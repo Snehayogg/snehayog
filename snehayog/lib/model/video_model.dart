@@ -28,4 +28,24 @@ class VideoModel {
       uploadedAt: DateTime.parse(json['uploadedAt']),
     );
   }
+
+  VideoModel copyWith({
+    String? videoName,
+    String? videoUrl,
+    int? likes,
+    int? views,
+    String? description,
+    String? uploader,
+    DateTime? uploadedAt,
+  }) {
+    return VideoModel(
+      videoName: videoName ?? this.videoName,
+      videoUrl: videoUrl ?? this.videoUrl,
+      likes: likes ?? this.likes,
+      views: views ?? this.views,
+      description: description ?? this.description,
+      uploader: uploader ?? this.uploader,
+      uploadedAt: uploadedAt ?? this.uploadedAt,
+    );
+  }
 }
