@@ -80,100 +80,74 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> {
                 color: Colors.red.withOpacity(0.5),
               ),
             ),
-          // Bottom Action Buttons Row
           Positioned(
-            bottom: 5,
-            left: 0,
-            right: 0,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 13),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // Video Info
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.videoName,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          widget.description,
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${widget.views} views',
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                      ],
-                    ),
+            bottom: 80,
+            right: 10,
+            child: Column(
+              children: [
+                IconButton(
+                  icon: Icon(
+                    Icons.favorite,
+                    color: isLiked ? Colors.red : Colors.white,
+                    size: 32,
                   ),
-                  // Action Buttons
-                  Row(
-                    children: [
-                      Column(
-                        children: [
-                          IconButton(
-                            icon: Icon(
-                              Icons.favorite,
-                              color: isLiked ? Colors.red : Colors.white,
-                              size: 32,
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                isLiked = !isLiked;
-                                if (isLiked) {
-                                  widget.onLikePressed?.call();
-                                }
-                              });
-                            },
-                          ),
-                          Text(
-                            '${widget.likes}',
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(width: 8),
-                      Column(
-                        children: [
-                          IconButton(
-                            icon: Icon(
-                              Icons.bookmark,
-                              color: isSaved ? Colors.yellow : Colors.white,
-                              size: 30,
-                            ),
-                            onPressed: () {
-                              setState(() => isSaved = !isSaved);
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(width: 8),
-                      Column(
-                        children: [
-                          IconButton(
-                            icon: const Icon(
-                              Icons.share,
-                              color: Colors.white,
-                              size: 30,
-                            ),
-                            onPressed: _onShare,
-                          ),
-                        ],
-                      ),
-                    ],
+                  onPressed: () {
+                    setState(() {
+                      isLiked = !isLiked;
+                      if (isLiked) {
+                        widget.onLikePressed?.call();
+                      }
+                    });
+                  },
+                ),
+                Text(
+                  '${widget.likes}',
+                  style: const TextStyle(color: Colors.white),
+                ),
+                const SizedBox(height: 16),
+                IconButton(
+                  icon: Icon(
+                    Icons.bookmark,
+                    color: isSaved ? Colors.yellow : Colors.white,
+                    size: 30,
                   ),
-                ],
-              ),
+                  onPressed: () {
+                    setState(() => isSaved = !isSaved);
+                  },
+                ),
+                const SizedBox(height: 16),
+                IconButton(
+                  icon: const Icon(Icons.share, color: Colors.white, size: 30),
+                  onPressed: _onShare,
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            bottom: 26,
+            left: 10,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.videoName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  widget.description,
+                  style: const TextStyle(color: Colors.white),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${widget.views} views',
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ],
             ),
           ),
           // Visit Now Button
@@ -183,6 +157,7 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> {
             right: 39,
             child: Container(
               height: 40,
+              margin: const EdgeInsets.symmetric(horizontal: 13),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [Color(0xFF2196F3), Color(0xFF1976D2)],
@@ -194,7 +169,7 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> {
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(20),
                   onTap: widget.onVisitPressed,
                   child: const Center(
                     child: Text(
