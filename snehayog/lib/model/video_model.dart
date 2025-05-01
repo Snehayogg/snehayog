@@ -6,6 +6,8 @@ class VideoModel {
   final String description;
   final String uploader;
   final DateTime uploadedAt;
+  final String videoType; // 'yog' or 'sneha'
+  final Duration duration; // Video duration
 
   VideoModel({
     required this.videoName,
@@ -15,6 +17,8 @@ class VideoModel {
     required this.description,
     required this.uploader,
     required this.uploadedAt,
+    required this.videoType,
+    required this.duration,
   });
 
   factory VideoModel.fromJson(Map<String, dynamic> json) {
@@ -26,6 +30,8 @@ class VideoModel {
       description: json['description'] ?? '',
       uploader: json['uploader'],
       uploadedAt: DateTime.parse(json['uploadedAt']),
+      videoType: json['videoType'] ?? 'sneha',
+      duration: Duration(seconds: json['duration'] ?? 0),
     );
   }
 
@@ -37,6 +43,8 @@ class VideoModel {
     String? description,
     String? uploader,
     DateTime? uploadedAt,
+    String? videoType,
+    Duration? duration,
   }) {
     return VideoModel(
       videoName: videoName ?? this.videoName,
@@ -46,6 +54,8 @@ class VideoModel {
       description: description ?? this.description,
       uploader: uploader ?? this.uploader,
       uploadedAt: uploadedAt ?? this.uploadedAt,
+      videoType: videoType ?? this.videoType,
+      duration: duration ?? this.duration,
     );
   }
 }

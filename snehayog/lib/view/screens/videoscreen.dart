@@ -1,188 +1,43 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/utils/constant.dart';
 import 'package:video_player/video_player.dart';
 import 'package:snehayog/model/video_model.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'package:snehayog/view/widget/videoplayeritem.dart';
+import 'package:snehayog/model/carousel_model.dart';
+import 'package:snehayog/view/widget/carousel_item.dart';
+import 'package:snehayog/view/widget/carousel_indicator.dart';
 
 class VideoScreen extends StatelessWidget {
   const VideoScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        backgroundColor: Colors.black,
-        appBar: PreferredSize(
-          preferredSize: const Size.fromHeight(50),
-          child: AppBar(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            centerTitle: true,
-            title: const TabBar(
-              indicatorColor: Colors.white,
-              indicatorSize: TabBarIndicatorSize.label,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.grey,
-              labelStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              tabs: [Tab(text: 'Yog'), Tab(text: 'Sneha')],
-            ),
-          ),
-        ),
-        body: const TabBarView(
-          children: [
-            ForYouFeed(), // You can swap these if you want different logic
-            FollowingFeed(),
-          ],
-        ),
-      ),
+    return Scaffold(
+      backgroundColor: const Color(0xFF002B36),
+      body: const ReelsWithAds(),
     );
   }
 }
 
-// You can reuse the same widget for both tabs or customize if needed
-class ForYouFeed extends StatefulWidget {
-  const ForYouFeed({super.key});
+class ReelsWithAds extends StatefulWidget {
+  const ReelsWithAds({super.key});
   @override
-  State<ForYouFeed> createState() => _ForYouFeedState();
+  State<ReelsWithAds> createState() => _ReelsWithAdsState();
 }
 
-class FollowingFeed extends StatefulWidget {
-  const FollowingFeed({super.key});
-  @override
-  State<FollowingFeed> createState() => _FollowingFeedState();
-}
-
-class _ForYouFeedState extends State<ForYouFeed> {
-  late PageController _pageController;
-  List<VideoModel> _videos = [];
-  int _currentIndex = 0;
+class _ReelsWithAdsState extends State<ReelsWithAds> {
+  final PageController _verticalPageController = PageController();
+  final PageController _horizontalPageController = PageController();
   final List<VideoPlayerController> _controllers = [];
-  bool _isLoading = true;
-  String? _error;
-
-  void _incrementViews(int index) {
-    setState(() {
-      _videos[index] = _videos[index].copyWith(views: _videos[index].views + 1);
-    });
-  }
-
-  void _incrementLikes(int index) {
-    setState(() {
-      _videos[index] = _videos[index].copyWith(likes: _videos[index].likes + 1);
-    });
-  }
-
-  void _handleVisit(int index) {
-    // Here you can implement what happens when Visit Now is pressed
-    // For example, navigate to a details page or open a URL
-    print('Visit Now pressed for video: ${_videos[index].videoName}');
-    // You can add navigation logic here
-  }
+  List<VideoModel> _videos = [];
+  List<CarouselItem> _ads = [];
+  int _videoIndex = 0;
+  int _adIndex = 0;
+  bool _showAds = false;
 
   @override
   void initState() {
     super.initState();
-    _pageController = PageController();
-    _initializeVideos();
-  }
-
-  Future<void> _initializeVideos() async {
-    try {
-      await loadVideos();
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<List<VideoModel>> fetchVideos() async {
-    // Dummy video data for testing UI with real video URLs
-    return [
-      VideoModel(
-        videoName: "Sample Video 1",
-        description: "This is a sample video description",
-        videoUrl:
-            "https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4",
-        views: 0, // Start with 0 views
-        likes: 0, // Start with 0 likes
-        uploader: "User1",
-        uploadedAt: DateTime.now().subtract(const Duration(days: 1)),
-      ),
-      VideoModel(
-        videoName: "Sample Video 2",
-        description: "Another sample video for testing",
-        videoUrl:
-            "https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4",
-        views: 0,
-        likes: 0,
-        uploader: "User2",
-        uploadedAt: DateTime.now().subtract(const Duration(days: 2)),
-      ),
-      VideoModel(
-        videoName: "Sample Video 3",
-        description: "Testing the video player UI",
-        videoUrl:
-            "https://flutter.github.io/assets-for-api-docs/assets/videos/sea.mp4",
-        views: 0,
-        likes: 0,
-        uploader: "User3",
-        uploadedAt: DateTime.now().subtract(const Duration(days: 3)),
-      ),
-    ];
-  }
-
-  Future<void> loadVideos() async {
-    try {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
-
-      final videos = await fetchVideos();
-
-      if (videos.isEmpty) {
-        setState(() {
-          _isLoading = false;
-          _videos = [];
-          _controllers.clear();
-        });
-        return;
-      }
-
-      _videos = videos;
-      _controllers.clear();
-
-      for (var video in _videos) {
-        try {
-          final controller = VideoPlayerController.networkUrl(
-            Uri.parse(video.videoUrl),
-          );
-          await controller.initialize();
-          controller.setLooping(true);
-          _controllers.add(controller);
-        } catch (e) {
-          print('Error initializing video controller: $e');
-        }
-      }
-
-      if (_controllers.isNotEmpty) {
-        _controllers[0].play();
-      }
-
-      setState(() {
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _error = e.toString();
-      });
-    }
+    _loadContent();
   }
 
   @override
@@ -190,241 +45,166 @@ class _ForYouFeedState extends State<ForYouFeed> {
     for (var controller in _controllers) {
       controller.dispose();
     }
-    _pageController.dispose();
+    _verticalPageController.dispose();
+    _horizontalPageController.dispose();
     super.dispose();
   }
 
-  void _onPageChanged(int index) {
-    if (_controllers.isNotEmpty) {
-      _controllers[_currentIndex].pause();
-      _controllers[index].play();
-      _incrementViews(index); // Increment views when video is viewed
-      _currentIndex = index;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _isLoading
-        ? const Center(child: CircularProgressIndicator(color: Colors.white))
-        : _error != null
-        ? Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'Error: $_error',
-                style: const TextStyle(color: Colors.white),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _initializeVideos,
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        )
-        : _controllers.isEmpty
-        ? const Center(
-          child: Text(
-            'No videos available',
-            style: TextStyle(color: Colors.white),
-          ),
-        )
-        : PageView.builder(
-          scrollDirection: Axis.vertical,
-          controller: _pageController,
-          itemCount: _controllers.length,
-          onPageChanged: _onPageChanged,
-          itemBuilder: (context, index) {
-            final controller = _controllers[index];
-            return VideoPlayerItem(
-              description: _videos[index].description,
-              views: _videos[index].views,
-              likes: _videos[index].likes,
-              controller: controller,
-              videoName: _videos[index].videoName,
-              videoUrl: _videos[index].videoUrl,
-              onLikePressed: () => _incrementLikes(index),
-              onVisitPressed: () => _handleVisit(index),
-            );
-          },
-        );
-  }
-}
-
-class _FollowingFeedState extends State<FollowingFeed> {
-  late PageController _pageController;
-  List<VideoModel> _videos = [];
-  int _currentIndex = 0;
-  final List<VideoPlayerController> _controllers = [];
-  bool _isLoading = true;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _pageController = PageController();
-    _initializeVideos();
-  }
-
-  Future<void> _initializeVideos() async {
-    try {
-      await loadVideos();
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<List<VideoModel>> fetchVideos() async {
-    // Dummy video data for testing UI with real video URLs
-    return [
-      VideoModel(
-        videoName: "Sample Video 1",
-        description: "This is a sample video description",
-        videoUrl:
-            "https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4",
-        views: 1000,
-        likes: 500,
-        uploader: "User1",
-        uploadedAt: DateTime.now().subtract(const Duration(days: 1)),
+  Future<void> _loadContent() async {
+    // Load ads data
+    _ads = [
+      CarouselItem(
+        id: 'ad1',
+        type: 'ad',
+        imageUrl: 'https://picsum.photos/800/600',
+        adTitle: 'Special Discount',
+        adDescription: 'Get 20% Off on Yoga Gear!',
+        adLink: 'https://example.com',
       ),
-      VideoModel(
-        videoName: "Sample Video 2",
-        description: "Another sample video for testing",
-        videoUrl:
-            "https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4",
-        views: 2000,
-        likes: 800,
-        uploader: "User2",
-        uploadedAt: DateTime.now().subtract(const Duration(days: 2)),
-      ),
-      VideoModel(
-        videoName: "Sample Video 3",
-        description: "Testing the video player UI",
-        videoUrl:
-            "https://flutter.github.io/assets-for-api-docs/assets/videos/sea.mp4",
-        views: 3000,
-        likes: 1200,
-        uploader: "User3",
-        uploadedAt: DateTime.now().subtract(const Duration(days: 3)),
+      CarouselItem(
+        id: 'ad2',
+        type: 'ad',
+        imageUrl: 'https://picsum.photos/800/601',
+        adTitle: 'Mindfulness App',
+        adDescription: 'Try free for 7 days!',
+        adLink: 'https://mindapp.com',
       ),
     ];
-  }
 
-  Future<void> loadVideos() async {
-    try {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
+    // Load video data
+    _videos = [
+      VideoModel(
+        videoName: "Yoga Session",
+        description: "Peaceful yoga routine",
+        videoUrl: "https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4",
+        views: 0,
+        likes: 0,
+        uploader: "Instructor A",
+        uploadedAt: DateTime.now(),
+        videoType: 'yog',
+        duration: const Duration(seconds: 30),
+      ),
+      VideoModel(
+        videoName: "Meditation",
+        description: "Short breathing practice",
+        videoUrl: "https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4",
+        views: 0,
+        likes: 0,
+        uploader: "Instructor B",
+        uploadedAt: DateTime.now(),
+        videoType: 'yog',
+        duration: const Duration(seconds: 40),
+      ),
+    ];
 
-      final videos = await fetchVideos();
-
-      if (videos.isEmpty) {
-        setState(() {
-          _isLoading = false;
-          _videos = [];
-          _controllers.clear();
-        });
-        return;
-      }
-
-      _videos = videos;
-      _controllers.clear();
-
-      for (var video in _videos) {
-        try {
-          final controller = VideoPlayerController.networkUrl(
-            Uri.parse(video.videoUrl),
-          );
-          await controller.initialize();
-          controller.setLooping(true);
-          _controllers.add(controller);
-        } catch (e) {
-          print('Error initializing video controller: $e');
-        }
-      }
-
-      if (_controllers.isNotEmpty) {
-        _controllers[0].play();
-      }
-
-      setState(() {
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _error = e.toString();
-      });
+    // Initialize controllers for each video
+    for (var video in _videos) {
+      final controller = VideoPlayerController.network(video.videoUrl);
+      await controller.initialize();
+      controller.setLooping(true);
+      _controllers.add(controller);
     }
-  }
 
-  @override
-  void dispose() {
-    for (var controller in _controllers) {
-      controller.dispose();
-    }
-    _pageController.dispose();
-    super.dispose();
-  }
-
-  void _onPageChanged(int index) {
+    // Play the first video if controllers are initialized
     if (_controllers.isNotEmpty) {
-      _controllers[_currentIndex].pause();
-      _controllers[index].play();
-      _currentIndex = index;
+      _controllers[0].play();
+    }
+
+    // Update UI after loading content
+    setState(() {});
+  }
+
+  void _onVerticalPageChanged(int index) {
+    if (_controllers.isNotEmpty && index < _controllers.length) {
+      _controllers[_videoIndex].pause();
+      _videoIndex = index;
+      _controllers[_videoIndex].play();
+    }
+  }
+
+  void _onHorizontalPageChanged(int index) {
+    if (_ads.isNotEmpty && index < _ads.length) {
+      setState(() {
+        _adIndex = index;
+      });
+    }
+  }
+
+  void _handleHorizontalSwipe(DragEndDetails details) {
+    if (!_showAds) {
+      setState(() {
+        if (_controllers.isNotEmpty && _videoIndex < _controllers.length) {
+          _controllers[_videoIndex].pause();
+        }
+        _showAds = true;
+      });
+    }
+  }
+
+  void _handleVerticalSwipe(DragEndDetails details) {
+    if (_showAds) {
+      setState(() {
+        _showAds = false;
+        if (_controllers.isNotEmpty && _videoIndex < _controllers.length) {
+          _controllers[_videoIndex].play();
+        }
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return _isLoading
-        ? const Center(child: CircularProgressIndicator(color: Colors.white))
-        : _error != null
-        ? Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'Error: $_error',
-                style: const TextStyle(color: Colors.white),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _initializeVideos,
-                child: const Text('Retry'),
-              ),
-            ],
+    return Stack(
+      children: [
+        Offstage(
+          offstage: _showAds,
+          child: PageView.builder(
+            scrollDirection: Axis.vertical,
+            controller: _verticalPageController,
+            onPageChanged: _onVerticalPageChanged,
+            itemCount: _videos.length,
+            itemBuilder: (context, index) {
+              if (index < _videos.length && index < _controllers.length) {
+                return VideoPlayerItem(
+                  videoName: _videos[index].videoName,
+                  description: _videos[index].description,
+                  views: _videos[index].views,
+                  likes: _videos[index].likes,
+                  controller: _controllers[index],
+                  videoUrl: _videos[index].videoUrl,
+                  onLikePressed: () {},
+                  onVisitPressed: () {},
+                );
+              }
+              return Container(); // Default empty container if index is out of range
+            },
           ),
-        )
-        : _controllers.isEmpty
-        ? const Center(
-          child: Text(
-            'No videos available',
-            style: TextStyle(color: Colors.white),
+        ),
+        Offstage(
+          offstage: !_showAds,
+          child: PageView.builder(
+            scrollDirection: Axis.horizontal,
+            controller: _horizontalPageController,
+            onPageChanged: _onHorizontalPageChanged,
+            itemCount: _ads.length,
+            itemBuilder: (context, index) {
+              if (index < _ads.length) {
+                return CarouselItemWidget(
+                  item: _ads[index],
+                  onAdTap: () => print('Ad tapped: ${_ads[index].adLink}'),
+                );
+              }
+              return Container(); // Default empty container if index is out of range
+            },
           ),
-        )
-        : PageView.builder(
-          scrollDirection: Axis.vertical,
-          controller: _pageController,
-          itemCount: _controllers.length,
-          onPageChanged: _onPageChanged,
-          itemBuilder: (context, index) {
-            final controller = _controllers[index];
-            return VideoPlayerItem(
-              description: _videos[index].description,
-              views: _videos[index].views,
-              likes: _videos[index].likes,
-              controller: controller,
-              videoName: _videos[index].videoName,
-              videoUrl: '$BASE_URL${_videos[index].videoUrl}',
-            );
-          },
-        );
+        ),
+        Positioned.fill(
+          child: GestureDetector(
+            onHorizontalDragEnd: _handleHorizontalSwipe,
+            onVerticalDragEnd: _handleVerticalSwipe,
+          ),
+        ),
+      ],
+    );
   }
 }

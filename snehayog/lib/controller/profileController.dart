@@ -5,14 +5,12 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:snehayog/model/usermodel.dart';
 import 'package:snehayog/utils/constant.dart';
-import 'package:snehayog/config/google_sign_in_config.dart';
 
 class ProfileController extends ChangeNotifier {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    clientId: GoogleSignInConfig.clientId,
-    scopes: GoogleSignInConfig.scopes,
-    signInOption: SignInOption.standard,
+    scopes: ['email', 'profile'], 
   );
+
   UserModel? user;
   bool isLoading = false;
   String? error;
@@ -34,11 +32,15 @@ class ProfileController extends ChangeNotifier {
       } else {
         print('No user is currently signed in');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       print("Initialization error: $e");
+      print("Stack trace: $stackTrace");
       if (e is PlatformException) {
+        print("Platform exception code: ${e.code}");
+        print("Platform exception message: ${e.message}");
+        print("Platform exception details: ${e.details}");
         if (e.code == 'sign_in_failed') {
-          error = "Google Sign-In failed. Please check your configuration.";
+          error = "Google Sign-In failed. Please check your configuration. Error details: ${e.message}";
         } else if (e.code == 'network_error') {
           error = "Network error. Please check your internet connection.";
         } else {
@@ -58,8 +60,7 @@ class ProfileController extends ChangeNotifier {
       final idToken = auth.idToken;
 
       if (idToken == null) {
-        error =
-            "Failed to get ID token from Google. Please try signing in again.";
+        error = "Failed to get ID token from Google. Please try signing in again.";
         print('ID token is null');
         return;
       }
@@ -68,7 +69,7 @@ class ProfileController extends ChangeNotifier {
       print('Attempting to fetch user data with ID token');
 
       final res = await http.post(
-        Uri.parse("$BASE_URL/api/auth/google"),
+        Uri.parse("$BASE_URL/api/auth"),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',

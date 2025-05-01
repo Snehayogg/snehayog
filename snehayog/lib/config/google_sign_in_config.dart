@@ -11,7 +11,7 @@ class GoogleSignInConfig {
   // 8. Get SHA-1 fingerprint from your debug keystore
   // 9. Copy the client ID from the created credential
   static const String clientId =
-      'YOUR_ANDROID_CLIENT_ID.apps.googleusercontent.com';
+      '406195883653-1j2f5ilp46376ndqs8gd0trkto8n727d.apps.googleusercontent.com';
 
   // Web client ID (if you're also supporting web platform)
   // To get this:
@@ -21,8 +21,8 @@ class GoogleSignInConfig {
   // 4. Add authorized JavaScript origins (http://localhost:3000 for development)
   // 5. Add authorized redirect URIs (http://localhost:3000/auth/google/callback)
   // 6. Copy the client ID from the created credential
-  static const String webClientId =
-      'YOUR_WEB_CLIENT_ID.apps.googleusercontent.com';
+  // static const String webClientId =
+  //     '406195883653-1j2f5ilp46376ndqs8gd0trkto8n727d.apps.googleusercontent.com';
 
   // Scopes required for the application
   static const List<String> scopes = ['email', 'profile'];

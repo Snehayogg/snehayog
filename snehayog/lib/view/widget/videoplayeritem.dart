@@ -1,4 +1,4 @@
-import 'package:share_plus/share_plus.dart'; // For sharing
+import 'package:share_plus/share_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
@@ -38,7 +38,7 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> {
     });
     widget.onLikePressed?.call();
 
-    Future.delayed(Duration(milliseconds: 800), () {
+    Future.delayed(const Duration(milliseconds: 800), () {
       setState(() {
         isLiked = false;
       });
@@ -47,6 +47,63 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> {
 
   void _onShare() {
     Share.share('Check out this video: ${widget.videoUrl}');
+  }
+
+  void _onCommentTap() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF002B36),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                height: 4,
+                width: 40,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Comments',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              const TextField(
+                style: TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'Add a comment...',
+                  hintStyle: TextStyle(color: Colors.white54),
+                  filled: true,
+                  fillColor: Color(0xFF073642),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(10)),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -77,9 +134,11 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> {
               child: Icon(
                 Icons.favorite,
                 size: 100,
-                color: Colors.red.withOpacity(0.5),
+                color: const Color(0xFF268BD2).withOpacity(0.5),
               ),
             ),
+
+          // Right-side Buttons
           Positioned(
             bottom: 80,
             right: 10,
@@ -88,27 +147,33 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> {
                 IconButton(
                   icon: Icon(
                     Icons.favorite,
-                    color: isLiked ? Colors.red : Colors.white,
+                    color: isLiked ? const Color(0xFF268BD2) : Colors.white,
                     size: 32,
                   ),
                   onPressed: () {
                     setState(() {
                       isLiked = !isLiked;
-                      if (isLiked) {
-                        widget.onLikePressed?.call();
-                      }
+                      if (isLiked) widget.onLikePressed?.call();
                     });
                   },
                 ),
                 Text(
                   '${widget.likes}',
-                  style: const TextStyle(color: Colors.white),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                IconButton(
+                  icon: const Icon(Icons.comment, color: Colors.white, size: 30),
+                  onPressed: _onCommentTap,
                 ),
                 const SizedBox(height: 16),
                 IconButton(
                   icon: Icon(
                     Icons.bookmark,
-                    color: isSaved ? Colors.yellow : Colors.white,
+                    color: isSaved ? const Color(0xFF268BD2) : Colors.white,
                     size: 30,
                   ),
                   onPressed: () {
@@ -123,9 +188,12 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> {
               ],
             ),
           ),
+
+          // Video Info & Visit Button (left side)
           Positioned(
-            bottom: 26,
-            left: 10,
+            bottom: 90,
+            left: 12,
+            right: 80,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -133,53 +201,48 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> {
                   widget.videoName,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 16,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Text(
                   widget.description,
-                  style: const TextStyle(color: Colors.white),
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Text(
                   '${widget.views} views',
-                  style: const TextStyle(color: Colors.white),
+                  style: const TextStyle(
+                    color: Color(0xFF586E75),
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
           ),
-          // Visit Now Button
+
           Positioned(
-            bottom: 5,
-            left: 13,
-            right: 39,
-            child: Container(
-              height: 40,
-              margin: const EdgeInsets.symmetric(horizontal: 13),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF2196F3), Color(0xFF1976D2)],
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
+            bottom: 20,
+            left: 14,
+            right: 14,
+            child: SizedBox(
+              height: 42,
+              child: ElevatedButton(
+                onPressed: widget.onVisitPressed,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  backgroundColor: const Color(0xFF268BD2),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(20),
-                  onTap: widget.onVisitPressed,
-                  child: const Center(
-                    child: Text(
-                      'Visit Now',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                child: const Text(
+                  'Visit Now',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
                   ),
                 ),
               ),
