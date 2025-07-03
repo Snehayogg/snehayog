@@ -90,7 +90,7 @@ class MyApp extends StatelessWidget {
       builder: (context, child) {
         // Ensure consistent text scaling
         return MediaQuery(
-          data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(1.0)),
+          data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1.0)),
           child: child!,
         );
       },

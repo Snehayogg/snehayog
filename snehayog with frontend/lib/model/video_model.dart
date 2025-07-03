@@ -4,9 +4,9 @@ class VideoModel {
   final String videoUrl;
   final String originalVideoUrl;
   final String thumbnailUrl;
-  final int likes;
-  final int views;
-  final int shares;
+  int likes;
+  int views;
+  int shares;
   final String description;
   final Uploader uploader;
   final DateTime uploadedAt;

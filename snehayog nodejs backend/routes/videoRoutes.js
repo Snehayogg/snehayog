@@ -238,5 +238,38 @@ router.get('/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch video' });
   }
 });
+router.post('/:id/comments', async (req, res) => {
+  try {
+    const { userId, text } = req.body;
+
+    const user = await User.findOne({ googleId: userId });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const comment = {
+      user: user._id,
+      text,
+      createdAt: new Date(),
+    };
+
+    // ✅ Safely push comment without modifying the whole document
+    const video = await Video.findByIdAndUpdate(
+      req.params.id,
+      { $push: { comments: comment } },
+      { new: true }
+    ).populate('comments.user', 'name profilePic');
+
+    if (!video) {
+      return res.status(404).json({ error: 'Video not found' });
+    }
+
+    res.json(video.comments);
+  } catch (err) {
+    console.error('Error adding comment:', err);
+    res.status(500).json({ error: 'Failed to add comment', details: err.message });
+  }
+});
+
 
 module.exports = router;

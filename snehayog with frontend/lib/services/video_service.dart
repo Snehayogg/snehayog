@@ -223,18 +223,19 @@ class VideoService {
   Future<List<Comment>> addComment(
       String videoId, String text, String userId) async {
     try {
-      final headers = await _getAuthHeaders();
-
       final res = await http
           .post(
             Uri.parse('$baseUrl/api/videos/$videoId/comments'),
-            headers: headers,
+            headers: {
+            'Content-Type': 'application/json', // Ensure backend can read JSON
+          },
             body: json.encode({
               'userId': userId,
               'text': text,
             }),
           )
           .timeout(const Duration(seconds: 10));
+      print('Response body: \\${res.body}');
 
       if (res.statusCode == 200) {
         final List<dynamic> commentsJson = json.decode(res.body);
