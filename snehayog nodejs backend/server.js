@@ -7,14 +7,6 @@ const videoRoutes = require('./routes/videoRoutes');
 const User = require('./models/User');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
-const HOST = '192.168.0.195'; // Use laptop IP for server
-
-// Get local IP addresses
-const { networkInterfaces } = require('os');
-const nets = networkInterfaces();
-const laptopIP = '192.168.0.195'; // Your laptop's IP
-  const mobileIP = '192.168.0.195'; // Your mobile's IP
 
 // Ensure upload directories exist
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -121,23 +113,8 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-const server = app.listen(PORT, HOST, () => {
-  console.log(`Server is running on http://${HOST}:${PORT}`);
-  console.log(`Mobile can access via http://${HOST}:${PORT}`);
-}).on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.log(`Port ${PORT} is busy, trying another port...`);
-    server.close();
-    // Try again with a new random port
-    const newPort = Math.floor(Math.random() * (9999 - 3000 + 1)) + 3000;
-    app.listen(newPort, HOST, () => {
-      console.log(`Server running at http://${HOST}:${newPort}/api`);
-      console.log(`Local access: http://localhost:${newPort}/api`);
-      console.log(`Laptop access: http://${laptopIP}:${newPort}/api`);
-      console.log(`Mobile access: http://${mobileIP}:${newPort}/api`);
-      console.log(`Video uploads will be available at: http://${mobileIP}:${newPort}/uploads/videos/`);
-    });
-  } else {
-    console.error('Server error:', err);
-  }
+const PORT = process.env.PORT || 5000;
+
+const server = app.listen(PORT, () => {
+  console.log(`✅ Server is running on port ${PORT}`);
 });
