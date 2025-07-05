@@ -19,7 +19,7 @@ class AuthService {
 
       // Send idToken to backend for verification and JWT generation
       final response = await http.post(
-        Uri.parse('$BASE_URL/api/auth'),
+        Uri.parse('${Constants.BASE_URL}/api/auth'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'idToken': idToken}),
       );

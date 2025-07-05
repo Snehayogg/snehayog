@@ -29,51 +29,40 @@ const upload = multer({ storage: storage });
 router.post('/upload', upload.single('video'), async (req, res) => {
   try {
     const { googleId, videoName, description } = req.body;
-    const originalPath = req.file.path;
-    const outputFilename = `compressed-${req.file.filename}`;
-    const outputPath = path.join(path.dirname(originalPath), outputFilename);
+    // Check for required fields
+    if (!req.file || !googleId || !videoName) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
 
-    // --- FFmpeg Compression ---
-    ffmpeg(originalPath)
-      .output(outputPath)
-      .videoCodec('libx264')
-      .size('?x480') // 480p height, auto width
-      .videoBitrate('500k')
-      .on('end', async () => {
-        // --- Save to DB after compression ---
-        const user = await User.findOne({ googleId });
-        if (!user) {
-          return res.status(404).json({ error: 'User not found' });
-        }
+    // Find user
+    const user = await User.findOne({ googleId });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
 
-        const video = new Video({
-          videoName,
-          description,
-          videoUrl: `/uploads/videos/${outputFilename}`, // Compressed
-          originalVideoUrl: `/uploads/videos/${req.file.filename}`, // Original
-          thumbnailUrl: `/uploads/videos/${req.file.filename}.jpg`,
-          uploader: user._id,
-        });
+    // Save video directly without FFmpeg compression
+    const video = new Video({
+      videoName,
+      description,
+      videoUrl: `/uploads/videos/${req.file.filename}`, // Uncompressed
+      uploader: user._id,
+    });
 
-        await video.save();
-        user.videos.push(video._id);
-        await user.save();
+    await video.save();
 
-        res.status(201).json({
-          message: 'Video uploaded and compressed successfully',
-          video,
-        });
-      })
-      .on('error', (err) => {
-        console.error('FFmpeg error:', err);
-        res.status(500).json({ error: 'Failed to process video.' });
-      })
-      .run();
+    user.videos.push(video._id);
+    await user.save();
+
+    res.status(201).json({
+      message: '✅ Video uploaded successfully (no FFmpeg)',
+      video,
+    });
   } catch (error) {
     console.error('Error uploading video:', error);
-    res.status(500).json({ error: 'Error uploading video' });
+    res.status(500).json({ error: '❌ Failed to upload video' });
   }
 });
+
 
 // Stream video
 router.get('/stream/:filename', (req, res) => {

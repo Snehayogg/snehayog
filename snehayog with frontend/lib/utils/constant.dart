@@ -1,1 +1,5 @@
-const String BASE_URL = 'http://10.0.2.2:5000';
+import 'package:snehayog/config/app_config.dart';
+
+class Constants {
+  static String get BASE_URL => AppConfig.baseUrl;
+}

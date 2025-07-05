@@ -3,6 +3,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:snehayog/services/google_auth_service.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:snehayog/config/app_config.dart';
 
 class GoogleSignInController extends ChangeNotifier {
   final GoogleSignIn _googleSignIn = GoogleSignIn();
@@ -18,7 +19,7 @@ class GoogleSignInController extends ChangeNotifier {
 
   // Base URL for API endpoints
   static String get baseUrl {
-    return 'http://192.168.0.197:5000';
+    return AppConfig.baseUrl;
   }
 
   GoogleSignInController() {

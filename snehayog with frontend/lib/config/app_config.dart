@@ -1,12 +1,7 @@
 /// App configuration for different environments
 class AppConfig {
-  // Server configuration
-  static const String serverIP =
-      '192.168.0.195'; // Change this to your computer's IP
-  static const int serverPort = 5000;
-
   // Base URL for API endpoints
-  static String get baseUrl => 'http://$serverIP:$serverPort';
+  static String baseUrl = "https://snehayog-production.up.railway.app";
 
   // App settings
   static const String appName = 'Snehayog';
@@ -32,20 +27,8 @@ class NetworkHelper {
     return AppConfig.baseUrl;
   }
 
-  /// Check if running on physical device
-  static bool isPhysicalDevice() {
-    // This is a simple check - you might want to implement more sophisticated detection
-    return true; // Assume physical device for now
-  }
-
   /// Get the appropriate base URL for the current environment
   static String getBaseUrl() {
-    if (isPhysicalDevice()) {
-      // For physical device, use computer's IP address
-      return AppConfig.baseUrl;
-    } else {
-      // For emulator, use 10.0.2.2
-      return 'http://10.0.2.2:${AppConfig.serverPort}';
-    }
+    return AppConfig.baseUrl;
   }
 }

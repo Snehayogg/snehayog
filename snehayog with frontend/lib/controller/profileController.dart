@@ -8,7 +8,7 @@ import 'package:snehayog/utils/constant.dart';
 
 class ProfileController extends ChangeNotifier {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: ['email', 'profile'], 
+    scopes: ['email', 'profile'],
   );
 
   UserModel? user;
@@ -40,7 +40,8 @@ class ProfileController extends ChangeNotifier {
         print("Platform exception message: ${e.message}");
         print("Platform exception details: ${e.details}");
         if (e.code == 'sign_in_failed') {
-          error = "Google Sign-In failed. Please check your configuration. Error details: ${e.message}";
+          error =
+              "Google Sign-In failed. Please check your configuration. Error details: ${e.message}";
         } else if (e.code == 'network_error') {
           error = "Network error. Please check your internet connection.";
         } else {
@@ -60,7 +61,8 @@ class ProfileController extends ChangeNotifier {
       final idToken = auth.idToken;
 
       if (idToken == null) {
-        error = "Failed to get ID token from Google. Please try signing in again.";
+        error =
+            "Failed to get ID token from Google. Please try signing in again.";
         print('ID token is null');
         return;
       }
@@ -69,7 +71,7 @@ class ProfileController extends ChangeNotifier {
       print('Attempting to fetch user data with ID token');
 
       final res = await http.post(
-        Uri.parse("$BASE_URL/api/auth"),
+        Uri.parse("${Constants.BASE_URL}/api/auth"),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
