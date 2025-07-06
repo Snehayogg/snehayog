@@ -3,7 +3,7 @@ const multer = require('multer');
 const Video = require('../models/Video');
 const User = require('../models/User');
 const mongoose = require('mongoose');
-const cloudinary = require('../config/cloudnary');
+const cloudinary = require('../config/cloudnary.js');
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
 const router = express.Router();
