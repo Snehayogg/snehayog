@@ -6,7 +6,6 @@ import 'package:snehayog/model/video_model.dart';
 import 'package:snehayog/controllers/google_sign_in_controller.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
-import 'package:video_compress/video_compress.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
 import 'package:snehayog/config/app_config.dart';
@@ -227,8 +226,9 @@ class VideoService {
           .post(
             Uri.parse('$baseUrl/api/videos/$videoId/comments'),
             headers: {
-            'Content-Type': 'application/json', // Ensure backend can read JSON
-          },
+              'Content-Type':
+                  'application/json', // Ensure backend can read JSON
+            },
             body: json.encode({
               'userId': userId,
               'text': text,
@@ -339,15 +339,6 @@ class VideoService {
 
       print('User data for upload: ${userData.toString()}');
 
-      // Compress video before uploading
-      print('Starting video compression...');
-      final compressedVideoFile = await _compressVideo(videoFile);
-      if (compressedVideoFile == null) {
-        throw Exception('Video compression failed.');
-      }
-      print(
-          'Video compression finished. New size: ${await compressedVideoFile.length()} bytes');
-
       // Create a multipart request
       var request = http.MultipartRequest(
         'POST',
@@ -358,7 +349,7 @@ class VideoService {
       request.files.add(
         await http.MultipartFile.fromPath(
           'video',
-          compressedVideoFile.path, // Upload the compressed file
+          videoFile.path, // Upload the original file
         ),
       );
 
@@ -416,30 +407,6 @@ class VideoService {
             'Could not connect to server. Please check if the server is running.');
       }
       rethrow;
-    }
-  }
-
-  /// Compresses a video file to a standard quality for mobile playback
-  /// Parameters:
-  /// - videoFile: The video file to compress
-  /// Returns the compressed video file, or null if compression fails
-  Future<File?> _compressVideo(File file) async {
-    try {
-      await VideoCompress.setLogLevel(0);
-      final MediaInfo? info = await VideoCompress.compressVideo(
-        file.path,
-        quality: VideoQuality.MediumQuality, // Good balance of quality and size
-        deleteOrigin: false, // Keep the original file
-        includeAudio: true,
-        frameRate: 30,
-      );
-      return info?.file;
-    } catch (e) {
-      print('Error compressing video: $e');
-      // If compression fails, we can choose to upload the original
-      // return file;
-      // For now, let's return null to indicate failure
-      return null;
     }
   }
 

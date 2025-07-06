@@ -48,7 +48,6 @@ dependencies:
   image_picker: ^1.1.2
   video_player: ^2.8.6
   chewie: ^1.7.5
-  video_compress: ^3.1.4
 
 dev_dependencies:
   flutter_launcher_icons: ^0.14.3

@@ -58,12 +58,10 @@ router.post('/upload', upload.single('video'), async (req, res) => {
       video,
     });
   } catch (error) {
-    console.error('Error uploading video:', error);
+    console.error('❌ Upload Error:', error.message, error.stack);
     res.status(500).json({ error: '❌ Failed to upload video' });
   }
 });
-
-
 // Stream video
 router.get('/stream/:filename', (req, res) => {
   const { filename } = req.params;
