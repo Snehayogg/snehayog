@@ -316,7 +316,7 @@ class CommentsSheet extends StatefulWidget {
 class _CommentsSheetState extends State<CommentsSheet> {
   late List<Comment> _comments;
   final TextEditingController _controller = TextEditingController();
-  bool _isLoading = false;
+  final bool _isLoading = false;
   bool _isPosting = false;
 
   @override
