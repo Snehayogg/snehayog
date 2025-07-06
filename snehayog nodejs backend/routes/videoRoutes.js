@@ -41,11 +41,12 @@ router.post('/upload', upload.single('video'), async (req, res) => {
     }
 
     // Get Cloudinary video URL and public ID
-    const videoUrl = req.file.path; // Cloudinary URL
-    const publicId = req.file.filename; // Cloudinary public ID
-
-    // Generate thumbnail URL from Cloudinary
-    const thumbnailUrl = videoUrl.replace('/upload/', '/upload/w_300,h_400,c_fill/');
+    const videoUrl = req.file?.path;
+    if (!videoUrl) {
+      return res.status(400).json({ error: 'Cloudinary upload failed, video URL missing' });
+    }
+    
+    const thumbnailUrl = videoUrl.replace('/upload/', '/upload/w_300,h_400,c_fill/')    
 
     // Save video with Cloudinary URLs
     const video = new Video({
