@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
-import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:snehayog/model/video_model.dart';
 import 'package:snehayog/services/video_service.dart';
 import 'package:snehayog/view/widget/video_player_widget.dart';
@@ -54,18 +53,17 @@ class _VideoScreenState extends State<VideoScreen> {
     if (index < 0 || index >= _videos.length) return;
     if (_controllers.containsKey(index)) return;
     final url = _videos[index].videoUrl;
-    final file = await DefaultCacheManager().getSingleFile(url);
-    final controller = VideoPlayerController.file(file);
+    // Use network controller directly for Cloudinary URLs
+    final controller = VideoPlayerController.network(url);
     await controller.initialize();
     controller.setLooping(true);
     _controllers[index] = controller;
   }
 
   Future<void> _preloadAllVideos() async {
-    for (int i = 0; i < _videos.length; i++) {
-      final url = _videos[i].videoUrl;
-      DefaultCacheManager().downloadFile(url);
-    }
+    // Cloudinary handles video optimization and caching
+    // No need to preload files manually
+    print('Videos will be loaded on-demand by Cloudinary');
   }
 
   Future<void> _loadVideos({bool isInitialLoad = true}) async {
@@ -286,11 +284,10 @@ class _VideoScreenState extends State<VideoScreen> {
 
   void _handleShare(VideoModel video) async {
     try {
-      // Get the local cached file
-      final file = await DefaultCacheManager().getSingleFile(video.videoUrl);
-      await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'video/mp4')],
-        text: 'Check out this video: ${video.videoName}',
+      // Share the Cloudinary URL directly
+      await Share.share(
+        'Check out this video: ${video.videoName}\n\n${video.videoUrl}',
+        subject: 'Snehayog Video',
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(

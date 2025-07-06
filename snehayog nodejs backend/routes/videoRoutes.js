@@ -1,34 +1,34 @@
 const express = require('express');
 const multer = require('multer');
-const path = require('path');
 const Video = require('../models/Video');
 const User = require('../models/User');
-const fs = require('fs');
 const mongoose = require('mongoose');
-const ffmpeg = require('fluent-ffmpeg');
+const cloudinary = require('../config/cloudnary');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
 const router = express.Router();
 
-// Configure multer for video uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadDir = path.join(__dirname, '../uploads/videos');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + '-' + file.originalname);
+// Configure Cloudinary storage for video uploads
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'snehayog-videos',
+    resource_type: 'video',
+    allowed_formats: ['mp4', 'avi', 'mov', 'mkv', 'webm'],
+    transformation: [
+      { width: 1080, height: 1920, crop: 'fill' }, // Optimize for mobile
+      { quality: 'auto' }
+    ]
   }
 });
 
 const upload = multer({ storage: storage });
 
-// Upload video
+// Upload video to Cloudinary
 router.post('/upload', upload.single('video'), async (req, res) => {
   try {
     const { googleId, videoName, description } = req.body;
+    
     // Check for required fields
     if (!req.file || !googleId || !videoName) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -40,11 +40,20 @@ router.post('/upload', upload.single('video'), async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Save video directly without FFmpeg compression
+    // Get Cloudinary video URL and public ID
+    const videoUrl = req.file.path; // Cloudinary URL
+    const publicId = req.file.filename; // Cloudinary public ID
+
+    // Generate thumbnail URL from Cloudinary
+    const thumbnailUrl = videoUrl.replace('/upload/', '/upload/w_300,h_400,c_fill/');
+
+    // Save video with Cloudinary URLs
     const video = new Video({
       videoName,
       description,
-      videoUrl: `/uploads/videos/${req.file.filename}`, // Uncompressed
+      videoUrl: videoUrl, // Cloudinary URL
+      originalVideoUrl: videoUrl, // Same as videoUrl for Cloudinary
+      thumbnailUrl: thumbnailUrl, // Generated thumbnail URL
       uploader: user._id,
     });
 
@@ -54,48 +63,21 @@ router.post('/upload', upload.single('video'), async (req, res) => {
     await user.save();
 
     res.status(201).json({
-      message: '✅ Video uploaded successfully (no FFmpeg)',
-      video,
+      message: '✅ Video uploaded successfully to Cloudinary',
+      video: {
+        ...video.toObject(),
+        videoUrl: videoUrl,
+        thumbnailUrl: thumbnailUrl
+      },
     });
   } catch (error) {
     console.error('❌ Upload Error:', error.message, error.stack);
     res.status(500).json({ error: '❌ Failed to upload video' });
   }
 });
-// Stream video
-router.get('/stream/:filename', (req, res) => {
-  const { filename } = req.params;
-  const videoPath = path.join(__dirname, '../uploads/videos', filename);
 
-  const stat = fs.statSync(videoPath);
-  const fileSize = stat.size;
-  const range = req.headers.range;
-
-  if (range) {
-    const parts = range.replace(/bytes=/, "").split("-");
-    const start = parseInt(parts[0], 10);
-    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-
-    const chunksize = (end - start) + 1;
-    const file = fs.createReadStream(videoPath, { start, end });
-    const head = {
-      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-      'Accept-Ranges': 'bytes',
-      'Content-Length': chunksize,
-      'Content-Type': 'video/mp4',
-    };
-
-    res.writeHead(206, head);
-    file.pipe(res);
-  } else {
-    const head = {
-      'Content-Length': fileSize,
-      'Content-Type': 'video/mp4',
-    };
-    res.writeHead(200, head);
-    fs.createReadStream(videoPath).pipe(res);
-  }
-});
+// Note: Video streaming is now handled by Cloudinary directly
+// No need for local streaming endpoint as Cloudinary provides optimized video delivery
 
 // Get videos by user ID
 router.get('/user/:googleId', async (req, res) => {
@@ -118,19 +100,13 @@ router.get('/user/:googleId', async (req, res) => {
     const videos = await user.getVideos();
     console.log('Found videos:', videos.length);
 
-    // Add full URLs to each video
-    const videosWithUrls = videos.map(video => {
-      const compressedFilename = video.videoUrl ? path.basename(video.videoUrl) : '';
-      const originalFilename = video.originalVideoUrl ? path.basename(video.originalVideoUrl) : '';
-      const thumbFilename = video.thumbnailUrl ? path.basename(video.thumbnailUrl) : '';
-
-      return {
-        ...video.toObject(),
-        videoUrl: compressedFilename ? `${req.protocol}://${req.get('host')}/api/videos/stream/${compressedFilename}` : '',
-        originalVideoUrl: originalFilename ? `${req.protocol}://${req.get('host')}/api/videos/stream/${originalFilename}` : '',
-        thumbnailUrl: thumbFilename ? `${req.protocol}://${req.get('host')}/uploads/thumbnails/${thumbFilename}` : ''
-      };
-    });
+    // Cloudinary URLs are already full URLs, no need to construct them
+    const videosWithUrls = videos.map(video => ({
+      ...video.toObject(),
+      videoUrl: video.videoUrl || '',
+      originalVideoUrl: video.originalVideoUrl || '',
+      thumbnailUrl: video.thumbnailUrl || ''
+    }));
 
     res.json(videosWithUrls);
   } catch (error) {
@@ -184,19 +160,13 @@ router.get('/', async (req, res) => {
     const totalVideos = await Video.countDocuments();
     const hasMore = (page * limit) < totalVideos;
     
-    // Add full URLs to each video
-    const videosWithUrls = videos.map(video => {
-      const compressedFilename = video.videoUrl ? path.basename(video.videoUrl) : '';
-      const originalFilename = video.originalVideoUrl ? path.basename(video.originalVideoUrl) : '';
-      const thumbFilename = video.thumbnailUrl ? path.basename(video.thumbnailUrl) : '';
-
-      return {
-        ...video.toObject(),
-        videoUrl: compressedFilename ? `${req.protocol}://${req.get('host')}/api/videos/stream/${compressedFilename}` : '',
-        originalVideoUrl: originalFilename ? `${req.protocol}://${req.get('host')}/api/videos/stream/${originalFilename}` : '',
-        thumbnailUrl: thumbFilename ? `${req.protocol}://${req.get('host')}/uploads/thumbnails/${thumbFilename}` : ''
-      };
-    });
+    // Cloudinary URLs are already full URLs, no need to construct them
+    const videosWithUrls = videos.map(video => ({
+      ...video.toObject(),
+      videoUrl: video.videoUrl || '',
+      originalVideoUrl: video.originalVideoUrl || '',
+      thumbnailUrl: video.thumbnailUrl || ''
+    }));
 
     res.json({
       videos: videosWithUrls,
@@ -225,6 +195,7 @@ router.get('/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch video' });
   }
 });
+
 router.post('/:id/comments', async (req, res) => {
   try {
     const { userId, text } = req.body;
@@ -257,6 +228,5 @@ router.post('/:id/comments', async (req, res) => {
     res.status(500).json({ error: 'Failed to add comment', details: err.message });
   }
 });
-
 
 module.exports = router;

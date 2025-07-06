@@ -380,12 +380,15 @@ class VideoService {
         final videoData = responseData['video'];
 
         // Return the video data in the expected format
+        // Cloudinary URLs are already full URLs, no need to prepend baseUrl
         return {
           'id': videoData['_id'],
           'title': videoData['videoName'],
           'description': videoData['description'],
-          'videoUrl': '$baseUrl${videoData['videoUrl']}',
-          'thumbnail': '$baseUrl${videoData['thumbnailUrl']}',
+          'videoUrl':
+              videoData['videoUrl'], // Cloudinary URL is already complete
+          'thumbnail':
+              videoData['thumbnailUrl'], // Cloudinary URL is already complete
           'duration': '0:00',
           'views': 0,
           'uploader': userData['name'],
