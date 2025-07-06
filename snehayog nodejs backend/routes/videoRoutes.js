@@ -28,54 +28,42 @@ const upload = multer({ storage: storage });
 router.post('/upload', upload.single('video'), async (req, res) => {
   try {
     const { googleId, videoName, description } = req.body;
-    
-    // Check for required fields
-    if (!req.file || !googleId || !videoName) {
-      return res.status(400).json({ error: 'Missing required fields' });
+
+    if (!req.file || !req.file.path) {
+      return res.status(400).json({ error: 'Cloudinary upload failed. No file found.' });
     }
 
-    // Find user
+    const videoUrl = req.file.path;
+    const thumbnailUrl = videoUrl.includes('/upload/')
+      ? videoUrl.replace('/upload/', '/upload/w_300,h_400,c_fill/')
+      : '';
+
     const user = await User.findOne({ googleId });
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
+    if (!user) return res.status(404).json({ error: 'User not found' });
 
-    // Get Cloudinary video URL and public ID
-    const videoUrl = req.file?.path;
-    if (!videoUrl) {
-      return res.status(400).json({ error: 'Cloudinary upload failed, video URL missing' });
-    }
-    
-    const thumbnailUrl = videoUrl.replace('/upload/', '/upload/w_300,h_400,c_fill/')    
-
-    // Save video with Cloudinary URLs
     const video = new Video({
       videoName,
       description,
-      videoUrl: videoUrl, // Cloudinary URL
-      originalVideoUrl: videoUrl, // Same as videoUrl for Cloudinary
-      thumbnailUrl: thumbnailUrl, // Generated thumbnail URL
+      videoUrl,
+      originalVideoUrl: videoUrl,
+      thumbnailUrl,
       uploader: user._id,
     });
 
     await video.save();
-
     user.videos.push(video._id);
     await user.save();
 
     res.status(201).json({
       message: '✅ Video uploaded successfully to Cloudinary',
-      video: {
-        ...video.toObject(),
-        videoUrl: videoUrl,
-        thumbnailUrl: thumbnailUrl
-      },
+      video,
     });
   } catch (error) {
     console.error('❌ Upload Error:', error.message, error.stack);
-    res.status(500).json({ error: '❌ Failed to upload video' });
+    res.status(500).json({ error: '❌ Failed to upload video', details: error.message });
   }
 });
+
 
 // Note: Video streaming is now handled by Cloudinary directly
 // No need for local streaming endpoint as Cloudinary provides optimized video delivery
