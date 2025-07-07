@@ -37,8 +37,8 @@ const videoSchema = new mongoose.Schema({
   },
   videoType: {
     type: String,
-    enum: ['reel', 'yog'],
-    default: 'reel'
+    enum: ['snehayog', 'yog'],
+    default: 'yog'
   },
   duration: {
     type: Number,

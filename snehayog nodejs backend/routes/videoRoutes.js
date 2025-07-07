@@ -26,6 +26,8 @@ const upload = multer({ storage: storage });
 
 // Upload video to Cloudinary
 router.post('/upload', upload.single('video'), async (req, res) => {
+  console.log('req.file:', req.file); // uploaded video
+  console.log('req.body:', req.body);
   try {
     const { googleId, videoName, description } = req.body;
 

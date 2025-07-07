@@ -4,7 +4,6 @@ import 'package:snehayog/controller/google_sign_in_controller.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
-
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
 
@@ -25,8 +24,8 @@ Future<void> registerUserOnBackend(Map<String, dynamic> user) async {
   }
 
   print('✅ User registered: ${response.body}');
-}
 
+}
 
   @override
   Widget build(BuildContext context) {
