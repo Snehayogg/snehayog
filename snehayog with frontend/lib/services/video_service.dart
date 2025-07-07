@@ -3,7 +3,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/controllers/google_sign_in_controller.dart';
+import 'package:snehayog/controller/google_sign_in_controller.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 import 'package:provider/provider.dart';

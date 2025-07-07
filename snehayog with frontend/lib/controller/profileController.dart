@@ -146,6 +146,7 @@ class ProfileController extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+
     try {
       isLoading = true;
       notifyListeners();
@@ -163,4 +164,25 @@ class ProfileController extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+Future<void> registerUserOnBackend(Map<String, dynamic> user) async {
+  final response = await http.post(
+    Uri.parse('https://snehayog-production.up.railway.app/api/users/register'),
+    headers: { 'Content-Type': 'application/json' },
+    body: json.encode({
+      'googleId': user['id'],
+      'name': user['name'],
+      'email': user['email'],
+      'profilePic': user['photoUrl'],
+    }),
+  );
+
+  if (response.statusCode != 201 && response.statusCode != 200) {
+    print('❌ Failed to register user: ${response.body}');
+    throw Exception('User registration failed');
+  } else {
+    print('✅ User registered: ${response.body}');
+  }
+}
+
 }

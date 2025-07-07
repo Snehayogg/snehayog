@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:snehayog/services/google_auth_service.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:snehayog/config/app_config.dart';
 
 class GoogleSignInController extends ChangeNotifier {
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
   final GoogleAuthService _authService = GoogleAuthService();
-  bool _isLoading = false;
+  final bool _isLoading = false;
   String? _error;
   Map<String, dynamic>? _userData;
 
@@ -57,30 +55,11 @@ class GoogleSignInController extends ChangeNotifier {
     }
   }
 
-  Future<bool> signIn() async {
-    try {
-      _isLoading = true;
-      _error = null;
-      notifyListeners();
+Future<Map<String, dynamic>?> signIn() async {
+  final userInfo = await GoogleAuthService().signInWithGoogle();
+  return userInfo; // return the actual data
+}
 
-      final userInfo = await _authService.signInWithGoogle();
-
-      if (userInfo == null) {
-        _error = 'Sign in was cancelled';
-        return false;
-      }
-
-      _userData = userInfo;
-      await _registerUser();
-      return true;
-    } catch (e) {
-      _error = e.toString();
-      return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
 
   Future<void> signOut() async {
     try {

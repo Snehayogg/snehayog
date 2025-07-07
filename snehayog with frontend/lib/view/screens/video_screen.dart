@@ -6,7 +6,7 @@ import 'package:snehayog/services/video_service.dart';
 import 'package:snehayog/view/widget/video_player_widget.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:provider/provider.dart';
-import 'package:snehayog/controllers/google_sign_in_controller.dart';
+import 'package:snehayog/controller/google_sign_in_controller.dart';
 
 class VideoScreen extends StatefulWidget {
   const VideoScreen({Key? key}) : super(key: key);

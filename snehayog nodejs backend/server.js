@@ -73,7 +73,7 @@ app.post('/api/users/register', async (req, res) => {
         googleId,
         name,
         email,
-        profilePic
+        profilePic,
       });
       await user.save();
     }

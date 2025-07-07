@@ -3,7 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:snehayog/services/video_service.dart';
-import 'package:snehayog/controllers/google_sign_in_controller.dart';
+import 'package:snehayog/controller/google_sign_in_controller.dart';
 import 'package:provider/provider.dart';
 
 class UploadScreen extends StatefulWidget {

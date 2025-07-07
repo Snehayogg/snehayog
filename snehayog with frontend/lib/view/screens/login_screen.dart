@@ -1,9 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:snehayog/controllers/google_sign_in_controller.dart';
+import 'package:snehayog/controller/google_sign_in_controller.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
+
+Future<void> registerUserOnBackend(Map<String, dynamic> user) async {
+  final response = await http.post(
+    Uri.parse('https://snehayog-production.up.railway.app/api/users/register'),
+    headers: {'Content-Type': 'application/json'},
+    body: json.encode({
+      'googleId': user['id'],
+      'name': user['name'],
+      'email': user['email'],
+      'profilePic': user['photoUrl'],
+    }),
+  );
+
+  if (response.statusCode != 200 && response.statusCode != 201) {
+    throw Exception('User registration failed: ${response.body}');
+  }
+
+  print('✅ User registered: ${response.body}');
+}
+
 
   @override
   Widget build(BuildContext context) {
@@ -39,14 +62,34 @@ class LoginScreen extends StatelessWidget {
 
                 return ElevatedButton.icon(
                   onPressed: () async {
-                    final success = await authController.signIn();
-                    if (!success && context.mounted) {
+                    final user = await authController
+                        .signIn(); // returns Map<String, dynamic>?
+                    if (user == null && context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Failed to sign in with Google'),
                           backgroundColor: Colors.red,
                         ),
                       );
+                      return;
+                    }
+
+                    try {
+                      await registerUserOnBackend(
+                          user!); // ✅ Register to Node.js backend
+                      // Optional: Navigate to home screen
+                      if (context.mounted) {
+                        Navigator.pushReplacementNamed(context, '/home');
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('❌ Backend registration failed: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
                     }
                   },
                   icon: Image.network(

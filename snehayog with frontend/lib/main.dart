@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:snehayog/controller/main_controller.dart';
 import 'package:snehayog/view/homescreen.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:snehayog/controllers/google_sign_in_controller.dart';
+import 'package:snehayog/controller/google_sign_in_controller.dart';
 import 'package:snehayog/view/screens/login_screen.dart';
 import 'package:snehayog/services/video_service.dart';
 
