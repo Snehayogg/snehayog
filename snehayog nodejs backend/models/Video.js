@@ -24,7 +24,7 @@ const videoSchema = new mongoose.Schema({
     default: 0
   },
   likedBy: [{
-    type: String  // Store user IDs as strings
+    type: String,
   }],
   uploader: {
     type: mongoose.Schema.Types.ObjectId,
@@ -37,7 +37,7 @@ const videoSchema = new mongoose.Schema({
   },
   videoType: {
     type: String,
-    enum: ['snehayog', 'yog'],
+    enum: ['sneha', 'yog'],
     default: 'yog'
   },
   duration: {
