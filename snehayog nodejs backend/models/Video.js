@@ -15,9 +15,11 @@ const videoSchema = new mongoose.Schema({
   },
   originalVideoUrl: {
     type: String,
+    required: true
   },
   thumbnailUrl: {
     type: String,
+    required: true
   },
   views: {
     type: Number,

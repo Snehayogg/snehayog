@@ -39,7 +39,7 @@ router.post('/upload', upload.single('video'), async (req, res) => {
     const thumbnailUrl = videoUrl.includes('/upload/')
       ? videoUrl.replace('/upload/', '/upload/w_300,h_400,c_fill/')
       : '';
-
+      const originalVideoUrl = videoUrl;
     const user = await User.findOne({ googleId });
     if (!user) return res.status(404).json({ error: 'User not found' });
 
@@ -47,7 +47,7 @@ router.post('/upload', upload.single('video'), async (req, res) => {
       videoName,
       description,
       videoUrl,
-      originalVideoUrl: videoUrl,
+      originalVideoUrl,
       thumbnailUrl,
       uploader: user._id,
     });
