@@ -30,7 +30,7 @@ router.post('/upload', upload.single('video'), async (req, res) => {
   console.log('req.body:', req.body);
   try {
     const { googleId, videoName, description } = req.body;
-
+    console.log("File received:", req.file);
     if (!req.file || !req.file.path) {
       return res.status(400).json({ error: 'Cloudinary upload failed. No file found.' });
     }
