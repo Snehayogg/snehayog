@@ -3,7 +3,7 @@ const multer = require('multer');
 const Video = require('../models/Video');
 const User = require('../models/User');
 const mongoose = require('mongoose');
-const cloudinary = require('../config/cloudnary.js');
+const cloudinary = require('../config/cloudinary .js');
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
 const router = express.Router();
@@ -16,8 +16,8 @@ const storage = new CloudinaryStorage({
     resource_type: 'video',
     allowed_formats: ['mp4', 'avi', 'mov', 'mkv', 'webm'],
     transformation: [
-      { width: 1080, height: 1920, crop: 'fill' }, // Optimize for mobile
-      { quality: 'auto' }
+      { quality: 'auto:good' },    // Smart compression, preserves quality
+      { fetch_format: 'auto' } 
     ]
   }
 });
@@ -32,6 +32,7 @@ router.post('/upload', upload.single('video'), async (req, res) => {
     const { googleId, videoName, description } = req.body;
     console.log("File received:", req.file);
     if (!req.file || !req.file.path) {
+      console.log('❌ No file or path');
       return res.status(400).json({ error: 'Cloudinary upload failed. No file found.' });
     }
 
