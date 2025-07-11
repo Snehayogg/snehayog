@@ -2,53 +2,58 @@ const express = require('express');
 const multer = require('multer');
 const Video = require('../models/Video');
 const User = require('../models/User');
-const mongoose = require('mongoose');
-const cloudinary = require('../config/cloudinary .js');
+const cloudinary = require('../config/cloudinary.js');
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
-
+const fs = require('fs'); // To delete temp file after upload
 const router = express.Router();
 
-// Configure Cloudinary storage for video uploads
-const storage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: {
-    folder: 'snehayog-videos',
-    resource_type: 'video',
-    allowed_formats: ['mp4', 'avi', 'mov', 'mkv', 'webm'],
-    transformation: [
-      { quality: 'auto:good' },    // Smart compression, preserves quality
-      { fetch_format: 'auto' } 
-    ]
-  }
+// Multer disk storage to get original file first
+const tempStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, 'uploads/'), // temp folder
+  filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname),
 });
+const upload = multer({ storage: tempStorage });
 
-const upload = multer({ storage: storage });
-
-// Upload video to Cloudinary
+// POST /api/videos/upload
 router.post('/upload', upload.single('video'), async (req, res) => {
-  console.log('req.file:', req.file); // uploaded video
-  console.log('req.body:', req.body);
   try {
     const { googleId, videoName, description } = req.body;
-    console.log("File received:", req.file);
+
     if (!req.file || !req.file.path) {
-      console.log('❌ No file or path');
-      return res.status(400).json({ error: 'Cloudinary upload failed. No file found.' });
+      return res.status(400).json({ error: 'No video file uploaded' });
     }
 
-    const videoUrl = req.file.path;
-    const thumbnailUrl = videoUrl.includes('/upload/')
-      ? videoUrl.replace('/upload/', '/upload/w_300,h_400,c_fill/')
-      : '';
-      const originalVideoUrl = videoUrl;
     const user = await User.findOne({ googleId });
     if (!user) return res.status(404).json({ error: 'User not found' });
 
+    // ✅ Upload original video (uncompressed)
+    const originalResult = await cloudinary.uploader.upload(req.file.path, {
+      resource_type: 'video',
+      folder: 'snehayog-originals',
+    });
+
+    // ✅ Upload transformed/compressed video
+    const compressedResult = await cloudinary.uploader.upload(req.file.path, {
+      resource_type: 'video',
+      folder: 'snehayog-videos',
+      transformation: [
+        { quality: 'auto:good' },
+        { fetch_format: 'auto' },
+      ],
+    });
+
+    // ✅ Generate thumbnail from transformed video URL
+    const thumbnailUrl = compressedResult.secure_url.replace(
+      '/upload/',
+      '/upload/w_300,h_400,c_fill/'
+    );
+
+    // ✅ Create and save video entry
     const video = new Video({
       videoName,
       description,
-      videoUrl,
-      originalVideoUrl,
+      videoUrl: compressedResult.secure_url,
+      originalVideoUrl: originalResult.secure_url,
       thumbnailUrl,
       uploader: user._id,
     });
@@ -57,15 +62,20 @@ router.post('/upload', upload.single('video'), async (req, res) => {
     user.videos.push(video._id);
     await user.save();
 
+    // ✅ Delete the temp file
+    fs.unlinkSync(req.file.path);
+
     res.status(201).json({
       message: '✅ Video uploaded successfully to Cloudinary',
       video,
     });
   } catch (error) {
-    console.error('❌ Upload Error:', error.message, error.stack);
-    res.status(500).json({ error: '❌ Failed to upload video', details: error.message });
+    console.error('❌ Upload Error:', error.message);
+    res.status(500).json({ error: 'Failed to upload video', details: error.message });
   }
 });
+
+
 
 
 // Note: Video streaming is now handled by Cloudinary directly
