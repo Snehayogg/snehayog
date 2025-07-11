@@ -42,11 +42,27 @@ router.post('/upload', upload.single('video'), async (req, res) => {
       ],
     });
 
+    // ⛔ Prevent proceeding if Cloudinary didn't return secure_url
+    if (!originalResult?.secure_url || !compressedResult?.secure_url) {
+      console.error('Cloudinary upload failed:', { originalResult, compressedResult });
+      return res.status(500).json({
+        error: 'Cloudinary upload failed',
+        details: 'Missing secure_url in upload result',
+        originalResult,
+        compressedResult
+      });
+    }
+
+
     // ✅ Generate thumbnail from transformed video URL
     const thumbnailUrl = compressedResult.secure_url.replace(
       '/upload/',
       '/upload/w_300,h_400,c_fill/'
     );
+    console.log('Original Result:', originalResult);
+    console.log('Compressed Result:', compressedResult);
+    console.log('Thumbnail URL:', thumbnailUrl);
+
 
     // ✅ Create and save video entry
     const video = new Video({
@@ -71,12 +87,12 @@ router.post('/upload', upload.single('video'), async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Upload Error:', error.message);
-    res.status(500).json({ error: 'Failed to upload video', details: error.message });
+    res.status(500).json({
+      error: 'Failed to upload video', details: error.message,
+      stack: error.stack,
+    });
   }
 });
-
-
-
 
 // Note: Video streaming is now handled by Cloudinary directly
 // No need for local streaming endpoint as Cloudinary provides optimized video delivery
@@ -85,7 +101,7 @@ router.post('/upload', upload.single('video'), async (req, res) => {
 router.get('/user/:googleId', async (req, res) => {
   try {
     console.log('Fetching videos for user:', req.params.googleId);
-    
+
     const user = await User.findOne({ googleId: req.params.googleId });
     if (!user) {
       console.log('User not found');
@@ -161,7 +177,7 @@ router.get('/', async (req, res) => {
 
     const totalVideos = await Video.countDocuments();
     const hasMore = (page * limit) < totalVideos;
-    
+
     // Cloudinary URLs are already full URLs, no need to construct them
     const videosWithUrls = videos.map(video => ({
       ...video.toObject(),
@@ -186,7 +202,7 @@ router.get('/:id', async (req, res) => {
     const video = await Video.findById(req.params.id)
       .populate('uploader', 'name profilePic')
       .populate('comments.user', 'name profilePic');
-    
+
     if (!video) {
       return res.status(404).json({ error: 'Video not found' });
     }
