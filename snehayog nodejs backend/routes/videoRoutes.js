@@ -25,7 +25,7 @@ const tempStorage = multer.diskStorage({
   },
 });
 
-const upload = multer({ 
+const upload = multer({
   storage: tempStorage,
   limits: {
     fileSize: 100 * 1024 * 1024, // 100MB limit
@@ -54,13 +54,13 @@ const handleMulterError = (error, req, res, next) => {
       details: error.message
     });
   }
-  
+
   if (error.message.includes('Invalid file type')) {
     return res.status(400).json({
       error: 'Invalid file type. Only video files are allowed.'
     });
   }
-  
+
   next(error);
 };
 
@@ -73,14 +73,14 @@ router.get('/health', async (req, res) => {
       api_key: process.env.CLOUD_KEY,
       api_secret: process.env.CLOUD_SECRET ? '***configured***' : '***missing***'
     };
-    
+
     // Check if all required environment variables are set
     const missingVars = [];
     if (!process.env.CLOUD_NAME) missingVars.push('CLOUD_NAME');
     if (!process.env.CLOUD_KEY) missingVars.push('CLOUD_KEY');
     if (!process.env.CLOUD_SECRET) missingVars.push('CLOUD_SECRET');
     if (!process.env.MONGO_URI) missingVars.push('MONGO_URI');
-    
+
     res.json({
       status: 'ok',
       timestamp: new Date().toISOString(),
@@ -128,8 +128,8 @@ router.post('/upload', upload.single('video'), handleMulterError, async (req, re
     const allowedMimeTypes = ['video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/webm'];
     if (!allowedMimeTypes.includes(req.file.mimetype)) {
       fs.unlinkSync(req.file.path); // Clean up temp file
-      return res.status(400).json({ 
-        error: 'Invalid file type. Please upload a video file (MP4, AVI, MOV, WMV, FLV, WEBM)' 
+      return res.status(400).json({
+        error: 'Invalid file type. Please upload a video file (MP4, AVI, MOV, WMV, FLV, WEBM)'
       });
     }
 
@@ -137,8 +137,8 @@ router.post('/upload', upload.single('video'), handleMulterError, async (req, re
     const maxSize = 100 * 1024 * 1024; // 100MB
     if (req.file.size > maxSize) {
       fs.unlinkSync(req.file.path); // Clean up temp file
-      return res.status(400).json({ 
-        error: 'File too large. Maximum size is 100MB' 
+      return res.status(400).json({
+        error: 'File too large. Maximum size is 100MB'
       });
     }
 
@@ -171,6 +171,11 @@ router.post('/upload', upload.single('video'), handleMulterError, async (req, re
     });
 
     console.log('Compressed upload result:', compressedResult);
+
+    console.log('✅ Upload path:', req.file.path);
+    console.log('✅ File exists:', fs.existsSync(req.file.path));
+    console.log('📦 Cloudinary original result:', originalResult);
+    console.log('📦 Cloudinary compressed result:', compressedResult);
 
     // ⛔ Prevent proceeding if Cloudinary didn't return secure_url
     if (!originalResult?.secure_url || !compressedResult?.secure_url) {
@@ -220,7 +225,7 @@ router.post('/upload', upload.single('video'), handleMulterError, async (req, re
   } catch (error) {
     console.error('❌ Upload Error:', error.message);
     console.error('Error stack:', error.stack);
-    
+
     // Clean up temp file if it exists
     if (req.file && req.file.path && fs.existsSync(req.file.path)) {
       try {
@@ -230,11 +235,17 @@ router.post('/upload', upload.single('video'), handleMulterError, async (req, re
       }
     }
 
-    // Check for specific error types
-    if (error.message.includes('ENOENT')) {
+    if (!originalResult?.secure_url || !compressedResult?.secure_url) {
+      console.error('❌ Cloudinary upload returned missing URLs', {
+        originalResult,
+        compressedResult
+      });
+
+      fs.unlinkSync(req.file.path);
       return res.status(500).json({
-        error: 'File system error - file not found',
-        details: error.message
+        error: '❌ Cloudinary upload failed. Missing secure_url.',
+        originalResult,
+        compressedResult,
       });
     }
 
