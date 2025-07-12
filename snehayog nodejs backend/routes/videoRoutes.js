@@ -85,7 +85,8 @@ router.get('/health', async (req, res) => {
       status: 'ok',
       timestamp: new Date().toISOString(),
       cloudinary: {
-        configured: !missingVars.includes('CLOUD_NAME') && !missingVars.includes('CLOUD_KEY') && !missingVars.includes('CLOUD_SECRET'),
+        configured: !missingVars.includes('CLOUD_NAME') && !missingVars.includes('CLOUD_KEY') 
+        && !missingVars.includes('CLOUD_SECRET'),
         config: cloudinaryConfig
       },
       database: {
@@ -107,6 +108,9 @@ router.get('/health', async (req, res) => {
 
 // POST /api/videos/upload
 router.post('/upload', upload.single('video'), handleMulterError, async (req, res) => {
+  let originalResult = null;
+  let compressedResult = null;
+
   try {
     const { googleId, videoName, description, videoType } = req.body;
 
@@ -129,7 +133,7 @@ router.post('/upload', upload.single('video'), handleMulterError, async (req, re
     if (!allowedMimeTypes.includes(req.file.mimetype)) {
       fs.unlinkSync(req.file.path); // Clean up temp file
       return res.status(400).json({
-        error: 'Invalid file type. Please upload a video file (MP4, AVI, MOV, WMV, FLV, WEBM)'
+        error: 'Invalid file type. Please upload a valid video format.'
       });
     }
 
@@ -138,67 +142,55 @@ router.post('/upload', upload.single('video'), handleMulterError, async (req, re
     if (req.file.size > maxSize) {
       fs.unlinkSync(req.file.path); // Clean up temp file
       return res.status(400).json({
-        error: 'File too large. Maximum size is 100MB'
+        error: 'File too large. Maximum size is 100MB.'
       });
     }
 
+    // Fetch user
     const user = await User.findOne({ googleId });
     if (!user) {
-      fs.unlinkSync(req.file.path); // Clean up temp file
+      fs.unlinkSync(req.file.path);
       return res.status(404).json({ error: 'User not found' });
     }
 
-    console.log('Uploading to Cloudinary...');
-
-    // ✅ Upload original video (uncompressed)
-    const originalResult = await cloudinary.uploader.upload(req.file.path, {
+    // ✅ Upload original
+    originalResult = await cloudinary.uploader.upload(req.file.path, {
       resource_type: 'video',
       folder: 'snehayog-originals',
-      timeout: 60000, // 60 seconds timeout
+      timeout: 60000
     });
 
-    console.log('Original upload result:', originalResult);
+    console.log('✅ Original upload result:', originalResult);
 
-    // ✅ Upload transformed/compressed video
-    const compressedResult = await cloudinary.uploader.upload(req.file.path, {
+    // ✅ Upload compressed
+    compressedResult = await cloudinary.uploader.upload(req.file.path, {
       resource_type: 'video',
       folder: 'snehayog-videos',
       transformation: [
         { quality: 'auto:good' },
         { fetch_format: 'auto' },
       ],
-      timeout: 60000, // 60 seconds timeout
+      timeout: 60000
     });
 
-    console.log('Compressed upload result:', compressedResult);
+    console.log('✅ Compressed upload result:', compressedResult);
 
-    console.log('✅ Upload path:', req.file.path);
-    console.log('✅ File exists:', fs.existsSync(req.file.path));
-    console.log('📦 Cloudinary original result:', originalResult);
-    console.log('📦 Cloudinary compressed result:', compressedResult);
-
-    // ⛔ Prevent proceeding if Cloudinary didn't return secure_url
+    // ⛔ Ensure both uploads succeeded
     if (!originalResult?.secure_url || !compressedResult?.secure_url) {
-      console.error('Cloudinary upload failed:', { originalResult, compressedResult });
-      fs.unlinkSync(req.file.path); // Clean up temp file
+      fs.unlinkSync(req.file.path);
       return res.status(500).json({
-        error: 'Cloudinary upload failed',
-        details: 'Missing secure_url in upload result',
+        error: '❌ Cloudinary upload failed. Missing secure_url.',
         originalResult,
         compressedResult
       });
     }
 
-    // ✅ Generate thumbnail from transformed video URL
     const thumbnailUrl = compressedResult.secure_url.replace(
       '/upload/',
       '/upload/w_300,h_400,c_fill/'
     );
-    console.log('Original Result:', originalResult);
-    console.log('Compressed Result:', compressedResult);
-    console.log('Thumbnail URL:', thumbnailUrl);
 
-    // ✅ Create and save video entry
+    // ✅ Create and save video
     const video = new Video({
       videoName,
       description,
@@ -206,70 +198,44 @@ router.post('/upload', upload.single('video'), handleMulterError, async (req, re
       originalVideoUrl: originalResult.secure_url,
       thumbnailUrl,
       uploader: user._id,
-      videoType: videoType || 'sneha', // Use provided videoType or default to 'sneha'
+      videoType: videoType || 'sneha'
     });
 
     await video.save();
     user.videos.push(video._id);
     await user.save();
 
-    // ✅ Delete the temp file
     fs.unlinkSync(req.file.path);
-
-    console.log('Video saved successfully:', video._id);
 
     res.status(201).json({
       message: '✅ Video uploaded successfully to Cloudinary',
-      video,
+      video
     });
+
   } catch (error) {
     console.error('❌ Upload Error:', error.message);
-    console.error('Error stack:', error.stack);
+    console.error('Stack:', error.stack);
 
-    // Clean up temp file if it exists
-    if (req.file && req.file.path && fs.existsSync(req.file.path)) {
+    // Cleanup
+    if (req.file?.path && fs.existsSync(req.file.path)) {
       try {
         fs.unlinkSync(req.file.path);
-      } catch (cleanupError) {
-        console.error('Failed to clean up temp file:', cleanupError);
+      } catch (cleanupErr) {
+        console.error('❌ Failed to delete temp file:', cleanupErr.message);
       }
-    }
-
-    if (!originalResult?.secure_url || !compressedResult?.secure_url) {
-      console.error('❌ Cloudinary upload returned missing URLs', {
-        originalResult,
-        compressedResult
-      });
-
-      fs.unlinkSync(req.file.path);
-      return res.status(500).json({
-        error: '❌ Cloudinary upload failed. Missing secure_url.',
-        originalResult,
-        compressedResult,
-      });
-    }
-
-    if (error.message.includes('cloudinary')) {
-      return res.status(500).json({
-        error: 'Cloudinary upload failed',
-        details: error.message
-      });
-    }
-
-    if (error.message.includes('timeout')) {
-      return res.status(500).json({
-        error: 'Upload timeout - file may be too large',
-        details: error.message
-      });
     }
 
     res.status(500).json({
       error: '❌ Failed to upload video',
       details: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      cloudinary: {
+        originalResult,
+        compressedResult
+      }
     });
   }
 });
+
 
 // Note: Video streaming is now handled by Cloudinary directly
 // No need for local streaming endpoint as Cloudinary provides optimized video delivery
