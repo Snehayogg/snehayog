@@ -322,6 +322,13 @@ class VideoService {
     try {
       print('Using server at: $baseUrl');
 
+      // Check server health before upload
+      final isHealthy = await checkServerHealth();
+      if (!isHealthy) {
+        throw Exception(
+            'Server is not responding. Please check your connection and try again.');
+      }
+
       final isLong = await isLongVideo(videoFile.path);
       final authController = Provider.of<GoogleSignInController>(
         navigatorKey.currentContext!,
@@ -338,6 +345,13 @@ class VideoService {
       }
 
       print('User data for upload: ${userData.toString()}');
+
+      // Check file size before upload
+      final fileSize = await videoFile.length();
+      final maxSize = 100 * 1024 * 1024; // 100MB
+      if (fileSize > maxSize) {
+        throw Exception('File too large. Maximum size is 100MB');
+      }
 
       // Create a multipart request
       var request = http.MultipartRequest(
@@ -398,7 +412,30 @@ class VideoService {
       } else {
         print('Upload failed with status: ${streamedResponse.statusCode}');
         print('Upload error: $responseData');
-        throw Exception(responseData['error'] ?? 'Failed to upload video');
+
+        // Handle specific error types
+        if (responseData['error'] != null) {
+          final errorMessage = responseData['error'].toString();
+
+          if (errorMessage.contains('File too large')) {
+            throw Exception('File too large. Maximum size is 100MB');
+          } else if (errorMessage.contains('Invalid file type')) {
+            throw Exception(
+                'Invalid file type. Please upload a video file (MP4, AVI, MOV, WMV, FLV, WEBM)');
+          } else if (errorMessage.contains('User not found')) {
+            throw Exception('User not found. Please sign in again.');
+          } else if (errorMessage.contains('Cloudinary upload failed')) {
+            throw Exception(
+                'Video upload service is temporarily unavailable. Please try again later.');
+          } else if (errorMessage.contains('timeout')) {
+            throw Exception(
+                'Upload timed out. Please check your internet connection and try again.');
+          } else {
+            throw Exception(errorMessage);
+          }
+        }
+
+        throw Exception('Failed to upload video. Please try again.');
       }
     } catch (e) {
       print('Error uploading video: $e');
@@ -408,6 +445,8 @@ class VideoService {
       } else if (e is SocketException) {
         throw Exception(
             'Could not connect to server. Please check if the server is running.');
+      } else if (e is FormatException) {
+        throw Exception('Invalid response from server. Please try again.');
       }
       rethrow;
     }

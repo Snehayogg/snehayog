@@ -5,32 +5,159 @@ const User = require('../models/User');
 const cloudinary = require('../config/cloudinary.js');
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const fs = require('fs'); // To delete temp file after upload
+const mongoose = require('mongoose'); // For database health check
 const router = express.Router();
 
 // Multer disk storage to get original file first
 const tempStorage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/'), // temp folder
-  filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname),
+  destination: (req, file, cb) => {
+    // Ensure uploads directory exists
+    const uploadDir = 'uploads/';
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    // Generate unique filename with timestamp
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + '-' + file.originalname);
+  },
 });
-const upload = multer({ storage: tempStorage });
+
+const upload = multer({ 
+  storage: tempStorage,
+  limits: {
+    fileSize: 100 * 1024 * 1024, // 100MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    // Check file type
+    const allowedMimeTypes = ['video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/webm'];
+    if (allowedMimeTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only video files are allowed.'), false);
+    }
+  }
+});
+
+// Error handling middleware for multer
+const handleMulterError = (error, req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({
+        error: 'File too large. Maximum size is 100MB'
+      });
+    }
+    return res.status(400).json({
+      error: 'File upload error',
+      details: error.message
+    });
+  }
+  
+  if (error.message.includes('Invalid file type')) {
+    return res.status(400).json({
+      error: 'Invalid file type. Only video files are allowed.'
+    });
+  }
+  
+  next(error);
+};
+
+// Health check endpoint for video service
+router.get('/health', async (req, res) => {
+  try {
+    // Check if Cloudinary is configured
+    const cloudinaryConfig = {
+      cloud_name: process.env.CLOUD_NAME,
+      api_key: process.env.CLOUD_KEY,
+      api_secret: process.env.CLOUD_SECRET ? '***configured***' : '***missing***'
+    };
+    
+    // Check if all required environment variables are set
+    const missingVars = [];
+    if (!process.env.CLOUD_NAME) missingVars.push('CLOUD_NAME');
+    if (!process.env.CLOUD_KEY) missingVars.push('CLOUD_KEY');
+    if (!process.env.CLOUD_SECRET) missingVars.push('CLOUD_SECRET');
+    if (!process.env.MONGO_URI) missingVars.push('MONGO_URI');
+    
+    res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      cloudinary: {
+        configured: !missingVars.includes('CLOUD_NAME') && !missingVars.includes('CLOUD_KEY') && !missingVars.includes('CLOUD_SECRET'),
+        config: cloudinaryConfig
+      },
+      database: {
+        connected: mongoose.connection.readyState === 1,
+        missingVars: missingVars
+      },
+      uploads: {
+        directory: 'uploads/',
+        exists: fs.existsSync('uploads/')
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      error: error.message
+    });
+  }
+});
 
 // POST /api/videos/upload
-router.post('/upload', upload.single('video'), async (req, res) => {
+router.post('/upload', upload.single('video'), handleMulterError, async (req, res) => {
   try {
-    const { googleId, videoName, description } = req.body;
+    const { googleId, videoName, description, videoType } = req.body;
+
+    console.log('Upload request received:', {
+      googleId,
+      videoName,
+      description,
+      videoType,
+      hasFile: !!req.file,
+      fileSize: req.file?.size,
+      fileMimetype: req.file?.mimetype
+    });
 
     if (!req.file || !req.file.path) {
       return res.status(400).json({ error: 'No video file uploaded' });
     }
 
+    // Validate file type
+    const allowedMimeTypes = ['video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/webm'];
+    if (!allowedMimeTypes.includes(req.file.mimetype)) {
+      fs.unlinkSync(req.file.path); // Clean up temp file
+      return res.status(400).json({ 
+        error: 'Invalid file type. Please upload a video file (MP4, AVI, MOV, WMV, FLV, WEBM)' 
+      });
+    }
+
+    // Validate file size (100MB limit)
+    const maxSize = 100 * 1024 * 1024; // 100MB
+    if (req.file.size > maxSize) {
+      fs.unlinkSync(req.file.path); // Clean up temp file
+      return res.status(400).json({ 
+        error: 'File too large. Maximum size is 100MB' 
+      });
+    }
+
     const user = await User.findOne({ googleId });
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user) {
+      fs.unlinkSync(req.file.path); // Clean up temp file
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    console.log('Uploading to Cloudinary...');
 
     // ✅ Upload original video (uncompressed)
     const originalResult = await cloudinary.uploader.upload(req.file.path, {
       resource_type: 'video',
       folder: 'snehayog-originals',
+      timeout: 60000, // 60 seconds timeout
     });
+
+    console.log('Original upload result:', originalResult);
 
     // ✅ Upload transformed/compressed video
     const compressedResult = await cloudinary.uploader.upload(req.file.path, {
@@ -40,11 +167,15 @@ router.post('/upload', upload.single('video'), async (req, res) => {
         { quality: 'auto:good' },
         { fetch_format: 'auto' },
       ],
+      timeout: 60000, // 60 seconds timeout
     });
+
+    console.log('Compressed upload result:', compressedResult);
 
     // ⛔ Prevent proceeding if Cloudinary didn't return secure_url
     if (!originalResult?.secure_url || !compressedResult?.secure_url) {
       console.error('Cloudinary upload failed:', { originalResult, compressedResult });
+      fs.unlinkSync(req.file.path); // Clean up temp file
       return res.status(500).json({
         error: 'Cloudinary upload failed',
         details: 'Missing secure_url in upload result',
@@ -52,7 +183,6 @@ router.post('/upload', upload.single('video'), async (req, res) => {
         compressedResult
       });
     }
-
 
     // ✅ Generate thumbnail from transformed video URL
     const thumbnailUrl = compressedResult.secure_url.replace(
@@ -63,7 +193,6 @@ router.post('/upload', upload.single('video'), async (req, res) => {
     console.log('Compressed Result:', compressedResult);
     console.log('Thumbnail URL:', thumbnailUrl);
 
-
     // ✅ Create and save video entry
     const video = new Video({
       videoName,
@@ -72,6 +201,7 @@ router.post('/upload', upload.single('video'), async (req, res) => {
       originalVideoUrl: originalResult.secure_url,
       thumbnailUrl,
       uploader: user._id,
+      videoType: videoType || 'sneha', // Use provided videoType or default to 'sneha'
     });
 
     await video.save();
@@ -81,15 +211,51 @@ router.post('/upload', upload.single('video'), async (req, res) => {
     // ✅ Delete the temp file
     fs.unlinkSync(req.file.path);
 
+    console.log('Video saved successfully:', video._id);
+
     res.status(201).json({
       message: '✅ Video uploaded successfully to Cloudinary',
       video,
     });
   } catch (error) {
     console.error('❌ Upload Error:', error.message);
+    console.error('Error stack:', error.stack);
+    
+    // Clean up temp file if it exists
+    if (req.file && req.file.path && fs.existsSync(req.file.path)) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (cleanupError) {
+        console.error('Failed to clean up temp file:', cleanupError);
+      }
+    }
+
+    // Check for specific error types
+    if (error.message.includes('ENOENT')) {
+      return res.status(500).json({
+        error: 'File system error - file not found',
+        details: error.message
+      });
+    }
+
+    if (error.message.includes('cloudinary')) {
+      return res.status(500).json({
+        error: 'Cloudinary upload failed',
+        details: error.message
+      });
+    }
+
+    if (error.message.includes('timeout')) {
+      return res.status(500).json({
+        error: 'Upload timeout - file may be too large',
+        details: error.message
+      });
+    }
+
     res.status(500).json({
-      error: 'Failed to upload video', details: error.message,
-      stack: error.stack,
+      error: '❌ Failed to upload video',
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     });
   }
 });
