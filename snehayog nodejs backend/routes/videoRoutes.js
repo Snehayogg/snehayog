@@ -107,62 +107,40 @@ router.get('/health', async (req, res) => {
 });
 
 // POST /api/videos/upload
-router.post('/upload', upload.single('video'), handleMulterError, async (req, res) => {
+router.post('/upload', upload.single('video'), async (req, res) => {
   let originalResult = null;
   let compressedResult = null;
 
   try {
     const { googleId, videoName, description, videoType } = req.body;
 
-    console.log('Upload request received:', {
-      googleId,
-      videoName,
-      description,
-      videoType,
-      hasFile: !!req.file,
-      fileSize: req.file?.size,
-      fileMimetype: req.file?.mimetype
-    });
-
+    // 1. Validate file
     if (!req.file || !req.file.path) {
       return res.status(400).json({ error: 'No video file uploaded' });
     }
 
-    // Validate file type
-    const allowedMimeTypes = ['video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/webm'];
-    if (!allowedMimeTypes.includes(req.file.mimetype)) {
-      fs.unlinkSync(req.file.path); // Clean up temp file
-      return res.status(400).json({
-        error: 'Invalid file type. Please upload a valid video format.'
-      });
+    // 2. Validate MIME type
+    const allowedTypes = ['video/mp4', 'video/webm', 'video/avi', 'video/mkv', 'video/mov'];
+    if (!allowedTypes.includes(req.file.mimetype)) {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: 'Invalid video format' });
     }
 
-    // Validate file size (100MB limit)
-    const maxSize = 100 * 1024 * 1024; // 100MB
-    if (req.file.size > maxSize) {
-      fs.unlinkSync(req.file.path); // Clean up temp file
-      return res.status(400).json({
-        error: 'File too large. Maximum size is 100MB.'
-      });
-    }
-
-    // Fetch user
+    // 3. Validate user
     const user = await User.findOne({ googleId });
     if (!user) {
       fs.unlinkSync(req.file.path);
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // ✅ Upload original
+    // 4. Upload original video
     originalResult = await cloudinary.uploader.upload(req.file.path, {
       resource_type: 'video',
       folder: 'snehayog-originals',
       timeout: 60000
     });
 
-    console.log('✅ Original upload result:', originalResult);
-
-    // ✅ Upload compressed
+    // 5. Upload compressed video
     compressedResult = await cloudinary.uploader.upload(req.file.path, {
       resource_type: 'video',
       folder: 'snehayog-videos',
@@ -173,24 +151,18 @@ router.post('/upload', upload.single('video'), handleMulterError, async (req, re
       timeout: 60000
     });
 
-    console.log('✅ Compressed upload result:', compressedResult);
-
-    // ⛔ Ensure both uploads succeeded
     if (!originalResult?.secure_url || !compressedResult?.secure_url) {
       fs.unlinkSync(req.file.path);
-      return res.status(500).json({
-        error: '❌ Cloudinary upload failed. Missing secure_url.',
-        originalResult,
-        compressedResult
-      });
+      return res.status(500).json({ error: 'Cloudinary upload failed' });
     }
 
+    // 6. Generate thumbnail URL
     const thumbnailUrl = compressedResult.secure_url.replace(
       '/upload/',
       '/upload/w_300,h_400,c_fill/'
     );
 
-    // ✅ Create and save video
+    // 7. Save video in MongoDB
     const video = new Video({
       videoName,
       description,
@@ -198,40 +170,34 @@ router.post('/upload', upload.single('video'), handleMulterError, async (req, re
       originalVideoUrl: originalResult.secure_url,
       thumbnailUrl,
       uploader: user._id,
-      videoType: videoType || 'sneha'
+      videoType: videoType || 'yog', // Default type
     });
 
     await video.save();
+
+    // 8. Push video to user's video list
     user.videos.push(video._id);
     await user.save();
 
+    // 9. Clean up temp file
     fs.unlinkSync(req.file.path);
 
+    // 10. Respond success
     res.status(201).json({
-      message: '✅ Video uploaded successfully to Cloudinary',
+      message: '✅ Video uploaded & saved successfully',
       video
     });
 
   } catch (error) {
-    console.error('❌ Upload Error:', error.message);
-    console.error('Stack:', error.stack);
+    console.error('❌ Upload error:', error.message);
 
-    // Cleanup
     if (req.file?.path && fs.existsSync(req.file.path)) {
-      try {
-        fs.unlinkSync(req.file.path);
-      } catch (cleanupErr) {
-        console.error('❌ Failed to delete temp file:', cleanupErr.message);
-      }
+      fs.unlinkSync(req.file.path); // Clean temp
     }
 
     res.status(500).json({
       error: '❌ Failed to upload video',
-      details: error.message,
-      cloudinary: {
-        originalResult,
-        compressedResult
-      }
+      details: error.message
     });
   }
 });
