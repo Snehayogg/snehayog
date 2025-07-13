@@ -142,6 +142,22 @@ class VideoService {
         final List<dynamic> videoList = responseData['videos'];
 
         final videos = videoList.map((json) {
+          // Ensure URLs are complete if they're relative paths
+          if (json['videoUrl'] != null &&
+              !json['videoUrl'].toString().startsWith('http')) {
+            json['videoUrl'] = '$baseUrl${json['videoUrl']}';
+          }
+
+          if (json['originalVideoUrl'] != null &&
+              !json['originalVideoUrl'].toString().startsWith('http')) {
+            json['originalVideoUrl'] = '$baseUrl${json['originalVideoUrl']}';
+          }
+
+          if (json['thumbnailUrl'] != null &&
+              !json['thumbnailUrl'].toString().startsWith('http')) {
+            json['thumbnailUrl'] = '$baseUrl${json['thumbnailUrl']}';
+          }
+
           return VideoModel.fromJson(json);
         }).toList();
 
@@ -403,6 +419,8 @@ class VideoService {
               videoData['videoUrl'], // Cloudinary URL is already complete
           'thumbnail':
               videoData['thumbnailUrl'], // Cloudinary URL is already complete
+          'originalVideoUrl':
+              videoData['originalVideoUrl'], // Add original video URL
           'duration': '0:00',
           'views': 0,
           'uploader': userData['name'],
@@ -484,6 +502,12 @@ class VideoService {
             if (json['videoUrl'] != null &&
                 !json['videoUrl'].toString().startsWith('http')) {
               json['videoUrl'] = '$baseUrl${json['videoUrl']}';
+            }
+
+            // Ensure originalVideoUrl has the base URL if it's a relative path
+            if (json['originalVideoUrl'] != null &&
+                !json['originalVideoUrl'].toString().startsWith('http')) {
+              json['originalVideoUrl'] = '$baseUrl${json['originalVideoUrl']}';
             }
 
             // Ensure thumbnailUrl has the base URL if it's a relative path
