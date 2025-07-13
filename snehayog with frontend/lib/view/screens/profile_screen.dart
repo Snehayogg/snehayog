@@ -137,7 +137,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (videos.isNotEmpty) {
         print('First video data: ${videos.first.toJson()}');
         print('Video URL: ${videos.first.videoUrl}');
-        print('Thumbnail URL: ${videos.first.thumbnailUrl}');
       } else {
         print('No videos found for user');
       }

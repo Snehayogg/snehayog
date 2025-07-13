@@ -2,8 +2,6 @@ class VideoModel {
   final String id;
   final String videoName;
   final String videoUrl;
-  final String originalVideoUrl;
-  final String thumbnailUrl;
   int likes;
   int views;
   int shares;
@@ -20,8 +18,6 @@ class VideoModel {
     required this.id,
     required this.videoName,
     required this.videoUrl,
-    required this.originalVideoUrl,
-    required this.thumbnailUrl,
     required this.likes,
     required this.views,
     required this.shares,
@@ -41,8 +37,6 @@ class VideoModel {
       id: json['_id'] ?? json['id'],
       videoName: json['videoName'] ?? '',
       videoUrl: json['videoUrl'] ?? '',
-      originalVideoUrl: json['originalVideoUrl'] ?? json['videoUrl'] ?? '',
-      thumbnailUrl: json['thumbnailUrl'] ?? '',
       likes: json['likes'] ?? 0,
       views: json['views'] ?? 0,
       shares: json['shares'] ?? 0,
@@ -69,8 +63,6 @@ class VideoModel {
       'id': id,
       'videoName': videoName,
       'videoUrl': videoUrl,
-      'originalVideoUrl': originalVideoUrl,
-      'thumbnailUrl': thumbnailUrl,
       'likes': likes,
       'views': views,
       'shares': shares,
@@ -111,8 +103,6 @@ class VideoModel {
       id: id ?? this.id,
       videoName: videoName ?? this.videoName,
       videoUrl: videoUrl ?? this.videoUrl,
-      originalVideoUrl: originalVideoUrl ?? this.originalVideoUrl,
-      thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
       likes: likes ?? this.likes,
       views: views ?? this.views,
       shares: shares ?? this.shares,

@@ -147,17 +147,6 @@ class VideoService {
               !json['videoUrl'].toString().startsWith('http')) {
             json['videoUrl'] = '$baseUrl${json['videoUrl']}';
           }
-
-          if (json['originalVideoUrl'] != null &&
-              !json['originalVideoUrl'].toString().startsWith('http')) {
-            json['originalVideoUrl'] = '$baseUrl${json['originalVideoUrl']}';
-          }
-
-          if (json['thumbnailUrl'] != null &&
-              !json['thumbnailUrl'].toString().startsWith('http')) {
-            json['thumbnailUrl'] = '$baseUrl${json['thumbnailUrl']}';
-          }
-
           return VideoModel.fromJson(json);
         }).toList();
 

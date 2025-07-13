@@ -167,8 +167,6 @@ router.post('/upload', upload.single('video'), async (req, res) => {
       videoName,
       description,
       videoUrl: compressedResult.secure_url,
-      originalVideoUrl: originalResult.secure_url,
-      thumbnailUrl,
       uploader: user._id,
       videoType: videoType || 'yog', // Default type
     });
