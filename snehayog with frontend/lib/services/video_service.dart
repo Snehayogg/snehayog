@@ -353,7 +353,7 @@ class VideoService {
 
       // Check file size before upload
       final fileSize = await videoFile.length();
-      final maxSize = 100 * 1024 * 1024; // 100MB
+      const maxSize = 100 * 1024 * 1024; // 100MB
       if (fileSize > maxSize) {
         throw Exception('File too large. Maximum size is 100MB');
       }
