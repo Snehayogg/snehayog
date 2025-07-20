@@ -77,4 +77,5 @@ videoSchema.virtual('likes').get(function() {
 videoSchema.set('toJSON', { virtuals: true });
 videoSchema.set('toObject', { virtuals: true });
 
-module.exports = mongoose.model('Video', videoSchema);
+module.exports = mongoose.models.Video || mongoose.model('Video', videoSchema);
+

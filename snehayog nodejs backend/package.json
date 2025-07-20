@@ -12,7 +12,7 @@
   "license": "ISC",
   "dependencies": {
     "@google-cloud/storage": "^7.16.0",
-    "cloudinary": "^2.7.0",
+    "cloudinary": "^1.30.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.0",
     "express": "^4.21.2",
