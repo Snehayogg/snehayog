@@ -7,6 +7,7 @@ import 'package:snehayog/view/widget/video_player_widget.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:snehayog/controller/google_sign_in_controller.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 class VideoScreen extends StatefulWidget {
   final int? initialIndex;
@@ -183,43 +184,54 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       return const Center(child: Text("No videos found."));
     }
 
-    return PageView.builder(
-      controller: _pageController,
-      scrollDirection: Axis.vertical,
-      itemCount: _videos.length + (_hasMore ? 1 : 0),
-      onPageChanged: (index) {
-        _onPageChanged(index);
-      },
-      itemBuilder: (context, index) {
-        if (index == _videos.length) {
-          return const Center(child: CircularProgressIndicator());
+    return VisibilityDetector(
+      key: const Key('video_screen_visibility'),
+      onVisibilityChanged: (visibilityInfo) {
+        final visiblePercentage = visibilityInfo.visibleFraction * 100;
+        if (visiblePercentage < 100) {
+          _controllers[_activePage]?.pause();
+        } else {
+          _controllers[_activePage]?.play();
         }
-        final video = _videos[index];
-        final controller = _controllers[index];
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            VideoPlayerWidget(
-              key: ValueKey(video.id),
-              controller: controller,
-              video: video,
-              play: index == _activePage,
-            ),
-            // Video info and uploader (bottom left)
-            Positioned(
-              left: 12,
-              bottom: 12,
-              right: 80,
-              child: _buildVideoInfo(video),
-            ),
-            Positioned(
-              right: 12,
-              bottom: 12,
-              child: _buildActionButtons(video, index),
-            ),
-          ],
-        );
       },
+      child: PageView.builder(
+        controller: _pageController,
+        scrollDirection: Axis.vertical,
+        itemCount: _videos.length + (_hasMore ? 1 : 0),
+        onPageChanged: (index) {
+          _onPageChanged(index);
+        },
+        itemBuilder: (context, index) {
+          if (index == _videos.length) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final video = _videos[index];
+          final controller = _controllers[index];
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              VideoPlayerWidget(
+                key: ValueKey(video.id),
+                controller: controller,
+                video: video,
+                play: index == _activePage,
+              ),
+              // Video info and uploader (bottom left)
+              Positioned(
+                left: 12,
+                bottom: 12,
+                right: 80,
+                child: _buildVideoInfo(video),
+              ),
+              Positioned(
+                right: 12,
+                bottom: 12,
+                child: _buildActionButtons(video, index),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
