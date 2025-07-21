@@ -26,7 +26,10 @@ const UserSchema = new mongoose.Schema({
 
 // Add method to get user's videos
 UserSchema.methods.getVideos = async function() {
-  await this.populate('videos');
+  await this.populate({
+    path: 'videos',
+    populate: { path: 'uploader', select: 'name profilePic' }
+  });
   return this.videos;
 };
 
