@@ -8,6 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 import 'dart:async'; // Add this import for TimeoutException
 import 'package:snehayog/view/screens/video_screen.dart';
+import 'dart:convert'; // Add this import for jsonEncode
+import 'package:http/http.dart' as http; // Add this import for http
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -212,7 +214,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
         throw 'Name cannot be empty';
       }
 
-      // Save the new profile data
+      // Call backend to update name
+      final googleId = _userData?['id']; // or whatever field is your googleId
+      final response = await http.post(
+        Uri.parse('snehayog-production.up.railway.app/api/auth/update-name'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'googleId': googleId, 'name': newName}),
+      );
+      if (response.statusCode != 200) throw 'Failed to update name on server';
+
+      // Save locally as before
       await _saveProfileData(newName, _userData?['profilePic']);
 
       setState(() {
@@ -222,6 +233,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         };
         _isEditing = false;
       });
+
+      // Refresh videos
+      await _loadUserVideos();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
