@@ -41,9 +41,10 @@ class VideoModel {
       views: json['views'] ?? 0,
       shares: json['shares'] ?? 0,
       description: json['description'] ?? '',
-      uploader: json['uploader'] != null
+      uploader: (json['uploader'] is Map<String, dynamic>)
           ? Uploader.fromJson(json['uploader'])
-          : Uploader(id: '', name: 'Unknown', profilePic: ''),
+          : Uploader(
+              id: json['uploader'].toString(), name: 'Unknown', profilePic: ''),
       uploadedAt: json['uploadedAt'] != null
           ? DateTime.parse(json['uploadedAt'])
           : DateTime.now(),

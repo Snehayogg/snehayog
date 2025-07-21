@@ -9,6 +9,8 @@ import 'package:video_player/video_player.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
 import 'package:snehayog/config/app_config.dart';
+import 'package:http_parser/http_parser.dart';
+
 
 /// VideoService class handles all video-related operations including:
 /// - Fetching videos
@@ -369,6 +371,7 @@ class VideoService {
         await http.MultipartFile.fromPath(
           'video',
           videoFile.path, // Upload the original file
+          contentType: MediaType('video', 'mp4'),
         ),
       );
 
