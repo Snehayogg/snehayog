@@ -58,6 +58,28 @@ class _VideoScreenState extends State<VideoScreen> {
     }
   }
 
+  Future<void> _initController(int index) async {
+  if (index < 0 || index >= _videos.length) return;
+
+  // Dispose unused controllers except the current one and adjacent
+  _controllers.removeWhere((i, c) {
+    if ((i - index).abs() > 1) {
+      c.dispose();
+      return true;
+    }
+    return false;
+  });
+
+  if (_controllers.containsKey(index)) return;
+
+  final url = _videos[index].videoUrl;
+  final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+  await controller.initialize();
+  controller.setLooping(true);
+  _controllers[index] = controller;
+}
+
+
   @override
   void dispose() {
     for (var c in _controllers.values) {
@@ -67,16 +89,12 @@ class _VideoScreenState extends State<VideoScreen> {
     super.dispose();
   }
 
-  Future<void> _initController(int index) async {
-    if (index < 0 || index >= _videos.length) return;
-    if (_controllers.containsKey(index)) return;
-    final url = _videos[index].videoUrl;
-    // Use network controller directly for Cloudinary URLs
-    final controller = VideoPlayerController.network(url);
-    await controller.initialize();
-    controller.setLooping(true);
-    _controllers[index] = controller;
-  }
+@override
+void deactivate() {
+  // Pause the active video when navigating away
+  _controllers[_activePage]?.pause();
+  super.deactivate();
+}
 
   Future<void> _preloadAllVideos() async {
     // Cloudinary handles video optimization and caching
