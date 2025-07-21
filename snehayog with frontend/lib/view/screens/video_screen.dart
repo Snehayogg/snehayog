@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:snehayog/controller/google_sign_in_controller.dart';
 import 'package:visibility_detector/visibility_detector.dart';
+import 'package:snehayog/view/screens/profile_screen.dart';
 
 class VideoScreen extends StatefulWidget {
   final int? initialIndex;
@@ -25,6 +26,9 @@ class _VideoScreenState extends State<VideoScreen> {
   late List<VideoModel> _videos;
   late PageController _pageController;
   final Map<int, VideoPlayerController> _controllers = {};
+
+  final int _preloadDistance =
+      1; // How many videos to preload in each direction
 
   bool _isLoading = true;
   bool _isLoadingMore = false;
@@ -70,7 +74,7 @@ class _VideoScreenState extends State<VideoScreen> {
   }
 
   Future<void> _preloadVideosAround(int index) async {
-    for (int i = index - 2; i <= index + 2; i++) {
+    for (int i = index - _preloadDistance; i <= index + _preloadDistance; i++) {
       await _initController(i);
     }
   }
@@ -149,7 +153,7 @@ class _VideoScreenState extends State<VideoScreen> {
   void _disposeOffScreenControllers() {
     final keysToRemove = <int>[];
     _controllers.forEach((key, controller) {
-      if ((key - _activePage).abs() > 2) {
+      if ((key - _activePage).abs() > _preloadDistance) {
         keysToRemove.add(key);
         controller.dispose();
       }
@@ -243,16 +247,26 @@ class _VideoScreenState extends State<VideoScreen> {
           overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: 20),
-        Row(
-          children: [
-            const CircleAvatar(radius: 16, backgroundColor: Colors.grey),
-            const SizedBox(width: 8),
-            Text(
-              video.uploader.name,
-              style: const TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.bold),
-            )
-          ],
+        GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ProfileScreen(userId: video.uploader.id),
+              ),
+            );
+          },
+          child: Row(
+            children: [
+              const CircleAvatar(radius: 16, backgroundColor: Colors.grey),
+              const SizedBox(width: 8),
+              Text(
+                video.uploader.name,
+                style: const TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold),
+              )
+            ],
+          ),
         ),
       ],
     );

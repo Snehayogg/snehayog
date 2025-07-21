@@ -7,12 +7,14 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 import 'dart:async'; // Add this import for TimeoutException
+import 'package:snehayog/services/user_service.dart';
 import 'package:snehayog/view/screens/video_screen.dart';
 import 'dart:convert'; // Add this import for jsonEncode
 import 'package:http/http.dart' as http; // Add this import for http
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  final String? userId; // Add userId to accept a user ID
+  const ProfileScreen({super.key, this.userId});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -21,6 +23,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final VideoService _videoService = VideoService();
   final GoogleAuthService _authService = GoogleAuthService();
+  final UserService _userService = UserService(); // Add user service
   List<VideoModel> _userVideos = [];
   bool _isLoading = true;
   String? _error;
@@ -43,48 +46,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadUserData() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
     try {
-      print('Starting to load user data...');
+      final loggedInUser = await _authService.getUserData();
+      final bool isMyProfile =
+          widget.userId == null || widget.userId == loggedInUser?['id'];
 
-      // Add timeout to the getUserData call
-      final userData = await _authService.getUserData().timeout(
-        const Duration(seconds: 30),
-        onTimeout: () {
-          throw TimeoutException(
-              'Request timed out. Please check your internet connection.');
-        },
-      );
-
-      print('User data received: $userData');
-
-      if (userData != null) {
-        print('User data is not null, loading saved profile data...');
-        // Load saved profile data from local storage
+      Map<String, dynamic>? userData;
+      if (isMyProfile) {
+        userData = loggedInUser;
+        // Load saved profile data for the logged-in user
         final savedName = await _loadSavedName();
         final savedProfilePic = await _loadSavedProfilePic();
-        print('Saved name: $savedName, Saved profile pic: $savedProfilePic');
+        if (userData != null) {
+          userData['name'] = savedName ?? userData['name'];
+          userData['profilePic'] = savedProfilePic ?? userData['profilePic'];
+        }
+      } else {
+        // Fetch profile data for another user
+        userData = await _userService.getUserById(widget.userId!);
+      }
 
+      if (userData != null) {
         setState(() {
-          _userData = {
-            ...userData,
-            'name': savedName ?? userData['name'],
-            'profilePic': savedProfilePic ?? userData['profilePic'],
-          };
+          _userData = userData;
           _isLoading = false;
-          _error = null; // Clear any previous errors
         });
-
-        print('User data set, loading videos...');
         await _loadUserVideos();
       } else {
-        print('User data is null, showing sign in view');
         setState(() {
           _isLoading = false;
-          _error = null; // Clear any previous errors
+          _error = 'Could not load user data.';
         });
       }
-    } on TimeoutException catch (e) {
-      print('Timeout error in _loadUserData: $e');
+    } on TimeoutException catch (_) {
       setState(() {
         _error =
             'Connection timed out. Please check your internet connection and try again.';
@@ -180,10 +179,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final userData = await _authService.signInWithGoogle();
       if (userData != null) {
-        setState(() {
-          _userData = userData;
-        });
-        _loadUserVideos();
+        // Since this is a fresh sign-in, we're on our own profile.
+        // We can reload all data.
+        _loadUserData();
       }
     } catch (e) {
       if (mounted) {
@@ -217,7 +215,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       // Call backend to update name
       final googleId = _userData?['id']; // or whatever field is your googleId
       final response = await http.post(
-        Uri.parse('snehayog-production.up.railway.app/api/auth/update-name'),
+        Uri.parse(
+            'https://snehayog-production.up.railway.app/api/auth/update-name'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'googleId': googleId, 'name': newName}),
       );
@@ -396,19 +395,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    print('Building ProfileScreen with state:');
-    print('isLoading: $_isLoading');
-    print('error: $_error');
-    print('userData: $_userData');
-    print('userVideos count: ${_userVideos.length}');
+    final bool isMyProfile = _userData != null &&
+        (_authService.currentUser == null ||
+            _authService.currentUser!['id'] == _userData!['id']);
 
     return Scaffold(
         backgroundColor: Colors.white,
         appBar: AppBar(
           backgroundColor: Colors.white,
-          title:
-              const Text('Profile', style: TextStyle(color: Color(0xFF424242))),
-          actions: _userData != null
+          title: Text(_userData?['name'] ?? 'Profile',
+              style: TextStyle(color: Color(0xFF424242))),
+          actions: isMyProfile && _userData != null
               ? [
                   IconButton(
                     icon: const Icon(Icons.logout, color: Color(0xFF424242)),
@@ -475,6 +472,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                           'profilePic']))
                                                       as ImageProvider
                                               : null,
+                                          onBackgroundImageError:
+                                              (exception, stackTrace) {
+                                            print(
+                                                'Error loading profile image: $exception');
+                                          },
                                           child: _userData?['profilePic'] ==
                                                   null
                                               ? Icon(
@@ -532,31 +534,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
-                                    if (_isEditing)
-                                      Padding(
-                                        padding: const EdgeInsets.all(16.0),
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            ElevatedButton(
-                                              onPressed: _handleCancelEdit,
-                                              child: const Text('Cancel'),
-                                            ),
-                                            const SizedBox(width: 16),
-                                            ElevatedButton(
-                                              onPressed: _handleSaveProfile,
-                                              child: const Text('Save'),
-                                            ),
-                                          ],
+                                    if (isMyProfile)
+                                      if (_isEditing)
+                                        Padding(
+                                          padding: const EdgeInsets.all(16.0),
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              ElevatedButton(
+                                                onPressed: _handleCancelEdit,
+                                                child: const Text('Cancel'),
+                                              ),
+                                              const SizedBox(width: 16),
+                                              ElevatedButton(
+                                                onPressed: _handleSaveProfile,
+                                                child: const Text('Save'),
+                                              ),
+                                            ],
+                                          ),
+                                        )
+                                      else
+                                        TextButton.icon(
+                                          onPressed: _handleEditProfile,
+                                          icon: const Icon(Icons.edit),
+                                          label: const Text('Edit Profile'),
                                         ),
-                                      )
-                                    else
-                                      TextButton.icon(
-                                        onPressed: _handleEditProfile,
-                                        icon: const Icon(Icons.edit),
-                                        label: const Text('Edit Profile'),
-                                      ),
                                   ],
                                 ),
                               ),
@@ -676,10 +679,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                               children: [
                                                 Expanded(
                                                   child: Image.network(
-                                                    '${VideoService.baseUrl}${video.videoUrl}',
+                                                    video
+                                                        .videoUrl, // Use videoUrl as a fallback
                                                     fit: BoxFit.cover,
                                                     errorBuilder: (context,
                                                         error, stackTrace) {
+                                                      print(
+                                                          'Error loading thumbnail: $error');
                                                       return Center(
                                                         child: Icon(
                                                           Icons.video_library,

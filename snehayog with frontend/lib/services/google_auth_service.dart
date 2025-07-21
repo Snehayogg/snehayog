@@ -21,6 +21,39 @@ class GoogleAuthService {
     clientId: kIsWeb ? _webClientId : null,
   );
 
+  Map<String, dynamic>? _currentUser;
+
+  Map<String, dynamic>? get currentUser => _currentUser;
+
+  Future<Map<String, dynamic>?> _updateAndSaveUser(
+      GoogleSignInAccount googleUser) async {
+    final GoogleSignInAuthentication googleAuth =
+        await googleUser.authentication;
+
+    if (googleAuth.accessToken == null) {
+      throw Exception('Failed to get access token from Google');
+    }
+
+    final userInfo = {
+      'id': googleUser.id,
+      'name': googleUser.displayName ?? 'User',
+      'email': googleUser.email,
+      'photoUrl': googleUser.photoUrl ?? 'https://via.placeholder.com/150',
+      'token': googleAuth.accessToken,
+    };
+
+    await saveUserData(
+      userId: userInfo['id']!,
+      userName: userInfo['name']!,
+      profilePic: userInfo['photoUrl']!,
+      email: userInfo['email']!,
+      token: userInfo['token']!,
+    );
+
+    _currentUser = userInfo;
+    return _currentUser;
+  }
+
   Future<String?> getCurrentUserId() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_userIdKey);
@@ -34,40 +67,8 @@ class GoogleAuthService {
   Future<Map<String, dynamic>?> signInWithGoogle() async {
     try {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) return null;
-
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-
-      if (googleAuth.accessToken == null) {
-        throw Exception('Failed to get access token from Google');
-      }
-
-      // Get user info from Google
-      final userInfo = {
-        'id': googleUser.id,
-        'name': googleUser.displayName ?? 'User',
-        'email': googleUser.email,
-        'photoUrl': googleUser.photoUrl ?? 'https://via.placeholder.com/150',
-        'token': googleAuth.accessToken,
-      };
-
-      // Save user data locally
-      await saveUserData(
-        userId: userInfo['id']!,
-        userName: userInfo['name']!,
-        profilePic: userInfo['photoUrl']!,
-        email: userInfo['email']!,
-        token: userInfo['token']!,
-      );
-
-      // Verify token is saved
-      final savedData = await getUserData();
-      if (savedData == null || savedData['token'] == null) {
-        throw Exception('Failed to save authentication data');
-      }
-
-      return userInfo;
+      if (googleUser == null) return null; // User cancelled the sign-in
+      return await _updateAndSaveUser(googleUser);
     } catch (error) {
       print('Error signing in with Google: $error');
       // Clear any partial data
@@ -93,26 +94,16 @@ class GoogleAuthService {
 
   Future<Map<String, dynamic>?> getUserData() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getString(_userIdKey);
-      final token = prefs.getString(_userTokenKey);
-
-      if (userId == null || token == null) {
-        // If either userId or token is missing, clear all data
-        await logout();
+      final GoogleSignInAccount? googleUser =
+          await _googleSignIn.signInSilently();
+      if (googleUser == null) {
+        await logout(); // Not signed in
         return null;
       }
-
-      return {
-        'id': userId,
-        'name': prefs.getString(_userNameKey) ?? 'User',
-        'profilePic': prefs.getString(_userProfilePicKey) ??
-            'https://via.placeholder.com/150',
-        'email': prefs.getString(_userEmailKey),
-        'token': token,
-      };
+      return await _updateAndSaveUser(googleUser);
     } catch (e) {
-      print('Error getting user data: $e');
+      print('Error getting user data silently: $e');
+      await logout();
       return null;
     }
   }
@@ -130,5 +121,6 @@ class GoogleAuthService {
     await prefs.remove(_userProfilePicKey);
     await prefs.remove(_userEmailKey);
     await prefs.remove(_userTokenKey);
+    _currentUser = null;
   }
 }
