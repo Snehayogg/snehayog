@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:snehayog/services/video_service.dart';
 import 'package:snehayog/controller/google_sign_in_controller.dart';
 import 'package:provider/provider.dart';
+import 'package:video_compress/video_compress.dart';
 
 class UploadScreen extends StatefulWidget {
   const UploadScreen({super.key});
@@ -16,6 +17,7 @@ class UploadScreen extends StatefulWidget {
 class _UploadScreenState extends State<UploadScreen> {
   File? _selectedVideo;
   bool _isUploading = false;
+  bool _isCompressing = false;
   String? _errorMessage;
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
@@ -41,8 +43,19 @@ class _UploadScreenState extends State<UploadScreen> {
 
       if (result != null) {
         setState(() {
-          _selectedVideo = File(result.files.single.path!);
+          _isCompressing = true;
+        });
+
+        final compressedVideo = await VideoCompress.compressVideo(
+          result.files.single.path!,
+          quality: VideoQuality.MediumQuality,
+          deleteOrigin: false,
+        );
+
+        setState(() {
+          _selectedVideo = compressedVideo?.file;
           _errorMessage = null;
+          _isCompressing = false;
         });
       }
     } catch (e) {
@@ -244,39 +257,15 @@ class _UploadScreenState extends State<UploadScreen> {
                   border: Border.all(color: Colors.grey),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: _selectedVideo != null
-                    ? Center(
+                child: _isCompressing
+                    ? const Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(
-                              Icons.video_file,
-                              size: 48,
-                              color: Colors.blue,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              _selectedVideo!.path.split('/').last,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.video_library,
-                              size: 48,
-                              color: Colors.grey,
-                            ),
+                            CircularProgressIndicator(),
                             SizedBox(height: 16),
                             Text(
-                              'No video selected',
+                              'Compressing video...',
                               style: TextStyle(
                                 fontSize: 16,
                                 color: Colors.grey,
@@ -284,7 +273,48 @@ class _UploadScreenState extends State<UploadScreen> {
                             ),
                           ],
                         ),
-                      ),
+                      )
+                    : _selectedVideo != null
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.video_file,
+                                  size: 48,
+                                  color: Colors.blue,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  _selectedVideo!.path.split('/').last,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.video_library,
+                                  size: 48,
+                                  color: Colors.grey,
+                                ),
+                                SizedBox(height: 16),
+                                Text(
+                                  'No video selected',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
               ),
               const SizedBox(height: 24),
               TextField(

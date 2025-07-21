@@ -6,14 +6,14 @@ import 'package:snehayog/services/video_service.dart';
 class UserService {
   final GoogleAuthService _authService = GoogleAuthService();
 
-  Future<Map<String, dynamic>> getUserById(String userId) async {
+  Future<Map<String, dynamic>> getUserById(String id) async {
     final token = (await _authService.getUserData())?['token'];
     if (token == null) {
       throw Exception('Not authenticated');
     }
 
     final response = await http.get(
-      Uri.parse('${VideoService.baseUrl}/api/users/$userId'),
+      Uri.parse('${VideoService.baseUrl}/api/videos/$id'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',

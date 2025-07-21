@@ -28,7 +28,7 @@ class _VideoScreenState extends State<VideoScreen> {
   final Map<int, VideoPlayerController> _controllers = {};
 
   final int _preloadDistance =
-      1; // How many videos to preload in each direction
+      2; // How many videos to preload in each direction
 
   bool _isLoading = true;
   bool _isLoadingMore = false;
@@ -44,9 +44,11 @@ class _VideoScreenState extends State<VideoScreen> {
       _activePage = widget.initialIndex ?? 0;
       _pageController = PageController(initialPage: _activePage);
       _isLoading = false;
-      _preloadVideosAround(_activePage).then((_) {
-        _controllers[_activePage]?.play();
+      // Initialize the current video, then preload neighbors
+      _initController(_activePage).then((_) {
         if (mounted) {
+          _controllers[_activePage]?.play();
+          _preloadVideosAround(_activePage);
           setState(() {});
         }
       });
@@ -88,7 +90,7 @@ class _VideoScreenState extends State<VideoScreen> {
 
     try {
       final url = _videos[index].videoUrl;
-      final controller = VideoPlayerController.network(url);
+      final controller = VideoPlayerController.networkUrl(Uri.parse(url));
       await controller.initialize();
       controller.setLooping(true);
       _controllers[index] = controller;
@@ -126,9 +128,12 @@ class _VideoScreenState extends State<VideoScreen> {
         });
         // Preload initial videos
         if (isInitialLoad && _videos.isNotEmpty) {
-          await _preloadVideosAround(0);
-          _controllers[0]?.play();
-          if (mounted) setState(() {});
+          await _initController(0);
+          if (mounted) {
+            _controllers[0]?.play();
+            _preloadVideosAround(0);
+            setState(() {});
+          }
         }
       }
     } catch (e) {
@@ -143,24 +148,38 @@ class _VideoScreenState extends State<VideoScreen> {
   }
 
   Future<void> _onPageChanged(int index) async {
+    // Stop the previous video
     _controllers[_activePage]?.pause();
+
+    // Update the active page
     _activePage = index;
-    _controllers[_activePage]?.play();
+
+    // Asynchronously preload and dispose videos
     _preloadVideosAround(index);
     _disposeOffScreenControllers();
+
+    // Play the new video. If it's not ready, initialize it first.
+    if (_controllers.containsKey(index)) {
+      _controllers[index]?.play();
+    } else {
+      await _initController(index);
+      if (mounted) {
+        _controllers[index]?.play();
+        setState(() {});
+      }
+    }
   }
 
   void _disposeOffScreenControllers() {
-    final keysToRemove = <int>[];
-    _controllers.forEach((key, controller) {
-      if ((key - _activePage).abs() > _preloadDistance) {
-        keysToRemove.add(key);
-        controller.dispose();
-      }
-    });
-    for (final key in keysToRemove) {
-      _controllers.remove(key);
-    }
+    _controllers.keys
+        .where((key) {
+          return (key - _activePage).abs() > _preloadDistance;
+        })
+        .toList()
+        .forEach((key) {
+          _controllers[key]?.dispose();
+          _controllers.remove(key);
+        });
   }
 
   @override

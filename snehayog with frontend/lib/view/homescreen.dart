@@ -14,12 +14,18 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  final List<Widget> _screens = [
-    VideoScreen(),
-    const SnehaScreen(),
-    const UploadScreen(),
-    const ProfileScreen(),
-  ];
+  late final List<Widget> _screens;
+
+  @override
+  void initState() {
+    super.initState();
+    _screens = [
+      VideoScreen(key: const PageStorageKey('videoScreen')),
+      const SnehaScreen(key: PageStorageKey('snehaScreen')),
+      const UploadScreen(key: PageStorageKey('uploadScreen')),
+      const ProfileScreen(key: PageStorageKey('profileScreen')),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
