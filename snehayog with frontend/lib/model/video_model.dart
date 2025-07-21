@@ -157,6 +157,18 @@ class Uploader {
       profilePic: json['profilePic'] ?? '',
     );
   }
+
+  Uploader copyWith({
+    String? id,
+    String? name,
+    String? profilePic,
+  }) {
+    return Uploader(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      profilePic: profilePic ?? this.profilePic,
+    );
+  }
 }
 
 class Comment {

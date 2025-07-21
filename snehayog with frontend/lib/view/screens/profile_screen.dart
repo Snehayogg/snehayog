@@ -629,13 +629,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         final video = _userVideos[index];
                                         return GestureDetector(
                                           onTap: () {
+                                            // Update uploader name in all user videos before navigating
+                                            final updatedVideos =
+                                                _userVideos.map((video) {
+                                              if (_userData != null &&
+                                                  _userData!['name'] != null) {
+                                                return video.copyWith(
+                                                  uploader:
+                                                      video.uploader.copyWith(
+                                                    name: _userData!['name'],
+                                                  ),
+                                                );
+                                              }
+                                              return video;
+                                            }).toList();
                                             Navigator.push(
                                               context,
                                               MaterialPageRoute(
                                                 builder: (context) =>
                                                     VideoScreen(
                                                   initialIndex: index,
-                                                  initialVideos: _userVideos,
+                                                  initialVideos: updatedVideos,
                                                 ),
                                               ),
                                             );
