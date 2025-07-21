@@ -15,7 +15,7 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   final List<Widget> _screens = [
-    const VideoScreen(),
+     VideoScreen(),
     const LongVideoScreen(),
     const UploadScreen(),
     const ProfileScreen(),

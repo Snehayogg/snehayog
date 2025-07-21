@@ -12,14 +12,14 @@ class VideoScreen extends StatefulWidget {
   final int? initialIndex;
   final List<VideoModel>? initialVideos;
 
-  const VideoScreen({Key? key, this.initialIndex, this.initialVideos})
+  VideoScreen({Key? key, this.initialIndex, this.initialVideos})
       : super(key: key);
 
   @override
   _VideoScreenState createState() => _VideoScreenState();
 }
 
-class _VideoScreenState extends State<VideoScreen> {
+class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
   final VideoService _videoService = VideoService();
   late List<VideoModel> _videos;
   late PageController _pageController;
@@ -33,6 +33,7 @@ class _VideoScreenState extends State<VideoScreen> {
 
   @override
   void initState() {
+    WidgetsBinding.instance.addObserver(this);
     super.initState();
     if (widget.initialVideos != null && widget.initialVideos!.isNotEmpty) {
       _videos = List<VideoModel>.from(widget.initialVideos!);
@@ -58,30 +59,9 @@ class _VideoScreenState extends State<VideoScreen> {
     }
   }
 
-  Future<void> _initController(int index) async {
-  if (index < 0 || index >= _videos.length) return;
-
-  // Dispose unused controllers except the current one and adjacent
-  _controllers.removeWhere((i, c) {
-    if ((i - index).abs() > 1) {
-      c.dispose();
-      return true;
-    }
-    return false;
-  });
-
-  if (_controllers.containsKey(index)) return;
-
-  final url = _videos[index].videoUrl;
-  final controller = VideoPlayerController.networkUrl(Uri.parse(url));
-  await controller.initialize();
-  controller.setLooping(true);
-  _controllers[index] = controller;
-}
-
-
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     for (var c in _controllers.values) {
       c.dispose();
     }
@@ -89,12 +69,26 @@ class _VideoScreenState extends State<VideoScreen> {
     super.dispose();
   }
 
-@override
-void deactivate() {
-  // Pause the active video when navigating away
-  _controllers[_activePage]?.pause();
-  super.deactivate();
-}
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.paused) {
+      _controllers[_activePage]?.pause();
+    } else if (state == AppLifecycleState.resumed) {
+      _controllers[_activePage]?.play();
+    }
+  }
+
+  Future<void> _initController(int index) async {
+    if (index < 0 || index >= _videos.length) return;
+    if (_controllers.containsKey(index)) return;
+    final url = _videos[index].videoUrl;
+    // Use network controller directly for Cloudinary URLs
+    final controller = VideoPlayerController.network(url);
+    await controller.initialize();
+    controller.setLooping(true);
+    _controllers[index] = controller;
+  }
 
   Future<void> _preloadAllVideos() async {
     // Cloudinary handles video optimization and caching
