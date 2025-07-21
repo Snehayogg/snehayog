@@ -9,7 +9,11 @@ import 'package:provider/provider.dart';
 import 'package:snehayog/controller/google_sign_in_controller.dart';
 
 class VideoScreen extends StatefulWidget {
-  const VideoScreen({Key? key}) : super(key: key);
+  final int? initialIndex;
+  final List<VideoModel>? initialVideos;
+
+  const VideoScreen({Key? key, this.initialIndex, this.initialVideos})
+      : super(key: key);
 
   @override
   _VideoScreenState createState() => _VideoScreenState();
@@ -17,8 +21,8 @@ class VideoScreen extends StatefulWidget {
 
 class _VideoScreenState extends State<VideoScreen> {
   final VideoService _videoService = VideoService();
-  final List<VideoModel> _videos = [];
-  final PageController _pageController = PageController();
+  late List<VideoModel> _videos;
+  late PageController _pageController;
   final Map<int, VideoPlayerController> _controllers = {};
 
   bool _isLoading = true;
@@ -30,14 +34,28 @@ class _VideoScreenState extends State<VideoScreen> {
   @override
   void initState() {
     super.initState();
-    _loadVideos();
-    _pageController.addListener(() {
-      if (_pageController.position.pixels >=
-              _pageController.position.maxScrollExtent - 200 &&
-          !_isLoadingMore) {
-        _loadVideos(isInitialLoad: false);
-      }
-    });
+    if (widget.initialVideos != null && widget.initialVideos!.isNotEmpty) {
+      _videos = List<VideoModel>.from(widget.initialVideos!);
+      _activePage = widget.initialIndex ?? 0;
+      _pageController = PageController(initialPage: _activePage);
+      _isLoading = false;
+      _preloadAllVideos();
+      _initController(_activePage).then((_) {
+        _controllers[_activePage]?.play();
+        setState(() {});
+      });
+    } else {
+      _videos = [];
+      _pageController = PageController();
+      _loadVideos();
+      _pageController.addListener(() {
+        if (_pageController.position.pixels >=
+                _pageController.position.maxScrollExtent - 200 &&
+            !_isLoadingMore) {
+          _loadVideos(isInitialLoad: false);
+        }
+      });
+    }
   }
 
   @override

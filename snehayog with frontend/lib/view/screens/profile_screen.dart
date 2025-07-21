@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 import 'dart:async'; // Add this import for TimeoutException
+import 'package:snehayog/view/screens/video_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -626,98 +627,112 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       itemCount: _userVideos.length,
                                       itemBuilder: (context, index) {
                                         final video = _userVideos[index];
-                                        return Card(
-                                          color: const Color(0xFFF5F5F5),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.stretch,
-                                            children: [
-                                              Expanded(
-                                                child: Image.network(
-                                                  '${VideoService.baseUrl}${video.videoUrl}',
-                                                  fit: BoxFit.cover,
-                                                  errorBuilder: (context, error,
-                                                      stackTrace) {
-                                                    return Center(
-                                                      child: Icon(
-                                                        Icons.video_library,
-                                                        color: const Color(
-                                                            0xFF424242),
-                                                        size: ResponsiveHelper
-                                                            .getAdaptiveIconSize(
-                                                                context),
-                                                      ),
-                                                    );
-                                                  },
+                                        return GestureDetector(
+                                          onTap: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) =>
+                                                    VideoScreen(
+                                                  initialIndex: index,
+                                                  initialVideos: _userVideos,
                                                 ),
                                               ),
-                                              Padding(
-                                                padding: EdgeInsets.all(
-                                                  ResponsiveHelper.isMobile(
-                                                          context)
-                                                      ? 8.0
-                                                      : 12.0,
-                                                ),
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      video.videoName,
-                                                      style: TextStyle(
-                                                        color: const Color(
-                                                            0xFF424242),
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        fontSize: ResponsiveHelper
-                                                            .getAdaptiveFontSize(
-                                                                context, 14),
-                                                      ),
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                    ),
-                                                    SizedBox(
-                                                        height: ResponsiveHelper
-                                                                .isMobile(
-                                                                    context)
-                                                            ? 4
-                                                            : 8),
-                                                    Row(
-                                                      children: [
-                                                        Icon(
-                                                          Icons.visibility,
+                                            );
+                                          },
+                                          child: Card(
+                                            color: const Color(0xFFF5F5F5),
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.stretch,
+                                              children: [
+                                                Expanded(
+                                                  child: Image.network(
+                                                    '${VideoService.baseUrl}${video.videoUrl}',
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder: (context,
+                                                        error, stackTrace) {
+                                                      return Center(
+                                                        child: Icon(
+                                                          Icons.video_library,
                                                           color: const Color(
-                                                              0xFF757575),
+                                                              0xFF424242),
                                                           size: ResponsiveHelper
-                                                                  .getAdaptiveIconSize(
-                                                                      context) *
-                                                              0.6,
+                                                              .getAdaptiveIconSize(
+                                                                  context),
                                                         ),
-                                                        SizedBox(
-                                                            width: ResponsiveHelper
-                                                                    .isMobile(
-                                                                        context)
-                                                                ? 4
-                                                                : 8),
-                                                        Text(
-                                                          '${video.views}',
-                                                          style: TextStyle(
+                                                      );
+                                                    },
+                                                  ),
+                                                ),
+                                                Padding(
+                                                  padding: EdgeInsets.all(
+                                                    ResponsiveHelper.isMobile(
+                                                            context)
+                                                        ? 8.0
+                                                        : 12.0,
+                                                  ),
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      Text(
+                                                        video.videoName,
+                                                        style: TextStyle(
+                                                          color: const Color(
+                                                              0xFF424242),
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          fontSize: ResponsiveHelper
+                                                              .getAdaptiveFontSize(
+                                                                  context, 14),
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                      SizedBox(
+                                                          height: ResponsiveHelper
+                                                                  .isMobile(
+                                                                      context)
+                                                              ? 4
+                                                              : 8),
+                                                      Row(
+                                                        children: [
+                                                          Icon(
+                                                            Icons.visibility,
                                                             color: const Color(
                                                                 0xFF757575),
-                                                            fontSize:
-                                                                ResponsiveHelper
-                                                                    .getAdaptiveFontSize(
-                                                                        context,
-                                                                        12),
+                                                            size: ResponsiveHelper
+                                                                    .getAdaptiveIconSize(
+                                                                        context) *
+                                                                0.6,
                                                           ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ],
+                                                          SizedBox(
+                                                              width: ResponsiveHelper
+                                                                      .isMobile(
+                                                                          context)
+                                                                  ? 4
+                                                                  : 8),
+                                                          Text(
+                                                            '${video.views}',
+                                                            style: TextStyle(
+                                                              color: const Color(
+                                                                  0xFF757575),
+                                                              fontSize: ResponsiveHelper
+                                                                  .getAdaptiveFontSize(
+                                                                      context,
+                                                                      12),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ],
+                                                  ),
                                                 ),
-                                              ),
-                                            ],
+                                              ],
+                                            ),
                                           ),
                                         );
                                       },
