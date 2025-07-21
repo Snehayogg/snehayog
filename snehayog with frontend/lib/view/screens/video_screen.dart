@@ -20,7 +20,7 @@ class VideoScreen extends StatefulWidget {
   _VideoScreenState createState() => _VideoScreenState();
 }
 
-class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
+class _VideoScreenState extends State<VideoScreen> {
   final VideoService _videoService = VideoService();
   late List<VideoModel> _videos;
   late PageController _pageController;
@@ -34,17 +34,17 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
 
   @override
   void initState() {
-    WidgetsBinding.instance.addObserver(this);
     super.initState();
     if (widget.initialVideos != null && widget.initialVideos!.isNotEmpty) {
       _videos = List<VideoModel>.from(widget.initialVideos!);
       _activePage = widget.initialIndex ?? 0;
       _pageController = PageController(initialPage: _activePage);
       _isLoading = false;
-      _preloadAllVideos();
-      _initController(_activePage).then((_) {
+      _preloadVideosAround(_activePage).then((_) {
         _controllers[_activePage]?.play();
-        setState(() {});
+        if (mounted) {
+          setState(() {});
+        }
       });
     } else {
       _videos = [];
@@ -62,7 +62,6 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     for (var c in _controllers.values) {
       c.dispose();
     }
@@ -70,31 +69,28 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.paused) {
-      _controllers[_activePage]?.pause();
-    } else if (state == AppLifecycleState.resumed) {
-      _controllers[_activePage]?.play();
+  Future<void> _preloadVideosAround(int index) async {
+    for (int i = index - 2; i <= index + 2; i++) {
+      await _initController(i);
     }
   }
 
   Future<void> _initController(int index) async {
-    if (index < 0 || index >= _videos.length) return;
-    if (_controllers.containsKey(index)) return;
-    final url = _videos[index].videoUrl;
-    // Use network controller directly for Cloudinary URLs
-    final controller = VideoPlayerController.network(url);
-    await controller.initialize();
-    controller.setLooping(true);
-    _controllers[index] = controller;
-  }
+    if (index < 0 ||
+        index >= _videos.length ||
+        _controllers.containsKey(index)) {
+      return;
+    }
 
-  Future<void> _preloadAllVideos() async {
-    // Cloudinary handles video optimization and caching
-    // No need to preload files manually
-    print('Videos will be loaded on-demand by Cloudinary');
+    try {
+      final url = _videos[index].videoUrl;
+      final controller = VideoPlayerController.network(url);
+      await controller.initialize();
+      controller.setLooping(true);
+      _controllers[index] = controller;
+    } catch (e) {
+      print('Error initializing video at index $index: $e');
+    }
   }
 
   Future<void> _loadVideos({bool isInitialLoad = true}) async {
@@ -124,12 +120,11 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
             _isLoadingMore = false;
           }
         });
-        // Preload all videos in the background
-        _preloadAllVideos();
-        // Preload the first video if this is the initial load
+        // Preload initial videos
         if (isInitialLoad && _videos.isNotEmpty) {
-          await _initController(0);
+          await _preloadVideosAround(0);
           _controllers[0]?.play();
+          if (mounted) setState(() {});
         }
       }
     } catch (e) {
@@ -144,27 +139,23 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _onPageChanged(int index) async {
-    setState(() {
-      _activePage = index;
-    });
-    // Preload current, previous, and next
-    await _initController(index);
-    await _initController(index - 1);
-    await _initController(index + 1);
-    // Play only the current, pause others
-    _controllers.forEach((i, c) {
-      if (i == index) {
-        c.play();
-      } else {
-        c.pause();
+    _controllers[_activePage]?.pause();
+    _activePage = index;
+    _controllers[_activePage]?.play();
+    _preloadVideosAround(index);
+    _disposeOffScreenControllers();
+  }
+
+  void _disposeOffScreenControllers() {
+    final keysToRemove = <int>[];
+    _controllers.forEach((key, controller) {
+      if ((key - _activePage).abs() > 2) {
+        keysToRemove.add(key);
+        controller.dispose();
       }
     });
-    // Dispose controllers not in (index-1, index, index+1)
-    final keysToRemove =
-        _controllers.keys.where((i) => i < index - 1 || i > index + 1).toList();
-    for (final i in keysToRemove) {
-      _controllers[i]?.dispose();
-      _controllers.remove(i);
+    for (final key in keysToRemove) {
+      _controllers.remove(key);
     }
   }
 
@@ -187,8 +178,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
     return VisibilityDetector(
       key: const Key('video_screen_visibility'),
       onVisibilityChanged: (visibilityInfo) {
-        final visiblePercentage = visibilityInfo.visibleFraction * 100;
-        if (visiblePercentage < 100) {
+        if (visibilityInfo.visibleFraction == 0) {
           _controllers[_activePage]?.pause();
         } else {
           _controllers[_activePage]?.play();

@@ -6,14 +6,14 @@ import 'package:snehayog/utils/responsive_helper.dart';
 import 'package:snehayog/view/screens/video_detail_screen.dart';
 import 'package:snehayog/services/video_service.dart';
 
-class LongVideoScreen extends StatefulWidget {
-  const LongVideoScreen({super.key});
+class SnehaScreen extends StatefulWidget {
+  const SnehaScreen({super.key});
 
   @override
-  State<LongVideoScreen> createState() => _LongVideoScreenState();
+  State<SnehaScreen> createState() => _SnehaScreenState();
 }
 
-class _LongVideoScreenState extends State<LongVideoScreen> {
+class _SnehaScreenState extends State<SnehaScreen> {
   final TextEditingController _searchController = TextEditingController();
   List<Map<String, dynamic>> _videos = [];
   bool _isLoading = false;
