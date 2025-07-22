@@ -404,7 +404,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         appBar: AppBar(
           backgroundColor: Colors.white,
           title: Text(_userData?['name'] ?? 'Profile',
-              style: TextStyle(color: Color(0xFF424242))),
+              style: const TextStyle(color: Color(0xFF424242))),
           actions: isMyProfile && _userData != null
               ? [
                   IconButton(

@@ -20,7 +20,7 @@ class _MainScreenState extends State<MainScreen> {
   void initState() {
     super.initState();
     _screens = [
-      VideoScreen(key: const PageStorageKey('videoScreen')),
+      const VideoScreen(key: PageStorageKey('videoScreen')),
       const SnehaScreen(key: PageStorageKey('snehaScreen')),
       const UploadScreen(key: PageStorageKey('uploadScreen')),
       const ProfileScreen(key: PageStorageKey('profileScreen')),

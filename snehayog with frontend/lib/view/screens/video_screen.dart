@@ -14,7 +14,7 @@ class VideoScreen extends StatefulWidget {
   final int? initialIndex;
   final List<VideoModel>? initialVideos;
 
-  VideoScreen({Key? key, this.initialIndex, this.initialVideos})
+  const VideoScreen({Key? key, this.initialIndex, this.initialVideos})
       : super(key: key);
 
   @override
