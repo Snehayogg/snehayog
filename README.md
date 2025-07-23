@@ -32,5 +32,5 @@ Inspired by platforms like YouTube Shorts and Instagram Reels, Snehayog focuses 
 ### Clone the repo
 
 ```bash
-git clone https://github.com/your-username/snehayog.git
+git clone https://github.com/Snehayogg/snehayog.git
 cd snehayog
