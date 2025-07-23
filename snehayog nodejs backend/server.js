@@ -37,6 +37,7 @@ app.use(express.json());
 
 // Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/api/users', userRoutes);
 
 // Log all requests with more details
 app.use((req, res, next) => {
@@ -56,8 +57,6 @@ mongoose.connect(process.env.MONGO_URI, {
 .then(() => console.log("✅ MongoDB connected"))
 .catch(err => console.error("❌ MongoDB error", err));
 
-// Routes
-app.use('/api/user', userRoutes);
 app.use('/api/videos', videoRoutes);
 
 // User registration endpoint
