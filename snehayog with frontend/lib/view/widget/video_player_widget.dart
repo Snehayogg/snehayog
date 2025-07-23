@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:snehayog/model/video_model.dart';
+import 'package:snehayog/utils/video_controller_manager.dart';
 
 class VideoPlayerWidget extends StatefulWidget {
   final VideoModel video;
@@ -21,6 +22,7 @@ class VideoPlayerWidget extends StatefulWidget {
 class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   VideoPlayerController? _internalController;
   Future<void>? _initializeVideoPlayerFuture;
+  final VideoControllerManager _videoManager = VideoControllerManager();
 
   VideoPlayerController? get _controller =>
       widget.controller ?? _internalController;
@@ -33,6 +35,9 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
           VideoPlayerController.network(widget.video.videoUrl);
       _initializeVideoPlayerFuture =
           _internalController!.initialize().then((_) {
+        // Register controller with VideoControllerManager
+        _videoManager.registerController(_internalController!);
+        
         if (widget.play) {
           _internalController!.play();
           _internalController!.setLooping(true);
@@ -56,7 +61,9 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
   @override
   void dispose() {
-    if (widget.controller == null) {
+    if (widget.controller == null && _internalController != null) {
+      // Unregister controller before disposing
+      _videoManager.unregisterController(_internalController!);
       _internalController?.dispose();
     }
     super.dispose();

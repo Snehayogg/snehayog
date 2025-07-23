@@ -5,6 +5,7 @@ import 'package:snehayog/view/screens/long_video.dart';
 import 'package:snehayog/view/screens/upload_screen.dart';
 import 'package:snehayog/view/screens/video_screen.dart';
 import 'package:snehayog/controller/main_controller.dart';
+import 'package:snehayog/utils/video_controller_manager.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -15,6 +16,7 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   late final List<Widget> _screens;
+  final VideoControllerManager _videoManager = VideoControllerManager();
 
   @override
   void initState() {
@@ -25,6 +27,21 @@ class _MainScreenState extends State<MainScreen> {
       const UploadScreen(key: PageStorageKey('uploadScreen')),
       const ProfileScreen(key: PageStorageKey('profileScreen')),
     ];
+    
+    // Register pause callback with MainController
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final mainController = Provider.of<MainController>(context, listen: false);
+      mainController.registerPauseCallback(_videoManager.pauseAllVideos);
+    });
+  }
+
+  @override
+  void dispose() {
+    // Unregister callback and clear controllers
+    final mainController = Provider.of<MainController>(context, listen: false);
+    mainController.unregisterPauseCallback();
+    _videoManager.clearAll();
+    super.dispose();
   }
 
   @override

@@ -4,6 +4,7 @@ import 'package:chewie/chewie.dart';
 import 'package:snehayog/services/video_service.dart';
 import 'package:snehayog/services/google_auth_service.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:snehayog/utils/video_controller_manager.dart';
 
 class VideoDetailScreen extends StatefulWidget {
   final Map<String, dynamic> video;
@@ -20,6 +21,7 @@ class VideoDetailScreen extends StatefulWidget {
 class _VideoDetailScreenState extends State<VideoDetailScreen> {
   final VideoService _videoService = VideoService();
   final GoogleAuthService _authService = GoogleAuthService();
+  final VideoControllerManager _videoManager = VideoControllerManager();
   VideoPlayerController? _videoController;
   ChewieController? _chewieController;
   bool _isLiked = false;
@@ -39,6 +41,9 @@ class _VideoDetailScreenState extends State<VideoDetailScreen> {
   Future<void> _initializeVideo() async {
     _videoController = VideoPlayerController.network(widget.video['videoUrl']);
     await _videoController!.initialize();
+    
+    // Register controller with VideoControllerManager
+    _videoManager.registerController(_videoController!);
 
     _chewieController = ChewieController(
       videoPlayerController: _videoController!,
@@ -187,7 +192,11 @@ class _VideoDetailScreenState extends State<VideoDetailScreen> {
 
   @override
   void dispose() {
-    _videoController?.dispose();
+    if (_videoController != null) {
+      // Unregister controller before disposing
+      _videoManager.unregisterController(_videoController!);
+      _videoController?.dispose();
+    }
     _chewieController?.dispose();
     _commentController.dispose();
     super.dispose();

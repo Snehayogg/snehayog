@@ -5,6 +5,7 @@ import 'package:chewie/chewie.dart';
 import 'package:snehayog/utils/responsive_helper.dart';
 import 'package:snehayog/view/screens/video_detail_screen.dart';
 import 'package:snehayog/services/video_service.dart';
+import 'package:snehayog/utils/video_controller_manager.dart';
 
 class SnehaScreen extends StatefulWidget {
   const SnehaScreen({super.key});
@@ -21,6 +22,7 @@ class _SnehaScreenState extends State<SnehaScreen> {
   ChewieController? _chewieController;
   final bool _isPlaying = false;
   int? _selectedVideoIndex;
+  final VideoControllerManager _videoManager = VideoControllerManager();
 
   static const int maxShortVideoDuration = 120;
 
@@ -161,7 +163,10 @@ class _SnehaScreenState extends State<SnehaScreen> {
 
   @override
   void dispose() {
-    _videoController?.dispose();
+    if (_videoController != null) {
+      _videoManager.unregisterController(_videoController!);
+      _videoController?.dispose();
+    }
     _chewieController?.dispose();
     super.dispose();
   }

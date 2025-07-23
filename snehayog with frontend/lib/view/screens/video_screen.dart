@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:snehayog/controller/google_sign_in_controller.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:snehayog/view/screens/profile_screen.dart';
+import 'package:snehayog/utils/video_controller_manager.dart';
 
 class VideoScreen extends StatefulWidget {
   final int? initialIndex;
@@ -26,6 +27,7 @@ class _VideoScreenState extends State<VideoScreen> {
   late List<VideoModel> _videos;
   late PageController _pageController;
   final Map<int, VideoPlayerController> _controllers = {};
+  final VideoControllerManager _videoManager = VideoControllerManager();
 
   final int _preloadDistance =
       2; // How many videos to preload in each direction
@@ -69,6 +71,8 @@ class _VideoScreenState extends State<VideoScreen> {
   @override
   void dispose() {
     for (var c in _controllers.values) {
+      // Unregister controller before disposing
+      _videoManager.unregisterController(c);
       c.dispose();
     }
     _pageController.dispose();
@@ -94,6 +98,9 @@ class _VideoScreenState extends State<VideoScreen> {
       await controller.initialize();
       controller.setLooping(true);
       _controllers[index] = controller;
+      
+      // Register controller with VideoControllerManager
+      _videoManager.registerController(controller);
     } catch (e) {
       print('Error initializing video at index $index: $e');
     }
@@ -177,7 +184,11 @@ class _VideoScreenState extends State<VideoScreen> {
         })
         .toList()
         .forEach((key) {
-          _controllers[key]?.dispose();
+          if (_controllers[key] != null) {
+            // Unregister controller before disposing
+            _videoManager.unregisterController(_controllers[key]!);
+            _controllers[key]?.dispose();
+          }
           _controllers.remove(key);
         });
   }
