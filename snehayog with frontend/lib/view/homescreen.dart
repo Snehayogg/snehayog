@@ -14,9 +14,8 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  // Use GlobalKey<State<VideoScreen>> and GlobalKey<State<SnehaScreen>> for cross-file access
+  // Use GlobalKey<State<VideoScreen>> for cross-file access
   final GlobalKey<State<VideoScreen>> _videoScreenKey = VideoScreen.createKey();
-  final GlobalKey<State<SnehaScreen>> _snehaScreenKey = SnehaScreen.createKey();
   late final List<Widget> _screens;
 
   @override
@@ -24,7 +23,7 @@ class _MainScreenState extends State<MainScreen> {
     super.initState();
     _screens = [
       VideoScreen(key: _videoScreenKey),
-      SnehaScreen(key: _snehaScreenKey),
+      const SnehaScreen(key: PageStorageKey('snehaScreen')),
       const UploadScreen(key: PageStorageKey('uploadScreen')),
       const ProfileScreen(key: PageStorageKey('profileScreen')),
     ];
@@ -35,15 +34,11 @@ class _MainScreenState extends State<MainScreen> {
       // Notify old screen it's now hidden
       if (controller.currentIndex == 0)
         (_videoScreenKey.currentState as dynamic)?.onScreenVisible(false);
-      if (controller.currentIndex == 1)
-        (_snehaScreenKey.currentState as dynamic)?.onScreenVisible(false);
       // Change index
       controller.changeIndex(index);
       // Notify new screen it's now visible
       if (index == 0)
         (_videoScreenKey.currentState as dynamic)?.onScreenVisible(true);
-      if (index == 1)
-        (_snehaScreenKey.currentState as dynamic)?.onScreenVisible(true);
     }
   }
 
