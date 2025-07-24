@@ -14,17 +14,37 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
+  // Use GlobalKey<State<VideoScreen>> and GlobalKey<State<SnehaScreen>> for cross-file access
+  final GlobalKey<State<VideoScreen>> _videoScreenKey = VideoScreen.createKey();
+  final GlobalKey<State<SnehaScreen>> _snehaScreenKey = SnehaScreen.createKey();
   late final List<Widget> _screens;
 
   @override
   void initState() {
     super.initState();
     _screens = [
-      const VideoScreen(key: PageStorageKey('videoScreen')),
-      const SnehaScreen(key: PageStorageKey('snehaScreen')),
+      VideoScreen(key: _videoScreenKey),
+      SnehaScreen(key: _snehaScreenKey),
       const UploadScreen(key: PageStorageKey('uploadScreen')),
       const ProfileScreen(key: PageStorageKey('profileScreen')),
     ];
+  }
+
+  void _onTabTapped(MainController controller, int index) {
+    if (controller.currentIndex != index) {
+      // Notify old screen it's now hidden
+      if (controller.currentIndex == 0)
+        (_videoScreenKey.currentState as dynamic)?.onScreenVisible(false);
+      if (controller.currentIndex == 1)
+        (_snehaScreenKey.currentState as dynamic)?.onScreenVisible(false);
+      // Change index
+      controller.changeIndex(index);
+      // Notify new screen it's now visible
+      if (index == 0)
+        (_videoScreenKey.currentState as dynamic)?.onScreenVisible(true);
+      if (index == 1)
+        (_snehaScreenKey.currentState as dynamic)?.onScreenVisible(true);
+    }
   }
 
   @override
@@ -53,7 +73,7 @@ class _MainScreenState extends State<MainScreen> {
               selectedItemColor: const Color(0xFF424242),
               unselectedItemColor: const Color(0xFF757575),
               currentIndex: controller.currentIndex,
-              onTap: controller.changeIndex,
+              onTap: (index) => _onTabTapped(controller, index),
               type: BottomNavigationBarType.fixed,
               elevation: 0,
               items: [

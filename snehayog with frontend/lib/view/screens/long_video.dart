@@ -9,6 +9,10 @@ import 'package:snehayog/services/video_service.dart';
 class SnehaScreen extends StatefulWidget {
   const SnehaScreen({super.key});
 
+  // Add this static helper for type-safe key usage
+  static GlobalKey<_SnehaScreenState> createKey() =>
+      GlobalKey<_SnehaScreenState>();
+
   @override
   State<SnehaScreen> createState() => _SnehaScreenState();
 }
@@ -152,6 +156,19 @@ class _SnehaScreenState extends State<SnehaScreen> {
 
   String? _tempTitle;
   String? _tempDescription;
+
+  // Add this method for external visibility control
+  void onScreenVisible(bool visible) {
+    if (_videoController != null && _chewieController != null) {
+      if (visible) {
+        _videoController?.play();
+        _chewieController?.play();
+      } else {
+        _videoController?.pause();
+        _chewieController?.pause();
+      }
+    }
+  }
 
   @override
   void initState() {

@@ -17,6 +17,10 @@ class VideoScreen extends StatefulWidget {
   const VideoScreen({Key? key, this.initialIndex, this.initialVideos})
       : super(key: key);
 
+  // Add this static helper for type-safe key usage
+  static GlobalKey<_VideoScreenState> createKey() =>
+      GlobalKey<_VideoScreenState>();
+
   @override
   _VideoScreenState createState() => _VideoScreenState();
 }
@@ -180,6 +184,17 @@ class _VideoScreenState extends State<VideoScreen> {
           _controllers[key]?.dispose();
           _controllers.remove(key);
         });
+  }
+
+  // Add this method for external visibility control
+  void onScreenVisible(bool visible) {
+    if (_controllers.containsKey(_activePage)) {
+      if (visible) {
+        _controllers[_activePage]?.play();
+      } else {
+        _controllers[_activePage]?.pause();
+      }
+    }
   }
 
   @override
