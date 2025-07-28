@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 class VideoModel {
   final String id;
   final String videoName;
@@ -16,6 +14,7 @@ class VideoModel {
   final double aspectRatio;
   final Duration duration;
   List<Comment> comments;
+  final String? link;
 
   VideoModel({
     required this.id,
@@ -33,6 +32,7 @@ class VideoModel {
     required this.aspectRatio,
     required this.duration,
     required this.comments,
+    this.link,
   });
 
   factory VideoModel.fromJson(Map<String, dynamic> json) {
@@ -61,6 +61,7 @@ class VideoModel {
               ?.map((comment) => Comment.fromJson(comment))
               .toList() ??
           [],
+      link: json['link'],
     );
   }
 
@@ -85,6 +86,7 @@ class VideoModel {
       'aspectRatio': aspectRatio,
       'duration': duration.inSeconds,
       'comments': comments.map((comment) => comment.toJson()).toList(),
+      'link': link,
     };
   }
 
@@ -104,6 +106,7 @@ class VideoModel {
     double? aspectRatio,
     Duration? duration,
     List<Comment>? comments,
+    String? link,
   }) {
     return VideoModel(
       id: id ?? this.id,
@@ -121,6 +124,7 @@ class VideoModel {
       aspectRatio: aspectRatio ?? this.aspectRatio,
       duration: duration ?? this.duration,
       comments: comments ?? this.comments,
+      link: link ?? this.link,
     );
   }
 

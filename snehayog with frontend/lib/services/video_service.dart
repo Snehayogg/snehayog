@@ -11,7 +11,6 @@ import 'package:flutter/material.dart';
 import 'package:snehayog/config/app_config.dart';
 import 'package:http_parser/http_parser.dart';
 
-
 /// VideoService class handles all video-related operations including:
 /// - Fetching videos
 /// - Uploading videos
@@ -325,7 +324,7 @@ class VideoService {
   /// Returns a map containing the uploaded video's data
   Future<Map<String, dynamic>> uploadVideo(
       File videoFile, String title, String description,
-      {Function(double)? onProgress}) async {
+      [String? link, Function(double)? onProgress]) async {
     try {
       print('Using server at: $baseUrl');
 
@@ -380,6 +379,9 @@ class VideoService {
       request.fields['videoName'] = title;
       request.fields['description'] = description;
       request.fields['videoType'] = isLong ? 'yog' : 'sneha';
+      if (link != null && link.isNotEmpty) {
+        request.fields['link'] = link;
+      }
 
       print('Uploading video with fields: ${request.fields}');
 

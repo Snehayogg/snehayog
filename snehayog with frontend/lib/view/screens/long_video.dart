@@ -5,12 +5,12 @@ class SnehaScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return const Scaffold(
       backgroundColor: Colors.white,
       body: Center(
-        child: const Column(
+        child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
+          children: [
             Icon(Icons.hourglass_empty, size: 64, color: Colors.grey),
             SizedBox(height: 24),
             Text(

@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:snehayog/controller/google_sign_in_controller.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:snehayog/view/screens/profile_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class VideoScreen extends StatefulWidget {
   final int? initialIndex;
@@ -25,7 +26,7 @@ class VideoScreen extends StatefulWidget {
   _VideoScreenState createState() => _VideoScreenState();
 }
 
-class _VideoScreenState extends State<VideoScreen> {
+class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
   final VideoService _videoService = VideoService();
   late List<VideoModel> _videos;
   late PageController _pageController;
@@ -43,6 +44,7 @@ class _VideoScreenState extends State<VideoScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (widget.initialVideos != null && widget.initialVideos!.isNotEmpty) {
       _videos = List<VideoModel>.from(widget.initialVideos!);
       _activePage = widget.initialIndex ?? 0;
@@ -72,11 +74,45 @@ class _VideoScreenState extends State<VideoScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     for (var c in _controllers.values) {
       c.dispose();
     }
     _pageController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      // Pause all videos when app is not active
+      for (var controller in _controllers.values) {
+        if (controller.value.isPlaying) {
+          controller.pause();
+        }
+      }
+    } else if (state == AppLifecycleState.resumed) {
+      // Optionally resume only the active video if the screen is visible
+      if (ModalRoute.of(context)?.isCurrent ?? false) {
+        _controllers[_activePage]?.play();
+      }
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Pause all videos if this route is not current (e.g., another screen is pushed on top)
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) {
+      for (var controller in _controllers.values) {
+        if (controller.value.isPlaying) {
+          controller.pause();
+        }
+      }
+    }
   }
 
   Future<void> _preloadVideosAround(int index) async {
@@ -199,9 +235,73 @@ class _VideoScreenState extends State<VideoScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final currentVideo = (_videos.isNotEmpty && _activePage < _videos.length)
+        ? _videos[_activePage]
+        : null;
+    final hasLink =
+        currentVideo?.link != null && currentVideo!.link!.isNotEmpty;
     return Scaffold(
       backgroundColor: Colors.black,
-      body: _buildVideoPlayer(),
+      body: Stack(
+        children: [
+          _buildVideoPlayer(),
+          if (hasLink)
+            Positioned(
+              left: 15,
+              right: 15,
+              bottom: 56,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () async {
+                    final url = Uri.tryParse(currentVideo!.link!);
+                    if (url != null && await canLaunchUrl(url)) {
+                      await launchUrl(url,
+                          mode: LaunchMode.externalApplication);
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Could not open link.')),
+                      );
+                    }
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.white.withOpacity(0.18),
+                          theme.colorScheme.primary.withOpacity(0.92),
+                        ],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                      ),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.open_in_new, color: Colors.white, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Visit Now',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.5,
+                            fontSize: 15,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -271,16 +371,16 @@ class _VideoScreenState extends State<VideoScreen> {
         Text(
           video.videoName,
           style: const TextStyle(
-              color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         Text(
           video.description,
-          style: const TextStyle(color: Colors.white, fontSize: 15),
+          style: const TextStyle(color: Colors.white, fontSize: 13),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 8),
         GestureDetector(
           onTap: () {
             Navigator.push(
@@ -297,7 +397,9 @@ class _VideoScreenState extends State<VideoScreen> {
               Text(
                 video.uploader.name,
                 style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold),
+                    color: Colors.white,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 13),
               )
             ],
           ),

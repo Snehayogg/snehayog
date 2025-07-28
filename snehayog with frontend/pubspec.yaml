@@ -50,6 +50,7 @@ dependencies:
   chewie: ^1.7.5
   visibility_detector: ^0.4.0+2
   video_compress: ^3.1.4
+  url_launcher: ^6.2.5
 
 dev_dependencies:
   flutter_launcher_icons: ^0.14.3

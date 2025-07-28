@@ -21,6 +21,7 @@ class _UploadScreenState extends State<UploadScreen> {
   String? _errorMessage;
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
+  final TextEditingController _linkController = TextEditingController();
   final VideoService _videoService = VideoService();
 
   @override
@@ -139,6 +140,7 @@ class _UploadScreenState extends State<UploadScreen> {
         _selectedVideo!,
         _titleController.text,
         _descriptionController.text,
+        _linkController.text.isNotEmpty ? _linkController.text : null,
       )
           .timeout(
         const Duration(minutes: 5),
@@ -162,6 +164,7 @@ class _UploadScreenState extends State<UploadScreen> {
           _selectedVideo = null;
           _titleController.clear();
           _descriptionController.clear();
+          _linkController.clear();
         });
       }
     } on TimeoutException catch (e) {
@@ -195,6 +198,7 @@ class _UploadScreenState extends State<UploadScreen> {
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
+    _linkController.dispose();
     super.dispose();
   }
 
@@ -334,6 +338,16 @@ class _UploadScreenState extends State<UploadScreen> {
                   border: OutlineInputBorder(),
                 ),
                 maxLines: 3,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _linkController,
+                decoration: const InputDecoration(
+                  labelText: 'Link (optional)',
+                  hintText: 'Add a website, social media, etc.',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.url,
               ),
               const SizedBox(height: 24),
               if (_errorMessage != null)

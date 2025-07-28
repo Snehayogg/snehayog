@@ -32,13 +32,15 @@ class _MainScreenState extends State<MainScreen> {
   void _onTabTapped(MainController controller, int index) {
     if (controller.currentIndex != index) {
       // Notify old screen it's now hidden
-      if (controller.currentIndex == 0)
+      if (controller.currentIndex == 0) {
         (_videoScreenKey.currentState as dynamic)?.onScreenVisible(false);
+      }
       // Change index
       controller.changeIndex(index);
       // Notify new screen it's now visible
-      if (index == 0)
+      if (index == 0) {
         (_videoScreenKey.currentState as dynamic)?.onScreenVisible(true);
+      }
     }
   }
 
