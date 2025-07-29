@@ -3,8 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:snehayog/services/video_service.dart';
-import 'package:snehayog/controller/google_sign_in_controller.dart';
-import 'package:provider/provider.dart';
+import 'package:snehayog/services/google_auth_service.dart';
 import 'package:video_compress/video_compress.dart';
 
 class UploadScreen extends StatefulWidget {
@@ -30,8 +29,9 @@ class _UploadScreenState extends State<UploadScreen> {
   }
 
   Future<void> _pickVideo() async {
-    final authController = context.read<GoogleSignInController>();
-    if (!authController.isSignedIn) {
+    final googleAuthService = GoogleAuthService();
+    final userData = await googleAuthService.getUserData();
+    if (userData == null) {
       _showLoginPrompt();
       return;
     }
@@ -80,8 +80,8 @@ class _UploadScreenState extends State<UploadScreen> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-              final authController = context.read<GoogleSignInController>();
-              await authController.signIn();
+              final googleAuthService = GoogleAuthService();
+              await googleAuthService.signInWithGoogle();
             },
             child: const Text('Sign In'),
           ),
@@ -91,8 +91,9 @@ class _UploadScreenState extends State<UploadScreen> {
   }
 
   Future<void> _uploadVideo() async {
-    final authController = context.read<GoogleSignInController>();
-    if (!authController.isSignedIn) {
+    final googleAuthService = GoogleAuthService();
+    final userData = await googleAuthService.getUserData();
+    if (userData == null) {
       _showLoginPrompt();
       return;
     }
@@ -204,113 +205,75 @@ class _UploadScreenState extends State<UploadScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final authController = context.watch<GoogleSignInController>();
-    final isSignedIn = authController.isSignedIn;
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: GoogleAuthService().getUserData(),
+      builder: (context, snapshot) {
+        final isSignedIn = snapshot.hasData && snapshot.data != null;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Upload Video'),
-        centerTitle: true,
-      ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (!isSignedIn)
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade100,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.warning_amber_rounded,
-                          color: Colors.orange),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          'Please sign in to upload videos',
-                          style: TextStyle(color: Colors.orange),
-                        ),
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Upload Video'),
+            centerTitle: true,
+          ),
+          body: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (!isSignedIn)
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade100,
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      TextButton(
-                        onPressed: () async {
-                          await authController.signIn();
-                        },
-                        child: const Text('Sign In'),
-                      ),
-                    ],
-                  ),
-                ),
-              const SizedBox(height: 32),
-              const Text(
-                'Upload your video',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 32),
-              Container(
-                height: 200,
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: _isCompressing
-                    ? const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            CircularProgressIndicator(),
-                            SizedBox(height: 16),
-                            Text(
-                              'Compressing video...',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.grey,
-                              ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.warning_amber_rounded,
+                              color: Colors.orange),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              'Please sign in to upload videos',
+                              style: TextStyle(color: Colors.orange),
                             ),
-                          ],
-                        ),
-                      )
-                    : _selectedVideo != null
-                        ? Center(
+                          ),
+                          TextButton(
+                            onPressed: () async {
+                              final googleAuthService = GoogleAuthService();
+                              await googleAuthService.signInWithGoogle();
+                            },
+                            child: const Text('Sign In'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 32),
+                  const Text(
+                    'Upload your video',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 32),
+                  Container(
+                    height: 200,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: _isCompressing
+                        ? const Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Icon(
-                                  Icons.video_file,
-                                  size: 48,
-                                  color: Colors.blue,
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  _selectedVideo!.path.split('/').last,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        : const Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.video_library,
-                                  size: 48,
-                                  color: Colors.grey,
-                                ),
+                                CircularProgressIndicator(),
                                 SizedBox(height: 16),
                                 Text(
-                                  'No video selected',
+                                  'Compressing video...',
                                   style: TextStyle(
                                     fontSize: 16,
                                     color: Colors.grey,
@@ -318,89 +281,132 @@ class _UploadScreenState extends State<UploadScreen> {
                                 ),
                               ],
                             ),
-                          ),
-              ),
-              const SizedBox(height: 24),
-              TextField(
-                controller: _titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Video Title',
-                  hintText: 'Enter a title for your video',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _descriptionController,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  hintText: 'Enter a description for your video',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 3,
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _linkController,
-                decoration: const InputDecoration(
-                  labelText: 'Link (optional)',
-                  hintText: 'Add a website, social media, etc.',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.url,
-              ),
-              const SizedBox(height: 24),
-              if (_errorMessage != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16.0),
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(
-                      color: Colors.red,
-                      fontSize: 14,
+                          )
+                        : _selectedVideo != null
+                            ? Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.video_file,
+                                      size: 48,
+                                      color: Colors.blue,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      _selectedVideo!.path.split('/').last,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : const Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.video_library,
+                                      size: 48,
+                                      color: Colors.grey,
+                                    ),
+                                    SizedBox(height: 16),
+                                    Text(
+                                      'No video selected',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                  ),
+                  const SizedBox(height: 24),
+                  TextField(
+                    controller: _titleController,
+                    decoration: const InputDecoration(
+                      labelText: 'Video Title',
+                      hintText: 'Enter a title for your video',
+                      border: OutlineInputBorder(),
                     ),
-                    textAlign: TextAlign.center,
                   ),
-                ),
-              ElevatedButton.icon(
-                onPressed: _isUploading ? null : _pickVideo,
-                icon: const Icon(Icons.video_library),
-                label: const Text('Select Video'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _descriptionController,
+                    decoration: const InputDecoration(
+                      labelText: 'Description',
+                      hintText: 'Enter a description for your video',
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: 3,
                   ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: _isUploading ? null : _uploadVideo,
-                icon: _isUploading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _linkController,
+                    decoration: const InputDecoration(
+                      labelText: 'Link (optional)',
+                      hintText: 'Add a website, social media, etc.',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.url,
+                  ),
+                  const SizedBox(height: 24),
+                  if (_errorMessage != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: Text(
+                        _errorMessage!,
+                        style: const TextStyle(
+                          color: Colors.red,
+                          fontSize: 14,
                         ),
-                      )
-                    : const Icon(Icons.cloud_upload),
-                label: Text(_isUploading ? 'Uploading...' : 'Upload Video'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ElevatedButton.icon(
+                    onPressed: _isUploading ? null : _pickVideo,
+                    icon: const Icon(Icons.video_library),
+                    label: const Text('Select Video'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: _isUploading ? null : _uploadVideo,
+                    icon: _isUploading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Icon(Icons.cloud_upload),
+                    label: Text(_isUploading ? 'Uploading...' : 'Upload Video'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

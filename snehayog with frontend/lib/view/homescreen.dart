@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:snehayog/view/screens/profile_screen.dart';
 import 'package:snehayog/view/screens/long_video.dart';
 import 'package:snehayog/view/screens/upload_screen.dart';
-import 'package:snehayog/view/screens/video_screen.dart';
+import 'package:snehayog/view/screens/video_screen.dart'; // Import your actual VideoScreen
 import 'package:snehayog/controller/main_controller.dart';
 
 class MainScreen extends StatefulWidget {
@@ -14,35 +14,9 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  // Use GlobalKey<State<VideoScreen>> for cross-file access
-  final GlobalKey<State<VideoScreen>> _videoScreenKey = VideoScreen.createKey();
-  late final List<Widget> _screens;
-
-  @override
-  void initState() {
-    super.initState();
-    _screens = [
-      VideoScreen(key: _videoScreenKey),
-      const SnehaScreen(key: PageStorageKey('snehaScreen')),
-      const UploadScreen(key: PageStorageKey('uploadScreen')),
-      const ProfileScreen(key: PageStorageKey('profileScreen')),
-    ];
-  }
-
-  void _onTabTapped(MainController controller, int index) {
-    if (controller.currentIndex != index) {
-      // Notify old screen it's now hidden
-      if (controller.currentIndex == 0) {
-        (_videoScreenKey.currentState as dynamic)?.onScreenVisible(false);
-      }
-      // Change index
-      controller.changeIndex(index);
-      // Notify new screen it's now visible
-      if (index == 0) {
-        (_videoScreenKey.currentState as dynamic)?.onScreenVisible(true);
-      }
-    }
-  }
+  final _videoScreenKey = GlobalKey<
+      State<VideoScreen>>(); // Use State<VideoScreen> as the type parameter
+  final int _currentIndex = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -51,8 +25,13 @@ class _MainScreenState extends State<MainScreen> {
         return Scaffold(
           backgroundColor: Colors.white,
           body: IndexedStack(
-            index: controller.currentIndex,
-            children: _screens,
+            index: _currentIndex,
+            children: [
+              VideoScreen(key: _videoScreenKey),
+              const SnehaScreen(key: PageStorageKey('snehaScreen')),
+              const UploadScreen(key: PageStorageKey('uploadScreen')),
+              const ProfileScreen(key: PageStorageKey('profileScreen')),
+            ],
           ),
           bottomNavigationBar: Container(
             decoration: BoxDecoration(
@@ -69,8 +48,8 @@ class _MainScreenState extends State<MainScreen> {
               backgroundColor: Colors.white,
               selectedItemColor: const Color(0xFF424242),
               unselectedItemColor: const Color(0xFF757575),
-              currentIndex: controller.currentIndex,
-              onTap: (index) => _onTabTapped(controller, index),
+              currentIndex: _currentIndex,
+              onTap: (index) {},
               type: BottomNavigationBarType.fixed,
               elevation: 0,
               items: [
@@ -78,7 +57,7 @@ class _MainScreenState extends State<MainScreen> {
                   icon: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: controller.currentIndex == 0
+                      color: _currentIndex == 0
                           ? const Color(0xFF424242).withOpacity(0.1)
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(12),
@@ -91,7 +70,7 @@ class _MainScreenState extends State<MainScreen> {
                   icon: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: controller.currentIndex == 1
+                      color: _currentIndex == 1
                           ? const Color(0xFF424242).withOpacity(0.1)
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(12),
@@ -104,7 +83,7 @@ class _MainScreenState extends State<MainScreen> {
                   icon: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: controller.currentIndex == 2
+                      color: _currentIndex == 2
                           ? const Color(0xFF424242).withOpacity(0.1)
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(12),
@@ -117,7 +96,7 @@ class _MainScreenState extends State<MainScreen> {
                   icon: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: controller.currentIndex == 3
+                      color: _currentIndex == 3
                           ? const Color(0xFF424242).withOpacity(0.1)
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(12),
@@ -134,3 +113,4 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 }
+

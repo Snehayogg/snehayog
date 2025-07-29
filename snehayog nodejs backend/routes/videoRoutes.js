@@ -238,6 +238,49 @@ router.get('/', async (req, res) => {
   }
 });
 
+// POST /api/videos/:id/like - Toggle like for a video (must be before /:id route)
+router.post('/:id/like', async (req, res) => {
+  try {
+    const { userId } = req.body;
+    const videoId = req.params.id;
+
+    // Validate user
+    const user = await User.findOne({ googleId: userId });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Find the video
+    const video = await Video.findById(videoId);
+    if (!video) {
+      return res.status(404).json({ error: 'Video not found' });
+    }
+
+    // Check if user has already liked the video
+    const userLikedIndex = video.likedBy.indexOf(userId);
+    
+    if (userLikedIndex > -1) {
+      // User has already liked - remove the like
+      video.likedBy.splice(userLikedIndex, 1);
+    } else {
+      // User hasn't liked - add the like
+      video.likedBy.push(userId);
+    }
+
+    await video.save();
+
+    // Return the updated video with populated fields
+    const updatedVideo = await Video.findById(videoId)
+      .populate('uploader', 'name profilePic')
+      .populate('comments.user', 'name profilePic');
+
+    res.json(updatedVideo);
+  } catch (err) {
+    console.error('Error toggling like:', err);
+    res.status(500).json({ error: 'Failed to toggle like', details: err.message });
+  }
+});
+
 // Get video by ID
 router.get('/:id', async (req, res) => {
   try {

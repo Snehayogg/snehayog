@@ -56,8 +56,19 @@ class GoogleSignInController extends ChangeNotifier {
   }
 
 Future<Map<String, dynamic>?> signIn() async {
-  final userInfo = await GoogleAuthService().signInWithGoogle();
-  return userInfo; // return the actual data
+  try {
+    final userInfo = await _authService.signInWithGoogle();
+    if (userInfo != null) {
+      _userData = userInfo;
+      await _registerUser();
+      notifyListeners();
+    }
+    return userInfo;
+  } catch (e) {
+    _error = e.toString();
+    notifyListeners();
+    return null;
+  }
 }
 
 

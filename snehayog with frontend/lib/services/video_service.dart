@@ -3,10 +3,9 @@ import 'dart:async';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/controller/google_sign_in_controller.dart';
+import 'package:snehayog/services/google_auth_service.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
-import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
 import 'package:snehayog/config/app_config.dart';
 import 'package:http_parser/http_parser.dart';
@@ -190,15 +189,34 @@ class VideoService {
   /// Returns the updated VideoModel
   Future<VideoModel> toggleLike(String videoId, String userId) async {
     try {
-      final headers = await _getAuthHeaders();
+      // Check authentication first
+      final googleAuthService = GoogleAuthService();
+      final userData = await googleAuthService.getUserData();
+
+      if (userData == null) {
+        throw Exception('Please sign in to like videos');
+      }
 
       final res = await http
           .post(
             Uri.parse('$baseUrl/api/videos/$videoId/like'),
-            headers: headers,
+            headers: {
+              'Content-Type': 'application/json',
+            },
             body: json.encode({'userId': userId}),
           )
           .timeout(const Duration(seconds: 10));
+
+      // Debug: print response for troubleshooting
+      print('toggleLike response status: ${res.statusCode}');
+      print('toggleLike response body: ${res.body}');
+
+      // Detect HTML response (usually error page)
+      if (res.body.trim().toLowerCase().startsWith('<!doctype html') ||
+          res.body.trim().toLowerCase().startsWith('<html')) {
+        throw Exception(
+            'Server returned an HTML error page. The endpoint may be incorrect, missing, or the server is misconfigured.');
+      }
 
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
@@ -206,8 +224,13 @@ class VideoService {
       } else if (res.statusCode == 401) {
         throw Exception('Please sign in again to like videos');
       } else {
-        final error = json.decode(res.body);
-        throw Exception(error['error'] ?? 'Failed to like video');
+        try {
+          final error = json.decode(res.body);
+          throw Exception(error['error'] ?? 'Failed to like video');
+        } catch (e) {
+          // If response is not JSON, show raw response
+          throw Exception('Failed to like video: ${res.body}');
+        }
       }
     } catch (e) {
       if (e is TimeoutException) {
@@ -228,6 +251,14 @@ class VideoService {
   Future<List<Comment>> addComment(
       String videoId, String text, String userId) async {
     try {
+      // Check authentication first
+      final googleAuthService = GoogleAuthService();
+      final userData = await googleAuthService.getUserData();
+
+      if (userData == null) {
+        throw Exception('Please sign in to add comments');
+      }
+
       final res = await http
           .post(
             Uri.parse('$baseUrl/api/videos/$videoId/comments'),
@@ -273,24 +304,33 @@ class VideoService {
     try {
       final headers = await _getAuthHeaders();
 
-      // Share the video using platform share dialog
       await Share.share(
         'Check out this video on Snehayog!\n\n$description\n\n$videoUrl',
         subject: 'Snehayog Video',
       );
 
-      // Update share count on server
       final res = await http.post(
         Uri.parse('$baseUrl/api/videos/$videoId/share'),
         headers: headers,
       );
 
+      // Detect HTML error page
+      if (res.body.trim().toLowerCase().startsWith('<!doctype html') ||
+          res.body.trim().toLowerCase().startsWith('<html')) {
+        throw Exception(
+            'Server returned an HTML error page. The endpoint may be incorrect, missing, or the server is misconfigured.');
+      }
+
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         return VideoModel.fromJson(data);
       } else {
-        final error = json.decode(res.body);
-        throw Exception(error['error'] ?? 'Failed to share video');
+        try {
+          final error = json.decode(res.body);
+          throw Exception(error['error'] ?? 'Failed to share video');
+        } catch (e) {
+          throw Exception('Failed to share video: ${res.body}');
+        }
       }
     } catch (e) {
       if (e is Exception) rethrow;
@@ -326,8 +366,6 @@ class VideoService {
       File videoFile, String title, String description,
       [String? link, Function(double)? onProgress]) async {
     try {
-      print('Using server at: $baseUrl');
-
       // Check server health before upload
       final isHealthy = await checkServerHealth();
       if (!isHealthy) {
@@ -336,22 +374,18 @@ class VideoService {
       }
 
       final isLong = await isLongVideo(videoFile.path);
-      final authController = Provider.of<GoogleSignInController>(
-        navigatorKey.currentContext!,
-        listen: false,
-      );
 
-      if (!authController.isSignedIn) {
-        throw Exception('User not authenticated');
-      }
+      // Get authentication data directly from GoogleAuthService
+      final googleAuthService = GoogleAuthService();
+      final userData = await googleAuthService.getUserData();
 
-      final userData = authController.userData;
       if (userData == null) {
-        throw Exception('User data not found');
+        throw Exception(
+            'User not authenticated. Please sign in to upload videos.');
       }
 
       print('User data for upload: ${userData.toString()}');
-
+      print('User data for upload: ${userData.toString()}');
       // Check file size before upload
       final fileSize = await videoFile.length();
       const maxSize = 100 * 1024 * 1024; // 100MB
@@ -512,51 +546,29 @@ class VideoService {
 
             print('Final videoUrl: ${json['videoUrl']}');
             print('Final thumbnailUrl: ${json['thumbnailUrl']}');
-
             return VideoModel.fromJson(json);
           }).toList();
 
-          return videos;
+          return List<VideoModel>.from(videos);
         } catch (e) {
-          print('Error parsing JSON response: $e');
-          throw Exception('Invalid response format from server');
+          print('Error decoding user videos: $e');
+          throw Exception('Failed to load user videos');
         }
-      } else if (response.statusCode == 404) {
-        print('No videos found for user');
-        return [];
       } else {
-        print('Server error: ${response.statusCode}');
-        print('Error response: ${response.body}');
-        throw Exception('Failed to fetch user videos: ${response.statusCode}');
+        throw Exception('Failed to load user videos: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error fetching user videos: $e');
-      if (e is TimeoutException) {
-        throw Exception(
-            'Request timed out. Please check your internet connection and try again.');
-      }
+      print('Error in getUserVideos: $e');
       rethrow;
     }
   }
 
-  /// Gets authentication headers for API requests
-  /// Returns a map containing Content-Type and Authorization headers
-  /// Throws an exception if user is not authenticated
   Future<Map<String, String>> _getAuthHeaders() async {
-    final authController = Provider.of<GoogleSignInController>(
-      navigatorKey.currentContext!,
-      listen: false,
-    );
-
-    if (!authController.isSignedIn) {
-      throw Exception('User not authenticated');
-    }
-
-    final userData = authController.userData;
+    final googleAuthService = GoogleAuthService();
+    final userData = await googleAuthService.getUserData();
     if (userData == null || userData['token'] == null) {
-      throw Exception('Authentication token not found');
+      throw Exception('User not authenticated. Please sign in.');
     }
-
     return {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer ${userData['token']}',
