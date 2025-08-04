@@ -6,14 +6,14 @@ import 'package:snehayog/utils/responsive_helper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
-import 'dart:async'; // Add this import for TimeoutException
+import 'dart:async';
 import 'package:snehayog/services/user_service.dart';
 import 'package:snehayog/view/screens/video_screen.dart';
-import 'dart:convert'; // Add this import for jsonEncode
-import 'package:http/http.dart' as http; // Add this import for http
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class ProfileScreen extends StatefulWidget {
-  final String? userId; // Add userId to accept a user ID
+  final String? userId;
   const ProfileScreen({super.key, this.userId});
 
   @override
@@ -153,6 +153,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         _error = e.toString();
       });
+    }
+  }
+
+  // Selection mode for deleting videos
+  bool _isSelecting = false;
+  final Set<String> _selectedVideoIds = {};
+
+  Future<void> _deleteSelectedVideos() async {
+    if (_selectedVideoIds.isEmpty) return;
+    setState(() {
+      _isLoading = true;
+    });
+    try {
+      for (final videoId in _selectedVideoIds) {
+        final result = await _videoService.deleteVideo(videoId);
+        if (result == false) {
+          throw 'Delete route not found or failed for video ID: $videoId';
+        }
+      }
+      _selectedVideoIds.clear();
+      await _loadUserVideos();
+      setState(() {
+        _isSelecting = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Selected videos deleted successfully'),
+              backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  'Error deleting videos: $e\nMake sure your backend has a DELETE /api/videos/:id route.'),
+              backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -408,8 +451,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
           actions: isMyProfile && _userData != null
               ? [
                   IconButton(
-                    icon: const Icon(Icons.logout, color: Color(0xFF424242)),
-                    onPressed: _handleLogout,
+                    icon: const Icon(Icons.more_vert, color: Color(0xFF424242)),
+                    onPressed: () {
+                      showModalBottomSheet(
+                        context: context,
+                        builder: (context) => Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ListTile(
+                              leading: const Icon(Icons.select_all),
+                              title: const Text('Select & Delete Videos'),
+                              onTap: () {
+                                Navigator.pop(context);
+                                setState(() {
+                                  _isSelecting = true;
+                                });
+                              },
+                            ),
+                            ListTile(
+                              leading: const Icon(Icons.logout),
+                              title: const Text('Logout'),
+                              onTap: () {
+                                Navigator.pop(context);
+                                _handleLogout();
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                 ]
               : null,
@@ -421,11 +491,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
-                          'Error: $_error',
-                          style: const TextStyle(color: Color(0xFF424242)),
-                          textAlign: TextAlign.center,
-                        ),
+                        Text('Error: $_error',
+                            style: const TextStyle(color: Color(0xFF424242)),
+                            textAlign: TextAlign.center),
                         const SizedBox(height: 16),
                         ElevatedButton(
                           onPressed: () {
@@ -447,6 +515,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         child: SingleChildScrollView(
                           child: Column(
                             children: [
+                              if (_isSelecting && isMyProfile)
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 8.0),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      ElevatedButton.icon(
+                                        icon: const Icon(Icons.delete),
+                                        label: const Text('Delete Selected'),
+                                        style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.red),
+                                        onPressed: _selectedVideoIds.isEmpty
+                                            ? null
+                                            : _deleteSelectedVideos,
+                                      ),
+                                      const SizedBox(width: 16),
+                                      TextButton(
+                                        child: const Text('Cancel'),
+                                        onPressed: () {
+                                          setState(() {
+                                            _isSelecting = false;
+                                            _selectedVideoIds.clear();
+                                          });
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               Container(
                                 padding: ResponsiveHelper.getAdaptivePadding(
                                     context),
@@ -644,129 +741,211 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       itemCount: _userVideos.length,
                                       itemBuilder: (context, index) {
                                         final video = _userVideos[index];
+                                        final isSelected = _selectedVideoIds
+                                            .contains(video.id);
+                                        final isOwnVideo = isMyProfile &&
+                                            video.uploader.id ==
+                                                _userData?['id'];
                                         return GestureDetector(
                                           onTap: () {
-                                            // Update uploader name in all user videos before navigating
-                                            final updatedVideos =
-                                                _userVideos.map((video) {
-                                              if (_userData != null &&
-                                                  _userData!['name'] != null) {
-                                                return video.copyWith(
-                                                  uploader:
-                                                      video.uploader.copyWith(
-                                                    name: _userData!['name'],
+                                            if (_isSelecting && isOwnVideo) {
+                                              setState(() {
+                                                if (isSelected) {
+                                                  _selectedVideoIds
+                                                      .remove(video.id);
+                                                } else {
+                                                  _selectedVideoIds
+                                                      .add(video.id);
+                                                }
+                                              });
+                                            } else if (isMyProfile) {
+                                              setState(() {
+                                                _isSelecting = true;
+                                                _selectedVideoIds.add(video.id);
+                                              });
+                                            } else {
+                                              final updatedVideos =
+                                                  _userVideos.map((video) {
+                                                if (_userData != null &&
+                                                    _userData!['name'] !=
+                                                        null) {
+                                                  return video.copyWith(
+                                                    uploader: video.uploader
+                                                        .copyWith(
+                                                            name: _userData![
+                                                                'name']),
+                                                  );
+                                                }
+                                                return video;
+                                              }).toList();
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) =>
+                                                      VideoScreen(
+                                                    initialIndex: index,
+                                                    initialVideos:
+                                                        updatedVideos,
                                                   ),
-                                                );
-                                              }
-                                              return video;
-                                            }).toList();
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) =>
-                                                    VideoScreen(
-                                                  initialIndex: index,
-                                                  initialVideos: updatedVideos,
                                                 ),
-                                              ),
-                                            );
+                                              );
+                                            }
                                           },
-                                          child: Card(
-                                            color: const Color(0xFFF5F5F5),
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.stretch,
-                                              children: [
-                                                Expanded(
-                                                  child: Image.network(
-                                                    video
-                                                        .videoUrl, // Use videoUrl as a fallback
-                                                    fit: BoxFit.cover,
-                                                    errorBuilder: (context,
-                                                        error, stackTrace) {
-                                                      print(
-                                                          'Error loading thumbnail: $error');
-                                                      return Center(
-                                                        child: Icon(
-                                                          Icons.video_library,
-                                                          color: const Color(
-                                                              0xFF424242),
-                                                          size: ResponsiveHelper
-                                                              .getAdaptiveIconSize(
-                                                                  context),
-                                                        ),
-                                                      );
-                                                    },
-                                                  ),
+                                          onLongPress: () {
+                                            if (isMyProfile &&
+                                                isOwnVideo &&
+                                                !_isSelecting) {
+                                              setState(() {
+                                                _isSelecting = true;
+                                                _selectedVideoIds.add(video.id);
+                                              });
+                                            }
+                                          },
+                                          child: Stack(
+                                            children: [
+                                              AnimatedContainer(
+                                                duration: const Duration(
+                                                    milliseconds: 200),
+                                                decoration: BoxDecoration(
+                                                  border: isSelected
+                                                      ? Border.all(
+                                                          color: Colors.blue,
+                                                          width: 3)
+                                                      : null,
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
                                                 ),
-                                                Padding(
-                                                  padding: EdgeInsets.all(
-                                                    ResponsiveHelper.isMobile(
-                                                            context)
-                                                        ? 8.0
-                                                        : 12.0,
-                                                  ),
+                                                child: Card(
+                                                  color:
+                                                      const Color(0xFFF5F5F5),
                                                   child: Column(
                                                     crossAxisAlignment:
                                                         CrossAxisAlignment
-                                                            .start,
+                                                            .stretch,
                                                     children: [
-                                                      Text(
-                                                        video.videoName,
-                                                        style: TextStyle(
-                                                          color: const Color(
-                                                              0xFF424242),
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          fontSize: ResponsiveHelper
-                                                              .getAdaptiveFontSize(
-                                                                  context, 14),
+                                                      Expanded(
+                                                        child: Image.network(
+                                                          video.videoUrl,
+                                                          fit: BoxFit.cover,
+                                                          errorBuilder:
+                                                              (context, error,
+                                                                  stackTrace) {
+                                                            print(
+                                                                'Error loading thumbnail: $error');
+                                                            return Center(
+                                                              child: Icon(
+                                                                Icons
+                                                                    .video_library,
+                                                                color: const Color(
+                                                                    0xFF424242),
+                                                                size: ResponsiveHelper
+                                                                    .getAdaptiveIconSize(
+                                                                        context),
+                                                              ),
+                                                            );
+                                                          },
                                                         ),
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
                                                       ),
-                                                      SizedBox(
-                                                          height: ResponsiveHelper
+                                                      Padding(
+                                                        padding: EdgeInsets.all(
+                                                          ResponsiveHelper
                                                                   .isMobile(
                                                                       context)
-                                                              ? 4
-                                                              : 8),
-                                                      Row(
-                                                        children: [
-                                                          Icon(
-                                                            Icons.visibility,
-                                                            color: const Color(
-                                                                0xFF757575),
-                                                            size: ResponsiveHelper
-                                                                    .getAdaptiveIconSize(
-                                                                        context) *
-                                                                0.6,
-                                                          ),
-                                                          SizedBox(
-                                                              width: ResponsiveHelper
-                                                                      .isMobile(
-                                                                          context)
-                                                                  ? 4
-                                                                  : 8),
-                                                          Text(
-                                                            '${video.views}',
-                                                            style: TextStyle(
-                                                              color: const Color(
-                                                                  0xFF757575),
-                                                              fontSize: ResponsiveHelper
-                                                                  .getAdaptiveFontSize(
-                                                                      context,
-                                                                      12),
+                                                              ? 8.0
+                                                              : 12.0,
+                                                        ),
+                                                        child: Column(
+                                                          crossAxisAlignment:
+                                                              CrossAxisAlignment
+                                                                  .start,
+                                                          children: [
+                                                            Text(
+                                                              video.videoName,
+                                                              style: TextStyle(
+                                                                color: const Color(
+                                                                    0xFF424242),
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .bold,
+                                                                fontSize: ResponsiveHelper
+                                                                    .getAdaptiveFontSize(
+                                                                        context,
+                                                                        14),
+                                                              ),
+                                                              maxLines: 1,
+                                                              overflow:
+                                                                  TextOverflow
+                                                                      .ellipsis,
                                                             ),
-                                                          ),
-                                                        ],
+                                                            SizedBox(
+                                                                height: ResponsiveHelper
+                                                                        .isMobile(
+                                                                            context)
+                                                                    ? 4
+                                                                    : 8),
+                                                            Row(
+                                                              children: [
+                                                                Icon(
+                                                                  Icons
+                                                                      .visibility,
+                                                                  color: const Color(
+                                                                      0xFF757575),
+                                                                  size: ResponsiveHelper
+                                                                          .getAdaptiveIconSize(
+                                                                              context) *
+                                                                      0.6,
+                                                                ),
+                                                                SizedBox(
+                                                                    width: ResponsiveHelper.isMobile(
+                                                                            context)
+                                                                        ? 4
+                                                                        : 8),
+                                                                Text(
+                                                                  '${video.views}',
+                                                                  style:
+                                                                      TextStyle(
+                                                                    color: const Color(
+                                                                        0xFF757575),
+                                                                    fontSize: ResponsiveHelper
+                                                                        .getAdaptiveFontSize(
+                                                                            context,
+                                                                            12),
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ],
+                                                        ),
                                                       ),
                                                     ],
                                                   ),
                                                 ),
-                                              ],
-                                            ),
+                                              ),
+                                              if (_isSelecting && isOwnVideo)
+                                                Positioned(
+                                                  top: 8,
+                                                  right: 8,
+                                                  child: Checkbox(
+                                                    value: isSelected,
+                                                    activeColor: Colors.blue,
+                                                    checkColor: Colors.white,
+                                                    side: const BorderSide(
+                                                        color: Colors.blue,
+                                                        width: 2),
+                                                    onChanged: (checked) {
+                                                      setState(() {
+                                                        if (checked == true) {
+                                                          _selectedVideoIds
+                                                              .add(video.id);
+                                                        } else {
+                                                          _selectedVideoIds
+                                                              .remove(video.id);
+                                                        }
+                                                      });
+                                                    },
+                                                  ),
+                                                ),
+                                            ],
                                           ),
                                         );
                                       },

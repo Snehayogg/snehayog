@@ -61,7 +61,11 @@ class VideoModel {
               ?.map((comment) => Comment.fromJson(comment))
               .toList() ??
           [],
-      link: json['link'],
+      link: json.containsKey('link')
+          ? (json['link']?.toString().trim().isNotEmpty == true
+              ? json['link'].toString().trim()
+              : null)
+          : null,
     );
   }
 

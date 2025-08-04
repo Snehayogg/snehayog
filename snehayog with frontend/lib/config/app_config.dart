@@ -1,7 +1,7 @@
 /// App configuration for different environments
 class AppConfig {
   // Base URL for API endpoints
-  static String baseUrl = "https://snehayog-production.up.railway.app";
+  static String baseUrl = "http://192.168.0.190:5000";
 
   // App settings
   static const String appName = 'Snehayog';

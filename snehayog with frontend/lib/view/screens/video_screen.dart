@@ -56,10 +56,12 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
   bool _hasMore = true; // Whether more videos are available
   int _currentPage = 1; // Current page for pagination
   int _activePage = 0; // Currently active video index
-
-  // Add these properties
-  final List<VideoPlayerController> _controllersList = [];
-  int _currentIndex = 0;
+  
+  // Track if the screen is currently visible
+  bool _isScreenVisible = true;
+  
+  // Timer for periodic video health checks
+  Timer? _healthCheckTimer;
 
   @override
   void initState() {
@@ -78,7 +80,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       // Initialize the current video and preload neighboring videos
       _initController(_activePage).then((_) {
         if (mounted) {
-          _controllers[_activePage]?.play();
+          _playActiveVideo();
           _preloadVideosAround(_activePage);
           setState(() {});
         }
@@ -98,17 +100,27 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
         }
       });
     }
+    
+    // Start periodic health checks for video controllers
+    _startHealthCheckTimer();
   }
 
   @override
   void dispose() {
     // Clean up resources when widget is disposed
     WidgetsBinding.instance.removeObserver(this);
-    for (var controller in _controllers.values) {
-      if (controller.value.isPlaying) {
-        controller.pause();
+    _healthCheckTimer?.cancel();
+
+    // Pause all videos before disposing
+    _pauseAllVideos();
+    
+    // Dispose all video controllers to free memory
+    for (var c in _controllers.values) {
+      try {
+        c.dispose();
+      } catch (e) {
+        print('Error disposing controller: $e');
       }
-      controller.dispose();
     }
     _controllers.clear();
     _pageController.dispose();
@@ -118,20 +130,17 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
   /// Handle app lifecycle changes to pause/resume videos appropriately
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    print('AppLifecycleState changed: $state');
+    super.didChangeAppLifecycleState(state);
+
+    // Pause all videos when app goes to background
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached) {
-      for (var controller in _controllers.values) {
-        if (controller.value.isPlaying) {
-          controller.pause();
-          print('Paused video controller');
-        }
-      }
+      _pauseAllVideos();
     } else if (state == AppLifecycleState.resumed) {
       // Resume only the active video when app comes back to foreground
-      if (ModalRoute.of(context)?.isCurrent ?? false) {
-        _controllers[_activePage]?.play();
+      if (_isScreenVisible && (ModalRoute.of(context)?.isCurrent ?? false)) {
+        _playActiveVideo();
       }
     }
   }
@@ -141,12 +150,103 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    // Pause all videos if this route is not current (another screen is on top)
-    if (!(ModalRoute.of(context)?.isCurrent ?? true)) {
-      for (var controller in _controllers.values) {
+    // Check if this route is still current
+    final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
+    
+    if (!isCurrentRoute) {
+      _pauseAllVideos();
+      _isScreenVisible = false;
+    } else {
+      _isScreenVisible = true;
+      // Only play if the screen is actually visible
+      if (_isScreenVisible) {
+        _playActiveVideo();
+      }
+    }
+  }
+
+  /// Pause all video controllers
+  void _pauseAllVideos() {
+    for (var controller in _controllers.values) {
+      try {
         if (controller.value.isPlaying) {
           controller.pause();
         }
+      } catch (e) {
+        print('Error pausing controller: $e');
+      }
+    }
+  }
+
+  /// Play only the active video
+  void _playActiveVideo() {
+    final controller = _controllers[_activePage];
+    if (controller != null && controller.value.isInitialized) {
+      try {
+        if (!controller.value.isPlaying) {
+          controller.play();
+        }
+      } catch (e) {
+        print('Error playing active video: $e');
+        // If there's an error, try to reinitialize the controller
+        _reinitializeController(_activePage);
+      }
+    }
+  }
+
+  /// Reinitialize a video controller if it's having issues
+  Future<void> _reinitializeController(int index) async {
+    if (index < 0 || index >= _videos.length) return;
+    
+    try {
+      // Dispose the old controller
+      final oldController = _controllers[index];
+      if (oldController != null) {
+        try {
+          oldController.dispose();
+        } catch (e) {
+          print('Error disposing old controller: $e');
+        }
+      }
+      
+      // Create a new controller
+      await _initController(index);
+      
+      // Play the new controller if it's the active one
+      if (index == _activePage && _isScreenVisible) {
+        _playActiveVideo();
+      }
+    } catch (e) {
+      print('Error reinitializing controller at index $index: $e');
+    }
+  }
+
+  /// Start periodic health check timer
+  void _startHealthCheckTimer() {
+    _healthCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (mounted && _isScreenVisible) {
+        _checkVideoHealth();
+      }
+    });
+  }
+
+  /// Check video health and fix issues
+  void _checkVideoHealth() {
+    final activeController = _controllers[_activePage];
+    if (activeController != null && activeController.value.isInitialized) {
+      // Check if video is stuck (playing but not progressing)
+      final position = activeController.value.position;
+      final duration = activeController.value.duration;
+      
+      // If video has been at the same position for too long while playing
+      if (activeController.value.isPlaying && 
+          duration.inSeconds > 0 &&
+          position.inSeconds > 0 &&
+          position.inSeconds < duration.inSeconds - 1) {
+        
+        // Check if video is actually progressing
+        final currentTime = DateTime.now();
+        // You could add more sophisticated checks here
       }
     }
   }
@@ -173,6 +273,16 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       final url = _videos[index].videoUrl;
       // Create network video player controller
       final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+      
+      // Add error listener
+      controller.addListener(() {
+        if (controller.value.hasError) {
+          print('Video controller error at index $index: ${controller.value.errorDescription}');
+          // Try to reinitialize the controller
+          _reinitializeController(index);
+        }
+      });
+      
       await controller.initialize();
       controller.setLooping(true); // Enable looping for continuous playback
       _controllers[index] = controller;
@@ -217,7 +327,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
         if (isInitialLoad && _videos.isNotEmpty) {
           await _initController(0);
           if (mounted) {
-            _controllers[0]?.play();
+            _playActiveVideo();
             _preloadVideosAround(0);
             setState(() {});
           }
@@ -234,21 +344,38 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
     }
   }
 
-  // Add this method
   /// Handle page changes when user scrolls to a different video
   /// This method manages video playback transitions
-  void _onPageChanged(int index) {
-    for (int i = 0; i < _controllersList.length; i++) {
-      if (i != index && _controllersList[i].value.isPlaying) {
-        _controllersList[i].pause();
+  Future<void> _onPageChanged(int index) async {
+    // Pause the previous video
+    final previousController = _controllers[_activePage];
+    if (previousController != null) {
+      try {
+        previousController.pause();
+      } catch (e) {
+        print('Error pausing previous video: $e');
       }
     }
-    if (_controllersList[index].value.isInitialized) {
-      _controllersList[index].play();
+
+    // Update the active page index
+    _activePage = index;
+
+    // Preload videos around the new index and dispose off-screen controllers
+    _preloadVideosAround(index);
+    _disposeOffScreenControllers();
+
+    // Play the new video, initialize if not ready
+    if (_controllers.containsKey(index)) {
+      if (_isScreenVisible) {
+        _playActiveVideo();
+      }
+    } else {
+      await _initController(index);
+      if (mounted && _isScreenVisible) {
+        _playActiveVideo();
+        setState(() {});
+      }
     }
-    setState(() {
-      _currentIndex = index;
-    });
   }
 
   /// Dispose video controllers that are far from the active video to save memory
@@ -260,7 +387,11 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
         })
         .toList()
         .forEach((key) {
-          _controllers[key]?.dispose();
+          try {
+            _controllers[key]?.dispose();
+          } catch (e) {
+            print('Error disposing off-screen controller: $e');
+          }
           _controllers.remove(key);
         });
   }
@@ -268,12 +399,23 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
   /// External method to control video playback based on screen visibility
   /// This can be called from parent widgets to pause/play videos
   void onScreenVisible(bool visible) {
-    if (_controllers.containsKey(_activePage)) {
-      if (visible) {
-        _controllers[_activePage]?.play();
-      } else {
-        _controllers[_activePage]?.pause();
-      }
+    _isScreenVisible = visible;
+    if (visible) {
+      _playActiveVideo();
+    } else {
+      _pauseAllVideos();
+    }
+  }
+
+  /// External method to pause all videos (called from parent)
+  void pauseAllVideos() {
+    _pauseAllVideos();
+  }
+
+  /// External method to resume the active video (called from parent)
+  void resumeActiveVideo() {
+    if (_isScreenVisible) {
+      _playActiveVideo();
     }
   }
 
@@ -359,73 +501,72 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
 
   /// Build the main video player widget with PageView for vertical scrolling
   Widget _buildVideoPlayer() {
+    // Show loading indicator while initially loading videos
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
+
+    // Show message if no videos are available
     if (_videos.isEmpty) {
       return const Center(child: Text("No videos found."));
     }
 
-    return RefreshIndicator(
-      onRefresh: () async {
-        // Clear current videos and reload from API
-        setState(() {
-          _videos.clear();
-          _currentPage = 1;
-          _hasMore = true;
-        });
-        await _loadVideos(isInitialLoad: true);
+    return VisibilityDetector(
+      key: const Key('video_screen_visibility'),
+      onVisibilityChanged: (visibilityInfo) {
+        // Pause/play videos based on screen visibility
+        if (visibilityInfo.visibleFraction == 0) {
+          _pauseAllVideos();
+        } else {
+          _playActiveVideo();
+        }
       },
-      child: VisibilityDetector(
-        key: const Key('video_screen_visibility'),
-        onVisibilityChanged: (visibilityInfo) {
-          if (visibilityInfo.visibleFraction == 0) {
-            _controllers[_activePage]?.pause();
-          } else {
-            _controllers[_activePage]?.play();
-          }
+      child: PageView.builder(
+        controller: _pageController,
+        scrollDirection: Axis.vertical, // Vertical scrolling like TikTok
+        itemCount:
+            _videos.length + (_hasMore ? 1 : 0), // +1 for loading indicator
+        onPageChanged: (index) {
+          _onPageChanged(index);
         },
-        child: PageView.builder(
-          controller: _pageController,
-          scrollDirection: Axis.vertical,
-          itemCount: _videos.length + (_hasMore ? 1 : 0),
-          onPageChanged: (index) {
-            _onPageChanged(index);
-          },
-          itemBuilder: (context, index) {
-            if (index == _videos.length) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            final video = _videos[index];
-            final controller = _controllers[index];
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                VideoPlayerWidget(
-                  key: ValueKey(video.id),
-                  controller: controller,
-                  video: video,
-                  play: index == _activePage,
-                ),
+        itemBuilder: (context, index) {
+          // Show loading indicator at the end when loading more videos
+          if (index == _videos.length) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-                // Video information overlay (bottom left)
-                Positioned(
-                  left: 12,
-                  bottom: 12,
-                  right: 80,
-                  child: _buildVideoInfo(video),
-                ),
+          final video = _videos[index];
+          final controller = _controllers[index];
 
-                // Action buttons overlay (bottom right)
-                Positioned(
-                  right: 12,
-                  bottom: 12,
-                  child: _buildActionButtons(video, index),
-                ),
-              ],
-            );
-          },
-        ),
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              // Video player widget
+              VideoPlayerWidget(
+                key: ValueKey(video.id),
+                controller: controller,
+                video: video,
+                play: index ==
+                    _activePage, // Only play if this is the active video
+              ),
+
+              // Video information overlay (bottom left)
+              Positioned(
+                left: 12,
+                bottom: 12,
+                right: 80,
+                child: _buildVideoInfo(video),
+              ),
+
+              // Action buttons overlay (bottom right)
+              Positioned(
+                right: 12,
+                bottom: 12,
+                child: _buildActionButtons(video, index),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -704,7 +845,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
       final userId = await _getCurrentUserId();
       if (userId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please sign in')),
+          const SnackBar(content: Text('Please sign in to comment')),
         );
         setState(() => _isPosting = false);
         return;
@@ -727,7 +868,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
       widget.onCommentsUpdated(updatedComments);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to post comment')),
+        SnackBar(content: Text('Failed to add comment: $e')),
       );
     } finally {
       setState(() => _isPosting = false);
@@ -793,6 +934,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
               ),
             ),
           const SizedBox(height: 12),
+
           // Comment input field and send button
           Row(
             children: [

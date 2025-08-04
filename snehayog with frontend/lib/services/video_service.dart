@@ -207,30 +207,14 @@ class VideoService {
           )
           .timeout(const Duration(seconds: 10));
 
-      // Debug: print response for troubleshooting
-      print('toggleLike response status: ${res.statusCode}');
-      print('toggleLike response body: ${res.body}');
-
-      // Detect HTML response (usually error page)
-      if (res.body.trim().toLowerCase().startsWith('<!doctype html') ||
-          res.body.trim().toLowerCase().startsWith('<html')) {
-        throw Exception(
-            'Server returned an HTML error page. The endpoint may be incorrect, missing, or the server is misconfigured.');
-      }
-
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         return VideoModel.fromJson(data);
       } else if (res.statusCode == 401) {
         throw Exception('Please sign in again to like videos');
       } else {
-        try {
-          final error = json.decode(res.body);
-          throw Exception(error['error'] ?? 'Failed to like video');
-        } catch (e) {
-          // If response is not JSON, show raw response
-          throw Exception('Failed to like video: ${res.body}');
-        }
+        final error = json.decode(res.body);
+        throw Exception(error['error'] ?? 'Failed to like video');
       }
     } catch (e) {
       if (e is TimeoutException) {
@@ -304,33 +288,24 @@ class VideoService {
     try {
       final headers = await _getAuthHeaders();
 
+      // Share the video using platform share dialog
       await Share.share(
         'Check out this video on Snehayog!\n\n$description\n\n$videoUrl',
         subject: 'Snehayog Video',
       );
 
+      // Update share count on server
       final res = await http.post(
         Uri.parse('$baseUrl/api/videos/$videoId/share'),
         headers: headers,
       );
 
-      // Detect HTML error page
-      if (res.body.trim().toLowerCase().startsWith('<!doctype html') ||
-          res.body.trim().toLowerCase().startsWith('<html')) {
-        throw Exception(
-            'Server returned an HTML error page. The endpoint may be incorrect, missing, or the server is misconfigured.');
-      }
-
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         return VideoModel.fromJson(data);
       } else {
-        try {
-          final error = json.decode(res.body);
-          throw Exception(error['error'] ?? 'Failed to share video');
-        } catch (e) {
-          throw Exception('Failed to share video: ${res.body}');
-        }
+        final error = json.decode(res.body);
+        throw Exception(error['error'] ?? 'Failed to share video');
       }
     } catch (e) {
       if (e is Exception) rethrow;
@@ -366,6 +341,8 @@ class VideoService {
       File videoFile, String title, String description,
       [String? link, Function(double)? onProgress]) async {
     try {
+      print('Using server at: $baseUrl');
+
       // Check server health before upload
       final isHealthy = await checkServerHealth();
       if (!isHealthy) {
@@ -385,7 +362,9 @@ class VideoService {
       }
 
       print('User data for upload: ${userData.toString()}');
+
       print('User data for upload: ${userData.toString()}');
+
       // Check file size before upload
       final fileSize = await videoFile.length();
       const maxSize = 100 * 1024 * 1024; // 100MB
@@ -546,32 +525,94 @@ class VideoService {
 
             print('Final videoUrl: ${json['videoUrl']}');
             print('Final thumbnailUrl: ${json['thumbnailUrl']}');
+
             return VideoModel.fromJson(json);
           }).toList();
 
-          return List<VideoModel>.from(videos);
+          return videos;
         } catch (e) {
-          print('Error decoding user videos: $e');
-          throw Exception('Failed to load user videos');
+          print('Error parsing JSON response: $e');
+          throw Exception('Invalid response format from server');
         }
+      } else if (response.statusCode == 404) {
+        print('No videos found for user');
+        return [];
       } else {
-        throw Exception('Failed to load user videos: ${response.statusCode}');
+        print('Server error: ${response.statusCode}');
+        print('Error response: ${response.body}');
+        throw Exception('Failed to fetch user videos: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error in getUserVideos: $e');
+      print('Error fetching user videos: $e');
+      if (e is TimeoutException) {
+        throw Exception(
+            'Request timed out. Please check your internet connection and try again.');
+      }
       rethrow;
     }
   }
 
+  /// Gets authentication headers for API requests
+  /// Returns a map containing Content-Type and Authorization headers
+  /// Throws an exception if user is not authenticated
   Future<Map<String, String>> _getAuthHeaders() async {
     final googleAuthService = GoogleAuthService();
     final userData = await googleAuthService.getUserData();
-    if (userData == null || userData['token'] == null) {
-      throw Exception('User not authenticated. Please sign in.');
+
+    if (userData == null) {
+      throw Exception('User not authenticated');
     }
+
+    if (userData['token'] == null) {
+      throw Exception('Authentication token not found');
+    }
+
     return {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer ${userData['token']}',
     };
+  }
+
+  /// Deletes a video from the server
+  /// Parameters:
+  /// - videoId: The ID of the video to delete
+  /// Returns true if deletion was successful, false otherwise
+  Future<bool> deleteVideo(String videoId) async {
+    try {
+      // Check authentication first
+      final googleAuthService = GoogleAuthService();
+      final userData = await googleAuthService.getUserData();
+
+      if (userData == null) {
+        throw Exception('Please sign in to delete videos');
+      }
+
+      final res = await http.delete(
+        Uri.parse('$baseUrl/api/videos/$videoId'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 200 || res.statusCode == 204) {
+        return true;
+      } else if (res.statusCode == 401) {
+        throw Exception('Please sign in again to delete videos');
+      } else if (res.statusCode == 403) {
+        throw Exception('You do not have permission to delete this video');
+      } else if (res.statusCode == 404) {
+        throw Exception('Video not found');
+      } else {
+        final error = json.decode(res.body);
+        throw Exception(error['error'] ?? 'Failed to delete video');
+      }
+    } catch (e) {
+      if (e is TimeoutException) {
+        throw Exception('Request timed out. Please try again.');
+      } else if (e is Exception) {
+        rethrow;
+      }
+      throw Exception('Network error: $e');
+    }
   }
 }

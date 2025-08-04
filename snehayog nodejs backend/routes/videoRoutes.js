@@ -3,9 +3,7 @@ const multer = require('multer');
 const Video = require('../models/Video');
 const User = require('../models/User');
 const cloudinary = require('../config/cloudinary.js');
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const fs = require('fs'); // To delete temp file after upload
-const mongoose = require('mongoose'); // For database health check
 const router = express.Router();
 
 // Multer disk storage to get original file first
@@ -47,7 +45,7 @@ router.post('/upload', upload.single('video'), async (req, res) => {
   let compressedResult = null;
 
   try {
-    const { googleId, videoName, description, videoType } = req.body;
+    const { googleId, videoName, description, videoType, link } = req.body;
 
     // 1. Validate file
     if (!req.file || !req.file.path) {
@@ -101,6 +99,7 @@ router.post('/upload', upload.single('video'), async (req, res) => {
     const video = new Video({
       videoName,
       description,
+      link,
       videoUrl: compressedResult.secure_url,
       uploader: user._id,
       videoType: videoType || 'yog', // Default type
@@ -189,7 +188,8 @@ router.get('/debug/user/:googleId', async (req, res) => {
         id: user._id,
         name: user.name,
         googleId: user.googleId,
-        videoCount: videos.length
+        videoCount: videos.length,
+        link: videos.link,
       },
       videos: videos.map(video => ({
         id: video._id,
@@ -329,6 +329,21 @@ router.post('/:id/comments', async (req, res) => {
   } catch (err) {
     console.error('Error adding comment:', err);
     res.status(500).json({ error: 'Failed to add comment', details: err.message });
+  }
+});
+
+
+// Delete video by ID
+router.delete('/:id', async (req, res) => {
+  try {
+    const videoId = req.params.id;
+    const deletedVideo = await Video.findByIdAndDelete(videoId);
+    if (!deletedVideo) {
+      return res.status(404).json({ error: 'Video not found' });
+    }
+    res.json({ success: true, message: 'Video deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete video' });
   }
 });
 

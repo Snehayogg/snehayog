@@ -99,9 +99,9 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server
 const PORT = process.env.PORT || 5000;
+const HOST = '192.168.0.190'; // Your local IP
 
-const server = app.listen(PORT, () => {
-  console.log(`✅ Server is running on port ${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`Server running at http://${HOST}:${PORT}`);
 });

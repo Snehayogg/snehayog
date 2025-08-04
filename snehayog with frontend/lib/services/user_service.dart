@@ -13,7 +13,7 @@ Future<Map<String, dynamic>> getUserById(String id) async {
   }
 
   final response = await http.get(
-    Uri.parse('${VideoService.baseUrl}/api/users/$id'), // ✅ CORRECT ENDPOINT
+    Uri.parse('${VideoService.baseUrl}/api/users/$id'), 
     headers: {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer $token',
