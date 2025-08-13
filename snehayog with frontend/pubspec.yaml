@@ -41,16 +41,18 @@ dependencies:
   path_provider: ^2.1.3
   permission_handler: ^11.0.1
   cached_network_image: ^3.3.0
-  flutter_cache_manager: ^3.3.1
   google_sign_in: ^6.2.1
   provider: ^6.1.2
-  flutter_screenutil: ^5.9.3
+  flutter_screenutil: ^5.9.3  # Keep for responsiveness
   image_picker: ^1.1.2
-  video_player: ^2.8.6
-  chewie: ^1.7.5
-  visibility_detector: ^0.4.0+2
   video_compress: ^3.1.4
   url_launcher: ^6.2.5
+  # Video player dependencies - keep only essential ones
+  video_player: ^2.8.3
+  http_parser: ^4.0.2
+  google_mobile_ads: ^6.0.0
+  visibility_detector: ^0.4.0+2
+
 
 dev_dependencies:
   flutter_launcher_icons: ^0.14.3

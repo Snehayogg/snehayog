@@ -9,8 +9,6 @@ import 'dart:io';
 import 'dart:async';
 import 'package:snehayog/services/user_service.dart';
 import 'package:snehayog/view/screens/video_screen.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -255,15 +253,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         throw 'Name cannot be empty';
       }
 
-      // Call backend to update name
-      final googleId = _userData?['id']; // or whatever field is your googleId
-      final response = await http.post(
-        Uri.parse(
-            'https://snehayog-production.up.railway.app/api/auth/update-name'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'googleId': googleId, 'name': newName}),
+      // Call backend to update name using UserService
+      final googleId = _userData?['id'];
+      await _userService.updateProfile(
+        googleId: googleId!,
+        name: newName,
+        profilePic: _userData?['profilePic'],
       );
-      if (response.statusCode != 200) throw 'Failed to update name on server';
 
       // Save locally as before
       await _saveProfileData(newName, _userData?['profilePic']);
@@ -713,6 +709,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     SizedBox(
                                         height:
                                             ResponsiveHelper.isMobile(context)
+                                                ? 8
+                                                : 12),
+                                    // Add helpful instruction text
+                                    if (isMyProfile)
+                                      Text(
+                                        'Tap to play • Long press to select for deletion',
+                                        style: TextStyle(
+                                          color: const Color(0xFF757575),
+                                          fontSize: ResponsiveHelper
+                                              .getAdaptiveFontSize(context, 12),
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    SizedBox(
+                                        height:
+                                            ResponsiveHelper.isMobile(context)
                                                 ? 16
                                                 : 24),
                                     GridView.builder(
@@ -748,22 +761,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                 _userData?['id'];
                                         return GestureDetector(
                                           onTap: () {
-                                            if (_isSelecting && isOwnVideo) {
-                                              setState(() {
-                                                if (isSelected) {
-                                                  _selectedVideoIds
-                                                      .remove(video.id);
-                                                } else {
-                                                  _selectedVideoIds
-                                                      .add(video.id);
-                                                }
-                                              });
-                                            } else if (isMyProfile) {
-                                              setState(() {
-                                                _isSelecting = true;
-                                                _selectedVideoIds.add(video.id);
-                                              });
-                                            } else {
+                                            // Single tap: Play video (navigate to VideoScreen)
+                                            if (!_isSelecting) {
                                               final updatedVideos =
                                                   _userVideos.map((video) {
                                                 if (_userData != null &&
@@ -778,6 +777,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                 }
                                                 return video;
                                               }).toList();
+
                                               Navigator.push(
                                                 context,
                                                 MaterialPageRoute(
@@ -789,9 +789,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                   ),
                                                 ),
                                               );
+                                            } else if (_isSelecting &&
+                                                isOwnVideo) {
+                                              // In selection mode: toggle selection
+                                              setState(() {
+                                                if (isSelected) {
+                                                  _selectedVideoIds
+                                                      .remove(video.id);
+                                                } else {
+                                                  _selectedVideoIds
+                                                      .add(video.id);
+                                                }
+                                              });
                                             }
                                           },
                                           onLongPress: () {
+                                            // Long press: Enter selection mode for deletion
                                             if (isMyProfile &&
                                                 isOwnVideo &&
                                                 !_isSelecting) {
@@ -814,6 +827,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                       : null,
                                                   borderRadius:
                                                       BorderRadius.circular(12),
+                                                  // Add shadow when selected
+                                                  boxShadow: isSelected
+                                                      ? [
+                                                          BoxShadow(
+                                                            color: Colors.blue
+                                                                .withOpacity(
+                                                                    0.3),
+                                                            blurRadius: 8,
+                                                            spreadRadius: 2,
+                                                          )
+                                                        ]
+                                                      : null,
                                                 ),
                                                 child: Card(
                                                   color:

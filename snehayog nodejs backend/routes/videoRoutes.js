@@ -1,9 +1,9 @@
-const express = require('express');
-const multer = require('multer');
-const Video = require('../models/Video');
-const User = require('../models/User');
-const cloudinary = require('../config/cloudinary.js');
-const fs = require('fs'); // To delete temp file after upload
+import express from 'express';
+import multer from 'multer';
+import Video from '../models/Video.js';
+import User from '../models/User.js';
+import cloudinary from '../config/cloudinary.js';
+import fs from 'fs'; // To delete temp file after upload
 const router = express.Router();
 
 // Multer disk storage to get original file first
@@ -203,38 +203,75 @@ router.get('/debug/user/:googleId', async (req, res) => {
   }
 });
 
-// Get all videos
+// Get all videos (optimized for performance)
 router.get('/', async (req, res) => {
   try {
-    const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 10; // Load 10 videos per page
+    console.log('📹 Fetching videos...');
+    
+    // Get query parameters for pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
+    
+    // Use Promise.all to run queries in parallel for better performance
+    const [totalVideos, videos] = await Promise.all([
+      Video.countDocuments(),
+      Video.find()
+        .select('videoName videoUrl thumbnailUrl likes views shares description uploader uploadedAt likedBy videoType aspectRatio duration comments link')
+        .populate('uploader', 'name profilePic')
+        .populate('comments.user', 'name profilePic')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean() // Use lean() for better performance (returns plain objects)
+    ]);
+    
+    console.log(`✅ Found ${videos.length} videos (page ${page}, total: ${totalVideos}) in ${Date.now()}ms`);
+    
+    // Add caching headers for better performance
+    res.set({
+      'Cache-Control': 'public, max-age=30', // Cache for 30 seconds
+      'ETag': `videos-${page}-${limit}-${totalVideos}`,
+      'Last-Modified': new Date().toUTCString()
+    });
+    
+    // Return in the format the Flutter app expects
+    res.json({
+      videos: videos,
+      hasMore: (page * limit) < totalVideos,
+      total: totalVideos,
+      currentPage: page,
+      totalPages: Math.ceil(totalVideos / limit)
+    });
+  } catch (error) {
+    console.error('❌ Error fetching videos:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch videos',
+      message: error.message 
+    });
+  }
+});
 
+// Debug endpoint to get all videos without pagination
+router.get('/debug/all', async (req, res) => {
+  try {
+    console.log('🔍 Debug: Fetching all videos without pagination...');
+    
     const videos = await Video.find()
       .populate('uploader', 'name profilePic')
       .populate('comments.user', 'name profilePic')
-      .sort({ uploadedAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    const totalVideos = await Video.countDocuments();
-    const hasMore = (page * limit) < totalVideos;
-
-    // Cloudinary URLs are already full URLs, no need to construct them
-    const videosWithUrls = videos.map(video => ({
-      ...video.toObject(),
-      videoUrl: video.videoUrl || '',
-      originalVideoUrl: video.originalVideoUrl || '',
-      thumbnailUrl: video.thumbnailUrl || ''
-    }));
-
+      .sort({ createdAt: -1 });
+    
+    console.log(`🔍 Debug: Found ${videos.length} total videos`);
+    
     res.json({
-      videos: videosWithUrls,
-      hasMore: hasMore
+      message: 'All videos (debug endpoint)',
+      count: videos.length,
+      videos: videos
     });
-  } catch (err) {
-    console.error('Get videos error:', err);
-    res.status(500).json({ error: 'Failed to fetch videos' });
+  } catch (error) {
+    console.error('❌ Debug endpoint error:', error);
+    res.status(500).json({ error: 'Error in debug endpoint' });
   }
 });
 
@@ -244,10 +281,22 @@ router.post('/:id/like', async (req, res) => {
     const { userId } = req.body;
     const videoId = req.params.id;
 
-    // Validate user
-    const user = await User.findOne({ googleId: userId });
+    console.log('🔍 Like API: Received request', { userId, videoId });
+
+    // Find or create user
+    let user = await User.findOne({ googleId: userId });
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      console.log('🔍 Like API: User not found, creating new user with googleId:', userId);
+      // Create user if they don't exist
+      user = new User({
+        googleId: userId,
+        name: 'User', // Will be updated later
+        email: '', // Will be updated later
+        following: [],
+        followers: []
+      });
+      await user.save();
+      console.log('✅ Like API: Created new user with ID:', user._id);
     }
 
     // Find the video
@@ -256,28 +305,49 @@ router.post('/:id/like', async (req, res) => {
       return res.status(404).json({ error: 'Video not found' });
     }
 
+    console.log('🔍 Like API: Video found, current likes:', video.likes, 'likedBy:', video.likedBy);
+
     // Check if user has already liked the video
     const userLikedIndex = video.likedBy.indexOf(userId);
+    let wasLiked = false;
     
     if (userLikedIndex > -1) {
       // User has already liked - remove the like
       video.likedBy.splice(userLikedIndex, 1);
+      video.likes = Math.max(0, video.likes - 1); // Decrement likes, ensure not negative
+      wasLiked = false;
+      console.log('🔍 Like API: Removed like, new count:', video.likes);
     } else {
       // User hasn't liked - add the like
       video.likedBy.push(userId);
+      video.likes = video.likes + 1; // Increment likes
+      wasLiked = true;
+      console.log('🔍 Like API: Added like, new count:', video.likes);
     }
 
     await video.save();
+    console.log('✅ Like API: Video saved successfully');
 
     // Return the updated video with populated fields
     const updatedVideo = await Video.findById(videoId)
       .populate('uploader', 'name profilePic')
       .populate('comments.user', 'name profilePic');
 
-    res.json(updatedVideo);
+    res.json({
+      ...updatedVideo.toObject(),
+      likeAction: wasLiked ? 'added' : 'removed',
+      newLikeCount: video.likes
+    });
+    
+    console.log('✅ Like API: Successfully toggled like, returning video');
+    
   } catch (err) {
-    console.error('Error toggling like:', err);
-    res.status(500).json({ error: 'Failed to toggle like', details: err.message });
+    console.error('❌ Like API Error:', err);
+    res.status(500).json({ 
+      error: 'Failed to toggle like', 
+      details: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
   }
 });
 
@@ -347,4 +417,5 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-module.exports = router;
+
+export default router

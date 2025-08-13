@@ -5,14 +5,16 @@ import 'package:snehayog/view/homescreen.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:snehayog/controller/google_sign_in_controller.dart';
 import 'package:snehayog/controller/main_controller.dart';
+import 'package:snehayog/core/providers/video_provider.dart';
+import 'package:snehayog/core/providers/user_provider.dart';
 import 'package:snehayog/view/screens/login_screen.dart';
 import 'package:snehayog/services/video_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
   ]);
@@ -22,6 +24,8 @@ void main() {
       providers: [
         ChangeNotifierProvider(create: (_) => GoogleSignInController()),
         ChangeNotifierProvider(create: (_) => MainController()),
+        ChangeNotifierProvider(create: (_) => VideoProvider()),
+        ChangeNotifierProvider(create: (_) => UserProvider()),
       ],
       child: ScreenUtilInit(
         designSize: const Size(375, 812),

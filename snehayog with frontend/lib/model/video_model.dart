@@ -61,11 +61,25 @@ class VideoModel {
               ?.map((comment) => Comment.fromJson(comment))
               .toList() ??
           [],
-      link: json.containsKey('link')
-          ? (json['link']?.toString().trim().isNotEmpty == true
-              ? json['link'].toString().trim()
-              : null)
-          : null,
+      link: () {
+        // Try multiple possible field names for the link
+        final possibleFields = ['link', 'externalLink', 'websiteUrl', 'url'];
+
+        for (final field in possibleFields) {
+          if (json.containsKey(field)) {
+            final linkValue = json[field]?.toString().trim();
+            if (linkValue?.isNotEmpty == true) {
+              print(
+                  '🔗 VideoModel: Found link in field "$field": "$linkValue"');
+              return linkValue;
+            }
+          }
+        }
+
+        print('🔗 VideoModel: No link field found in video data');
+        print('🔗 VideoModel: Available fields: ${json.keys.toList()}');
+        return null;
+      }(),
     );
   }
 

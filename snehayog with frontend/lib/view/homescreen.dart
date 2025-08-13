@@ -14,7 +14,7 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
-  final _videoScreenKey = GlobalKey(); // Use untyped GlobalKey
+  final _videoScreenKey = GlobalKey();
 
   @override
   void initState() {
@@ -39,23 +39,11 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached) {
       mainController.setAppInForeground(false);
-      _pauseVideos();
+      // Force pause videos when app goes to background
+      mainController.forcePauseVideos();
     } else if (state == AppLifecycleState.resumed) {
       mainController.setAppInForeground(true);
-      if (mainController.isVideoScreen) {
-        _resumeVideos();
-      }
     }
-  }
-
-  // Method to pause videos when switching screens
-  void _pauseVideos() {
-    // The VideoScreen will handle pausing automatically through visibility detection
-  }
-
-  // Method to resume videos when returning to video screen
-  void _resumeVideos() {
-    // The VideoScreen will handle resuming automatically through visibility detection
   }
 
   @override
@@ -67,7 +55,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           body: IndexedStack(
             index: mainController.currentIndex,
             children: [
-              VideoScreen(key: _videoScreenKey),
+              // VideoScreen with proper key for state management
+              VideoScreen(
+                key: _videoScreenKey,
+              ),
               const SnehaScreen(key: PageStorageKey('snehaScreen')),
               const UploadScreen(key: PageStorageKey('uploadScreen')),
               const ProfileScreen(key: PageStorageKey('profileScreen')),
@@ -90,21 +81,20 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               unselectedItemColor: const Color(0xFF757575),
               currentIndex: mainController.currentIndex,
               onTap: (index) {
-                // Pause videos before switching screens
                 if (index != mainController.currentIndex) {
-                  _pauseVideos();
-                }
+                  print(
+                      'Homescreen: Switching from index ${mainController.currentIndex} to $index');
 
-                mainController.changeIndex(index);
+                  // If leaving video tab, immediately pause videos through MainController
+                  if (mainController.currentIndex == 0) {
+                    print(
+                        'Homescreen: Leaving video tab, pausing videos immediately');
+                    // Force pause videos through MainController
+                    mainController.forcePauseVideos();
+                  }
 
-                // Resume videos if returning to video screen
-                if (index == 0) {
-                  // Use a small delay to ensure the screen is fully loaded
-                  Future.delayed(const Duration(milliseconds: 100), () {
-                    if (mainController.isAppInForeground) {
-                      _resumeVideos();
-                    }
-                  });
+                  // Change index - MainController will handle additional video control
+                  mainController.changeIndex(index);
                 }
               },
               type: BottomNavigationBarType.fixed,

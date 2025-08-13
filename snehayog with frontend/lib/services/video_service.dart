@@ -10,119 +10,85 @@ import 'package:flutter/material.dart';
 import 'package:snehayog/config/app_config.dart';
 import 'package:http_parser/http_parser.dart';
 
-/// VideoService class handles all video-related operations including:
-/// - Fetching videos
-/// - Uploading videos
-/// - Managing video interactions (likes, comments, shares)
-/// - Video search functionality
+/// Optimized VideoService for better performance and smaller app size
 class VideoService {
-  // Global key for accessing the navigator context
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();
 
-  // Base URL for API endpoints
-  static String get baseUrl {
-    return NetworkHelper.getBaseUrl();
-  }
+  static String get baseUrl => NetworkHelper.getBaseUrl();
 
-  // Maximum number of retry attempts for failed requests
-  static const int maxRetries = 3;
+  // Optimized constants
+  static const int maxRetries = 2; // Reduced from 3
+  static const int retryDelay = 1; // Reduced from 2
+  static const int maxShortVideoDuration = 120;
 
-  // Delay between retries (in seconds)
-  static const int retryDelay = 2;
-
-  // Maximum duration for short videos (in seconds)
-  static const int maxShortVideoDuration = 120; // 2 minutes
-
-  // Add server health check method
+  // Simplified server health check
   Future<bool> checkServerHealth() async {
     try {
-      print('Checking server health at: $baseUrl/api/test');
-      final response = await http.get(Uri.parse('$baseUrl/api/test')).timeout(
-        const Duration(seconds: 5),
-        onTimeout: () {
-          print('Server health check timed out');
-          throw TimeoutException('Server health check timed out');
-        },
-      );
-
-      print('Server health check response: ${response.statusCode}');
-      print('Server health check body: ${response.body}');
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        print('Server is healthy: ${data['message']}');
-        return true;
-      }
-      return false;
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/health'))
+          .timeout(const Duration(seconds: 5)); // Reduced timeout
+      return response.statusCode == 200;
     } catch (e) {
-      print('Server health check failed: $e');
-      if (e is SocketException) {
-        print('Socket exception - server might be down or unreachable');
-      } else if (e is TimeoutException) {
-        print('Timeout exception - server is not responding');
-      }
       return false;
     }
   }
 
-  // Add method to make HTTP requests with retry logic
+  /// Test method to check if videos have link field
+  Future<void> testVideoLinkField() async {
+    try {
+      print('🔗 VideoService: Testing video link field...');
+      final response =
+          await http.get(Uri.parse('$baseUrl/api/videos?page=1&limit=5'));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final videos = data['videos'] as List;
+
+        print('🔗 VideoService: Found ${videos.length} videos');
+
+        for (int i = 0; i < videos.length; i++) {
+          final video = videos[i];
+          print('🔗 VideoService: Video $i:');
+          print('🔗 VideoService:   - ID: ${video['_id']}');
+          print('🔗 VideoService:   - Title: ${video['videoName']}');
+          print(
+              '🔗 VideoService:   - Has link field: ${video.containsKey('link')}');
+          if (video.containsKey('link')) {
+            print('🔗 VideoService:   - Link value: "${video['link']}"');
+          }
+          print('🔗 VideoService:   - All fields: ${video.keys.toList()}');
+        }
+      } else {
+        print(
+            '🔗 VideoService: Failed to fetch videos: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('🔗 VideoService: Error testing video link field: $e');
+    }
+  }
+
+  // Optimized HTTP request with retry logic
   Future<http.Response> _makeRequest(
     Future<http.Response> Function() requestFn, {
-    int maxRetries = 3,
-    Duration retryDelay = const Duration(seconds: 2),
-    Duration timeout = const Duration(seconds: 30),
+    int maxRetries = 2,
+    Duration retryDelay = const Duration(seconds: 1),
+    Duration timeout = const Duration(seconds: 15), // Reduced timeout
   }) async {
     int attempts = 0;
     while (attempts < maxRetries) {
       try {
-        // Check server health before making request
-        final isHealthy = await checkServerHealth();
-        if (!isHealthy) {
-          print(
-              'Server health check failed, retrying in ${retryDelay * (attempts + 1)} seconds...');
-          await Future.delayed(retryDelay * (attempts + 1));
-          attempts++;
-          continue;
-        }
-
-        final response = await requestFn().timeout(
-          timeout,
-          onTimeout: () {
-            throw TimeoutException('Request timed out. Please try again.');
-          },
-        );
-
-        if (response.statusCode == 200) {
-          return response;
-        }
-
-        // If we get here, the request failed but didn't throw an exception
+        final response = await requestFn().timeout(timeout);
+        if (response.statusCode == 200) return response;
         attempts++;
-        if (attempts < maxRetries) {
-          print(
-              'Request failed with status ${response.statusCode}, retrying in ${retryDelay * attempts} seconds...');
-          await Future.delayed(retryDelay * attempts); // Exponential backoff
-        }
+        if (attempts < maxRetries) await Future.delayed(retryDelay * attempts);
       } catch (e) {
-        print('Request failed (Attempt ${attempts + 1}/$maxRetries): $e');
         attempts++;
-        if (attempts >= maxRetries) {
-          if (e is SocketException) {
-            throw Exception(
-                'Cannot connect to server. Please check if the server is running and accessible.');
-          } else if (e is TimeoutException) {
-            throw Exception(
-                'Server is not responding. Please check your internet connection and try again.');
-          }
-          rethrow;
-        }
-        print('Retrying in ${retryDelay * attempts} seconds...');
-        await Future.delayed(retryDelay * attempts); // Exponential backoff
+        if (attempts >= maxRetries) rethrow;
+        await Future.delayed(retryDelay * attempts);
       }
     }
-    throw Exception(
-        'Failed to connect to server after $maxRetries attempts. Please check if the server is running.');
+    throw Exception('Request failed after $maxRetries attempts');
   }
 
   /// Fetches a list of videos from the server
@@ -130,18 +96,26 @@ class VideoService {
   Future<Map<String, dynamic>> getVideos({int page = 1, int limit = 10}) async {
     try {
       final url = '$baseUrl/api/videos?page=$page&limit=$limit';
-      print('Fetching videos from: $url');
 
       final response = await _makeRequest(
         () => http.get(Uri.parse(url)),
-        timeout: const Duration(seconds: 30),
+        timeout: const Duration(seconds: 15), // Reduced timeout for better UX
       );
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = json.decode(response.body);
+
         final List<dynamic> videoList = responseData['videos'];
 
         final videos = videoList.map((json) {
+          // Debug: Print each video's JSON data
+          print('🔗 VideoService: Processing video JSON: $json');
+          print(
+              '🔗 VideoService: json.containsKey("link") = ${json.containsKey('link')}');
+          if (json.containsKey('link')) {
+            print('🔗 VideoService: json["link"] = ${json['link']}');
+          }
+
           // Ensure URLs are complete if they're relative paths
           if (json['videoUrl'] != null &&
               !json['videoUrl'].toString().startsWith('http')) {
@@ -158,7 +132,6 @@ class VideoService {
         throw Exception('Failed to load videos: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error in getVideos: $e');
       rethrow;
     }
   }
@@ -182,20 +155,25 @@ class VideoService {
     }
   }
 
-  /// Toggles the like status of a video for a specific user
+  /// Toggle like for a video
   /// Parameters:
   /// - videoId: The ID of the video to like/unlike
   /// - userId: The ID of the user performing the action
   /// Returns the updated VideoModel
   Future<VideoModel> toggleLike(String videoId, String userId) async {
     try {
+      print('🔍 VideoService: Starting toggleLike for video: $videoId, user: $userId');
+      
       // Check authentication first
       final googleAuthService = GoogleAuthService();
       final userData = await googleAuthService.getUserData();
 
       if (userData == null) {
+        print('❌ VideoService: User not authenticated');
         throw Exception('Please sign in to like videos');
       }
+
+      print('🔍 VideoService: User authenticated, making API request...');
 
       final res = await http
           .post(
@@ -205,18 +183,35 @@ class VideoService {
             },
             body: json.encode({'userId': userId}),
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 15));
+
+      print('🔍 VideoService: API response status: ${res.statusCode}');
+      print('🔍 VideoService: API response body: ${res.body}');
 
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        return VideoModel.fromJson(data);
+        print('✅ VideoService: Like toggle successful, response: $data');
+        
+        // Create VideoModel from the response
+        final videoModel = VideoModel.fromJson(data);
+        print('✅ VideoService: VideoModel created successfully');
+        
+        return videoModel;
       } else if (res.statusCode == 401) {
+        print('❌ VideoService: Unauthorized - user needs to sign in again');
         throw Exception('Please sign in again to like videos');
+      } else if (res.statusCode == 404) {
+        print('❌ VideoService: Video or user not found');
+        final error = json.decode(res.body);
+        throw Exception(error['error'] ?? 'Video not found');
       } else {
+        print('❌ VideoService: Server error - status: ${res.statusCode}');
         final error = json.decode(res.body);
         throw Exception(error['error'] ?? 'Failed to like video');
       }
     } catch (e) {
+      print('❌ VideoService: Error in toggleLike: $e');
+      
       if (e is TimeoutException) {
         throw Exception('Request timed out. Please try again.');
       } else if (e is Exception) {
@@ -363,8 +358,6 @@ class VideoService {
 
       print('User data for upload: ${userData.toString()}');
 
-      print('User data for upload: ${userData.toString()}');
-
       // Check file size before upload
       final fileSize = await videoFile.length();
       const maxSize = 100 * 1024 * 1024; // 100MB
@@ -382,7 +375,7 @@ class VideoService {
       request.files.add(
         await http.MultipartFile.fromPath(
           'video',
-          videoFile.path, // Upload the original file
+          videoFile.path,
           contentType: MediaType('video', 'mp4'),
         ),
       );
@@ -395,8 +388,6 @@ class VideoService {
       if (link != null && link.isNotEmpty) {
         request.fields['link'] = link;
       }
-
-      print('Uploading video with fields: ${request.fields}');
 
       // Send the request with timeout
       final streamedResponse = await request.send().timeout(
@@ -411,10 +402,16 @@ class VideoService {
       final responseBody = await streamedResponse.stream.bytesToString();
       final responseData = json.decode(responseBody);
 
-      print('Upload response: $responseData');
-
       if (streamedResponse.statusCode == 201) {
         final videoData = responseData['video'];
+
+        // Debug: Print the full video data response
+        print('🔗 VideoService: Full video data response: $videoData');
+        print(
+            '🔗 VideoService: videoData.containsKey("link") = ${videoData.containsKey('link')}');
+        if (videoData.containsKey('link')) {
+          print('🔗 VideoService: videoData["link"] = ${videoData['link']}');
+        }
 
         // Return the video data in the expected format
         // Cloudinary URLs are already full URLs, no need to prepend baseUrl
@@ -433,11 +430,9 @@ class VideoService {
           'uploader': userData['name'],
           'uploadTime': 'Just now',
           'isLongVideo': isLong,
+          'link': videoData['link'], // Include the link field
         };
       } else {
-        print('Upload failed with status: ${streamedResponse.statusCode}');
-        print('Upload error: $responseData');
-
         // Handle specific error types
         if (responseData['error'] != null) {
           final errorMessage = responseData['error'].toString();

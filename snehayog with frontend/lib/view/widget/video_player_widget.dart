@@ -38,7 +38,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   void _initializeInternalController() {
     try {
       _internalController =
-          VideoPlayerController.network(widget.video.videoUrl);
+          VideoPlayerController.networkUrl(Uri.parse(widget.video.videoUrl));
       
       // Add error listener
       _internalController!.addListener(() {

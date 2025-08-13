@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+/// Simplified ResponsiveHelper for basic responsive design
 class ResponsiveHelper {
   static bool isMobile(BuildContext context) =>
       MediaQuery.of(context).size.width < 600;
@@ -11,20 +12,24 @@ class ResponsiveHelper {
   static bool isDesktop(BuildContext context) =>
       MediaQuery.of(context).size.width >= 1200;
 
-  static double getScreenWidth(BuildContext context) =>
-      MediaQuery.of(context).size.width;
-
-  static double getScreenHeight(BuildContext context) =>
-      MediaQuery.of(context).size.height;
-
   static double getAdaptiveFontSize(BuildContext context, double baseSize) {
-    double screenWidth = getScreenWidth(context);
+    double screenWidth = MediaQuery.of(context).size.width;
     if (isMobile(context)) {
       return baseSize;
     } else if (isTablet(context)) {
       return baseSize * 1.2;
     } else {
       return baseSize * 1.4;
+    }
+  }
+
+  static double getAdaptiveIconSize(BuildContext context) {
+    if (isMobile(context)) {
+      return 24.0;
+    } else if (isTablet(context)) {
+      return 28.0;
+    } else {
+      return 32.0;
     }
   }
 
@@ -35,16 +40,6 @@ class ResponsiveHelper {
       return const EdgeInsets.all(24.0);
     } else {
       return const EdgeInsets.all(32.0);
-    }
-  }
-
-  static double getAdaptiveIconSize(BuildContext context) {
-    if (isMobile(context)) {
-      return 24.0;
-    } else if (isTablet(context)) {
-      return 32.0;
-    } else {
-      return 40.0;
     }
   }
 }

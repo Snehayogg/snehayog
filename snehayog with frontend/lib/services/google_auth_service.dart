@@ -94,16 +94,35 @@ class GoogleAuthService {
 
   Future<Map<String, dynamic>?> getUserData() async {
     try {
-      final GoogleSignInAccount? googleUser =
-          await _googleSignIn.signInSilently();
-      if (googleUser == null) {
-        await logout(); // Not signed in
-        return null;
+      // First try to get stored user data
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString(_userIdKey);
+      final userName = prefs.getString(_userNameKey);
+      final userProfilePic = prefs.getString(_userProfilePicKey);
+      final userEmail = prefs.getString(_userEmailKey);
+      final userToken = prefs.getString(_userTokenKey);
+
+      // If we have stored data, return it
+      if (userId != null && userName != null && userToken != null) {
+        return {
+          'id': userId,
+          'name': userName,
+          'profilePic': userProfilePic ?? 'https://via.placeholder.com/150',
+          'email': userEmail ?? '',
+          'token': userToken,
+        };
       }
-      return await _updateAndSaveUser(googleUser);
+
+      // If no stored data, try silent sign-in
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signInSilently();
+      if (googleUser != null) {
+        return await _updateAndSaveUser(googleUser);
+      }
+
+      // No stored data and no silent sign-in possible
+      return null;
     } catch (e) {
-      print('Error getting user data silently: $e');
-      await logout();
+      print('Error getting user data: $e');
       return null;
     }
   }
