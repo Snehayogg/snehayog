@@ -1,29 +1,90 @@
+import 'dart:io';
+
 class GoogleSignInConfig {
-  // Replace with your actual client ID from Google Cloud Console
-  // To get this:
-  // 1. Go to https://console.cloud.google.com/
-  // 2. Create a new project or select existing one
-  // 3. Enable Google Sign-In API
-  // 4. Go to Credentials
-  // 5. Create OAuth 2.0 Client ID
-  // 6. Choose Android application
-  // 7. Enter your package name (com.example.snehayog)
-  // 8. Get SHA-1 fingerprint from your debug keystore
-  // 9. Copy the client ID from the created credential
+  // ✅ ANDROID OAuth 2.0 Client ID (from google-services.json)
   static const String clientId =
-      '406195883653-1j2f5ilp46376ndqs8gd0trkto8n727d.apps.googleusercontent.com';
+      '406195883653-qp49f9nauq4t428ndscuu3nr9jb10g4h.apps.googleusercontent.com';
 
-  // Web client ID (if you're also supporting web platform)
-  // To get this:
-  // 1. In the same Google Cloud Console project
-  // 2. Create another OAuth 2.0 Client ID
-  // 3. Choose Web application
-  // 4. Add authorized JavaScript origins (http://localhost:3000 for development)
-  // 5. Add authorized redirect URIs (http://localhost:3000/auth/google/callback)
-  // 6. Copy the client ID from the created credential
-  // static const String webClientId =
-  //     '406195883653-1j2f5ilp46376ndqs8gd0trkto8n727d.apps.googleusercontent.com';
+  // ✅ iOS Client ID (from GoogleService-Info.plist)
+  static const String iosClientId =
+      '406195883653-f4ejmoq2e0v9tnquvout06uu305bb4eh.apps.googleusercontent.com';
 
-  // Scopes required for the application
+  // ✅ Platform-specific client ID getter (Android & iOS only)
+  static String get platformClientId {
+    try {
+      if (Platform.isAndroid) return clientId;
+      if (Platform.isIOS) return iosClientId;
+    } catch (e) {
+      // Web platform - use Android client ID as default
+      print('🌐 Web platform detected, using Android client ID');
+    }
+    return clientId;
+  }
+
   static const List<String> scopes = ['email', 'profile'];
+
+  // ✅ Check if configuration is valid
+  static bool get isConfigured => clientId.isNotEmpty && iosClientId.isNotEmpty;
+
+  // ✅ Validate OAuth 2.0 Client ID format
+  static bool get isValidClientId {
+    final androidValid = clientId.contains('apps.googleusercontent.com') &&
+        clientId.contains('406195883653');
+    final iosValid = iosClientId.contains('apps.googleusercontent.com') &&
+        iosClientId.contains('406195883653');
+    return androidValid && iosValid;
+  }
+
+  // ✅ Debug information with OAuth 2.0 validation (Web-safe)
+  static void printConfig() {
+    print('🔧 Google Sign-In Configuration:');
+    print('   📱 Android Client ID: $clientId');
+    print('   🍎 iOS Client ID: $iosClientId');
+    print('   📦 Package Name: com.example.snehayog');
+    print('   🎯 Scopes: ${scopes.join(', ')}');
+
+    // Safe platform detection
+    String platformInfo = 'Unknown';
+    try {
+      platformInfo = Platform.operatingSystem;
+    } catch (e) {
+      platformInfo = 'Web Browser';
+    }
+    print('   🌐 Platform: $platformInfo');
+
+    print('   🌐 Using Client ID: $platformClientId');
+
+    if (isConfigured) {
+      print('   ✅ Configuration is present');
+    } else {
+      print('   ❌ Configuration is missing');
+    }
+
+    if (isValidClientId) {
+      print('   ✅ OAuth 2.0 Client ID format is valid');
+    } else {
+      print('   ❌ OAuth 2.0 Client ID format is invalid');
+      print('   🔧 Please check your Firebase Console configuration');
+    }
+
+    // Additional OAuth 2.0 validation
+    print('   🔐 OAuth 2.0 Validation:');
+    print(
+        '      - Android: ${clientId.contains('apps.googleusercontent.com') ? '✅' : '❌'}');
+    print(
+        '      - iOS: ${iosClientId.contains('apps.googleusercontent.com') ? '✅' : '❌'}');
+    print(
+        '      - Project ID Match: ${clientId.contains('406195883653') ? '✅' : '❌'}');
+  }
+
+  // ✅ Get detailed error information
+  static String? getConfigurationError() {
+    if (!isConfigured) {
+      return 'OAuth 2.0 Client IDs are missing in configuration';
+    }
+    if (!isValidClientId) {
+      return 'OAuth 2.0 Client ID format is invalid. Please check Firebase Console.';
+    }
+    return null;
+  }
 }

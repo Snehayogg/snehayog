@@ -33,25 +33,33 @@ dependencies:
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.6
+  cupertino_icons: ^1.0.2
   file_picker: ^10.1.9
-  http: ^1.2.1
-  shared_preferences: ^2.2.3
+  http: ^1.1.0
+  crypto: ^3.0.3
+  shared_preferences: ^2.2.2
   share_plus: ^11.0.0
-  path_provider: ^2.1.3
+  path_provider: ^2.1.1
   permission_handler: ^11.0.1
   cached_network_image: ^3.3.0
-  google_sign_in: ^6.2.1
+  google_sign_in: ^6.1.6
   provider: ^6.1.2
-  flutter_screenutil: ^5.9.3  # Keep for responsiveness
-  image_picker: ^1.1.2
+  flutter_screenutil: ^5.9.3 
+  image_picker: ^1.0.4
   video_compress: ^3.1.4
   url_launcher: ^6.2.5
   # Video player dependencies - keep only essential ones
-  video_player: ^2.8.3
+  video_player: ^2.8.1
+  video_player_platform_interface: ^6.2.0
+  video_player_android: ^2.3.7
+  video_player_avfoundation: ^2.3.7
+  # better_player: ^0.0.83  # Commented out due to Flutter compatibility issues
   http_parser: ^4.0.2
   google_mobile_ads: ^6.0.0
   visibility_detector: ^0.4.0+2
+  chewie: ^1.7.4
+  # **NEW: JWT Decoder for token validation**
+  jwt_decoder: ^2.0.1
 
 
 dev_dependencies:

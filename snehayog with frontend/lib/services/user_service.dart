@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:snehayog/services/google_auth_service.dart';
+import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/services/video_service.dart';
 
 class UserService {
-  final GoogleAuthService _authService = GoogleAuthService();
+  final AuthService _authService = AuthService();
 
   Future<Map<String, dynamic>> getUserById(String id) async {
     final token = (await _authService.getUserData())?['token'];
@@ -120,16 +120,9 @@ class UserService {
   Future<bool> isFollowingUser(String userIdToCheck) async {
     try {
       final token = (await _authService.getUserData())?['token'];
-      print(
-          '🔍 IsFollowing API Debug: Token retrieved: ${token != null ? 'Yes' : 'No'}');
-
       if (token == null) {
-        print('❌ IsFollowing API Error: No authentication token found');
-        return false;
+        throw Exception('Not authenticated');
       }
-
-      print(
-          '🔍 IsFollowing API Debug: Checking if following user: $userIdToCheck');
 
       final response = await http.get(
         Uri.parse(
@@ -140,22 +133,15 @@ class UserService {
         },
       );
 
-      print(
-          '🔍 IsFollowing API Debug: Response status: ${response.statusCode}');
-      print('🔍 IsFollowing API Debug: Response body: ${response.body}');
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final isFollowing = data['isFollowing'] ?? false;
-        print('🔍 IsFollowing API Debug: Result: $isFollowing');
-        return isFollowing;
+        return data['isFollowing'] ?? false;
       } else {
-        print(
-            '❌ IsFollowing API Error: Status code ${response.statusCode}, Body: ${response.body}');
+        print('Failed to check follow status. Status: ${response.statusCode}');
         return false;
       }
     } catch (e) {
-      print('❌ IsFollowing API Exception: $e');
+      print('Error checking follow status: $e');
       return false;
     }
   }
@@ -185,5 +171,57 @@ class UserService {
           'Failed to update profile. Status code: ${response.statusCode}, Body: ${response.body}');
       throw Exception('Failed to update profile on server');
     }
+  }
+}
+
+/// **NEW: FollowManager for better follow state management**
+class FollowManager {
+  static final Map<String, bool> _followCache = {};
+  static final Map<String, int> _followerCountCache = {};
+
+  /// Check if user is following another user (with caching)
+  static Future<bool> isFollowing(String userIdToCheck) async {
+    // Return cached value if available
+    if (_followCache.containsKey(userIdToCheck)) {
+      return _followCache[userIdToCheck]!;
+    }
+
+    // Fetch from service and cache
+    try {
+      final userService = UserService();
+      final isFollowing = await userService.isFollowingUser(userIdToCheck);
+      _followCache[userIdToCheck] = isFollowing;
+      return isFollowing;
+    } catch (e) {
+      print('Error checking follow status: $e');
+      return false;
+    }
+  }
+
+  /// Update follow status in cache
+  static void updateFollowStatus(String userId, bool isFollowing) {
+    _followCache[userId] = isFollowing;
+  }
+
+  /// Update follower count in cache
+  static void updateFollowerCount(String userId, int count) {
+    _followerCountCache[userId] = count;
+  }
+
+  /// Get cached follower count
+  static int getFollowerCount(String userId) {
+    return _followerCountCache[userId] ?? 0;
+  }
+
+  /// Clear cache for a specific user
+  static void clearUserCache(String userId) {
+    _followCache.remove(userId);
+    _followerCountCache.remove(userId);
+  }
+
+  /// Clear all cache
+  static void clearAllCache() {
+    _followCache.clear();
+    _followerCountCache.clear();
   }
 }

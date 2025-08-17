@@ -3,7 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:snehayog/services/video_service.dart';
-import 'package:snehayog/services/google_auth_service.dart';
+import 'package:snehayog/services/authservices.dart';
 import 'package:video_compress/video_compress.dart';
 import 'package:snehayog/view/screens/create_ad_screen.dart';
 import 'package:snehayog/view/screens/ad_management_screen.dart';
@@ -25,6 +25,7 @@ class _UploadScreenState extends State<UploadScreen> {
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _linkController = TextEditingController();
   final VideoService _videoService = VideoService();
+  final AuthService _authService = AuthService();
 
   @override
   void initState() {
@@ -32,8 +33,7 @@ class _UploadScreenState extends State<UploadScreen> {
   }
 
   Future<void> _pickVideo() async {
-    final googleAuthService = GoogleAuthService();
-    final userData = await googleAuthService.getUserData();
+    final userData = await _authService.getUserData();
     if (userData == null) {
       _showLoginPrompt();
       return;
@@ -83,8 +83,7 @@ class _UploadScreenState extends State<UploadScreen> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-              final googleAuthService = GoogleAuthService();
-              await googleAuthService.signInWithGoogle();
+              await _authService.signInWithGoogle();
             },
             child: const Text('Sign In'),
           ),
@@ -94,8 +93,7 @@ class _UploadScreenState extends State<UploadScreen> {
   }
 
   Future<void> _uploadVideo() async {
-    final googleAuthService = GoogleAuthService();
-    final userData = await googleAuthService.getUserData();
+    final userData = await _authService.getUserData();
     if (userData == null) {
       _showLoginPrompt();
       return;
@@ -209,7 +207,7 @@ class _UploadScreenState extends State<UploadScreen> {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<Map<String, dynamic>?>(
-      future: GoogleAuthService().getUserData(),
+      future: _authService.getUserData(),
       builder: (context, snapshot) {
         final isSignedIn = snapshot.hasData && snapshot.data != null;
 
@@ -259,8 +257,7 @@ class _UploadScreenState extends State<UploadScreen> {
                           ),
                           TextButton(
                             onPressed: () async {
-                              final googleAuthService = GoogleAuthService();
-                              await googleAuthService.signInWithGoogle();
+                              await _authService.signInWithGoogle();
                             },
                             child: const Text('Sign In'),
                           ),

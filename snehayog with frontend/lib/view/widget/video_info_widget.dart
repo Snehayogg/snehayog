@@ -91,7 +91,7 @@ class _UploaderInfoSection extends StatelessWidget {
         ),
 
         // Follow button
-        const SizedBox(width: 8),
+        const SizedBox(width: 6),
         FollowButtonWidget(
           uploaderId: video.uploader.id,
           uploaderName: video.uploader.name,
@@ -119,6 +119,15 @@ class _UploaderAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Debug logging to see what data we're getting
+    print(
+        '🖼️ _UploaderAvatar: Building avatar for uploader: ${uploader.name}');
+    print('🖼️ _UploaderAvatar: profilePic: "${uploader.profilePic}"');
+    print(
+        '🖼️ _UploaderAvatar: profilePic.isEmpty: ${uploader.profilePic.isEmpty}');
+    print(
+        '🖼️ _UploaderAvatar: profilePic.length: ${uploader.profilePic.length}');
+
     return CircleAvatar(
       radius: AppConstants.avatarRadius,
       backgroundColor: Colors.grey,
@@ -130,11 +139,54 @@ class _UploaderAvatar extends StatelessWidget {
                 height: AppConstants.avatarRadius * 2,
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) {
-                  return const Icon(Icons.person, color: Colors.white);
+                  print('🖼️ _UploaderAvatar: Image.network error: $error');
+                  return _buildInitialsAvatar();
+                },
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  );
                 },
               ),
             )
-          : const Icon(Icons.person, color: Colors.white),
+          : _buildInitialsAvatar(),
+    );
+  }
+
+  Widget _buildInitialsAvatar() {
+    // Get initials from the user's name
+    final initials = uploader.name.isNotEmpty
+        ? uploader.name
+            .split(' ')
+            .map((n) => n.isNotEmpty ? n[0] : '')
+            .take(2)
+            .join('')
+            .toUpperCase()
+        : '?';
+
+    return Container(
+      width: AppConstants.avatarRadius * 2,
+      height: AppConstants.avatarRadius * 2,
+      decoration: BoxDecoration(
+        color: Colors.blue[600],
+        shape: BoxShape.circle,
+      ),
+      child: Center(
+        child: Text(
+          initials,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
     );
   }
 }

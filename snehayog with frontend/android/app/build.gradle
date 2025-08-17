@@ -33,16 +33,16 @@ if (flutterVersionName == null) {
 
 android {
     namespace "com.example.snehayog"
-    compileSdkVersion 35
+    compileSdkVersion 35 // Updated to match plugin requirements
     ndkVersion "27.0.12077973"
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = '1.8'
+        jvmTarget = '17'
     }
 
     sourceSets {
@@ -75,6 +75,12 @@ android {
         disable 'InvalidPackage'
         checkReleaseBuilds false
     }
+    
+    // Fix for better_player namespace issue
+    packagingOptions {
+        pickFirst '**/libc++_shared.so'
+        pickFirst '**/libjsc.so'
+    }
 }
 
 flutter {
@@ -84,4 +90,18 @@ flutter {
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
     implementation 'androidx.multidex:multidex:2.0.1'
+    
+    // Google Sign-In dependencies
+    implementation 'com.google.android.gms:play-services-auth:20.7.0'
+    implementation 'com.google.firebase:firebase-auth:22.3.1'
+    
+    // Fix for better_player namespace issue
+    constraints {
+        implementation('com.google.android.gms:play-services-ads:22.0.0') {
+            because 'better_player dependency constraint'
+        }
+    }
 }
+
+// Apply Google Services plugin for Google Sign-In
+apply plugin: 'com.google.gms.google-services'

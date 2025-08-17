@@ -15,58 +15,28 @@ class MainController extends ChangeNotifier {
 
   /// Change the current index and handle video control
   void changeIndex(int index) {
+    if (_currentIndex == index) return; // No change needed
+
     print('🔄 MainController: Changing index from $_currentIndex to $index');
-    print('🔄 MainController: Current time: ${DateTime.now()}');
 
-    if (_currentIndex != index) {
-      // If we're leaving the video tab (index 0), pause videos IMMEDIATELY
-      if (_currentIndex == 0) {
-        print(
-            '⏸️ MainController: LEAVING VIDEO TAB - pausing videos immediately');
-        print('⏸️ MainController: Calling pause callback...');
-
-        // Call pause callback immediately
-        _pauseVideosCallback?.call();
-        print('⏸️ MainController: Pause callback executed');
-
-        // Force pause again after a short delay to ensure videos stop
-        Future.delayed(const Duration(milliseconds: 50), () {
-          if (_currentIndex != 0) {
-            print('🛑 MainController: Double-checking videos are paused');
-            _pauseVideosCallback?.call();
-          }
-        });
-
-        // Additional safety check after a longer delay
-        Future.delayed(const Duration(milliseconds: 200), () {
-          if (_currentIndex != 0) {
-            print(
-                '🛑 MainController: Final safety check - pausing videos again');
-            _pauseVideosCallback?.call();
-          }
-        });
-      }
-
-      // Update the current index
-      _currentIndex = index;
-      print('🔄 MainController: Index updated to $_currentIndex');
-
-      // If we're entering the video tab, resume videos with a delay
-      if (index == 0) {
-        print(
-            '▶️ MainController: Entering video tab, will resume videos shortly');
-        // Small delay to ensure clean state, then resume
-        Future.delayed(const Duration(milliseconds: 100), () {
-          if (_currentIndex == 0 && isAppInForeground) {
-            print(
-                '▶️ MainController: Resuming videos after entering video tab');
-            _resumeVideosCallback?.call();
-          }
-        });
-      }
-
-      notifyListeners();
+    // If we're leaving the video tab (index 0), pause videos immediately
+    if (_currentIndex == 0) {
+      print(
+          '⏸️ MainController: LEAVING VIDEO TAB - pausing videos immediately');
+      _pauseVideosCallback?.call();
     }
+
+    // Update the current index
+    _currentIndex = index;
+    print('🔄 MainController: Index updated to $_currentIndex');
+
+    // If we're entering the video tab, resume videos
+    if (index == 0 && isAppInForeground) {
+      print('▶️ MainController: Entering video tab, resuming videos');
+      _resumeVideosCallback?.call();
+    }
+
+    notifyListeners();
   }
 
   void navigateToProfile() {
@@ -104,17 +74,7 @@ class MainController extends ChangeNotifier {
   /// Force pause all videos (called from external sources)
   void forcePauseVideos() {
     print('🛑 MainController: Force pausing all videos');
-    if (_pauseVideosCallback != null) {
-      _pauseVideosCallback!();
-
-      // Additional safety pause after a short delay
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (_pauseVideosCallback != null) {
-          print('🛑 MainController: Safety pause after force pause');
-          _pauseVideosCallback!();
-        }
-      });
-    }
+    _pauseVideosCallback?.call();
   }
 
   /// Check if videos should be paused based on current state

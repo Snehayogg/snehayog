@@ -15,6 +15,10 @@ class VideoStateManager extends ChangeNotifier {
   // Screen visibility
   bool _isScreenVisible = true;
 
+  // Error state
+  bool _hasError = false;
+  String? _errorMessage;
+
   // Service
   final VideoService _videoService = VideoService();
 
@@ -27,6 +31,8 @@ class VideoStateManager extends ChangeNotifier {
   int get activePage => _activePage;
   bool get isScreenVisible => _isScreenVisible;
   int get totalVideos => _videos.length;
+  bool get hasError => _hasError;
+  String? get errorMessage => _errorMessage;
 
   /// Initialize with provided videos
   void initializeWithVideos(List<VideoModel> videos, int initialIndex) {
@@ -154,12 +160,21 @@ class VideoStateManager extends ChangeNotifier {
       final video = _videos[index];
       final isCurrentlyLiked = video.likedBy.contains(userId);
 
+      // Use copyWith to create a new instance instead of modifying the final list
       if (isCurrentlyLiked) {
-        video.likedBy.remove(userId);
-        video.likes--;
+        // Remove like
+        final updatedLikedBy = List<String>.from(video.likedBy)..remove(userId);
+        _videos[index] = video.copyWith(
+          likedBy: updatedLikedBy,
+          likes: video.likes - 1,
+        );
       } else {
-        video.likedBy.add(userId);
-        video.likes++;
+        // Add like
+        final updatedLikedBy = List<String>.from(video.likedBy)..add(userId);
+        _videos[index] = video.copyWith(
+          likedBy: updatedLikedBy,
+          likes: video.likes + 1,
+        );
       }
 
       notifyListeners();
@@ -218,10 +233,135 @@ class VideoStateManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Retry loading videos after an error
+  Future<void> retryLoading() async {
+    _hasError = false;
+    _errorMessage = null;
+    _currentPage = 1;
+    _videos.clear();
+    await loadVideosWithAds(isInitialLoad: true);
+  }
+
+  /// Clear error state
+  void clearError() {
+    _hasError = false;
+    _errorMessage = null;
+    notifyListeners();
+  }
+
   /// Dispose
   @override
   void dispose() {
     _videos.clear();
     super.dispose();
+  }
+
+  /// Load videos with integrated ads
+  Future<void> loadVideosWithAds({bool isInitialLoad = true}) async {
+    if (!_hasMore || (_isLoadingMore && !isInitialLoad)) return;
+
+    _setLoadingState(isInitialLoad, true);
+
+    try {
+      print(
+          '🎬 VideoStateManager: Loading videos with ads - Page: $_currentPage, Initial: $isInitialLoad');
+
+      final stopwatch = Stopwatch()..start();
+      final response = await _videoService.getVideosWithAds(
+        page: _currentPage,
+        limit: 10,
+        adInsertionFrequency: 3, // Insert ad every 3rd video
+      );
+      stopwatch.stop();
+
+      print(
+          '📡 VideoStateManager: API response received in ${stopwatch.elapsedMilliseconds}ms');
+      print('📡 VideoStateManager: Response keys: ${response.keys.toList()}');
+
+      final List<dynamic> fetchedItems = response['videos'] ?? [];
+      final bool hasMore = response['hasMore'] ?? false;
+      final int adCount = response['adCount'] ?? 0;
+
+      print(
+          '🎥 VideoStateManager: Fetched ${fetchedItems.length} items (${adCount} ads)');
+
+      if (isInitialLoad) {
+        _videos.clear();
+        _currentPage = 1;
+      }
+
+      // Convert dynamic items to VideoModel or handle ads
+      for (final item in fetchedItems) {
+        try {
+          if (item is VideoModel) {
+            _videos.add(item);
+          } else if (item is Map<String, dynamic> && item['isAd'] == true) {
+            // Handle ad items - convert to VideoModel with ad flag
+            final adVideo = VideoModel(
+              id: item['id'] ?? 'ad_${DateTime.now().millisecondsSinceEpoch}',
+              videoName: item['videoName'] ?? 'Sponsored Content',
+              videoUrl: item['videoUrl'] ?? '',
+              thumbnailUrl: item['thumbnailUrl'] ?? '',
+              likes: item['likes'] ?? 0,
+              views: item['views'] ?? 0,
+              shares: item['shares'] ?? 0,
+              description: item['description'] ?? 'Sponsored content',
+              uploader: Uploader(
+                id: item['uploader']?['id'] ?? 'advertiser',
+                name: item['uploader']?['name'] ?? 'Sponsored',
+                profilePic: item['uploader']?['profilePic'] ?? '',
+              ),
+              uploadedAt: item['uploadedAt'] != null
+                  ? DateTime.parse(item['uploadedAt'])
+                  : DateTime.now(),
+              likedBy: List<String>.from(item['likedBy'] ?? []),
+              videoType: item['videoType'] ?? 'ad',
+              comments: [],
+              link: item['link'],
+              aspectRatio: 9 / 16, // Default aspect ratio for ads
+              duration: Duration.zero, // Default duration for ads
+            );
+            _videos.add(adVideo);
+          }
+        } catch (e) {
+          print('❌ VideoStateManager: Error processing item: $e');
+          print('❌ VideoStateManager: Item data: $item');
+        }
+      }
+
+      _hasMore = hasMore;
+      if (!isInitialLoad) {
+        _currentPage++;
+      }
+
+      _setLoadingState(isInitialLoad, false);
+
+      print('📱 VideoStateManager: Total items now: ${_videos.length}');
+      print('📱 VideoStateManager: Has more: $_hasMore');
+
+      notifyListeners();
+    } catch (e) {
+      print("❌ VideoStateManager: Error loading videos with ads: $e");
+      print("❌ VideoStateManager: Error type: ${e.runtimeType}");
+      _setLoadingState(isInitialLoad, false);
+
+      // Set error state
+      _hasError = true;
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
+  }
+
+  /// Check if a video item is an ad
+  bool isAd(dynamic videoItem) {
+    return videoItem is Map<String, dynamic> && videoItem['isAd'] == true;
+  }
+
+  /// Get ad data from a video item
+  Map<String, dynamic>? getAdData(dynamic videoItem) {
+    if (isAd(videoItem)) {
+      return videoItem['adData'] as Map<String, dynamic>?;
+    }
+    return null;
   }
 }

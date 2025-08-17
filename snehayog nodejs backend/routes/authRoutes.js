@@ -1,8 +1,12 @@
-const express = require('express');
-const authController = require('../controllers/authController');
+import express from 'express';
+import { googleSignIn } from '../controllers/authController.js';
 
 const router = express.Router();
 
-router.post('/google', authController.googleSignIn);
+// **FIXED: Main auth endpoint that Flutter app calls**
+router.post('/', googleSignIn);
 
-module.exports = router;
+// **KEEP: Specific Google endpoint for clarity**
+router.post('/google', googleSignIn);
+
+export default router;

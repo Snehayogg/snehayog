@@ -27,19 +27,59 @@ class VideoControllerManager {
     try {
       print(
           '🎬 VideoControllerManager: Initializing controller for video $index');
+      print('🎬 VideoControllerManager: Video URL: ${video.videoUrl}');
+      print('🎬 VideoControllerManager: Is HLS: ${video.isHLSEncoded}');
+      print(
+          '🎬 VideoControllerManager: HLS Master URL: ${video.hlsMasterPlaylistUrl}');
+      print(
+          '🎬 VideoControllerManager: HLS Playlist URL: ${video.hlsPlaylistUrl}');
 
-      // Use cache manager to get cached video file
-      final file = await DefaultCacheManager().getSingleFile(video.videoUrl);
-      print('✅ VideoControllerManager: Cached video file ready: ${file.path}');
+      VideoPlayerController controller;
 
-      // Create video player controller from cached file
-      final controller = VideoPlayerController.file(file);
+      // Check if this is an HLS video
+      if (video.isHLSEncoded == true &&
+          video.hlsPlaylistUrl != null &&
+          video.hlsPlaylistUrl!.isNotEmpty) {
+        // Use HLS playlist URL for better streaming
+        final hlsUrl = video.hlsPlaylistUrl!.startsWith('http')
+            ? video.hlsPlaylistUrl!
+            : 'http://192.168.0.190:5000${video.hlsPlaylistUrl}';
+
+        print('🎬 VideoControllerManager: Using HLS playlist URL: $hlsUrl');
+        controller = VideoPlayerController.networkUrl(Uri.parse(hlsUrl));
+      } else if (video.isHLSEncoded == true &&
+          video.hlsMasterPlaylistUrl != null &&
+          video.hlsMasterPlaylistUrl!.isNotEmpty) {
+        // Use HLS master playlist URL for adaptive streaming
+        final hlsUrl = video.hlsMasterPlaylistUrl!.startsWith('http')
+            ? video.hlsMasterPlaylistUrl!
+            : 'http://192.168.0.190:5000${video.hlsMasterPlaylistUrl}';
+
+        print('🎬 VideoControllerManager: Using HLS master URL: $hlsUrl');
+        controller = VideoPlayerController.networkUrl(Uri.parse(hlsUrl));
+      } else {
+        // Fallback to original video URL with caching
+        print(
+            '🎬 VideoControllerManager: Using original video URL with caching');
+        try {
+          final file =
+              await DefaultCacheManager().getSingleFile(video.videoUrl);
+          print(
+              '✅ VideoControllerManager: Cached video file ready: ${file.path}');
+          controller = VideoPlayerController.file(file);
+        } catch (cacheError) {
+          print(
+              '⚠️ VideoControllerManager: Cache failed, using network: $cacheError');
+          controller =
+              VideoPlayerController.networkUrl(Uri.parse(video.videoUrl));
+        }
+      }
 
       // Add error listener
       controller.addListener(() {
         if (controller.value.hasError) {
           print(
-              'Video controller error at index $index: ${controller.value.errorDescription}');
+              '❌ Video controller error at index $index: ${controller.value.errorDescription}');
         }
       });
 

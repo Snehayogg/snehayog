@@ -1,9 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:crypto/crypto.dart';
 import 'package:snehayog/config/app_config.dart';
-import 'package:snehayog/services/google_auth_service.dart';
+import 'package:snehayog/services/authservices.dart';
 
 class RazorpayService {
   static final RazorpayService _instance = RazorpayService._internal();
@@ -14,7 +13,7 @@ class RazorpayService {
   static String get keySecret => AppConfig.razorpayKeySecret;
   static String get webhookSecret => AppConfig.razorpayWebhookSecret;
 
-  final GoogleAuthService _authService = GoogleAuthService();
+  final AuthService _authService = AuthService();
 
   /// Create a new order for ad payment
   Future<Map<String, dynamic>> createOrder({
@@ -33,7 +32,8 @@ class RazorpayService {
         Uri.parse('https://api.razorpay.com/v1/orders'),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Basic ${base64Encode(utf8.encode('$keyId:$keySecret'))}',
+          'Authorization':
+              'Basic ${base64Encode(utf8.encode('$keyId:$keySecret'))}',
         },
         body: json.encode({
           'amount': (amount * 100).round(), // Convert to paise
@@ -69,7 +69,8 @@ class RazorpayService {
         Uri.parse('https://api.razorpay.com/v1/payments/$paymentId/capture'),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Basic ${base64Encode(utf8.encode('$keyId:$keySecret'))}',
+          'Authorization':
+              'Basic ${base64Encode(utf8.encode('$keyId:$keySecret'))}',
         },
         body: json.encode({
           'amount': (amount * 100).round(), // Convert to paise
@@ -97,20 +98,55 @@ class RazorpayService {
           .convert(utf8.encode(payload))
           .toString();
 
-      return signature == expectedSignature;
+      return expectedSignature == signature;
     } catch (e) {
-      print('Error verifying webhook signature: $e');
       return false;
     }
   }
 
-  /// Get payment details
+  /// **NEW: Calculate revenue split for creators**
+  Map<String, double> calculateRevenueSplit(double adSpend) {
+    return {
+      'creator': adSpend * 0.80, // 80% to creator
+      'platform': adSpend * 0.20, // 20% to platform
+    };
+  }
+
+  /// **NEW: Process payment callback from Razorpay**
+  Future<Map<String, dynamic>> processPaymentCallback({
+    required String paymentId,
+    required String orderId,
+    required String signature,
+  }) async {
+    try {
+      // Verify the payment with Razorpay
+      final paymentDetails = await getPaymentDetails(paymentId);
+
+      if (paymentDetails['status'] == 'captured') {
+        return {
+          'success': true,
+          'paymentId': paymentId,
+          'orderId': orderId,
+          'amount': paymentDetails['amount'] / 100, // Convert from paise
+          'currency': paymentDetails['currency'],
+          'status': 'success'
+        };
+      } else {
+        throw Exception('Payment not completed: ${paymentDetails['status']}');
+      }
+    } catch (e) {
+      throw Exception('Error processing payment callback: $e');
+    }
+  }
+
+  /// **NEW: Get payment details from Razorpay**
   Future<Map<String, dynamic>> getPaymentDetails(String paymentId) async {
     try {
       final response = await http.get(
         Uri.parse('https://api.razorpay.com/v1/payments/$paymentId'),
         headers: {
-          'Authorization': 'Basic ${base64Encode(utf8.encode('$keyId:$keySecret'))}',
+          'Authorization':
+              'Basic ${base64Encode(utf8.encode('$keyId:$keySecret'))}',
         },
       );
 
@@ -135,7 +171,8 @@ class RazorpayService {
         Uri.parse('https://api.razorpay.com/v1/payments/$paymentId/refund'),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Basic ${base64Encode(utf8.encode('$keyId:$keySecret'))}',
+          'Authorization':
+              'Basic ${base64Encode(utf8.encode('$keyId:$keySecret'))}',
         },
         body: json.encode({
           'amount': (amount * 100).round(), // Convert to paise
@@ -151,18 +188,6 @@ class RazorpayService {
     } catch (e) {
       throw Exception('Error refunding payment: $e');
     }
-  }
-
-  /// Calculate revenue split for creator and platform
-  Map<String, double> calculateRevenueSplit(double totalAmount) {
-    final creatorRevenue = AppConfig.calculateCreatorRevenue(totalAmount);
-    final platformRevenue = AppConfig.calculatePlatformRevenue(totalAmount);
-    
-    return {
-      'creator': creatorRevenue,
-      'platform': platformRevenue,
-      'total': totalAmount,
-    };
   }
 
   /// Get supported payment methods

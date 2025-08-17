@@ -1,19 +1,67 @@
 import express from 'express';
 import User from '../models/User.js';
 import { verifyToken } from '../utils/verifytoken.js';
+import jwt from 'jsonwebtoken'; // Added for token info endpoint
 const router = express.Router();
 
-// ✅ Route to get user by MongoDB ID
+// ✅ Route to get current user profile (requires authentication)
+// **IMPORTANT: This must come before /:id route**
+router.get('/profile', verifyToken, async (req, res) => {
+  try {
+    console.log('🔍 Profile API: Request received');
+    console.log('🔍 Profile API: Current user from token:', req.user);
+    
+    const currentUserId = req.user.id; // This is the Google user ID
+    
+    console.log('🔍 Profile API: currentUserId:', currentUserId);
+    
+    // Find current user
+    const currentUser = await User.findOne({ googleId: currentUserId });
+    if (!currentUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json({
+      id: currentUser.googleId,
+      googleId: currentUser.googleId,
+      name: currentUser.name,
+      email: currentUser.email,
+      profilePic: currentUser.profilePic,
+      videos: currentUser.videos,
+      following: currentUser.following?.length || 0,
+      followers: currentUser.followers?.length || 0,
+      preferredCurrency: currentUser.preferredCurrency,
+      preferredPaymentMethod: currentUser.preferredPaymentMethod,
+      country: currentUser.country,
+    });
+  } catch (err) {
+    console.error('Get profile error:', err);
+    res.status(500).json({ error: 'Failed to get profile' });
+  }
+});
+
+// ✅ Route to get user profile by ID
 router.get('/:id', async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select('name profilePic');
+    const { id } = req.params;
+    const user = await User.findOne({ googleId: id });
+    
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-    res.json(user);
+    
+    res.json({
+      id: user.googleId,
+      name: user.name,
+      email: user.email,
+      profilePic: user.profilePic,
+      videos: user.videos,
+      following: user.following?.length || 0,
+      followers: user.followers?.length || 0,
+    });
   } catch (err) {
-    console.error('Get user error:', err);
-    res.status(500).json({ error: 'Failed to fetch user' });
+    console.error('Get user by ID error:', err);
+    res.status(500).json({ error: 'Failed to get user' });
   }
 });
 
@@ -86,6 +134,7 @@ router.post('/follow', verifyToken, async (req, res) => {
         following: [],
         followers: []
       });
+      await currentUser.save();
     }
 
     // Find or create user to follow
@@ -99,6 +148,7 @@ router.post('/follow', verifyToken, async (req, res) => {
         following: [],
         followers: []
       });
+      await userToFollow.save();
     }
 
     // Check if already following
@@ -106,11 +156,11 @@ router.post('/follow', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'Already following this user' });
     }
 
-    // Add to following list
+    // Add to following list (store MongoDB ObjectId reference)
     currentUser.following.push(userToFollow._id);
     await currentUser.save();
 
-    // Add to followers list
+    // Add to followers list (store MongoDB ObjectId reference)
     userToFollow.followers.push(currentUser._id);
     await userToFollow.save();
 
@@ -163,13 +213,13 @@ router.post('/unfollow', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'Not following this user' });
     }
 
-    // Remove from following list
+    // Remove from following list (remove MongoDB ObjectId reference)
     currentUser.following = currentUser.following.filter(
       id => id.toString() !== userToUnfollow._id.toString()
     );
     await currentUser.save();
 
-    // Remove from followers list
+    // Remove from followers list (remove MongoDB ObjectId reference)
     userToUnfollow.followers = userToUnfollow.followers.filter(
       id => id.toString() !== currentUser._id.toString()
     );
@@ -213,11 +263,76 @@ router.get('/isfollowing/:userId', verifyToken, async (req, res) => {
       return res.json({ isFollowing: false });
     }
 
-    const isFollowing = currentUser.following.includes(userToCheck._id);
+    // Check if following by comparing MongoDB ObjectId references
+    const isFollowing = currentUser.following.some(
+      followingId => followingId.toString() === userToCheck._id.toString()
+    );
+    
     res.json({ isFollowing });
   } catch (err) {
     console.error('Check follow status error:', err);
     res.status(500).json({ error: 'Failed to check follow status' });
+  }
+});
+
+// **NEW: JWT Token validation endpoint (for debugging)**
+router.get('/validate-token', verifyToken, async (req, res) => {
+  try {
+    console.log('🔍 Token validation request received');
+    console.log('🔍 User from token:', req.user);
+    
+    res.json({
+      valid: true,
+      user: req.user,
+      message: 'Token is valid',
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('❌ Token validation error:', err);
+    res.status(401).json({ 
+      valid: false, 
+      error: 'Invalid token',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// **NEW: JWT Token info endpoint (for debugging)**
+router.get('/token-info', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Bearer token required' });
+    }
+    
+    const token = authHeader.split(' ')[1];
+    console.log('🔍 Token info request for token:', token.substring(0, 20) + '...');
+    
+    // Decode JWT without verification (for info only)
+    const decoded = jwt.decode(token);
+    if (!decoded) {
+      return res.status(400).json({ error: 'Invalid token format' });
+    }
+    
+    const now = Math.floor(Date.now() / 1000);
+    const isExpired = decoded.exp && decoded.exp < now;
+    const expiresIn = decoded.exp ? decoded.exp - now : null;
+    
+    res.json({
+      tokenInfo: {
+        userId: decoded.id,
+        issuedAt: decoded.iat ? new Date(decoded.iat * 1000).toISOString() : null,
+        expiresAt: decoded.exp ? new Date(decoded.exp * 1000).toISOString() : null,
+        isExpired: isExpired,
+        expiresInSeconds: expiresIn,
+        expiresInMinutes: expiresIn ? Math.floor(expiresIn / 60) : null,
+        tokenType: 'JWT'
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('❌ Token info error:', err);
+    res.status(500).json({ error: 'Failed to decode token' });
   }
 });
 

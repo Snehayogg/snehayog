@@ -5,6 +5,7 @@ import 'package:snehayog/view/screens/profile_screen.dart';
 import 'package:snehayog/view/screens/long_video.dart';
 import 'package:snehayog/view/screens/upload_screen.dart';
 import 'package:snehayog/view/screens/video_screen.dart';
+import 'package:snehayog/services/authservices.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -15,11 +16,55 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   final _videoScreenKey = GlobalKey();
+  final AuthService _authService = AuthService();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _checkTokenValidity();
+  }
+
+  /// Check if JWT token is valid and handle expired tokens
+  Future<void> _checkTokenValidity() async {
+    try {
+      final needsReLogin = await _authService.needsReLogin();
+      if (needsReLogin) {
+        print(
+            '⚠️ MainScreen: Token validation failed, clearing expired tokens');
+        await _authService.clearExpiredTokens();
+
+        // Show re-login dialog
+        if (mounted) {
+          _showReLoginDialog();
+        }
+      }
+    } catch (e) {
+      print('❌ MainScreen: Error checking token validity: $e');
+    }
+  }
+
+  /// Show re-login dialog when tokens are expired
+  void _showReLoginDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('🔄 Session Expired'),
+        content: const Text(
+          'Your session has expired. Please sign in again to continue using the app.',
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await _authService.signInWithGoogle();
+            },
+            child: const Text('Sign In Again'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -64,99 +109,185 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               const ProfileScreen(key: PageStorageKey('profileScreen')),
             ],
           ),
+          // ... existing code ...
           bottomNavigationBar: Container(
             decoration: BoxDecoration(
               color: Colors.white,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, -5),
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 20,
+                  offset: const Offset(0, -2),
+                  spreadRadius: 0,
+                ),
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, -1),
+                  spreadRadius: 0,
                 ),
               ],
             ),
-            child: BottomNavigationBar(
-              backgroundColor: Colors.white,
-              selectedItemColor: const Color(0xFF424242),
-              unselectedItemColor: const Color(0xFF757575),
-              currentIndex: mainController.currentIndex,
-              onTap: (index) {
-                if (index != mainController.currentIndex) {
-                  print(
-                      'Homescreen: Switching from index ${mainController.currentIndex} to $index');
-
-                  // If leaving video tab, immediately pause videos through MainController
-                  if (mainController.currentIndex == 0) {
-                    print(
-                        'Homescreen: Leaving video tab, pausing videos immediately');
-                    // Force pause videos through MainController
-                    mainController.forcePauseVideos();
-                  }
-
-                  // Change index - MainController will handle additional video control
-                  mainController.changeIndex(index);
-                }
-              },
-              type: BottomNavigationBarType.fixed,
-              elevation: 0,
-              items: [
-                BottomNavigationBarItem(
-                  icon: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: mainController.currentIndex == 0
-                          ? const Color(0xFF424242).withOpacity(0.1)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
+            child: SafeArea(
+              child: Container(
+                height: 70,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildNavItem(
+                      index: 0,
+                      currentIndex: mainController.currentIndex,
+                      icon: Icons.play_circle_filled,
+                      label: 'Yog',
+                      onTap: () => _handleNavTap(0, mainController),
                     ),
-                    child: const Icon(Icons.video_call_sharp),
-                  ),
-                  label: 'Yog',
-                ),
-                BottomNavigationBarItem(
-                  icon: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: mainController.currentIndex == 1
-                          ? const Color(0xFF424242).withOpacity(0.1)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
+                    _buildNavItem(
+                      index: 1,
+                      currentIndex: mainController.currentIndex,
+                      icon: Icons.video_camera_front_rounded,
+                      label: 'Sneha',
+                      onTap: () => _handleNavTap(1, mainController),
                     ),
-                    child: const Icon(Icons.video_camera_front_outlined),
-                  ),
-                  label: 'Sneha',
-                ),
-                BottomNavigationBarItem(
-                  icon: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: mainController.currentIndex == 2
-                          ? const Color(0xFF424242).withOpacity(0.1)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
+                    _buildNavItem(
+                      index: 2,
+                      currentIndex: mainController.currentIndex,
+                      icon: Icons.add_circle_outline,
+                      label: 'Upload',
+                      onTap: () => _handleNavTap(2, mainController),
+                      isSpecial: true,
                     ),
-                    child: const Icon(Icons.add_box_outlined),
-                  ),
-                  label: 'Upload',
-                ),
-                BottomNavigationBarItem(
-                  icon: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: mainController.currentIndex == 3
-                          ? const Color(0xFF424242).withOpacity(0.1)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
+                    _buildNavItem(
+                      index: 3,
+                      currentIndex: mainController.currentIndex,
+                      icon: Icons.person_outline_rounded,
+                      label: 'Profile',
+                      onTap: () => _handleNavTap(3, mainController),
                     ),
-                    child: const Icon(Icons.person_outline),
-                  ),
-                  label: 'Profile',
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
+// ... existing code ...
         );
       },
     );
   }
 }
+
+// ... existing code ...
+Widget _buildNavItem({
+  required int index,
+  required int currentIndex,
+  required IconData icon,
+  required String label,
+  required VoidCallback onTap,
+  bool isSpecial = false,
+}) {
+  final isSelected = currentIndex == index;
+  final isUpload = index == 2;
+
+  return GestureDetector(
+    onTap: onTap,
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeInOut,
+      padding: EdgeInsets.symmetric(
+        horizontal: isSelected ? 16 : 12,
+        vertical: isSelected ? 12 : 8,
+      ),
+      decoration: BoxDecoration(
+        color: isSelected
+            ? const Color(0xFF424242).withOpacity(0.12)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(
+          isSelected ? 16 : 12,
+        ),
+        border: isSelected
+            ? Border.all(
+                color: const Color(0xFF424242).withOpacity(0.2),
+                width: 1.5,
+              )
+            : null,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Icon with special handling for upload
+          if (isUpload && isSpecial)
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFF424242).withOpacity(0.1),
+                    const Color(0xFF757575).withOpacity(0.05),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                icon,
+                size: isSelected ? 28 : 24,
+                color: isSelected
+                    ? const Color(0xFF424242)
+                    : const Color(0xFF757575),
+              ),
+            )
+          else
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              child: Icon(
+                icon,
+                size: isSelected ? 28 : 24,
+                color: isSelected
+                    ? const Color(0xFF424242)
+                    : const Color(0xFF757575),
+              ),
+            ),
+
+          // Only show label if this tab is currently selected
+          if (isSelected) ...[
+            const SizedBox(width: 8),
+
+            // Label with better typography (only visible when selected)
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 200),
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF424242),
+                letterSpacing: 0.2,
+              ),
+              child: Text(label),
+            ),
+          ],
+        ],
+      ),
+    ),
+  );
+}
+
+// ... existing code ...
+void _handleNavTap(int index, MainController mainController) {
+  if (index != mainController.currentIndex) {
+    print(
+        'Homescreen: Switching from index ${mainController.currentIndex} to $index');
+
+    // If leaving video tab, immediately pause videos through MainController
+    if (mainController.currentIndex == 0) {
+      print('Homescreen: Leaving video tab, pausing videos immediately');
+      mainController.forcePauseVideos();
+    }
+
+    // Change index - MainController will handle additional video control
+    mainController.changeIndex(index);
+  }
+}
+
+// ... existing code ...

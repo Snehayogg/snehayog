@@ -1,7 +1,7 @@
 import 'dart:io';
 import '../repositories/video_repository.dart';
+import '../../../../config/app_config.dart';
 import '../../../../core/exceptions/app_exceptions.dart';
-import '../../../../core/network/network_helper.dart';
 
 /// Use case for uploading videos
 /// This encapsulates the business logic for video uploads
@@ -11,14 +11,14 @@ class UploadVideoUseCase {
   const UploadVideoUseCase(this._repository);
 
   /// Executes the use case to upload a video
-  /// 
+  ///
   /// Parameters:
   /// - videoPath: The local path to the video file
   /// - title: The title of the video
   /// - description: The description of the video
   /// - link: Optional link associated with the video
   /// - onProgress: Optional callback for upload progress
-  /// 
+  ///
   /// Returns:
   /// - A map containing the uploaded video's data
   /// - Throws [AppException] if the operation fails
@@ -31,7 +31,7 @@ class UploadVideoUseCase {
   }) async {
     // Validate input parameters
     _validateInputs(videoPath, title, description);
-    
+
     // Check if video file exists
     final videoFile = File(videoPath);
     if (!await videoFile.exists()) {
@@ -43,7 +43,10 @@ class UploadVideoUseCase {
     if (fileSize > NetworkHelper.maxVideoFileSize) {
       throw FileSizeException(
         'File too large. Maximum size is ${NetworkHelper.formatFileSize(NetworkHelper.maxVideoFileSize)}',
-        details: {'fileSize': fileSize, 'maxSize': NetworkHelper.maxVideoFileSize},
+        details: {
+          'fileSize': fileSize,
+          'maxSize': NetworkHelper.maxVideoFileSize
+        },
       );
     }
 
@@ -60,13 +63,15 @@ class UploadVideoUseCase {
     if (title.trim().isEmpty) {
       throw const ValidationException('Video title cannot be empty');
     }
-    
+
     if (title.length > 100) {
-      throw const ValidationException('Video title cannot exceed 100 characters');
+      throw const ValidationException(
+          'Video title cannot exceed 100 characters');
     }
-    
+
     if (description.length > 500) {
-      throw const ValidationException('Video description cannot exceed 500 characters');
+      throw const ValidationException(
+          'Video description cannot exceed 500 characters');
     }
 
     // Check server health before upload
@@ -92,11 +97,11 @@ class UploadVideoUseCase {
     if (videoPath.isEmpty) {
       throw const ValidationException('Video path cannot be empty');
     }
-    
+
     if (title.isEmpty) {
       throw const ValidationException('Video title cannot be empty');
     }
-    
+
     if (description.isEmpty) {
       throw const ValidationException('Video description cannot be empty');
     }

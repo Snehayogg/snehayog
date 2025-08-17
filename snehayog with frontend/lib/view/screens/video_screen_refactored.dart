@@ -9,7 +9,7 @@ import 'package:snehayog/core/enums/video_state.dart';
 import 'package:snehayog/view/widget/video_item_widget.dart';
 import 'package:snehayog/view/widget/video_loading_states.dart';
 import 'package:snehayog/services/video_service.dart';
-import 'package:snehayog/services/google_auth_service.dart';
+import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/controller/main_controller.dart';
 import 'package:snehayog/model/video_model.dart';
 
@@ -36,6 +36,7 @@ class _VideoScreenRefactoredState extends State<VideoScreenRefactored>
   late PageController _pageController;
   int _activePage = 0;
   bool _isScreenVisible = true;
+  final AuthService _authService = AuthService();
 
   @override
   void initState() {
@@ -182,9 +183,8 @@ class _VideoScreenRefactoredState extends State<VideoScreenRefactored>
       final provider = Provider.of<VideoProvider>(context, listen: false);
       final video = provider.videos[index];
 
-      // Get current user ID using GoogleAuthService
-      final googleAuthService = GoogleAuthService();
-      final userData = await googleAuthService.getUserData();
+      // Get current user ID using AuthService
+      final userData = await _authService.getUserData();
 
       if (userData == null || userData['id'] == null) {
         print('User not signed in, cannot like video');
@@ -367,8 +367,7 @@ class _VideoScreenRefactoredState extends State<VideoScreenRefactored>
               index: index,
               controller: controller,
               isActive: isActive,
-              onLike: _handleLike,
-              videoService: VideoService(),
+              onLike: () => _handleLike(index),
             );
           },
         ),

@@ -3,20 +3,23 @@ import 'dart:async';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/services/google_auth_service.dart';
+import 'package:snehayog/services/authservices.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 import 'package:flutter/material.dart';
-import 'package:snehayog/config/app_config.dart';
 import 'package:http_parser/http_parser.dart';
+import 'package:snehayog/config/app_config.dart';
+import 'package:snehayog/model/ad_model.dart';
+import 'package:snehayog/services/ad_service.dart';
 
 /// Optimized VideoService for better performance and smaller app size
 class VideoService {
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();
+  final AuthService _authService = AuthService();
+  final AdService _adService = AdService();
 
   static String get baseUrl => NetworkHelper.getBaseUrl();
-
   // Optimized constants
   static const int maxRetries = 2; // Reduced from 3
   static const int retryDelay = 1; // Reduced from 2
@@ -26,7 +29,7 @@ class VideoService {
   Future<bool> checkServerHealth() async {
     try {
       final response = await http
-          .get(Uri.parse('$baseUrl/api/health'))
+          .get(Uri.parse('$baseUrl/health')) // Use correct health endpoint
           .timeout(const Duration(seconds: 5)); // Reduced timeout
       return response.statusCode == 200;
     } catch (e) {
@@ -65,6 +68,33 @@ class VideoService {
       }
     } catch (e) {
       print('🔗 VideoService: Error testing video link field: $e');
+    }
+  }
+
+  /// Test network configuration and connectivity
+  Future<bool> testNetworkConfiguration() async {
+    try {
+      print('🌐 VideoService: Testing network configuration...');
+      print('🌐 VideoService: Base URL: $baseUrl');
+
+      // Test basic connectivity
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/health'))
+          .timeout(const Duration(seconds: 5));
+
+      print('🌐 VideoService: Health check response: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        print('✅ VideoService: Network configuration is working');
+        return true;
+      } else {
+        print(
+            '❌ VideoService: Network configuration returned status: ${response.statusCode}');
+        return false;
+      }
+    } catch (e) {
+      print('❌ VideoService: Network configuration test failed: $e');
+      return false;
     }
   }
 
@@ -116,11 +146,46 @@ class VideoService {
             print('🔗 VideoService: json["link"] = ${json['link']}');
           }
 
+          // Debug: Check uploader data
+          if (json.containsKey('uploader')) {
+            print('🔗 VideoService: uploader data: ${json['uploader']}');
+            if (json['uploader'] is Map<String, dynamic>) {
+              print(
+                  '🔗 VideoService: uploader.name: ${json['uploader']['name']}');
+              print(
+                  '🔗 VideoService: uploader.profilePic: ${json['uploader']['profilePic']}');
+              print(
+                  '🔗 VideoService: uploader.profilePic type: ${json['uploader']['profilePic'].runtimeType}');
+            }
+          }
+
           // Ensure URLs are complete if they're relative paths
           if (json['videoUrl'] != null &&
               !json['videoUrl'].toString().startsWith('http')) {
             json['videoUrl'] = '$baseUrl${json['videoUrl']}';
           }
+          
+          // Check if HLS URLs are available and use them for better streaming
+          if (json['hlsPlaylistUrl'] != null && json['hlsPlaylistUrl'].toString().isNotEmpty) {
+            // Use HLS playlist URL for better streaming
+            if (!json['hlsPlaylistUrl'].toString().startsWith('http')) {
+              json['videoUrl'] = '$baseUrl${json['hlsPlaylistUrl']}';
+            } else {
+              json['videoUrl'] = json['hlsPlaylistUrl'];
+            }
+            print('🔗 VideoService: Using HLS URL: ${json['videoUrl']}');
+          } else if (json['hlsMasterPlaylistUrl'] != null && json['hlsMasterPlaylistUrl'].toString().isNotEmpty) {
+            // Use HLS master playlist URL for adaptive streaming
+            if (!json['hlsMasterPlaylistUrl'].toString().startsWith('http')) {
+              json['videoUrl'] = '$baseUrl${json['hlsMasterPlaylistUrl']}';
+            } else {
+              json['videoUrl'] = json['hlsMasterPlaylistUrl'];
+            }
+            print('🔗 VideoService: Using HLS Master URL: ${json['videoUrl']}');
+          } else {
+            print('🔗 VideoService: Using original video URL: ${json['videoUrl']}');
+          }
+
           return VideoModel.fromJson(json);
         }).toList();
 
@@ -162,18 +227,23 @@ class VideoService {
   /// Returns the updated VideoModel
   Future<VideoModel> toggleLike(String videoId, String userId) async {
     try {
-      print('🔍 VideoService: Starting toggleLike for video: $videoId, user: $userId');
-      
+      print(
+          '🔍 VideoService: Starting toggleLike for video: $videoId, user: $userId');
+
       // Check authentication first
-      final googleAuthService = GoogleAuthService();
-      final userData = await googleAuthService.getUserData();
+      final userData = await _authService.getUserData();
 
       if (userData == null) {
         print('❌ VideoService: User not authenticated');
         throw Exception('Please sign in to like videos');
       }
 
-      print('🔍 VideoService: User authenticated, making API request...');
+      print('🔍 VideoService: User authenticated, userData: $userData');
+      print(
+          '🔍 VideoService: Making API request to: $baseUrl/api/videos/$videoId/like');
+      print(
+          '🔍 VideoService: Request body: ${json.encode({'userId': userId})}');
+      print('🔍 VideoService: Base URL: $baseUrl');
 
       final res = await http
           .post(
@@ -187,16 +257,21 @@ class VideoService {
 
       print('🔍 VideoService: API response status: ${res.statusCode}');
       print('🔍 VideoService: API response body: ${res.body}');
+      print('🔍 VideoService: API response headers: ${res.headers}');
 
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         print('✅ VideoService: Like toggle successful, response: $data');
-        
+
         // Create VideoModel from the response
         final videoModel = VideoModel.fromJson(data);
         print('✅ VideoService: VideoModel created successfully');
-        
+
         return videoModel;
+      } else if (res.statusCode == 400) {
+        print('❌ VideoService: Bad request - status: ${res.statusCode}');
+        final error = json.decode(res.body);
+        throw Exception(error['error'] ?? 'Bad request');
       } else if (res.statusCode == 401) {
         print('❌ VideoService: Unauthorized - user needs to sign in again');
         throw Exception('Please sign in again to like videos');
@@ -211,7 +286,9 @@ class VideoService {
       }
     } catch (e) {
       print('❌ VideoService: Error in toggleLike: $e');
-      
+      print('❌ VideoService: Error type: ${e.runtimeType}');
+      print('❌ VideoService: Error details: ${e.toString()}');
+
       if (e is TimeoutException) {
         throw Exception('Request timed out. Please try again.');
       } else if (e is Exception) {
@@ -231,8 +308,7 @@ class VideoService {
       String videoId, String text, String userId) async {
     try {
       // Check authentication first
-      final googleAuthService = GoogleAuthService();
-      final userData = await googleAuthService.getUserData();
+      final userData = await _authService.getUserData();
 
       if (userData == null) {
         throw Exception('Please sign in to add comments');
@@ -347,9 +423,8 @@ class VideoService {
 
       final isLong = await isLongVideo(videoFile.path);
 
-      // Get authentication data directly from GoogleAuthService
-      final googleAuthService = GoogleAuthService();
-      final userData = await googleAuthService.getUserData();
+      // Get authentication data directly from AuthService
+      final userData = await _authService.getUserData();
 
       if (userData == null) {
         throw Exception(
@@ -547,12 +622,116 @@ class VideoService {
     }
   }
 
+  /// Fetches videos with integrated ads for the video feed
+  /// Parameters:
+  /// - page: Page number for pagination
+  /// - limit: Number of videos per page
+  /// - adInsertionFrequency: How often to insert ads (every Nth video)
+  /// Returns a map with videos, ads, and pagination info
+  Future<Map<String, dynamic>> getVideosWithAds({
+    int page = 1,
+    int limit = 10,
+    int adInsertionFrequency = 3, // Insert ad every 3rd video
+  }) async {
+    try {
+      print('🔍 VideoService: Fetching videos with ads...');
+      print(
+          '🔍 VideoService: Page: $page, Limit: $limit, Ad frequency: $adInsertionFrequency');
+
+      // Fetch videos and ads in parallel
+      final videosFuture = getVideos(page: page, limit: limit);
+      final adsFuture = _adService.getActiveAds();
+
+      final results = await Future.wait([videosFuture, adsFuture]);
+      final videosResult = results[0] as Map<String, dynamic>;
+      final ads = results[1] as List<AdModel>;
+
+      final videos = videosResult['videos'] as List<VideoModel>;
+
+      print(
+          '🔍 VideoService: Fetched ${videos.length} videos and ${ads.length} ads');
+
+      // Integrate ads into video feed
+      final integratedFeed =
+          _integrateAdsIntoFeed(videos, ads, adInsertionFrequency);
+
+      return {
+        'videos': integratedFeed,
+        'hasMore': videosResult['hasMore'] ?? false,
+        'total': videosResult['total'] ?? 0,
+        'currentPage': page,
+        'totalPages': videosResult['totalPages'] ?? 1,
+        'adCount': ads.length,
+        'integratedCount': integratedFeed.length,
+      };
+    } catch (e) {
+      print('❌ VideoService: Error fetching videos with ads: $e');
+      rethrow;
+    }
+  }
+
+  /// Integrates ads into the video feed at specified intervals
+  List<dynamic> _integrateAdsIntoFeed(
+      List<VideoModel> videos, List<AdModel> ads, int frequency) {
+    if (ads.isEmpty) return videos;
+
+    final integratedFeed = <dynamic>[];
+    int adIndex = 0;
+
+    for (int i = 0; i < videos.length; i++) {
+      // Add video
+      integratedFeed.add(videos[i]);
+
+      // Insert ad after every Nth video (but not after the last video)
+      if ((i + 1) % frequency == 0 && i < videos.length - 1) {
+        if (adIndex < ads.length) {
+          // Convert AdModel to VideoModel-like structure for seamless integration
+          final adAsVideo = _convertAdToVideoFormat(ads[adIndex]);
+          integratedFeed.add(adAsVideo);
+          adIndex++;
+        }
+      }
+    }
+
+    print('🔍 VideoService: Integrated ${adIndex} ads into feed');
+    return integratedFeed;
+  }
+
+  /// Converts AdModel to a VideoModel-like structure for seamless feed integration
+  Map<String, dynamic> _convertAdToVideoFormat(AdModel ad) {
+    return {
+      'id': 'ad_${ad.id}', // Unique ID for ads
+      'videoName': ad.title,
+      'videoUrl':
+          ad.videoUrl ?? ad.imageUrl ?? '', // Use video or image as video
+      'thumbnailUrl': ad.imageUrl ?? ad.videoUrl ?? '',
+      'description': ad.description,
+      'likes': 0,
+      'views': 0,
+      'shares': 0,
+      'uploader': {
+        'id': ad.uploaderId ?? 'advertiser',
+        'name': 'Sponsored',
+        'profilePic': ad.uploaderProfilePic ?? '',
+      },
+      'uploadedAt': DateTime.now(),
+      'likedBy': <String>[],
+      'videoType': 'ad', // Mark as ad
+      'comments': <Map<String, dynamic>>[],
+      'link': ad.link,
+      'isAd': true, // Flag to identify ads
+      'adData': ad.toJson(), // Store original ad data
+      'adType': ad.adType,
+      'targetAudience': ad.targetAudience,
+      'targetKeywords': ad.targetKeywords,
+    };
+  }
+
   /// Gets authentication headers for API requests
   /// Returns a map containing Content-Type and Authorization headers
   /// Throws an exception if user is not authenticated
   Future<Map<String, String>> _getAuthHeaders() async {
-    final googleAuthService = GoogleAuthService();
-    final userData = await googleAuthService.getUserData();
+    final userData = await _authService.getUserData();
 
     if (userData == null) {
       throw Exception('User not authenticated');
@@ -575,8 +754,7 @@ class VideoService {
   Future<bool> deleteVideo(String videoId) async {
     try {
       // Check authentication first
-      final googleAuthService = GoogleAuthService();
-      final userData = await googleAuthService.getUserData();
+      final userData = await _authService.getUserData();
 
       if (userData == null) {
         throw Exception('Please sign in to delete videos');

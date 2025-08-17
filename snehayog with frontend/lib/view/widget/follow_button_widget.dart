@@ -119,22 +119,25 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
               child: ElevatedButton(
                 onPressed: isLoading ? null : _handleFollowTap,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: isFollowing ? Colors.grey[600] : Colors.blue,
+                  backgroundColor: isFollowing
+                      ? Colors.grey[400]?.withOpacity(0.8)
+                      : Colors.blue[600]?.withOpacity(0.9),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
                       horizontal: AppConstants.followButtonPadding,
-                      vertical: 8),
+                      vertical: 4),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   elevation: 0,
+                  shadowColor: Colors.transparent,
                 ),
                 child: isLoading
                     ? const SizedBox(
-                        width: 16,
-                        height: 16,
+                        width: 12,
+                        height: 12,
                         child: CircularProgressIndicator(
-                          strokeWidth: 2,
+                          strokeWidth: 1.5,
                           valueColor:
                               AlwaysStoppedAnimation<Color>(Colors.white),
                         ),
@@ -146,14 +149,15 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
                             isFollowing
                                 ? Icons.person_remove
                                 : Icons.person_add,
-                            size: 16,
+                            size: 12,
                           ),
-                          const SizedBox(width: 4),
+                          const SizedBox(width: 3),
                           Text(
                             isFollowing ? 'Following' : 'Follow',
                             style: const TextStyle(
-                              fontSize: 12,
+                              fontSize: 10,
                               fontWeight: FontWeight.w500,
+                              letterSpacing: 0.2,
                             ),
                           ),
                         ],

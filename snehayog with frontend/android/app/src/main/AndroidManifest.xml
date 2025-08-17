@@ -27,7 +27,7 @@
             android:value="ca-app-pub-2359959043864469~9193363039" />
             
         <activity
-            android:name=".MainActivity"
+            android:name="com.example.snehayog.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""

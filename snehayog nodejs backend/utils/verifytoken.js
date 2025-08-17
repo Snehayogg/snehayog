@@ -6,7 +6,7 @@ dotenv.config();
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-const verifyGoogleToken = async (idToken) => {
+export const verifyGoogleToken = async (idToken) => {
     const ticket = await client.verifyIdToken({
         idToken,
         audience: process.env.GOOGLE_CLIENT_ID,
@@ -15,21 +15,28 @@ const verifyGoogleToken = async (idToken) => {
     return payload;
 };
 
-const generateJWT = (userId) => {
+export const generateJWT = (userId) => {
     return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: '1h' });
 };
 
 // Middleware to verify Google access token
-const verifyToken = async (req, res, next) => {
+export const verifyToken = async (req, res, next) => {
     try {
+        console.log('🔍 verifyToken middleware called');
+        console.log('🔍 Authorization header:', req.headers.authorization);
+        
         const token = req.headers.authorization?.split(' ')[1];
         
         if (!token) {
+            console.log('❌ No token provided in Authorization header');
             return res.status(401).json({ error: 'Access token required' });
         }
 
+        console.log('🔍 Token extracted:', token.substring(0, 20) + '...');
+
         // First, try to verify as Google access token using Google People API
         try {
+            console.log('🔍 Trying Google access token verification...');
             // Use the token to get user info from Google
             const response = await fetch(`https://www.googleapis.com/oauth2/v2/userinfo?access_token=${token}`);
             
@@ -51,6 +58,7 @@ const verifyToken = async (req, res, next) => {
             
             // Fallback: try to verify as Google ID token
             try {
+                console.log('🔍 Trying Google ID token verification...');
                 const ticket = await client.verifyIdToken({
                     idToken: token,
                     audience: process.env.GOOGLE_CLIENT_ID,
@@ -69,6 +77,7 @@ const verifyToken = async (req, res, next) => {
                 
                 // Final fallback: try to verify as JWT token
                 try {
+                    console.log('🔍 Trying JWT verification...');
                     const decoded = jwt.verify(token, process.env.JWT_SECRET);
                     req.user = decoded;
                     console.log('✅ JWT token verified successfully for user:', decoded.id);
@@ -83,10 +92,9 @@ const verifyToken = async (req, res, next) => {
             }
         }
     } catch (error) {
-        console.error('Token verification error:', error);
+        console.error('❌ Token verification error:', error);
         return res.status(401).json({ error: 'Invalid or expired token' });
     }
 };
 
-export { verifyGoogleToken, generateJWT, verifyToken };
 export default verifyToken;

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:snehayog/services/ad_service.dart';
-import 'package:snehayog/services/google_auth_service.dart';
+import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/model/ad_model.dart';
 
 class AdManagementScreen extends StatefulWidget {
@@ -12,8 +12,8 @@ class AdManagementScreen extends StatefulWidget {
 
 class _AdManagementScreenState extends State<AdManagementScreen> {
   final AdService _adService = AdService();
-  final GoogleAuthService _authService = GoogleAuthService();
-  
+  final AuthService _authService = AuthService();
+
   List<AdModel> _ads = [];
   bool _isLoading = true;
   String? _errorMessage;
@@ -49,7 +49,7 @@ class _AdManagementScreenState extends State<AdManagementScreen> {
     try {
       await _adService.updateAdStatus(ad.id, newStatus);
       await _loadAds(); // Reload ads to get updated data
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -75,7 +75,8 @@ class _AdManagementScreenState extends State<AdManagementScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Advertisement'),
-        content: Text('Are you sure you want to delete "${ad.title}"? This action cannot be undone.'),
+        content: Text(
+            'Are you sure you want to delete "${ad.title}"? This action cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -97,7 +98,7 @@ class _AdManagementScreenState extends State<AdManagementScreen> {
       try {
         await _adService.deleteAd(ad.id);
         await _loadAds(); // Reload ads
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -140,7 +141,8 @@ class _AdManagementScreenState extends State<AdManagementScreen> {
                     errorBuilder: (context, error, stackTrace) => Container(
                       height: 150,
                       color: Colors.grey.shade300,
-                      child: const Icon(Icons.image, size: 48, color: Colors.grey),
+                      child:
+                          const Icon(Icons.image, size: 48, color: Colors.grey),
                     ),
                   ),
                 ),
@@ -272,16 +274,30 @@ class _AdManagementScreenState extends State<AdManagementScreen> {
               // Filter Dropdown
               Row(
                 children: [
-                  const Text('Filter: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text('Filter: ',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(width: 8),
                   DropdownButton<String>(
                     value: _selectedFilter,
                     items: [
-                      DropdownMenuItem(value: 'all', child: Text('All (${_ads.length})')),
-                      DropdownMenuItem(value: 'active', child: Text('Active (${_ads.where((ad) => ad.isActive).length})')),
-                      DropdownMenuItem(value: 'draft', child: Text('Draft (${_ads.where((ad) => ad.isDraft).length})')),
-                      DropdownMenuItem(value: 'paused', child: Text('Paused (${_ads.where((ad) => ad.isPaused).length})')),
-                      DropdownMenuItem(value: 'completed', child: Text('Completed (${_ads.where((ad) => ad.isCompleted).length})')),
+                      DropdownMenuItem(
+                          value: 'all', child: Text('All (${_ads.length})')),
+                      DropdownMenuItem(
+                          value: 'active',
+                          child: Text(
+                              'Active (${_ads.where((ad) => ad.isActive).length})')),
+                      DropdownMenuItem(
+                          value: 'draft',
+                          child: Text(
+                              'Draft (${_ads.where((ad) => ad.isDraft).length})')),
+                      DropdownMenuItem(
+                          value: 'paused',
+                          child: Text(
+                              'Paused (${_ads.where((ad) => ad.isPaused).length})')),
+                      DropdownMenuItem(
+                          value: 'completed',
+                          child: Text(
+                              'Completed (${_ads.where((ad) => ad.isCompleted).length})')),
                     ],
                     onChanged: (value) {
                       setState(() {
@@ -291,9 +307,9 @@ class _AdManagementScreenState extends State<AdManagementScreen> {
                   ),
                 ],
               ),
-              
+
               const SizedBox(height: 16),
-              
+
               // Stats Cards
               Row(
                 children: [
@@ -338,7 +354,8 @@ class _AdManagementScreenState extends State<AdManagementScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                          const Icon(Icons.error_outline,
+                              size: 64, color: Colors.red),
                           const SizedBox(height: 16),
                           Text(
                             _errorMessage!,
@@ -358,13 +375,15 @@ class _AdManagementScreenState extends State<AdManagementScreen> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(Icons.campaign_outlined, size: 64, color: Colors.grey),
+                              const Icon(Icons.campaign_outlined,
+                                  size: 64, color: Colors.grey),
                               const SizedBox(height: 16),
                               Text(
                                 _selectedFilter == 'all'
                                     ? 'No advertisements found'
-                                    : 'No ${_selectedFilter} advertisements found',
-                                style: const TextStyle(color: Colors.grey, fontSize: 18),
+                                    : 'No $_selectedFilter advertisements found',
+                                style: const TextStyle(
+                                    color: Colors.grey, fontSize: 18),
                               ),
                               const SizedBox(height: 8),
                               const Text(
@@ -388,7 +407,8 @@ class _AdManagementScreenState extends State<AdManagementScreen> {
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+  Widget _buildStatCard(
+      String title, String value, IconData icon, Color color) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -436,7 +456,8 @@ class _AdManagementScreenState extends State<AdManagementScreen> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: _getStatusColor(ad.status),
                     borderRadius: BorderRadius.circular(12),
@@ -452,9 +473,9 @@ class _AdManagementScreenState extends State<AdManagementScreen> {
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 8),
-            
+
             // Description
             Text(
               ad.description,
@@ -462,9 +483,9 @@ class _AdManagementScreenState extends State<AdManagementScreen> {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(color: Colors.grey.shade600),
             ),
-            
+
             const SizedBox(height: 12),
-            
+
             // Stats row
             Row(
               children: [
@@ -477,9 +498,9 @@ class _AdManagementScreenState extends State<AdManagementScreen> {
                 _buildStatItem(Icons.trending_up, ad.formattedCtr),
               ],
             ),
-            
+
             const SizedBox(height: 12),
-            
+
             // Actions row
             Row(
               children: [

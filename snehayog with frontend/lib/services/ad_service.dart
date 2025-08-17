@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:snehayog/model/ad_model.dart';
-import 'package:snehayog/services/google_auth_service.dart';
+import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/services/cloudinary_service.dart';
 import 'package:snehayog/services/razorpay_service.dart';
 import 'package:snehayog/config/app_config.dart';
@@ -13,7 +13,7 @@ class AdService {
   AdService._internal();
 
   static String get baseUrl => AppConfig.baseUrl;
-  final GoogleAuthService _authService = GoogleAuthService();
+  final AuthService _authService = AuthService();
   final CloudinaryService _cloudinaryService = CloudinaryService();
   final RazorpayService _razorpayService = RazorpayService();
 
@@ -100,36 +100,114 @@ class AdService {
     DateTime? endDate,
   }) async {
     try {
-      // Step 1: Create Razorpay order
-      final order = await _razorpayService.createOrder(
-        amount: budget,
-        currency: 'INR',
-        receipt: 'ad_${DateTime.now().millisecondsSinceEpoch}',
-        notes: 'Advertisement: $title',
+      final userData = await _authService.getUserData();
+      if (userData == null) {
+        throw Exception('User not authenticated');
+      }
+
+      // Calculate impressions based on fixed CPM
+      final impressions = AppConfig.calculateImpressionsFromBudget(budget);
+      final revenueSplit = _razorpayService.calculateRevenueSplit(budget);
+
+      print('🔍 AdService: Creating ad with payment...');
+      print(
+          '🔍 AdService: Budget: ₹$budget, Estimated impressions: $impressions');
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/ads/create-with-payment'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${userData['token']}',
+        },
+        body: json.encode({
+          'title': title,
+          'description': description,
+          'imageUrl': imageUrl,
+          'videoUrl': videoUrl,
+          'link': link,
+          'adType': adType,
+          'budget': budget,
+          'targetAudience': targetAudience,
+          'targetKeywords': targetKeywords,
+          'startDate': startDate?.toIso8601String(),
+          'endDate': endDate?.toIso8601String(),
+          'uploaderId': userData['id'],
+          'uploaderName': userData['name'],
+          'uploaderProfilePic': userData['profilePic'],
+          'estimatedImpressions': impressions,
+          'fixedCpm': AppConfig.fixedCpm,
+          'creatorRevenue': revenueSplit['creator'],
+          'platformRevenue': revenueSplit['platform'],
+        }),
       );
 
-      // Step 2: Create ad in draft status
-      final ad = await createAd(
-        title: title,
-        description: description,
-        imageUrl: imageUrl,
-        videoUrl: videoUrl,
-        link: link,
-        adType: adType,
-        budget: (budget * 100).round(), // Convert to paise
-        targetAudience: targetAudience,
-        targetKeywords: targetKeywords,
-        startDate: startDate,
-        endDate: endDate,
-      );
+      if (response.statusCode == 201) {
+        final data = json.decode(response.body);
+        print('✅ AdService: Ad created successfully with payment required');
 
-      return {
-        'ad': ad,
-        'order': order,
-        'paymentRequired': true,
-      };
+        return {
+          'success': true,
+          'ad': data['ad'],
+          'invoice': data['invoice'],
+          'message': data['message']
+        };
+      } else {
+        final error = json.decode(response.body);
+        throw Exception(error['error'] ?? 'Failed to create ad');
+      }
     } catch (e) {
-      throw Exception('Error creating ad with payment: $e');
+      print('❌ AdService: Error creating ad with payment: $e');
+      throw Exception('Error creating ad: $e');
+    }
+  }
+
+  // **NEW: Process payment after successful Razorpay payment**
+  Future<Map<String, dynamic>> processPayment({
+    required String orderId,
+    required String paymentId,
+    required String signature,
+    required String adId,
+  }) async {
+    try {
+      final userData = await _authService.getUserData();
+      if (userData == null) {
+        throw Exception('User not authenticated');
+      }
+
+      print('🔍 AdService: Processing payment...');
+      print('🔍 AdService: Order ID: $orderId, Payment ID: $paymentId');
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/ads/process-payment'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${userData['token']}',
+        },
+        body: json.encode({
+          'orderId': orderId,
+          'paymentId': paymentId,
+          'signature': signature,
+          'adId': adId,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print('✅ AdService: Payment processed successfully');
+
+        return {
+          'success': true,
+          'ad': data['ad'],
+          'invoice': data['invoice'],
+          'message': data['message']
+        };
+      } else {
+        final error = json.decode(response.body);
+        throw Exception(error['error'] ?? 'Failed to process payment');
+      }
+    } catch (e) {
+      print('❌ AdService: Error processing payment: $e');
+      throw Exception('Error processing payment: $e');
     }
   }
 
@@ -314,7 +392,7 @@ class AdService {
     }
   }
 
-  // Get ad analytics
+  // **NEW: Get ad analytics**
   Future<Map<String, dynamic>> getAdAnalytics(String adId) async {
     try {
       final userData = await _authService.getUserData();
@@ -323,19 +401,77 @@ class AdService {
       }
 
       final response = await http.get(
-        Uri.parse('$baseUrl/api/ads/$adId/analytics'),
+        Uri.parse('$baseUrl/api/ads/analytics/$adId?userId=${userData['id']}'),
         headers: {
           'Authorization': 'Bearer ${userData['token']}',
         },
       );
 
       if (response.statusCode == 200) {
-        return json.decode(response.body);
+        final data = json.decode(response.body);
+        return data;
       } else {
-        throw Exception('Failed to fetch ad analytics: ${response.body}');
+        final error = json.decode(response.body);
+        throw Exception(error['error'] ?? 'Failed to get analytics');
       }
     } catch (e) {
-      throw Exception('Error fetching ad analytics: $e');
+      throw Exception('Error getting analytics: $e');
+    }
+  }
+
+  // **NEW: Track ad impression**
+  Future<void> trackAdImpression(
+    String adId,
+    String userId,
+    String platform,
+    String location,
+  ) async {
+    try {
+      final userData = await _authService.getUserData();
+      if (userData == null) return;
+
+      await http.post(
+        Uri.parse('$baseUrl/api/ads/track-impression/$adId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${userData['token']}',
+        },
+        body: json.encode({
+          'userId': userId,
+          'platform': platform,
+          'location': location,
+        }),
+      );
+    } catch (e) {
+      print('Error tracking impression: $e');
+    }
+  }
+
+  // **NEW: Track ad click**
+  Future<void> trackAdClick(
+    String adId,
+    String userId,
+    String platform,
+    String location,
+  ) async {
+    try {
+      final userData = await _authService.getUserData();
+      if (userData == null) return;
+
+      await http.post(
+        Uri.parse('$baseUrl/api/ads/track-click/$adId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${userData['token']}',
+        },
+        body: json.encode({
+          'userId': userId,
+          'platform': platform,
+          'location': location,
+        }),
+      );
+    } catch (e) {
+      print('Error tracking click: $e');
     }
   }
 

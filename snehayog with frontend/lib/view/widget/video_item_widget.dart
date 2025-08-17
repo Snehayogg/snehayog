@@ -1,129 +1,330 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/view/widget/video_player_widget.dart';
+import 'package:snehayog/model/ad_model.dart';
 import 'package:snehayog/view/widget/video_info_widget.dart';
-import 'package:snehayog/view/widget/video_actions_widget.dart';
-import 'package:snehayog/services/video_service.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:snehayog/view/widget/action_buttons_widget.dart';
+import 'package:snehayog/view/widget/ad_display_widget.dart';
+import 'package:provider/provider.dart';
+import 'package:snehayog/controller/google_sign_in_controller.dart';
+import 'package:snehayog/view/widget/video_player_widget.dart';
+import 'package:snehayog/services/ad_service.dart';
+import 'package:snehayog/services/authservices.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
-class VideoItemWidget extends StatelessWidget {
+class VideoItemWidget extends StatefulWidget {
   final VideoModel video;
-  final int index;
   final VideoPlayerController? controller;
   final bool isActive;
-  final Function(int) onLike;
-  final VideoService videoService;
+  final int index;
+  final VoidCallback? onLike;
+  final VoidCallback? onComment;
+  final VoidCallback? onShare;
+  final VoidCallback? onProfileTap;
 
   const VideoItemWidget({
     Key? key,
     required this.video,
-    required this.index,
     required this.controller,
     required this.isActive,
-    required this.onLike,
-    required this.videoService,
+    required this.index,
+    this.onLike,
+    this.onComment,
+    this.onShare,
+    this.onProfileTap,
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // Video player widget
-        RepaintBoundary(
-          child: VideoPlayerWidget(
-            key: ValueKey(video.id),
-            controller: controller,
-            video: video,
-            play: isActive,
-          ),
-        ),
-
-        // Video information overlay (bottom left)
-         Positioned(
-          left: 12,
-          bottom: 12,
-          right: 80,
-          child: VideoInfoWidget(video: video,),
-        ),
-
-        // Action buttons overlay (bottom right)
-        Positioned(
-          right: 12,
-          bottom: 12,
-          child: VideoActionsWidget(
-            video: video,
-            index: index,
-            onLike: onLike,
-            videoService: videoService,
-          ),
-        ),
-
-        // External link button (if video has a link)
-        if (video.link != null && video.link!.isNotEmpty)
-          const Positioned(
-            left: 15,
-            right: 15,
-            bottom: 120, // Position above action buttons
-            child: _ExternalLinkButton(),
-          ),
-      ],
-    );
-  }
+  State<VideoItemWidget> createState() => _VideoItemWidgetState();
 }
 
-// Lightweight external link button widget
-class _ExternalLinkButton extends StatelessWidget {
-  const _ExternalLinkButton();
+class _VideoItemWidgetState extends State<VideoItemWidget> {
+  final AdService _adService = AdService();
+  final AuthService _authService = AuthService();
+  bool _isAd = false;
+  Map<String, dynamic>? _adData;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkIfAd();
+  }
+
+  void _checkIfAd() {
+    // Check if this video is actually an ad
+    if (widget.video.videoType == 'ad' || widget.video.id.startsWith('ad_')) {
+      _isAd = true;
+      // Extract ad data if available
+      if (widget.video.description.contains('Sponsored')) {
+        _adData = {
+          'title': widget.video.videoName,
+          'description': widget.video.description,
+          'imageUrl': widget.video.thumbnailUrl,
+          'videoUrl': widget.video.videoUrl,
+          'link': widget.video.link,
+          'adType': 'interstitial',
+        };
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () async {
-          // Get video from context
-          final video =
-              context.findAncestorWidgetOfExactType<VideoItemWidget>()?.video;
-          if (video?.link != null) {
-            final url = Uri.tryParse(video!.link!);
-            if (url != null && await canLaunchUrl(url)) {
-              await launchUrl(url, mode: LaunchMode.externalApplication);
-            }
-          }
-        },
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            gradient: const LinearGradient(
-              colors: [
-                Color(0x2EFFFFFF),
-                Color(0xEB2196F3), 
-              ],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
+    if (_isAd) {
+      return _buildAdWidget();
+    }
+    
+    return _buildVideoWidget();
+  }
+
+  Widget _buildAdWidget() {
+    return Container(
+      width: double.infinity,
+      height: MediaQuery.of(context).size.height,
+      color: Colors.black,
+      child: Stack(
+        children: [
+          // Ad content
+          if (_adData != null)
+            AdDisplayWidget(
+              ad: AdModel.fromJson(_adData!),
+              isVideoFeed: true,
+              onAdClosed: () {
+                // Handle ad close - could skip to next video
+                print('Ad closed by user');
+              },
+            )
+          else
+            _buildFallbackAdWidget(),
+          
+          // Ad tag overlay
+          Positioned(
+            top: 50,
+            left: 16,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.orange,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.campaign,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                  SizedBox(width: 4),
+                  Text(
+                    'Ad',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.open_in_new, color: Colors.white, size: 20),
-              SizedBox(width: 8),
-              Text(
-                'Visit Now',
+          
+          // Skip button for ads
+          Positioned(
+            top: 50,
+            right: 16,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Text(
+                'Skip in 3s',
                 style: TextStyle(
                   color: Colors.white,
+                  fontSize: 12,
                   fontWeight: FontWeight.w500,
-                  letterSpacing: 0.5,
-                  fontSize: 15,
                 ),
               ),
-            ],
+            ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFallbackAdWidget() {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.blue.withOpacity(0.8),
+            Colors.purple.withOpacity(0.8),
+          ],
+        ),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.campaign,
+              size: 64,
+              color: Colors.white,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              widget.video.videoName,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              widget.video.description,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 16,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () {
+                // Handle ad click
+                if (widget.video.link != null && widget.video.link!.isNotEmpty) {
+                  // Launch ad link
+                  print('Ad clicked: ${widget.video.link}');
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.blue,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+              ),
+              child: const Text(
+                'Learn More',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVideoWidget() {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Video player
+        VideoPlayerWidget(
+          key: ValueKey(widget.video.id),
+          controller: widget.controller,
+          video: widget.video,
+          play: widget.isActive,
+        ),
+        
+        // Video info overlay
+        Positioned(
+          left: 12,
+          bottom: 12,
+          right: 80,
+          child: VideoInfoWidget(video: widget.video),
+        ),
+        
+        // Action buttons
+        Positioned(
+          right: 12,
+          bottom: 12,
+          child: ActionButtonsWidget(
+            video: widget.video,
+            index: widget.index,
+            isLiked: Provider.of<GoogleSignInController>(context, listen: false)
+                        .userData?['id'] !=
+                    null &&
+                widget.video.likedBy.contains(
+                  Provider.of<GoogleSignInController>(context, listen: false)
+                      .userData?['id'],
+                ),
+            onLike: widget.onLike ?? () {},
+            onComment: widget.onComment ?? () {},
+            onShare: widget.onShare ?? () {},
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildThumbnail() {
+    if (widget.video.thumbnailUrl.isEmpty) {
+      return _buildFallbackThumbnail();
+    }
+    
+    return CachedNetworkImage(
+      imageUrl: widget.video.thumbnailUrl,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      height: double.infinity,
+      placeholder: (context, url) => _buildFallbackThumbnail(),
+      errorWidget: (context, url, error) {
+        print('❌ Thumbnail loading error for $url: $error');
+        return _buildFallbackThumbnail();
+      },
+      httpHeaders: const {
+        'User-Agent': 'Snehayog-App/1.0',
+      },
+    );
+  }
+
+  Widget _buildFallbackThumbnail() {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.grey[800],
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.video_library,
+              size: 32,
+              color: Colors.grey[400],
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Video',
+              style: TextStyle(
+                color: Colors.grey[400],
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
         ),
       ),
     );

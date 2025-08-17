@@ -1,8 +1,0 @@
-[build]
-nixpkgs = ["ffmpeg"]
-
-[phases.install]
-cmds = ["npm install"]
-
-[start]
-cmd = "node server.js"

@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/services/google_auth_service.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'package:snehayog/config/app_config.dart';
+import 'package:snehayog/services/authservices.dart';
 
 class GoogleSignInController extends ChangeNotifier {
-  final GoogleAuthService _authService = GoogleAuthService();
-  final bool _isLoading = false;
+  final AuthService _authService = AuthService();
+  bool _isLoading = false;
   String? _error;
   Map<String, dynamic>? _userData;
 
@@ -15,67 +12,45 @@ class GoogleSignInController extends ChangeNotifier {
   bool get isSignedIn => _userData != null;
   Map<String, dynamic>? get userData => _userData;
 
-  // Base URL for API endpoints
-  static String get baseUrl {
-    return AppConfig.baseUrl;
-  }
-
   GoogleSignInController() {
     _init();
   }
 
   Future<void> _init() async {
     _userData = await _authService.getUserData();
-    if (_userData != null) {
-      await _registerUser();
-    }
     notifyListeners();
   }
 
-  Future<void> _registerUser() async {
-    if (_userData == null) return;
-
+  Future<Map<String, dynamic>?> signIn() async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/users/register'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'googleId': _userData!['id'],
-          'name': _userData!['name'],
-          'email': _userData!['email'],
-          'profilePic': _userData!['profilePic'],
-        }),
-      );
-
-      if (response.statusCode != 200 && response.statusCode != 201) {
-        print('User registration failed: ${response.body}');
-      }
-    } catch (e) {
-      print('Error registering user: $e');
-    }
-  }
-
-Future<Map<String, dynamic>?> signIn() async {
-  try {
-    final userInfo = await _authService.signInWithGoogle();
-    if (userInfo != null) {
-      _userData = userInfo;
-      await _registerUser();
+      _isLoading = true;
+      _error = null;
       notifyListeners();
-    }
-    return userInfo;
-  } catch (e) {
-    _error = e.toString();
-    notifyListeners();
-    return null;
-  }
-}
 
+      final userInfo = await _authService.signInWithGoogle();
+      if (userInfo != null) {
+        _userData = userInfo;
+        _error = null;
+      } else {
+        _error = 'Sign in failed';
+      }
+
+      _isLoading = false;
+      notifyListeners();
+      return userInfo;
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    }
+  }
 
   Future<void> signOut() async {
     try {
-      await _authService.logout();
+      await _authService.signOut();
       _userData = null;
+      _error = null;
       notifyListeners();
     } catch (e) {
       _error = e.toString();

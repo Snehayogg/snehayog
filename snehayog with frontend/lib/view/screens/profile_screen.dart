@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:snehayog/model/video_model.dart';
 import 'package:snehayog/services/video_service.dart';
-import 'package:snehayog/services/google_auth_service.dart';
+import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/utils/responsive_helper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +9,11 @@ import 'dart:io';
 import 'dart:async';
 import 'package:snehayog/services/user_service.dart';
 import 'package:snehayog/view/screens/video_screen.dart';
+import 'package:snehayog/view/screens/creator_payment_setup_screen.dart';
+import 'package:snehayog/view/screens/creator_revenue_screen.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:snehayog/config/app_config.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -20,7 +25,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final VideoService _videoService = VideoService();
-  final GoogleAuthService _authService = GoogleAuthService();
+  final AuthService _authService = AuthService();
   final UserService _userService = UserService(); // Add user service
   List<VideoModel> _userVideos = [];
   bool _isLoading = true;
@@ -50,13 +55,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
 
     try {
+      print('🔍 ProfileScreen: Starting to load user data...');
       final loggedInUser = await _authService.getUserData();
+      print(
+          '🔍 ProfileScreen: AuthService.getUserData() result: ${loggedInUser != null ? 'Success' : 'Failed'}');
+
       final bool isMyProfile =
           widget.userId == null || widget.userId == loggedInUser?['id'];
 
       Map<String, dynamic>? userData;
       if (isMyProfile) {
         userData = loggedInUser;
+        print('🔍 ProfileScreen: Loading my own profile data');
         // Load saved profile data for the logged-in user
         final savedName = await _loadSavedName();
         final savedProfilePic = await _loadSavedProfilePic();
@@ -64,32 +74,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
           userData['name'] = savedName ?? userData['name'];
           userData['profilePic'] = savedProfilePic ?? userData['profilePic'];
         }
+
+        // **NEW: Check payment setup status and log it**
+        final hasPaymentSetup = await _checkPaymentSetupStatus();
+        print('🔍 ProfileScreen: Payment setup status: $hasPaymentSetup');
       } else {
+        print('🔍 ProfileScreen: Loading another user\'s profile data');
         // Fetch profile data for another user
         userData = await _userService.getUserById(widget.userId!);
       }
 
       if (userData != null) {
+        print('🔍 ProfileScreen: User data loaded successfully');
         setState(() {
           _userData = userData;
           _isLoading = false;
         });
         await _loadUserVideos();
       } else {
+        print('❌ ProfileScreen: Failed to load user data');
         setState(() {
           _isLoading = false;
           _error = 'Could not load user data.';
         });
       }
     } on TimeoutException catch (_) {
+      print('❌ ProfileScreen: Connection timeout');
       setState(() {
         _error =
             'Connection timed out. Please check your internet connection and try again.';
         _isLoading = false;
       });
     } catch (e, stackTrace) {
-      print('Error in _loadUserData: $e');
-      print('Stack trace: $stackTrace');
+      print('❌ ProfileScreen: Error in _loadUserData: $e');
+      print('❌ ProfileScreen: Stack trace: $stackTrace');
       setState(() {
         _error = 'Error loading user data: ${e.toString()}';
         _isLoading = false;
@@ -199,7 +217,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _handleLogout() async {
     try {
-      await _authService.logout();
+      // Clear payment setup flag on logout
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('has_payment_setup');
+
+      await _authService.signOut();
       setState(() {
         _userData = null;
         _userVideos = [];
@@ -434,9 +456,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isMyProfile = _userData != null &&
-        (_authService.currentUser == null ||
-            _authService.currentUser!['id'] == _userData!['id']);
+    final bool isMyProfile = _userData != null;
 
     return Scaffold(
         backgroundColor: Colors.white,
@@ -687,6 +707,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                   sum + (video.views * 0.01)))
                                           .toInt(),
                                       isEarnings: true,
+                                      onTap: () async {
+                                        // Check if user has completed payment setup
+                                        final hasPaymentSetup =
+                                            await _checkPaymentSetupStatus();
+
+                                        if (hasPaymentSetup) {
+                                          // Navigate to revenue screen if payment setup is complete
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) =>
+                                                  const CreatorRevenueScreen(),
+                                            ),
+                                          );
+                                        } else {
+                                          // Navigate to payment setup screen if not complete
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) =>
+                                                  const CreatorPaymentSetupScreen(),
+                                            ),
+                                          );
+                                        }
+                                      },
                                     ),
                                   ],
                                 ),
@@ -984,16 +1029,112 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ));
   }
 
-  Widget _buildStatColumn(String label, int value, {bool isEarnings = false}) {
+  Future<bool> _checkPaymentSetupStatus() async {
+    try {
+      // **FIXED: Prioritize SharedPreferences flag first**
+      final prefs = await SharedPreferences.getInstance();
+      final hasPaymentSetup = prefs.getBool('has_payment_setup') ?? false;
+
+      if (hasPaymentSetup) {
+        print('✅ Payment setup flag found in SharedPreferences');
+        return true;
+      }
+
+      // **NEW: If no flag, try to load payment setup data from backend**
+      if (_userData != null && _userData!['id'] != null) {
+        print('🔍 No payment setup flag found, checking backend data...');
+        final hasBackendSetup = await _checkBackendPaymentSetup();
+        if (hasBackendSetup) {
+          // Set the flag for future use
+          await prefs.setBool('has_payment_setup', true);
+          print('✅ Backend payment setup found, setting flag');
+          return true;
+        }
+      }
+
+      print('❌ No payment setup found');
+      return false;
+    } catch (e) {
+      print('Error checking payment setup status: $e');
+      return false;
+    }
+  }
+
+  // **NEW: Method to check payment setup from backend**
+  Future<bool> _checkBackendPaymentSetup() async {
+    try {
+      print('🔍 _checkBackendPaymentSetup: Starting backend check...');
+      final userData = await _authService.getUserData();
+      final token = userData?['token'];
+
+      if (token == null) {
+        print('❌ _checkBackendPaymentSetup: No token available');
+        return false;
+      }
+
+      print(
+          '🔍 _checkBackendPaymentSetup: Making API call to creator-payouts/profile');
+      final response = await http.get(
+        Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/profile'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      print(
+          '🔍 _checkBackendPaymentSetup: Response status: ${response.statusCode}');
+      print('🔍 _checkBackendPaymentSetup: Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final paymentMethod = data['creator']?['preferredPaymentMethod'];
+        final paymentDetails = data['paymentDetails'];
+
+        print('🔍 _checkBackendPaymentSetup: Payment method: $paymentMethod');
+        print('🔍 _checkBackendPaymentSetup: Payment details: $paymentDetails');
+
+        // Check if user has completed payment setup
+        if (paymentMethod != null &&
+            paymentMethod.isNotEmpty &&
+            paymentDetails != null) {
+          print('✅ Backend payment setup found: $paymentMethod');
+          return true;
+        } else {
+          print(
+              '❌ _checkBackendPaymentSetup: Payment setup incomplete - method: $paymentMethod, details: $paymentDetails');
+        }
+      } else {
+        print(
+            '❌ _checkBackendPaymentSetup: API call failed with status ${response.statusCode}');
+      }
+
+      return false;
+    } catch (e) {
+      print('❌ _checkBackendPaymentSetup: Error: $e');
+      return false;
+    }
+  }
+
+  Widget _buildStatColumn(String label, int value,
+      {bool isEarnings = false, VoidCallback? onTap}) {
     return Builder(
       builder: (context) => Column(
         children: [
-          Text(
-            isEarnings ? '₹${value.toString()}' : value.toString(),
-            style: TextStyle(
-              color: const Color(0xFF424242),
-              fontSize: ResponsiveHelper.getAdaptiveFontSize(context, 24),
-              fontWeight: FontWeight.bold,
+          GestureDetector(
+            onTap: onTap,
+            child: MouseRegion(
+              cursor: isEarnings
+                  ? SystemMouseCursors.click
+                  : SystemMouseCursors.basic,
+              child: Text(
+                isEarnings ? '₹${value.toString()}' : value.toString(),
+                style: TextStyle(
+                  color: const Color(0xFF424242),
+                  fontSize: ResponsiveHelper.getAdaptiveFontSize(context, 24),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ),
           SizedBox(height: ResponsiveHelper.isMobile(context) ? 4 : 8),

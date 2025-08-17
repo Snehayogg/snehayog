@@ -4,6 +4,9 @@ import Video from '../models/Video.js';
 import User from '../models/User.js';
 import cloudinary from '../config/cloudinary.js';
 import fs from 'fs'; // To delete temp file after upload
+import hlsEncodingService from '../services/hlsEncodingService.js';
+import path from 'path'; // For serving HLS files
+import { setHLSHeaders } from '../config/hlsConfig.js';
 const router = express.Router();
 
 // Multer disk storage to get original file first
@@ -95,12 +98,28 @@ router.post('/upload', upload.single('video'), async (req, res) => {
       '/upload/w_300,h_400,c_fill/'
     );
 
-    // 7. Save video in MongoDB
+    // 7. Generate HLS version for streaming
+    let hlsResult = null;
+    try {
+      console.log(`Starting HLS encoding for video: ${videoName}`);
+      hlsResult = await hlsEncodingService.generateAdaptiveHLS(req.file.path, Date.now().toString());
+      console.log(`HLS encoding completed:`, hlsResult);
+    } catch (hlsError) {
+      console.error(`HLS encoding failed for ${videoName}:`, hlsError);
+      // Continue with upload even if HLS fails
+    }
+
+    // 8. Save video in MongoDB
     const video = new Video({
       videoName,
       description,
       link,
       videoUrl: compressedResult.secure_url,
+      // Add HLS streaming URLs
+      hlsMasterPlaylistUrl: hlsResult?.masterPlaylistUrl || null,
+      hlsPlaylistUrl: hlsResult?.variants?.[0]?.playlistUrl || null,
+      hlsVariants: hlsResult?.variants || [],
+      isHLSEncoded: !!hlsResult,
       uploader: user._id,
       videoType: videoType || 'yog', // Default type
     });
@@ -137,6 +156,48 @@ router.post('/upload', upload.single('video'), async (req, res) => {
 
 // Note: Video streaming is now handled by Cloudinary directly
 // No need for local streaming endpoint as Cloudinary provides optimized video delivery
+
+// HLS Streaming endpoint
+router.get('/hls/:videoId/:filename', (req, res) => {
+  const { videoId, filename } = req.params;
+  const filePath = path.join(__dirname, `../uploads/hls/${videoId}/${filename}`);
+  
+  // Check if file exists
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'HLS file not found' });
+  }
+  
+  // Set proper headers using configuration
+  setHLSHeaders(res, filename);
+  
+  // Handle range requests for video segments
+  if (filename.endsWith('.ts')) {
+    const stat = fs.statSync(filePath);
+    const fileSize = stat.size;
+    const range = req.headers.range;
+    
+    if (range) {
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunksize = (end - start) + 1;
+      
+      res.status(206);
+      res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
+      res.setHeader('Content-Length', chunksize);
+      
+      const stream = fs.createReadStream(filePath, { start, end });
+      stream.pipe(res);
+    } else {
+      res.setHeader('Content-Length', fileSize);
+      const stream = fs.createReadStream(filePath);
+      stream.pipe(res);
+    }
+  } else {
+    // For playlist files, send the entire file
+    res.sendFile(filePath);
+  }
+});
 
 // Get videos by user ID
 router.get('/user/:googleId', async (req, res) => {
@@ -203,6 +264,73 @@ router.get('/debug/user/:googleId', async (req, res) => {
   }
 });
 
+// Endpoint to refresh user profile pictures (for existing users)
+router.post('/refresh-profile-pics', async (req, res) => {
+  try {
+    console.log('🔄 Refreshing user profile pictures...');
+    
+    // This would typically require admin authentication
+    // For now, we'll just log the request
+    console.log('⚠️ Profile picture refresh requested (admin only in production)');
+    
+    const users = await User.find({}).select('name profilePic googleId');
+    const usersWithoutPics = users.filter(user => !user.profilePic || user.profilePic.trim() === '');
+    
+    console.log(`🔄 Found ${usersWithoutPics.length} users without profile pictures`);
+    
+    if (usersWithoutPics.length > 0) {
+      console.log('🔄 Users without profile pictures:');
+      usersWithoutPics.forEach(user => {
+        console.log(`  - ${user.name} (${user.googleId})`);
+      });
+      
+      console.log('🔄 Note: Users will need to sign in again to get their profile pictures updated');
+    }
+    
+    res.json({
+      message: 'Profile picture refresh initiated',
+      totalUsers: users.length,
+      usersWithoutPics: usersWithoutPics.length,
+      note: 'Users need to sign in again to get profile pictures updated'
+    });
+  } catch (error) {
+    console.error('❌ Refresh profile pics error:', error);
+    res.status(500).json({ error: 'Error refreshing profile pictures' });
+  }
+});
+
+// Debug endpoint to check and update user profile pictures
+router.get('/debug/profile-pics', async (req, res) => {
+  try {
+    console.log('🔍 Debug: Checking user profile pictures...');
+    
+    const users = await User.find({}).select('name profilePic googleId');
+    console.log(`🔍 Found ${users.length} users`);
+    
+    const usersWithoutPics = users.filter(user => !user.profilePic || user.profilePic.trim() === '');
+    console.log(`🔍 Users without profile pics: ${usersWithoutPics.length}`);
+    
+    usersWithoutPics.forEach(user => {
+      console.log(`  - ${user.name} (${user.googleId}): No profile pic`);
+    });
+    
+    res.json({
+      message: 'Profile picture debug info',
+      totalUsers: users.length,
+      usersWithoutPics: usersWithoutPics.length,
+      users: users.map(user => ({
+        name: user.name,
+        googleId: user.googleId,
+        hasProfilePic: !!(user.profilePic && user.profilePic.trim() !== ''),
+        profilePic: user.profilePic || 'None'
+      }))
+    });
+  } catch (error) {
+    console.error('❌ Debug profile pics error:', error);
+    res.status(500).json({ error: 'Error in debug endpoint' });
+  }
+});
+
 // Get all videos (optimized for performance)
 router.get('/', async (req, res) => {
   try {
@@ -225,6 +353,21 @@ router.get('/', async (req, res) => {
         .limit(limit)
         .lean() // Use lean() for better performance (returns plain objects)
     ]);
+    
+    // Debug: Log uploader data for first few videos
+    console.log('🔍 Videos route: Checking uploader data...');
+    videos.slice(0, 3).forEach((video, index) => {
+      console.log(`🔍 Video ${index + 1}:`);
+      console.log(`  - ID: ${video._id}`);
+      console.log(`  - Name: ${video.videoName}`);
+      console.log(`  - Uploader: ${JSON.stringify(video.uploader)}`);
+      if (video.uploader && video.uploader.profilePic) {
+        console.log(`  - Profile Pic URL: ${video.uploader.profilePic}`);
+        console.log(`  - Profile Pic type: ${typeof video.uploader.profilePic}`);
+      } else {
+        console.log(`  - No profile pic found`);
+      }
+    });
     
     console.log(`✅ Found ${videos.length} videos (page ${page}, total: ${totalVideos}) in ${Date.now()}ms`);
     
@@ -283,6 +426,17 @@ router.post('/:id/like', async (req, res) => {
 
     console.log('🔍 Like API: Received request', { userId, videoId });
 
+    // Validate input
+    if (!userId) {
+      console.log('❌ Like API: Missing userId in request body');
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    if (!videoId) {
+      console.log('❌ Like API: Missing videoId in params');
+      return res.status(400).json({ error: 'videoId is required' });
+    }
+
     // Find or create user
     let user = await User.findOne({ googleId: userId });
     if (!user) {
@@ -302,6 +456,7 @@ router.post('/:id/like', async (req, res) => {
     // Find the video
     const video = await Video.findById(videoId);
     if (!video) {
+      console.log('❌ Like API: Video not found with ID:', videoId);
       return res.status(404).json({ error: 'Video not found' });
     }
 

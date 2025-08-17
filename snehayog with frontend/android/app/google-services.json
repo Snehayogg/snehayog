@@ -1,0 +1,62 @@
+{
+  "project_info": {
+    "project_number": "406195883653",
+    "project_id": "snehayog",
+    "storage_bucket": "snehayog.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:406195883653:android:c5d7dafdb8d97e770363ec",
+        "android_client_info": {
+          "package_name": "com.example.snehayog"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "406195883653-1j2f5ilp46376ndqs8gd0trkto8n727d.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.snehayog",
+            "certificate_hash": "e96ce8e66162e4d1e19905a8bcf7dec0ddbe154c"
+          }
+        },
+        {
+          "client_id": "406195883653-qp49f9nauq4t428ndscuu3nr9jb10g4h.apps.googleusercontent.com",
+          "client_type": 3
+        },
+        {
+          "client_id": "406195883653-1j2f5ilp46376ndqs8gd0trkto8n727d.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.snehayog",
+            "certificate_hash": "9455a734285a0a550e7c195e275b75df5b396272"
+          }
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDnWmouF30ZRP3JVeg4DMIcfOtobDAT5Fo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "406195883653-qp49f9nauq4t428ndscuu3nr9jb10g4h.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "406195883653-f4ejmoq2e0v9tnquvout06uu305bb4eh.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.snehayog"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

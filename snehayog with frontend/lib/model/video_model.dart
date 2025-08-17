@@ -15,6 +15,11 @@ class VideoModel {
   final Duration duration;
   List<Comment> comments;
   final String? link;
+  // HLS Streaming fields
+  final String? hlsMasterPlaylistUrl;
+  final String? hlsPlaylistUrl;
+  final List<Map<String, dynamic>>? hlsVariants;
+  final bool? isHLSEncoded;
 
   VideoModel({
     required this.id,
@@ -33,6 +38,10 @@ class VideoModel {
     required this.duration,
     required this.comments,
     this.link,
+    this.hlsMasterPlaylistUrl,
+    this.hlsPlaylistUrl,
+    this.hlsVariants,
+    this.isHLSEncoded,
   });
 
   factory VideoModel.fromJson(Map<String, dynamic> json) {
@@ -46,10 +55,24 @@ class VideoModel {
       views: json['views'] ?? 0,
       shares: json['shares'] ?? 0,
       description: json['description'] ?? '',
-      uploader: (json['uploader'] is Map<String, dynamic>)
-          ? Uploader.fromJson(json['uploader'])
-          : Uploader(
-              id: json['uploader'].toString(), name: 'Unknown', profilePic: ''),
+      uploader: () {
+        print('🔍 VideoModel: Parsing uploader data...');
+        print('🔍 VideoModel: json["uploader"] = ${json['uploader']}');
+        print(
+            '🔍 VideoModel: json["uploader"] type = ${json['uploader'].runtimeType}');
+
+        if (json['uploader'] is Map<String, dynamic>) {
+          print('🔍 VideoModel: uploader is Map, calling Uploader.fromJson');
+          final uploader = Uploader.fromJson(json['uploader']);
+          print('🔍 VideoModel: parsed uploader = ${uploader.toJson()}');
+          return uploader;
+        } else {
+          print(
+              '🔍 VideoModel: uploader is not Map, creating default Uploader');
+          return Uploader(
+              id: json['uploader'].toString(), name: 'Unknown', profilePic: '');
+        }
+      }(),
       uploadedAt: json['uploadedAt'] != null
           ? DateTime.parse(json['uploadedAt'])
           : DateTime.now(),
@@ -80,6 +103,13 @@ class VideoModel {
         print('🔗 VideoModel: Available fields: ${json.keys.toList()}');
         return null;
       }(),
+      // Parse HLS streaming fields
+      hlsMasterPlaylistUrl: json['hlsMasterPlaylistUrl'],
+      hlsPlaylistUrl: json['hlsPlaylistUrl'],
+      hlsVariants: json['hlsVariants'] != null
+          ? List<Map<String, dynamic>>.from(json['hlsVariants'])
+          : null,
+      isHLSEncoded: json['isHLSEncoded'] ?? false,
     );
   }
 
@@ -196,6 +226,14 @@ class Uploader {
       name: name ?? this.name,
       profilePic: profilePic ?? this.profilePic,
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'profilePic': profilePic,
+    };
   }
 }
 

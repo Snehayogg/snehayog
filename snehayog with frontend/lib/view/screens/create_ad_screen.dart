@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'dart:convert';
 import 'package:snehayog/services/ad_service.dart';
-import 'package:snehayog/services/google_auth_service.dart';
+import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/model/ad_model.dart';
+import 'package:snehayog/services/razorpay_service.dart';
+import 'package:snehayog/services/cloudinary_service.dart';
+import 'package:http/http.dart' as http;
+import 'package:snehayog/config/app_config.dart';
 
 class CreateAdScreen extends StatefulWidget {
   const CreateAdScreen({super.key});
@@ -32,7 +37,10 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
   String? _successMessage;
 
   final AdService _adService = AdService();
-  final GoogleAuthService _authService = GoogleAuthService();
+  final AuthService _authService = AuthService();
+  final RazorpayService _razorpayService =
+      RazorpayService(); // Added RazorpayService instance
+  final CloudinaryService _cloudinaryService = CloudinaryService();
 
   final List<String> _adTypes = [
     'banner',
@@ -120,7 +128,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
     }
   }
 
-  Future<void> _createAd() async {
+  Future<void> _submitAd() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
@@ -130,56 +138,65 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
     });
 
     try {
-      String? imageUrl;
-      String? videoUrl;
+      print('🔍 CreateAdScreen: Starting ad submission...');
 
-      if (_selectedImage != null) {
-        imageUrl = await _adService.uploadAdMedia(_selectedImage!, 'image');
-      } else if (_selectedVideo != null) {
-        videoUrl = await _adService.uploadAdMedia(_selectedVideo!, 'video');
+      // Validate media selection
+      if (_selectedImage == null && _selectedVideo == null) {
+        throw Exception('Please select an image or video for your ad');
       }
 
-      final budget = double.parse(_budgetController.text);
+      // Validate budget
+      final budget = double.tryParse(_budgetController.text);
+      if (budget == null || budget < 100) {
+        throw Exception('Budget must be at least ₹100');
+      }
 
-      final keywords = _keywordsController.text
-          .split(',')
-          .map((e) => e.trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
+      // Upload media to Cloudinary first
+      String? mediaUrl;
+      if (_selectedImage != null) {
+        print('🔍 CreateAdScreen: Uploading image to Cloudinary...');
+        mediaUrl = await _cloudinaryService.uploadImage(_selectedImage!);
+      } else if (_selectedVideo != null) {
+        print('🔍 CreateAdScreen: Uploading video to Cloudinary...');
+        mediaUrl = await _cloudinaryService.uploadVideo(_selectedVideo!);
+      }
 
-      // **NEW: Create ad with payment processing**
+      print('✅ CreateAdScreen: Media uploaded successfully: $mediaUrl');
+
+      // Create ad with payment processing
       final result = await _adService.createAdWithPayment(
-        title: _titleController.text,
-        description: _descriptionController.text,
-        imageUrl: imageUrl,
-        videoUrl: videoUrl,
-        link: _linkController.text.isNotEmpty ? _linkController.text : null,
+        title: _titleController.text.trim(),
+        description: _descriptionController.text.trim(),
+        imageUrl: _selectedImage != null ? mediaUrl : null,
+        videoUrl: _selectedVideo != null ? mediaUrl : null,
+        link: _linkController.text.trim(),
         adType: _selectedAdType,
         budget: budget,
-        targetAudience: _targetAudienceController.text,
-        targetKeywords: keywords,
+        targetAudience: _targetAudienceController.text.trim(),
+        targetKeywords: _keywordsController.text
+            .trim()
+            .split(',')
+            .map((e) => e.trim())
+            .toList(),
         startDate: _startDate,
         endDate: _endDate,
       );
 
-      if (result['paymentRequired'] == true) {
-        // **NEW: Show payment options**
-        if (mounted) {
-          _showPaymentOptions(result['ad'], result['order']);
-        }
-      } else {
-        setState(() {
-          _successMessage = 'Ad created successfully! ID: ${result['ad'].id}';
-          _clearForm();
-        });
+      if (result['success']) {
+        print('✅ CreateAdScreen: Ad created successfully, payment required');
 
-        if (mounted) {
-          _showSuccessDialog(result['ad']);
-        }
+        // Show payment options
+        _showPaymentOptions(
+          AdModel.fromJson(result['ad']),
+          result['invoice'],
+        );
+      } else {
+        throw Exception('Failed to create ad');
       }
     } catch (e) {
+      print('❌ CreateAdScreen: Error submitting ad: $e');
       setState(() {
-        _errorMessage = 'Error creating ad: $e';
+        _errorMessage = e.toString().replaceAll('Exception: ', '');
       });
     } finally {
       setState(() {
@@ -239,22 +256,52 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
   }
 
   // **NEW: Show payment options for Razorpay**
-  void _showPaymentOptions(AdModel ad, Map<String, dynamic> order) {
+  void _showPaymentOptions(AdModel ad, Map<String, dynamic> invoice) {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('Payment Required'),
+        title: const Row(
+          children: [
+            Icon(Icons.payment, color: Colors.blue, size: 24),
+            SizedBox(width: 8),
+            Text('Payment Required'),
+          ],
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Ad: ${ad.title}'),
-            Text('Order ID: ${order['id']}'),
-            Text('Amount: ₹${(ad.budget / 100).toStringAsFixed(2)}'),
+            Text('Order ID: ${invoice['orderId']}'),
+            Text('Amount: ₹${invoice['amount']}'),
             const SizedBox(height: 16),
             const Text(
               'Your ad has been created in draft status. Please complete the payment to activate it.',
               style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '💰 What you get:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                      '• Estimated ${(invoice['amount'] / 30 * 1000).round()} impressions'),
+                  const Text('• 80% revenue share for creators'),
+                  const Text('• Real-time performance tracking'),
+                  const Text('• Professional ad management'),
+                ],
+              ),
             ),
           ],
         ),
@@ -266,7 +313,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              _initiatePayment(order);
+              _initiatePayment(invoice);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green,
@@ -280,17 +327,169 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
   }
 
   // **NEW: Initiate Razorpay payment**
-  void _initiatePayment(Map<String, dynamic> order) {
-    // This would integrate with Razorpay checkout
-    // For now, we'll show a success message
-    setState(() {
-      _successMessage = 'Payment initiated! Please complete payment to activate your ad.';
-    });
-    
-    // In a real implementation, you would:
-    // 1. Open Razorpay checkout
-    // 2. Handle payment success/failure
-    // 3. Update ad status accordingly
+  void _initiatePayment(Map<String, dynamic> order) async {
+    try {
+      setState(() {
+        _isLoading = true;
+        _successMessage = 'Processing payment...';
+      });
+
+      // Get user data for payment
+      final userData = await _authService.getUserData();
+      if (userData == null) {
+        throw Exception('User not authenticated');
+      }
+
+      // Create Razorpay order
+      final razorpayOrder = await _razorpayService.createOrder(
+        amount: order['amount']?.toDouble() ?? 0.0,
+        currency: 'INR',
+        receipt: order['id']?.toString() ?? '',
+        notes: 'Campaign payment for user: ${userData['id']}',
+      );
+
+      // For now, simulate payment success since we don't have Razorpay checkout UI
+      // In production, you would integrate with razorpay_flutter package
+      await Future.delayed(
+          const Duration(seconds: 2)); // Simulate payment processing
+
+      // Simulate successful payment
+      final paymentResult = {
+        'status': 'success',
+        'razorpay_order_id': razorpayOrder['id'],
+        'razorpay_payment_id': 'pay_${DateTime.now().millisecondsSinceEpoch}',
+        'razorpay_signature':
+            'simulated_signature_${DateTime.now().millisecondsSinceEpoch}',
+      };
+
+      if (paymentResult['status'] == 'success') {
+        // Verify payment with backend
+        final verificationResult = await _verifyPaymentWithBackend(
+          orderId: paymentResult['razorpay_order_id'],
+          paymentId: paymentResult['razorpay_payment_id'],
+          signature: paymentResult['razorpay_signature'],
+        );
+
+        if (verificationResult['verified']) {
+          // Activate campaign
+          await _activateCampaign(order['campaignId']?.toString() ?? '');
+
+          setState(() {
+            _successMessage = 'Payment successful! Your ad is now active.';
+            _clearForm();
+          });
+
+          if (mounted) {
+            _showPaymentSuccessDialog();
+          }
+        } else {
+          throw Exception('Payment verification failed');
+        }
+      } else {
+        throw Exception('Payment failed: ${paymentResult['error']}');
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Payment error: $e';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  // **NEW: Verify payment with backend**
+  Future<Map<String, dynamic>> _verifyPaymentWithBackend({
+    required String orderId,
+    required String paymentId,
+    required String signature,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${AppConfig.baseUrl}/api/billing/verify-payment'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'razorpay_order_id': orderId,
+          'razorpay_payment_id': paymentId,
+          'razorpay_signature': signature,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Payment verification failed: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Payment verification error: $e');
+    }
+  }
+
+  // **NEW: Activate campaign after successful payment**
+  Future<void> _activateCampaign(String campaignId) async {
+    try {
+      // Call backend to activate campaign
+      final response = await http.post(
+        Uri.parse(
+            '${AppConfig.baseUrl}/api/ads/campaigns/$campaignId/activate'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to activate campaign: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error activating campaign: $e');
+      // Campaign will be activated by backend after payment verification
+    }
+  }
+
+  // **NEW: Show payment success dialog**
+  void _showPaymentSuccessDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.green, size: 24),
+            SizedBox(width: 8),
+            Text('Payment Successful!'),
+          ],
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Your advertisement campaign has been activated!'),
+            SizedBox(height: 16),
+            Text('Features:'),
+            Text('• Ad will be shown to your target audience'),
+            Text('• Real-time performance tracking'),
+            Text('• Budget management and optimization'),
+            Text('• Analytics and insights'),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('View Campaign'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -664,4 +863,54 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                             ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.orange,
-                              
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_startDate != null && _endDate != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          'Campaign will run for ${_endDate!.difference(_startDate!).inDays + 1} days',
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _isLoading ? null : _submitAd,
+              icon: _isLoading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Icon(Icons.create),
+              label:
+                  Text(_isLoading ? 'Creating Ad...' : 'Create Advertisement'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

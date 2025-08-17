@@ -23,12 +23,23 @@ class VideoProvider extends ChangeNotifier {
 
   /// Load videos from API
   Future<void> loadVideos({bool isInitialLoad = true}) async {
-    if (!_hasMore || (isLoadingMore && !isInitialLoad)) return;
+    // Prevent multiple simultaneous calls
+    if (_loadState == VideoLoadState.loading ||
+        _loadState == VideoLoadState.loadingMore) {
+      print('⚠️ VideoProvider: Already loading videos, skipping request');
+      return;
+    }
+
+    if (!_hasMore && !isInitialLoad) {
+      print('⚠️ VideoProvider: No more videos to load');
+      return;
+    }
 
     _setLoadState(
         isInitialLoad ? VideoLoadState.loading : VideoLoadState.loadingMore);
 
     try {
+      print('🔄 VideoProvider: Loading videos, page: $_currentPage');
       final response = await _videoService.getVideos(page: _currentPage);
       final List<VideoModel> fetchedVideos = response['videos'];
       final bool hasMore = response['hasMore'];
@@ -43,7 +54,10 @@ class VideoProvider extends ChangeNotifier {
       _currentPage++;
       _errorMessage = null;
       _setLoadState(VideoLoadState.loaded);
+      print(
+          '✅ VideoProvider: Successfully loaded ${fetchedVideos.length} videos');
     } catch (e) {
+      print('❌ VideoProvider: Error loading videos: $e');
       _errorMessage = e.toString();
       _setLoadState(VideoLoadState.error);
     }

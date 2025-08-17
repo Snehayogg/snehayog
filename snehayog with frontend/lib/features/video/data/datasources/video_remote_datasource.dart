@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:video_player/video_player.dart';
-import '../../../../core/network/network_helper.dart';
+import '../../../../config/app_config.dart';
 import '../../../../core/exceptions/app_exceptions.dart';
 import '../models/video_model.dart';
 import '../models/comment_model.dart';
@@ -37,7 +37,8 @@ class VideoRemoteDataSource {
           // Ensure URLs are complete if they're relative paths
           if (json['videoUrl'] != null &&
               !json['videoUrl'].toString().startsWith('http')) {
-            json['videoUrl'] = '${NetworkHelper.baseUrl}${json['videoUrl']}';
+            json['videoUrl'] =
+                '${NetworkHelper.getBaseUrl()}${json['videoUrl']}';
           }
           return VideoModel.fromJson(json);
         }).toList();
@@ -98,12 +99,13 @@ class VideoRemoteDataSource {
           // Ensure URLs are complete if they're relative paths
           if (json['videoUrl'] != null &&
               !json['videoUrl'].toString().startsWith('http')) {
-            json['videoUrl'] = '${NetworkHelper.baseUrl}${json['videoUrl']}';
+            json['videoUrl'] =
+                '${NetworkHelper.getBaseUrl()}${json['videoUrl']}';
           }
           if (json['thumbnailUrl'] != null &&
               !json['thumbnailUrl'].toString().startsWith('http')) {
             json['thumbnailUrl'] =
-                '${NetworkHelper.baseUrl}${json['thumbnailUrl']}';
+                '${NetworkHelper.getBaseUrl()}${json['thumbnailUrl']}';
           }
           return VideoModel.fromJson(json);
         }).toList();

@@ -73,6 +73,26 @@ const videoSchema = new mongoose.Schema({
   link: {
     type: String,
     default: null
+  },
+  // HLS Streaming fields
+  hlsMasterPlaylistUrl: {
+    type: String,
+    default: null
+  },
+  hlsPlaylistUrl: {
+    type: String,
+    default: null
+  },
+  hlsVariants: [{
+    name: String,
+    playlistUrl: String,
+    resolution: String,
+    bitrate: String,
+    segments: Number
+  }],
+  isHLSEncoded: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true

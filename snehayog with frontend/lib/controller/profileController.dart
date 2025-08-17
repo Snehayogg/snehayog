@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:snehayog/model/usermodel.dart';
-import 'package:snehayog/utils/constant.dart';
+import 'package:snehayog/config/app_config.dart';
 
 class ProfileController extends ChangeNotifier {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
@@ -71,7 +71,7 @@ class ProfileController extends ChangeNotifier {
       print('Attempting to fetch user data with ID token');
 
       final res = await http.post(
-        Uri.parse("${Constants.BASE_URL}/api/auth"),
+        Uri.parse("${AppConfig.baseUrl}/api/auth"),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -146,7 +146,6 @@ class ProfileController extends ChangeNotifier {
   }
 
   Future<void> logout() async {
-
     try {
       isLoading = true;
       notifyListeners();
@@ -165,24 +164,24 @@ class ProfileController extends ChangeNotifier {
     }
   }
 
-Future<void> registerUserOnBackend(Map<String, dynamic> user) async {
-  final response = await http.post(
-    Uri.parse('https://snehayog-production.up.railway.app/api/users/register'),
-    headers: { 'Content-Type': 'application/json' },
-    body: json.encode({
-      'googleId': user['id'],
-      'name': user['name'],
-      'email': user['email'],
-      'profilePic': user['photoUrl'],
-    }),
-  );
+  Future<void> registerUserOnBackend(Map<String, dynamic> user) async {
+    final response = await http.post(
+      Uri.parse(
+          'https://snehayog-production.up.railway.app/api/users/register'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'googleId': user['id'],
+        'name': user['name'],
+        'email': user['email'],
+        'profilePic': user['photoUrl'],
+      }),
+    );
 
-  if (response.statusCode != 201 && response.statusCode != 200) {
-    print('❌ Failed to register user: ${response.body}');
-    throw Exception('User registration failed');
-  } else {
-    print('✅ User registered: ${response.body}');
+    if (response.statusCode != 201 && response.statusCode != 200) {
+      print('❌ Failed to register user: ${response.body}');
+      throw Exception('User registration failed');
+    } else {
+      print('✅ User registered: ${response.body}');
+    }
   }
-}
-
 }
