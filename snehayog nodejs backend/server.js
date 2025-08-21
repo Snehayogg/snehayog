@@ -1,5 +1,6 @@
 import express from 'express';
-import dotenv from 'dotenv';
+import dotenv from "dotenv";
+dotenv.config();
 import cors from 'cors';
 import path from 'path';
 import compression from 'compression';
@@ -15,15 +16,13 @@ import authRoutes from './routes/authRoutes.js';
 import adRoutes from './routes/adRoutes/index.js';
 import billingRoutes from './routes/billingRoutes.js';
 import creatorPayoutRoutes from './routes/creatorPayoutRoutes.js';
+import uploadRoutes from './routes/uploadRoutes.js';
 
 // Import services
 import automatedPayoutService from './services/automatedPayoutService.js';
 
 // Import middleware
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
-
-// Load environment variables
-dotenv.config();
 
 const app = express();
 
@@ -91,19 +90,10 @@ app.use('/api/ads', adRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/creator-payouts', creatorPayoutRoutes);
 app.use('/api/videos', videoRoutes);
+app.use('/api/upload', uploadRoutes);
 
 // Health check endpoints (both /health and /api/health)
 app.get('/health', (req, res) => {
-  const dbStatus = databaseManager.getConnectionStatus();
-  res.json({
-    status: 'OK',
-    timestamp: new Date().toISOString(),
-    database: dbStatus,
-    uptime: process.uptime()
-  });
-});
-
-app.get('/api/health', (req, res) => {
   const dbStatus = databaseManager.getConnectionStatus();
   res.json({
     status: 'OK',

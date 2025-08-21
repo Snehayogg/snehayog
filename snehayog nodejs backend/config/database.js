@@ -8,7 +8,7 @@ class DatabaseManager {
   async connect() {
     try {
       console.log('🔌 Connecting to MongoDB...');
-      console.log(`📍 MongoDB URI: ${process.env.MONGO_URI}`);
+      console.log('📍 MongoDB URI: [HIDDEN]');
       
       await mongoose.connect(process.env.MONGO_URI, {
         useNewUrlParser: true,
@@ -44,8 +44,9 @@ class DatabaseManager {
   }
 
   handleDisconnect() {
-    console.log('⚠️ MongoDB disconnected');
+    console.log('⚠️ MongoDB disconnected. Retrying in 5s...');
     this.isConnected = false;
+    setTimeout(() => this.connect(), 5000);
   }
 
   getConnectionStatus() {

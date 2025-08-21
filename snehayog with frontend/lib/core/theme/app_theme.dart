@@ -125,12 +125,10 @@ class AppTheme {
         primary: primaryColor,
         secondary: secondaryColor,
         surface: surfaceColor,
-        background: backgroundColor,
         error: errorColor,
         onPrimary: textOnPrimary,
         onSecondary: textOnPrimary,
         onSurface: textPrimary,
-        onBackground: textPrimary,
         onError: textOnPrimary,
       ),
       textTheme: const TextTheme(
@@ -188,7 +186,7 @@ class AppTheme {
         ),
         contentPadding: const EdgeInsets.all(paddingMedium),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         elevation: 2,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusMedium),

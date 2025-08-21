@@ -63,7 +63,7 @@ class AdService {
           'targetKeywords': targetKeywords,
           'startDate': startDate?.toIso8601String(),
           'endDate': endDate?.toIso8601String(),
-          'uploaderId': userData['id'],
+          'uploaderId': userData['googleId'] ?? userData['id'],
           'uploaderName': userData['name'],
           'uploaderProfilePic': userData['profilePic'],
           // **NEW: Revenue and impression data**
@@ -131,7 +131,7 @@ class AdService {
           'targetKeywords': targetKeywords,
           'startDate': startDate?.toIso8601String(),
           'endDate': endDate?.toIso8601String(),
-          'uploaderId': userData['id'],
+          'uploaderId': userData['googleId'] ?? userData['id'],
           'uploaderName': userData['name'],
           'uploaderProfilePic': userData['profilePic'],
           'estimatedImpressions': impressions,
@@ -281,7 +281,8 @@ class AdService {
       }
 
       final response = await http.get(
-        Uri.parse('$baseUrl/api/ads/user/${userData['id']}'),
+        Uri.parse(
+            '$baseUrl/api/ads/user/${userData['googleId'] ?? userData['id']}'),
         headers: {
           'Authorization': 'Bearer ${userData['token']}',
         },
@@ -401,7 +402,8 @@ class AdService {
       }
 
       final response = await http.get(
-        Uri.parse('$baseUrl/api/ads/analytics/$adId?userId=${userData['id']}'),
+        Uri.parse(
+            '$baseUrl/api/ads/analytics/$adId?userId=${userData['googleId'] ?? userData['id']}'),
         headers: {
           'Authorization': 'Bearer ${userData['token']}',
         },
@@ -545,7 +547,8 @@ class AdService {
       }
 
       final response = await http.get(
-        Uri.parse('$baseUrl/api/ads/creator/revenue/${userData['id']}'),
+        Uri.parse(
+            '$baseUrl/api/ads/creator/revenue/${userData['googleId'] ?? userData['id']}'),
         headers: {
           'Authorization': 'Bearer ${userData['token']}',
         },

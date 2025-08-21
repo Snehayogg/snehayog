@@ -283,7 +283,7 @@ class VideoStateManager extends ChangeNotifier {
       final int adCount = response['adCount'] ?? 0;
 
       print(
-          '🎥 VideoStateManager: Fetched ${fetchedItems.length} items (${adCount} ads)');
+          '🎥 VideoStateManager: Fetched ${fetchedItems.length} items ($adCount ads)');
 
       if (isInitialLoad) {
         _videos.clear();

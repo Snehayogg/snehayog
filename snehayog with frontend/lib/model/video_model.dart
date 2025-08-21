@@ -210,7 +210,7 @@ class Uploader {
 
   factory Uploader.fromJson(Map<String, dynamic> json) {
     return Uploader(
-      id: json['_id'] ?? json['id'] ?? '',
+      id: json['googleId'] ?? json['_id'] ?? json['id'] ?? '',
       name: json['name'] ?? '',
       profilePic: json['profilePic'] ?? '',
     );

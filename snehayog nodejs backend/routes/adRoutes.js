@@ -687,4 +687,163 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
   }
 });
 
+// **NEW: Get user's ads**
+router.get('/user/:userId', verifyToken, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    // Verify the user is requesting their own ads
+    if (req.user.id !== userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Get user's ad campaigns
+    const campaigns = await AdCampaign.find({ advertiserUserId: userId })
+      .populate('creative')
+      .populate('advertiserUserId', 'name profilePic')
+      .sort({ createdAt: -1 });
+
+    // Convert campaigns to the format expected by AdModel
+    const ads = campaigns.map(campaign => ({
+      id: campaign._id.toString(),
+      title: campaign.name,
+      description: campaign.objective || '',
+      imageUrl: campaign.creative?.imageUrl || null,
+      videoUrl: campaign.creative?.videoUrl || null,
+      link: campaign.creative?.link || null,
+      adType: campaign.creative?.adType || 'banner',
+      budget: campaign.dailyBudget,
+      targetAudience: campaign.target?.audience || 'all',
+      targetKeywords: campaign.target?.keywords || [],
+      startDate: campaign.startDate,
+      endDate: campaign.endDate,
+      status: campaign.status,
+      impressions: campaign.creative?.impressions || 0,
+      clicks: campaign.creative?.clicks || 0,
+      ctr: campaign.creative?.ctr || 0.0,
+      createdAt: campaign.createdAt,
+      updatedAt: campaign.updatedAt,
+      // Add missing fields required by AdModel
+      uploaderId: campaign.advertiserUserId?._id?.toString() || campaign.advertiserUserId?.toString() || '',
+      uploaderName: campaign.advertiserUserId?.name || '',
+      uploaderProfilePic: campaign.advertiserUserId?.profilePic || ''
+    }));
+
+    res.json(ads);
+  } catch (error) {
+    console.error('❌ Get user ads error:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch user ads',
+      details: error.message 
+    });
+  }
+});
+
+// **NEW: Update ad status**
+router.patch('/:adId/status', verifyToken, async (req, res) => {
+  try {
+    const { adId } = req.params;
+    const { status } = req.body;
+
+    if (!status) {
+      return res.status(400).json({ error: 'Status is required' });
+    }
+
+    // Validate status
+    const validStatuses = ['draft', 'pending_review', 'active', 'paused', 'completed', 'rejected'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
+    // Find the campaign
+    const campaign = await AdCampaign.findById(adId);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Ad campaign not found' });
+    }
+
+    // Verify ownership
+    if (campaign.advertiserUserId.toString() !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Update status
+    campaign.status = status;
+    await campaign.save();
+
+    // Return updated ad in expected format
+    const updatedAd = {
+      id: campaign._id.toString(),
+      title: campaign.name,
+      description: campaign.objective || '',
+      imageUrl: campaign.creative?.imageUrl || null,
+      videoUrl: campaign.creative?.videoUrl || null,
+      link: campaign.creative?.link || null,
+      adType: campaign.creative?.adType || 'banner',
+      budget: campaign.dailyBudget,
+      targetAudience: campaign.target?.audience || 'all',
+      targetKeywords: campaign.target?.keywords || [],
+      startDate: campaign.startDate,
+      endDate: campaign.endDate,
+      status: campaign.status,
+      impressions: campaign.creative?.impressions || 0,
+      clicks: campaign.creative?.clicks || 0,
+      ctr: campaign.creative?.ctr || 0.0,
+      createdAt: campaign.createdAt,
+      updatedAt: campaign.updatedAt,
+      // Add missing fields required by AdModel
+      uploaderId: campaign.advertiserUserId?.toString() || '',
+      uploaderName: '', // Will be populated if needed
+      uploaderProfilePic: '' // Will be populated if needed
+    };
+
+    res.json(updatedAd);
+  } catch (error) {
+    console.error('❌ Update ad status error:', error);
+    res.status(500).json({ 
+      error: 'Failed to update ad status',
+      details: error.message 
+    });
+  }
+});
+
+// **NEW: Delete ad**
+router.delete('/:adId', verifyToken, async (req, res) => {
+  try {
+    const { adId } = req.params;
+
+    // Find the campaign
+    const campaign = await AdCampaign.findById(adId);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Ad campaign not found' });
+    }
+
+    // Verify ownership
+    if (campaign.advertiserUserId.toString() !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Delete associated creative if exists
+    if (campaign.creative) {
+      await AdCreative.findByIdAndDelete(campaign.creative);
+    }
+
+    // Delete associated invoices
+    await Invoice.deleteMany({ campaignId: adId });
+
+    // Delete the campaign
+    await AdCampaign.findByIdAndDelete(adId);
+
+    res.json({ 
+      success: true, 
+      message: 'Ad campaign deleted successfully' 
+    });
+  } catch (error) {
+    console.error('❌ Delete ad error:', error);
+    res.status(500).json({ 
+      error: 'Failed to delete ad',
+      details: error.message 
+    });
+  }
+});
+
 export default router;

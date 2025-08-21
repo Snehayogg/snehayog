@@ -2,23 +2,32 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:snehayog/config/app_config.dart';
+import 'package:snehayog/services/authservices.dart';
 
 class CloudinaryService {
   static final CloudinaryService _instance = CloudinaryService._internal();
   factory CloudinaryService() => _instance;
   CloudinaryService._internal();
 
-  // **UPDATED: Use backend endpoints instead of direct Cloudinary API**
-  // Since you have Cloudinary setup in your backend, we'll use your backend API
-
   /// Upload image through your backend (which handles Cloudinary)
   Future<String> uploadImage(File imageFile, {String? folder}) async {
     try {
+      // Get user data for authentication
+      final authService = AuthService();
+      final userData = await authService.getUserData();
+
+      if (userData == null) {
+        throw Exception('User not authenticated');
+      }
+
       // Create multipart request to your backend
       final request = http.MultipartRequest(
         'POST',
         Uri.parse('${AppConfig.baseUrl}/api/upload/image'),
       );
+
+      // Add authorization header
+      request.headers['Authorization'] = 'Bearer ${userData['token']}';
 
       // Add the image file
       request.files.add(
@@ -35,9 +44,15 @@ class CloudinaryService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return data['url'] ?? data['secure_url'] ?? '';
+        if (data['success'] == true) {
+          return data['url'] ?? '';
+        } else {
+          throw Exception('Upload failed: ${data['error'] ?? 'Unknown error'}');
+        }
       } else {
-        throw Exception('Failed to upload image: ${response.body}');
+        final errorData = json.decode(response.body);
+        throw Exception(
+            'Failed to upload image: ${errorData['error'] ?? response.body}');
       }
     } catch (e) {
       throw Exception('Error uploading image: $e');
@@ -47,11 +62,22 @@ class CloudinaryService {
   /// Upload video through your backend (which handles Cloudinary)
   Future<String> uploadVideo(File videoFile, {String? folder}) async {
     try {
+      // Get user data for authentication
+      final authService = AuthService();
+      final userData = await authService.getUserData();
+
+      if (userData == null) {
+        throw Exception('User not authenticated');
+      }
+
       // Create multipart request to your backend
       final request = http.MultipartRequest(
         'POST',
         Uri.parse('${AppConfig.baseUrl}/api/upload/video'),
       );
+
+      // Add authorization header
+      request.headers['Authorization'] = 'Bearer ${userData['token']}';
 
       // Add the video file
       request.files.add(
@@ -68,9 +94,15 @@ class CloudinaryService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return data['url'] ?? data['secure_url'] ?? '';
+        if (data['success'] == true) {
+          return data['url'] ?? '';
+        } else {
+          throw Exception('Upload failed: ${data['error'] ?? 'Unknown error'}');
+        }
       } else {
-        throw Exception('Failed to upload video: ${response.body}');
+        final errorData = json.decode(response.body);
+        throw Exception(
+            'Failed to upload video: ${errorData['error'] ?? response.body}');
       }
     } catch (e) {
       throw Exception('Error uploading video: $e');

@@ -401,7 +401,7 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _selectedCountry,
+                initialValue: _selectedCountry,
                 decoration: const InputDecoration(
                   labelText: 'Country',
                   border: OutlineInputBorder(),
@@ -437,7 +437,7 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _selectedCurrency,
+                initialValue: _selectedCurrency,
                 decoration: const InputDecoration(
                   labelText: 'Currency',
                   border: OutlineInputBorder(),
@@ -470,7 +470,7 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _selectedPaymentMethod,
+                initialValue: _selectedPaymentMethod,
                 decoration: const InputDecoration(
                   labelText: 'Payment Method',
                   border: OutlineInputBorder(),

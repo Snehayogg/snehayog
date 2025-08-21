@@ -73,7 +73,7 @@ class _VideoItemWidgetState extends State<VideoItemWidget> {
     if (_isAd) {
       return _buildAdWidget();
     }
-    
+
     return _buildVideoWidget();
   }
 
@@ -96,7 +96,7 @@ class _VideoItemWidgetState extends State<VideoItemWidget> {
             )
           else
             _buildFallbackAdWidget(),
-          
+
           // Ad tag overlay
           Positioned(
             top: 50,
@@ -135,7 +135,7 @@ class _VideoItemWidgetState extends State<VideoItemWidget> {
               ),
             ),
           ),
-          
+
           // Skip button for ads
           Positioned(
             top: 50,
@@ -207,7 +207,8 @@ class _VideoItemWidgetState extends State<VideoItemWidget> {
             ElevatedButton(
               onPressed: () {
                 // Handle ad click
-                if (widget.video.link != null && widget.video.link!.isNotEmpty) {
+                if (widget.video.link != null &&
+                    widget.video.link!.isNotEmpty) {
                   // Launch ad link
                   print('Ad clicked: ${widget.video.link}');
                 }
@@ -215,7 +216,8 @@ class _VideoItemWidgetState extends State<VideoItemWidget> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
                 foregroundColor: Colors.blue,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(24),
                 ),
@@ -239,38 +241,50 @@ class _VideoItemWidgetState extends State<VideoItemWidget> {
       fit: StackFit.expand,
       children: [
         // Video player
-        VideoPlayerWidget(
-          key: ValueKey(widget.video.id),
-          controller: widget.controller,
-          video: widget.video,
-          play: widget.isActive,
+        RepaintBoundary(
+          child: VideoPlayerWidget(
+            key: ValueKey('video_${widget.video.id}_${widget.index}'),
+            controller: widget.controller,
+            video: widget.video,
+            play: widget.isActive,
+          ),
         ),
-        
+
         // Video info overlay
         Positioned(
           left: 12,
           bottom: 12,
           right: 80,
-          child: VideoInfoWidget(video: widget.video),
+          child: RepaintBoundary(
+            child: IgnorePointer(
+              child: VideoInfoWidget(video: widget.video),
+            ),
+          ),
         ),
-        
+
         // Action buttons
         Positioned(
           right: 12,
           bottom: 12,
-          child: ActionButtonsWidget(
-            video: widget.video,
-            index: widget.index,
-            isLiked: Provider.of<GoogleSignInController>(context, listen: false)
-                        .userData?['id'] !=
-                    null &&
-                widget.video.likedBy.contains(
-                  Provider.of<GoogleSignInController>(context, listen: false)
-                      .userData?['id'],
-                ),
-            onLike: widget.onLike ?? () {},
-            onComment: widget.onComment ?? () {},
-            onShare: widget.onShare ?? () {},
+          child: RepaintBoundary(
+            child: IgnorePointer(
+              child: ActionButtonsWidget(
+                video: widget.video,
+                index: widget.index,
+                isLiked:
+                    Provider.of<GoogleSignInController>(context, listen: false)
+                                .userData?['id'] !=
+                            null &&
+                        widget.video.likedBy.contains(
+                          Provider.of<GoogleSignInController>(context,
+                                  listen: false)
+                              .userData?['id'],
+                        ),
+                onLike: widget.onLike ?? () {},
+                onComment: widget.onComment ?? () {},
+                onShare: widget.onShare ?? () {},
+              ),
+            ),
           ),
         ),
       ],
@@ -281,7 +295,7 @@ class _VideoItemWidgetState extends State<VideoItemWidget> {
     if (widget.video.thumbnailUrl.isEmpty) {
       return _buildFallbackThumbnail();
     }
-    
+
     return CachedNetworkImage(
       imageUrl: widget.video.thumbnailUrl,
       fit: BoxFit.cover,
@@ -315,7 +329,7 @@ class _VideoItemWidgetState extends State<VideoItemWidget> {
               size: 32,
               color: Colors.grey[400],
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Text(
               'Video',
               style: TextStyle(

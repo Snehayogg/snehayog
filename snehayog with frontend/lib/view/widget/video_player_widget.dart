@@ -1,6 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:snehayog/model/video_model.dart';
+import 'package:snehayog/core/managers/video_player_state_manager.dart';
+import 'package:snehayog/core/services/video_url_service.dart';
+import 'package:snehayog/view/widget/video_overlays/video_progress_bar.dart';
+import 'package:snehayog/view/widget/video_overlays/video_play_pause_overlay.dart';
+import 'package:snehayog/view/widget/video_overlays/video_seeking_indicator.dart';
+import 'package:snehayog/view/widget/video_overlays/video_error_widget.dart';
+import 'package:snehayog/view/widget/video_overlays/video_loading_widget.dart';
+import 'package:snehayog/core/constants/video_constants.dart';
 
 class VideoPlayerWidget extends StatefulWidget {
   final VideoModel video;
@@ -19,285 +27,161 @@ class VideoPlayerWidget extends StatefulWidget {
 }
 
 class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
-  VideoPlayerController? _internalController;
-  Future<void>? _initializeVideoPlayerFuture;
-  bool _hasError = false;
-  String? _errorMessage;
-  bool _isHLS = false;
+  late final VideoPlayerStateManager _stateManager;
+  VideoPlayerController? _externalController;
 
   VideoPlayerController? get _controller =>
-      widget.controller ?? _internalController;
+      widget.controller ?? _stateManager.internalController;
 
   @override
   void initState() {
     super.initState();
-    _checkIfShouldUseHLS();
+    _stateManager = VideoPlayerStateManager();
+
+    // Check HLS status
+    final isHLS = VideoUrlService.shouldUseHLS(widget.video);
+    _stateManager.updateHLSStatus(isHLS);
 
     if (widget.controller == null) {
       _initializeInternalController();
-    }
-  }
-
-  void _checkIfShouldUseHLS() {
-    _isHLS = widget.video.isHLSEncoded == true ||
-        widget.video.hlsMasterPlaylistUrl != null ||
-        widget.video.hlsPlaylistUrl != null;
-  }
-
-  void _initializeInternalController() {
-    try {
-      // Use HLS URL if available, otherwise fall back to regular video URL
-      String videoUrl = _getBestVideoUrl();
-
-      print('🎬 Initializing video player with URL: $videoUrl');
-      print('🎬 Is HLS: $_isHLS');
-
-      _internalController = VideoPlayerController.networkUrl(
-        Uri.parse(videoUrl),
-        videoPlayerOptions: VideoPlayerOptions(
-          mixWithOthers: false,
-          allowBackgroundPlayback: false,
-        ),
+    } else {
+      _externalController = widget.controller;
+      _stateManager.initializeController(
+        VideoUrlService.getBestVideoUrl(widget.video),
+        widget.play,
       );
-
-      // Add error listener
-      _internalController!.addListener(() {
-        if (_internalController!.value.hasError) {
-          setState(() {
-            _hasError = true;
-            _errorMessage = _internalController!.value.errorDescription;
-          });
-          print(
-              '❌ Video player error: ${_internalController!.value.errorDescription}');
-        }
-      });
-
-      _initializeVideoPlayerFuture =
-          _internalController!.initialize().then((_) {
-        print('✅ Video player initialized successfully');
-        if (widget.play && mounted) {
-          try {
-            _internalController!.play();
-            _internalController!.setLooping(true);
-            print('▶️ Video started playing');
-          } catch (e) {
-            print('❌ Error playing video: $e');
-            setState(() {
-              _hasError = true;
-              _errorMessage = 'Failed to play video: $e';
-            });
-          }
-        }
-        if (mounted) {
-          setState(() {});
-        }
-      }).catchError((error) {
-        print('❌ Error initializing video: $error');
-        if (mounted) {
-          setState(() {
-            _hasError = true;
-            _errorMessage = 'Failed to load video: $error';
-          });
-        }
-      });
-    } catch (e) {
-      print('❌ Error creating video controller: $e');
-      setState(() {
-        _hasError = true;
-        _errorMessage = 'Failed to create video player: $e';
-      });
     }
-  }
-
-  String _getBestVideoUrl() {
-    // Priority: HLS Master Playlist > HLS Playlist > Regular Video URL
-    if (widget.video.hlsMasterPlaylistUrl != null &&
-        widget.video.hlsMasterPlaylistUrl!.isNotEmpty) {
-      print(
-          '🎬 Using HLS Master Playlist: ${widget.video.hlsMasterPlaylistUrl}');
-      return _buildFullUrl(widget.video.hlsMasterPlaylistUrl!);
-    }
-
-    if (widget.video.hlsPlaylistUrl != null &&
-        widget.video.hlsPlaylistUrl!.isNotEmpty) {
-      print('🎬 Using HLS Playlist: ${widget.video.hlsPlaylistUrl}');
-      return _buildFullUrl(widget.video.hlsPlaylistUrl!);
-    }
-
-    print('🎬 Using regular video URL: ${widget.video.videoUrl}');
-    return widget.video.videoUrl;
-  }
-
-  String _buildFullUrl(String relativeUrl) {
-    // Use your local network IP for development
-    if (relativeUrl.startsWith('/uploads/hls/')) {
-      final fullUrl = 'http://192.168.0.190:5000/api/videos${relativeUrl}';
-      print('🔗 Built full URL: $fullUrl');
-      return fullUrl;
-    }
-    return relativeUrl;
   }
 
   @override
-  void didUpdateWidget(covariant VideoPlayerWidget oldWidget) {
+  void didUpdateWidget(VideoPlayerWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // Handle play/pause changes
-    if (_controller != null && _controller!.value.isInitialized) {
-      try {
-        if (widget.play && !_controller!.value.isPlaying) {
-          _controller!.play();
-          print('▶️ Video resumed');
-        } else if (!widget.play && _controller!.value.isPlaying) {
-          _controller!.pause();
-          print('⏸️ Video paused');
-        }
-      } catch (e) {
-        print('❌ Error updating video player state: $e');
+    // Check if video data has changed and refresh HLS status
+    if (oldWidget.video.id != widget.video.id ||
+        oldWidget.video.isHLSEncoded != widget.video.isHLSEncoded ||
+        oldWidget.video.hlsMasterPlaylistUrl !=
+            widget.video.hlsMasterPlaylistUrl ||
+        oldWidget.video.hlsPlaylistUrl != widget.video.hlsPlaylistUrl) {
+      final isHLS = VideoUrlService.shouldUseHLS(widget.video);
+      _stateManager.updateHLSStatus(isHLS);
+    }
+
+    // Handle play state changes
+    if (oldWidget.play != widget.play &&
+        _controller != null &&
+        _controller!.value.isInitialized) {
+      if (widget.play && !_stateManager.isPlaying) {
+        _stateManager.play();
+      } else if (!widget.play && _stateManager.isPlaying) {
+        _stateManager.pause();
       }
     }
   }
 
+  Future<void> _initializeInternalController() async {
+    final videoUrl = VideoUrlService.getBestVideoUrl(widget.video);
+    await _stateManager.initializeController(videoUrl, widget.play);
+  }
+
+  void _handleTap() {
+    if (_controller == null || !_controller!.value.isInitialized) return;
+
+    if (_stateManager.isPlaying) {
+      _stateManager.pause();
+    } else {
+      _stateManager.play();
+    }
+
+    _stateManager.displayPlayPauseOverlay();
+  }
+
+  void _handleDoubleTap(TapDownDetails details) {
+    if (_controller == null || !_controller!.value.isInitialized) return;
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    final tapPosition = details.globalPosition.dx;
+    final currentPosition = _controller!.value.position;
+
+    if (tapPosition < screenWidth / 2) {
+      // Left side - seek backward
+      final newPosition = currentPosition - VideoConstants.seekDuration;
+      if (newPosition.inMilliseconds > 0) {
+        _stateManager.seekTo(newPosition);
+      }
+    } else {
+      // Right side - seek forward
+      final newPosition = currentPosition + VideoConstants.seekDuration;
+      if (newPosition.inMilliseconds <
+          _controller!.value.duration.inMilliseconds) {
+        _stateManager.seekTo(newPosition);
+      }
+    }
+
+    _stateManager.showSeekingIndicator();
+  }
+
   @override
   void dispose() {
-    _internalController?.dispose();
+    _stateManager.dispose();
     super.dispose();
-  }
-
-  Widget _buildPlaceholder() {
-    return Container(
-      color: Colors.black,
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.play_circle_outline,
-              size: 64,
-              color: Colors.white.withOpacity(0.7),
-            ),
-            SizedBox(height: 16),
-            Text(
-              'Tap to play',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.7),
-                fontSize: 16,
-              ),
-            ),
-            if (_isHLS) ...[
-              SizedBox(height: 8),
-              Text(
-                'HLS Streaming',
-                style: TextStyle(
-                  color: Colors.blue.withOpacity(0.7),
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildErrorWidget(String errorMessage) {
-    return Container(
-      color: Colors.black,
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 64,
-              color: Colors.red.withOpacity(0.7),
-            ),
-            SizedBox(height: 16),
-            Text(
-              'Playback Error',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: 8),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                errorMessage,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
-                  fontSize: 14,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-            SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _hasError = false;
-                  _errorMessage = null;
-                });
-                _initializeInternalController();
-              },
-              child: Text('Retry'),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_hasError) {
-      return _buildErrorWidget(_errorMessage ?? 'Unknown error');
-    }
+    return ListenableBuilder(
+      listenable: _stateManager,
+      builder: (context, child) {
+        if (_stateManager.hasError) {
+          return VideoErrorWidget(
+            errorMessage: _stateManager.errorMessage ?? 'Unknown error',
+            onRetry: () {
+              _stateManager.clearError();
+              _initializeInternalController();
+            },
+          );
+        }
 
-    // Show video player
-    if (_controller == null || !_controller!.value.isInitialized) {
-      return _buildLoadingWidget();
-    }
+        if (_stateManager.internalController == null ||
+            !_stateManager.internalController!.value.isInitialized) {
+          return VideoLoadingWidget(isHLS: _stateManager.isHLS);
+        }
 
-    return AspectRatio(
-      aspectRatio: _controller!.value.aspectRatio,
-      child: VideoPlayer(_controller!),
-    );
-  }
-
-  Widget _buildLoadingWidget() {
-    return Container(
-      color: Colors.black,
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-            ),
-            SizedBox(height: 16),
-            Text(
-              'Loading video...',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.7),
-                fontSize: 16,
-              ),
-            ),
-            if (_isHLS) ...[
-              SizedBox(height: 8),
-              Text(
-                'HLS Streaming',
-                style: TextStyle(
-                  color: Colors.blue.withOpacity(0.7),
-                  fontSize: 12,
+        return RepaintBoundary(
+          child: Stack(
+            children: [
+              // Video player
+              Positioned.fill(
+                child: VideoPlayer(
+                  _stateManager.internalController!,
                 ),
               ),
+
+              // Touch overlay
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _handleTap,
+                  onDoubleTapDown: _handleDoubleTap,
+                  child: Container(
+                    color: Colors.transparent,
+                    width: double.infinity,
+                    height: double.infinity,
+                  ),
+                ),
+              ),
+
+              // Overlays
+              VideoPlayPauseOverlay(
+                isVisible: _stateManager.showPlayPauseOverlay,
+                isPlaying: _stateManager.isPlaying,
+              ),
+              VideoSeekingIndicator(isVisible: _stateManager.isSeeking),
+              VideoProgressBar(controller: _controller!),
             ],
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

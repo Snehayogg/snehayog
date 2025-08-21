@@ -53,12 +53,10 @@ dependencies:
   video_player_platform_interface: ^6.2.0
   video_player_android: ^2.3.7
   video_player_avfoundation: ^2.3.7
-  # better_player: ^0.0.83  # Commented out due to Flutter compatibility issues
   http_parser: ^4.0.2
   google_mobile_ads: ^6.0.0
   visibility_detector: ^0.4.0+2
-  chewie: ^1.7.4
-  # **NEW: JWT Decoder for token validation**
+
   jwt_decoder: ^2.0.1
 
 

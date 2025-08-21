@@ -67,5 +67,27 @@ export const isProduction = () => {
   return config.server.environment === 'production';
 };
 
+  // Cloudinary configuration check
+export const isCloudinaryConfigured = () => {
+  const cloudName = process.env.CLOUD_NAME;
+  const apiKey = process.env.CLOUD_KEY;
+  const apiSecret = process.env.CLOUD_SECRET;
+  
+  // Check if all required Cloudinary environment variables are set
+  const isConfigured = !!(cloudName && apiKey && apiSecret);
+  
+  if (!isConfigured) {
+    console.warn('⚠️ Cloudinary not properly configured - video uploads will fail');
+    console.warn('   Missing environment variables:');
+    if (!cloudName) console.warn('     - CLOUD_NAME');
+    if (!apiKey) console.warn('     - CLOUD_KEY');
+    if (!apiSecret) console.warn('     - CLOUD_SECRET');
+  } else {
+    console.log('✅ Cloudinary properly configured');
+  }
+  
+  return isConfigured;
+};
+
 // Export default config
 export default config;

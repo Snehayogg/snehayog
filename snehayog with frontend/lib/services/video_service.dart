@@ -71,6 +71,35 @@ class VideoService {
     }
   }
 
+  /// Test method to check link field for a specific video
+  Future<void> testSpecificVideoLink(String videoId) async {
+    try {
+      print('🔗 VideoService: Testing link field for video: $videoId');
+      final response =
+          await http.get(Uri.parse('$baseUrl/api/videos/$videoId'));
+
+      if (response.statusCode == 200) {
+        final video = json.decode(response.body);
+        print('🔗 VideoService: Video data:');
+        print('🔗 VideoService:   - ID: ${video['_id']}');
+        print('🔗 VideoService:   - Title: ${video['videoName']}');
+        print(
+            '🔗 VideoService:   - Has link field: ${video.containsKey('link')}');
+        if (video.containsKey('link')) {
+          print('🔗 VideoService:   - Link value: "${video['link']}"');
+          print('🔗 VideoService:   - Link type: ${video['link'].runtimeType}');
+          print(
+              '🔗 VideoService:   - Link is empty: ${video['link'].toString().isEmpty}');
+        }
+        print('🔗 VideoService:   - All fields: ${video.keys.toList()}');
+      } else {
+        print('🔗 VideoService: Failed to fetch video: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('🔗 VideoService: Error testing specific video link: $e');
+    }
+  }
+
   /// Test network configuration and connectivity
   Future<bool> testNetworkConfiguration() async {
     try {
@@ -164,9 +193,10 @@ class VideoService {
               !json['videoUrl'].toString().startsWith('http')) {
             json['videoUrl'] = '$baseUrl${json['videoUrl']}';
           }
-          
+
           // Check if HLS URLs are available and use them for better streaming
-          if (json['hlsPlaylistUrl'] != null && json['hlsPlaylistUrl'].toString().isNotEmpty) {
+          if (json['hlsPlaylistUrl'] != null &&
+              json['hlsPlaylistUrl'].toString().isNotEmpty) {
             // Use HLS playlist URL for better streaming
             if (!json['hlsPlaylistUrl'].toString().startsWith('http')) {
               json['videoUrl'] = '$baseUrl${json['hlsPlaylistUrl']}';
@@ -174,7 +204,8 @@ class VideoService {
               json['videoUrl'] = json['hlsPlaylistUrl'];
             }
             print('🔗 VideoService: Using HLS URL: ${json['videoUrl']}');
-          } else if (json['hlsMasterPlaylistUrl'] != null && json['hlsMasterPlaylistUrl'].toString().isNotEmpty) {
+          } else if (json['hlsMasterPlaylistUrl'] != null &&
+              json['hlsMasterPlaylistUrl'].toString().isNotEmpty) {
             // Use HLS master playlist URL for adaptive streaming
             if (!json['hlsMasterPlaylistUrl'].toString().startsWith('http')) {
               json['videoUrl'] = '$baseUrl${json['hlsMasterPlaylistUrl']}';
@@ -183,7 +214,8 @@ class VideoService {
             }
             print('🔗 VideoService: Using HLS Master URL: ${json['videoUrl']}');
           } else {
-            print('🔗 VideoService: Using original video URL: ${json['videoUrl']}');
+            print(
+                '🔗 VideoService: Using original video URL: ${json['videoUrl']}');
           }
 
           return VideoModel.fromJson(json);
@@ -466,7 +498,8 @@ class VideoService {
 
       // Send the request with timeout
       final streamedResponse = await request.send().timeout(
-        const Duration(minutes: 5),
+        const Duration(
+            minutes: 10), // Increased timeout for large video uploads
         onTimeout: () {
           throw TimeoutException(
               'Upload timed out. Please check your internet connection and try again.');
@@ -638,22 +671,34 @@ class VideoService {
       print(
           '🔍 VideoService: Page: $page, Limit: $limit, Ad frequency: $adInsertionFrequency');
 
-      // Fetch videos and ads in parallel
-      final videosFuture = getVideos(page: page, limit: limit);
-      final adsFuture = _adService.getActiveAds();
-
-      final results = await Future.wait([videosFuture, adsFuture]);
-      final videosResult = results[0] as Map<String, dynamic>;
-      final ads = results[1] as List<AdModel>;
-
+      // Always fetch videos first
+      final videosResult = await getVideos(page: page, limit: limit);
       final videos = videosResult['videos'] as List<VideoModel>;
+
+      // Try to fetch ads, but don't fail the whole feed if ads are unavailable
+      List<AdModel> ads = const [];
+      try {
+        ads = await _adService.getActiveAds();
+      } catch (adError) {
+        print(
+            '⚠️ VideoService: Failed to fetch ads, continuing without ads: $adError');
+      }
 
       print(
           '🔍 VideoService: Fetched ${videos.length} videos and ${ads.length} ads');
 
-      // Integrate ads into video feed
-      final integratedFeed =
-          _integrateAdsIntoFeed(videos, ads, adInsertionFrequency);
+      // Integrate ads into video feed safely
+      List<dynamic> integratedFeed = videos;
+      try {
+        if (ads.isNotEmpty) {
+          integratedFeed =
+              _integrateAdsIntoFeed(videos, ads, adInsertionFrequency);
+        }
+      } catch (integrationError) {
+        print(
+            '⚠️ VideoService: Failed to integrate ads, using videos only: $integrationError');
+        integratedFeed = videos;
+      }
 
       return {
         'videos': integratedFeed,
@@ -693,7 +738,7 @@ class VideoService {
       }
     }
 
-    print('🔍 VideoService: Integrated ${adIndex} ads into feed');
+    print('🔍 VideoService: Integrated $adIndex ads into feed');
     return integratedFeed;
   }
 
@@ -753,6 +798,8 @@ class VideoService {
   /// Returns true if deletion was successful, false otherwise
   Future<bool> deleteVideo(String videoId) async {
     try {
+      print('🗑️ VideoService: Attempting to delete video: $videoId');
+
       // Check authentication first
       final userData = await _authService.getUserData();
 
@@ -760,14 +807,22 @@ class VideoService {
         throw Exception('Please sign in to delete videos');
       }
 
-      final res = await http.delete(
-        Uri.parse('$baseUrl/api/videos/$videoId'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      ).timeout(const Duration(seconds: 10));
+      // Get authentication headers
+      final headers = await _getAuthHeaders();
+      print('🗑️ VideoService: Using headers: ${headers.keys.toList()}');
+
+      final res = await http
+          .delete(
+            Uri.parse('$baseUrl/api/videos/$videoId'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 10));
+
+      print('🗑️ VideoService: Delete response status: ${res.statusCode}');
+      print('🗑️ VideoService: Delete response body: ${res.body}');
 
       if (res.statusCode == 200 || res.statusCode == 204) {
+        print('✅ VideoService: Video deleted successfully');
         return true;
       } else if (res.statusCode == 401) {
         throw Exception('Please sign in again to delete videos');
@@ -780,6 +835,7 @@ class VideoService {
         throw Exception(error['error'] ?? 'Failed to delete video');
       }
     } catch (e) {
+      print('❌ VideoService: Error deleting video: $e');
       if (e is TimeoutException) {
         throw Exception('Request timed out. Please try again.');
       } else if (e is Exception) {

@@ -11,6 +11,14 @@ class HLSEncodingService {
     // Ensure HLS output directory exists
     this.hlsOutputDir = path.join(__dirname, '../uploads/hls');
     this.ensureHLSDirectory();
+    
+    // Check FFmpeg installation
+    this.checkFFmpegInstallation().then(isInstalled => {
+      if (!isInstalled) {
+        console.warn('⚠️ FFmpeg not found. HLS encoding will not work.');
+        console.warn('   Please install FFmpeg: https://ffmpeg.org/download.html');
+      }
+    });
   }
 
   ensureHLSDirectory() {
@@ -166,6 +174,24 @@ class HLSEncodingService {
       command.run();
     });
   }
+
+  // Add this method to the HLSEncodingService class
+
+async checkFFmpegInstallation() {
+  return new Promise((resolve) => {
+    ffmpeg.getAvailableCodecs((err, codecs) => {
+      if (err) {
+        console.error('❌ FFmpeg not properly installed:', err.message);
+        resolve(false);
+      } else {
+        console.log('✅ FFmpeg is properly installed and working');
+        resolve(true);
+      }
+    });
+  });
+}
+
+
 
   /**
    * Generate multiple quality variants for adaptive streaming

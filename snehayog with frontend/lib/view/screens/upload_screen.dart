@@ -145,7 +145,8 @@ class _UploadScreenState extends State<UploadScreen> {
         _linkController.text.isNotEmpty ? _linkController.text : null,
       )
           .timeout(
-        const Duration(minutes: 5),
+        const Duration(
+            minutes: 10), // Increased timeout for large video uploads
         onTimeout: () {
           throw TimeoutException(
               'Upload timed out. Please check your internet connection and try again.');

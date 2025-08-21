@@ -44,12 +44,22 @@ router.get('/profile', verifyToken, async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const user = await User.findOne({ googleId: id });
-    
+    // First try to find by Google ID (primary identifier)
+    let user = await User.findOne({ googleId: id });
+
+    // If not found, try by MongoDB ObjectId
+    if (!user) {
+      try {
+        user = await User.findById(id);
+      } catch (e) {
+        // ignore invalid ObjectId errors
+      }
+    }
+
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-    
+
     res.json({
       id: user.googleId,
       name: user.name,

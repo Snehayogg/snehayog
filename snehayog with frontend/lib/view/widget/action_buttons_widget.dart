@@ -21,32 +21,34 @@ class ActionButtonsWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          icon: Icon(
-            isLiked ? Icons.favorite : Icons.favorite_border,
-            color: isLiked ? Colors.red : Colors.white,
-            size: 32,
+    return RepaintBoundary(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: Icon(
+              isLiked ? Icons.favorite : Icons.favorite_border,
+              color: isLiked ? Colors.red : Colors.white,
+              size: 32,
+            ),
+            onPressed: onLike,
           ),
-          onPressed: onLike,
-        ),
-        Text('${video.likes}', style: const TextStyle(color: Colors.white)),
-        const SizedBox(height: 20),
-        IconButton(
-          icon: const Icon(Icons.comment, color: Colors.white, size: 32),
-          onPressed: onComment,
-        ),
-        Text('${video.comments.length}',
-            style: const TextStyle(color: Colors.white)),
-        const SizedBox(height: 20),
-        IconButton(
-          icon: const Icon(Icons.share, color: Colors.white, size: 32),
-          onPressed: onShare,
-        ),
-        Text('${video.shares}', style: const TextStyle(color: Colors.white)),
-      ],
+          Text('${video.likes}', style: const TextStyle(color: Colors.white)),
+          const SizedBox(height: 20),
+          IconButton(
+            icon: const Icon(Icons.comment, color: Colors.white, size: 32),
+            onPressed: onComment,
+          ),
+          Text('${video.comments.length}',
+              style: const TextStyle(color: Colors.white)),
+          const SizedBox(height: 20),
+          IconButton(
+            icon: const Icon(Icons.share, color: Colors.white, size: 32),
+            onPressed: onShare,
+          ),
+          Text('${video.shares}', style: const TextStyle(color: Colors.white)),
+        ],
+      ),
     );
   }
 }

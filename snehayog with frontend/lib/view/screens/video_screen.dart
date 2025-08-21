@@ -14,7 +14,8 @@ import 'package:snehayog/core/managers/video_cache_manager.dart';
 import 'package:snehayog/core/managers/video_state_manager.dart';
 import 'package:snehayog/view/widget/video_ui_components.dart';
 import 'package:snehayog/view/widget/comments_sheet.dart';
-import 'package:flutter/foundation.dart'; // Added for kDebugMode
+import 'package:snehayog/services/admob_service.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 /// Refactored VideoScreen with modular architecture for better maintainability
 class VideoScreen extends StatefulWidget {
@@ -41,6 +42,14 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
   // Service
   final VideoService _videoService = VideoService();
   final AuthService _authService = AuthService();
+  final AdMobService _adMobService = AdMobService();
+
+  // AdMob
+  BannerAd? _bannerAd;
+  bool _isBannerAdLoaded = false;
+  Map<int, BannerAd> _videoBannerAds = {}; // Store banner ads for each video
+  Map<int, bool> _videoAdLoaded = {}; // Track loading state for each video
+  Map<int, String> _videoAdUnitIds = {}; // Store ad unit IDs for each video
 
   // Controller for the PageView that handles vertical scrolling
   late PageController _pageController;
@@ -81,6 +90,9 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
 
     // Listen to state changes
     _stateManager.addListener(_onStateChanged);
+
+    // Initialize AdMob banner ad
+    _initializeBannerAd();
   }
 
   void _initializeWithVideos() {
@@ -167,6 +179,25 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
     _pageController.dispose();
     print('🔄 VideoScreen: PageController disposed');
 
+    // Dispose banner ad
+    _bannerAd?.dispose();
+    print('🔄 VideoScreen: Banner ad disposed');
+
+    // Dispose all video banner ads
+    print('🔄 VideoScreen: Disposing video banner ads...');
+    for (final entry in _videoBannerAds.entries) {
+      try {
+        entry.value.dispose();
+        print('🔄 VideoScreen: Disposed banner ad for video ${entry.key}');
+      } catch (e) {
+        print('❌ Error disposing banner ad for video ${entry.key}: $e');
+      }
+    }
+    _videoBannerAds.clear();
+    _videoAdLoaded.clear();
+    _videoAdUnitIds.clear();
+    print('🔄 VideoScreen: All video banner ads disposed');
+
     super.dispose();
     print('🔄 VideoScreen: DISPOSE COMPLETED');
   }
@@ -186,6 +217,11 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       _controllerManager.emergencyStopAllVideos();
 
       _cacheManager.automatedCacheCleanup();
+
+      // Pause banner ad when app goes to background
+      if (_bannerAd != null && _isBannerAdLoaded) {
+        print('🛑 VideoScreen: Pausing banner ad');
+      }
     } else if (state == AppLifecycleState.resumed) {
       print('👁️ VideoScreen: App resumed - checking video state');
       if (_stateManager.isScreenVisible &&
@@ -199,6 +235,12 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
             _playActiveVideo();
           }
         });
+      }
+
+      // Resume banner ad when app comes to foreground
+      if (_bannerAd != null && !_isBannerAdLoaded) {
+        print('👁️ VideoScreen: Resuming banner ad');
+        _refreshBannerAd();
       }
     }
   }
@@ -227,6 +269,13 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       if (mainController.isAppInForeground) {
         _playActiveVideo();
       }
+
+      // Refresh banner ad when screen becomes visible
+      if (!_isBannerAdLoaded && _bannerAd != null) {
+        print(
+            '🔄 VideoScreen: Refreshing banner ad after screen visibility change');
+        _refreshBannerAd();
+      }
     }
   }
 
@@ -246,6 +295,13 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
             _playActiveVideo();
           }
         });
+
+        // Refresh banner ad when screen becomes visible
+        if (!_isBannerAdLoaded && _bannerAd != null) {
+          print(
+              '🔄 VideoScreen: Refreshing banner ad after main controller change');
+          _refreshBannerAd();
+        }
       } else if (!isVideoScreenActive && _stateManager.isScreenVisible) {
         print('🛑 VideoScreen: Tab switched away, immediately pausing videos');
         _stateManager.updateScreenVisibility(false);
@@ -258,6 +314,14 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
           if (mounted && !mainController.isVideoScreen) {
             print('🛑 VideoScreen: Safety pause after tab switch');
             _controllerManager.emergencyStopAllVideos();
+          }
+        });
+
+        // Refresh banner ad when returning to video tab
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted && mainController.isVideoScreen && !_isBannerAdLoaded) {
+            print('🔄 VideoScreen: Refreshing banner ad after tab switch');
+            _refreshBannerAd();
           }
         });
       }
@@ -285,9 +349,19 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       // Optimize controllers
       _controllerManager.optimizeControllers();
 
+      // Initialize banner ad for new video
+      _initializeVideoBannerAd(newPage, _stateManager.videos[newPage]);
+
       // Play new video if screen is visible
       if (_stateManager.isScreenVisible) {
         _playActiveVideo();
+      }
+
+      // Refresh banner ad if it's not loaded
+      if (!_isVideoBannerAdLoaded(newPage) &&
+          _videoBannerAds.containsKey(newPage)) {
+        print('🔄 VideoScreen: Refreshing banner ad after video change');
+        _retryVideoBannerAd(newPage, _stateManager.videos[newPage]);
       }
     }
   }
@@ -347,6 +421,11 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
 
       if (isInitialLoad && _stateManager.videos.isNotEmpty) {
         _initializeCurrentVideo();
+
+        // Initialize banner ads for all loaded videos
+        for (int i = 0; i < _stateManager.videos.length; i++) {
+          _initializeVideoBannerAd(i, _stateManager.videos[i]);
+        }
       } else if (isInitialLoad && _stateManager.hasError) {
         print(
             '❌ VideoScreen: Error loading videos: ${_stateManager.errorMessage}');
@@ -362,6 +441,16 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
               ),
             ),
           );
+        }
+      }
+
+      // Refresh banner ad after loading videos
+      if (_stateManager.videos.isNotEmpty) {
+        final currentIndex = _stateManager.activePage;
+        if (!_isVideoBannerAdLoaded(currentIndex) &&
+            _videoBannerAds.containsKey(currentIndex)) {
+          print('🔄 VideoScreen: Refreshing banner ad after loading videos');
+          _retryVideoBannerAd(currentIndex, _stateManager.videos[currentIndex]);
         }
       }
     } catch (e) {
@@ -431,7 +520,360 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
   void _onStateChanged() {
     if (mounted) {
       setState(() {});
+
+      // Refresh banner ad if it's not loaded
+      if (!_isBannerAdLoaded && _bannerAd != null) {
+        print('🔄 VideoScreen: Refreshing banner ad after state change');
+        _refreshBannerAd();
+      }
     }
+  }
+
+  /// Initialize AdMob banner ad
+  void _initializeBannerAd() async {
+    try {
+      // Create banner ad with custom listener
+      _bannerAd = BannerAd(
+        adUnitId: 'ca-app-pub-3940256099942544/6300978111', // Test ad unit ID
+        size: AdSize.banner,
+        request: const AdRequest(),
+        listener: BannerAdListener(
+          onAdLoaded: (ad) {
+            print('✅ Banner ad loaded successfully in VideoScreen');
+            if (mounted) {
+              setState(() {
+                _isBannerAdLoaded = true;
+              });
+            }
+          },
+          onAdFailedToLoad: (ad, error) {
+            print('❌ Banner ad failed to load: ${error.message}');
+            if (mounted) {
+              setState(() {
+                _isBannerAdLoaded = false;
+              });
+            }
+            // Retry after 5 seconds
+            Future.delayed(const Duration(seconds: 5), () {
+              if (mounted && !_isBannerAdLoaded) {
+                _refreshBannerAd();
+              }
+            });
+          },
+          onAdOpened: (ad) {
+            print('🎯 Banner ad opened');
+          },
+          onAdClosed: (ad) {
+            print('🔒 Banner ad closed');
+          },
+        ),
+      );
+
+      // Load the ad
+      await _bannerAd!.load();
+    } catch (e) {
+      print('❌ Error initializing banner ad: $e');
+      // Retry after 5 seconds
+      Future.delayed(const Duration(seconds: 5), () {
+        if (mounted && !_isBannerAdLoaded) {
+          _refreshBannerAd();
+        }
+      });
+    }
+  }
+
+  /// Initialize per-video banner ad for specific video index
+  Future<void> _initializeVideoBannerAd(
+      int videoIndex, VideoModel video) async {
+    try {
+      // Skip if already initialized
+      if (_videoBannerAds.containsKey(videoIndex)) {
+        return;
+      }
+
+      print(
+          '📱 VideoScreen: Initializing banner ad for video $videoIndex: ${video.videoName}');
+
+      // Generate unique ad unit ID for this video (in production, use real ad unit IDs)
+      final adUnitId = _generateAdUnitIdForVideo(videoIndex, video);
+      _videoAdUnitIds[videoIndex] = adUnitId;
+
+      // Create banner ad for this specific video
+      final bannerAd = BannerAd(
+        adUnitId: adUnitId,
+        size: AdSize.banner,
+        request: AdRequest(
+          // Add video-specific targeting
+          keywords: [
+            video.videoName,
+            video.description,
+            video.uploader.name,
+          ],
+        ),
+        listener: BannerAdListener(
+          onAdLoaded: (ad) {
+            print('✅ Video $videoIndex: Banner ad loaded successfully');
+            if (mounted) {
+              setState(() {
+                _videoAdLoaded[videoIndex] = true;
+              });
+            }
+            // Track ad load for revenue analytics
+            _trackAdLoad(videoIndex, video);
+          },
+          onAdFailedToLoad: (ad, error) {
+            print(
+                '❌ Video $videoIndex: Banner ad failed to load: ${error.message}');
+            if (mounted) {
+              setState(() {
+                _videoAdLoaded[videoIndex] = false;
+              });
+            }
+            // Retry after 3 seconds
+            Future.delayed(const Duration(seconds: 3), () {
+              if (mounted && !(_videoAdLoaded[videoIndex] ?? false)) {
+                _retryVideoBannerAd(videoIndex, video);
+              }
+            });
+          },
+          onAdOpened: (ad) {
+            print('🎯 Video $videoIndex: Banner ad opened');
+            // Track ad click for revenue analytics
+            _trackAdClick(videoIndex, video);
+          },
+          onAdClosed: (ad) {
+            print('🔒 Video $videoIndex: Banner ad closed');
+          },
+          onAdImpression: (ad) {
+            print('👁️ Video $videoIndex: Banner ad impression');
+            // Track ad impression for revenue analytics
+            _trackAdImpression(videoIndex, video);
+            // Track real ad impression for revenue calculation
+            _trackRealAdImpression(videoIndex, video);
+          },
+        ),
+      );
+
+      // Store the banner ad
+      _videoBannerAds[videoIndex] = bannerAd;
+      _videoAdLoaded[videoIndex] = false;
+
+      // Load the ad
+      await bannerAd.load();
+
+      print(
+          '📱 VideoScreen: Banner ad initialization started for video $videoIndex');
+    } catch (e) {
+      print('❌ Error initializing video banner ad for index $videoIndex: $e');
+      _videoAdLoaded[videoIndex] = false;
+    }
+  }
+
+  /// Generate unique ad unit ID for video (in production, use real ad unit IDs)
+  String _generateAdUnitIdForVideo(int videoIndex, VideoModel video) {
+    // For testing, use different test ad unit IDs
+    // In production, you would have different real ad unit IDs for different video categories
+    final testAdUnitIds = [
+      'ca-app-pub-3940256099942544/6300978111', // Test Banner 1
+      'ca-app-pub-3940256099942544/6300978112', // Test Banner 2 (if available)
+      'ca-app-pub-3940256099942544/6300978113', // Test Banner 3 (if available)
+    ];
+
+    // Use video index to cycle through different ad unit IDs
+    final adUnitIndex = videoIndex % testAdUnitIds.length;
+    return testAdUnitIds[adUnitIndex];
+  }
+
+  /// Retry loading banner ad for specific video
+  Future<void> _retryVideoBannerAd(int videoIndex, VideoModel video) async {
+    try {
+      print('🔄 VideoScreen: Retrying banner ad for video $videoIndex');
+
+      // Dispose old ad if exists
+      _videoBannerAds[videoIndex]?.dispose();
+
+      // Reinitialize
+      await _initializeVideoBannerAd(videoIndex, video);
+    } catch (e) {
+      print('❌ Error retrying video banner ad for index $videoIndex: $e');
+    }
+  }
+
+  /// Track ad load for revenue analytics
+  void _trackAdLoad(int videoIndex, VideoModel video) {
+    try {
+      print('📊 Ad Analytics: Ad loaded for video $videoIndex');
+      print('📊 Ad Analytics: Video ID: ${video.id}');
+      print('📊 Ad Analytics: Video Name: ${video.videoName}');
+      print('📊 Ad Analytics: Ad Unit ID: ${_videoAdUnitIds[videoIndex]}');
+
+      // Send analytics data to backend
+      _sendAdAnalytics('load', videoIndex, video);
+    } catch (e) {
+      print('❌ Error tracking ad load: $e');
+    }
+  }
+
+  /// Track ad click for revenue analytics
+  void _trackAdClick(int videoIndex, VideoModel video) {
+    try {
+      print('📊 Ad Analytics: Ad clicked for video $videoIndex');
+      print('📊 Ad Analytics: Video ID: ${video.id}');
+      print('📊 Ad Analytics: Video Name: ${video.videoName}');
+
+      // Send analytics data to backend
+      _sendAdAnalytics('click', videoIndex, video);
+    } catch (e) {
+      print('❌ Error tracking ad click: $e');
+    }
+  }
+
+  /// Track ad impression for revenue analytics
+  void _trackAdImpression(int videoIndex, VideoModel video) {
+    try {
+      print('📊 Ad Analytics: Ad impression for video $videoIndex');
+      print('📊 Ad Analytics: Video ID: ${video.id}');
+      print('📊 Ad Analytics: Video Name: ${video.videoName}');
+
+      // Send analytics data to backend
+      _sendAdAnalytics('impression', videoIndex, video);
+    } catch (e) {
+      print('❌ Error tracking ad impression: $e');
+    }
+  }
+
+  /// Track real ad impression for revenue calculation
+  void _trackRealAdImpression(int videoIndex, VideoModel video) {
+    try {
+      print('📊 Real Ad Impression: Video $videoIndex - ${video.videoName}');
+
+      // In production, this would send data to your backend
+      // to track actual ad impressions for revenue calculation
+
+      // You can implement this method to:
+      // 1. Send impression data to your analytics backend
+      // 2. Update ad impression counters
+      // 3. Calculate real-time revenue
+
+      // Example implementation:
+      // await _sendAdImpressionToBackend({
+      //   'video_id': video.id,
+      //   'video_index': videoIndex,
+      //   'ad_unit_id': _videoAdUnitIds[videoIndex],
+      //   'impression_timestamp': DateTime.now().toIso8601String(),
+      //   'user_id': await _getCurrentUserId(),
+      // });
+
+      print('📊 Ad impression tracked for revenue calculation');
+    } catch (e) {
+      print('❌ Error tracking ad impression: $e');
+    }
+  }
+
+  /// Get real ad impressions from backend (if available)
+  Future<int> _getRealAdImpressionsFromBackend(String videoId) async {
+    try {
+      // This should call your backend API to get real ad impressions
+      // For now, return 0 to indicate no real data available
+
+      // Example implementation:
+      // final response = await http.get(
+      //   Uri.parse('${AppConfig.baseUrl}/api/ads/impressions/$videoId'),
+      //   headers: {'Authorization': 'Bearer $token'},
+      // );
+      //
+      // if (response.statusCode == 200) {
+      //   final data = json.decode(response.body);
+      //   return data['impressions'] ?? 0;
+      // }
+
+      return 0; // No real data available yet
+    } catch (e) {
+      print('❌ Error getting real ad impressions: $e');
+      return 0;
+    }
+  }
+
+  /// Send ad analytics data to backend for revenue tracking
+  Future<void> _sendAdAnalytics(
+      String eventType, int videoIndex, VideoModel video) async {
+    try {
+      print(
+          '📊 Sending ad analytics to backend: $eventType for video $videoIndex');
+
+      // Prepare analytics data
+      final analyticsData = {
+        'event_type': eventType, // 'load', 'click', 'impression'
+        'video_id': video.id,
+        'video_index': videoIndex,
+        'video_name': video.videoName,
+        'uploader_id': video.uploader.id,
+        'uploader_name': video.uploader.name,
+        'ad_unit_id': _videoAdUnitIds[videoIndex],
+        'timestamp': DateTime.now().toIso8601String(),
+        'user_id': await _getCurrentUserId(),
+        'session_id': _generateSessionId(),
+        'device_info': {
+          'platform': Theme.of(context).platform.name,
+          'screen_size': MediaQuery.of(context).size.toString(),
+        }
+      };
+
+      print('📊 Analytics data: $analyticsData');
+
+      // Send to backend (you can implement this based on your backend API)
+      // await _sendAnalyticsToBackend(analyticsData);
+
+      // For now, just log the data
+      print('📊 Ad analytics data prepared for backend:');
+      print('   Event: $eventType');
+      print('   Video: ${video.videoName} (ID: ${video.id})');
+      print('   Ad Unit: ${_videoAdUnitIds[videoIndex]}');
+      print('   Timestamp: ${analyticsData['timestamp']}');
+    } catch (e) {
+      print('❌ Error sending ad analytics: $e');
+    }
+  }
+
+  /// Get current user ID for analytics
+  Future<String?> _getCurrentUserId() async {
+    try {
+      final userData = await _authService.getUserData();
+      return userData?['id'] ?? userData?['googleId'];
+    } catch (e) {
+      print('❌ Error getting user ID: $e');
+      return null;
+    }
+  }
+
+  /// Generate session ID for analytics
+  String _generateSessionId() {
+    return 'session_${DateTime.now().millisecondsSinceEpoch}_${_stateManager.activePage}';
+  }
+
+  /// Get banner ad for specific video
+  BannerAd? _getVideoBannerAd(int videoIndex) {
+    return _videoBannerAds[videoIndex];
+  }
+
+  /// Check if video banner ad is loaded
+  bool _isVideoBannerAdLoaded(int videoIndex) {
+    return _videoAdLoaded[videoIndex] ?? false;
+  }
+
+  /// Refresh banner ad
+  void _refreshBannerAd() async {
+    if (_bannerAd != null) {
+      _bannerAd!.dispose();
+      _bannerAd = null;
+    }
+
+    setState(() {
+      _isBannerAdLoaded = false;
+    });
+
+    await Future.delayed(const Duration(milliseconds: 500));
+    _initializeBannerAd();
   }
 
   /// Handle like button
@@ -440,6 +882,12 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
 
     try {
       print('🔍 Like Handler: Starting like process for video at index $index');
+
+      // Refresh banner ad if it's not loaded
+      if (!_isBannerAdLoaded && _bannerAd != null) {
+        print('🔄 VideoScreen: Refreshing banner ad after like action');
+        _refreshBannerAd();
+      }
 
       // Validate index
       if (index < 0 || index >= _stateManager.videos.length) {
@@ -546,6 +994,12 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
 
   /// Handle comment button
   void _handleComment(VideoModel video) {
+    // Refresh banner ad if it's not loaded
+    if (!_isBannerAdLoaded && _bannerAd != null) {
+      print('🔄 VideoScreen: Refreshing banner ad after comment action');
+      _refreshBannerAd();
+    }
+
     _showCommentsSheet(video);
   }
 
@@ -571,6 +1025,12 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
 
   /// Handle share button
   void _handleShare(VideoModel video) async {
+    // Refresh banner ad if it's not loaded
+    if (!_isBannerAdLoaded && _bannerAd != null) {
+      print('🔄 VideoScreen: Refreshing banner ad after share action');
+      _refreshBannerAd();
+    }
+
     try {
       await Share.share(
         'Check out this video: ${video.videoName}\n\n${video.videoUrl}',
@@ -581,16 +1041,6 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
         SnackBar(content: Text('Failed to share video: $e')),
       );
     }
-  }
-
-  /// Clear video cache
-  Future<void> _clearVideoCache() async {
-    await _cacheManager.clearVideoCache();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('✅ Video cache cleared'),
-          backgroundColor: Colors.green),
-    );
   }
 
   /// Get cache info
@@ -636,54 +1086,221 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
     }
   }
 
+  /// Get revenue analytics summary for a specific video
+  Map<String, dynamic> _getVideoRevenueAnalytics(
+      int videoIndex, VideoModel video) {
+    try {
+      final adUnitId = _videoAdUnitIds[videoIndex];
+      final isAdLoaded = _videoAdLoaded[videoIndex] ?? false;
+
+      return {
+        'video_id': video.id,
+        'video_name': video.videoName,
+        'video_index': videoIndex,
+        'uploader_id': video.uploader.id,
+        'uploader_name': video.uploader.name,
+        'ad_unit_id': adUnitId,
+        'ad_status': isAdLoaded ? 'loaded' : 'not_loaded',
+        'ad_loaded_at': isAdLoaded ? DateTime.now().toIso8601String() : null,
+        'estimated_revenue': _calculateEstimatedRevenue(videoIndex, video),
+        'analytics_timestamp': DateTime.now().toIso8601String(),
+      };
+    } catch (e) {
+      print('❌ Error getting video revenue analytics: $e');
+      return {};
+    }
+  }
+
+  /// Calculate estimated revenue for a video based on AD IMPRESSIONS
+  double _calculateEstimatedRevenue(int videoIndex, VideoModel video) {
+    try {
+      // Revenue is based on AD IMPRESSIONS, not video views
+      // CPM (Cost Per Mille) = Revenue per 1000 ad impressions
+      final cpm = 2.0; // Example: $2.00 per 1000 ad impressions
+
+      // Get ad impressions for this video
+      final adImpressions = _getAdImpressionsForVideo(videoIndex, video);
+
+      // Calculate revenue: (Ad Impressions / 1000) × CPM
+      double revenue = (adImpressions / 1000.0) * cpm;
+
+      // Apply ad performance multipliers
+      final adPerformanceMultiplier = _calculateAdPerformanceMultiplier(video);
+      revenue *= adPerformanceMultiplier;
+
+      return revenue;
+    } catch (e) {
+      print('❌ Error calculating estimated revenue: $e');
+      return 0.0;
+    }
+  }
+
+  /// Get ad impressions for a specific video
+  int _getAdImpressionsForVideo(int videoIndex, VideoModel video) {
+    try {
+      // This should come from your ad analytics backend
+      // For now, we'll simulate based on video engagement
+
+      // Base impressions = video views
+      int baseImpressions = video.views ?? 0;
+
+      // Ad impressions are typically higher than video views
+      // because ads can be shown multiple times per video view
+      final adImpressionsMultiplier =
+          1.5; // 50% more ad impressions than video views
+
+      // Calculate estimated ad impressions
+      final estimatedAdImpressions =
+          (baseImpressions * adImpressionsMultiplier).round();
+
+      print(
+          '📊 Video ${video.videoName}: ${video.views} views → ${estimatedAdImpressions} estimated ad impressions');
+
+      return estimatedAdImpressions;
+    } catch (e) {
+      print('❌ Error getting ad impressions: $e');
+      return 0;
+    }
+  }
+
+  /// Calculate ad performance multiplier based on engagement
+  double _calculateAdPerformanceMultiplier(VideoModel video) {
+    try {
+      double multiplier = 1.0;
+
+      // Higher engagement = better ad performance = higher revenue
+
+      // Likes factor: +0.1 for every 100 likes
+      if (video.likes > 0) {
+        multiplier += (video.likes / 100.0) * 0.1;
+      }
+
+      // Comments factor: +0.05 for every 10 comments
+      if (video.comments.isNotEmpty) {
+        multiplier += (video.comments.length / 10.0) * 0.05;
+      }
+
+      // Video completion rate factor
+      // Higher completion rate = better ad retention
+      if (video.views != null && video.views! > 0) {
+        // Assume 70% completion rate as baseline
+        final estimatedCompletionRate = 0.7;
+        if (estimatedCompletionRate > 0.7) {
+          multiplier += (estimatedCompletionRate - 0.7) *
+              0.5; // +0.5 for every 10% above 70%
+        }
+      }
+
+      // Cap multiplier to reasonable bounds
+      return multiplier.clamp(0.5, 2.0);
+    } catch (e) {
+      print('❌ Error calculating ad performance multiplier: $e');
+      return 1.0;
+    }
+  }
+
+  /// Get revenue multiplier for specific ad unit
+  double _getRevenueMultiplierForAdUnit(String adUnitId) {
+    // In production, this would come from your ad network configuration
+    // For now, return different multipliers for different test ad units
+    if (adUnitId.contains('6300978111')) return 1.0;
+    if (adUnitId.contains('6300978112')) return 1.2;
+    if (adUnitId.contains('6300978113')) return 1.5;
+    return 1.0;
+  }
+
+  /// Calculate engagement multiplier based on video metrics
+  double _calculateEngagementMultiplier(VideoModel video) {
+    try {
+      double multiplier = 1.0;
+
+      // Likes factor
+      if (video.likes > 0) {
+        multiplier += (video.likes / 100.0) * 0.1; // +0.1 for every 100 likes
+      }
+
+      // Comments factor
+      if (video.comments.isNotEmpty) {
+        multiplier += (video.comments.length / 10.0) *
+            0.05; // +0.05 for every 10 comments
+      }
+
+      // Views factor (if available)
+      if (video.views != null && video.views! > 0) {
+        multiplier +=
+            (video.views! / 1000.0) * 0.02; // +0.02 for every 1000 views
+      }
+
+      // Cap the multiplier to reasonable bounds
+      return multiplier.clamp(0.5, 3.0);
+    } catch (e) {
+      print('❌ Error calculating engagement multiplier: $e');
+      return 1.0;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Debug toolbar
-            if (kDebugMode)
+    return RepaintBoundary(
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: SafeArea(
+          child: Column(
+            children: [
+              // Banner ad at the top
               Container(
-                color: Colors.blue.withOpacity(0.8),
-                padding: const EdgeInsets.all(8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    ElevatedButton(
-                      onPressed: _testApiConnection,
-                      child: const Text('Test API',
-                          style: TextStyle(fontSize: 12)),
-                    ),
-                    ElevatedButton(
-                      onPressed: _testVideoLinkField,
-                      child: const Text('Test Links',
-                          style: TextStyle(fontSize: 12)),
-                    ),
-                    ElevatedButton(
-                      onPressed: debugVideoState,
-                      child: const Text('Debug State',
-                          style: TextStyle(fontSize: 12)),
-                    ),
-                    ElevatedButton(
-                      onPressed: _testLikeFunctionality,
-                      child: const Text('Test Like',
-                          style: TextStyle(fontSize: 12)),
-                    ),
-                    ElevatedButton(
-                      onPressed: _testNetworkConfig,
-                      child: const Text('Test Network',
-                          style: TextStyle(fontSize: 12)),
-                    ),
-                  ],
+                width: double.infinity,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border(
+                    bottom: BorderSide(color: Colors.grey.shade300, width: 1),
+                  ),
+                ),
+                child: GestureDetector(
+                  onTap: () {
+                    final currentIndex = _stateManager.activePage;
+                    if (!_isVideoBannerAdLoaded(currentIndex) &&
+                        _videoBannerAds.containsKey(currentIndex)) {
+                      _retryVideoBannerAd(
+                          currentIndex, _stateManager.videos[currentIndex]);
+                    }
+                  },
+                  child: _isVideoBannerAdLoaded(_stateManager.activePage) &&
+                          _videoBannerAds
+                              .containsKey(_stateManager.activePage) &&
+                          _videoBannerAds[_stateManager.activePage] != null
+                      ? AdWidget(ad: _videoBannerAds[_stateManager.activePage]!)
+                      : const Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Loading Ad...',
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              Text(
+                                'Tap to retry',
+                                style: TextStyle(
+                                  color: Colors.blue,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                 ),
               ),
-            // Main video player area
-            Expanded(
-              child: _buildVideoPlayer(),
-            ),
-          ],
+
+              // Main video player area
+              Expanded(
+                child: _buildVideoPlayer(),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -691,182 +1308,163 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
 
   /// Build the main video player area
   Widget _buildVideoPlayer() {
-    return VisibilityDetector(
-      key: const Key('video_screen'),
-      onVisibilityChanged: (VisibilityInfo visibilityInfo) {
-        if (visibilityInfo.visibleFraction == 0) {
-          print('🛑 VideoScreen: Screen not visible, pausing videos');
-          _stateManager.updateScreenVisibility(false);
-          _controllerManager.handleVideoInvisible();
-        } else {
-          print(
-              '👁️ VideoScreen: Screen visible, checking if should play videos');
-          _stateManager.updateScreenVisibility(true);
-          _controllerManager.handleVideoVisible();
+    return RepaintBoundary(
+      child: VisibilityDetector(
+        key: const Key('video_screen'),
+        onVisibilityChanged: (VisibilityInfo visibilityInfo) {
+          if (visibilityInfo.visibleFraction == 0) {
+            print('🛑 VideoScreen: Screen not visible, pausing videos');
+            _stateManager.updateScreenVisibility(false);
+            _controllerManager.handleVideoInvisible();
+          } else {
+            print(
+                '👁️ VideoScreen: Screen visible, checking if should play videos');
+            _stateManager.updateScreenVisibility(true);
+            _controllerManager.handleVideoVisible();
 
-          // Only play if we're on the video tab and app is in foreground
-          final mainController =
-              Provider.of<MainController>(context, listen: false);
-          if (mainController.isVideoScreen &&
-              mainController.isAppInForeground) {
-            Future.delayed(const Duration(milliseconds: 100), () {
-              if (mounted && _stateManager.isScreenVisible) {
-                _playActiveVideo();
-              }
-            });
-          }
-        }
-      },
-      child: NotificationListener<ScrollNotification>(
-        onNotification: (ScrollNotification scrollInfo) {
-          if (scrollInfo is ScrollUpdateNotification) {
-            final currentIndex =
-                _pageController.page?.round() ?? _stateManager.activePage;
-            _stateManager.checkAndLoadMoreVideos(currentIndex);
-          }
-          return false;
-        },
-        child: PageView.builder(
-          controller: _pageController,
-          scrollDirection: Axis.vertical,
-          itemCount:
-              _stateManager.videos.length + (_stateManager.hasMore ? 1 : 0),
-          onPageChanged: (index) {
-            print('📱 VideoScreen: PageView changed to index: $index');
-            _onVideoPageChanged(index);
-          },
-          itemBuilder: (context, index) {
-            // Show loading indicator at the end when loading more videos
-            if (index == _stateManager.videos.length) {
-              return const LoadingIndicatorWidget();
+            // Only play if we're on the video tab and app is in foreground
+            final mainController =
+                Provider.of<MainController>(context, listen: false);
+            if (mainController.isVideoScreen &&
+                mainController.isAppInForeground) {
+              Future.delayed(const Duration(milliseconds: 100), () {
+                if (mounted && _stateManager.isScreenVisible) {
+                  _playActiveVideo();
+                }
+              });
             }
+          }
+        },
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (ScrollNotification scrollInfo) {
+            if (scrollInfo is ScrollUpdateNotification) {
+              final currentIndex =
+                  _pageController.page?.round() ?? _stateManager.activePage;
+              _stateManager.checkAndLoadMoreVideos(currentIndex);
 
-            final video = _stateManager.videos[index];
-            final controller = _controllerManager.getController(index);
-
-            return VideoItemWidget(
-              video: video,
-              controller: controller,
-              isActive: index == _stateManager.activePage,
-              onLike: () => _handleLike(index),
-              onComment: () => _handleComment(video),
-              onShare: () => _handleShare(video),
-              onProfileTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        ProfileScreen(userId: video.uploader.id),
-                  ),
-                );
-              },
-            );
+              // Refresh banner ad if it's not loaded
+              if (!_isBannerAdLoaded && _bannerAd != null) {
+                print('🔄 VideoScreen: Refreshing banner ad after scroll');
+                _refreshBannerAd();
+              }
+            }
+            return false;
           },
+          child: PageView.builder(
+            controller: _pageController,
+            scrollDirection: Axis.vertical,
+            itemCount:
+                _stateManager.videos.length + (_stateManager.hasMore ? 1 : 0),
+            onPageChanged: (index) {
+              print('📱 VideoScreen: PageView changed to index: $index');
+              _onVideoPageChanged(index);
+            },
+            itemBuilder: (context, index) {
+              // Show loading indicator at the end when loading more videos
+              if (index == _stateManager.videos.length) {
+                return const RepaintBoundary(
+                  child: LoadingIndicatorWidget(),
+                );
+              }
+
+              final video = _stateManager.videos[index];
+              final controller = _controllerManager.getController(index);
+
+              return RepaintBoundary(
+                child: VideoItemWidget(
+                  video: video,
+                  controller: controller,
+                  isActive: index == _stateManager.activePage,
+                  onLike: () => _handleLike(index),
+                  onComment: () => _handleComment(video),
+                  onShare: () => _handleShare(video),
+                  onProfileTap: () {
+                    // Refresh banner ad if it's not loaded
+                    if (!_isBannerAdLoaded && _bannerAd != null) {
+                      print(
+                          '🔄 VideoScreen: Refreshing banner ad after profile tap');
+                      _refreshBannerAd();
+                    }
+
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            ProfileScreen(userId: video.uploader.id),
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
   }
 
-  // Add this method to VideoScreen for debugging
-  void debugVideoState() {
-    print('🔍 DEBUG VIDEO STATE:');
-    print('  - Screen visible: ${_stateManager.isScreenVisible}');
-    print('  - Active page: ${_stateManager.activePage}');
-    print('  - Total videos: ${_stateManager.videos.length}');
-    print('  - Controllers count: ${_controllerManager.controllers.length}');
+  /// Build revenue display widget for current video
+  Widget _buildRevenueDisplay() {
+    if (_stateManager.videos.isEmpty) return const SizedBox.shrink();
 
-    // Check if any videos are still playing
-    bool anyPlaying = false;
-    _controllerManager.controllers.forEach((index, controller) {
-      if (controller.value.isPlaying) {
-        print('🔍 VideoScreen: Video at index $index is STILL PLAYING!');
-        anyPlaying = true;
-      }
-    });
+    final currentVideo = _stateManager.videos[_stateManager.activePage];
+    final currentIndex = _stateManager.activePage;
+    final revenueAnalytics =
+        _getVideoRevenueAnalytics(currentIndex, currentVideo);
+    final estimatedRevenue = revenueAnalytics['estimated_revenue'] ?? 0.0;
 
-    if (!anyPlaying) {
-      print('🔍 VideoScreen: All videos are properly paused');
-    }
-  }
-
-  /// Test API connection
-  Future<void> _testApiConnection() async {
-    try {
-      print('🧪 VideoScreen: Testing API connection...');
-
-      // Show current configuration
-      print('🧪 VideoScreen: Current base URL: ${VideoService.baseUrl}');
-
-      final response = await _videoService.checkServerHealth();
-      print('🧪 VideoScreen: API health check result: $response');
-
-      if (response) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('✅ API is accessible'),
-              backgroundColor: Colors.green),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('❌ API is not accessible'),
-              backgroundColor: Colors.red),
-        );
-      }
-    } catch (e) {
-      print('🧪 VideoScreen: API test error: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('❌ API test failed: $e'),
-            backgroundColor: Colors.red),
-      );
-    }
-  }
-
-  /// Test video link field
-  Future<void> _testVideoLinkField() async {
-    try {
-      print('🔗 VideoScreen: Testing video link field...');
-      await _videoService.testVideoLinkField();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('🔗 Check console for video link field info'),
-            backgroundColor: Colors.blue),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('🔗 Error testing video link field: $e'),
-            backgroundColor: Colors.red),
-      );
-    }
-  }
-
-  /// Test like functionality
-  Future<void> _testLikeFunctionality() async {
-    try {
-      print('❤️ VideoScreen: Testing like functionality...');
-
-      // Get current user data
-      final userData = await _authService.getUserData();
-      print('❤️ VideoScreen: Current user data: $userData');
-
-      if (userData == null || userData['id'] == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('❌ No user data available for testing'),
-            backgroundColor: Colors.red,
+    return Positioned(
+      top: 80, // Below banner ad
+      right: 16,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.8),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: Colors.green.withOpacity(0.6),
+            width: 1,
           ),
-        );
-        return;
-      }
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.attach_money,
+              color: Colors.green,
+              size: 16,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '\$${estimatedRevenue.toStringAsFixed(4)}',
+              style: const TextStyle(
+                color: Colors.green,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(width: 4),
+            GestureDetector(
+              onTap: () => _showCurrentVideoRevenueAnalytics(),
+              child: Icon(
+                Icons.info_outline,
+                color: Colors.white.withOpacity(0.7),
+                size: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-      // Get current video
+  /// Show revenue analytics for current video
+  void _showCurrentVideoRevenueAnalytics() {
+    try {
       if (_stateManager.videos.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('❌ No videos available for testing'),
+            content: Text('❌ No videos available for analytics'),
             backgroundColor: Colors.red,
           ),
         );
@@ -874,68 +1472,56 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       }
 
       final currentVideo = _stateManager.videos[_stateManager.activePage];
-      print('❤️ VideoScreen: Testing like on video: ${currentVideo.id}');
-      print('❤️ VideoScreen: Current likes: ${currentVideo.likes}');
-      print('❤️ VideoScreen: Liked by: ${currentVideo.likedBy}');
+      final currentIndex = _stateManager.activePage;
+      final revenueAnalytics =
+          _getVideoRevenueAnalytics(currentIndex, currentVideo);
 
-      // Test the like API call
-      final updatedVideo =
-          await _videoService.toggleLike(currentVideo.id, userData['id']);
-      print('❤️ VideoScreen: Like test successful!');
-      print('❤️ VideoScreen: Updated video likes: ${updatedVideo.likes}');
-      print('❤️ VideoScreen: Updated video likedBy: ${updatedVideo.likedBy}');
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ Like test successful! Check console for details'),
-          backgroundColor: Colors.green,
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('📊 Video Revenue Analytics'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Video: ${currentVideo.videoName}'),
+              Text('Index: $currentIndex'),
+              Text('Ad Unit ID: ${revenueAnalytics['ad_unit_id'] ?? 'N/A'}'),
+              Text('Ad Status: ${revenueAnalytics['ad_status'] ?? 'N/A'}'),
+              Text(
+                  'Estimated Revenue: \$${revenueAnalytics['estimated_revenue']?.toStringAsFixed(4) ?? '0.0000'}'),
+              const SizedBox(height: 16),
+              const Text('Engagement Factors:',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              Text('Likes: ${currentVideo.likes}'),
+              Text('Comments: ${currentVideo.comments.length}'),
+              Builder(
+                builder: (context) {
+                  final views = currentVideo.views;
+                  if (views != null && views > 0) {
+                    return Text('Views: $views');
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
         ),
       );
     } catch (e) {
-      print('❌ VideoScreen: Like test failed: $e');
+      print('❌ Error showing revenue analytics: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('❌ Like test failed: $e'),
+          content: Text('❌ Error showing revenue analytics: $e'),
           backgroundColor: Colors.red,
         ),
       );
     }
   }
-
-  /// Test network configuration
-  Future<void> _testNetworkConfig() async {
-    try {
-      print('🌐 VideoScreen: Testing network configuration...');
-
-      // Show current configuration
-      print('🌐 VideoScreen: Current base URL: ${VideoService.baseUrl}');
-
-      final response = await _videoService.testNetworkConfiguration();
-      print('🌐 VideoScreen: Network configuration test result: $response');
-
-      if (response) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('✅ Network configuration is correct'),
-              backgroundColor: Colors.green),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('❌ Network configuration is incorrect'),
-              backgroundColor: Colors.red),
-        );
-      }
-    } catch (e) {
-      print('🌐 VideoScreen: Network configuration test error: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('❌ Network configuration test failed: $e'),
-            backgroundColor: Colors.red),
-      );
-    }
-  }
-
-  // Call this method when you suspect issues
-  // You can add a debug button or call it from console
 }

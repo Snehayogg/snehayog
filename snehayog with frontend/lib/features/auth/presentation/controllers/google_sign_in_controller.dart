@@ -112,8 +112,4 @@ class GoogleSignInController extends ChangeNotifier {
     _errorMessage = null;
   }
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
 }

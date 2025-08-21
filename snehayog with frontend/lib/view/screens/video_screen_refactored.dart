@@ -271,57 +271,8 @@ class _VideoScreenRefactoredState extends State<VideoScreenRefactored>
             );
           }
 
-          // Debug: Add test button for link functionality
-          return Column(
-            children: [
-              // Debug button
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                color: Colors.blue.withOpacity(0.1),
-                child: Column(
-                  children: [
-                    const Text(
-                      'Debug: Video Link Test',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        ElevatedButton(
-                          onPressed: () async {
-                            final videoService = VideoService();
-                            await videoService.testVideoLinkField();
-                          },
-                          child: const Text('Test Link Field'),
-                        ),
-                        ElevatedButton(
-                          onPressed: () {
-                            print('🔗 Debug: Current videos:');
-                            for (int i = 0;
-                                i < videoProvider.videos.length;
-                                i++) {
-                              final video = videoProvider.videos[i];
-                              print(
-                                  '🔗 Debug: Video $i: "${video.videoName}" - Link: "${video.link}"');
-                            }
-                          },
-                          child: const Text('Print Video Links'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              // Video feed
-              Expanded(child: _buildVideoFeed(videoProvider)),
-            ],
-          );
+          // Only show the video feed (remove debug bar)
+          return Expanded(child: _buildVideoFeed(videoProvider));
         },
       ),
     );

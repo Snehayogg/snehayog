@@ -9,9 +9,15 @@ import 'package:snehayog/core/providers/video_provider.dart';
 import 'package:snehayog/core/providers/user_provider.dart';
 import 'package:snehayog/view/screens/login_screen.dart';
 import 'package:snehayog/services/video_service.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:snehayog/core/services/error_logging_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize AdMob
+  await MobileAds.instance.initialize();
+  ErrorLoggingService.logServiceInitialization('AdMob');
 
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -49,7 +55,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    debugPrint("App started");
+    ErrorLoggingService.logAppLifecycle('started');
   }
 
   @override
@@ -64,21 +70,21 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
     switch (state) {
       case AppLifecycleState.resumed:
-        debugPrint("🟢 App Resumed");
+        ErrorLoggingService.logAppLifecycle('Resumed');
         mainController.setAppInForeground(true);
         break;
       case AppLifecycleState.inactive:
-        debugPrint("🔘 App Inactive");
+        ErrorLoggingService.logAppLifecycle('Inactive');
         break;
       case AppLifecycleState.paused:
-        debugPrint("🟡 App Paused");
+        ErrorLoggingService.logAppLifecycle('Paused');
         mainController.setAppInForeground(false);
         break;
       case AppLifecycleState.detached:
-        debugPrint("🔴 App Detached");
+        ErrorLoggingService.logAppLifecycle('Detached');
         break;
       case AppLifecycleState.hidden:
-        debugPrint("⚫ App Hidden");
+        ErrorLoggingService.logAppLifecycle('Hidden');
         break;
     }
   }

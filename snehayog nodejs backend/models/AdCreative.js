@@ -6,10 +6,27 @@ const AdCreativeSchema = new mongoose.Schema({
     ref: 'AdCampaign',
     required: true
   },
+  adType: {
+    type: String,
+    required: true,
+    enum: ['banner', 'carousel ads', 'video feeds'],
+    default: 'banner'
+  },
   type: {
     type: String,
     required: true,
-    enum: ['image', 'video']
+    enum: ['image', 'video'],
+    validate: {
+      validator: function(v) {
+        // Banner ads can only use images
+        if (this.adType === 'banner' && v !== 'image') {
+          return false;
+        }
+        // Carousel ads and video feeds can use both images and videos
+        return true;
+      },
+      message: 'Banner ads can only use images. Carousel ads and video feeds can use both images and videos.'
+    }
   },
   cloudinaryUrl: {
     type: String,
@@ -90,7 +107,25 @@ AdCreativeSchema.pre('save', function(next) {
   next();
 });
 
-// Only allow one active creative per campaign
-AdCreativeSchema.index({ campaignId: 1, isActive: 1 }, { unique: true, sparse: true });
+// Pre-save middleware to validate adType and type combination
+AdCreativeSchema.pre('save', function(next) {
+  // Validate banner ads can only use images
+  if (this.adType === 'banner' && this.type !== 'image') {
+    const error = new Error('Banner ads can only use images');
+    return next(error);
+  }
+  
+  // Validate video ads require duration
+  if (this.type === 'video' && (!this.durationSec || this.durationSec < 1 || this.durationSec > 60)) {
+    const error = new Error('Video ads require duration between 1-60 seconds');
+    return next(error);
+  }
+  
+  next();
+});
+
+// Add indexes for better performance
+AdCreativeSchema.index({ adType: 1 }); // For filtering by ad type
+AdCreativeSchema.index({ campaignId: 1, adType: 1 }); // For finding creatives by campaign and ad type
 
 export default mongoose.models.AdCreative || mongoose.model('AdCreative', AdCreativeSchema);

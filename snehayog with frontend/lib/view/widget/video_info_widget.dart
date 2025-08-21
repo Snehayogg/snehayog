@@ -14,36 +14,38 @@ class VideoInfoWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Video title
-        Text(
-          video.videoName,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
+    return RepaintBoundary(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Video title
+          Text(
+            video.videoName,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-        ),
-        const SizedBox(height: 4),
+          const SizedBox(height: 4),
 
-        // Video description (limited to 2 lines)
-        Text(
-          video.description,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 13,
+          // Video description (limited to 2 lines)
+          Text(
+            video.description,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        const SizedBox(height: 8),
+          const SizedBox(height: 8),
 
-        // Uploader information (tappable to go to profile)
-        _UploaderInfoSection(video: video),
-      ],
+          // Uploader information (tappable to go to profile)
+          _UploaderInfoSection(video: video),
+        ],
+      ),
     );
   }
 }

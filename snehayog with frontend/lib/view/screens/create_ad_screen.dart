@@ -42,12 +42,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
       RazorpayService(); // Added RazorpayService instance
   final CloudinaryService _cloudinaryService = CloudinaryService();
 
-  final List<String> _adTypes = [
-    'banner',
-    'interstitial',
-    'rewarded',
-    'native'
-  ];
+  final List<String> _adTypes = ['banner', 'carousel', 'video feed ad'];
 
   @override
   void initState() {
@@ -69,19 +64,38 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
 
   Future<void> _pickImage() async {
     try {
-      final ImagePicker picker = ImagePicker();
-      final XFile? image = await picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1920,
-        maxHeight: 1080,
-        imageQuality: 85,
-      );
+      // For banner ads, only allow images
+      if (_selectedAdType == 'banner') {
+        final ImagePicker picker = ImagePicker();
+        final XFile? image = await picker.pickImage(
+          source: ImageSource.gallery,
+          maxWidth: 1920,
+          maxHeight: 1080,
+          imageQuality: 85,
+        );
 
-      if (image != null) {
-        setState(() {
-          _selectedImage = File(image.path);
-          _selectedVideo = null;
-        });
+        if (image != null) {
+          setState(() {
+            _selectedImage = File(image.path);
+            _selectedVideo = null;
+          });
+        }
+      } else {
+        // For carousel and video feed ads, allow both image and video
+        final ImagePicker picker = ImagePicker();
+        final XFile? image = await picker.pickImage(
+          source: ImageSource.gallery,
+          maxWidth: 1920,
+          maxHeight: 1080,
+          imageQuality: 85,
+        );
+
+        if (image != null) {
+          setState(() {
+            _selectedImage = File(image.path);
+            // Don't clear video for carousel and video feed ads
+          });
+        }
       }
     } catch (e) {
       setState(() {
@@ -92,6 +106,15 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
 
   Future<void> _pickVideo() async {
     try {
+      // Only allow video selection for carousel and video feed ads
+      if (_selectedAdType == 'banner') {
+        setState(() {
+          _errorMessage =
+              'Banner ads only support images. Please select an image instead.';
+        });
+        return;
+      }
+
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.video,
         allowMultiple: false,
@@ -100,7 +123,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
       if (result != null) {
         setState(() {
           _selectedVideo = File(result.files.single.path!);
-          _selectedImage = null;
+          // Don't clear image for carousel/video feed ads
         });
       }
     } catch (e) {
@@ -128,8 +151,89 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
     }
   }
 
+  // Manual validation method to check all required fields
+  bool _validateAllFields() {
+    bool isValid = true;
+
+    // Check title
+    if (_titleController.text.trim().isEmpty) {
+      print('❌ Validation: Title is empty');
+      isValid = false;
+    } else if (_titleController.text.trim().length < 5) {
+      print(
+          '❌ Validation: Title too short (${_titleController.text.trim().length} chars)');
+      isValid = false;
+    }
+
+    // Check description
+    if (_descriptionController.text.trim().isEmpty) {
+      print('❌ Validation: Description is empty');
+      isValid = false;
+    } else if (_descriptionController.text.trim().length < 10) {
+      print(
+          '❌ Validation: Description too short (${_descriptionController.text.trim().length} chars)');
+      isValid = false;
+    }
+
+    // Check budget
+    final budget = double.tryParse(_budgetController.text.trim());
+    if (budget == null || budget <= 0) {
+      print('❌ Validation: Invalid budget: ${_budgetController.text}');
+      isValid = false;
+    } else if (budget < 100) {
+      print('❌ Validation: Budget too low: $budget');
+      isValid = false;
+    }
+
+    // Check media selection based on ad type
+    if (_selectedAdType == 'banner') {
+      // Banner ads only need image
+      if (_selectedImage == null) {
+        print('❌ Validation: Banner ad requires an image');
+        isValid = false;
+      }
+      if (_selectedVideo != null) {
+        print('❌ Validation: Banner ads cannot have videos');
+        isValid = false;
+      }
+    } else if (_selectedAdType == 'carousel' ||
+        _selectedAdType == 'video feed ad') {
+      // Carousel and video feed ads need at least one media type
+      if (_selectedImage == null && _selectedVideo == null) {
+        print('❌ Validation: Carousel/video feed ad requires image or video');
+        isValid = false;
+      }
+    }
+
+    // Check dates
+    if (_startDate == null || _endDate == null) {
+      print(
+          '❌ Validation: Dates not selected - Start: $_startDate, End: $_endDate');
+      isValid = false;
+    }
+
+    print('🔍 Validation result: $isValid');
+    return isValid;
+  }
+
   Future<void> _submitAd() async {
-    if (!_formKey.currentState!.validate()) return;
+    print('🔍 CreateAdScreen: Submit button pressed');
+
+    // First validate the form using Flutter's built-in validation
+    if (!_formKey.currentState!.validate()) {
+      print('❌ CreateAdScreen: Flutter form validation failed');
+      print('🔍 Debug: Form state - ${_formKey.currentState}');
+      return;
+    }
+
+    // Then do our custom validation
+    if (!_validateAllFields()) {
+      print('❌ CreateAdScreen: Custom validation failed');
+      setState(() {
+        _errorMessage = 'Please complete all required fields correctly';
+      });
+      return;
+    }
 
     setState(() {
       _isLoading = true;
@@ -139,17 +243,54 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
 
     try {
       print('🔍 CreateAdScreen: Starting ad submission...');
+      print('🔍 Debug: Form data:');
+      print('   Title: "${_titleController.text.trim()}"');
+      print('   Description: "${_descriptionController.text.trim()}"');
+      print('   Budget: "${_budgetController.text.trim()}"');
+      print('   Ad Type: "$_selectedAdType"');
+      print('   Start Date: $_startDate');
+      print('   End Date: $_endDate');
+      print('   Image Selected: ${_selectedImage != null}');
+      print('   Video Selected: ${_selectedVideo != null}');
 
       // Validate media selection
-      if (_selectedImage == null && _selectedVideo == null) {
-        throw Exception('Please select an image or video for your ad');
+      if (_selectedAdType == 'banner') {
+        if (_selectedImage == null) {
+          throw Exception('Banner ads require an image');
+        }
+        if (_selectedVideo != null) {
+          throw Exception('Banner ads cannot have videos');
+        }
+      } else if (_selectedAdType == 'carousel' ||
+          _selectedAdType == 'video feed ad') {
+        // Carousel and video feed ads need at least one media type
+        if (_selectedImage == null && _selectedVideo == null) {
+          throw Exception('Please select an image or video for your ad');
+        }
       }
 
-      // Validate budget
-      final budget = double.tryParse(_budgetController.text);
-      if (budget == null || budget < 100) {
-        throw Exception('Budget must be at least ₹100');
+      // Validate budget - convert to double and check minimum
+      final budgetText = _budgetController.text.trim();
+      final budget = double.tryParse(budgetText);
+      if (budget == null || budget <= 0) {
+        throw Exception('Please enter a valid budget amount');
       }
+      if (budget < 1) {
+        throw Exception('Budget must be at least ₹1.00');
+      }
+
+      // Validate required fields
+      if (_titleController.text.trim().isEmpty) {
+        throw Exception('Please enter an ad title');
+      }
+      if (_descriptionController.text.trim().isEmpty) {
+        throw Exception('Please enter a description');
+      }
+      if (_startDate == null || _endDate == null) {
+        throw Exception('Please select campaign start and end dates');
+      }
+
+      print('✅ CreateAdScreen: Form validation passed');
 
       // Upload media to Cloudinary first
       String? mediaUrl;
@@ -177,6 +318,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
             .trim()
             .split(',')
             .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
             .toList(),
         startDate: _startDate,
         endDate: _endDate,
@@ -545,6 +687,9 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
   }
 
   Widget _buildCreateAdForm() {
+    print('🔍 CreateAdScreen: Building create ad form');
+    print('🔍 Debug: Form key state: ${_formKey.currentState}');
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Form(
@@ -593,9 +738,22 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _selectedAdType == 'banner'
+                          ? 'Banner ads are static image advertisements displayed at the top or sides of content'
+                          : _selectedAdType == 'carousel'
+                              ? 'Carousel ads allow multiple images/videos to be displayed in a swipeable format'
+                              : 'Video feed ads appear between video content like Instagram Reels',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: _selectedAdType,
+                      initialValue: _selectedAdType,
                       decoration: const InputDecoration(
                         labelText: 'Select Ad Type',
                         border: OutlineInputBorder(),
@@ -609,6 +767,20 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                       onChanged: (value) {
                         setState(() {
                           _selectedAdType = value!;
+
+                          // Clear inappropriate media when ad type changes
+                          if (value == 'banner') {
+                            // Banner ads can't have videos
+                            if (_selectedVideo != null) {
+                              _selectedVideo = null;
+                              _errorMessage =
+                                  'Banner ads only support images. Video has been removed.';
+                            }
+                          } else if (value == 'carousel' ||
+                              value == 'video feed ad') {
+                            // Carousel and video feed ads can have both image and video
+                            // No need to clear anything
+                          }
                         });
                       },
                     ),
@@ -673,24 +845,36 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                                     ),
                                   ),
                                 )
-                              : const Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.add_photo_alternate,
-                                        size: 48,
+                              : Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      _selectedAdType == 'banner'
+                                          ? Icons.image
+                                          : Icons.add_photo_alternate,
+                                      size: 48,
+                                      color: Colors.grey,
+                                    ),
+                                    Text(
+                                      _selectedAdType == 'banner'
+                                          ? 'Select Image *'
+                                          : 'Select Image or Video *',
+                                      style: const TextStyle(
                                         color: Colors.grey,
+                                        fontSize: 16,
                                       ),
-                                      Text(
-                                        'Select Image or Video',
-                                        style: TextStyle(
-                                          color: Colors.grey,
-                                          fontSize: 16,
-                                        ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      _selectedAdType == 'banner'
+                                          ? 'Banner ads require an image'
+                                          : 'Carousel and video feed ads support both',
+                                      style: TextStyle(
+                                        color: Colors.red,
+                                        fontSize: 12,
                                       ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
                     ),
                     const SizedBox(height: 12),
@@ -700,7 +884,9 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                           child: ElevatedButton.icon(
                             onPressed: _pickImage,
                             icon: const Icon(Icons.image),
-                            label: const Text('Select Image'),
+                            label: Text(_selectedAdType == 'banner'
+                                ? 'Select Image *'
+                                : 'Select Image'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blue,
                               foregroundColor: Colors.white,
@@ -710,16 +896,32 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: _pickVideo,
+                            onPressed:
+                                _selectedAdType == 'banner' ? null : _pickVideo,
                             icon: const Icon(Icons.video_library),
-                            label: const Text('Select Video'),
+                            label: Text(_selectedAdType == 'banner'
+                                ? 'Video Not Allowed'
+                                : 'Select Video'),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
+                              backgroundColor: _selectedAdType == 'banner'
+                                  ? Colors.grey
+                                  : Colors.green,
                               foregroundColor: Colors.white,
                             ),
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _selectedAdType == 'banner'
+                          ? 'Banner ads only support images'
+                          : 'Carousel and video feed ads support both images and videos',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
                   ],
                 ),
@@ -748,11 +950,14 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                         border: OutlineInputBorder(),
                       ),
                       validator: (value) {
-                        if (value == null || value.isEmpty) {
+                        if (value == null || value.trim().isEmpty) {
                           return 'Please enter an ad title';
                         }
-                        if (value.length < 5) {
+                        if (value.trim().length < 5) {
                           return 'Title must be at least 5 characters';
+                        }
+                        if (value.trim().length > 100) {
+                          return 'Title must be less than 100 characters';
                         }
                         return null;
                       },
@@ -767,11 +972,14 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                       ),
                       maxLines: 3,
                       validator: (value) {
-                        if (value == null || value.isEmpty) {
+                        if (value == null || value.trim().isEmpty) {
                           return 'Please enter a description';
                         }
-                        if (value.length < 10) {
+                        if (value.trim().length < 10) {
                           return 'Description must be at least 10 characters';
+                        }
+                        if (value.trim().length > 500) {
+                          return 'Description must be less than 500 characters';
                         }
                         return null;
                       },
@@ -809,8 +1017,8 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                     TextFormField(
                       controller: _budgetController,
                       decoration: const InputDecoration(
-                        labelText: 'Daily Budget (\$) *',
-                        hintText: '10.00',
+                        labelText: 'Daily Budget (₹) *',
+                        hintText: '100',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.attach_money),
                       ),
@@ -819,12 +1027,12 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                         if (value == null || value.isEmpty) {
                           return 'Please enter a budget';
                         }
-                        final budget = double.tryParse(value);
+                        final budget = double.tryParse(value.trim());
                         if (budget == null || budget <= 0) {
                           return 'Please enter a valid budget';
                         }
-                        if (budget < 1) {
-                          return 'Minimum budget is \$1.00';
+                        if (budget < 100) {
+                          return 'Minimum budget is ₹100';
                         }
                         return null;
                       },
@@ -859,7 +1067,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                             label: Text(
                               _startDate != null && _endDate != null
                                   ? '${_startDate!.toString().split(' ')[0]} - ${_endDate!.toString().split(' ')[0]}'
-                                  : 'Select Date Range',
+                                  : 'Select Date Range *',
                             ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.orange,
@@ -876,6 +1084,17 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                           'Campaign will run for ${_endDate!.difference(_startDate!).inDays + 1} days',
                           style: TextStyle(
                             color: Colors.grey.shade600,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    if (_startDate == null || _endDate == null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          'Please select start and end dates for your campaign',
+                          style: TextStyle(
+                            color: Colors.red.shade600,
                             fontSize: 12,
                           ),
                         ),

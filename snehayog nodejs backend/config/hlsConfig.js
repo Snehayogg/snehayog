@@ -44,29 +44,30 @@ export const hlsConfig = {
   }
 };
 
+// Complete the getMimeType function
+
 export const getMimeType = (filename) => {
-  const ext = filename.toLowerCase().substring(filename.lastIndexOf('.'));
+  const ext = path.extname(filename).toLowerCase();
   return hlsConfig.mimeTypes[ext] || 'application/octet-stream';
 };
 
+// Add the setHLSHeaders function
 export const setHLSHeaders = (res, filename) => {
-  // Set MIME type
-  res.setHeader('Content-Type', getMimeType(filename));
+  const ext = path.extname(filename).toLowerCase();
+  const mimeType = getMimeType(filename);
   
-  // Set CORS headers
+  res.setHeader('Content-Type', mimeType);
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  
+  // Add CORS headers
   Object.entries(hlsConfig.corsHeaders).forEach(([key, value]) => {
     res.setHeader(key, value);
   });
   
-  // Set cache headers
+  // Add cache headers based on file type
   if (filename.endsWith('.m3u8')) {
     res.setHeader('Cache-Control', `public, max-age=${hlsConfig.cache.maxAge}`);
   } else if (filename.endsWith('.ts')) {
     res.setHeader('Cache-Control', `public, max-age=${hlsConfig.cache.maxAgeSegments}`);
-  }
-  
-  // Enable range requests for video segments
-  if (filename.endsWith('.ts')) {
-    res.setHeader('Accept-Ranges', 'bytes');
   }
 };
