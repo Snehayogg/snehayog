@@ -78,7 +78,7 @@ class CloudinaryService {
       // Use the correct endpoint based on upload type
       // For user videos, use /videos/upload (which has HLS enabled by default)
       // For ads/creatives, use /upload/video
-      final endpoint = '/videos/upload';
+      const endpoint = '/videos/upload';
 
       // Create multipart request to your backend
       final request = http.MultipartRequest(
@@ -153,7 +153,7 @@ class CloudinaryService {
       }
 
       // Use the ads/creatives endpoint
-      final endpoint = '/upload/video';
+      const endpoint = '/upload/video';
 
       // Create multipart request to your backend
       final request = http.MultipartRequest(

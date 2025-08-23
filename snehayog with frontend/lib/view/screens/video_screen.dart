@@ -60,10 +60,75 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
   // Timer for periodic video health checks
   Timer? _healthCheckTimer;
 
+  // Refresh state
+  bool _isRefreshing = false;
+  int _refreshCount = 0;
+
   // Public method to refresh videos (can be called from outside)
   void refreshVideos() {
     print('🔄 VideoScreen: refreshVideos() called from outside');
     _loadVideos(isInitialLoad: false);
+  }
+
+  /// Private method to refresh videos with proper cleanup
+  Future<void> _refreshVideos() async {
+    try {
+      print('🔄 VideoScreen: Starting video refresh...');
+
+      // Set refreshing state
+      setState(() {
+        _isRefreshing = true;
+        _refreshCount++;
+      });
+
+      // Dispose all video controllers to free memory
+      _controllerManager.disposeAll();
+
+      // Clear current videos and reset state
+      _stateManager.reset();
+
+      // Load fresh videos
+      await _loadVideos(isInitialLoad: true);
+
+      // Reinitialize first video if available
+      if (_stateManager.videos.isNotEmpty) {
+        _initializeCurrentVideo();
+      }
+
+      print('✅ VideoScreen: Video refresh completed successfully');
+
+      // Show success feedback
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                '✅ Videos refreshed successfully! (Refresh #$_refreshCount)'),
+            duration: const Duration(seconds: 2),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ VideoScreen: Error refreshing videos: $e');
+
+      // Show error feedback
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Failed to refresh videos: ${e.toString()}'),
+            duration: const Duration(seconds: 3),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      // Reset refreshing state
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+        });
+      }
+    }
   }
 
   @override
@@ -1192,11 +1257,10 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       // Video completion rate factor
       // Higher completion rate = better ad retention
       if (video.views > 0) {
-        // Assume 70% completion rate as baseline
         const estimatedCompletionRate = 0.7;
         if (estimatedCompletionRate > 0.7) {
           multiplier += (estimatedCompletionRate - 0.7) *
-              0.5; // +0.5 for every 10% above 70%
+              0.5;
         }
       }
 
@@ -1256,7 +1320,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
         body: SafeArea(
           child: Column(
             children: [
-              // Banner ad at the top
+              // Banner ad at the top with refresh button
               Container(
                 width: double.infinity,
                 height: 60,
@@ -1266,41 +1330,119 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
                     bottom: BorderSide(color: Colors.grey.shade300, width: 1),
                   ),
                 ),
-                child: GestureDetector(
-                  onTap: () {
-                    final currentIndex = _stateManager.activePage;
-                    if (!_isVideoBannerAdLoaded(currentIndex) &&
-                        _videoBannerAds.containsKey(currentIndex)) {
-                      _retryVideoBannerAd(
-                          currentIndex, _stateManager.videos[currentIndex]);
-                    }
-                  },
-                  child: _isVideoBannerAdLoaded(_stateManager.activePage) &&
-                          _videoBannerAds
-                              .containsKey(_stateManager.activePage) &&
-                          _videoBannerAds[_stateManager.activePage] != null
-                      ? AdWidget(ad: _videoBannerAds[_stateManager.activePage]!)
-                      : const Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                'Loading Ad...',
-                                style: TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              Text(
-                                'Tap to retry',
-                                style: TextStyle(
-                                  color: Colors.blue,
-                                  fontSize: 10,
-                                ),
-                              ),
-                            ],
+                child: Row(
+                  children: [
+                    // Refresh button on the left
+                    SizedBox(
+                      width: 60,
+                      height: 60,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          IconButton(
+                            onPressed: _isRefreshing
+                                ? null
+                                : () {
+                                    _refreshVideos();
+                                  },
+                            icon: _isRefreshing
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                          Colors.blue),
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.refresh,
+                                    color: Colors.blue,
+                                    size: 24,
+                                  ),
+                            tooltip: _isRefreshing
+                                ? 'Refreshing...'
+                                : 'Refresh Videos (Tap to refresh)',
                           ),
-                        ),
+                          if (_refreshCount > 0)
+                            Text(
+                              '$_refreshCount',
+                              style: const TextStyle(
+                                color: Colors.blue,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+
+                    // Banner ad in the center (expanded)
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          final currentIndex = _stateManager.activePage;
+                          if (!_isVideoBannerAdLoaded(currentIndex) &&
+                              _videoBannerAds.containsKey(currentIndex)) {
+                            _retryVideoBannerAd(currentIndex,
+                                _stateManager.videos[currentIndex]);
+                          }
+                        },
+                        child: _isVideoBannerAdLoaded(
+                                    _stateManager.activePage) &&
+                                _videoBannerAds
+                                    .containsKey(_stateManager.activePage) &&
+                                _videoBannerAds[_stateManager.activePage] !=
+                                    null
+                            ? AdWidget(
+                                ad: _videoBannerAds[_stateManager.activePage]!)
+                            : const Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      'Loading Ad...',
+                                      style: TextStyle(
+                                        color: Colors.grey,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Tap to retry',
+                                      style: TextStyle(
+                                        color: Colors.blue,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                      ),
+                    ),
+
+                    // Status indicator on the right
+                    SizedBox(
+                      width: 60,
+                      height: 60,
+                      child: Center(
+                        child: _stateManager.isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.blue),
+                                ),
+                              )
+                            : const Icon(
+                                Icons.check_circle,
+                                color: Colors.green,
+                                size: 20,
+                              ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
@@ -1359,53 +1501,56 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
             }
             return false;
           },
-          child: PageView.builder(
-            controller: _pageController,
-            scrollDirection: Axis.vertical,
-            itemCount:
-                _stateManager.videos.length + (_stateManager.hasMore ? 1 : 0),
-            onPageChanged: (index) {
-              print('📱 VideoScreen: PageView changed to index: $index');
-              _onVideoPageChanged(index);
-            },
-            itemBuilder: (context, index) {
-              // Show loading indicator at the end when loading more videos
-              if (index == _stateManager.videos.length) {
-                return const RepaintBoundary(
-                  child: LoadingIndicatorWidget(),
+          child: RefreshIndicator(
+            onRefresh: _refreshVideos,
+            child: PageView.builder(
+              controller: _pageController,
+              scrollDirection: Axis.vertical,
+              itemCount:
+                  _stateManager.videos.length + (_stateManager.hasMore ? 1 : 0),
+              onPageChanged: (index) {
+                print('📱 VideoScreen: PageView changed to index: $index');
+                _onVideoPageChanged(index);
+              },
+              itemBuilder: (context, index) {
+                // Show loading indicator at the end when loading more videos
+                if (index == _stateManager.videos.length) {
+                  return const RepaintBoundary(
+                    child: LoadingIndicatorWidget(),
+                  );
+                }
+
+                final video = _stateManager.videos[index];
+                final controller = _controllerManager.getController(index);
+
+                return RepaintBoundary(
+                  child: VideoItemWidget(
+                    video: video,
+                    controller: controller,
+                    isActive: index == _stateManager.activePage,
+                    onLike: () => _handleLike(index),
+                    onComment: () => _handleComment(video),
+                    onShare: () => _handleShare(video),
+                    onProfileTap: () {
+                      // Refresh banner ad if it's not loaded
+                      if (!_isBannerAdLoaded && _bannerAd != null) {
+                        print(
+                            '🔄 VideoScreen: Refreshing banner ad after profile tap');
+                        _refreshBannerAd();
+                      }
+
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              ProfileScreen(userId: video.uploader.id),
+                        ),
+                      );
+                    },
+                  ),
                 );
-              }
-
-              final video = _stateManager.videos[index];
-              final controller = _controllerManager.getController(index);
-
-              return RepaintBoundary(
-                child: VideoItemWidget(
-                  video: video,
-                  controller: controller,
-                  isActive: index == _stateManager.activePage,
-                  onLike: () => _handleLike(index),
-                  onComment: () => _handleComment(video),
-                  onShare: () => _handleShare(video),
-                  onProfileTap: () {
-                    // Refresh banner ad if it's not loaded
-                    if (!_isBannerAdLoaded && _bannerAd != null) {
-                      print(
-                          '🔄 VideoScreen: Refreshing banner ad after profile tap');
-                      _refreshBannerAd();
-                    }
-
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            ProfileScreen(userId: video.uploader.id),
-                      ),
-                    );
-                  },
-                ),
-              );
-            },
+              },
+            ),
           ),
         ),
       ),

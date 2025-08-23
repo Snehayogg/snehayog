@@ -1,13 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/core/managers/video_player_state_manager.dart';
 import 'package:snehayog/core/services/video_url_service.dart';
-import 'package:snehayog/view/widget/video_overlays/video_progress_bar.dart';
-import 'package:snehayog/view/widget/video_overlays/video_play_pause_overlay.dart';
-import 'package:snehayog/view/widget/video_overlays/video_seeking_indicator.dart';
-import 'package:snehayog/core/constants/video_constants.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'dart:async';
 
 class VideoPlayerWidget extends StatefulWidget {
   final VideoModel video;
@@ -26,198 +22,365 @@ class VideoPlayerWidget extends StatefulWidget {
 }
 
 class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
-  late final VideoPlayerStateManager _stateManager;
-  VideoPlayerController? _externalController;
-
-  VideoPlayerController? get _controller =>
-      widget.controller ?? _stateManager.internalController;
+  VideoPlayerController? _controller;
+  bool _isInitialized = false;
+  bool _isPlaying = false;
+  bool _isMuted = false; // Changed from true to false - videos start unmuted
+  bool _isLoading = true;
+  String? _errorMessage;
+  Timer? _loopCheckTimer;
+  bool _showTapFeedback = false;
+  Timer? _feedbackTimer;
 
   @override
   void initState() {
     super.initState();
-    _stateManager = VideoPlayerStateManager();
-
-    // Check HLS status
-    final isHLS = VideoUrlService.shouldUseHLS(widget.video);
-    _stateManager.updateHLSStatus(isHLS);
+    print(
+        '🎬 VideoPlayerWidget: Initializing for video: ${widget.video.videoName}');
 
     if (widget.controller == null) {
-      _initializeInternalController();
+      _initializeController();
     } else {
-      _externalController = widget.controller;
-      _stateManager.initializeController(
-        VideoUrlService.getBestVideoUrl(widget.video),
-        widget.play,
-      );
-    }
-
-    // Add listener for automatic error recovery
-    _stateManager.addListener(_onStateManagerChanged);
-  }
-
-  @override
-  void didUpdateWidget(VideoPlayerWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    // Check if video data has changed and refresh HLS status
-    if (oldWidget.video.id != widget.video.id ||
-        oldWidget.video.isHLSEncoded != widget.video.isHLSEncoded ||
-        oldWidget.video.hlsMasterPlaylistUrl !=
-            widget.video.hlsMasterPlaylistUrl ||
-        oldWidget.video.hlsPlaylistUrl != widget.video.hlsPlaylistUrl) {
-      final isHLS = VideoUrlService.shouldUseHLS(widget.video);
-      _stateManager.updateHLSStatus(isHLS);
-    }
-
-    // Handle play state changes
-    if (oldWidget.play != widget.play &&
-        _controller != null &&
-        _controller!.value.isInitialized) {
-      if (widget.play && !_stateManager.isPlaying) {
-        _stateManager.play();
-      } else if (!widget.play && _stateManager.isPlaying) {
-        _stateManager.pause();
-      }
+      _controller = widget.controller;
+      _setupController();
     }
   }
 
-  Future<void> _initializeInternalController() async {
+  Future<void> _initializeController() async {
     try {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+
       final videoUrl = VideoUrlService.getBestVideoUrl(widget.video);
-      await _stateManager.initializeController(videoUrl, widget.play);
+      print('🎬 VideoPlayerWidget: Video URL: $videoUrl');
+
+      _controller = VideoPlayerController.networkUrl(
+        Uri.parse(videoUrl),
+        videoPlayerOptions: VideoPlayerOptions(
+          mixWithOthers: false,
+          allowBackgroundPlayback: false,
+        ),
+      );
+
+      await _setupController();
+
+      setState(() {
+        _isLoading = false;
+      });
     } catch (e) {
-      print('❌ Error initializing video controller: $e');
-
-      // Try automatic retry with fallback URL
-      await _tryFallbackVideoUrl();
+      print('❌ VideoPlayerWidget: Error initializing controller: $e');
+      setState(() {
+        _errorMessage = e.toString();
+        _isLoading = false;
+      });
     }
   }
 
-  void _handleTap() {
-    if (_controller == null || !_controller!.value.isInitialized) return;
+  Future<void> _setupController() async {
+    if (_controller == null) return;
 
-    // Toggle audio on tap (Instagram-style behavior)
-    _stateManager.toggleMute();
+    try {
+      // Add listener for state changes
+      _controller!.addListener(_onControllerStateChanged);
 
-    // Also toggle play/pause if video is not playing
-    if (!_stateManager.isPlaying) {
-      _stateManager.play();
+      // Initialize controller
+      await _controller!.initialize();
+
+      // Set looping - this should work but let's also add manual completion handling
+      _controller!.setLooping(true);
+
+      // Add completion listener to manually restart video if looping fails
+      _controller!.addListener(_onVideoCompleted);
+
+      // Set initial volume - videos start with sound (unmuted)
+      _controller!.setVolume(1.0);
+
+      // Auto-play if requested
+      if (widget.play) {
+        await _controller!.play();
+        _isPlaying = true;
+      }
+
+      setState(() {
+        _isInitialized = true;
+        _isLoading = false;
+      });
+
+      // Start periodic loop checking as backup
+      _startLoopCheckTimer();
+
+      print(
+          '🎬 VideoPlayerWidget: Controller setup complete with looping enabled');
+    } catch (e) {
+      print('❌ VideoPlayerWidget: Error in setup: $e');
+      setState(() {
+        _errorMessage = e.toString();
+        _isLoading = false;
+      });
     }
-
-    _stateManager.displayPlayPauseOverlay();
   }
 
-  void _handleDoubleTap(TapDownDetails details) {
+  void _startLoopCheckTimer() {
+    // Check every 500ms if video needs to be restarted
+    _loopCheckTimer =
+        Timer.periodic(const Duration(milliseconds: 500), (timer) {
+      if (_controller != null &&
+          _controller!.value.isInitialized &&
+          _controller!.value.isPlaying) {
+        final remainingTime =
+            _controller!.value.duration - _controller!.value.position;
+        if (remainingTime.inMilliseconds <= 200) {
+          print(
+              '🎬 VideoPlayerWidget: Timer detected video near end, restarting...');
+          _restartVideo();
+        }
+      }
+    });
+  }
+
+  void _restartVideo() {
     if (_controller == null || !_controller!.value.isInitialized) return;
 
-    final screenWidth = MediaQuery.of(context).size.width;
-    final tapPosition = details.globalPosition.dx;
-    final currentPosition = _controller!.value.position;
+    print('🎬 VideoPlayerWidget: Restarting video from beginning');
+    _controller!.seekTo(Duration.zero);
 
-    if (tapPosition < screenWidth / 2) {
-      // Left side - seek backward
-      final newPosition = currentPosition - VideoConstants.seekDuration;
-      if (newPosition.inMilliseconds > 0) {
-        _stateManager.seekTo(newPosition);
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (_controller != null && _controller!.value.isInitialized) {
+        _controller!.play();
+        _isPlaying = true;
+        setState(() {});
+        print('🎬 VideoPlayerWidget: Video restarted successfully via timer');
       }
-    } else {
-      // Right side - seek forward
-      final newPosition = currentPosition + VideoConstants.seekDuration;
-      if (newPosition.inMilliseconds <
-          _controller!.value.duration.inMilliseconds) {
-        _stateManager.seekTo(newPosition);
-      }
+    });
+  }
+
+  void _onControllerStateChanged() {
+    if (_controller == null) return;
+
+    final wasPlaying = _isPlaying;
+    _isPlaying = _controller!.value.isPlaying;
+
+    if (wasPlaying != _isPlaying) {
+      setState(() {});
+      print('🎬 VideoPlayerWidget: Play state changed to: $_isPlaying');
+    }
+  }
+
+  void _onVideoCompleted() {
+    if (_controller == null) return;
+
+    // Check if video is near the end (within 100ms) for smoother looping
+    final remainingTime =
+        _controller!.value.duration - _controller!.value.position;
+    if (remainingTime.inMilliseconds <= 100) {
+      print(
+          '🎬 VideoPlayerWidget: Video near completion (${remainingTime.inMilliseconds}ms remaining), restarting...');
+
+      // Restart video from beginning
+      _controller!.seekTo(Duration.zero);
+
+      // Small delay to ensure seek completes
+      Future.delayed(const Duration(milliseconds: 50), () {
+        if (_controller != null && _controller!.value.isInitialized) {
+          _controller!.play();
+          _isPlaying = true;
+          setState(() {});
+          print('🎬 VideoPlayerWidget: Video restarted successfully');
+        }
+      });
+    }
+  }
+
+  void _togglePlayPause() {
+    if (_controller == null || !_controller!.value.isInitialized) {
+      print('❌ VideoPlayerWidget: Controller not ready for play/pause');
+      return;
     }
 
-    _stateManager.showSeekingIndicator();
+    print('🎬 VideoPlayerWidget: Screen tapped, toggling play/pause');
+
+    setState(() {
+      if (_isPlaying) {
+        _controller!.pause();
+        _isPlaying = false;
+        print('🎬 VideoPlayerWidget: Video paused via screen tap');
+      } else {
+        _controller!.play();
+        _isPlaying = true;
+        print('🎬 VideoPlayerWidget: Video playing via screen tap');
+      }
+    });
+
+    // Show visual feedback
+    _showTapFeedbackIndicator();
+  }
+
+  void _showTapFeedbackIndicator() {
+    setState(() {
+      _showTapFeedback = true;
+    });
+
+    // Cancel previous timer if exists
+    _feedbackTimer?.cancel();
+
+    // Hide feedback after 1 second
+    _feedbackTimer = Timer(const Duration(seconds: 1), () {
+      if (mounted) {
+        setState(() {
+          _showTapFeedback = false;
+        });
+      }
+    });
+  }
+
+  void _toggleMute() {
+    if (_controller == null || !_controller!.value.isInitialized) return;
+
+    setState(() {
+      if (_isMuted) {
+        // Unmute - set volume to 1.0
+        _controller!.setVolume(1.0);
+        _isMuted = false;
+        print('🎬 VideoPlayerWidget: Video unmuted');
+      } else {
+        // Mute - set volume to 0.0
+        _controller!.setVolume(0.0);
+        _isMuted = true;
+        print('🎬 VideoPlayerWidget: Video muted');
+      }
+    });
   }
 
   @override
   void dispose() {
-    _stateManager.removeListener(_onStateManagerChanged);
-    _stateManager.dispose();
+    // Cancel all timers
+    _loopCheckTimer?.cancel();
+    _feedbackTimer?.cancel();
+
+    if (_controller != null && widget.controller == null) {
+      // Remove all listeners before disposing
+      _controller!.removeListener(_onControllerStateChanged);
+      _controller!.removeListener(_onVideoCompleted);
+      _controller!.dispose();
+    }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: _stateManager,
-      builder: (context, child) {
-        if (_controller == null || !_controller!.value.isInitialized) {
-          // Show thumbnail while video is initializing
-          return _buildThumbnailWithLoading();
-        }
+    print(
+        '🎬 VideoPlayerWidget: Building widget, isInitialized: $_isInitialized, isLoading: $_isLoading, controller: ${_controller != null}');
 
-        if (_stateManager.hasError) {
-          return _buildErrorWidget();
-        }
+    if (_isLoading) {
+      return _buildThumbnailWithLoading();
+    }
 
-        return RepaintBoundary(
-          child: Stack(
-            children: [
-              // Video player
-              VideoPlayer(_controller!),
+    if (_errorMessage != null) {
+      return _buildErrorWidget();
+    }
 
-              // Thumbnail overlay (shown while buffering)
-              if (_isVideoBuffering()) _buildThumbnailOverlay(),
+    if (_controller == null || !_controller!.value.isInitialized) {
+      return _buildThumbnailWithLoading();
+    }
 
-              // Buffering indicator
-              if (_isVideoBuffering())
-                const Center(
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2,
-                  ),
-                ),
+    return Stack(
+      children: [
+        // Video player
+        VideoPlayer(_controller!),
 
-              // Touch overlay for play/pause
-              GestureDetector(
-                onTap: _handleTap,
-                child: Container(
-                  color: Colors.transparent,
-                  width: double.infinity,
-                  height: double.infinity,
-                ),
-              ),
-
-              // Play/Pause overlay
-              VideoPlayPauseOverlay(
-                isVisible: _stateManager.showPlayPauseOverlay,
-                isPlaying: _stateManager.isPlaying,
-              ),
-
-              VideoSeekingIndicator(isVisible: _stateManager.isSeeking),
-              VideoProgressBar(controller: _controller!),
-
-              // Audio control button
-              Positioned(
-                top: 16,
-                right: 16,
-                child: GestureDetector(
-                  onTap: () {
-                    _stateManager.toggleMute();
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.6),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Icon(
-                      _stateManager.isMuted
-                          ? Icons.volume_off
-                          : Icons.volume_up,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+        // Touch overlay for play/pause - YouTube Shorts style
+        GestureDetector(
+          onTap: _togglePlayPause,
+          child: Container(
+            color: Colors.transparent,
+            width: double.infinity,
+            height: double.infinity,
           ),
-        );
-      },
+        ),
+
+        // Tap feedback indicator (YouTube Shorts style)
+        if (_showTapFeedback)
+          Center(
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.7),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                _isPlaying ? Icons.pause : Icons.play_arrow,
+                color: Colors.white,
+                size: 50,
+              ),
+            ),
+          ),
+
+        // Audio control button - ALWAYS VISIBLE
+        Positioned(
+          top: 16,
+          right: 16,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.9),
+              borderRadius: BorderRadius.circular(25),
+              border: Border.all(color: Colors.white, width: 3),
+            ),
+            child: IconButton(
+              onPressed: _toggleMute,
+              icon: Icon(
+                _isMuted ? Icons.volume_off : Icons.volume_up,
+                color: Colors.white,
+                size: 24,
+              ),
+              iconSize: 24,
+              padding: const EdgeInsets.all(12),
+            ),
+          ),
+        ),
+
+        // Debug info overlay (temporary for testing)
+        Positioned(
+          top: 16,
+          left: 16,
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.green.withOpacity(0.9),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.white, width: 2),
+            ),
+            child: Text(
+              'Playing: $_isPlaying\nMuted: $_isMuted\nReady: ${_controller?.value.isInitialized}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+
+        // Progress bar at bottom
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          child: Container(
+            height: 4,
+            child: VideoProgressIndicator(
+              _controller!,
+              allowScrubbing: true,
+              colors: VideoProgressColors(
+                playedColor: Colors.red,
+                bufferedColor: Colors.grey,
+                backgroundColor: Colors.black54,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -228,25 +391,30 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
         // Thumbnail background
         _buildThumbnailBackground(),
 
-        // Loading indicator
-        const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(
-                color: Colors.white,
-                strokeWidth: 2,
-              ),
-              SizedBox(height: 16),
-              Text(
-                'Loading video...',
-                style: TextStyle(
+        // Loading indicator overlay
+        Container(
+          width: double.infinity,
+          height: double.infinity,
+          color: Colors.black.withOpacity(0.3),
+          child: const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(
                   color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+                  strokeWidth: 3,
                 ),
-              ),
-            ],
+                SizedBox(height: 16),
+                Text(
+                  'Loading Video...',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ],
@@ -255,16 +423,15 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
   /// Build thumbnail background
   Widget _buildThumbnailBackground() {
-    // Try to get thumbnail from video model
-    final thumbnailUrl = _getThumbnailUrl();
-
-    if (thumbnailUrl != null && thumbnailUrl.isNotEmpty) {
+    if (widget.video.thumbnailUrl?.isNotEmpty == true) {
       return CachedNetworkImage(
-        imageUrl: thumbnailUrl,
+        imageUrl: widget.video.thumbnailUrl!,
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
         placeholder: (context, url) => Container(
+          width: double.infinity,
+          height: double.infinity,
           color: Colors.black,
           child: const Center(
             child: Icon(
@@ -279,20 +446,6 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     }
 
     return _buildFallbackThumbnail();
-  }
-
-  /// Build thumbnail overlay shown while buffering
-  Widget _buildThumbnailOverlay() {
-    return AnimatedOpacity(
-      opacity: _isVideoBuffering() ? 0.7 : 0.0,
-      duration: const Duration(milliseconds: 300),
-      child: Container(
-        width: double.infinity,
-        height: double.infinity,
-        color: Colors.black,
-        child: _buildThumbnailBackground(),
-      ),
-    );
   }
 
   /// Build fallback thumbnail when no thumbnail URL is available
@@ -327,243 +480,50 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
   /// Build error widget when video fails to load
   Widget _buildErrorWidget() {
-    String errorMessage = 'Video playback error. Please try again.';
-    String actionMessage =
-        'This video requires HLS streaming format (.m3u8) to play.';
-
-    if (_stateManager.errorMessage != null) {
-      if (_stateManager.errorMessage!.contains('HLS')) {
-        errorMessage = 'HLS Streaming Error';
-        actionMessage =
-            'This video failed to load in streaming format. Please re-upload the video.';
-      } else if (_stateManager.errorMessage!.contains('not HLS encoded')) {
-        errorMessage = 'Video Format Not Supported';
-        actionMessage =
-            'This video is not in streaming format (.m3u8). Only HLS videos are supported.';
-      } else if (_stateManager.errorMessage!.contains('network')) {
-        errorMessage = 'Network Error';
-        actionMessage =
-            'Failed to load video from network. Check your internet connection.';
-      }
-    }
-
     return Container(
       width: double.infinity,
       height: double.infinity,
       color: Colors.black,
       child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Error icon
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: Colors.red,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
                 Icons.error_outline,
-                color: Colors.white,
-                size: 48,
+                color: Colors.red,
+                size: 64,
               ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Error title
-            Text(
-              errorMessage,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
-            ),
-
-            const SizedBox(height: 16),
-
-            // Error description
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: Text(
-                actionMessage,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 16,
+              const SizedBox(height: 16),
+              const Text(
+                'Video playback error. Please try again.',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
                 ),
                 textAlign: TextAlign.center,
               ),
-            ),
-
-            const SizedBox(height: 32),
-
-            // Action buttons
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Retry button
-                ElevatedButton.icon(
-                  onPressed: () {
-                    _stateManager.clearError();
-                    _initializeInternalController();
-                  },
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Retry'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 12),
-                  ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _errorMessage = null;
+                  });
+                  _initializeController();
+                },
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
                 ),
-
-                const SizedBox(width: 16),
-
-                // Alternative button
-                ElevatedButton.icon(
-                  onPressed: () {
-                    // Try alternative video or show message
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                            'All videos must be in HLS streaming format (.m3u8)'),
-                        duration: Duration(seconds: 3),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.arrow_forward),
-                  label: const Text('Try Alternative'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 12),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Check if video is currently buffering
-  bool _isVideoBuffering() {
-    if (_controller == null || !_controller!.value.isInitialized) {
-      return false;
-    }
-    return _controller!.value.isBuffering;
-  }
-
-  /// Get thumbnail URL from video model
-  String? _getThumbnailUrl() {
-    try {
-      // Try to get thumbnail from video model
-      // This assumes your VideoModel has a thumbnail field
-      // You may need to adjust this based on your actual model structure
-
-      // Option 1: If you have a thumbnail field
-      // return widget.video.thumbnail;
-
-      // Option 2: Generate thumbnail from video URL (if supported)
-      // return _generateThumbnailUrl(widget.video.videoUrl);
-
-      // Option 3: Use a default thumbnail
-      return null;
-    } catch (e) {
-      print('❌ Error getting thumbnail URL: $e');
-      return null;
-    }
-  }
-
-  /// Try alternative video URL if primary fails
-  Future<void> _tryFallbackVideoUrl() async {
-    try {
-      print('🔄 Trying fallback video URL...');
-
-      // Try different quality options
-      String? fallbackUrl;
-
-      // First try HLS if available
-      if (widget.video.hlsPlaylistUrl != null &&
-          widget.video.hlsPlaylistUrl!.isNotEmpty) {
-        fallbackUrl = widget.video.hlsPlaylistUrl;
-        print('🔄 Trying HLS playlist URL: $fallbackUrl');
-      }
-      // Then try original video URL
-      else if (widget.video.videoUrl.isNotEmpty) {
-        fallbackUrl = widget.video.videoUrl;
-        print('🔄 Trying original video URL: $fallbackUrl');
-      }
-
-      if (fallbackUrl != null) {
-        await _stateManager.initializeController(fallbackUrl, false);
-      } else {
-        print('❌ No fallback URL available');
-        _stateManager.setError('No alternative video source available');
-      }
-    } catch (e) {
-      print('❌ Error trying fallback URL: $e');
-      _stateManager.setError('Failed to load alternative video source');
-    }
-  }
-
-  /// Show video information for debugging
-  void _showVideoInfo() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Video Information'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Title: ${widget.video.videoName}'),
-              Text('ID: ${widget.video.id}'),
-              Text('Video URL: ${widget.video.videoUrl}'),
-              if (widget.video.hlsPlaylistUrl != null)
-                Text('HLS URL: ${widget.video.hlsPlaylistUrl}'),
-              if (widget.video.hlsMasterPlaylistUrl != null)
-                Text('HLS Master: ${widget.video.hlsMasterPlaylistUrl}'),
-              Text('Is HLS: ${widget.video.isHLSEncoded}'),
-              Text('Error: ${_stateManager.errorMessage ?? 'None'}'),
-              const SizedBox(height: 16),
-              const Text(
-                'This information can help diagnose video playback issues.',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
               ),
             ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
       ),
     );
-  }
-
-  /// Listener for state manager changes to handle automatic retries
-  void _onStateManagerChanged() {
-    if (_stateManager.hasError &&
-        _stateManager.errorMessage == 'No alternative video source available') {
-      // If the error is due to no fallback URL, try to initialize with the current URL
-      // This assumes the current URL is the primary one that failed.
-      // If the error message is more specific, you might need a different logic.
-      final currentVideoUrl = VideoUrlService.getBestVideoUrl(widget.video);
-      if (currentVideoUrl.isNotEmpty) {
-        print('🔄 Attempting to retry with current URL: $currentVideoUrl');
-        _stateManager.initializeController(currentVideoUrl, false);
-      } else {
-        print('❌ No current URL available for retry.');
-      }
-    }
   }
 }

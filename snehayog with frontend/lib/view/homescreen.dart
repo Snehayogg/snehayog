@@ -126,7 +126,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               ),
               const SnehaScreen(key: PageStorageKey('snehaScreen')),
               UploadScreen(
-                key: PageStorageKey('uploadScreen'),
+                key: const PageStorageKey('uploadScreen'),
                 onVideoUploaded: _refreshVideoList, // Pass the refresh callback
               ),
               const ProfileScreen(key: PageStorageKey('profileScreen')),

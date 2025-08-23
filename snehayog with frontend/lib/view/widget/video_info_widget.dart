@@ -3,6 +3,7 @@ import 'package:snehayog/model/video_model.dart';
 import 'package:snehayog/core/constants/app_constants.dart';
 import 'package:snehayog/view/screens/profile_screen.dart';
 import 'package:snehayog/view/widget/follow_button_widget.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class VideoInfoWidget extends StatelessWidget {
   final VideoModel video;
@@ -30,7 +31,7 @@ class VideoInfoWidget extends StatelessWidget {
           ),
           const SizedBox(height: 4),
 
-               // Video description (limited to 2 lines)
+          // Video description (limited to 2 lines)
           if (video.description != null && video.description!.isNotEmpty)
             Text(
               video.description!,
@@ -45,6 +46,12 @@ class VideoInfoWidget extends StatelessWidget {
 
           // Uploader information (tappable to go to profile)
           _UploaderInfoSection(video: video),
+
+          // Visit Now button below uploader info (if video has a link)
+          if (video.link != null && video.link!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _VisitNowButton(link: video.link!),
+          ],
         ],
       ),
     );
@@ -214,6 +221,60 @@ class _LinkStatusBadge extends StatelessWidget {
           color: Colors.white,
           fontSize: 10,
           fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+}
+
+// Visit Now button widget
+class _VisitNowButton extends StatelessWidget {
+  final String link;
+
+  const _VisitNowButton({required this.link});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity, // Make it as wide as possible
+      margin: const EdgeInsets.only(
+          right: 8), // Reduced to 8 to come very close to share button
+      child: ElevatedButton(
+        onPressed: () async {
+          final Uri uri = Uri.parse(link);
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          } else {
+            // Handle error, e.g., show a snackbar
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Could not open link: $link')),
+            );
+          }
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF2196F3), // Blue color
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+          elevation: 2,
+        ),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.open_in_new, color: Colors.white, size: 16),
+            SizedBox(width: 8),
+            Text(
+              'Visit Now',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
       ),
     );

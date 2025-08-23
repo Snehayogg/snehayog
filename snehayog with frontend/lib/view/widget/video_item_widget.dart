@@ -196,7 +196,7 @@ class _VideoItemWidgetState extends State<VideoItemWidget> {
             ),
             const SizedBox(height: 8),
             Text(
-              widget.video.description?? 'No description available',
+              widget.video.description ?? 'No description available',
               style: const TextStyle(
                 color: Colors.white70,
                 fontSize: 16,
@@ -254,7 +254,8 @@ class _VideoItemWidgetState extends State<VideoItemWidget> {
         Positioned(
           left: 12,
           bottom: 12,
-          right: 80,
+          right:
+              120, // Increased from 100 to 120 to give maximum space for Visit Now button
           child: RepaintBoundary(
             child: IgnorePointer(
               child: VideoInfoWidget(video: widget.video),

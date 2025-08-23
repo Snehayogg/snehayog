@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/services/video_service.dart';
+import 'package:snehayog/model/usermodel.dart';
 
 class UserService {
   final AuthService _authService = AuthService();
@@ -170,6 +171,59 @@ class UserService {
       print(
           'Failed to update profile. Status code: ${response.statusCode}, Body: ${response.body}');
       throw Exception('Failed to update profile on server');
+    }
+  }
+
+  /// Get user data including follower counts
+  Future<UserModel?> getUserData(String userId) async {
+    try {
+      final token = (await _authService.getUserData())?['token'];
+      if (token == null) {
+        throw Exception('Not authenticated');
+      }
+
+      final response = await http.get(
+        Uri.parse('${VideoService.baseUrl}/api/users/$userId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        
+        // Also check follow status for current user
+        bool isFollowing = false;
+        try {
+          isFollowing = await isFollowingUser(userId);
+        } catch (e) {
+          print('Error checking follow status: $e');
+        }
+        
+        // Create UserModel with all available data
+        return UserModel(
+          id: data['_id'] ?? data['id'] ?? data['googleId'] ?? '',
+          name: data['name'] ?? '',
+          email: data['email'] ?? '',
+          profilePic: data['profilePic'] ?? '',
+          videos: List<String>.from(data['videos'] ?? []),
+          followersCount: data['followersCount'] ?? data['followers'] ?? 0,
+          followingCount: data['followingCount'] ?? data['following'] ?? 0,
+          isFollowing: isFollowing,
+          createdAt: data['createdAt'] != null 
+              ? DateTime.parse(data['createdAt']) 
+              : null,
+          bio: data['bio'],
+          location: data['location'],
+        );
+      } else {
+        print('Failed to load user data. Status: ${response.statusCode}');
+        return null;
+      }
+    } catch (e) {
+      print('Error getting user data: $e');
+      return null;
     }
   }
 }

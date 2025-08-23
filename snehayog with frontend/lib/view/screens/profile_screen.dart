@@ -11,6 +11,9 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:snehayog/config/app_config.dart';
 import 'package:snehayog/core/managers/profile_state_manager.dart';
+import 'package:provider/provider.dart';
+import 'package:snehayog/core/providers/user_provider.dart';
+import 'package:snehayog/model/usermodel.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -20,26 +23,51 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends State<ProfileScreen>
+    with WidgetsBindingObserver {
   late final ProfileStateManager _stateManager;
   final ImagePicker _imagePicker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _stateManager = ProfileStateManager();
     _loadUserData();
+
+    // Load user data from UserProvider for real-time follower updates
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.userId != null) {
+        final userProvider = Provider.of<UserProvider>(context, listen: false);
+        userProvider.getUserDataWithFollowers(widget.userId!);
+      }
+    });
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Set context in ProfileStateManager so it can access VideoProvider
     _stateManager.setContext(context);
+
+    if (widget.userId != null) {
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      userProvider.getUserDataWithFollowers(widget.userId!);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // Refresh user data when app becomes visible
+    if (state == AppLifecycleState.resumed && widget.userId != null) {
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      userProvider.refreshUserData(widget.userId!);
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _stateManager.dispose();
     super.dispose();
   }
@@ -114,13 +142,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to update profile: $e'),
+            content: Text('Error updating profile: $e'),
             backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
           ),
         );
       }
     }
+  }
+
+  Future<void> _handleCancelEdit() async {
+    _stateManager.cancelEditing();
   }
 
   /// Handles deletion of selected videos with professional error handling
@@ -219,10 +250,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           },
         ) ??
         false;
-  }
-
-  Future<void> _handleCancelEdit() async {
-    _stateManager.cancelEditing();
   }
 
   Future<void> _handleProfilePhotoChange() async {
@@ -343,852 +370,564 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: _stateManager,
-      builder: (context, child) {
-        final userData = _stateManager.userData;
-        final bool isMyProfile = userData != null;
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: _buildAppBar(),
+      body: Consumer<UserProvider>(
+        builder: (context, userProvider, child) {
+          // Get user data from UserProvider if available
+          UserModel? userModel;
+          if (widget.userId != null) {
+            userModel = userProvider.getUserData(widget.userId!);
+          }
 
-        return Scaffold(
-            backgroundColor: Colors.white,
-            appBar: AppBar(
-              backgroundColor: Colors.white,
-              title: Text(userData?['name'] ?? 'Profile',
-                  style: const TextStyle(color: Color(0xFF424242))),
-              actions: isMyProfile
-                  ? [
-                      IconButton(
-                        icon: const Icon(Icons.more_vert,
-                            color: Color(0xFF424242)),
-                        onPressed: () {
-                          showModalBottomSheet(
-                            context: context,
-                            builder: (context) => Column(
-                              mainAxisSize: MainAxisSize.min,
+          return _buildBody(userProvider, userModel);
+        },
+      ),
+    );
+  }
+
+  Widget _buildBody(UserProvider userProvider, UserModel? userModel) {
+    if (_stateManager.isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    if (_stateManager.error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 64,
+              color: Colors.red[300],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _stateManager.error!,
+              style: TextStyle(
+                color: Colors.red[700],
+                fontSize: 16,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _loadUserData,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          _buildProfileHeader(userProvider, userModel),
+          _buildProfileContent(userProvider, userModel),
+        ],
+      ),
+    );
+  }
+
+  AppBar _buildAppBar() {
+    return AppBar(
+      backgroundColor: Colors.white,
+      title: Text(
+        _stateManager.userData?['name'] ?? 'Profile',
+        style: const TextStyle(color: Color(0xFF424242)),
+      ),
+      actions: _stateManager.userData != null
+          ? [
+              IconButton(
+                icon: const Icon(Icons.more_vert, color: Color(0xFF424242)),
+                onPressed: () {
+                  showModalBottomSheet(
+                    context: context,
+                    builder: (context) => Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ListTile(
+                          leading: const Icon(Icons.select_all),
+                          title: const Text('Select & Delete Videos'),
+                          onTap: () {
+                            Navigator.pop(context);
+                            _stateManager.enterSelectionMode();
+                          },
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.refresh),
+                          title: const Text('Refresh Data'),
+                          onTap: () {
+                            Navigator.pop(context);
+                            _stateManager.refreshData();
+                          },
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.logout),
+                          title: const Text('Logout'),
+                          onTap: () {
+                            Navigator.pop(context);
+                            _handleLogout();
+                          },
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ]
+          : null,
+    );
+  }
+
+  Widget _buildProfileHeader(UserProvider userProvider, UserModel? userModel) {
+    return Container(
+      padding: ResponsiveHelper.getAdaptivePadding(context),
+      child: Column(
+        children: [
+          Stack(
+            children: [
+              CircleAvatar(
+                radius: ResponsiveHelper.isMobile(context) ? 50 : 75,
+                backgroundColor: const Color(0xFFF5F5F5),
+                backgroundImage: userModel?.profilePic != null
+                    ? userModel!.profilePic!.startsWith('http')
+                        ? NetworkImage(userModel!.profilePic!)
+                        : FileImage(File(userModel!.profilePic!))
+                            as ImageProvider
+                    : null,
+                onBackgroundImageError: (exception, stackTrace) {
+                  print('Error loading profile image: $exception');
+                },
+                child: userModel?.profilePic == null
+                    ? Icon(
+                        Icons.person,
+                        size: ResponsiveHelper.getAdaptiveIconSize(context),
+                        color: const Color(0xFF757575),
+                      )
+                    : null,
+              ),
+              if (_stateManager.isEditing)
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: IconButton(
+                    icon: const Icon(Icons.camera_alt),
+                    onPressed: _handleProfilePhotoChange,
+                    color: Colors.white,
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          SizedBox(height: ResponsiveHelper.isMobile(context) ? 16 : 24),
+          if (_stateManager.isEditing)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: TextField(
+                controller: _stateManager.nameController,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  labelText: 'Name',
+                  hintText: 'Enter a unique name',
+                ),
+              ),
+            )
+          else
+            Text(
+              userModel?.name ?? 'User',
+              style: TextStyle(
+                color: const Color(0xFF424242),
+                fontSize: ResponsiveHelper.getAdaptiveFontSize(context, 24),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          if (_stateManager.isEditing)
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton(
+                    onPressed: _handleCancelEdit,
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 16),
+                  ElevatedButton(
+                    onPressed: _handleSaveProfile,
+                    child: const Text('Save'),
+                  ),
+                ],
+              ),
+            )
+          else
+            TextButton.icon(
+              onPressed: _handleEditProfile,
+              icon: const Icon(Icons.edit),
+              label: const Text('Edit Profile'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileContent(UserProvider userProvider, UserModel? userModel) {
+    return Column(
+      children: [
+        Container(
+          padding: EdgeInsets.symmetric(
+            vertical: ResponsiveHelper.isMobile(context) ? 20 : 30,
+          ),
+          decoration: const BoxDecoration(
+            border: Border(
+              top: BorderSide(color: Color(0xFFE0E0E0)),
+              bottom: BorderSide(color: Color(0xFFE0E0E0)),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildStatColumn('Videos', _stateManager.userVideos.length),
+              _buildStatColumn(
+                'Followers',
+                userModel?.followersCount ?? 0,
+              ),
+              _buildStatColumn(
+                'Earnings',
+                _getCurrentMonthRevenue(), // Current month's revenue
+                isEarnings: true,
+                onTap: () async {
+                  // Check if user has completed payment setup
+                  final hasPaymentSetup = await _checkPaymentSetupStatus();
+
+                  if (hasPaymentSetup) {
+                    // Navigate to revenue screen if payment setup is complete
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CreatorRevenueScreen(),
+                      ),
+                    );
+                  } else {
+                    // Navigate to payment setup screen if not complete
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CreatorPaymentSetupScreen(),
+                      ),
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: ResponsiveHelper.getAdaptivePadding(context),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Your Videos',
+                style: TextStyle(
+                  color: const Color(0xFF424242),
+                  fontSize: ResponsiveHelper.getAdaptiveFontSize(context, 20),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: ResponsiveHelper.isMobile(context) ? 8 : 12),
+              // Add helpful instruction text for delete feature
+              if (userModel != null)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.blue.withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        color: Colors.blue[600],
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Long press on any video to enter selection mode, then tap videos to select them for deletion.',
+                          style: TextStyle(
+                            color: Colors.blue[700],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              SizedBox(height: ResponsiveHelper.isMobile(context) ? 16 : 24),
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: ResponsiveHelper.isMobile(context) ? 2 : 3,
+                  crossAxisSpacing:
+                      ResponsiveHelper.isMobile(context) ? 16 : 24,
+                  mainAxisSpacing: ResponsiveHelper.isMobile(context) ? 16 : 24,
+                  childAspectRatio:
+                      ResponsiveHelper.isMobile(context) ? 0.75 : 0.8,
+                ),
+                itemCount: _stateManager.userVideos.length,
+                itemBuilder: (context, index) {
+                  final video = _stateManager.userVideos[index];
+                  final isSelected =
+                      _stateManager.selectedVideoIds.contains(video.id);
+
+                  // Check if this is the user's own video by comparing multiple possible ID fields
+                  final userGoogleId = userModel?.id;
+                  final userId = userModel?.id;
+                  final videoUploaderId = video.uploader.id;
+
+                  final isOwnVideo = userModel != null &&
+                      (videoUploaderId == userGoogleId ||
+                          videoUploaderId == userId ||
+                          videoUploaderId == userModel.id);
+
+                  // Debug logging for video selection
+                  print('🔍 Video Selection Debug:');
+                  print('  - Video ID: ${video.id}');
+                  print('  - Video Uploader ID: ${video.uploader.id}');
+                  print('  - User Google ID: $userGoogleId');
+                  print('  - User ID: $userId');
+                  print('  - User ID: ${userModel?.id}');
+                  print('  - isMyProfile: ${userModel != null}');
+                  print('  - isOwnVideo: $isOwnVideo');
+                  print('  - isSelecting: ${_stateManager.isSelecting}');
+                  print('  - isSelected: $isSelected');
+
+                  // For debugging, allow selection of any video when in selection mode
+                  final canSelectVideo =
+                      _stateManager.isSelecting && userModel != null;
+
+                  // Use proper logic for video selection
+                  final canSelectVideoFinal =
+                      _stateManager.isSelecting && userModel != null;
+                  return GestureDetector(
+                    onTap: () {
+                      // Single tap: Play video (navigate to VideoScreen)
+                      if (!_stateManager.isSelecting) {
+                        final updatedVideos =
+                            _stateManager.userVideos.map((video) {
+                          if (userModel?.name != null) {
+                            return video.copyWith(
+                              uploader: video.uploader
+                                  .copyWith(name: userModel!.name),
+                            );
+                          }
+                          return video;
+                        }).toList();
+
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => VideoScreen(
+                              initialIndex: index,
+                              initialVideos: updatedVideos,
+                            ),
+                          ),
+                        );
+                      } else if (_stateManager.isSelecting &&
+                          canSelectVideoFinal) {
+                        // Use proper logic for video selection
+                        print('🔍 Video tapped in selection mode');
+                        print('🔍 Video ID: ${video.id}');
+                        print('🔍 Can select: $canSelectVideoFinal');
+                        _stateManager.toggleVideoSelection(video.id);
+                      } else {
+                        print('🔍 Video tapped but not selectable');
+                        print('🔍 isSelecting: ${_stateManager.isSelecting}');
+                        print('🔍 canSelectVideoFinal: $canSelectVideoFinal');
+                      }
+                    },
+                    onLongPress: () {
+                      // Long press: Enter selection mode for deletion
+                      print('🔍 Long press detected on video');
+                      print('🔍 isMyProfile: ${userModel != null}');
+                      print('🔍 canSelectVideoFinal: $canSelectVideoFinal');
+                      print('🔍 isSelecting: ${_stateManager.isSelecting}');
+
+                      if (userModel != null &&
+                          canSelectVideoFinal && // Use proper logic for video selection
+                          !_stateManager.isSelecting) {
+                        print('🔍 Entering selection mode via long press');
+                        _stateManager.enterSelectionMode();
+                        _stateManager.toggleVideoSelection(video.id);
+                      } else {
+                        print('🔍 Cannot enter selection mode via long press');
+                      }
+                    },
+                    child: Stack(
+                      children: [
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          decoration: BoxDecoration(
+                            border: isSelected
+                                ? Border.all(color: Colors.blue, width: 3)
+                                : null,
+                            borderRadius: BorderRadius.circular(12),
+                            // Add shadow when selected
+                            boxShadow: isSelected
+                                ? [
+                                    BoxShadow(
+                                      color: Colors.blue.withOpacity(0.3),
+                                      blurRadius: 8,
+                                      spreadRadius: 2,
+                                    )
+                                  ]
+                                : null,
+                          ),
+                          child: Card(
+                            color: isSelected
+                                ? Colors.blue.withOpacity(0.05)
+                                : const Color(0xFFF5F5F5),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                ListTile(
-                                  leading: const Icon(Icons.select_all),
-                                  title: const Text('Select & Delete Videos'),
-                                  onTap: () {
-                                    Navigator.pop(context);
-                                    _stateManager.enterSelectionMode();
-                                  },
+                                Expanded(
+                                  child: Stack(
+                                    children: [
+                                      Image.network(
+                                        video.videoUrl,
+                                        fit: BoxFit.cover,
+                                        errorBuilder:
+                                            (context, error, stackTrace) {
+                                          print(
+                                              'Error loading thumbnail: $error');
+                                          return Center(
+                                            child: Icon(
+                                              Icons.video_library,
+                                              color: const Color(0xFF424242),
+                                              size: ResponsiveHelper
+                                                  .getAdaptiveIconSize(context),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                      // Selection overlay
+                                      if (isSelected)
+                                        Positioned.fill(
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              color:
+                                                  Colors.blue.withOpacity(0.3),
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                            child: const Center(
+                                              child: Icon(
+                                                Icons.check_circle,
+                                                color: Colors.white,
+                                                size: 48,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
                                 ),
-                                ListTile(
-                                  leading: const Icon(Icons.refresh),
-                                  title: const Text('Refresh Data'),
-                                  onTap: () {
-                                    Navigator.pop(context);
-                                    _stateManager.refreshData();
-                                  },
-                                ),
-                                ListTile(
-                                  leading: const Icon(Icons.logout),
-                                  title: const Text('Logout'),
-                                  onTap: () {
-                                    Navigator.pop(context);
-                                    _handleLogout();
-                                  },
+                                Padding(
+                                  padding: EdgeInsets.all(
+                                    ResponsiveHelper.isMobile(context)
+                                        ? 8.0
+                                        : 12.0,
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        video.videoName,
+                                        style: TextStyle(
+                                          color: const Color(0xFF424242),
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: ResponsiveHelper
+                                              .getAdaptiveFontSize(context, 14),
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      SizedBox(
+                                          height:
+                                              ResponsiveHelper.isMobile(context)
+                                                  ? 4
+                                                  : 8),
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            Icons.visibility,
+                                            color: const Color(0xFF757575),
+                                            size: ResponsiveHelper
+                                                    .getAdaptiveIconSize(
+                                                        context) *
+                                                0.6,
+                                          ),
+                                          SizedBox(
+                                              width: ResponsiveHelper.isMobile(
+                                                      context)
+                                                  ? 4
+                                                  : 8),
+                                          Text(
+                                            '${video.views}',
+                                            style: TextStyle(
+                                              color: const Color(0xFF757575),
+                                              fontSize: ResponsiveHelper
+                                                  .getAdaptiveFontSize(
+                                                      context, 12),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
                             ),
-                          );
-                        },
-                      ),
-                    ]
-                  : null,
-            ),
-            body: _stateManager.isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _stateManager.error != null
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text('Error: ${_stateManager.error}',
-                                style:
-                                    const TextStyle(color: Color(0xFF424242)),
-                                textAlign: TextAlign.center),
-                            const SizedBox(height: 16),
-                            ElevatedButton(
-                              onPressed: () {
-                                _stateManager.clearError();
-                                _loadUserData();
-                              },
-                              child: const Text('Retry'),
-                            ),
-                          ],
+                          ),
                         ),
-                      )
-                    : userData == null
-                        ? _buildSignInView()
-                        : RefreshIndicator(
-                            onRefresh: () =>
-                                _stateManager.loadUserVideos(widget.userId),
-                            child: SingleChildScrollView(
-                              child: Column(
-                                children: [
-                                  if (_stateManager.isSelecting && isMyProfile)
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 8.0),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(16),
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey[100],
-                                          borderRadius:
-                                              BorderRadius.circular(8),
-                                        ),
-                                        child: Column(
-                                          children: [
-                                            Text(
-                                              'Selection Mode',
-                                              style: TextStyle(
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.grey[800],
-                                              ),
-                                            ),
-                                            const SizedBox(height: 8),
-                                            Text(
-                                              '${_stateManager.selectedVideoIds.length} video${_stateManager.selectedVideoIds.length == 1 ? '' : 's'} selected',
-                                              style: TextStyle(
-                                                color: Colors.grey[600],
-                                                fontSize: 14,
-                                              ),
-                                            ),
-                                            // Show error if any
-                                            if (_stateManager.error !=
-                                                null) ...[
-                                              const SizedBox(height: 16),
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.all(12),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.red[50],
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                  border: Border.all(
-                                                      color: Colors.red[200]!),
-                                                ),
-                                                child: Row(
-                                                  children: [
-                                                    Icon(Icons.error_outline,
-                                                        color: Colors.red[700],
-                                                        size: 20),
-                                                    const SizedBox(width: 8),
-                                                    Expanded(
-                                                      child: Text(
-                                                        _stateManager.error!,
-                                                        style: TextStyle(
-                                                          color:
-                                                              Colors.red[700],
-                                                          fontSize: 14,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    IconButton(
-                                                      icon: Icon(Icons.close,
-                                                          color:
-                                                              Colors.red[700],
-                                                          size: 20),
-                                                      onPressed: () =>
-                                                          _stateManager
-                                                              .clearError(),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
-                                            const SizedBox(height: 16),
-                                            Row(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              children: [
-                                                ElevatedButton.icon(
-                                                  icon: _stateManager.isLoading
-                                                      ? const SizedBox(
-                                                          width: 16,
-                                                          height: 16,
-                                                          child:
-                                                              CircularProgressIndicator(
-                                                            strokeWidth: 2,
-                                                            valueColor:
-                                                                AlwaysStoppedAnimation<
-                                                                        Color>(
-                                                                    Colors
-                                                                        .white),
-                                                          ),
-                                                        )
-                                                      : const Icon(
-                                                          Icons.delete),
-                                                  label: Text(_stateManager
-                                                          .isLoading
-                                                      ? 'Deleting...'
-                                                      : 'Delete Selected (${_stateManager.selectedVideoIds.length})'),
-                                                  style:
-                                                      ElevatedButton.styleFrom(
-                                                    backgroundColor: Colors.red,
-                                                    foregroundColor:
-                                                        Colors.white,
-                                                    disabledBackgroundColor:
-                                                        Colors.grey,
-                                                  ),
-                                                  onPressed: _stateManager
-                                                              .hasSelectedVideos &&
-                                                          !_stateManager
-                                                              .isLoading
-                                                      ? () =>
-                                                          _handleDeleteSelectedVideos()
-                                                      : null,
-                                                ),
-                                                const SizedBox(width: 16),
-                                                TextButton.icon(
-                                                  icon: const Icon(Icons.clear),
-                                                  label: const Text(
-                                                      'Clear Selection'),
-                                                  onPressed:
-                                                      _stateManager.isLoading
-                                                          ? null
-                                                          : () {
-                                                              print(
-                                                                  '🔍 Clear Selection button pressed');
-                                                              print(
-                                                                  '🔍 Before clear: ${_stateManager.selectedVideoIds}');
-                                                              _stateManager
-                                                                  .clearSelection();
-                                                              print(
-                                                                  '🔍 After clear: ${_stateManager.selectedVideoIds}');
-                                                            },
-                                                ),
-                                                const SizedBox(width: 16),
-                                                TextButton.icon(
-                                                  icon: const Icon(Icons.close),
-                                                  label: const Text(
-                                                      'Exit Selection'),
-                                                  onPressed:
-                                                      _stateManager.isLoading
-                                                          ? null
-                                                          : () {
-                                                              _stateManager
-                                                                  .exitSelectionMode();
-                                                            },
-                                                ),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  Container(
-                                    padding:
-                                        ResponsiveHelper.getAdaptivePadding(
-                                            context),
-                                    child: Column(
-                                      children: [
-                                        Stack(
-                                          children: [
-                                            CircleAvatar(
-                                              radius: ResponsiveHelper.isMobile(
-                                                      context)
-                                                  ? 50
-                                                  : 75,
-                                              backgroundColor:
-                                                  const Color(0xFFF5F5F5),
-                                              backgroundImage: userData[
-                                                          'profilePic'] !=
-                                                      null
-                                                  ? userData['profilePic']
-                                                          .startsWith('http')
-                                                      ? NetworkImage(userData[
-                                                          'profilePic'])
-                                                      : FileImage(File(userData[
-                                                              'profilePic']))
-                                                          as ImageProvider
-                                                  : null,
-                                              onBackgroundImageError:
-                                                  (exception, stackTrace) {
-                                                print(
-                                                    'Error loading profile image: $exception');
-                                              },
-                                              child:
-                                                  userData['profilePic'] == null
-                                                      ? Icon(
-                                                          Icons.person,
-                                                          size: ResponsiveHelper
-                                                              .getAdaptiveIconSize(
-                                                                  context),
-                                                          color: const Color(
-                                                              0xFF757575),
-                                                        )
-                                                      : null,
-                                            ),
-                                            if (_stateManager.isEditing)
-                                              Positioned(
-                                                bottom: 0,
-                                                right: 0,
-                                                child: IconButton(
-                                                  icon: const Icon(
-                                                      Icons.camera_alt),
-                                                  onPressed:
-                                                      _handleProfilePhotoChange,
-                                                  color: Colors.white,
-                                                  style: IconButton.styleFrom(
-                                                    backgroundColor:
-                                                        Colors.blue,
-                                                  ),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                        SizedBox(
-                                            height: ResponsiveHelper.isMobile(
-                                                    context)
-                                                ? 16
-                                                : 24),
-                                        if (_stateManager.isEditing)
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 20),
-                                            child: TextField(
-                                              controller:
-                                                  _stateManager.nameController,
-                                              decoration: const InputDecoration(
-                                                border: OutlineInputBorder(),
-                                                labelText: 'Name',
-                                                hintText: 'Enter a unique name',
-                                              ),
-                                            ),
-                                          )
-                                        else
-                                          Text(
-                                            userData['name'] ?? 'User',
-                                            style: TextStyle(
-                                              color: const Color(0xFF424242),
-                                              fontSize: ResponsiveHelper
-                                                  .getAdaptiveFontSize(
-                                                      context, 24),
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        if (isMyProfile)
-                                          if (_stateManager.isEditing)
-                                            Padding(
-                                              padding:
-                                                  const EdgeInsets.all(16.0),
-                                              child: Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.center,
-                                                children: [
-                                                  ElevatedButton(
-                                                    onPressed:
-                                                        _handleCancelEdit,
-                                                    child: const Text('Cancel'),
-                                                  ),
-                                                  const SizedBox(width: 16),
-                                                  ElevatedButton(
-                                                    onPressed:
-                                                        _handleSaveProfile,
-                                                    child: const Text('Save'),
-                                                  ),
-                                                ],
-                                              ),
-                                            )
-                                          else
-                                            TextButton.icon(
-                                              onPressed: _handleEditProfile,
-                                              icon: const Icon(Icons.edit),
-                                              label: const Text('Edit Profile'),
-                                            ),
-                                      ],
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: EdgeInsets.symmetric(
-                                      vertical:
-                                          ResponsiveHelper.isMobile(context)
-                                              ? 20
-                                              : 30,
-                                    ),
-                                    decoration: const BoxDecoration(
-                                      border: Border(
-                                        top: BorderSide(
-                                            color: Color(0xFFE0E0E0)),
-                                        bottom: BorderSide(
-                                            color: Color(0xFFE0E0E0)),
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceEvenly,
-                                      children: [
-                                        _buildStatColumn('Videos',
-                                            _stateManager.userVideos.length),
-                                        _buildStatColumn(
-                                          'Followers',
-                                          0, // This will be updated when we implement followers functionality
-                                        ),
-                                        _buildStatColumn(
-                                          'Earnings',
-                                          _getCurrentMonthRevenue(), // Current month's revenue
-                                          isEarnings: true,
-                                          onTap: () async {
-                                            // Check if user has completed payment setup
-                                            final hasPaymentSetup =
-                                                await _checkPaymentSetupStatus();
-
-                                            if (hasPaymentSetup) {
-                                              // Navigate to revenue screen if payment setup is complete
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (context) =>
-                                                      const CreatorRevenueScreen(),
-                                                ),
-                                              );
-                                            } else {
-                                              // Navigate to payment setup screen if not complete
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (context) =>
-                                                      const CreatorPaymentSetupScreen(),
-                                                ),
-                                              );
-                                            }
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding:
-                                        ResponsiveHelper.getAdaptivePadding(
-                                            context),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Your Videos',
-                                          style: TextStyle(
-                                            color: const Color(0xFF424242),
-                                            fontSize: ResponsiveHelper
-                                                .getAdaptiveFontSize(
-                                                    context, 20),
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        SizedBox(
-                                            height: ResponsiveHelper.isMobile(
-                                                    context)
-                                                ? 8
-                                                : 12),
-                                        // Add helpful instruction text for delete feature
-                                        if (isMyProfile)
-                                          Container(
-                                            padding: const EdgeInsets.all(12),
-                                            decoration: BoxDecoration(
-                                              color:
-                                                  Colors.blue.withOpacity(0.1),
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                              border: Border.all(
-                                                color: Colors.blue
-                                                    .withOpacity(0.3),
-                                                width: 1,
-                                              ),
-                                            ),
-                                            child: Row(
-                                              children: [
-                                                Icon(
-                                                  Icons.info_outline,
-                                                  color: Colors.blue[600],
-                                                  size: 20,
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                  child: Text(
-                                                    'Long press on any video to enter selection mode, then tap videos to select them for deletion.',
-                                                    style: TextStyle(
-                                                      color: Colors.blue[700],
-                                                      fontSize: 12,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        SizedBox(
-                                            height: ResponsiveHelper.isMobile(
-                                                    context)
-                                                ? 16
-                                                : 24),
-                                        GridView.builder(
-                                          shrinkWrap: true,
-                                          physics:
-                                              const NeverScrollableScrollPhysics(),
-                                          gridDelegate:
-                                              SliverGridDelegateWithFixedCrossAxisCount(
-                                            crossAxisCount:
-                                                ResponsiveHelper.isMobile(
-                                                        context)
-                                                    ? 2
-                                                    : 3,
-                                            crossAxisSpacing:
-                                                ResponsiveHelper.isMobile(
-                                                        context)
-                                                    ? 16
-                                                    : 24,
-                                            mainAxisSpacing:
-                                                ResponsiveHelper.isMobile(
-                                                        context)
-                                                    ? 16
-                                                    : 24,
-                                            childAspectRatio:
-                                                ResponsiveHelper.isMobile(
-                                                        context)
-                                                    ? 0.75
-                                                    : 0.8,
-                                          ),
-                                          itemCount:
-                                              _stateManager.userVideos.length,
-                                          itemBuilder: (context, index) {
-                                            final video =
-                                                _stateManager.userVideos[index];
-                                            final isSelected = _stateManager
-                                                .selectedVideoIds
-                                                .contains(video.id);
-
-                                            // Check if this is the user's own video by comparing multiple possible ID fields
-                                            final userGoogleId =
-                                                userData['googleId'];
-                                            final userId = userData['id'];
-                                            final videoUploaderId =
-                                                video.uploader.id;
-
-                                            final isOwnVideo = isMyProfile &&
-                                                (videoUploaderId ==
-                                                        userGoogleId ||
-                                                    videoUploaderId == userId ||
-                                                    videoUploaderId ==
-                                                        userData['_id']);
-
-                                            // Debug logging for video selection
-                                            print('🔍 Video Selection Debug:');
-                                            print('  - Video ID: ${video.id}');
-                                            print(
-                                                '  - Video Uploader ID: ${video.uploader.id}');
-                                            print(
-                                                '  - User Google ID: $userGoogleId');
-                                            print('  - User ID: $userId');
-                                            print(
-                                                '  - User _ID: ${userData['_id']}');
-                                            print(
-                                                '  - isMyProfile: $isMyProfile');
-                                            print(
-                                                '  - isOwnVideo: $isOwnVideo');
-                                            print(
-                                                '  - isSelecting: ${_stateManager.isSelecting}');
-                                            print(
-                                                '  - isSelected: $isSelected');
-
-                                            // For debugging, allow selection of any video when in selection mode
-                                            final canSelectVideo =
-                                                _stateManager.isSelecting &&
-                                                    isMyProfile;
-
-                                            // Use proper logic for video selection
-                                            final canSelectVideoFinal =
-                                                _stateManager.isSelecting &&
-                                                    isMyProfile;
-                                            return GestureDetector(
-                                              onTap: () {
-                                                // Single tap: Play video (navigate to VideoScreen)
-                                                if (!_stateManager
-                                                    .isSelecting) {
-                                                  final updatedVideos =
-                                                      _stateManager.userVideos
-                                                          .map((video) {
-                                                    if (userData['name'] !=
-                                                        null) {
-                                                      return video.copyWith(
-                                                        uploader: video.uploader
-                                                            .copyWith(
-                                                                name: userData[
-                                                                    'name']),
-                                                      );
-                                                    }
-                                                    return video;
-                                                  }).toList();
-
-                                                  Navigator.push(
-                                                    context,
-                                                    MaterialPageRoute(
-                                                      builder: (context) =>
-                                                          VideoScreen(
-                                                        initialIndex: index,
-                                                        initialVideos:
-                                                            updatedVideos,
-                                                      ),
-                                                    ),
-                                                  );
-                                                } else if (_stateManager
-                                                        .isSelecting &&
-                                                    canSelectVideoFinal) {
-                                                  // Use proper logic for video selection
-                                                  print(
-                                                      '🔍 Video tapped in selection mode');
-                                                  print(
-                                                      '🔍 Video ID: ${video.id}');
-                                                  print(
-                                                      '🔍 Can select: $canSelectVideoFinal');
-                                                  _stateManager
-                                                      .toggleVideoSelection(
-                                                          video.id);
-                                                } else {
-                                                  print(
-                                                      '🔍 Video tapped but not selectable');
-                                                  print(
-                                                      '🔍 isSelecting: ${_stateManager.isSelecting}');
-                                                  print(
-                                                      '🔍 canSelectVideoFinal: $canSelectVideoFinal');
-                                                }
-                                              },
-                                              onLongPress: () {
-                                                // Long press: Enter selection mode for deletion
-                                                print(
-                                                    '🔍 Long press detected on video');
-                                                print(
-                                                    '🔍 isMyProfile: $isMyProfile');
-                                                print(
-                                                    '🔍 canSelectVideoFinal: $canSelectVideoFinal');
-                                                print(
-                                                    '🔍 isSelecting: ${_stateManager.isSelecting}');
-
-                                                if (isMyProfile &&
-                                                    canSelectVideoFinal && // Use proper logic for video selection
-                                                    !_stateManager
-                                                        .isSelecting) {
-                                                  print(
-                                                      '🔍 Entering selection mode via long press');
-                                                  _stateManager
-                                                      .enterSelectionMode();
-                                                  _stateManager
-                                                      .toggleVideoSelection(
-                                                          video.id);
-                                                } else {
-                                                  print(
-                                                      '🔍 Cannot enter selection mode via long press');
-                                                }
-                                              },
-                                              child: Stack(
-                                                children: [
-                                                  AnimatedContainer(
-                                                    duration: const Duration(
-                                                        milliseconds: 200),
-                                                    decoration: BoxDecoration(
-                                                      border: isSelected
-                                                          ? Border.all(
-                                                              color:
-                                                                  Colors.blue,
-                                                              width: 3)
-                                                          : null,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              12),
-                                                      // Add shadow when selected
-                                                      boxShadow: isSelected
-                                                          ? [
-                                                              BoxShadow(
-                                                                color: Colors
-                                                                    .blue
-                                                                    .withOpacity(
-                                                                        0.3),
-                                                                blurRadius: 8,
-                                                                spreadRadius: 2,
-                                                              )
-                                                            ]
-                                                          : null,
-                                                    ),
-                                                    child: Card(
-                                                      color: isSelected
-                                                          ? Colors.blue
-                                                              .withOpacity(0.05)
-                                                          : const Color(
-                                                              0xFFF5F5F5),
-                                                      child: Column(
-                                                        crossAxisAlignment:
-                                                            CrossAxisAlignment
-                                                                .stretch,
-                                                        children: [
-                                                          Expanded(
-                                                            child: Stack(
-                                                              children: [
-                                                                Image.network(
-                                                                  video
-                                                                      .videoUrl,
-                                                                  fit: BoxFit
-                                                                      .cover,
-                                                                  errorBuilder:
-                                                                      (context,
-                                                                          error,
-                                                                          stackTrace) {
-                                                                    print(
-                                                                        'Error loading thumbnail: $error');
-                                                                    return Center(
-                                                                      child:
-                                                                          Icon(
-                                                                        Icons
-                                                                            .video_library,
-                                                                        color: const Color(
-                                                                            0xFF424242),
-                                                                        size: ResponsiveHelper.getAdaptiveIconSize(
-                                                                            context),
-                                                                      ),
-                                                                    );
-                                                                  },
-                                                                ),
-                                                                // Selection overlay
-                                                                if (isSelected)
-                                                                  Positioned
-                                                                      .fill(
-                                                                    child:
-                                                                        Container(
-                                                                      decoration:
-                                                                          BoxDecoration(
-                                                                        color: Colors
-                                                                            .blue
-                                                                            .withOpacity(0.3),
-                                                                        borderRadius:
-                                                                            BorderRadius.circular(12),
-                                                                      ),
-                                                                      child:
-                                                                          const Center(
-                                                                        child:
-                                                                            Icon(
-                                                                          Icons
-                                                                              .check_circle,
-                                                                          color:
-                                                                              Colors.white,
-                                                                          size:
-                                                                              48,
-                                                                        ),
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                              ],
-                                                            ),
-                                                          ),
-                                                          Padding(
-                                                            padding:
-                                                                EdgeInsets.all(
-                                                              ResponsiveHelper
-                                                                      .isMobile(
-                                                                          context)
-                                                                  ? 8.0
-                                                                  : 12.0,
-                                                            ),
-                                                            child: Column(
-                                                              crossAxisAlignment:
-                                                                  CrossAxisAlignment
-                                                                      .start,
-                                                              children: [
-                                                                Text(
-                                                                  video
-                                                                      .videoName,
-                                                                  style:
-                                                                      TextStyle(
-                                                                    color: const Color(
-                                                                        0xFF424242),
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .bold,
-                                                                    fontSize: ResponsiveHelper
-                                                                        .getAdaptiveFontSize(
-                                                                            context,
-                                                                            14),
-                                                                  ),
-                                                                  maxLines: 1,
-                                                                  overflow:
-                                                                      TextOverflow
-                                                                          .ellipsis,
-                                                                ),
-                                                                SizedBox(
-                                                                    height: ResponsiveHelper.isMobile(
-                                                                            context)
-                                                                        ? 4
-                                                                        : 8),
-                                                                Row(
-                                                                  children: [
-                                                                    Icon(
-                                                                      Icons
-                                                                          .visibility,
-                                                                      color: const Color(
-                                                                          0xFF757575),
-                                                                      size: ResponsiveHelper.getAdaptiveIconSize(
-                                                                              context) *
-                                                                          0.6,
-                                                                    ),
-                                                                    SizedBox(
-                                                                        width: ResponsiveHelper.isMobile(context)
-                                                                            ? 4
-                                                                            : 8),
-                                                                    Text(
-                                                                      '${video.views}',
-                                                                      style:
-                                                                          TextStyle(
-                                                                        color: const Color(
-                                                                            0xFF757575),
-                                                                        fontSize: ResponsiveHelper.getAdaptiveFontSize(
-                                                                            context,
-                                                                            12),
-                                                                      ),
-                                                                    ),
-                                                                  ],
-                                                                ),
-                                                              ],
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  if (_stateManager
-                                                          .isSelecting &&
-                                                      canSelectVideoFinal) // Use proper logic for video selection
-                                                    Positioned(
-                                                      top: 8,
-                                                      right: 8,
-                                                      child: Checkbox(
-                                                        value: isSelected,
-                                                        activeColor:
-                                                            Colors.blue,
-                                                        checkColor:
-                                                            Colors.white,
-                                                        side: const BorderSide(
-                                                            color: Colors.blue,
-                                                            width: 2),
-                                                        onChanged: (checked) {
-                                                          _stateManager
-                                                              .toggleVideoSelection(
-                                                                  video.id);
-                                                        },
-                                                      ),
-                                                    ),
-                                                ],
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
+                        if (_stateManager.isSelecting &&
+                            canSelectVideoFinal) // Use proper logic for video selection
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: Checkbox(
+                              value: isSelected,
+                              activeColor: Colors.blue,
+                              checkColor: Colors.white,
+                              side: const BorderSide(
+                                  color: Colors.blue, width: 2),
+                              onChanged: (checked) {
+                                _stateManager.toggleVideoSelection(video.id);
+                              },
                             ),
-                          ));
-      },
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

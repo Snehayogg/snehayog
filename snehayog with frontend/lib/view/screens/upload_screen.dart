@@ -208,12 +208,12 @@ class _UploadScreenState extends State<UploadScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Row(
               children: [
-                const Icon(Icons.check_circle, color: Colors.white),
-                const SizedBox(width: 8),
-                const Expanded(
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 8),
+                Expanded(
                   child: Text(
                     'Video uploaded successfully! Converting to HLS format...',
                     style: TextStyle(fontWeight: FontWeight.w500),
@@ -222,7 +222,7 @@ class _UploadScreenState extends State<UploadScreen> {
               ],
             ),
             backgroundColor: Colors.green,
-            duration: const Duration(seconds: 4),
+            duration: Duration(seconds: 4),
           ),
         );
 
@@ -887,7 +887,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                       value: _uploadProgress,
                                       backgroundColor:
                                           Colors.blue.withOpacity(0.2),
-                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                      valueColor: const AlwaysStoppedAnimation<Color>(
                                           Colors.blue),
                                     ),
 

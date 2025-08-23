@@ -263,36 +263,60 @@ class VideoPlayerStateManager extends ChangeNotifier {
 
   // Playback control
   Future<void> play() async {
-    if (_internalController != null &&
-        _internalController!.value.isInitialized) {
-      try {
-        await _internalController!.play();
-        _isPlaying = true;
-        notifyListeners();
-      } on PlatformException catch (e) {
-        print('❌ PlatformException in play: ${e.code} - ${e.message}');
-        _handlePlatformException(e);
-      } catch (e) {
-        print('❌ Error in play: $e');
-        _setError(_getUserFriendlyErrorMessage(e.toString()));
-      }
+    print('🎬 VideoPlayerStateManager: play() called');
+
+    if (_internalController == null) {
+      print('❌ VideoPlayerStateManager: No internal controller for play');
+      return;
+    }
+
+    if (!_internalController!.value.isInitialized) {
+      print('❌ VideoPlayerStateManager: Controller not initialized for play');
+      return;
+    }
+
+    try {
+      print('🎬 VideoPlayerStateManager: Attempting to play video');
+      await _internalController!.play();
+      _isPlaying = true;
+      print(
+          '🎬 VideoPlayerStateManager: Video play successful, isPlaying: $_isPlaying');
+      notifyListeners();
+    } on PlatformException catch (e) {
+      print('❌ PlatformException in play: ${e.code} - ${e.message}');
+      _handlePlatformException(e);
+    } catch (e) {
+      print('❌ Error in play: $e');
+      _setError(_getUserFriendlyErrorMessage(e.toString()));
     }
   }
 
   Future<void> pause() async {
-    if (_internalController != null &&
-        _internalController!.value.isInitialized) {
-      try {
-        await _internalController!.pause();
-        _isPlaying = false;
-        notifyListeners();
-      } on PlatformException catch (e) {
-        print('❌ PlatformException in pause: ${e.code} - ${e.message}');
-        _handlePlatformException(e);
-      } catch (e) {
-        print('❌ Error in pause: $e');
-        _setError(_getUserFriendlyErrorMessage(e.toString()));
-      }
+    print('🎬 VideoPlayerStateManager: pause() called');
+
+    if (_internalController == null) {
+      print('❌ VideoPlayerStateManager: No internal controller for pause');
+      return;
+    }
+
+    if (!_internalController!.value.isInitialized) {
+      print('❌ VideoPlayerStateManager: Controller not initialized for pause');
+      return;
+    }
+
+    try {
+      print('🎬 VideoPlayerStateManager: Attempting to pause video');
+      await _internalController!.pause();
+      _isPlaying = false;
+      print(
+          '🎬 VideoPlayerStateManager: Video pause successful, isPlaying: $_isPlaying');
+      notifyListeners();
+    } on PlatformException catch (e) {
+      print('❌ PlatformException in pause: ${e.code} - ${e.message}');
+      _handlePlatformException(e);
+    } catch (e) {
+      print('❌ Error in pause: $e');
+      _setError(_getUserFriendlyErrorMessage(e.toString()));
     }
   }
 
@@ -401,6 +425,34 @@ class VideoPlayerStateManager extends ChangeNotifier {
       await unmute();
     } else {
       await mute();
+    }
+  }
+
+  /// Toggle play/pause state
+  Future<void> togglePlayPause() async {
+    print(
+        '🎬 VideoPlayerStateManager: togglePlayPause called, current state: $_isPlaying');
+
+    if (_internalController == null) {
+      print('❌ VideoPlayerStateManager: No internal controller available');
+      return;
+    }
+
+    if (!_internalController!.value.isInitialized) {
+      print('❌ VideoPlayerStateManager: Controller not initialized');
+      return;
+    }
+
+    try {
+      if (_isPlaying) {
+        print('🎬 VideoPlayerStateManager: Pausing video');
+        await pause();
+      } else {
+        print('🎬 VideoPlayerStateManager: Playing video');
+        await play();
+      }
+    } catch (e) {
+      print('❌ VideoPlayerStateManager: Error in togglePlayPause: $e');
     }
   }
 
