@@ -437,12 +437,10 @@ class VideoService {
   /// Parameters:
   /// - videoFile: The video file to upload
   /// - title: The title of the video
-  /// - description: The description of the video
   /// - onProgress: Optional callback for upload progress
   /// Returns a map containing the uploaded video's data
-  Future<Map<String, dynamic>> uploadVideo(
-      File videoFile, String title, String description,
-      [String? link, Function(double)? onProgress]) async {
+  Future<Map<String, dynamic>> uploadVideo(File videoFile, String title,
+      [String? description, String? link, Function(double)? onProgress]) async {
     try {
       print('Using server at: $baseUrl');
 
@@ -478,6 +476,10 @@ class VideoService {
         Uri.parse('$baseUrl/api/videos/upload'),
       );
 
+      // Add authentication headers
+      final headers = await _getAuthHeaders();
+      request.headers.addAll(headers);
+
       // Add the video file
       request.files.add(
         await http.MultipartFile.fromPath(
@@ -487,10 +489,9 @@ class VideoService {
         ),
       );
 
-      // Add other fields
-      request.fields['googleId'] = userData['id'];
+      // Add other fields (googleId is no longer needed - backend gets it from JWT token)
       request.fields['videoName'] = title;
-      request.fields['description'] = description;
+      request.fields['description'] = description ?? ''; // Optional description
       request.fields['videoType'] = isLong ? 'yog' : 'sneha';
       if (link != null && link.isNotEmpty) {
         request.fields['link'] = link;
@@ -526,7 +527,6 @@ class VideoService {
         return {
           'id': videoData['_id'],
           'title': videoData['videoName'],
-          'description': videoData['description'],
           'videoUrl':
               videoData['videoUrl'], // Cloudinary URL is already complete
           'thumbnail':
@@ -786,10 +786,26 @@ class VideoService {
       throw Exception('Authentication token not found');
     }
 
-    return {
+    // Debug: Log token information
+    print('🔍 VideoService: Token found in userData');
+    print('🔍 VideoService: Token type: ${userData['token'].runtimeType}');
+    print(
+        '🔍 VideoService: Token length: ${userData['token'].toString().length}');
+    print(
+        '🔍 VideoService: Token preview: ${userData['token'].toString().substring(0, 20)}...');
+    print('🔍 VideoService: User ID from userData: ${userData['id']}');
+    print('🔍 VideoService: Google ID from userData: ${userData['googleId']}');
+
+    final headers = {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer ${userData['token']}',
     };
+
+    print('🔍 VideoService: Final headers: ${headers.keys.toList()}');
+    print(
+        '🔍 VideoService: Authorization header preview: ${headers['Authorization']?.substring(0, 30)}...');
+
+    return headers;
   }
 
   /// Deletes a video from the server
@@ -807,14 +823,29 @@ class VideoService {
         throw Exception('Please sign in to delete videos');
       }
 
+      // Get user ID (try multiple fields)
+      final userId = userData['googleId'] ?? userData['id'] ?? userData['_id'];
+      if (userId == null) {
+        throw Exception('User ID not found');
+      }
+
       // Get authentication headers
       final headers = await _getAuthHeaders();
       print('🗑️ VideoService: Using headers: ${headers.keys.toList()}');
+      print('🗑️ VideoService: User ID: $userId');
+
+      print(
+          '🗑️ VideoService: Sending DELETE request to: $baseUrl/api/videos/$videoId');
+      print('🗑️ VideoService: Request headers: $headers');
+      print('🗑️ VideoService: Request body: {}');
 
       final res = await http
           .delete(
             Uri.parse('$baseUrl/api/videos/$videoId'),
             headers: headers,
+            body: json.encode({
+              // googleId is no longer needed - backend gets it from JWT token
+            }),
           )
           .timeout(const Duration(seconds: 10));
 
@@ -842,6 +873,172 @@ class VideoService {
         rethrow;
       }
       throw Exception('Network error: $e');
+    }
+  }
+
+  /// Deletes multiple videos from the server
+  /// Parameters:
+  /// - videoIds: List of video IDs to delete
+  /// Returns true if all deletions were successful, false otherwise
+  Future<bool> deleteVideos(List<String> videoIds) async {
+    try {
+      if (videoIds.isEmpty) {
+        print('🗑️ VideoService: No videos to delete');
+        return true;
+      }
+
+      print(
+          '🗑️ VideoService: Attempting to delete ${videoIds.length} videos: $videoIds');
+
+      // Check authentication first
+      final userData = await _authService.getUserData();
+
+      if (userData == null) {
+        throw Exception('Please sign in to delete videos');
+      }
+
+      // Get user ID (try multiple fields)
+      final userId = userData['googleId'] ?? userData['id'] ?? userData['_id'];
+      if (userId == null) {
+        throw Exception('User ID not found');
+      }
+
+      // Get authentication headers
+      final headers = await _getAuthHeaders();
+      print('🗑️ VideoService: Using headers: ${headers.keys.toList()}');
+      print('🗑️ VideoService: User ID: $userId');
+
+      // For bulk deletion, we'll use a POST request with the video IDs
+      final res = await http
+          .post(
+            Uri.parse('$baseUrl/api/videos/bulk-delete'),
+            headers: headers,
+            body: json.encode({
+              'videoIds': videoIds,
+              // googleId is no longer needed - backend gets it from JWT token
+              'deleteReason': 'user_requested',
+              'timestamp': DateTime.now().toIso8601String(),
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      print('🗑️ VideoService: Bulk delete response status: ${res.statusCode}');
+      print('🗑️ VideoService: Bulk delete response body: ${res.body}');
+
+      if (res.statusCode == 200 || res.statusCode == 204) {
+        print('✅ VideoService: All videos deleted successfully');
+        return true;
+      } else if (res.statusCode == 401) {
+        throw Exception('Please sign in again to delete videos');
+      } else if (res.statusCode == 403) {
+        throw Exception('You do not have permission to delete these videos');
+      } else if (res.statusCode == 404) {
+        throw Exception('One or more videos were not found');
+      } else if (res.statusCode == 400) {
+        final error = json.decode(res.body);
+        throw Exception(error['error'] ?? 'Invalid request for bulk deletion');
+      } else {
+        final error = json.decode(res.body);
+        throw Exception(error['error'] ?? 'Failed to delete videos');
+      }
+    } catch (e) {
+      print('❌ VideoService: Error in bulk video deletion: $e');
+      if (e is TimeoutException) {
+        throw Exception('Request timed out. Please try again.');
+      } else if (e is Exception) {
+        rethrow;
+      }
+      throw Exception('Network error: $e');
+    }
+  }
+
+  /// Deletes a single video with enhanced error handling and logging
+  /// Parameters:
+  /// - videoId: The ID of the video to delete
+  /// - deleteReason: Optional reason for deletion (for analytics)
+  /// Returns true if deletion was successful, false otherwise
+  Future<bool> deleteVideoWithReason(String videoId,
+      {String? deleteReason}) async {
+    try {
+      print('🗑️ VideoService: Attempting to delete video: $videoId');
+      if (deleteReason != null) {
+        print('🗑️ VideoService: Delete reason: $deleteReason');
+      }
+
+      // Check authentication first
+      final userData = await _authService.getUserData();
+
+      if (userData == null) {
+        throw Exception('Please sign in to delete videos');
+      }
+
+      // Get authentication headers
+      final headers = await _getAuthHeaders();
+      print('🗑️ VideoService: Using headers: ${headers.keys.toList()}');
+
+      // Prepare request body with deletion metadata
+      final requestBody = {
+        'deleteReason': deleteReason ?? 'user_requested',
+        // deletedBy is no longer needed - backend gets it from JWT token
+        'deletedAt': DateTime.now().toIso8601String(),
+        'userAgent': 'Snehayog-Mobile-App',
+      };
+
+      final res = await http
+          .delete(
+            Uri.parse('$baseUrl/api/videos/$videoId'),
+            headers: headers,
+            body: json.encode(requestBody),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      print('🗑️ VideoService: Delete response status: ${res.statusCode}');
+      print('🗑️ VideoService: Delete response body: ${res.body}');
+
+      if (res.statusCode == 200 || res.statusCode == 204) {
+        print('✅ VideoService: Video deleted successfully');
+
+        // Log successful deletion for analytics
+        _logVideoDeletion(
+            videoId, userData['id'] ?? userData['googleId'], deleteReason);
+
+        return true;
+      } else if (res.statusCode == 401) {
+        throw Exception('Please sign in again to delete videos');
+      } else if (res.statusCode == 403) {
+        throw Exception('You do not have permission to delete this video');
+      } else if (res.statusCode == 404) {
+        throw Exception('Video not found');
+      } else if (res.statusCode == 409) {
+        throw Exception('Video cannot be deleted at this time');
+      } else {
+        final error = json.decode(res.body);
+        throw Exception(error['error'] ?? 'Failed to delete video');
+      }
+    } catch (e) {
+      print('❌ VideoService: Error deleting video: $e');
+      if (e is TimeoutException) {
+        throw Exception('Request timed out. Please try again.');
+      } else if (e is Exception) {
+        rethrow;
+      }
+      throw Exception('Network error: $e');
+    }
+  }
+
+  /// Logs video deletion for analytics and monitoring
+  void _logVideoDeletion(String videoId, String userId, String? deleteReason) {
+    try {
+      print('📊 VideoService: Logging video deletion for analytics');
+      print('   Video ID: $videoId');
+      print('   User ID: $userId');
+      print('   Delete Reason: ${deleteReason ?? 'user_requested'}');
+      print('   Timestamp: ${DateTime.now().toIso8601String()}');
+
+      // In production, you would send this data to your analytics service
+      // await _analyticsService.logVideoDeletion(videoId, userId, deleteReason);
+    } catch (e) {
+      print('❌ VideoService: Error logging video deletion: $e');
     }
   }
 }

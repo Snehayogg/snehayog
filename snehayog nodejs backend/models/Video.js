@@ -41,10 +41,7 @@ const videoSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  description: {
-    type: String,
-    required: true
-  },
+
   uploader: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -68,6 +65,10 @@ const videoSchema = new mongoose.Schema({
   duration: {
     type: Number,
     default: 0
+  },
+  description: {
+    type: String,
+    required: false // Optional for user videos, but can be required for ads
   },
   comments: [commentSchema],
   link: {

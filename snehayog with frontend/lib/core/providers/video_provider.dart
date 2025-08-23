@@ -132,6 +132,112 @@ class VideoProvider extends ChangeNotifier {
     }
   }
 
+  /// Delete video by ID (for real-time updates)
+  Future<void> deleteVideo(String videoId) async {
+    try {
+      print('🗑️ VideoProvider: Deleting video: $videoId');
+
+      // Remove video from local list immediately for instant UI update
+      final index = _videos.indexWhere((v) => v.id == videoId);
+      if (index != -1) {
+        _videos.removeAt(index);
+        notifyListeners(); // Update UI immediately
+
+        print('✅ VideoProvider: Video removed from local list, UI updated');
+      }
+
+      // Call backend to delete video
+      await _videoService.deleteVideo(videoId);
+      print('✅ VideoProvider: Video deleted from backend successfully');
+    } catch (e) {
+      print('❌ VideoProvider: Error deleting video: $e');
+
+      // If backend deletion failed, restore the video in the list
+      await refreshVideos();
+      print('🔄 VideoProvider: Restored video list after deletion failure');
+
+      _errorMessage = 'Failed to delete video: $e';
+      notifyListeners();
+    }
+  }
+
+  /// Bulk delete videos (for real-time updates)
+  Future<void> bulkDeleteVideos(List<String> videoIds) async {
+    try {
+      print('🗑️ VideoProvider: Bulk deleting ${videoIds.length} videos');
+
+      // Remove videos from local list immediately for instant UI update
+      final videosToRemove = <VideoModel>[];
+      for (final videoId in videoIds) {
+        final index = _videos.indexWhere((v) => v.id == videoId);
+        if (index != -1) {
+          videosToRemove.add(_videos[index]);
+          _videos.removeAt(index);
+        }
+      }
+
+      notifyListeners(); // Update UI immediately
+      print('✅ VideoProvider: Videos removed from local list, UI updated');
+
+      // Call backend to delete videos
+      await _videoService.deleteVideos(videoIds);
+      print('✅ VideoProvider: Videos deleted from backend successfully');
+    } catch (e) {
+      print('❌ VideoProvider: Error bulk deleting videos: $e');
+
+      // If backend deletion failed, restore the videos in the list
+      await refreshVideos();
+      print(
+          '🔄 VideoProvider: Restored video list after bulk deletion failure');
+
+      _errorMessage = 'Failed to delete videos: $e';
+      notifyListeners();
+    }
+  }
+
+  /// Remove video by ID without backend call (for UI updates only)
+  void removeVideoFromList(String videoId) {
+    final index = _videos.indexWhere((v) => v.id == videoId);
+    if (index != -1) {
+      _videos.removeAt(index);
+      notifyListeners();
+      print('✅ VideoProvider: Video removed from list: $videoId');
+    }
+  }
+
+  /// Remove multiple videos from list (for UI updates only)
+  void removeVideosFromList(List<String> videoIds) {
+    int removedCount = 0;
+    for (final videoId in videoIds) {
+      final index = _videos.indexWhere((v) => v.id == videoId);
+      if (index != -1) {
+        _videos.removeAt(index);
+        removedCount++;
+      }
+    }
+    if (removedCount > 0) {
+      notifyListeners();
+      print('✅ VideoProvider: Removed $removedCount videos from list');
+    }
+  }
+
+  /// Add video to list (for new uploads)
+  void addVideo(VideoModel video) {
+    _videos.insert(0, video); // Add at the beginning
+    notifyListeners();
+    print('✅ VideoProvider: Video added to list: ${video.videoName}');
+  }
+
+  /// Update video in list (for edits)
+  void updateVideo(VideoModel video) {
+    final index = _videos.indexWhere((v) => v.id == video.id);
+    if (index != -1) {
+      _videos[index] = video;
+      notifyListeners();
+      print('✅ VideoProvider: Video updated in list: ${video.videoName}');
+    }
+  }
+
   /// Clear error message
   void clearError() {
     _errorMessage = null;

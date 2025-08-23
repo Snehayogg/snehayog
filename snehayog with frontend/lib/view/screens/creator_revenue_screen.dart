@@ -18,7 +18,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
 
   Map<String, dynamic>? _revenueData;
   List<VideoModel> _userVideos = [];
-  Map<String, double> _videoRevenueMap = {};
+  final Map<String, double> _videoRevenueMap = {};
   double _totalRevenue = 0.0;
   bool _isLoading = true;
   String? _errorMessage;
@@ -67,7 +67,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     try {
       // Revenue is based on AD IMPRESSIONS, not video views
       // CPM (Cost Per Mille) = Revenue per 1000 ad impressions
-      final cpm = 2.0; // Example: $2.00 per 1000 ad impressions
+      const cpm = 2.0; // Example: $2.00 per 1000 ad impressions
 
       // Get ad impressions for this video
       final adImpressions = _getAdImpressionsForVideo(video.id);
@@ -98,7 +98,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
 
       // Ad impressions are typically higher than video views
       // because ads can be shown multiple times per video view
-      final adImpressionsMultiplier =
+      const adImpressionsMultiplier =
           1.5; // 50% more ad impressions than video views
 
       // Calculate estimated ad impressions
@@ -106,7 +106,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
           (baseImpressions * adImpressionsMultiplier).round();
 
       print(
-          '📊 Video ${video.videoName}: ${video.views} views → ${estimatedAdImpressions} estimated ad impressions');
+          '📊 Video ${video.videoName}: ${video.views} views → $estimatedAdImpressions estimated ad impressions');
 
       return estimatedAdImpressions;
     } catch (e) {
@@ -134,9 +134,9 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
 
       // Video completion rate factor
       // Higher completion rate = better ad retention
-      if (video.views != null && video.views! > 0) {
+      if (video.views > 0) {
         // Assume 70% completion rate as baseline
-        final estimatedCompletionRate = 0.7;
+        const estimatedCompletionRate = 0.7;
         if (estimatedCompletionRate > 0.7) {
           multiplier += (estimatedCompletionRate - 0.7) *
               0.5; // +0.5 for every 10% above 70%

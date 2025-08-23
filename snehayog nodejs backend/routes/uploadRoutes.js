@@ -1,6 +1,12 @@
 import express from 'express';
 import multer from 'multer';
-import cloudinary from '../config/cloudinary.js';
+import cloudinary, { 
+  STREAMING_PROFILES, 
+  HLS_CONFIG, 
+  getHLSStreamingUrl, 
+  getMasterPlaylistUrl, 
+  getVideoThumbnailUrl 
+} from '../config/cloudinary.js';
 import fs from 'fs';
 import { verifyToken } from '../utils/verifytoken.js';
 
@@ -22,12 +28,12 @@ const upload = multer({
     },
   }),
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit for media files
+    fileSize: 100 * 1024 * 1024, // 100MB limit for video files (increased for high quality)
   },
   fileFilter: (req, file, cb) => {
     const allowedMimeTypes = [
       'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-      'video/mp4', 'video/webm', 'video/avi', 'video/mov'
+      'video/mp4', 'video/webm', 'video/avi', 'video/mov', 'video/mkv'
     ];
     if (allowedMimeTypes.includes(file.mimetype)) {
       cb(null, true);
@@ -91,7 +97,7 @@ router.post('/image', verifyToken, upload.single('image'), async (req, res) => {
   }
 });
 
-// POST /api/upload/video - Upload video to Cloudinary
+// POST /api/upload/video - Upload video to Cloudinary with custom streaming profiles
 router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
   try {
     if (!req.file) {
@@ -101,14 +107,43 @@ router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
     console.log('🎬 Upload: Starting video upload to Cloudinary...');
     console.log('🎬 Upload: File:', req.file.originalname, 'Size:', req.file.size);
 
-    // Upload to Cloudinary
+    // Determine streaming profile based on request or auto-detect
+    const profileName = req.body.profile || 'portrait_reels';
+    const streamingProfile = STREAMING_PROFILES[profileName.toUpperCase()] || STREAMING_PROFILES.PORTRAIT_REELS;
+    
+    console.log('🎬 Upload: Using streaming profile:', profileName);
+
+    // Upload to Cloudinary with custom streaming profile
     const result = await cloudinary.uploader.upload(req.file.path, {
       resource_type: 'video',
       folder: req.body.folder || 'snehayog/ads/videos',
-      transformation: [
-        { quality: 'auto:good' },
-        { fetch_format: 'auto' }
-      ]
+      
+      // HLS streaming configuration - Fixed for Cloudinary compatibility
+      eager: [
+        {
+          streaming_profile: 'hd',
+          format: 'm3u8'
+        },
+        {
+          streaming_profile: 'sd',
+          format: 'm3u8'
+        }
+      ],
+      
+      eager_async: true,
+      eager_notification_url: req.body.notification_url,
+      
+      // Video optimization settings
+      overwrite: true,
+      invalidate: true,
+      
+      // Metadata for better organization
+      context: {
+        profile: profileName,
+        segment_duration: HLS_CONFIG.segment_duration,
+        keyframe_interval: HLS_CONFIG.keyframe_interval,
+        abr_enabled: HLS_CONFIG.abr_enabled
+      }
     });
 
     // Clean up temp file
@@ -119,6 +154,28 @@ router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
 
     console.log('✅ Upload: Video uploaded successfully to Cloudinary');
     console.log('🎬 Upload: Cloudinary URL:', result.secure_url);
+    console.log('🎬 Upload: Public ID:', result.public_id);
+
+    // Generate HLS streaming URLs
+    const hlsUrls = {
+      master_playlist: getMasterPlaylistUrl(result.public_id, profileName),
+      hls_stream: getHLSStreamingUrl(result.public_id, profileName),
+      thumbnail: getVideoThumbnailUrl(result.public_id, 400, 600)
+    };
+
+    // Get individual quality URLs for fallback - Fixed for Cloudinary compatibility
+    const qualityUrls = [
+      {
+        quality: '1080x1920',
+        bitrate: '3.5m',
+        url: `https://res.cloudinary.com/${process.env.CLOUD_NAME}/video/upload/sp_hd/${result.public_id}.m3u8`
+      },
+      {
+        quality: '720x1280',
+        bitrate: '1.8m',
+        url: `https://res.cloudinary.com/${process.env.CLOUD_NAME}/video/upload/sp_sd/${result.public_id}.m3u8`
+      }
+    ];
 
     res.json({
       success: true,
@@ -129,7 +186,24 @@ router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
       format: result.format,
       duration: result.duration,
       size: result.bytes,
-      thumbnail_url: result.thumbnail_url
+      thumbnail_url: result.thumbnail_url,
+      
+      // HLS streaming information
+      streaming_profile: profileName,
+      hls_urls: hlsUrls,
+      quality_urls: qualityUrls,
+      
+      // Streaming configuration
+      segment_duration: HLS_CONFIG.segment_duration,
+      keyframe_interval: HLS_CONFIG.keyframe_interval,
+      abr_enabled: HLS_CONFIG.abr_enabled,
+      
+      // Eager transformations (if completed)
+      eager: result.eager || [],
+      
+      // Additional metadata
+      context: result.context,
+      created_at: result.created_at
     });
 
   } catch (error) {
@@ -142,6 +216,153 @@ router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
     
     res.status(500).json({ 
       error: 'Failed to upload video',
+      details: error.message 
+    });
+  }
+});
+
+// POST /api/upload/video-hls - Upload video with HLS streaming profile
+router.post('/video-hls', verifyToken, upload.single('video'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No video file uploaded' });
+    }
+
+    console.log('🎬 Upload: Starting HLS video upload to Cloudinary...');
+    console.log('🎬 Upload: File:', req.file.originalname, 'Size:', req.file.size);
+
+    // Force portrait reels profile for HLS
+    const profileName = 'portrait_reels';
+    const streamingProfile = STREAMING_PROFILES.PORTRAIT_REELS;
+    
+    console.log('🎬 Upload: Using HLS streaming profile:', profileName);
+
+    // Upload with HLS-specific transformations
+    const result = await cloudinary.uploader.upload(req.file.path, {
+      resource_type: 'video',
+      folder: req.body.folder || 'snehayog/ads/videos/hls',
+      
+      // HLS format with eager transformations - Fixed for Cloudinary compatibility
+      eager: [
+        {
+          streaming_profile: 'hd',
+          format: 'm3u8'
+        },
+        {
+          streaming_profile: 'sd',
+          format: 'm3u8'
+        }
+      ],
+      
+      eager_async: true,
+      eager_notification_url: req.body.notification_url,
+      
+      // Video optimization
+      overwrite: true,
+      invalidate: true,
+      
+      // Metadata
+      context: {
+        profile: 'hls_portrait_reels',
+        segment_duration: 2,
+        keyframe_interval: 60,
+        abr_enabled: true,
+        aspect_ratio: '9:16',
+        optimized_for: 'mobile_scrolling'
+      }
+    });
+
+    // Clean up temp file
+    if (fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+      console.log('✅ Upload: Temporary file cleaned up');
+    }
+
+    console.log('✅ Upload: HLS video uploaded successfully to Cloudinary');
+    console.log('🎬 Upload: Public ID:', result.public_id);
+
+    // Generate HLS URLs
+    const hlsUrls = {
+      master_playlist: getMasterPlaylistUrl(result.public_id, 'portrait_reels'),
+      hls_stream: getHLSStreamingUrl(result.public_id, 'portrait_reels'),
+      thumbnail: getVideoThumbnailUrl(result.public_id, 400, 600)
+    };
+
+    res.json({
+      success: true,
+      public_id: result.public_id,
+      hls_urls: hlsUrls,
+      
+      // Streaming configuration
+      segment_duration: 2,
+      keyframe_interval: 60,
+      abr_enabled: true,
+      aspect_ratio: '9:16',
+      
+      // Quality levels
+      quality_levels: [
+        { resolution: '1080x1920', bitrate: '3.5m', profile: 'hd' },
+        { resolution: '720x1280', bitrate: '1.8m', profile: 'hd' },
+        { resolution: '480x854', bitrate: '0.9m', profile: 'sd' },
+        { resolution: '360x640', bitrate: '0.6m', profile: 'sd' }
+      ],
+      
+      // Eager transformations
+      eager: result.eager || [],
+      
+      // Metadata
+      context: result.context,
+      created_at: result.created_at
+    });
+
+  } catch (error) {
+    console.error('❌ Upload: HLS video upload error:', error);
+    
+    // Clean up temp file if it exists
+    if (req.file?.path && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    
+    res.status(500).json({ 
+      error: 'Failed to upload HLS video',
+      details: error.message 
+    });
+  }
+});
+
+// GET /api/upload/video-streaming-urls - Get streaming URLs for existing video
+router.get('/video-streaming-urls/:publicId', verifyToken, async (req, res) => {
+  try {
+    const { publicId } = req.params;
+    const profileName = req.query.profile || 'portrait_reels';
+
+    console.log('🎬 Streaming: Getting URLs for video:', publicId);
+    console.log('🎬 Streaming: Profile:', profileName);
+
+    // Generate streaming URLs
+    const streamingUrls = {
+      master_playlist: getMasterPlaylistUrl(publicId, profileName),
+      hls_stream: getHLSStreamingUrl(publicId, profileName),
+      thumbnail: getVideoThumbnailUrl(publicId, 400, 600),
+      original: `https://res.cloudinary.com/${process.env.CLOUD_NAME}/video/upload/${publicId}.mp4`
+    };
+
+    res.json({
+      success: true,
+      public_id: publicId,
+      profile: profileName,
+      streaming_urls: streamingUrls,
+      configuration: {
+        segment_duration: HLS_CONFIG.segment_duration,
+        keyframe_interval: HLS_CONFIG.keyframe_interval,
+        abr_enabled: HLS_CONFIG.abr_enabled
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Streaming: Error getting streaming URLs:', error);
+    res.status(500).json({ 
+      error: 'Failed to get streaming URLs',
       details: error.message 
     });
   }

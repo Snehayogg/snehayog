@@ -6,7 +6,7 @@ class VideoModel {
   int likes;
   int views;
   int shares;
-  final String description;
+  final String? description; // Optional description field
   final Uploader uploader;
   final DateTime uploadedAt;
   final List<String> likedBy;
@@ -29,7 +29,7 @@ class VideoModel {
     required this.likes,
     required this.views,
     required this.shares,
-    required this.description,
+    this.description, // Optional description field
     required this.uploader,
     required this.uploadedAt,
     required this.likedBy,
@@ -54,7 +54,8 @@ class VideoModel {
       likes: json['likes'] ?? 0,
       views: json['views'] ?? 0,
       shares: json['shares'] ?? 0,
-      description: json['description'] ?? '',
+      description: json['description'], // Parse description field
+
       uploader: () {
         print('🔍 VideoModel: Parsing uploader data...');
         print('🔍 VideoModel: json["uploader"] = ${json['uploader']}');
@@ -122,7 +123,7 @@ class VideoModel {
       'likes': likes,
       'views': views,
       'shares': shares,
-      'description': description,
+      'description': description, // Include description in JSON
       'uploader': {
         '_id': uploader.id,
         'name': uploader.name,
@@ -146,7 +147,7 @@ class VideoModel {
     int? likes,
     int? views,
     int? shares,
-    String? description,
+    String? description, // Add description parameter
     Uploader? uploader,
     DateTime? uploadedAt,
     List<String>? likedBy,
@@ -164,7 +165,8 @@ class VideoModel {
       likes: likes ?? this.likes,
       views: views ?? this.views,
       shares: shares ?? this.shares,
-      description: description ?? this.description,
+      description:
+          description ?? this.description, // Handle description in copyWith
       uploader: uploader ?? this.uploader,
       uploadedAt: uploadedAt ?? this.uploadedAt,
       likedBy: likedBy ?? this.likedBy,

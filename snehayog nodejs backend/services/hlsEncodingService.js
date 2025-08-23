@@ -36,9 +36,9 @@ class HLSEncodingService {
    */
   async convertToHLS(inputPath, videoId, options = {}) {
     const {
-      segmentDuration = 10, // Segment duration in seconds
+      segmentDuration = 3, // Optimized segment duration: 2-4 seconds for fast startup
       quality = 'medium', // low, medium, high
-      resolution = 'auto' // auto, 720p, 1080p, 4k
+      resolution = 'auto' // auto, 720p, 480p, 240p
     } = options;
 
     return new Promise((resolve, reject) => {
@@ -50,23 +50,18 @@ class HLSEncodingService {
         fs.mkdirSync(outputDir, { recursive: true });
       }
 
-      // Quality presets
+      // Quality presets optimized for HLS streaming
       const qualityPresets = {
-        low: { crf: 28, audioBitrate: '64k' },
-        medium: { crf: 23, audioBitrate: '128k' },
-        high: { crf: 18, audioBitrate: '192k' }
+        low: { crf: 25, audioBitrate: '64k' },    // Lower quality, smaller file
+        medium: { crf: 23, audioBitrate: '96k' }, // Balanced quality (recommended)
+        high: { crf: 20, audioBitrate: '128k' }   // Higher quality, larger file
       };
 
-      // Resolution presets - expanded for better device compatibility
+      // Resolution presets - focused on mobile and web streaming
       const resolutionPresets = {
-        '4k': { width: 3840, height: 2160, bitrate: '8000k' },
-        '1440p': { width: 2560, height: 1440, bitrate: '6000k' },
-        '1080p': { width: 1920, height: 1080, bitrate: '4000k' },
-        '720p': { width: 1280, height: 720, bitrate: '2500k' },
-        '480p': { width: 854, height: 480, bitrate: '1000k' },
-        '360p': { width: 640, height: 360, bitrate: '600k' },
-        '240p': { width: 426, height: 240, bitrate: '400k' },
-        '144p': { width: 256, height: 144, bitrate: '200k' }
+        '720p': { width: 1280, height: 720, bitrate: '1500k' },
+        '480p': { width: 854, height: 480, bitrate: '800k' },
+        '240p': { width: 426, height: 240, bitrate: '300k' }
       };
 
       // Auto-detect best resolution based on input video
@@ -87,31 +82,37 @@ class HLSEncodingService {
           '-loglevel error'
         ])
         .outputOptions([
-          // Video codec settings
+          // Video codec settings - optimized for HLS
           '-c:v', 'libx264',
-          '-preset', 'fast',
+          '-preset', 'fast',           // Fast encoding for production
+          '-profile:v', 'baseline',    // Baseline profile for maximum compatibility
+          '-level', '3.1',             // H.264 level for broad device support
           '-crf', selectedQuality.crf.toString(),
-          '-sc_threshold', '0',
-          '-g', '48',
-          '-keyint_min', '48',
+          '-maxrate', selectedResolution?.bitrate || '800k', // Bitrate constraint
+          '-bufsize', `${parseInt(selectedResolution?.bitrate || '800k') * 2}k`, // Buffer size
+          '-sc_threshold', '0',        // Disable scene change detection
+          '-g', '48',                  // GOP size for 3-second segments
+          '-keyint_min', '48',         // Minimum keyframe interval
+          '-force_key_frames', 'expr:gte(t,n_forced*3)', // Force keyframes every 3 seconds
           
           // Audio codec settings
           '-c:a', 'aac',
           '-b:a', selectedQuality.audioBitrate,
-          '-ac', '2',
-          '-ar', '44100',
+          '-ac', '2',                  // Stereo audio
+          '-ar', '44100',              // 44.1kHz sample rate
           
-          // HLS specific settings
+          // HLS specific settings - optimized for fast startup
           '-f', 'hls',
           '-hls_time', segmentDuration.toString(),
-          '-hls_list_size', '0', // Keep all segments
+          '-hls_list_size', '0',       // Keep all segments
           '-hls_segment_filename', path.join(outputDir, 'segment_%03d.ts'),
           '-hls_playlist_type', 'vod', // Video on demand
-          '-hls_flags', 'independent_segments',
+          '-hls_flags', 'independent_segments+delete_segments', // Better segment management
+          '-hls_segment_type', 'mpegts', // MPEG-TS segments for compatibility
           
-          // Adaptive bitrate (optional - creates multiple quality variants)
-          '-var_stream_map', 'v:0,a:0',
-          '-master_pl_name', 'master.m3u8'
+          // Additional optimizations
+          '-movflags', '+faststart',   // Optimize for streaming
+          '-pix_fmt', 'yuv420p'       // Pixel format for maximum compatibility
         ]);
 
       // Add resolution if specified
@@ -207,19 +208,39 @@ async checkFFmpegInstallation() {
       fs.mkdirSync(outputDir, { recursive: true });
     }
 
-    // Quality variants
+    // Quality variants optimized for fast startup and efficient streaming
+    // Segment duration: 2-4 seconds for fast startup
+    // CRF ~23 for good quality, baseline profile for compatibility
     const variants = [
-      { name: '4k', crf: 18, width: 3840, height: 2160, audioBitrate: '192k', bitrate: '8000k' },
-      { name: '1440p', crf: 20, width: 2560, height: 1440, audioBitrate: '192k', bitrate: '6000k' },
-      { name: '1080p', crf: 23, width: 1920, height: 1080, audioBitrate: '128k', bitrate: '4000k' },
-      { name: '720p', crf: 25, width: 1280, height: 720, audioBitrate: '128k', bitrate: '2500k' },
-      { name: '480p', crf: 28, width: 854, height: 480, audioBitrate: '96k', bitrate: '1000k' },
-      { name: '360p', crf: 30, width: 640, height: 360, audioBitrate: '64k', bitrate: '600k' },
-      { name: '240p', crf: 32, width: 426, height: 240, audioBitrate: '48k', bitrate: '400k' },
-      { name: '144p', crf: 35, width: 256, height: 144, audioBitrate: '32k', bitrate: '200k' }
+      { 
+        name: '720p', 
+        crf: 23, 
+        width: 1280, 
+        height: 720, 
+        audioBitrate: '128k', 
+        targetBitrate: '1500k',
+        segmentDuration: 3 // 3 seconds for optimal startup
+      },
+      { 
+        name: '480p', 
+        crf: 23, 
+        width: 854, 
+        height: 480, 
+        audioBitrate: '96k', 
+        targetBitrate: '800k',
+        segmentDuration: 3
+      },
+      { 
+        name: '240p', 
+        crf: 23, 
+        width: 426, 
+        height: 240, 
+        audioBitrate: '64k', 
+        targetBitrate: '300k',
+        segmentDuration: 3
+      }
     ];
 
-    const segmentDuration = 6; // Shorter segments for better streaming
     const promises = [];
 
     // Generate each quality variant
@@ -229,7 +250,7 @@ async checkFFmpegInstallation() {
         fs.mkdirSync(variantDir, { recursive: true });
       }
 
-      const promise = this.encodeVariant(inputPath, variantDir, variant, segmentDuration);
+      const promise = this.encodeVariant(inputPath, variantDir, variant, variant.segmentDuration);
       promises.push(promise);
     }
 
@@ -237,7 +258,7 @@ async checkFFmpegInstallation() {
       const results = await Promise.all(promises);
       
       // Generate master playlist
-      const masterPlaylist = this.generateMasterPlaylist(results, segmentDuration);
+      const masterPlaylist = this.generateMasterPlaylist(results, variants[0].segmentDuration);
       fs.writeFileSync(masterPlaylistPath, masterPlaylist);
 
       return {
@@ -245,7 +266,8 @@ async checkFFmpegInstallation() {
         masterPlaylistPath,
         masterPlaylistUrl: `/uploads/hls/${videoId}/master.m3u8`,
         variants: results,
-        segmentDuration
+        segmentDuration: variants[0].segmentDuration,
+        qualityRange: `${variants[0].name} to ${variants[variants.length - 1].name}`
       };
     } catch (error) {
       throw new Error(`Adaptive HLS generation failed: ${error.message}`);
@@ -262,22 +284,37 @@ async checkFFmpegInstallation() {
       ffmpeg(inputPath)
         .inputOptions(['-y', '-hide_banner', '-loglevel error'])
         .outputOptions([
+          // Video codec settings - optimized for HLS streaming
           '-c:v', 'libx264',
-          '-preset', 'fast',
-          '-crf', variant.crf.toString(),
-          '-sc_threshold', '0',
-          '-g', '48',
-          '-keyint_min', '48',
+          '-preset', 'fast',           // Fast encoding for production
+          '-profile:v', 'baseline',    // Baseline profile for maximum compatibility
+          '-level', '3.1',             // H.264 level for broad device support
+          '-crf', variant.crf.toString(), // Constant Rate Factor ~23 for good quality
+          '-maxrate', variant.targetBitrate, // Maximum bitrate constraint
+          '-bufsize', `${parseInt(variant.targetBitrate) * 2}k`, // Buffer size for bitrate control
+          '-sc_threshold', '0',        // Disable scene change detection for consistent quality
+          '-g', '48',                  // GOP size for 3-second segments
+          '-keyint_min', '48',         // Minimum keyframe interval
+          '-force_key_frames', 'expr:gte(t,n_forced*3)', // Force keyframes every 3 seconds
+          
+          // Audio codec settings
           '-c:a', 'aac',
           '-b:a', variant.audioBitrate,
-          '-ac', '2',
-          '-ar', '44100',
+          '-ac', '2',                  // Stereo audio
+          '-ar', '44100',              // 44.1kHz sample rate
+          
+          // HLS specific settings
           '-f', 'hls',
           '-hls_time', segmentDuration.toString(),
-          '-hls_list_size', '0',
+          '-hls_list_size', '0',       // Keep all segments
           '-hls_segment_filename', path.join(outputDir, 'segment_%03d.ts'),
-          '-hls_playlist_type', 'vod',
-          '-hls_flags', 'independent_segments'
+          '-hls_playlist_type', 'vod', // Video on demand
+          '-hls_flags', 'independent_segments+delete_segments', // Better segment management
+          '-hls_segment_type', 'mpegts', // MPEG-TS segments for compatibility
+          
+          // Additional optimizations
+          '-movflags', '+faststart',   // Optimize for streaming
+          '-pix_fmt', 'yuv420p'       // Pixel format for maximum compatibility
         ])
         .size(`${variant.width}x${variant.height}`)
         .aspect('16:9')
@@ -290,7 +327,8 @@ async checkFFmpegInstallation() {
             playlistUrl: `/uploads/hls/${videoId}/${variant.name}/playlist.m3u8`,
             segments: segments.length,
             resolution: `${variant.width}x${variant.height}`,
-            bitrate: variant.audioBitrate
+            bitrate: variant.targetBitrate,
+            segmentDuration: segmentDuration
           });
         })
         .on('error', reject)
@@ -320,17 +358,12 @@ async checkFFmpegInstallation() {
    */
   estimateBandwidth(variant) {
     const baseBandwidth = {
-      '4k': 8000000,
-      '1440p': 6000000,
-      '1080p': 4000000,
-      '720p': 2500000,
-      '480p': 1000000,
-      '360p': 600000,
-      '240p': 400000,
-      '144p': 200000
+      '720p': 1500000,  // 1.5 Mbps for 720p
+      '480p': 800000,   // 800 Kbps for 480p
+      '240p': 300000    // 300 Kbps for 240p
     };
     
-    return baseBandwidth[variant.name] || 1000000;
+    return baseBandwidth[variant.name] || 800000; // Default to 480p bitrate
   }
 
   /**
@@ -436,14 +469,33 @@ async checkFFmpegInstallation() {
    */
   getQualityVariants() {
     return [
-      { name: '4k', crf: 18, width: 3840, height: 2160, audioBitrate: '192k', bitrate: '8000k' },
-      { name: '1440p', crf: 20, width: 2560, height: 1440, audioBitrate: '192k', bitrate: '6000k' },
-      { name: '1080p', crf: 23, width: 1920, height: 1080, audioBitrate: '128k', bitrate: '4000k' },
-      { name: '720p', crf: 25, width: 1280, height: 720, audioBitrate: '128k', bitrate: '2500k' },
-      { name: '480p', crf: 28, width: 854, height: 480, audioBitrate: '96k', bitrate: '1000k' },
-      { name: '360p', crf: 30, width: 640, height: 360, audioBitrate: '64k', bitrate: '600k' },
-      { name: '240p', crf: 32, width: 426, height: 240, audioBitrate: '48k', bitrate: '400k' },
-      { name: '144p', crf: 35, width: 256, height: 144, audioBitrate: '32k', bitrate: '200k' }
+      { 
+        name: '720p', 
+        crf: 23, 
+        width: 1280, 
+        height: 720, 
+        audioBitrate: '128k', 
+        targetBitrate: '1500k',
+        segmentDuration: 3
+      },
+      { 
+        name: '480p', 
+        crf: 23, 
+        width: 854, 
+        height: 480, 
+        audioBitrate: '96k', 
+        targetBitrate: '800k',
+        segmentDuration: 3
+      },
+      { 
+        name: '240p', 
+        crf: 23, 
+        width: 426, 
+        height: 240, 
+        audioBitrate: '64k', 
+        targetBitrate: '300k',
+        segmentDuration: 3
+      }
     ];
   }
 

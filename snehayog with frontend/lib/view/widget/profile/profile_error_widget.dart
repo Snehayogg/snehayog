@@ -17,10 +17,10 @@ class ProfileErrorWidget extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
+          const Icon(
             Icons.error_outline,
             size: ProfileConstants.profileIconSize * 2,
-            color: const Color(ProfileConstants.redColor),
+            color: Color(ProfileConstants.redColor),
           ),
           const SizedBox(height: ProfileConstants.mediumSpacing),
           Text(

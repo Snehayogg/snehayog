@@ -47,15 +47,24 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
   // AdMob
   BannerAd? _bannerAd;
   bool _isBannerAdLoaded = false;
-  Map<int, BannerAd> _videoBannerAds = {}; // Store banner ads for each video
-  Map<int, bool> _videoAdLoaded = {}; // Track loading state for each video
-  Map<int, String> _videoAdUnitIds = {}; // Store ad unit IDs for each video
+  final Map<int, BannerAd> _videoBannerAds =
+      {}; // Store banner ads for each video
+  final Map<int, bool> _videoAdLoaded =
+      {}; // Track loading state for each video
+  final Map<int, String> _videoAdUnitIds =
+      {}; // Store ad unit IDs for each video
 
   // Controller for the PageView that handles vertical scrolling
   late PageController _pageController;
 
   // Timer for periodic video health checks
   Timer? _healthCheckTimer;
+
+  // Public method to refresh videos (can be called from outside)
+  void refreshVideos() {
+    print('🔄 VideoScreen: refreshVideos() called from outside');
+    _loadVideos(isInitialLoad: false);
+  }
 
   @override
   void initState() {
@@ -606,9 +615,9 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
           // Add video-specific targeting
           keywords: [
             video.videoName,
-            video.description,
+            if (video.description != null) video.description!,
             video.uploader.name,
-          ],
+          ].where((keyword) => keyword.isNotEmpty).toList(),
         ),
         listener: BannerAdListener(
           onAdLoaded: (ad) {
@@ -1116,7 +1125,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
     try {
       // Revenue is based on AD IMPRESSIONS, not video views
       // CPM (Cost Per Mille) = Revenue per 1000 ad impressions
-      final cpm = 2.0; // Example: $2.00 per 1000 ad impressions
+      const cpm = 2.0; // Example: $2.00 per 1000 ad impressions
 
       // Get ad impressions for this video
       final adImpressions = _getAdImpressionsForVideo(videoIndex, video);
@@ -1146,7 +1155,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
 
       // Ad impressions are typically higher than video views
       // because ads can be shown multiple times per video view
-      final adImpressionsMultiplier =
+      const adImpressionsMultiplier =
           1.5; // 50% more ad impressions than video views
 
       // Calculate estimated ad impressions
@@ -1154,7 +1163,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
           (baseImpressions * adImpressionsMultiplier).round();
 
       print(
-          '📊 Video ${video.videoName}: ${video.views} views → ${estimatedAdImpressions} estimated ad impressions');
+          '📊 Video ${video.videoName}: ${video.views} views → $estimatedAdImpressions estimated ad impressions');
 
       return estimatedAdImpressions;
     } catch (e) {
@@ -1182,9 +1191,9 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
 
       // Video completion rate factor
       // Higher completion rate = better ad retention
-      if (video.views != null && video.views! > 0) {
+      if (video.views > 0) {
         // Assume 70% completion rate as baseline
-        final estimatedCompletionRate = 0.7;
+        const estimatedCompletionRate = 0.7;
         if (estimatedCompletionRate > 0.7) {
           multiplier += (estimatedCompletionRate - 0.7) *
               0.5; // +0.5 for every 10% above 70%
@@ -1226,9 +1235,9 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       }
 
       // Views factor (if available)
-      if (video.views != null && video.views! > 0) {
+      if (video.views > 0) {
         multiplier +=
-            (video.views! / 1000.0) * 0.02; // +0.02 for every 1000 views
+            (video.views / 1000.0) * 0.02; // +0.02 for every 1000 views
       }
 
       // Cap the multiplier to reasonable bounds
@@ -1429,7 +1438,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
+            const Icon(
               Icons.attach_money,
               color: Colors.green,
               size: 16,
@@ -1498,7 +1507,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
               Builder(
                 builder: (context) {
                   final views = currentVideo.views;
-                  if (views != null && views > 0) {
+                  if (views > 0) {
                     return Text('Views: $views');
                   }
                   return const SizedBox.shrink();

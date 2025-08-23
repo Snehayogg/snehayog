@@ -218,15 +218,6 @@ class _VideoItemWidgetState extends State<VideoItemWidget> {
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 8),
-            Text(
-              widget.video.description,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 16,
-              ),
-              textAlign: TextAlign.center,
-            ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () {
@@ -269,7 +260,6 @@ class _VideoItemWidgetState extends State<VideoItemWidget> {
     print(
         '🔗 VideoItemWidget: Should show link button: ${widget.video.link != null && widget.video.link!.isNotEmpty}');
     print('🔗 VideoItemWidget: Video ID: ${widget.video.id}');
-    print('🔗 VideoItemWidget: Video description: ${widget.video.description}');
 
     return Stack(
       fit: StackFit.expand,
@@ -361,15 +351,10 @@ class _VideoItemWidgetState extends State<VideoItemWidget> {
           widget.video.videoName,
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 15,
+            fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          widget.video.description,
-          style: const TextStyle(color: Colors.white, fontSize: 13),
-          maxLines: 2,
+          maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: 8),
@@ -485,31 +470,27 @@ class _VideoItemWidgetState extends State<VideoItemWidget> {
           }
         },
         child: Container(
+          width: 140, // Increased width from 100 to 140
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
-            gradient: const LinearGradient(
-              colors: [
-                Color(0xCC2196F3), // More opaque blue
-                Color(0xFF1976D2), // Solid blue
-              ],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-            ),
+            color: const Color(
+                0xFF757575), // Changed to grey color to match app theme
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withOpacity(0.2),
                 blurRadius: 4,
                 offset: const Offset(0, 1),
               ),
             ],
           ),
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+          padding: const EdgeInsets.symmetric(
+              vertical: 8, horizontal: 16),
           child: const Row(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize: MainAxisSize.max,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(Icons.open_in_new, color: Colors.white, size: 16),
-              SizedBox(width: 6),
+              SizedBox(width: 8), 
               Text(
                 'Visit Now',
                 style: TextStyle(

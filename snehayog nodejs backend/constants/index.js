@@ -3,7 +3,7 @@
 export const APP_CONFIG = {
   NAME: 'Snehayog',
   VERSION: '1.0.0',
-  DEFAULT_PORT: 5000,
+  DEFAULT_PORT: 5001,
   DEFAULT_HOST: '0.0.0.0',
   LOCAL_NETWORK_IP: '192.168.0.190'
 };

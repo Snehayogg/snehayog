@@ -5,7 +5,6 @@ import 'package:path_provider/path_provider.dart';
 /// Manages video caching for optimal performance and storage
 class VideoCacheManager {
   static const int _maxCacheSizeMB = 500; // 500MB threshold
-  static const int _cleanupIntervalMinutes = 5;
 
   /// Pre-cache videos for instant playback
   Future<void> preCacheVideos(List<String> urls) async {

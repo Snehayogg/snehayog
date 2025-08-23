@@ -40,7 +40,7 @@ if (missingEnvVars.length > 0) {
 }
 
 // Port and Host configuration
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 const HOST = process.env.HOST || '0.0.0.0';
 
 console.log('🔧 Server Configuration:');

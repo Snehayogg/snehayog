@@ -30,16 +30,17 @@ class VideoInfoWidget extends StatelessWidget {
           ),
           const SizedBox(height: 4),
 
-          // Video description (limited to 2 lines)
-          Text(
-            video.description,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
+               // Video description (limited to 2 lines)
+          if (video.description != null && video.description!.isNotEmpty)
+            Text(
+              video.description!,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
           const SizedBox(height: 8),
 
           // Uploader information (tappable to go to profile)

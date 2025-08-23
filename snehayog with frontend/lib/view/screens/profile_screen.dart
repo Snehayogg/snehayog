@@ -1,13 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/services/video_service.dart';
-import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/utils/responsive_helper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 import 'dart:async';
-import 'package:snehayog/services/user_service.dart';
 import 'package:snehayog/view/screens/video_screen.dart';
 import 'package:snehayog/view/screens/creator_payment_setup_screen.dart';
 import 'package:snehayog/view/screens/creator_revenue_screen.dart';
@@ -33,6 +29,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.initState();
     _stateManager = ProfileStateManager();
     _loadUserData();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Set context in ProfileStateManager so it can access VideoProvider
+    _stateManager.setContext(context);
   }
 
   @override
@@ -101,8 +104,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Profile updated successfully'),
+            content: Text('Profile updated successfully!'),
             backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
           ),
         );
       }
@@ -110,12 +114,111 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error updating profile: $e'),
+            content: Text('Failed to update profile: $e'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
     }
+  }
+
+  /// Handles deletion of selected videos with professional error handling
+  Future<void> _handleDeleteSelectedVideos() async {
+    try {
+      // Show confirmation dialog
+      final shouldDelete = await _showDeleteConfirmationDialog();
+
+      if (!shouldDelete) return;
+
+      print('🗑️ ProfileScreen: Starting video deletion process');
+      print(
+          '🗑️ ProfileScreen: Selected videos: ${_stateManager.selectedVideoIds}');
+      print('🗑️ ProfileScreen: User data: ${_stateManager.userData}');
+
+      // Perform deletion
+      await _stateManager.deleteSelectedVideos();
+
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                '${_stateManager.selectedVideoIds.length} videos deleted successfully!'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+            action: SnackBarAction(
+              label: 'Undo',
+              textColor: Colors.white,
+              onPressed: () {
+                // In a real app, you might want to implement undo functionality
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Undo functionality not implemented yet'),
+                    backgroundColor: Colors.orange,
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ ProfileScreen: Error in _handleDeleteSelectedVideos: $e');
+      // Error handling is done in ProfileStateManager, just show the error
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_stateManager.error ?? 'Failed to delete videos'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: () => _handleDeleteSelectedVideos(),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Shows a confirmation dialog before deleting videos
+  Future<bool> _showDeleteConfirmationDialog() async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.warning, color: Colors.orange),
+                  SizedBox(width: 8),
+                  Text('Confirm Deletion'),
+                ],
+              ),
+              content: Text(
+                'Are you sure you want to delete ${_stateManager.selectedVideoIds.length} video${_stateManager.selectedVideoIds.length == 1 ? '' : 's'}? This action cannot be undone.',
+                style: const TextStyle(fontSize: 16),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Delete'),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
   }
 
   Future<void> _handleCancelEdit() async {
@@ -252,7 +355,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               backgroundColor: Colors.white,
               title: Text(userData?['name'] ?? 'Profile',
                   style: const TextStyle(color: Color(0xFF424242))),
-              actions: isMyProfile && userData != null
+              actions: isMyProfile
                   ? [
                       IconButton(
                         icon: const Icon(Icons.more_vert,
@@ -269,6 +372,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   onTap: () {
                                     Navigator.pop(context);
                                     _stateManager.enterSelectionMode();
+                                  },
+                                ),
+                                ListTile(
+                                  leading: const Icon(Icons.refresh),
+                                  title: const Text('Refresh Data'),
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    _stateManager.refreshData();
                                   },
                                 ),
                                 ListTile(
@@ -324,42 +435,97 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       child: Container(
                                         padding: const EdgeInsets.all(16),
                                         decoration: BoxDecoration(
-                                          color: Colors.blue.withOpacity(0.1),
+                                          color: Colors.grey[100],
                                           borderRadius:
-                                              BorderRadius.circular(12),
-                                          border: Border.all(
-                                            color: Colors.blue.withOpacity(0.3),
-                                            width: 1,
-                                          ),
+                                              BorderRadius.circular(8),
                                         ),
                                         child: Column(
                                           children: [
                                             Text(
                                               'Selection Mode',
                                               style: TextStyle(
-                                                color: Colors.blue[700],
+                                                fontSize: 18,
                                                 fontWeight: FontWeight.bold,
-                                                fontSize: 16,
+                                                color: Colors.grey[800],
                                               ),
                                             ),
                                             const SizedBox(height: 8),
                                             Text(
                                               '${_stateManager.selectedVideoIds.length} video${_stateManager.selectedVideoIds.length == 1 ? '' : 's'} selected',
                                               style: TextStyle(
-                                                color: Colors.blue[600],
+                                                color: Colors.grey[600],
                                                 fontSize: 14,
                                               ),
                                             ),
+                                            // Show error if any
+                                            if (_stateManager.error !=
+                                                null) ...[
+                                              const SizedBox(height: 16),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.all(12),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.red[50],
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                  border: Border.all(
+                                                      color: Colors.red[200]!),
+                                                ),
+                                                child: Row(
+                                                  children: [
+                                                    Icon(Icons.error_outline,
+                                                        color: Colors.red[700],
+                                                        size: 20),
+                                                    const SizedBox(width: 8),
+                                                    Expanded(
+                                                      child: Text(
+                                                        _stateManager.error!,
+                                                        style: TextStyle(
+                                                          color:
+                                                              Colors.red[700],
+                                                          fontSize: 14,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    IconButton(
+                                                      icon: Icon(Icons.close,
+                                                          color:
+                                                              Colors.red[700],
+                                                          size: 20),
+                                                      onPressed: () =>
+                                                          _stateManager
+                                                              .clearError(),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
                                             const SizedBox(height: 16),
                                             Row(
                                               mainAxisAlignment:
                                                   MainAxisAlignment.center,
                                               children: [
                                                 ElevatedButton.icon(
-                                                  icon:
-                                                      const Icon(Icons.delete),
-                                                  label: Text(
-                                                      'Delete Selected (${_stateManager.selectedVideoIds.length})'),
+                                                  icon: _stateManager.isLoading
+                                                      ? const SizedBox(
+                                                          width: 16,
+                                                          height: 16,
+                                                          child:
+                                                              CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                            valueColor:
+                                                                AlwaysStoppedAnimation<
+                                                                        Color>(
+                                                                    Colors
+                                                                        .white),
+                                                          ),
+                                                        )
+                                                      : const Icon(
+                                                          Icons.delete),
+                                                  label: Text(_stateManager
+                                                          .isLoading
+                                                      ? 'Deleting...'
+                                                      : 'Delete Selected (${_stateManager.selectedVideoIds.length})'),
                                                   style:
                                                       ElevatedButton.styleFrom(
                                                     backgroundColor: Colors.red,
@@ -369,9 +535,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                         Colors.grey,
                                                   ),
                                                   onPressed: _stateManager
-                                                          .hasSelectedVideos
-                                                      ? () => _stateManager
-                                                          .deleteSelectedVideos()
+                                                              .hasSelectedVideos &&
+                                                          !_stateManager
+                                                              .isLoading
+                                                      ? () =>
+                                                          _handleDeleteSelectedVideos()
                                                       : null,
                                                 ),
                                                 const SizedBox(width: 16),
@@ -379,26 +547,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                   icon: const Icon(Icons.clear),
                                                   label: const Text(
                                                       'Clear Selection'),
-                                                  onPressed: () {
-                                                    print(
-                                                        '🔍 Clear Selection button pressed');
-                                                    print(
-                                                        '🔍 Before clear: ${_stateManager.selectedVideoIds}');
-                                                    _stateManager
-                                                        .clearSelection();
-                                                    print(
-                                                        '🔍 After clear: ${_stateManager.selectedVideoIds}');
-                                                  },
+                                                  onPressed:
+                                                      _stateManager.isLoading
+                                                          ? null
+                                                          : () {
+                                                              print(
+                                                                  '🔍 Clear Selection button pressed');
+                                                              print(
+                                                                  '🔍 Before clear: ${_stateManager.selectedVideoIds}');
+                                                              _stateManager
+                                                                  .clearSelection();
+                                                              print(
+                                                                  '🔍 After clear: ${_stateManager.selectedVideoIds}');
+                                                            },
                                                 ),
                                                 const SizedBox(width: 16),
                                                 TextButton.icon(
                                                   icon: const Icon(Icons.close),
                                                   label: const Text(
                                                       'Exit Selection'),
-                                                  onPressed: () {
-                                                    _stateManager
-                                                        .exitSelectionMode();
-                                                  },
+                                                  onPressed:
+                                                      _stateManager.isLoading
+                                                          ? null
+                                                          : () {
+                                                              _stateManager
+                                                                  .exitSelectionMode();
+                                                            },
                                                 ),
                                               ],
                                             ),
@@ -421,14 +595,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                   : 75,
                                               backgroundColor:
                                                   const Color(0xFFF5F5F5),
-                                              backgroundImage: userData?[
+                                              backgroundImage: userData[
                                                           'profilePic'] !=
                                                       null
-                                                  ? userData!['profilePic']
+                                                  ? userData['profilePic']
                                                           .startsWith('http')
-                                                      ? NetworkImage(userData![
+                                                      ? NetworkImage(userData[
                                                           'profilePic'])
-                                                      : FileImage(File(userData![
+                                                      : FileImage(File(userData[
                                                               'profilePic']))
                                                           as ImageProvider
                                                   : null,
@@ -437,17 +611,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                 print(
                                                     'Error loading profile image: $exception');
                                               },
-                                              child: userData?['profilePic'] ==
-                                                      null
-                                                  ? Icon(
-                                                      Icons.person,
-                                                      size: ResponsiveHelper
-                                                          .getAdaptiveIconSize(
-                                                              context),
-                                                      color: const Color(
-                                                          0xFF757575),
-                                                    )
-                                                  : null,
+                                              child:
+                                                  userData['profilePic'] == null
+                                                      ? Icon(
+                                                          Icons.person,
+                                                          size: ResponsiveHelper
+                                                              .getAdaptiveIconSize(
+                                                                  context),
+                                                          color: const Color(
+                                                              0xFF757575),
+                                                        )
+                                                      : null,
                                             ),
                                             if (_stateManager.isEditing)
                                               Positioned(
@@ -488,7 +662,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           )
                                         else
                                           Text(
-                                            userData?['name'] ?? 'User',
+                                            userData['name'] ?? 'User',
                                             style: TextStyle(
                                               color: const Color(0xFF424242),
                                               fontSize: ResponsiveHelper
@@ -688,8 +862,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                                             // Check if this is the user's own video by comparing multiple possible ID fields
                                             final userGoogleId =
-                                                userData?['googleId'];
-                                            final userId = userData?['id'];
+                                                userData['googleId'];
+                                            final userId = userData['id'];
                                             final videoUploaderId =
                                                 video.uploader.id;
 
@@ -698,7 +872,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                         userGoogleId ||
                                                     videoUploaderId == userId ||
                                                     videoUploaderId ==
-                                                        userData?['_id']);
+                                                        userData['_id']);
 
                                             // Debug logging for video selection
                                             print('🔍 Video Selection Debug:');
@@ -709,7 +883,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                 '  - User Google ID: $userGoogleId');
                                             print('  - User ID: $userId');
                                             print(
-                                                '  - User _ID: ${userData?['_id']}');
+                                                '  - User _ID: ${userData['_id']}');
                                             print(
                                                 '  - isMyProfile: $isMyProfile');
                                             print(
@@ -736,13 +910,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                   final updatedVideos =
                                                       _stateManager.userVideos
                                                           .map((video) {
-                                                    if (userData != null &&
-                                                        userData!['name'] !=
-                                                            null) {
+                                                    if (userData['name'] !=
+                                                        null) {
                                                       return video.copyWith(
                                                         uploader: video.uploader
                                                             .copyWith(
-                                                                name: userData![
+                                                                name: userData[
                                                                     'name']),
                                                       );
                                                     }
@@ -1055,7 +1228,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<bool> _checkBackendPaymentSetup() async {
     try {
       print('🔍 _checkBackendPaymentSetup: Starting backend check...');
-      final userData = await _stateManager.getUserData();
+      final userData = _stateManager.getUserData();
       final token = userData?['token'];
 
       if (token == null) {

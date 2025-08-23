@@ -6,18 +6,18 @@ class AppConfig {
   static String get baseUrl {
     if (_isDevelopment) {
       // Development: Use local network IP for physical device testing
-      return 'http://192.168.0.190:5000';
+      return 'http://192.168.0.190:5001';
     } else {
       // Production: Use your local network IP for physical device testing
-      return 'http://192.168.0.190:5000';
+      return 'http://192.168.0.190:5001';
     }
   }
 
   // **NEW: Fallback URLs for development**
   static const List<String> fallbackUrls = [
-    'http://192.168.0.190:5000', // **PRIORITY: Your local network IP for physical devices**
-    'http://localhost:5000',
-    'http://10.0.2.2:5000', // Android emulator
+    'http://192.168.0.190:5001', // **PRIORITY: Your local network IP for physical devices**
+    'http://localhost:5001',
+    'http://10.0.2.2:5001', // Android emulator
   ];
 
   // **NEW: Network timeout configurations**
@@ -57,6 +57,53 @@ class AppConfig {
   // Media upload configuration
   static const int maxImageSize = 5 * 1024 * 1024; // 5MB
   static const int maxVideoSize = 100 * 1024 * 1024; // 100MB
+
+  // **NEW: Cloudinary Configuration for HLS Streaming**
+  static const String cloudinaryCloudName =
+      'dgq0hlygs'; // Replace with your actual cloud name
+  static const String cloudinaryApiKey =
+      '441141219573521'; // Replace with your actual API key
+  static const String cloudinaryApiSecret =
+      'mVM4MKP69IW0SGWHsS12aygq1uU'; // Replace with your actual API secret
+
+  // Cloudinary streaming profiles
+  static const Map<String, Map<String, dynamic>> streamingProfiles = {
+    'portrait_reels': {
+      'name': 'Portrait Reels',
+      'aspect_ratio': '9:16',
+      'quality_levels': [
+        {'resolution': '1080x1920', 'bitrate': '3.5 Mbps', 'profile': 'HD'},
+        {'resolution': '720x1280', 'bitrate': '1.8 Mbps', 'profile': 'HD'},
+        {'resolution': '480x854', 'bitrate': '0.9 Mbps', 'profile': 'SD'},
+        {'resolution': '360x640', 'bitrate': '0.6 Mbps', 'profile': 'SD'},
+      ],
+      'segment_duration': 2,
+      'keyframe_interval': 2,
+      'optimized_for': 'Mobile Scrolling'
+    },
+    'landscape_standard': {
+      'name': 'Landscape Standard',
+      'aspect_ratio': '16:9',
+      'quality_levels': [
+        {'resolution': '1920x1080', 'bitrate': '4.0 Mbps', 'profile': 'HD'},
+        {'resolution': '1280x720', 'bitrate': '2.0 Mbps', 'profile': 'HD'},
+        {'resolution': '854x480', 'bitrate': '1.0 Mbps', 'profile': 'SD'},
+      ],
+      'segment_duration': 2,
+      'keyframe_interval': 2,
+      'optimized_for': 'Standard Video'
+    }
+  };
+
+  // HLS streaming configuration
+  static const Map<String, dynamic> hlsConfig = {
+    'segment_duration': 2, // 2 seconds per segment
+    'keyframe_interval': 60, // 2 seconds at 30fps
+    'abr_enabled': true, // Adaptive Bitrate enabled
+    'buffer_size': 10, // 10 seconds buffer
+    'hls_version': '3',
+    'compatibility': 'modern'
+  };
 
   // Ad types supported
   static const List<String> supportedAdTypes = [

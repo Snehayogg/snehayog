@@ -25,7 +25,7 @@ class VideoErrorWidget extends StatelessWidget {
               color: Colors.red.withOpacity(VideoConstants.lightTextOpacity),
             ),
             const SizedBox(height: 16),
-            Text(
+            const Text(
               'Playback Error',
               style: TextStyle(
                 color: Colors.white,

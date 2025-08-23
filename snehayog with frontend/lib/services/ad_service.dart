@@ -484,8 +484,10 @@ class AdService {
         return await _cloudinaryService.uploadImage(file,
             folder: 'snehayog/ads/images');
       } else if (mediaType == 'video') {
-        return await _cloudinaryService.uploadVideo(file,
+        final result = await _cloudinaryService.uploadVideo(file,
             folder: 'snehayog/ads/videos');
+        // Extract URL from the result map
+        return result['url'] ?? result['hls_urls']?['hls_stream'] ?? '';
       } else {
         throw Exception('Unsupported media type: $mediaType');
       }

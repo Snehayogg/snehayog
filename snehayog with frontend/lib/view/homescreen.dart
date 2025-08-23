@@ -15,8 +15,28 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
-  final _videoScreenKey = GlobalKey();
+  final _videoScreenKey = GlobalKey(); // Keep as generic key
   final AuthService _authService = AuthService();
+
+  // Method to refresh video list
+  void _refreshVideoList() {
+    print('🔄 MainScreen: _refreshVideoList() called');
+
+    // Use the public method from VideoScreen to refresh videos
+    final videoScreenState = _videoScreenKey.currentState;
+    if (videoScreenState != null) {
+      print('🔄 MainScreen: VideoScreen state found, calling refreshVideos()');
+      // Cast to access the public method
+      (videoScreenState as dynamic).refreshVideos();
+    } else {
+      print('❌ MainScreen: VideoScreen state not found');
+    }
+
+    // Also navigate back to video tab to show the refreshed content
+    final mainController = Provider.of<MainController>(context, listen: false);
+    mainController.changeIndex(0);
+    print('🔄 MainScreen: Navigated back to video tab');
+  }
 
   @override
   void initState() {
@@ -105,11 +125,13 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 key: _videoScreenKey,
               ),
               const SnehaScreen(key: PageStorageKey('snehaScreen')),
-              const UploadScreen(key: PageStorageKey('uploadScreen')),
+              UploadScreen(
+                key: PageStorageKey('uploadScreen'),
+                onVideoUploaded: _refreshVideoList, // Pass the refresh callback
+              ),
               const ProfileScreen(key: PageStorageKey('profileScreen')),
             ],
           ),
-          // ... existing code ...
           bottomNavigationBar: Container(
             decoration: BoxDecoration(
               color: Colors.white,

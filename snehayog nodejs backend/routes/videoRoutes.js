@@ -5,9 +5,9 @@ import User from '../models/User.js';
 import cloudinary from '../config/cloudinary.js';
 import config, { isCloudinaryConfigured } from '../config.js';
 import fs from 'fs'; // To delete temp file after upload
-import hlsEncodingService from '../services/hlsEncodingService.js';
 import path from 'path'; // For serving HLS files
 import { setHLSHeaders } from '../config/hlsConfig.js';
+import { verifyToken } from '../utils/verifytoken.js';
 const router = express.Router();
 
 // Multer disk storage to get original file first
@@ -44,12 +44,12 @@ const upload = multer({
 });
 
 // POST /api/videos/upload
-router.post('/upload', upload.single('video'), async (req, res) => {
+router.post('/upload', verifyToken, upload.single('video'), async (req, res) => {
   let originalResult = null;
-  let compressedResult = null;
+  let hlsResult = null;
 
   try {
-    console.log('🎬 Upload: Starting video upload process...');
+    console.log('🎬 Upload: Starting video upload process with HLS streaming...');
     console.log('🎬 Upload: Request body:', req.body);
     console.log('🎬 Upload: File info:', req.file ? {
       filename: req.file.filename,
@@ -58,7 +58,15 @@ router.post('/upload', upload.single('video'), async (req, res) => {
       path: req.file.path
     } : 'No file');
 
-    const { googleId, videoName, description, videoType, link } = req.body;
+    // Google ID is now available from verifyToken middleware
+    const googleId = req.user.googleId;
+    if (!googleId) {
+      console.log('❌ Upload: Google ID not found in token');
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(401).json({ error: 'Google ID not found in token' });
+    }
+
+    const { videoName, description, videoType, link } = req.body;
 
     // 1. Validate file
     if (!req.file || !req.file.path) {
@@ -67,19 +75,13 @@ router.post('/upload', upload.single('video'), async (req, res) => {
     }
 
     // 2. Validate required fields
-    if (!googleId) {
-      console.log('❌ Upload: Missing googleId');
-      fs.unlinkSync(req.file.path);
-      return res.status(400).json({ error: 'googleId is required' });
-    }
-
     if (!videoName || videoName.trim() === '') {
       console.log('❌ Upload: Missing video name');
       fs.unlinkSync(req.file.path);
       return res.status(400).json({ error: 'Video name is required' });
     }
 
-    // 3. Validate MIME type
+    // 3. Validate MIME type and file integrity
     const allowedTypes = ['video/mp4', 'video/webm', 'video/avi', 'video/mkv', 'video/mov'];
     if (!allowedTypes.includes(req.file.mimetype)) {
       console.log('❌ Upload: Invalid video format:', req.file.mimetype);
@@ -87,11 +89,33 @@ router.post('/upload', upload.single('video'), async (req, res) => {
       return res.status(400).json({ error: 'Invalid video format' });
     }
 
+    // 3.1 Enhanced file validation
+    try {
+      const stats = fs.statSync(req.file.path);
+      if (stats.size === 0) {
+        console.log('❌ Upload: Video file is empty (0 bytes)');
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ error: 'Video file is empty or corrupted' });
+      }
+      
+      if (stats.size < 1024) { // Less than 1KB
+        console.log('❌ Upload: Video file too small (likely corrupted):', stats.size);
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ error: 'Video file is too small and likely corrupted' });
+      }
+      
+      console.log('✅ Upload: File validation passed - Size:', stats.size, 'bytes');
+    } catch (validationError) {
+      console.error('❌ Upload: File validation failed:', validationError);
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: 'Failed to validate video file' });
+    }
+
     // 4. Validate user
-    console.log('🎬 Upload: Looking for user with googleId:', googleId);
-    const user = await User.findOne({ googleId });
+    console.log('🎬 Upload: Looking for user with Google ID:', googleId);
+    const user = await User.findOne({ googleId: googleId });
     if (!user) {
-      console.log('❌ Upload: User not found with googleId:', googleId);
+      console.log('❌ Upload: User not found with Google ID:', googleId);
       fs.unlinkSync(req.file.path);
       return res.status(404).json({ error: 'User not found' });
     }
@@ -108,15 +132,36 @@ router.post('/upload', upload.single('video'), async (req, res) => {
       });
     }
 
-    // 6. Upload original video
-    console.log('🎬 Upload: Starting Cloudinary upload...');
+    // 6. Upload original video with HLS streaming profile
+    console.log('🎬 Upload: Starting Cloudinary HLS upload...');
     try {
       originalResult = await cloudinary.uploader.upload(req.file.path, {
         resource_type: 'video',
         folder: 'snehayog-originals',
-        timeout: 60000
+        timeout: 60000,
+        
+        // Enhanced video validation
+        validate: true,
+        invalidate: true,
+        
+        // Video format optimization
+        video_codec: 'h264', // Ensure ExoPlayer compatibility
+        audio_codec: 'aac',  // Ensure audio compatibility
+        
+        // Quality settings
+        quality: 'auto:good',
+        fetch_format: 'auto'
       });
+      
+      // Validate Cloudinary response
+      if (!originalResult.secure_url || !originalResult.public_id) {
+        throw new Error('Cloudinary upload succeeded but returned invalid response');
+      }
+      
       console.log('✅ Upload: Original video uploaded to Cloudinary');
+      console.log('🎬 Upload: Cloudinary URL:', originalResult.secure_url);
+      console.log('🎬 Upload: Public ID:', originalResult.public_id);
+      
     } catch (cloudinaryError) {
       console.error('❌ Upload: Cloudinary upload failed:', cloudinaryError);
       fs.unlinkSync(req.file.path);
@@ -130,69 +175,175 @@ router.post('/upload', upload.single('video'), async (req, res) => {
       } else if (cloudinaryError.message.includes('cloud_name')) {
         errorMessage = 'Video upload service configuration error. Please contact administrator.';
         errorDetails = 'Cloudinary cloud name is invalid. Check your .env file configuration.';
+      } else if (cloudinaryError.message.includes('Invalid image file') || cloudinaryError.message.includes('Invalid video file')) {
+        errorMessage = 'Video file is corrupted or in an unsupported format. Please try with a different video file.';
+        errorDetails = 'The uploaded video file appears to be corrupted or uses an unsupported codec.';
+      } else if (cloudinaryError.message.includes('timeout')) {
+        errorMessage = 'Video upload timed out. The file might be too large or your connection is slow.';
+        errorDetails = 'Upload timeout - try with a smaller video file or check your internet connection.';
       }
       
       return res.status(500).json({ 
         error: errorMessage,
         details: errorDetails,
-        solution: 'Create a .env file with proper Cloudinary credentials and restart the server'
+        solution: 'Try uploading a different video file or contact support if the problem persists'
       });
     }
 
-    // 7. Upload compressed video
+    // 7. Upload HLS streaming version with 2-second segments
     try {
-      compressedResult = await cloudinary.uploader.upload(req.file.path, {
+      console.log('🎬 Upload: Creating HLS streaming version...');
+      
+      // Upload with HLS eager transformations to generate actual .m3u8 files
+      hlsResult = await cloudinary.uploader.upload(req.file.path, {
         resource_type: 'video',
         folder: 'snehayog-videos',
-        transformation: [
-          { quality: 'auto:good' },
-          { fetch_format: 'auto' },
+        
+        // HLS streaming transformations - Cloudinary compatible only
+        eager: [
+          {
+            // HD quality HLS stream - Cloudinary compatible
+            streaming_profile: 'hd',
+            format: 'm3u8'
+          },
+          {
+            // SD quality HLS stream - Cloudinary compatible
+            streaming_profile: 'sd',
+            format: 'm3u8'
+          }
         ],
-        timeout: 60000
+        
+        eager_async: false, // Wait for transformations to complete
+        eager_notification_url: req.body.notification_url,
+        
+        // Additional HLS settings
+        overwrite: true,
+        invalidate: true,
+        
+        // Enhanced validation
+        validate: true,
+        
+        timeout: 180000 // 3 minutes for HLS processing
       });
-      console.log('✅ Upload: Compressed video uploaded to Cloudinary');
+      
+      console.log('✅ Upload: HLS streaming version created with eager transformations');
+      console.log('🎬 Upload: HLS Result:', hlsResult);
+      
+      // Validate HLS result
+      if (!hlsResult.eager || hlsResult.eager.length === 0) {
+        console.error('❌ Upload: No eager transformations found in HLS result');
+        throw new Error('HLS transformations failed - no .m3u8 files generated');
+      }
+      
+      // Verify that we have actual .m3u8 files
+      const m3u8Transformations = hlsResult.eager.filter(t => t.format === 'm3u8');
+      if (m3u8Transformations.length === 0) {
+        console.error('❌ Upload: No .m3u8 files generated');
+        throw new Error('HLS conversion failed - no .m3u8 files created');
+      }
+      
+      console.log('✅ Upload: HLS .m3u8 files generated successfully');
+      console.log('🎬 Upload: M3U8 transformations found:', m3u8Transformations.length);
+      
+      m3u8Transformations.forEach((transformation, index) => {
+        console.log(`🎬 Upload: M3U8 Transformation ${index + 1}:`, {
+          format: transformation.format,
+          url: transformation.secure_url,
+          width: transformation.width,
+          height: transformation.height,
+          status: transformation.status || 'unknown',
+          isM3U8: transformation.format === 'm3u8'
+        });
+      });
+      
     } catch (cloudinaryError) {
-      console.error('❌ Upload: Compressed video upload failed:', cloudinaryError);
+      console.error('❌ Upload: HLS streaming creation failed:', cloudinaryError);
+      
       // Try to delete the original upload
       if (originalResult?.public_id) {
         try {
           await cloudinary.uploader.destroy(originalResult.public_id, { resource_type: 'video' });
+          console.log('✅ Upload: Cleaned up original upload after HLS failure');
         } catch (e) {
           console.error('❌ Upload: Failed to cleanup original upload:', e);
         }
       }
+      
       fs.unlinkSync(req.file.path);
+      
+      let hlsErrorMessage = 'Failed to create HLS streaming version. Please try again.';
+      let hlsErrorDetails = cloudinaryError.message;
+      
+      if (cloudinaryError.message.includes('Invalid video file')) {
+        hlsErrorMessage = 'Video file is corrupted or uses an unsupported codec. HLS streaming cannot be created.';
+        hlsErrorDetails = 'The video file appears to be corrupted or uses a codec that Cloudinary cannot process for HLS streaming.';
+      } else if (cloudinaryError.message.includes('timeout')) {
+        hlsErrorMessage = 'HLS processing timed out. The video might be too complex or too long.';
+        hlsErrorDetails = 'HLS processing timeout - try with a shorter or simpler video file.';
+      } else if (cloudinaryError.message.includes('no .m3u8 files')) {
+        hlsErrorMessage = 'HLS conversion failed. The video could not be converted to streaming format.';
+        hlsErrorDetails = 'Cloudinary failed to generate .m3u8 files for HLS streaming.';
+      }
+      
       return res.status(500).json({ 
-        error: 'Failed to process video. Please try again.' 
+        error: hlsErrorMessage,
+        details: hlsErrorDetails,
+        solution: 'Try uploading a different video file or contact support if the problem persists'
       });
     }
 
-    if (!originalResult?.secure_url || !compressedResult?.secure_url) {
+    if (!originalResult?.secure_url || !hlsResult?.secure_url) {
       console.log('❌ Upload: Missing Cloudinary URLs');
       fs.unlinkSync(req.file.path);
       return res.status(500).json({ error: 'Cloudinary upload failed' });
     }
 
     // 8. Generate thumbnail URL
-    const thumbnailUrl = compressedResult.secure_url.replace(
+    const thumbnailUrl = hlsResult.secure_url.replace(
       '/upload/',
       '/upload/w_300,h_400,c_fill/'
     );
 
-    // 9. Save video in MongoDB
-    console.log('🎬 Upload: Saving video to database...');
+    // 9. Save video in MongoDB with HLS URLs
+    console.log('🎬 Upload: Saving video to database with HLS URLs...');
+    
+    // Get HLS URLs from eager transformations
+    const hlsUrls = hlsResult.eager?.filter(t => t.format === 'm3u8') || [];
+    const primaryHlsUrl = hlsUrls.length > 0 ? hlsUrls[0].secure_url : null;
+    
+    // CRITICAL: Ensure we have HLS URLs before saving
+    if (!primaryHlsUrl) {
+      console.error('❌ Upload: No HLS URLs available - cannot save video');
+      fs.unlinkSync(req.file.path);
+      return res.status(500).json({
+        success: false,
+        error: 'HLS conversion failed',
+        details: 'Video could not be converted to streaming format',
+        solution: 'Please try uploading the video again'
+      });
+    }
+    
+    // Generate fallback HLS URL if needed
+    const fallbackHlsUrl = `https://res.cloudinary.com/${process.env.CLOUD_NAME}/video/upload/sp_hd,fl_segment_2/${originalResult.public_id}.m3u8`;
+    
     const video = new Video({
       videoName,
-      description: description || '',
+      description: description || '', // Optional for user videos
       link: link || '',
-      videoUrl: compressedResult.secure_url,
+      videoUrl: primaryHlsUrl, // ALWAYS use HLS URL - no MP4 fallback
       thumbnailUrl: thumbnailUrl,
       originalVideoUrl: originalResult.secure_url,
-      // HLS streaming URLs (will be updated later if encoding succeeds)
-      hlsMasterPlaylistUrl: null,
-      hlsPlaylistUrl: null,
-      hlsVariants: [],
-      isHLSEncoded: false,
+      // HLS streaming URLs from actual transformations
+      hlsMasterPlaylistUrl: primaryHlsUrl,
+      hlsPlaylistUrl: primaryHlsUrl,
+      hlsVariants: hlsUrls.map((hls, index) => ({
+        quality: index === 0 ? 'hd' : 'sd',
+        playlistUrl: hls.secure_url,
+        resolution: `${hls.width}x${hls.height}`,
+        bitrate: index === 0 ? '3.5m' : '1.8m',
+        format: hls.format
+      })),
+      isHLSEncoded: true, // Force HLS encoded since we have HLS URLs
       uploader: user._id,
       videoType: videoType || 'yog',
       likes: 0,
@@ -204,62 +355,14 @@ router.post('/upload', upload.single('video'), async (req, res) => {
     });
 
     await video.save();
-    console.log('✅ Upload: Video saved to database with ID:', video._id);
+    console.log('✅ Upload: Video saved to database with HLS URLs, ID:', video._id);
 
-    // 11. Push video to user's video list
+    // 10. Push video to user's video list
     user.videos.push(video._id);
     await user.save();
     console.log('✅ Upload: Video added to user profile');
 
-    // 12. Start HLS encoding BEFORE cleanup
-    const videoId = video._id.toString();
-    try {
-      // Check if HLS encoding service is available
-      const isFFmpegAvailable = await hlsEncodingService.checkFFmpegInstallation();
-      if (!isFFmpegAvailable) {
-        console.log('⚠️ Upload: FFmpeg not available, skipping HLS encoding for:', videoName);
-        // Mark video as not HLS encoded
-        await Video.findByIdAndUpdate(
-          videoId,
-          { isHLSEncoded: false },
-          { new: true }
-        );
-      } else {
-        console.log('🎬 Upload: Starting HLS encoding for video:', videoName);
-        
-        // Use the already imported service instead of dynamic import
-        hlsEncodingService.generateAdaptiveHLS(req.file.path, videoId)
-          .then(async (hlsResult) => {
-            console.log('✅ Upload: HLS encoding completed for', videoName, ':', hlsResult);
-            try {
-              const updatedVideo = await Video.findByIdAndUpdate(
-                videoId,
-                {
-                  hlsMasterPlaylistUrl: hlsResult?.masterPlaylistUrl || null,
-                  hlsPlaylistUrl: hlsResult?.variants?.[0]?.playlistUrl || null,
-                  hlsVariants: hlsResult?.variants || [],
-                  isHLSEncoded: true
-                },
-                { new: true }
-              );
-              console.log('✅ Upload: Video updated with HLS URLs');
-            } catch (updateError) {
-              console.error('❌ Upload: Failed to update video with HLS URLs:', updateError);
-            }
-          })
-          .catch((hlsError) => {
-            console.error('❌ Upload: HLS encoding failed for', videoName, ':', hlsError);
-            // Don't fail the upload - HLS is optional but we'll retry
-            _retryHLSEncoding(videoId, req.file.path, videoName);
-          });
-      }
-    } catch (hlsError) {
-      console.error('❌ Upload: HLS encoding service not available:', hlsError);
-      // Continue with upload - HLS is optional
-    }
-
-    // 13. Clean up temp file AFTER HLS encoding is started
-    // Add a small delay to ensure HLS encoding has started
+    // 11. Clean up temp file
     setTimeout(() => {
       try {
         if (fs.existsSync(req.file.path)) {
@@ -272,11 +375,65 @@ router.post('/upload', upload.single('video'), async (req, res) => {
     }, 2000); // 2 second delay
     console.log('⏳ Upload: Temporary file cleanup scheduled in 2 seconds');
 
-    // 14. Respond success
-    console.log('✅ Upload: Video upload completed successfully');
+    // 12. Respond success with actual HLS URL
+    console.log('✅ Upload: Video upload completed successfully with HLS streaming');
+    
+    // Return the actual HLS URL from eager transformations
+    let responseHlsUrl = primaryHlsUrl;
+    
+    // NO FALLBACK TO MP4 - Only HLS URLs allowed
+    if (!responseHlsUrl) {
+      console.error('❌ Upload: No HLS URLs available - this should not happen');
+      return res.status(500).json({
+        success: false,
+        error: 'HLS conversion failed',
+        details: 'Video processing completed but no HLS URLs were generated',
+        solution: 'Please try uploading the video again'
+      });
+    }
+    
+    // Generate optimized HLS URLs for faster loading using Cloudinary streaming profiles
+    const optimizedHlsUrls = {
+      fast: `https://res.cloudinary.com/${process.env.CLOUD_NAME}/video/upload/sp_hd,fl_segment_1/${originalResult.public_id}.m3u8`,
+      standard: `https://res.cloudinary.com/${process.env.CLOUD_NAME}/video/upload/sp_hd/${originalResult.public_id}.m3u8`,
+      quality: `https://res.cloudinary.com/${process.env.CLOUD_NAME}/video/upload/sp_hd,fl_segment_2/${originalResult.public_id}.m3u8`
+    };
+    
+    // Use the fastest HLS URL (1-second segments)
+    responseHlsUrl = optimizedHlsUrls.fast;
+    
+    // Final validation: Ensure we have a valid HLS URL
+    if (!responseHlsUrl || responseHlsUrl.trim() === '' || !responseHlsUrl.includes('.m3u8')) {
+      console.error('❌ Upload: Invalid HLS URL generated:', responseHlsUrl);
+      return res.status(500).json({
+        success: false,
+        error: 'Invalid HLS URL generated',
+        details: 'Video processing completed but generated URL is not valid HLS format',
+        solution: 'Please try uploading the video again or contact support'
+      });
+    }
+    
+    // Log the final response for debugging
+    console.log('🎬 Upload: Final response HLS URL:', responseHlsUrl);
+    console.log('🎬 Upload: HLS variants count:', hlsUrls.length);
+    console.log('🎬 Upload: Optimized HLS URLs available:', Object.keys(optimizedHlsUrls));
+    
     res.status(201).json({
-      message: '✅ Video uploaded & saved successfully',
-      video
+      success: true,
+      videoUrl: responseHlsUrl, // This will ALWAYS be HLS URL
+      message: '✅ Video uploaded & HLS streaming enabled successfully',
+      video: {
+        ...video.toObject(),
+        hlsUrl: responseHlsUrl,
+        // Add optimized HLS URLs for different quality levels
+        optimizedHlsUrls: optimizedHlsUrls,
+        hlsVariants: hlsUrls.map(hls => ({
+          quality: hls.width === 1080 ? 'hd' : 'sd',
+          url: hls.secure_url,
+          resolution: `${hls.width}x${hls.height}`,
+          format: hls.format
+        }))
+      }
     });
 
   } catch (error) {
@@ -294,71 +451,27 @@ router.post('/upload', upload.single('video'), async (req, res) => {
     }
 
     res.status(500).json({
+      success: false,
       error: '❌ Failed to upload video',
       details: error.message
     });
   }
 });
 
-// Add this function after the upload route
-
-// Retry HLS encoding if it fails initially
-async function _retryHLSEncoding(videoId, videoPath, videoName) {
-  try {
-    console.log('🔄 Upload: Retrying HLS encoding for video:', videoName);
-    
-    // Check if the local file still exists before retrying
-    if (!videoPath || !fs.existsSync(videoPath)) {
-      console.log('⚠️ Upload: Local file no longer available for HLS retry, skipping...');
-      // Mark video as HLS encoding failed since we can't retry
-      await Video.findByIdAndUpdate(
-        videoId,
-        { isHLSEncoded: false },
-        { new: true }
-      );
-      return;
-    }
-    
-    // Wait a bit before retry
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    
-    const hlsResult = await hlsEncodingService.generateAdaptiveHLS(videoPath, videoId);
-    console.log('✅ Upload: HLS encoding retry successful for', videoName);
-    
-    // Update video with HLS URLs
-    await Video.findByIdAndUpdate(
-      videoId,
-      {
-        hlsMasterPlaylistUrl: hlsResult?.masterPlaylistUrl || null,
-        hlsPlaylistUrl: hlsResult?.variants?.[0]?.playlistUrl || null,
-        hlsVariants: hlsResult?.variants || [],
-        isHLSEncoded: true
-      },
-      { new: true }
-    );
-    console.log('✅ Upload: Video updated with HLS URLs after retry');
-  } catch (retryError) {
-    console.error('❌ Upload: HLS encoding retry failed for', videoName, ':', retryError);
-    // Mark video as HLS encoding failed but don't delete it
-    await Video.findByIdAndUpdate(
-      videoId,
-      { isHLSEncoded: false },
-      { new: true }
-    );
-  }
-}
-// Note: Video streaming is now handled by Cloudinary directly
-// No need for local streaming endpoint as Cloudinary provides optimized video delivery
+// Note: Video streaming is now handled by Cloudinary directly with HLS streaming profiles
+// No need for local HLS encoding as Cloudinary provides optimized HLS streaming with 2-second segments
 // Add this test endpoint to help debug HLS issues
 
 // Test HLS configuration
 router.get('/upload/test-hls', async (req, res) => {
   try {
-    console.log('🧪 HLS Test: Configuration check requested');
+    console.log('🧪 HLS Test: Cloudinary HLS streaming configuration check requested');
     
     const configStatus = {
-      ffmpeg: false,
-      hlsService: true,
+      cloudinary: false,
+      cloudName: process.env.CLOUD_NAME || 'Not configured',
+      apiKey: process.env.CLOUD_KEY ? 'Configured' : 'Not configured',
+      apiSecret: process.env.CLOUD_SECRET ? 'Configured' : 'Not configured',
       uploads: {
         directory: 'uploads/',
         exists: false,
@@ -366,18 +479,13 @@ router.get('/upload/test-hls', async (req, res) => {
       }
     };
 
-    // Check FFmpeg installation
-    try {
-      const isFFmpegWorking = await hlsEncodingService.checkFFmpegInstallation();
-      configStatus.ffmpeg = isFFmpegWorking;
-    } catch (error) {
-      configStatus.ffmpeg = false;
+    // Check Cloudinary configuration
+    if (process.env.CLOUD_NAME && process.env.CLOUD_KEY && process.env.CLOUD_SECRET) {
+      configStatus.cloudinary = true;
     }
 
     // Check uploads directory
     try {
-      const fs = await import('fs');
-      const path = await import('path');
       const uploadsDir = path.join(process.cwd(), 'uploads');
       
       configStatus.uploads.exists = fs.existsSync(uploadsDir);
@@ -398,15 +506,22 @@ router.get('/upload/test-hls', async (req, res) => {
     }
 
     res.json({
-      message: 'HLS Configuration Test',
+      message: 'Cloudinary HLS Streaming Configuration Test',
       timestamp: new Date().toISOString(),
       status: configStatus,
-      recommendations: []
+      recommendations: [],
+      hlsFeatures: {
+        streamingProfile: 'sp_hd (High Definition)',
+        segmentDuration: '2 seconds (fl_segment_2)',
+        format: 'HLS (.m3u8)',
+        adaptiveBitrate: 'Enabled',
+        cdn: 'Cloudinary Global CDN'
+      }
     });
 
     // Add recommendations based on status
-    if (!configStatus.ffmpeg) {
-      console.log('❌ HLS Test: FFmpeg not working - HLS encoding will fail');
+    if (!configStatus.cloudinary) {
+      console.log('❌ HLS Test: Cloudinary not configured - HLS streaming will fail');
     }
     if (!configStatus.uploads.exists) {
       console.log('❌ HLS Test: Uploads directory missing');
@@ -611,7 +726,7 @@ router.get('/', async (req, res) => {
     const [totalVideos, videos] = await Promise.all([
       Video.countDocuments(),
       Video.find()
-        .select('videoName videoUrl thumbnailUrl likes views shares description uploader uploadedAt likedBy videoType aspectRatio duration comments link')
+        .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description')
         .populate('uploader', 'name profilePic googleId')
         .populate('comments.user', 'name profilePic')
         .sort({ createdAt: -1 })
@@ -825,16 +940,115 @@ router.post('/:id/comments', async (req, res) => {
 
 
 // Delete video by ID
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', verifyToken, async (req, res) => {
   try {
+    console.log('🗑️ DELETE VIDEO ROUTE CALLED');
+    console.log('🗑️ Video ID:', req.params.id);
+    console.log('🗑️ User from token:', req.user);
+    console.log('🗑️ User ID type:', req.user.id.runtimeType);
+    console.log('🗑️ User ID value:', req.user.id);
+    
     const videoId = req.params.id;
+    
+    // Get video to check ownership
+    const video = await Video.findById(videoId);
+    if (!video) {
+      console.log('❌ Video not found:', videoId);
+      return res.status(404).json({ error: 'Video not found' });
+    }
+
+    console.log('🗑️ Video found:', {
+      id: video._id,
+      uploader: video.uploader,
+      uploaderType: video.uploader.runtimeType,
+      uploaderString: video.uploader.toString()
+    });
+
+    // Get user from database to compare ObjectIds
+    const user = await User.findOne({ googleId: req.user.googleId });
+    if (!user) {
+      console.log('❌ User not found with Google ID:', req.user.googleId);
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    console.log('🗑️ Comparing user IDs:');
+    console.log('   Token User ID:', user._id.toString());
+    console.log('   Video uploader:', video.uploader.toString());
+    console.log('   Are they equal?', video.uploader.toString() === user._id.toString());
+
+    // Check if user owns the video by comparing ObjectIds
+    if (video.uploader.toString() !== user._id.toString()) {
+      console.log('❌ Permission denied - user does not own video');
+      console.log('   User ID from database:', user._id.toString());
+      console.log('   Video uploader ID:', video.uploader.toString());
+      return res.status(403).json({ error: 'You can only delete your own videos' });
+    }
+
+    // Delete the video
     const deletedVideo = await Video.findByIdAndDelete(videoId);
     if (!deletedVideo) {
       return res.status(404).json({ error: 'Video not found' });
     }
+
+    console.log(`🗑️ Video deleted: ${videoId} by user: ${user._id}`);
     res.json({ success: true, message: 'Video deleted successfully' });
   } catch (error) {
+    console.error('❌ Delete video error:', error);
     res.status(500).json({ error: 'Failed to delete video' });
+  }
+});
+
+// Bulk delete videos
+router.post('/bulk-delete', verifyToken, async (req, res) => {
+  try {
+    const { videoIds, deleteReason, timestamp } = req.body;
+    
+    // Get user from database to compare ObjectIds
+    const user = await User.findOne({ googleId: req.user.googleId });
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    // Validate request
+    if (!videoIds || !Array.isArray(videoIds) || videoIds.length === 0) {
+      return res.status(400).json({ error: 'Video IDs are required' });
+    }
+
+    console.log(`🗑️ Bulk delete requested: ${videoIds.length} videos by user: ${user._id}`);
+
+    // Find all videos and check ownership
+    const videos = await Video.find({ _id: { $in: videoIds } });
+    
+    if (videos.length === 0) {
+      return res.status(404).json({ error: 'No videos found' });
+    }
+
+    // Check if user owns all videos by comparing ObjectIds
+    const unauthorizedVideos = videos.filter(video => 
+      video.uploader.toString() !== user._id.toString()
+    );
+
+    if (unauthorizedVideos.length > 0) {
+      return res.status(403).json({ 
+        error: 'You can only delete your own videos',
+        unauthorizedVideos: unauthorizedVideos.map(v => v._id)
+      });
+    }
+
+    // Delete all videos
+    const deleteResult = await Video.deleteMany({ _id: { $in: videoIds } });
+    
+    console.log(`✅ Bulk delete successful: ${deleteResult.deletedCount} videos deleted`);
+    
+    res.json({ 
+      success: true, 
+      message: `${deleteResult.deletedCount} videos deleted successfully`,
+      deletedCount: deleteResult.deletedCount
+    });
+
+  } catch (error) {
+    console.error('❌ Bulk delete error:', error);
+    res.status(500).json({ error: 'Failed to delete videos' });
   }
 });
 

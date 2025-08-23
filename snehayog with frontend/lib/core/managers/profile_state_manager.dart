@@ -1,16 +1,26 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:snehayog/model/video_model.dart';
 import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/services/user_service.dart';
 import 'package:snehayog/services/video_service.dart';
 import 'package:snehayog/core/constants/profile_constants.dart';
+import 'package:snehayog/core/providers/video_provider.dart';
 
 class ProfileStateManager extends ChangeNotifier {
   final VideoService _videoService = VideoService();
   final AuthService _authService = AuthService();
   final UserService _userService = UserService();
+
+  // BuildContext to access VideoProvider
+  BuildContext? _context;
+
+  // Set context when needed
+  void setContext(BuildContext context) {
+    _context = context;
+  }
 
   // State variables
   List<VideoModel> _userVideos = [];
@@ -92,7 +102,7 @@ class ProfileStateManager extends ChangeNotifier {
           _userVideos = videos;
         });
       } else {
-        final videos = await _videoService.getUserVideos(userId!);
+        final videos = await _videoService.getUserVideos(userId);
         setState(() {
           _userVideos = videos;
         });
@@ -190,20 +200,138 @@ class ProfileStateManager extends ChangeNotifier {
     if (_selectedVideoIds.isEmpty) return;
 
     try {
-      // Delete videos logic here
-      // await _videoService.deleteVideos(_selectedVideoIds.toList());
+      print(
+          '🗑️ ProfileStateManager: Starting deletion of ${_selectedVideoIds.length} videos');
 
-      // Remove deleted videos from the list
-      _userVideos.removeWhere((video) => _selectedVideoIds.contains(video.id));
-
-      // Clear selection and exit selection mode
-      exitSelectionMode();
-
-      notifyListeners();
-    } catch (e) {
       setState(() {
-        _error = 'Failed to delete videos: ${e.toString()}';
+        _isLoading = true;
+        _error = null;
       });
+
+      // Create a copy of selected IDs for processing
+      final videoIdsToDelete = List<String>.from(_selectedVideoIds);
+
+      // Attempt to delete videos from the backend
+      final deletionSuccess =
+          await _videoService.deleteVideos(videoIdsToDelete);
+
+      if (deletionSuccess) {
+        print(
+            '✅ ProfileStateManager: All videos deleted successfully from backend');
+
+        // Remove deleted videos from local list
+        _userVideos.removeWhere((video) => videoIdsToDelete.contains(video.id));
+
+        // Clear selection and exit selection mode
+        exitSelectionMode();
+
+        setState(() {
+          _isLoading = false;
+        });
+
+        // Notify VideoProvider to update the main video feed
+        if (_context != null) {
+          try {
+            final videoProvider =
+                Provider.of<VideoProvider>(_context!, listen: false);
+            videoProvider.removeVideosFromList(videoIdsToDelete);
+            print(
+                '✅ ProfileStateManager: Notified VideoProvider of deleted videos');
+          } catch (e) {
+            print('⚠️ ProfileStateManager: Could not notify VideoProvider: $e');
+          }
+        }
+
+        print(
+            '✅ ProfileStateManager: Local state updated after successful deletion');
+      } else {
+        throw Exception('Backend deletion failed');
+      }
+    } catch (e) {
+      print('❌ ProfileStateManager: Error deleting videos: $e');
+
+      setState(() {
+        _isLoading = false;
+        _error = _getUserFriendlyErrorMessage(e);
+      });
+
+      // Don't exit selection mode on error - let user retry
+      notifyListeners();
+    }
+  }
+
+  /// Deletes a single video with enhanced error handling
+  Future<bool> deleteSingleVideo(String videoId) async {
+    try {
+      print('🗑️ ProfileStateManager: Deleting single video: $videoId');
+
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+
+      // Delete from backend
+      final deletionSuccess = await _videoService.deleteVideo(videoId);
+
+      if (deletionSuccess) {
+        print('✅ ProfileStateManager: Single video deleted successfully');
+
+        // Remove from local list
+        _userVideos.removeWhere((video) => video.id == videoId);
+
+        setState(() {
+          _isLoading = false;
+        });
+
+        // Notify VideoProvider to update the main video feed
+        if (_context != null) {
+          try {
+            final videoProvider =
+                Provider.of<VideoProvider>(_context!, listen: false);
+            videoProvider.removeVideoFromList(videoId);
+            print(
+                '✅ ProfileStateManager: Notified VideoProvider of deleted video');
+          } catch (e) {
+            print('⚠️ ProfileStateManager: Could not notify VideoProvider: $e');
+          }
+        }
+
+        return true;
+      } else {
+        throw Exception('Backend deletion failed');
+      }
+    } catch (e) {
+      print('❌ ProfileStateManager: Error deleting single video: $e');
+
+      setState(() {
+        _isLoading = false;
+        _error = _getUserFriendlyErrorMessage(e);
+      });
+
+      return false;
+    }
+  }
+
+  /// Converts technical error messages to user-friendly messages
+  String _getUserFriendlyErrorMessage(dynamic error) {
+    final errorString = error.toString().toLowerCase();
+
+    if (errorString.contains('timeout')) {
+      return 'Request timed out. Please check your connection and try again.';
+    } else if (errorString.contains('network')) {
+      return 'Network error. Please check your internet connection.';
+    } else if (errorString.contains('unauthorized') ||
+        errorString.contains('sign in')) {
+      return 'Please sign in again to delete videos.';
+    } else if (errorString.contains('permission') ||
+        errorString.contains('forbidden')) {
+      return 'You do not have permission to delete these videos.';
+    } else if (errorString.contains('not found')) {
+      return 'One or more videos were not found.';
+    } else if (errorString.contains('conflict')) {
+      return 'Videos cannot be deleted at this time. Please try again later.';
+    } else {
+      return 'Failed to delete videos. Please try again.';
     }
   }
 
@@ -277,6 +405,31 @@ class ProfileStateManager extends ChangeNotifier {
 
   // Getter for user data
   Map<String, dynamic>? getUserData() => _userData;
+
+  /// Refreshes user data and videos
+  Future<void> refreshData() async {
+    try {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+
+      // Reload user data and videos
+      await loadUserData(null);
+
+      setState(() {
+        _isLoading = false;
+      });
+
+      print('✅ ProfileStateManager: Data refreshed successfully');
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _error = 'Failed to refresh data: ${e.toString()}';
+      });
+      print('❌ ProfileStateManager: Error refreshing data: $e');
+    }
+  }
 
   // Cleanup
   @override

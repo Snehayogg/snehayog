@@ -55,7 +55,7 @@ class _VideoItemWidgetState extends State<VideoItemWidget> {
     if (widget.video.videoType == 'ad' || widget.video.id.startsWith('ad_')) {
       _isAd = true;
       // Extract ad data if available
-      if (widget.video.description.contains('Sponsored')) {
+      if (widget.video.description?.contains('Sponsored') ?? true) {
         _adData = {
           'title': widget.video.videoName,
           'description': widget.video.description,
@@ -196,7 +196,7 @@ class _VideoItemWidgetState extends State<VideoItemWidget> {
             ),
             const SizedBox(height: 8),
             Text(
-              widget.video.description,
+              widget.video.description?? 'No description available',
               style: const TextStyle(
                 color: Colors.white70,
                 fontSize: 16,
