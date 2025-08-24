@@ -323,27 +323,58 @@ router.post('/upload', verifyToken, upload.single('video'), async (req, res) => 
       });
     }
     
-    // Generate fallback HLS URL if needed
-    const fallbackHlsUrl = `https://res.cloudinary.com/${process.env.CLOUD_NAME}/video/upload/sp_hd,fl_segment_2/${originalResult.public_id}.m3u8`;
+    // Generate multiple HLS URLs with different streaming profiles
+    const cloudName = process.env.CLOUD_NAME;
+    const publicId = originalResult.public_id;
+    
+    // Create proper HLS URLs using Cloudinary streaming profiles
+    const hlsUrls = {
+      master: `https://res.cloudinary.com/${cloudName}/video/upload/sp_auto/${publicId}.m3u8`,
+      hd: `https://res.cloudinary.com/${cloudName}/video/upload/sp_hd/${publicId}.m3u8`,
+      sd: `https://res.cloudinary.com/${cloudName}/video/upload/sp_sd/${publicId}.m3u8`,
+      auto: `https://res.cloudinary.com/${cloudName}/video/upload/f_m3u8,q_auto/${publicId}.m3u8`
+    };
+    
+    // Use the auto-adaptive streaming URL as primary
+    const bestHlsUrl = hlsUrls.auto;
+    
+    console.log('🎬 Upload: Generated HLS URLs:', hlsUrls);
+    console.log('🎬 Upload: Primary HLS URL:', bestHlsUrl);
     
     const video = new Video({
       videoName,
       description: description || '', // Optional for user videos
       link: link || '',
-      videoUrl: primaryHlsUrl, // ALWAYS use HLS URL - no MP4 fallback
+      videoUrl: bestHlsUrl, // Use auto-adaptive HLS URL
       thumbnailUrl: thumbnailUrl,
       originalVideoUrl: originalResult.secure_url,
-      // HLS streaming URLs from actual transformations
-      hlsMasterPlaylistUrl: primaryHlsUrl,
-      hlsPlaylistUrl: primaryHlsUrl,
-      hlsVariants: hlsUrls.map((hls, index) => ({
-        quality: index === 0 ? 'hd' : 'sd',
-        playlistUrl: hls.secure_url,
-        resolution: `${hls.width}x${hls.height}`,
-        bitrate: index === 0 ? '3.5m' : '1.8m',
-        format: hls.format
-      })),
-      isHLSEncoded: true, // Force HLS encoded since we have HLS URLs
+      // HLS streaming URLs with proper format
+      hlsMasterPlaylistUrl: hlsUrls.master,
+      hlsPlaylistUrl: bestHlsUrl,
+      hlsVariants: [
+        {
+          quality: 'auto',
+          playlistUrl: hlsUrls.auto,
+          resolution: 'adaptive',
+          bitrate: 'auto',
+          format: 'm3u8'
+        },
+        {
+          quality: 'hd',
+          playlistUrl: hlsUrls.hd,
+          resolution: '720p',
+          bitrate: '2.5m',
+          format: 'm3u8'
+        },
+        {
+          quality: 'sd',
+          playlistUrl: hlsUrls.sd,
+          resolution: '480p',
+          bitrate: '1.5m',
+          format: 'm3u8'
+        }
+      ],
+      isHLSEncoded: true, // Force HLS encoded
       uploader: user._id,
       videoType: videoType || 'yog',
       likes: 0,
@@ -392,15 +423,8 @@ router.post('/upload', verifyToken, upload.single('video'), async (req, res) => 
       });
     }
     
-    // Generate optimized HLS URLs for faster loading using Cloudinary streaming profiles
-    const optimizedHlsUrls = {
-      fast: `https://res.cloudinary.com/${process.env.CLOUD_NAME}/video/upload/sp_hd,fl_segment_1/${originalResult.public_id}.m3u8`,
-      standard: `https://res.cloudinary.com/${process.env.CLOUD_NAME}/video/upload/sp_hd/${originalResult.public_id}.m3u8`,
-      quality: `https://res.cloudinary.com/${process.env.CLOUD_NAME}/video/upload/sp_hd,fl_segment_2/${originalResult.public_id}.m3u8`
-    };
-    
-    // Use the fastest HLS URL (1-second segments)
-    responseHlsUrl = optimizedHlsUrls.fast;
+    // Use the best HLS URL we already generated
+    responseHlsUrl = bestHlsUrl;
     
     // Final validation: Ensure we have a valid HLS URL
     if (!responseHlsUrl || responseHlsUrl.trim() === '' || !responseHlsUrl.includes('.m3u8')) {
@@ -415,8 +439,8 @@ router.post('/upload', verifyToken, upload.single('video'), async (req, res) => 
     
     // Log the final response for debugging
     console.log('🎬 Upload: Final response HLS URL:', responseHlsUrl);
-    console.log('🎬 Upload: HLS variants count:', hlsUrls.length);
-    console.log('🎬 Upload: Optimized HLS URLs available:', Object.keys(optimizedHlsUrls));
+    console.log('🎬 Upload: Generated HLS URLs:', Object.keys(hlsUrls));
+    console.log('🎬 Upload: Video ID:', video._id);
     
     res.status(201).json({
       success: true,
@@ -425,14 +449,10 @@ router.post('/upload', verifyToken, upload.single('video'), async (req, res) => 
       video: {
         ...video.toObject(),
         hlsUrl: responseHlsUrl,
-        // Add optimized HLS URLs for different quality levels
-        optimizedHlsUrls: optimizedHlsUrls,
-        hlsVariants: hlsUrls.map(hls => ({
-          quality: hls.width === 1080 ? 'hd' : 'sd',
-          url: hls.secure_url,
-          resolution: `${hls.width}x${hls.height}`,
-          format: hls.format
-        }))
+        // Add all HLS URLs for different quality levels
+        hlsUrls: hlsUrls,
+        // Include HLS variants from video object
+        hlsVariants: video.hlsVariants
       }
     });
 
@@ -796,6 +816,113 @@ router.get('/debug/all', async (req, res) => {
   } catch (error) {
     console.error('❌ Debug endpoint error:', error);
     res.status(500).json({ error: 'Error in debug endpoint' });
+  }
+});
+
+// Debug endpoint to test video URLs and HLS streaming
+router.get('/debug/test-urls/:videoId?', async (req, res) => {
+  try {
+    console.log('🧪 Debug: Testing video URLs and HLS streaming...');
+    
+    const { videoId } = req.params;
+    let videos = [];
+    
+    if (videoId) {
+      const video = await Video.findById(videoId);
+      if (video) {
+        videos = [video];
+      }
+    } else {
+      // Get latest 5 videos for testing
+      videos = await Video.find()
+        .sort({ createdAt: -1 })
+        .limit(5);
+    }
+    
+    if (videos.length === 0) {
+      return res.json({
+        message: 'No videos found for testing',
+        videoId: videoId || 'all'
+      });
+    }
+    
+    const testResults = [];
+    
+    for (const video of videos) {
+      console.log(`🧪 Testing video: ${video.videoName} (${video._id})`);
+      
+      const testResult = {
+        videoId: video._id,
+        videoName: video.videoName,
+        uploadedAt: video.uploadedAt,
+        urls: {
+          main: video.videoUrl,
+          hls_master: video.hlsMasterPlaylistUrl,
+          hls_playlist: video.hlsPlaylistUrl,
+          original: video.originalVideoUrl,
+          thumbnail: video.thumbnailUrl
+        },
+        hlsVariants: video.hlsVariants || [],
+        isHLSEncoded: video.isHLSEncoded,
+        tests: {
+          hasMainUrl: !!(video.videoUrl && video.videoUrl.trim() !== ''),
+          hasHlsUrls: !!(video.hlsPlaylistUrl || video.hlsMasterPlaylistUrl),
+          mainUrlIsHls: video.videoUrl?.includes('.m3u8') || false,
+          hasCloudinaryUrl: video.videoUrl?.includes('cloudinary.com') || false,
+          hasValidHlsFormat: false
+        }
+      };
+      
+      // Test URL formats
+      if (video.videoUrl) {
+        try {
+          const url = new URL(video.videoUrl);
+          testResult.tests.hasValidFormat = true;
+          testResult.tests.hasValidHlsFormat = url.pathname.includes('.m3u8');
+        } catch (e) {
+          testResult.tests.hasValidFormat = false;
+          testResult.tests.formatError = e.message;
+        }
+      }
+      
+      // Generate test HLS URLs if needed
+      if (video.originalVideoUrl && video.originalVideoUrl.includes('cloudinary.com')) {
+        const publicIdMatch = video.originalVideoUrl.match(/\/upload\/(?:v\d+\/)?(.+)\.\w+$/);
+        if (publicIdMatch) {
+          const publicId = publicIdMatch[1];
+          const cloudName = process.env.CLOUD_NAME;
+          
+          testResult.generatedHlsUrls = {
+            auto: `https://res.cloudinary.com/${cloudName}/video/upload/f_m3u8,q_auto/${publicId}.m3u8`,
+            hd: `https://res.cloudinary.com/${cloudName}/video/upload/sp_hd/${publicId}.m3u8`,
+            sd: `https://res.cloudinary.com/${cloudName}/video/upload/sp_sd/${publicId}.m3u8`
+          };
+        }
+      }
+      
+      testResults.push(testResult);
+    }
+    
+    res.json({
+      message: 'Video URL testing results',
+      timestamp: new Date().toISOString(),
+      cloudinaryConfigured: !!(process.env.CLOUD_NAME && process.env.CLOUD_KEY && process.env.CLOUD_SECRET),
+      testCount: testResults.length,
+      results: testResults,
+      recommendations: [
+        'All videos should have HLS URLs (.m3u8 format)',
+        'Main videoUrl should be an HLS URL for best compatibility',
+        'Cloudinary URLs should use proper streaming profiles',
+        'Check that HLS URLs are accessible and valid'
+      ]
+    });
+    
+  } catch (error) {
+    console.error('❌ Debug URL test error:', error);
+    res.status(500).json({ 
+      error: 'Failed to test video URLs',
+      details: error.message
+    });
   }
 });
 
