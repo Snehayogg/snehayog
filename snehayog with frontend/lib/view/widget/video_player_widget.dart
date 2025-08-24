@@ -55,6 +55,12 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
       final videoUrl = VideoUrlService.getBestVideoUrl(widget.video);
       print('🎬 VideoPlayerWidget: Video URL: $videoUrl');
+      print('🎬 VideoPlayerWidget: Video details - ID: ${widget.video.id}, Name: ${widget.video.videoName}');
+
+      // Validate URL before creating controller
+      if (!_isValidVideoUrl(videoUrl)) {
+        throw Exception('Invalid video URL format: $videoUrl');
+      }
 
       _controller = VideoPlayerController.networkUrl(
         Uri.parse(videoUrl),
@@ -62,6 +68,10 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
           mixWithOthers: false,
           allowBackgroundPlayback: false,
         ),
+        httpHeaders: {
+          'User-Agent': 'Snehayog-App/1.0',
+          'Accept': 'application/vnd.apple.mpegurl,video/*',
+        },
       );
 
       await _setupController();
@@ -71,11 +81,50 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
       });
     } catch (e) {
       print('❌ VideoPlayerWidget: Error initializing controller: $e');
-      setState(() {
-        _errorMessage = e.toString();
-        _isLoading = false;
-      });
+      await _handleVideoError(e);
     }
+  }
+
+  /// Validates if the video URL is in proper format
+  bool _isValidVideoUrl(String url) {
+    try {
+      final uri = Uri.parse(url);
+      if (!uri.hasScheme || (!uri.scheme.startsWith('http'))) {
+        return false;
+      }
+      
+      // Check if URL is HLS format or valid video format
+      final path = uri.path.toLowerCase();
+      return path.contains('.m3u8') || 
+             path.contains('.mp4') || 
+             path.contains('.webm') ||
+             path.contains('cloudinary.com');
+    } catch (e) {
+      print('❌ VideoPlayerWidget: URL validation error: $e');
+      return false;
+    }
+  }
+
+  /// Handle video errors with retry mechanism
+  Future<void> _handleVideoError(dynamic error) async {
+    print('❌ VideoPlayerWidget: Handling video error: $error');
+    
+    String errorMessage = 'Video playback error';
+    
+    if (error.toString().contains('VideoError')) {
+      errorMessage = 'HLS Video Playback Error\n\nThe video format is not supported or the video file is corrupted.';
+    } else if (error.toString().contains('NetworkError') || error.toString().contains('timeout')) {
+      errorMessage = 'Network Error\n\nPlease check your internet connection and try again.';
+    } else if (error.toString().contains('Invalid video URL')) {
+      errorMessage = 'Invalid Video URL\n\nThe video URL format is not supported.';
+    } else if (error.toString().contains('ExoPlaybackException')) {
+      errorMessage = 'HLS Video Playback Error\n\nPlatformException(VideoError, Video player had error androidx.media3.exoplayer.ExoPlaybackException: Source error, null, null)\n\nOnly HLS (.m3u8) format is supported for streaming.';
+    }
+    
+    setState(() {
+      _errorMessage = errorMessage;
+      _isLoading = false;
+    });
   }
 
   Future<void> _setupController() async {
@@ -85,8 +134,17 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
       // Add listener for state changes
       _controller!.addListener(_onControllerStateChanged);
 
-      // Initialize controller
-      await _controller!.initialize();
+      // Initialize controller with timeout
+      await _controller!.initialize().timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception('Video initialization timed out after 30 seconds');
+        },
+      );
+
+      if (!_controller!.value.isInitialized) {
+        throw Exception('Video controller failed to initialize');
+      }
 
       // Set looping - this should work but let's also add manual completion handling
       _controller!.setLooping(true);
@@ -111,14 +169,12 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
       // Start periodic loop checking as backup
       _startLoopCheckTimer();
 
-      print(
-          '🎬 VideoPlayerWidget: Controller setup complete with looping enabled');
+      print('🎬 VideoPlayerWidget: Controller setup complete with looping enabled');
+      print('🎬 VideoPlayerWidget: Video duration: ${_controller!.value.duration}');
+      print('🎬 VideoPlayerWidget: Video size: ${_controller!.value.size}');
     } catch (e) {
       print('❌ VideoPlayerWidget: Error in setup: $e');
-      setState(() {
-        _errorMessage = e.toString();
-        _isLoading = false;
-      });
+      await _handleVideoError(e);
     }
   }
 
@@ -490,34 +546,129 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
-                Icons.error_outline,
-                color: Colors.red,
-                size: 64,
+              // Error icon with red color
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.warning_rounded,
+                  color: Colors.red,
+                  size: 48,
+                ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
+              
+              // Error title
               const Text(
-                'Video playback error. Please try again.',
+                'HLS Video Playback Error',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _errorMessage = null;
-                  });
-                  _initializeController();
-                },
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
+              const SizedBox(height: 12),
+              
+              // Error details
+              Text(
+                _errorMessage ?? 'Unknown error occurred',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  height: 1.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              
+              // Additional info
+              const Text(
+                'Only HLS (.m3u8) format is supported for streaming.',
+                style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              
+              // Action buttons
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Retry button
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _errorMessage = null;
+                      });
+                      _initializeController();
+                    },
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('Retry HLS'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              
+              // Debug info for video
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Video Info:',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Name: ${widget.video.videoName}',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                      ),
+                    ),
+                    Text(
+                      'ID: ${widget.video.id}',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                      ),
+                    ),
+                    if (widget.video.videoUrl.isNotEmpty)
+                      Text(
+                        'URL: ${widget.video.videoUrl.length > 50 ? widget.video.videoUrl.substring(0, 50) + '...' : widget.video.videoUrl}',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ],
