@@ -1,7 +1,7 @@
 import 'package:video_player/video_player.dart';
-import 'package:snehayog/core/services/video_url_service.dart';
 import 'package:snehayog/model/video_model.dart';
 import 'package:snehayog/core/services/video_player_config_service.dart';
+import 'package:snehayog/core/services/video_url_service.dart';
 
 /// Factory for creating VideoPlayerController instances with optimized configuration
 class VideoControllerFactory {
