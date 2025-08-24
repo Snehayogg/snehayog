@@ -21,6 +21,14 @@ class ProfileScreen extends StatefulWidget {
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
+
+  // Public method to refresh videos (called from MainScreen)
+  static void refreshVideos(GlobalKey<State<ProfileScreen>> key) {
+    final state = key.currentState;
+    if (state != null) {
+      (state as _ProfileScreenState)._stateManager.refreshVideosOnly();
+    }
+  }
 }
 
 class _ProfileScreenState extends State<ProfileScreen>
@@ -62,6 +70,8 @@ class _ProfileScreenState extends State<ProfileScreen>
     if (state == AppLifecycleState.resumed && widget.userId != null) {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       userProvider.refreshUserData(widget.userId!);
+      // Also refresh videos in profile
+      _stateManager.refreshVideosOnly();
     }
   }
 
@@ -423,12 +433,26 @@ class _ProfileScreenState extends State<ProfileScreen>
       );
     }
 
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          _buildProfileHeader(userProvider, userModel),
-          _buildProfileContent(userProvider, userModel),
-        ],
+    return RefreshIndicator(
+      onRefresh: () async {
+        print('🔄 ProfileScreen: Pull to refresh triggered');
+        await _stateManager.refreshVideosOnly();
+        // Also refresh user data if needed
+        if (widget.userId != null) {
+          final userProvider =
+              Provider.of<UserProvider>(context, listen: false);
+          userProvider.refreshUserData(widget.userId!);
+        }
+      },
+      child: SingleChildScrollView(
+        physics:
+            const AlwaysScrollableScrollPhysics(), // Enable pull-to-refresh
+        child: Column(
+          children: [
+            _buildProfileHeader(userProvider, userModel),
+            _buildProfileContent(userProvider, userModel),
+          ],
+        ),
       ),
     );
   }
@@ -440,47 +464,149 @@ class _ProfileScreenState extends State<ProfileScreen>
         _stateManager.userData?['name'] ?? 'Profile',
         style: const TextStyle(color: Color(0xFF424242)),
       ),
-      actions: _stateManager.userData != null
-          ? [
-              IconButton(
-                icon: const Icon(Icons.more_vert, color: Color(0xFF424242)),
-                onPressed: () {
-                  showModalBottomSheet(
-                    context: context,
-                    builder: (context) => Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ListTile(
-                          leading: const Icon(Icons.select_all),
-                          title: const Text('Select & Delete Videos'),
-                          onTap: () {
-                            Navigator.pop(context);
-                            _stateManager.enterSelectionMode();
-                          },
-                        ),
-                        ListTile(
-                          leading: const Icon(Icons.refresh),
-                          title: const Text('Refresh Data'),
-                          onTap: () {
-                            Navigator.pop(context);
-                            _stateManager.refreshData();
-                          },
-                        ),
-                        ListTile(
-                          leading: const Icon(Icons.logout),
-                          title: const Text('Logout'),
-                          onTap: () {
-                            Navigator.pop(context);
-                            _handleLogout();
-                          },
-                        ),
-                      ],
-                    ),
-                  );
-                },
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.more_vert, color: Color(0xFF424242)),
+          onPressed: () {
+            print('🔍 ProfileScreen: Menu button clicked');
+            print('🔍 ProfileScreen: userData: ${_stateManager.userData}');
+            print('🔍 ProfileScreen: isLoading: ${_stateManager.isLoading}');
+            print('🔍 ProfileScreen: error: ${_stateManager.error}');
+
+            showModalBottomSheet(
+              context: context,
+              backgroundColor: Colors.white,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
               ),
-            ]
-          : null,
+              builder: (context) => SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Header
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          const Text(
+                            'Menu Options',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+
+                    // Debug info
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Debug Info:',
+                              style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text(
+                              'User Data: ${_stateManager.userData != null ? "Available" : "Not Available"}'),
+                          Text('Loading: ${_stateManager.isLoading}'),
+                          Text('Error: ${_stateManager.error ?? "None"}'),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+
+                    // Menu items
+                    if (_stateManager.userData != null) ...[
+                      ListTile(
+                        leading:
+                            const Icon(Icons.select_all, color: Colors.blue),
+                        title: const Text('Select & Delete Videos'),
+                        onTap: () {
+                          print('🔍 ProfileScreen: Select & Delete clicked');
+                          Navigator.pop(context);
+                          _stateManager.enterSelectionMode();
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.refresh, color: Colors.green),
+                        title: const Text('Refresh Profile'),
+                        onTap: () {
+                          print('🔍 ProfileScreen: Refresh Profile clicked');
+                          Navigator.pop(context);
+                          _stateManager.refreshData();
+                        },
+                      ),
+                      ListTile(
+                        leading:
+                            const Icon(Icons.video_library, color: Colors.blue),
+                        title: const Text('Refresh Videos'),
+                        onTap: () {
+                          print('🔍 ProfileScreen: Refresh Videos clicked');
+                          Navigator.pop(context);
+                          _stateManager.refreshVideosOnly();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('🔄 Refreshing videos...'),
+                              duration: Duration(seconds: 2),
+                              backgroundColor: Colors.blue,
+                            ),
+                          );
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.logout, color: Colors.red),
+                        title: const Text('Logout'),
+                        onTap: () {
+                          print('🔍 ProfileScreen: Logout clicked');
+                          Navigator.pop(context);
+                          _handleLogout();
+                        },
+                      ),
+                    ] else ...[
+                      ListTile(
+                        leading: const Icon(Icons.login, color: Colors.blue),
+                        title: const Text('Sign In'),
+                        onTap: () {
+                          print('🔍 ProfileScreen: Sign In clicked');
+                          Navigator.pop(context);
+                          _handleGoogleSignIn();
+                        },
+                      ),
+                    ],
+
+                    // Always show these options for testing
+                    const Divider(height: 1),
+                    const Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: Text('Debug Options:',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 12)),
+                    ),
+                    ListTile(
+                      leading:
+                          const Icon(Icons.bug_report, color: Colors.orange),
+                      title: const Text('Force Refresh'),
+                      onTap: () {
+                        print('🔍 ProfileScreen: Force Refresh clicked');
+                        Navigator.pop(context);
+                        _loadUserData();
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 

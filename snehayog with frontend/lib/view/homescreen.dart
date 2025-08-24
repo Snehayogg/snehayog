@@ -16,13 +16,15 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   final _videoScreenKey = GlobalKey(); // Keep as generic key
+  final _profileScreenKey = GlobalKey<
+      State<ProfileScreen>>(); // Add profile screen key with correct type
   final AuthService _authService = AuthService();
 
-  // Method to refresh video list
+  // Method to refresh video list and profile
   void _refreshVideoList() {
     print('🔄 MainScreen: _refreshVideoList() called');
 
-    // Use the public method from VideoScreen to refresh videos
+    // Refresh the video screen
     final videoScreenState = _videoScreenKey.currentState;
     if (videoScreenState != null) {
       print('🔄 MainScreen: VideoScreen state found, calling refreshVideos()');
@@ -30,6 +32,15 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       (videoScreenState as dynamic).refreshVideos();
     } else {
       print('❌ MainScreen: VideoScreen state not found');
+    }
+
+    // Also refresh the profile screen videos
+    print('🔄 MainScreen: Refreshing ProfileScreen videos');
+    try {
+      ProfileScreen.refreshVideos(_profileScreenKey);
+      print('✅ MainScreen: Profile videos refreshed successfully');
+    } catch (e) {
+      print('❌ MainScreen: Error refreshing profile videos: $e');
     }
 
     // Also navigate back to video tab to show the refreshed content
@@ -129,7 +140,9 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 key: const PageStorageKey('uploadScreen'),
                 onVideoUploaded: _refreshVideoList, // Pass the refresh callback
               ),
-              const ProfileScreen(key: PageStorageKey('profileScreen')),
+              ProfileScreen(
+                key: _profileScreenKey,
+              ),
             ],
           ),
           bottomNavigationBar: Container(

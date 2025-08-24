@@ -431,6 +431,44 @@ class ProfileStateManager extends ChangeNotifier {
     }
   }
 
+  /// Force refresh videos only (for when new videos are uploaded)
+  Future<void> refreshVideosOnly() async {
+    try {
+      print('🔄 ProfileStateManager: Force refreshing user videos...');
+
+      final loggedInUser = await _authService.getUserData();
+      if (loggedInUser != null) {
+        final videos =
+            await _videoService.getUserVideos(loggedInUser['id'] ?? '');
+        setState(() {
+          _userVideos = videos;
+        });
+        print(
+            '✅ ProfileStateManager: Videos refreshed successfully. Count: ${videos.length}');
+      }
+    } catch (e) {
+      print('❌ ProfileStateManager: Error refreshing videos: $e');
+      setState(() {
+        _error = 'Failed to refresh videos: ${e.toString()}';
+      });
+    }
+  }
+
+  /// Add a new video to the profile (called after successful upload)
+  void addNewVideo(VideoModel video) {
+    print(
+        '➕ ProfileStateManager: Adding new video to profile: ${video.videoName}');
+    _userVideos.insert(0, video); // Add to the beginning of the list
+    notifyListeners();
+  }
+
+  /// Remove a video from the profile
+  void removeVideo(String videoId) {
+    print('➖ ProfileStateManager: Removing video from profile: $videoId');
+    _userVideos.removeWhere((video) => video.id == videoId);
+    notifyListeners();
+  }
+
   // Cleanup
   @override
   void dispose() {

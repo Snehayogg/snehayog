@@ -1259,8 +1259,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       if (video.views > 0) {
         const estimatedCompletionRate = 0.7;
         if (estimatedCompletionRate > 0.7) {
-          multiplier += (estimatedCompletionRate - 0.7) *
-              0.5;
+          multiplier += (estimatedCompletionRate - 0.7) * 0.5;
         }
       }
 

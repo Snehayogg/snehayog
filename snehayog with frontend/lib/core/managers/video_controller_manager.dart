@@ -2,9 +2,8 @@ import 'dart:async';
 import 'package:video_player/video_player.dart';
 import 'package:snehayog/model/video_model.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
-// Added for precacheImage
-// Added for CachedNetworkImageProvider
 import 'package:snehayog/core/services/hls_performance_monitor.dart';
+import 'package:snehayog/core/services/video_url_service.dart';
 
 /// Manages video controllers for smooth playback and memory optimization
 class VideoControllerManager {
@@ -37,72 +36,60 @@ class VideoControllerManager {
 
       VideoPlayerController controller;
 
-      // FORCE HLS ONLY - Reject MP4 videos
-      if (video.isHLSEncoded != true) {
-        throw Exception(
-            'Video is not HLS encoded. Only .m3u8 streaming videos are supported.');
+      // FORCE HLS ONLY - Use VideoUrlService for automatic MP4 to HLS conversion
+      print(
+          '🎬 VideoControllerManager: Getting HLS URL from VideoUrlService...');
+
+      final hlsUrl = VideoUrlService.getBestVideoUrl(video);
+      final sourceType = VideoUrlService.getVideoSourceType(video);
+
+      print('🎬 VideoControllerManager: HLS URL: $hlsUrl');
+      print('🎬 VideoControllerManager: Source Type: $sourceType');
+
+      // Validate that we have a proper HLS URL
+      if (!hlsUrl.contains('.m3u8') && !hlsUrl.contains('/hls/')) {
+        print(
+            '⚠️ VideoControllerManager: URL might not be HLS format, but proceeding anyway');
       }
 
-      // Check if this is an HLS video
-      if (video.hlsMasterPlaylistUrl != null &&
-          video.hlsMasterPlaylistUrl!.isNotEmpty) {
-        // Use HLS master playlist URL for adaptive streaming (BEST QUALITY)
-        final hlsUrl = _buildHLSUrl(video.hlsMasterPlaylistUrl!);
-        print('🎬 VideoControllerManager: Using HLS master URL: $hlsUrl');
+      // Monitor HLS performance
+      await HLSPerformanceMonitor().monitorHLSPerformance(
+        videoId: video.id,
+        videoUrl: hlsUrl,
+        hlsType: sourceType,
+        onStart: () => print('🚀 HLS loading started for video ${video.id}'),
+        onComplete: () =>
+            print('✅ HLS loading completed for video ${video.id}'),
+        onError: (error) =>
+            print('❌ HLS loading error for video ${video.id}: $error'),
+      );
 
-        // Monitor HLS performance
-        await HLSPerformanceMonitor().monitorHLSPerformance(
-          videoId: video.id,
-          videoUrl: hlsUrl,
-          hlsType: 'master',
-          onStart: () =>
-              print('🚀 HLS Master loading started for video ${video.id}'),
-          onComplete: () =>
-              print('✅ HLS Master loading completed for video ${video.id}'),
-          onError: (error) =>
-              print('❌ HLS Master loading error for video ${video.id}: $error'),
-        );
+      // Create HLS controller with optimized settings
+      controller = VideoPlayerController.networkUrl(
+        Uri.parse(hlsUrl),
+        videoPlayerOptions: _getHLSOptimizedOptions(),
+        httpHeaders: _getHLSHeaders(),
+      );
 
-        controller = VideoPlayerController.networkUrl(
-          Uri.parse(hlsUrl),
-          videoPlayerOptions: _getHLSOptimizedOptions(),
-          httpHeaders: _getHLSHeaders(),
-        );
-      } else if (video.hlsPlaylistUrl != null &&
-          video.hlsPlaylistUrl!.isNotEmpty) {
-        // Use HLS playlist URL for single quality streaming
-        final hlsUrl = _buildHLSUrl(video.hlsPlaylistUrl!);
-        print('🎬 VideoControllerManager: Using HLS playlist URL: $hlsUrl');
-
-        // Monitor HLS performance
-        await HLSPerformanceMonitor().monitorHLSPerformance(
-          videoId: video.id,
-          videoUrl: hlsUrl,
-          hlsType: 'playlist',
-          onStart: () =>
-              print('🚀 HLS Playlist loading started for video ${video.id}'),
-          onComplete: () =>
-              print('✅ HLS Playlist loading completed for video ${video.id}'),
-          onError: (error) => print(
-              '❌ HLS Playlist loading error for video ${video.id}: $error'),
-        );
-
-        controller = VideoPlayerController.networkUrl(
-          Uri.parse(hlsUrl),
-          videoPlayerOptions: _getHLSOptimizedOptions(),
-          httpHeaders: _getHLSHeaders(),
-        );
-      } else {
-        // NO FALLBACK TO MP4 - Force HLS only
-        throw Exception(
-            'No HLS URLs available. Video must be converted to HLS streaming format (.m3u8) before playback.');
-      }
-
-      // Add error listener
+      // Add error listener with HLS-specific error handling
       controller.addListener(() {
         if (controller.value.hasError) {
-          print(
-              '❌ Video controller error at index $index: ${controller.value.errorDescription}');
+          final errorDescription =
+              controller.value.errorDescription ?? 'Unknown error';
+          print('❌ Video controller error at index $index: $errorDescription');
+
+          // Check if it's an HLS-related error
+          if (errorDescription.toLowerCase().contains('source error') ||
+              errorDescription.toLowerCase().contains('format') ||
+              errorDescription.toLowerCase().contains('m3u8')) {
+            print(
+                '🔄 VideoControllerManager: HLS error detected, video may need re-encoding');
+
+            // Log HLS conversion strategies
+            final strategies = VideoUrlService.getHlsFallbackStrategies(video);
+            print(
+                '💡 VideoControllerManager: Suggested strategies: $strategies');
+          }
         }
 
         // Enhanced buffering state monitoring
@@ -133,6 +120,35 @@ class VideoControllerManager {
     } catch (error) {
       print(
           '❌ VideoControllerManager: Failed to initialize controller for video $index: $error');
+
+      // Enhanced error handling for HLS-specific issues
+      final errorString = error.toString().toLowerCase();
+
+      if (errorString.contains('hls') ||
+          errorString.contains('m3u8') ||
+          errorString.contains('source error')) {
+        print(
+            '🔄 VideoControllerManager: HLS conversion/encoding error detected');
+        print(
+            '💡 VideoControllerManager: Video may need to be re-uploaded with HLS encoding');
+
+        // Create a user-friendly error message
+        throw Exception('HLS Video Playback Error\n\n'
+            'PlatformException(VideoError, Video player had error androidx.media3.exoplayer.ExoPlaybackException: Source error, null, null)\n\n'
+            'Only HLS (.m3u8) format is supported for streaming.');
+      } else if (errorString.contains('network') ||
+          errorString.contains('connection')) {
+        print('🌐 VideoControllerManager: Network error detected');
+        throw Exception(
+            'Network error: Please check your internet connection and try again.');
+      } else if (errorString.contains('format') ||
+          errorString.contains('codec')) {
+        print('🎥 VideoControllerManager: Video format error detected');
+        throw Exception(
+            'Video format not supported. Please convert to HLS (.m3u8) format.');
+      }
+
+      // Re-throw original error if it's not a known issue
       rethrow;
     }
   }
@@ -842,6 +858,15 @@ class VideoControllerManager {
     );
   }
 
+  /// Get MP4 optimized video player options
+  VideoPlayerOptions _getMP4OptimizedOptions() {
+    return VideoPlayerOptions(
+      mixWithOthers: false,
+      allowBackgroundPlayback: false,
+      // Enhanced buffering for MP4 videos
+    );
+  }
+
   /// Get standard VideoPlayerOptions for regular videos
   VideoPlayerOptions _getStandardOptions() {
     return VideoPlayerOptions(
@@ -861,6 +886,17 @@ class VideoControllerManager {
       // HLS specific headers for faster loading
       'Range': 'bytes=0-',
       'Cache-Control': 'no-cache',
+    };
+  }
+
+  /// Get standard headers for MP4 videos
+  Map<String, String> _getStandardHeaders() {
+    return {
+      'User-Agent': 'Snehayog-App/1.0',
+      'Accept': 'video/mp4, video/*, */*',
+      'Accept-Encoding': 'gzip, deflate',
+      'Connection': 'keep-alive',
+      'Cache-Control': 'max-age=3600',
     };
   }
 
