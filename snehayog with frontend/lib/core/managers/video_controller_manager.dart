@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'package:video_player/video_player.dart';
-import 'package:snehayog/model/video_model.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
-import 'package:snehayog/core/services/hls_performance_monitor.dart';
-import 'package:snehayog/core/services/video_url_service.dart';
+import 'package:snehayog/model/video_model.dart';
+import 'package:snehayog/utils/feature_flags.dart';
+import 'package:snehayog/core/managers/video_cache_manager.dart';
 
-/// Manages video controllers for smooth playback and memory optimization
+/// Enhanced Video Controller Manager with Fast Video Delivery System
+/// Manages video controllers for smooth playback, memory optimization, and background preloading
 class VideoControllerManager {
   // Map to store video player controllers for each video index
   final Map<int, VideoPlayerController> _controllers = {};
@@ -16,221 +17,114 @@ class VideoControllerManager {
   // Track active page
   int _activePage = 0;
 
+  // Fast video delivery integration
+  late VideoCacheManager _cacheManager;
+  List<VideoModel> _currentVideos = [];
+  Timer? _preloadTimer;
+
   // Getter for active page
   int get activePage => _activePage;
 
   // Getter for controllers
   Map<int, VideoPlayerController> get controllers => _controllers;
 
-  /// Initialize controller for a specific video index
+  /// Initialize the manager with cache manager
+  void initialize(VideoCacheManager cacheManager) {
+    _cacheManager = cacheManager;
+    print(
+        '🚀 VideoControllerManager: Initialized with fast video delivery system');
+  }
+
+  /// Set current videos for preloading strategy
+  void setCurrentVideos(List<VideoModel> videos) {
+    _currentVideos = videos;
+    print(
+        '📹 VideoControllerManager: Set ${videos.length} videos for preloading');
+  }
+
+  /// Initialize a video controller for a specific index with fast delivery
   Future<void> initController(int index, VideoModel video) async {
+    if (!Features.fastVideoDelivery.isEnabled) {
+      // Fallback to original behavior
+      await _initControllerOriginal(index, video);
+      return;
+    }
+
     try {
-      print(
-          '🎬 VideoControllerManager: Initializing controller for video $index');
-      print('🎬 VideoControllerManager: Video URL: ${video.videoUrl}');
-      print('🎬 VideoControllerManager: Is HLS: ${video.isHLSEncoded}');
-      print(
-          '🎬 VideoControllerManager: HLS Master URL: ${video.hlsMasterPlaylistUrl}');
-      print(
-          '🎬 VideoControllerManager: HLS Playlist URL: ${video.hlsPlaylistUrl}');
-
-      VideoPlayerController controller;
-
-      // FORCE HLS ONLY - Use VideoUrlService for automatic MP4 to HLS conversion
-      print(
-          '🎬 VideoControllerManager: Getting HLS URL from VideoUrlService...');
-
-      final hlsUrl = VideoUrlService.getBestVideoUrl(video);
-      final sourceType = VideoUrlService.getVideoSourceType(video);
-
-      print('🎬 VideoControllerManager: HLS URL: $hlsUrl');
-      print('🎬 VideoControllerManager: Source Type: $sourceType');
-
-      // Validate that we have a proper HLS URL
-      if (!hlsUrl.contains('.m3u8') && !hlsUrl.contains('/hls/')) {
-        print(
-            '⚠️ VideoControllerManager: URL might not be HLS format, but proceeding anyway');
+      if (_controllers.containsKey(index)) {
+        return; // Controller already exists
       }
 
-      // Monitor HLS performance
-      await HLSPerformanceMonitor().monitorHLSPerformance(
-        videoId: video.id,
-        videoUrl: hlsUrl,
-        hlsType: sourceType,
-        onStart: () => print('🚀 HLS loading started for video ${video.id}'),
-        onComplete: () =>
-            print('✅ HLS loading completed for video ${video.id}'),
-        onError: (error) =>
-            print('❌ HLS loading error for video ${video.id}: $error'),
+      print(
+          '🚀 VideoControllerManager: Initializing controller for index $index with fast delivery');
+
+      // Check if video is cached first
+      final cachedFile =
+          await _cacheManager.getCachedVideo(video.id, video.videoUrl);
+
+      if (cachedFile != null) {
+        // Use cached file for instant playback
+        print(
+            '⚡ VideoControllerManager: Using cached video for instant playback');
+        final controller = VideoPlayerController.file(
+          cachedFile,
+          videoPlayerOptions: _getStandardOptions(),
+        );
+
+        _controllers[index] = controller;
+        await controller.initialize();
+        print(
+            '✅ VideoControllerManager: Cached controller initialized instantly');
+      } else {
+        // Fallback to network loading
+        print(
+            '🌐 VideoControllerManager: Video not cached, loading from network');
+        await _initControllerOriginal(index, video);
+
+        // Start preloading this video for future use
+        _startBackgroundPreload(index, video);
+      }
+
+      // Trigger smart cache management
+      _scheduleCacheOptimization();
+    } catch (e) {
+      print(
+          '❌ VideoControllerManager: Error initializing controller for index $index: $e');
+      // Fallback to original method
+      await _initControllerOriginal(index, video);
+    }
+  }
+
+  /// Original controller initialization method (fallback)
+  Future<void> _initControllerOriginal(int index, VideoModel video) async {
+    try {
+      final controller = VideoPlayerController.networkUrl(
+        Uri.parse(video.videoUrl),
+        videoPlayerOptions: _getStandardOptions(),
+        httpHeaders: _getStandardHeaders(),
       );
-
-      // Create HLS controller with optimized settings
-      controller = VideoPlayerController.networkUrl(
-        Uri.parse(hlsUrl),
-        videoPlayerOptions: _getHLSOptimizedOptions(),
-        httpHeaders: _getHLSHeaders(),
-      );
-
-      // Add error listener with HLS-specific error handling
-      controller.addListener(() {
-        if (controller.value.hasError) {
-          final errorDescription =
-              controller.value.errorDescription ?? 'Unknown error';
-          print('❌ Video controller error at index $index: $errorDescription');
-
-          // Check if it's an HLS-related error
-          if (errorDescription.toLowerCase().contains('source error') ||
-              errorDescription.toLowerCase().contains('format') ||
-              errorDescription.toLowerCase().contains('m3u8')) {
-            print(
-                '🔄 VideoControllerManager: HLS error detected, video may need re-encoding');
-
-            // Log HLS conversion strategies
-            final strategies = VideoUrlService.getHlsFallbackStrategies(video);
-            print(
-                '💡 VideoControllerManager: Suggested strategies: $strategies');
-          }
-        }
-
-        // Enhanced buffering state monitoring
-        if (controller.value.isBuffering) {
-          print('🔄 Video $index: Buffering...');
-        } else if (controller.value.isInitialized &&
-            !controller.value.isBuffering) {
-          print('✅ Video $index: Buffering complete');
-        }
-      });
-
-      await controller.initialize();
-
-      // Enhanced initialization with INSTANT buffering optimization
-      await _optimizeControllerForInstantPlayback(controller);
-
-      controller.setLooping(true);
-      controller.setVolume(0.0);
 
       _controllers[index] = controller;
+      await controller.initialize();
       print(
-          '✅ VideoControllerManager: Controller initialized for video $index');
-
-      // Preload next video for instant switching (will be implemented later)
-      // if (index < _activePage + _preloadDistance) {
-      //   _preloadNextVideo(index + 1);
-      // }
-    } catch (error) {
-      print(
-          '❌ VideoControllerManager: Failed to initialize controller for video $index: $error');
-
-      // Enhanced error handling for HLS-specific issues
-      final errorString = error.toString().toLowerCase();
-
-      if (errorString.contains('hls') ||
-          errorString.contains('m3u8') ||
-          errorString.contains('source error')) {
-        print(
-            '🔄 VideoControllerManager: HLS conversion/encoding error detected');
-        print(
-            '💡 VideoControllerManager: Video may need to be re-uploaded with HLS encoding');
-
-        // Create a user-friendly error message
-        throw Exception('HLS Video Playback Error\n\n'
-            'PlatformException(VideoError, Video player had error androidx.media3.exoplayer.ExoPlaybackException: Source error, null, null)\n\n'
-            'Only HLS (.m3u8) format is supported for streaming.');
-      } else if (errorString.contains('network') ||
-          errorString.contains('connection')) {
-        print('🌐 VideoControllerManager: Network error detected');
-        throw Exception(
-            'Network error: Please check your internet connection and try again.');
-      } else if (errorString.contains('format') ||
-          errorString.contains('codec')) {
-        print('🎥 VideoControllerManager: Video format error detected');
-        throw Exception(
-            'Video format not supported. Please convert to HLS (.m3u8) format.');
-      }
-
-      // Re-throw original error if it's not a known issue
+          '✅ VideoControllerManager: Network controller initialized for index $index');
+    } catch (e) {
+      print('❌ VideoControllerManager: Error in original initialization: $e');
       rethrow;
     }
   }
 
-  /// Fallback method to initialize controller from network
-  Future<void> _initControllerFromNetwork(int index, VideoModel video) async {
-    try {
-      print(
-          '🌐 VideoControllerManager: Initializing from network for video $index');
+  /// Start background preloading for a video
+  void _startBackgroundPreload(int index, VideoModel video) {
+    if (!Features.backgroundVideoPreloading.isEnabled) return;
 
-      final controller =
-          VideoPlayerController.networkUrl(Uri.parse(video.videoUrl));
-      controller.addListener(() {
-        if (controller.value.hasError) {
-          print(
-              'Video controller error at index $index: ${controller.value.errorDescription}');
-        }
-      });
-
-      await controller.initialize();
-      controller.setLooping(true);
-      controller.setVolume(0.0);
-
-      _controllers[index] = controller;
-      print(
-          '✅ VideoControllerManager: Controller initialized from network for video $index');
-    } catch (e) {
-      print('❌ Error initializing network video at index $index: $e');
-    }
+    // Start preloading in background
+    _cacheManager.preCacheVideos([video], index).catchError((e) {
+      print('⚠️ VideoControllerManager: Background preload failed: $e');
+    });
   }
 
-  /// Optimize controller after initialization for better performance
-  Future<void> _optimizeControllerAfterInit(
-      VideoPlayerController controller) async {
-    try {
-      // Pre-buffer the video for smoother playback
-      if (controller.value.isInitialized) {
-        // Seek to beginning to trigger initial buffering
-        await controller.seekTo(Duration.zero);
-
-        // Set playback speed to 1.0 for optimal buffering
-        await controller.setPlaybackSpeed(1.0);
-
-        print(
-            '🎬 VideoControllerManager: Controller optimized after initialization');
-      }
-    } catch (e) {
-      print('⚠️ VideoControllerManager: Controller optimization failed: $e');
-    }
-  }
-
-  /// Optimize controller for INSTANT playback (faster than smooth playback)
-  Future<void> _optimizeControllerForInstantPlayback(
-      VideoPlayerController controller) async {
-    try {
-      if (controller.value.isInitialized) {
-        // Set minimal buffer for instant startup
-        await controller.setPlaybackSpeed(1.0);
-
-        // Pre-buffer first few seconds for instant playback
-        await controller.seekTo(Duration.zero);
-
-        // For HLS videos, trigger segment preloading
-        if (controller.value.isInitialized) {
-          // Preload first segment
-          await controller.seekTo(const Duration(milliseconds: 100));
-          await controller.seekTo(Duration.zero);
-
-          // Set minimal buffer size for faster startup
-          // This will be handled by the video player options
-        }
-
-        print(
-            '🎬 VideoControllerManager: INSTANT playback optimization applied');
-      }
-    } catch (e) {
-      print(
-          '⚠️ VideoControllerManager: INSTANT playback optimization failed: $e');
-    }
-  }
-
-  /// Set the active page and manage controllers
+  /// Set the active page and manage controllers with fast delivery
   void setActivePage(int newPage) {
     if (newPage != _activePage) {
       print(
@@ -272,8 +166,38 @@ class VideoControllerManager {
         }
       }
 
+      // Trigger smart preloading for next videos
+      _triggerSmartPreloading(newPage);
+
       _optimizeControllers();
     }
+  }
+
+  /// Trigger smart preloading based on current position
+  void _triggerSmartPreloading(int currentIndex) {
+    if (!Features.backgroundVideoPreloading.isEnabled) return;
+
+    // Cancel existing preload timer
+    _preloadTimer?.cancel();
+
+    // Schedule preloading with a small delay to avoid blocking UI
+    _preloadTimer = Timer(const Duration(milliseconds: 500), () {
+      if (_currentVideos.isNotEmpty) {
+        _cacheManager.preCacheVideos(_currentVideos, currentIndex);
+      }
+    });
+  }
+
+  /// Schedule cache optimization
+  void _scheduleCacheOptimization() {
+    if (!Features.videoMemoryOptimization.isEnabled) return;
+
+    // Run cache optimization every 5 minutes
+    Timer(const Duration(minutes: 5), () {
+      if (_currentVideos.isNotEmpty) {
+        _cacheManager.smartCacheManagement(_currentVideos.length, _activePage);
+      }
+    });
   }
 
   /// Immediately pause all videos without any delay
@@ -902,26 +826,26 @@ class VideoControllerManager {
 
   /// Get HLS performance insights for a specific video
   Map<String, dynamic>? getHLSPerformanceInsights(String videoId) {
-    return HLSPerformanceMonitor().getVideoPerformance(videoId);
+    // TODO: Implement HLS performance monitoring
+    return null;
   }
 
   /// Get all HLS performance metrics
   Map<String, Map<String, dynamic>> getAllHLSPerformanceMetrics() {
-    return HLSPerformanceMonitor().getAllMetrics();
+    // TODO: Implement HLS performance monitoring
+    return {};
   }
 
   /// Generate HLS performance report
   String generateHLSPerformanceReport() {
-    return HLSPerformanceMonitor().generatePerformanceReport();
+    // TODO: Implement HLS performance monitoring
+    return 'HLS Performance monitoring not implemented yet';
   }
 
   /// Get HLS performance recommendations for a video
   List<String> getHLSPerformanceRecommendations(String videoId) {
-    final performance = HLSPerformanceMonitor().getVideoPerformance(videoId);
-    if (performance != null && performance['recommendations'] != null) {
-      return List<String>.from(performance['recommendations']);
-    }
-    return [];
+    // TODO: Implement HLS performance monitoring
+    return ['Implement HLS performance monitoring'];
   }
 
   /// Get enhanced network headers for better video streaming
@@ -938,41 +862,11 @@ class VideoControllerManager {
 
   /// Check if HLS loading is slow for a specific video
   bool isHSLLoadingSlow(String videoId) {
-    final performance = HLSPerformanceMonitor().getVideoPerformance(videoId);
-    if (performance != null) {
-      final masterMetrics = performance['master'];
-      final playlistMetrics = performance['playlist'];
-
-      // Check if loading time exceeds threshold (5 seconds)
-      if (masterMetrics != null && masterMetrics['loadingTime'] != null) {
-        return masterMetrics['loadingTime'] > 5000;
-      }
-      if (playlistMetrics != null && playlistMetrics['loadingTime'] != null) {
-        return playlistMetrics['loadingTime'] > 5000;
-      }
-    }
     return false;
   }
 
   /// Get HLS loading time for a specific video
   int? getHSLLoadingTime(String videoId) {
-    final performance = HLSPerformanceMonitor().getVideoPerformance(videoId);
-    if (performance != null) {
-      final masterMetrics = performance['master'];
-      final playlistMetrics = performance['playlist'];
-
-      // Return the fastest loading time
-      int? masterTime = masterMetrics?['loadingTime'];
-      int? playlistTime = playlistMetrics?['loadingTime'];
-
-      if (masterTime != null && playlistTime != null) {
-        return masterTime < playlistTime ? masterTime : playlistTime;
-      } else if (masterTime != null) {
-        return masterTime;
-      } else if (playlistTime != null) {
-        return playlistTime;
-      }
-    }
     return null;
   }
 }

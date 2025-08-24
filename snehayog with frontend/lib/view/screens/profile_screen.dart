@@ -41,6 +41,8 @@ class _ProfileScreenState extends State<ProfileScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _stateManager = ProfileStateManager();
+
+    // Load user data immediately
     _loadUserData();
 
     // Load user data from UserProvider for real-time follower updates
@@ -57,7 +59,8 @@ class _ProfileScreenState extends State<ProfileScreen>
     super.didChangeDependencies();
     _stateManager.setContext(context);
 
-    if (widget.userId != null) {
+    // Only load user data if we don't have it yet or if it's a different user
+    if (widget.userId != null && _stateManager.userData == null) {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       userProvider.getUserDataWithFollowers(widget.userId!);
     }
@@ -67,9 +70,12 @@ class _ProfileScreenState extends State<ProfileScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     // Refresh user data when app becomes visible
-    if (state == AppLifecycleState.resumed && widget.userId != null) {
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
-      userProvider.refreshUserData(widget.userId!);
+    if (state == AppLifecycleState.resumed) {
+      print('🔄 ProfileScreen: App resumed, refreshing data...');
+      if (widget.userId != null) {
+        final userProvider = Provider.of<UserProvider>(context, listen: false);
+        userProvider.refreshUserDataForId(widget.userId!);
+      }
       // Also refresh videos in profile
       _stateManager.refreshVideosOnly();
     }
@@ -83,7 +89,46 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Future<void> _loadUserData() async {
-    await _stateManager.loadUserData(widget.userId);
+    print('🔄 ProfileScreen: Loading user data for userId: ${widget.userId}');
+
+    // First, check if we have any stored authentication data
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final hasJwtToken = prefs.getString('jwt_token') != null;
+      final hasFallbackUser = prefs.getString('fallback_user') != null;
+
+      if (!hasJwtToken && !hasFallbackUser) {
+        print(
+            '❌ ProfileScreen: No authentication data found - user needs to sign in');
+        setState(() {
+          // Force the sign-in view to show
+        });
+        return;
+      }
+    } catch (e) {
+      print('❌ ProfileScreen: Error checking authentication data: $e');
+    }
+
+    try {
+      await _stateManager.loadUserData(widget.userId);
+      print('✅ ProfileScreen: User data loaded successfully');
+    } catch (e) {
+      print('❌ ProfileScreen: Error loading user data: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading profile: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: () => _loadUserData(),
+            ),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _handleLogout() async {
@@ -92,7 +137,23 @@ class _ProfileScreenState extends State<ProfileScreen>
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('has_payment_setup');
 
+      // Clear all authentication data
+      await prefs.remove('jwt_token');
+      await prefs.remove('fallback_user');
+
+      print('✅ ProfileScreen: Authentication data cleared');
+
       await _stateManager.handleLogout();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Logged out successfully'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -107,13 +168,39 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Future<void> _handleGoogleSignIn() async {
     try {
+      print('🔐 ProfileScreen: Starting Google sign-in process...');
+
       final userData = await _stateManager.handleGoogleSignIn();
       if (userData != null) {
+        print('✅ ProfileScreen: Google sign-in successful');
+
         // Since this is a fresh sign-in, we're on our own profile.
         // We can reload all data.
-        _loadUserData();
+        await _loadUserData();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Signed in successfully!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } else {
+        print('❌ ProfileScreen: Google sign-in failed - no user data returned');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Sign-in failed. Please try again.'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
       }
     } catch (e) {
+      print('❌ ProfileScreen: Error during Google sign-in: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -192,7 +279,6 @@ class _ProfileScreenState extends State<ProfileScreen>
               label: 'Undo',
               textColor: Colors.white,
               onPressed: () {
-                // In a real app, you might want to implement undo functionality
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Undo functionality not implemented yet'),
@@ -338,42 +424,56 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Widget _buildSignInView() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(
-            Icons.account_circle,
-            size: 100,
-            color: Color(0xFF757575),
-          ),
-          const SizedBox(height: 20),
-          const Text(
-            'Sign in to view your profile',
-            style: TextStyle(
-              fontSize: 20,
-              color: Color(0xFF424242),
-              fontWeight: FontWeight.bold,
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.account_circle,
+              size: 100,
+              color: Color(0xFF757575),
             ),
-          ),
-          const SizedBox(height: 30),
-          ElevatedButton.icon(
-            onPressed: _handleGoogleSignIn,
-            icon: Image.network(
-              'https://www.google.com/favicon.ico',
-              height: 24,
+            const SizedBox(height: 20),
+            const Text(
+              'Sign in to view your profile',
+              style: TextStyle(
+                fontSize: 20,
+                color: Color(0xFF424242),
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
             ),
-            label: const Text('Sign in with Google'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: const Color(0xFF424242),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-                side: const BorderSide(color: Color(0xFFE0E0E0)),
+            const SizedBox(height: 12),
+            const Text(
+              'You need to sign in with your Google account to access your profile, upload videos, and track your earnings.',
+              style: TextStyle(
+                fontSize: 14,
+                color: Color(0xFF757575),
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 30),
+            ElevatedButton.icon(
+              onPressed: _handleGoogleSignIn,
+              icon: Image.network(
+                'https://www.google.com/favicon.ico',
+                height: 24,
+              ),
+              label: const Text('Sign in with Google'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF424242),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: const BorderSide(color: Color(0xFFE0E0E0)),
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -391,13 +491,99 @@ class _ProfileScreenState extends State<ProfileScreen>
             userModel = userProvider.getUserData(widget.userId!);
           }
 
-          return _buildBody(userProvider, userModel);
+          // Wrap with ProfileStateManager Consumer to listen to its changes
+          return Consumer<ProfileStateManager>(
+            builder: (context, profileManager, child) {
+              return _buildBody(userProvider, userModel);
+            },
+          );
         },
       ),
     );
   }
 
   Widget _buildBody(UserProvider userProvider, UserModel? userModel) {
+    // Check if we have any authentication data
+    if (_stateManager.userData == null && !_stateManager.isLoading) {
+      // Check if we have stored authentication data
+      return FutureBuilder<SharedPreferences>(
+        future: SharedPreferences.getInstance(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasData) {
+            final prefs = snapshot.data!;
+            final hasJwtToken = prefs.getString('jwt_token') != null;
+            final hasFallbackUser = prefs.getString('fallback_user') != null;
+
+            if (!hasJwtToken && !hasFallbackUser) {
+              // No authentication data - show sign-in view
+              return _buildSignInView();
+            } else {
+              // We have auth data but user data failed to load - show error with retry
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      size: 64,
+                      color: Colors.red[300],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Failed to load profile data',
+                      style: TextStyle(
+                        color: Colors.red[700],
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'You appear to be signed in, but we couldn\'t load your profile.',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 14,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton.icon(
+                      onPressed: _loadUserData,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry Loading Profile'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 12),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextButton.icon(
+                      onPressed: _handleGoogleSignIn,
+                      icon: const Icon(Icons.login),
+                      label: const Text('Sign In Again'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.blue,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+          }
+
+          // Fallback to sign-in view if SharedPreferences fails
+          return _buildSignInView();
+        },
+      );
+    }
+
     if (_stateManager.isLoading) {
       return const Center(
         child: CircularProgressIndicator(),
@@ -435,13 +621,12 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     return RefreshIndicator(
       onRefresh: () async {
-        print('🔄 ProfileScreen: Pull to refresh triggered');
         await _stateManager.refreshVideosOnly();
         // Also refresh user data if needed
         if (widget.userId != null) {
           final userProvider =
               Provider.of<UserProvider>(context, listen: false);
-          userProvider.refreshUserData(widget.userId!);
+          userProvider.refreshUserDataForId(widget.userId!);
         }
       },
       child: SingleChildScrollView(
@@ -468,11 +653,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         IconButton(
           icon: const Icon(Icons.more_vert, color: Color(0xFF424242)),
           onPressed: () {
-            print('🔍 ProfileScreen: Menu button clicked');
-            print('🔍 ProfileScreen: userData: ${_stateManager.userData}');
-            print('🔍 ProfileScreen: isLoading: ${_stateManager.isLoading}');
-            print('🔍 ProfileScreen: error: ${_stateManager.error}');
-
             showModalBottomSheet(
               context: context,
               backgroundColor: Colors.white,
@@ -529,7 +709,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                             const Icon(Icons.select_all, color: Colors.blue),
                         title: const Text('Select & Delete Videos'),
                         onTap: () {
-                          print('🔍 ProfileScreen: Select & Delete clicked');
                           Navigator.pop(context);
                           _stateManager.enterSelectionMode();
                         },
@@ -538,7 +717,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                         leading: const Icon(Icons.refresh, color: Colors.green),
                         title: const Text('Refresh Profile'),
                         onTap: () {
-                          print('🔍 ProfileScreen: Refresh Profile clicked');
                           Navigator.pop(context);
                           _stateManager.refreshData();
                         },
@@ -548,7 +726,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                             const Icon(Icons.video_library, color: Colors.blue),
                         title: const Text('Refresh Videos'),
                         onTap: () {
-                          print('🔍 ProfileScreen: Refresh Videos clicked');
                           Navigator.pop(context);
                           _stateManager.refreshVideosOnly();
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -564,7 +741,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                         leading: const Icon(Icons.logout, color: Colors.red),
                         title: const Text('Logout'),
                         onTap: () {
-                          print('🔍 ProfileScreen: Logout clicked');
                           Navigator.pop(context);
                           _handleLogout();
                         },
@@ -574,14 +750,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                         leading: const Icon(Icons.login, color: Colors.blue),
                         title: const Text('Sign In'),
                         onTap: () {
-                          print('🔍 ProfileScreen: Sign In clicked');
                           Navigator.pop(context);
                           _handleGoogleSignIn();
                         },
                       ),
                     ],
 
-                    // Always show these options for testing
+                    // Debug options
                     const Divider(height: 1),
                     const Padding(
                       padding: EdgeInsets.all(8.0),
@@ -594,9 +769,16 @@ class _ProfileScreenState extends State<ProfileScreen>
                           const Icon(Icons.bug_report, color: Colors.orange),
                       title: const Text('Force Refresh'),
                       onTap: () {
-                        print('🔍 ProfileScreen: Force Refresh clicked');
                         Navigator.pop(context);
                         _loadUserData();
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.clear_all, color: Colors.red),
+                      title: const Text('Clear Auth Data'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _clearAuthenticationData();
                       },
                     ),
                     const SizedBox(height: 16),
@@ -653,6 +835,66 @@ class _ProfileScreenState extends State<ProfileScreen>
             ],
           ),
           SizedBox(height: ResponsiveHelper.isMobile(context) ? 16 : 24),
+
+          // Authentication status indicator
+          FutureBuilder<SharedPreferences>(
+            future: SharedPreferences.getInstance(),
+            builder: (context, snapshot) {
+              if (snapshot.hasData) {
+                final prefs = snapshot.data!;
+                final hasJwtToken = prefs.getString('jwt_token') != null;
+                final hasFallbackUser =
+                    prefs.getString('fallback_user') != null;
+                final isAuthenticated = hasJwtToken || hasFallbackUser;
+
+                return Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isAuthenticated
+                        ? Colors.green[100]
+                        : Colors.orange[100],
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isAuthenticated
+                          ? Colors.green[300]!
+                          : Colors.orange[300]!,
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isAuthenticated ? Icons.check_circle : Icons.warning,
+                        size: 16,
+                        color: isAuthenticated
+                            ? Colors.green[700]
+                            : Colors.orange[700],
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        isAuthenticated
+                            ? 'Authenticated'
+                            : 'Authentication Issue',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isAuthenticated
+                              ? Colors.green[700]
+                              : Colors.orange[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+
+          SizedBox(height: ResponsiveHelper.isMobile(context) ? 16 : 24),
+
           if (_stateManager.isEditing)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -818,34 +1060,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                   final isSelected =
                       _stateManager.selectedVideoIds.contains(video.id);
 
-                  // Check if this is the user's own video by comparing multiple possible ID fields
-                  final userGoogleId = userModel?.id;
-                  final userId = userModel?.id;
-                  final videoUploaderId = video.uploader.id;
-
-                  final isOwnVideo = userModel != null &&
-                      (videoUploaderId == userGoogleId ||
-                          videoUploaderId == userId ||
-                          videoUploaderId == userModel.id);
-
-                  // Debug logging for video selection
-                  print('🔍 Video Selection Debug:');
-                  print('  - Video ID: ${video.id}');
-                  print('  - Video Uploader ID: ${video.uploader.id}');
-                  print('  - User Google ID: $userGoogleId');
-                  print('  - User ID: $userId');
-                  print('  - User ID: ${userModel?.id}');
-                  print('  - isMyProfile: ${userModel != null}');
-                  print('  - isOwnVideo: $isOwnVideo');
-                  print('  - isSelecting: ${_stateManager.isSelecting}');
-                  print('  - isSelected: $isSelected');
-
-                  // For debugging, allow selection of any video when in selection mode
+                  // Simplified video selection logic
                   final canSelectVideo =
-                      _stateManager.isSelecting && userModel != null;
-
-                  // Use proper logic for video selection
-                  final canSelectVideoFinal =
                       _stateManager.isSelecting && userModel != null;
                   return GestureDetector(
                     onTap: () {
@@ -871,29 +1087,26 @@ class _ProfileScreenState extends State<ProfileScreen>
                             ),
                           ),
                         );
-                      } else if (_stateManager.isSelecting &&
-                          canSelectVideoFinal) {
+                      } else if (_stateManager.isSelecting && canSelectVideo) {
                         // Use proper logic for video selection
                         print('🔍 Video tapped in selection mode');
                         print('🔍 Video ID: ${video.id}');
-                        print('🔍 Can select: $canSelectVideoFinal');
+                        print('🔍 Can select: $canSelectVideo');
                         _stateManager.toggleVideoSelection(video.id);
                       } else {
                         print('🔍 Video tapped but not selectable');
                         print('🔍 isSelecting: ${_stateManager.isSelecting}');
-                        print('🔍 canSelectVideoFinal: $canSelectVideoFinal');
+                        print('🔍 canSelectVideo: $canSelectVideo');
                       }
                     },
                     onLongPress: () {
                       // Long press: Enter selection mode for deletion
                       print('🔍 Long press detected on video');
                       print('🔍 isMyProfile: ${userModel != null}');
-                      print('🔍 canSelectVideoFinal: $canSelectVideoFinal');
+                      print('🔍 canSelectVideo: $canSelectVideo');
                       print('🔍 isSelecting: ${_stateManager.isSelecting}');
 
-                      if (userModel != null &&
-                          canSelectVideoFinal && // Use proper logic for video selection
-                          !_stateManager.isSelecting) {
+                      if (userModel != null && !_stateManager.isSelecting) {
                         print('🔍 Entering selection mode via long press');
                         _stateManager.enterSelectionMode();
                         _stateManager.toggleVideoSelection(video.id);
@@ -1030,7 +1243,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                           ),
                         ),
                         if (_stateManager.isSelecting &&
-                            canSelectVideoFinal) // Use proper logic for video selection
+                            canSelectVideo) // Use proper logic for video selection
                           Positioned(
                             top: 8,
                             right: 8,
@@ -1185,5 +1398,35 @@ class _ProfileScreenState extends State<ProfileScreen>
         ],
       ),
     );
+  }
+
+  Future<void> _clearAuthenticationData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('jwt_token');
+      await prefs.remove('fallback_user');
+      await prefs.remove('has_payment_setup');
+      print(
+          '✅ ProfileScreen: Authentication data cleared from SharedPreferences');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Authentication data cleared.'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      await _stateManager.handleLogout(); // Also clear state manager's data
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error clearing authentication data: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }

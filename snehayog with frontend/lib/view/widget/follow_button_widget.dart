@@ -71,7 +71,7 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
             : 'Unfollowed ${widget.uploaderName}');
 
         // Refresh user data to update follower counts in real-time
-        await userProvider.refreshUserData(widget.uploaderId);
+        await userProvider.refreshUserData();
 
         // Notify parent about follow status change
         widget.onFollowChanged?.call();

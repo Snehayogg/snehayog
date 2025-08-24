@@ -52,65 +52,104 @@ class ProfileStateManager extends ChangeNotifier {
     });
 
     try {
+      print('🔄 ProfileStateManager: Loading user data for userId: $userId');
+
       final loggedInUser = await _authService.getUserData();
+      print('🔄 ProfileStateManager: Logged in user: ${loggedInUser?['id']}');
+
+      // Check if we have any authentication data
+      if (loggedInUser == null) {
+        print('❌ ProfileStateManager: No authentication data available');
+        _isLoading = false;
+        _error = 'No authentication data available. Please sign in.';
+        notifyListeners();
+        return;
+      }
+
       final bool isMyProfile = userId == null || userId == loggedInUser?['id'];
+      print('🔄 ProfileStateManager: Is my profile: $isMyProfile');
 
       Map<String, dynamic>? userData;
       if (isMyProfile) {
+        // Load own profile data
         userData = loggedInUser;
-        // Load saved profile data for the logged-in user
-        final savedName = await _loadSavedName();
-        final savedProfilePic = await _loadSavedProfilePic();
         if (userData != null) {
+          // Load saved profile data for the logged-in user
+          final savedName = await _loadSavedName();
+          final savedProfilePic = await _loadSavedProfilePic();
           userData['name'] = savedName ?? userData['name'];
           userData['profilePic'] = savedProfilePic ?? userData['profilePic'];
+          print(
+              '🔄 ProfileStateManager: Loaded own profile data: ${userData['name']}');
         }
       } else {
         // Fetch profile data for another user
+        print(
+            '🔄 ProfileStateManager: Fetching other user profile for ID: $userId');
         userData = await _userService.getUserById(userId);
+        print(
+            '🔄 ProfileStateManager: Other user profile loaded: ${userData?['name']}');
       }
 
       if (userData != null) {
-        setState(() {
-          _userData = userData;
-          _isLoading = false;
-        });
+        _userData = userData;
+        _isLoading = false;
+        notifyListeners();
+        print(
+            '🔄 ProfileStateManager: User data loaded successfully, now loading videos');
         await loadUserVideos(userId);
       } else {
-        setState(() {
-          _isLoading = false;
-          _error = ProfileConstants.errorLoadingData;
-        });
+        _isLoading = false;
+        _error = ProfileConstants.errorLoadingData;
+        notifyListeners();
+        print('❌ ProfileStateManager: Failed to load user data');
       }
     } catch (e) {
-      setState(() {
-        _error = 'Error loading user data: ${e.toString()}';
-        _isLoading = false;
-      });
+      print('❌ ProfileStateManager: Error loading user data: $e');
+      _error = 'Error loading user data: ${e.toString()}';
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
   Future<void> loadUserVideos(String? userId) async {
     try {
+      print('🔄 ProfileStateManager: Loading videos for userId: $userId');
+
       final loggedInUser = await _authService.getUserData();
       final bool isMyProfile = userId == null || userId == loggedInUser?['id'];
 
+      print(
+          '🔄 ProfileStateManager: Loading videos - isMyProfile: $isMyProfile');
+
+      String targetUserId;
       if (isMyProfile) {
-        final videos =
-            await _videoService.getUserVideos(loggedInUser?['id'] ?? '');
-        setState(() {
-          _userVideos = videos;
-        });
+        targetUserId = loggedInUser?['id'] ?? '';
+        print(
+            '🔄 ProfileStateManager: Loading own videos with ID: $targetUserId');
       } else {
-        final videos = await _videoService.getUserVideos(userId);
-        setState(() {
-          _userVideos = videos;
-        });
+        targetUserId = userId ?? '';
+        print(
+            '🔄 ProfileStateManager: Loading other user videos with ID: $targetUserId');
+      }
+
+      if (targetUserId.isNotEmpty) {
+        final videos = await _videoService.getUserVideos(targetUserId);
+        print(
+            '🔄 ProfileStateManager: Loaded ${videos.length} videos for user: $targetUserId');
+
+        _userVideos = videos;
+        notifyListeners();
+      } else {
+        print('⚠️ ProfileStateManager: No valid user ID for video loading');
+        _userVideos = [];
+        notifyListeners();
       }
     } catch (e) {
-      setState(() {
-        _error = '${ProfileConstants.errorLoadingVideos}${e.toString()}';
-      });
+      print('❌ ProfileStateManager: Error loading user videos: $e');
+      _error = '${ProfileConstants.errorLoadingVideos}${e.toString()}';
+      _userVideos = [];
+      notifyListeners();
     }
   }
 
@@ -409,24 +448,34 @@ class ProfileStateManager extends ChangeNotifier {
   /// Refreshes user data and videos
   Future<void> refreshData() async {
     try {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+
+      // Get the current user ID from userData or logged in user
+      String? targetUserId;
+      if (_userData != null && _userData!['id'] != null) {
+        targetUserId = _userData!['id'];
+        print(
+            '🔄 ProfileStateManager: Refreshing data for user: $targetUserId');
+      } else {
+        final loggedInUser = await _authService.getUserData();
+        targetUserId = loggedInUser?['id'];
+        print(
+            '🔄 ProfileStateManager: Refreshing data for logged in user: $targetUserId');
+      }
 
       // Reload user data and videos
-      await loadUserData(null);
+      await loadUserData(targetUserId);
 
-      setState(() {
-        _isLoading = false;
-      });
+      _isLoading = false;
+      notifyListeners();
 
       print('✅ ProfileStateManager: Data refreshed successfully');
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _error = 'Failed to refresh data: ${e.toString()}';
-      });
+      _isLoading = false;
+      _error = 'Failed to refresh data: ${e.toString()}';
+      notifyListeners();
       print('❌ ProfileStateManager: Error refreshing data: $e');
     }
   }
@@ -436,21 +485,32 @@ class ProfileStateManager extends ChangeNotifier {
     try {
       print('🔄 ProfileStateManager: Force refreshing user videos...');
 
-      final loggedInUser = await _authService.getUserData();
-      if (loggedInUser != null) {
-        final videos =
-            await _videoService.getUserVideos(loggedInUser['id'] ?? '');
-        setState(() {
-          _userVideos = videos;
-        });
+      // Get the current user ID from userData or logged in user
+      String? targetUserId;
+      if (_userData != null && _userData!['id'] != null) {
+        targetUserId = _userData!['id'];
+        print(
+            '🔄 ProfileStateManager: Refreshing videos for user: $targetUserId');
+      } else {
+        final loggedInUser = await _authService.getUserData();
+        targetUserId = loggedInUser?['id'];
+        print(
+            '🔄 ProfileStateManager: Refreshing videos for logged in user: $targetUserId');
+      }
+
+      if (targetUserId != null && targetUserId.isNotEmpty) {
+        final videos = await _videoService.getUserVideos(targetUserId);
+        _userVideos = videos;
+        notifyListeners();
         print(
             '✅ ProfileStateManager: Videos refreshed successfully. Count: ${videos.length}');
+      } else {
+        print('⚠️ ProfileStateManager: No valid user ID for video refresh');
       }
     } catch (e) {
       print('❌ ProfileStateManager: Error refreshing videos: $e');
-      setState(() {
-        _error = 'Failed to refresh videos: ${e.toString()}';
-      });
+      _error = 'Failed to refresh videos: ${e.toString()}';
+      notifyListeners();
     }
   }
 

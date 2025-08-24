@@ -4,8 +4,7 @@ import 'package:snehayog/model/video_model.dart';
 class VideoUrlService {
   /// Gets the best video URL with automatic HLS transformation
   static String getBestVideoUrl(VideoModel video) {
-    // FORCE HLS ONLY - Transform MP4 to HLS if needed
-
+    // Try HLS URLs first
     if (video.hlsMasterPlaylistUrl != null &&
         video.hlsMasterPlaylistUrl!.isNotEmpty) {
       print('🎬 Using HLS Master Playlist: ${video.hlsMasterPlaylistUrl}');
@@ -13,15 +12,22 @@ class VideoUrlService {
     }
 
     if (video.hlsPlaylistUrl != null && video.hlsPlaylistUrl!.isNotEmpty) {
-      print('🎬 Using HLS Playlist: ${video.hlsPlaylistUrl}');
+      print('�� Using HLS Playlist: ${video.hlsPlaylistUrl}');
       return video.hlsPlaylistUrl!;
     }
 
-    // Transform MP4 to HLS for better streaming performance
+    // If no HLS available, try to transform MP4 to HLS
     if (video.videoUrl.isNotEmpty) {
-      final transformedUrl = _transformMp4ToHls(video.videoUrl);
-      print('🎬 Transformed MP4 to HLS: $transformedUrl');
-      return transformedUrl;
+      try {
+        final transformedUrl = _transformMp4ToHls(video.videoUrl);
+        print('�� Transformed MP4 to HLS: $transformedUrl');
+        return transformedUrl;
+      } catch (e) {
+        print('⚠️ HLS transformation failed: $e');
+        print('🎬 Falling back to original MP4 URL: ${video.videoUrl}');
+        // FALLBACK: Return original MP4 URL if HLS conversion fails
+        return video.videoUrl;
+      }
     }
 
     // If no video URL available, throw error
@@ -36,7 +42,7 @@ class VideoUrlService {
       final hlsUrl = originalUrl.replaceAll(
           '/video/upload/', '/video/upload/f_hls,q_auto,w_1280,fl_sanitize/');
 
-      print('🎬 HLS Transformation: MP4 → HLS');
+      print('�� HLS Transformation: MP4 → HLS');
       print('   Original: $originalUrl');
       print('   Transformed: $hlsUrl');
 
@@ -45,7 +51,7 @@ class VideoUrlService {
 
     // For other MP4 URLs, try to add HLS parameters if supported
     if (originalUrl.contains('.mp4')) {
-      print('🎬 Non-Cloudinary MP4 detected, attempting HLS conversion');
+      print('�� Non-Cloudinary MP4 detected, attempting HLS conversion');
 
       // Check if server supports HLS conversion
       if (originalUrl.contains('localhost') ||
@@ -59,7 +65,7 @@ class VideoUrlService {
 
         // Try to get HLS version from server
         final hlsUrl = '$baseUrl/hls/$videoId/master.m3u8';
-        print('🎬 Attempting local HLS conversion: $hlsUrl');
+        print('�� Attempting local HLS conversion: $hlsUrl');
         return hlsUrl;
       } else {
         // External server - try simple m3u8 replacement

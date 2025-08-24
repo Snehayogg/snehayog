@@ -3,6 +3,7 @@ import 'package:snehayog/services/ad_service.dart';
 import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/services/video_service.dart';
 import 'package:snehayog/model/video_model.dart';
+import 'package:snehayog/services/ad_impression_service.dart';
 
 class CreatorRevenueScreen extends StatefulWidget {
   const CreatorRevenueScreen({super.key});
@@ -15,6 +16,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   final AdService _adService = AdService();
   final AuthService _authService = AuthService();
   final VideoService _videoService = VideoService();
+  final AdImpressionService _adImpressionService = AdImpressionService();
 
   Map<String, dynamic>? _revenueData;
   List<VideoModel> _userVideos = [];
@@ -62,22 +64,21 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     }
   }
 
-  /// Calculate revenue for a specific video based on AD IMPRESSIONS
+  /// Calculate revenue for a specific video based on AD IMPRESSIONS ONLY
   double _calculateVideoRevenue(VideoModel video) {
     try {
-      // Revenue is based on AD IMPRESSIONS, not video views
-      // CPM (Cost Per Mille) = Revenue per 1000 ad impressions
-      const cpm = 2.0; // Example: $2.00 per 1000 ad impressions
+      // Fixed CPM (Cost Per Mille) - ₹30 per 1000 ad impressions
+      const cpm = 30.0; // ₹30 per 1000 impressions
 
-      // Get ad impressions for this video
-      final adImpressions = _getAdImpressionsForVideo(video.id);
+      // Get total ad impressions for this video
+      final totalAdImpressions = _getTotalAdImpressionsForVideo(video.id);
 
-      // Calculate revenue: (Ad Impressions / 1000) × CPM
-      double revenue = (adImpressions / 1000.0) * cpm;
+      // Simple calculation: (Ad Impressions / 1000) × CPM
+      final revenue = (totalAdImpressions / 1000) * cpm;
 
-      // Apply ad performance multipliers
-      final adPerformanceMultiplier = _calculateAdPerformanceMultiplier(video);
-      revenue *= adPerformanceMultiplier;
+      print('💰 Video: ${video.videoName}');
+      print('💰 Ad Impressions: $totalAdImpressions');
+      print('💰 Revenue: ₹${revenue.toStringAsFixed(2)}');
 
       return revenue;
     } catch (e) {
@@ -86,29 +87,24 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     }
   }
 
-  /// Get ad impressions for a specific video
-  int _getAdImpressionsForVideo(String videoId) {
+  /// Get total ad impressions (banner + carousel ads)
+  int _getTotalAdImpressionsForVideo(String videoId) {
     try {
-      // Find the video
-      final video = _userVideos.firstWhere((v) => v.id == videoId);
+      // Banner ads shown on this video
+      final bannerImpressions =
+          _adImpressionService.getBannerAdImpressions(videoId);
 
-      // Simulate ad impressions based on video performance
-      // In production, this would come from your ad network analytics
-      int baseImpressions = video.views ?? 0;
+      // Carousel ads shown when user scrolls through this video
+      final carouselImpressions =
+          _adImpressionService.getCarouselAdImpressions(videoId);
 
-      // Ad impressions are typically higher than video views
-      // because ads can be shown multiple times per video view
-      const adImpressionsMultiplier =
-          1.5; // 50% more ad impressions than video views
-
-      // Calculate estimated ad impressions
-      final estimatedAdImpressions =
-          (baseImpressions * adImpressionsMultiplier).round();
+      // Total impressions = Banner + Carousel
+      final totalImpressions = bannerImpressions + carouselImpressions;
 
       print(
-          '📊 Video ${video.videoName}: ${video.views} views → $estimatedAdImpressions estimated ad impressions');
+          '📊 Video $videoId: Banner: $bannerImpressions, Carousel: $carouselImpressions, Total: $totalImpressions');
 
-      return estimatedAdImpressions;
+      return totalImpressions;
     } catch (e) {
       print('❌ Error getting ad impressions: $e');
       return 0;
@@ -791,7 +787,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
             // Show top 5 videos by revenue
             ..._userVideos.take(5).map((video) {
               final revenue = _videoRevenueMap[video.id] ?? 0.0;
-              final adImpressions = _getAdImpressionsForVideo(video.id);
+              final adImpressions = _getTotalAdImpressionsForVideo(video.id);
 
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
@@ -951,131 +947,60 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     }
   }
 
+  /// Show detailed video analytics
   void _showDetailedVideoAnalytics() {
-    if (_userVideos.isEmpty) return;
-
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.analytics, color: Colors.green),
-            SizedBox(width: 8),
-            Text('📊 Detailed Video Analytics'),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Summary
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green.withOpacity(0.3)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.attach_money,
-                        color: Colors.green, size: 24),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Total Revenue',
-                          style: TextStyle(fontSize: 14, color: Colors.grey),
-                        ),
-                        Text(
-                          '₹${_totalRevenue.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Video breakdown
-              ..._userVideos.map((video) {
+        title: const Text('Detailed Video Analytics'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              children: _userVideos.map((video) {
                 final revenue = _videoRevenueMap[video.id] ?? 0.0;
-                final adImpressions = _getAdImpressionsForVideo(video.id);
+                final adImpressions = _getTotalAdImpressionsForVideo(video.id);
 
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey[200]!),
+                return ListTile(
+                  leading: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      video.thumbnailUrl,
+                      width: 50,
+                      height: 50,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          width: 50,
+                          height: 50,
+                          color: Colors.grey[300],
+                          child: const Icon(Icons.video_library, size: 24),
+                        );
+                      },
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                video.videoName,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              '₹${revenue.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildDetailedStat(
-                                  'Views', '${video.views ?? 0}'),
-                            ),
-                            Expanded(
-                              child:
-                                  _buildDetailedStat('Likes', '${video.likes}'),
-                            ),
-                            Expanded(
-                              child: _buildDetailedStat(
-                                  'Comments', '${video.comments.length}'),
-                            ),
-                            Expanded(
-                              child: _buildDetailedStat(
-                                  'Ad Impressions', '$adImpressions'),
-                            ),
-                          ],
-                        ),
-                      ],
+                  ),
+                  title: Text(
+                    video.videoName,
+                    style: const TextStyle(fontSize: 14),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text('${adImpressions} impressions'),
+                  trailing: Text(
+                    '₹${revenue.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green,
                     ),
                   ),
                 );
               }).toList(),
-            ],
+            ),
           ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.of(context).pop(),
             child: const Text('Close'),
           ),
         ],

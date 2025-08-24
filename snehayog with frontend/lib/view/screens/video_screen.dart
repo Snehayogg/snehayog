@@ -1,4 +1,3 @@
-// Import statements for required Flutter and third-party packages
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:snehayog/model/video_model.dart';
@@ -12,12 +11,12 @@ import 'package:snehayog/controller/main_controller.dart';
 import 'package:snehayog/core/managers/video_controller_manager.dart';
 import 'package:snehayog/core/managers/video_cache_manager.dart';
 import 'package:snehayog/core/managers/video_state_manager.dart';
-import 'package:snehayog/view/widget/video_ui_components.dart';
+import 'package:snehayog/view/widget/video_item_widget.dart';
+import 'package:snehayog/view/widget/video_ui_components.dart' as ui_components;
 import 'package:snehayog/view/widget/comments_sheet.dart';
-import 'package:snehayog/services/admob_service.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:snehayog/utils/feature_flags.dart';
 
-/// Refactored VideoScreen with modular architecture for better maintainability
 class VideoScreen extends StatefulWidget {
   final int? initialIndex;
   final List<VideoModel>? initialVideos;
@@ -42,7 +41,6 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
   // Service
   final VideoService _videoService = VideoService();
   final AuthService _authService = AuthService();
-  final AdMobService _adMobService = AdMobService();
 
   // AdMob
   BannerAd? _bannerAd;
@@ -67,7 +65,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
   // Public method to refresh videos (can be called from outside)
   void refreshVideos() {
     print('🔄 VideoScreen: refreshVideos() called from outside');
-    _loadVideos(isInitialLoad: false);
+    _loadVideos();
   }
 
   /// Private method to refresh videos with proper cleanup
@@ -88,7 +86,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       _stateManager.reset();
 
       // Load fresh videos
-      await _loadVideos(isInitialLoad: true);
+      await _loadVideos();
 
       // Reinitialize first video if available
       if (_stateManager.videos.isNotEmpty) {
@@ -134,12 +132,50 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    print('🎬 VideoScreen: Initializing with fast video delivery system');
 
     // Initialize managers
     _controllerManager = VideoControllerManager();
     _cacheManager = VideoCacheManager();
     _stateManager = VideoStateManager();
 
+    // Initialize fast video delivery system
+    _initializeFastVideoDelivery();
+
+    // Initialize other components
+    _initializeComponents();
+    _loadVideos();
+    _initializeAdMob();
+  }
+
+  /// Initialize fast video delivery system
+  void _initializeFastVideoDelivery() async {
+    if (!Features.fastVideoDelivery.isEnabled) {
+      print('🚫 VideoScreen: Fast video delivery disabled');
+      return;
+    }
+
+    try {
+      print('🚀 VideoScreen: Initializing fast video delivery system...');
+
+      // Initialize cache manager
+      await _cacheManager.initialize();
+
+      // Initialize controller manager with cache manager
+      _controllerManager.initialize(_cacheManager);
+
+      print('✅ VideoScreen: Fast video delivery system initialized');
+    } catch (e) {
+      print('❌ VideoScreen: Failed to initialize fast video delivery: $e');
+    }
+  }
+
+  /// Initialize AdMob banner ad
+  void _initializeAdMob() {
+    _initializeBannerAd();
+  }
+
+  void _initializeComponents() {
     // Add observer to handle app lifecycle changes
     WidgetsBinding.instance.addObserver(this);
 
@@ -164,9 +200,6 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
 
     // Listen to state changes
     _stateManager.addListener(_onStateChanged);
-
-    // Initialize AdMob banner ad
-    _initializeBannerAd();
   }
 
   void _initializeWithVideos() {
@@ -189,7 +222,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       if (_pageController.position.pixels >=
               _pageController.position.maxScrollExtent - 200 &&
           !_stateManager.isLoadingMore) {
-        _loadVideos(isInitialLoad: false);
+        _loadVideos();
       }
 
       // Detect page changes
@@ -477,62 +510,47 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
     _controllerManager.playActiveVideo();
   }
 
-  /// Load videos
-  Future<void> _loadVideos({bool isInitialLoad = true}) async {
+  /// Load videos from service or use initial videos
+  Future<void> _loadVideos() async {
     try {
-      print('🎬 VideoScreen: Starting to load videos...');
-      print(
-          '🎬 VideoScreen: Current state - isLoading: ${_stateManager.isLoading}');
-      print(
-          '🎬 VideoScreen: Current videos count: ${_stateManager.videos.length}');
+      print('🔄 VideoScreen: Loading videos...');
 
-      await _stateManager.loadVideosWithAds(isInitialLoad: isInitialLoad);
-
-      print(
-          '🎬 VideoScreen: Videos loaded successfully: ${_stateManager.videos.length}');
-      print('🎬 VideoScreen: Has error: ${_stateManager.hasError}');
-      print('🎬 VideoScreen: Error message: ${_stateManager.errorMessage}');
-
-      if (isInitialLoad && _stateManager.videos.isNotEmpty) {
-        _initializeCurrentVideo();
-
-        // Initialize banner ads for all loaded videos
-        for (int i = 0; i < _stateManager.videos.length; i++) {
-          _initializeVideoBannerAd(i, _stateManager.videos[i]);
-        }
-      } else if (isInitialLoad && _stateManager.hasError) {
+      if (widget.initialVideos != null && widget.initialVideos!.isNotEmpty) {
         print(
-            '❌ VideoScreen: Error loading videos: ${_stateManager.errorMessage}');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content:
-                  Text('Failed to load videos: ${_stateManager.errorMessage}'),
-              backgroundColor: Colors.red,
-              action: SnackBarAction(
-                label: 'Retry',
-                onPressed: () => _stateManager.retryLoading(),
-              ),
-            ),
-          );
+            '📹 VideoScreen: Using initial videos (${widget.initialVideos!.length})');
+        _stateManager.initializeWithVideos(
+          widget.initialVideos!,
+          widget.initialIndex ?? 0,
+        );
+
+        // Set videos for fast video delivery preloading
+        if (Features.fastVideoDelivery.isEnabled) {
+          _controllerManager.setCurrentVideos(widget.initialVideos!);
+        }
+      } else {
+        print('🌐 VideoScreen: Loading videos from service...');
+        final response = await _videoService.getVideos();
+        final videos = response['videos'] as List<VideoModel>;
+        _stateManager.initializeWithVideos(videos, 0);
+
+        // Set videos for fast video delivery preloading
+        if (Features.fastVideoDelivery.isEnabled) {
+          _controllerManager.setCurrentVideos(videos);
+
+          // Start preloading videos for instant playback
+          print(
+              '🚀 VideoScreen: Starting video preloading for ${videos.length} videos');
+          await _cacheManager.preCacheVideos(videos, 0);
         }
       }
 
-      // Refresh banner ad after loading videos
-      if (_stateManager.videos.isNotEmpty) {
-        final currentIndex = _stateManager.activePage;
-        if (!_isVideoBannerAdLoaded(currentIndex) &&
-            _videoBannerAds.containsKey(currentIndex)) {
-          print('🔄 VideoScreen: Refreshing banner ad after loading videos');
-          _retryVideoBannerAd(currentIndex, _stateManager.videos[currentIndex]);
-        }
-      }
+      print('✅ VideoScreen: Videos loaded successfully');
     } catch (e) {
-      print('❌ VideoScreen: Error in _loadVideos: $e');
+      print('❌ VideoScreen: Error loading videos: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to load videos: ${e.toString()}'),
+            content: Text('Error loading videos: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -844,31 +862,6 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// Get real ad impressions from backend (if available)
-  Future<int> _getRealAdImpressionsFromBackend(String videoId) async {
-    try {
-      // This should call your backend API to get real ad impressions
-      // For now, return 0 to indicate no real data available
-
-      // Example implementation:
-      // final response = await http.get(
-      //   Uri.parse('${AppConfig.baseUrl}/api/ads/impressions/$videoId'),
-      //   headers: {'Authorization': 'Bearer $token'},
-      // );
-      //
-      // if (response.statusCode == 200) {
-      //   final data = json.decode(response.body);
-      //   return data['impressions'] ?? 0;
-      // }
-
-      return 0; // No real data available yet
-    } catch (e) {
-      print('❌ Error getting real ad impressions: $e');
-      return 0;
-    }
-  }
-
-  /// Send ad analytics data to backend for revenue tracking
   Future<void> _sendAdAnalytics(
       String eventType, int videoIndex, VideoModel video) async {
     try {
@@ -1515,7 +1508,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
                 // Show loading indicator at the end when loading more videos
                 if (index == _stateManager.videos.length) {
                   return const RepaintBoundary(
-                    child: LoadingIndicatorWidget(),
+                    child: ui_components.LoadingIndicatorWidget(),
                   );
                 }
 
@@ -1527,6 +1520,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
                     video: video,
                     controller: controller,
                     isActive: index == _stateManager.activePage,
+                    index: index,
                     onLike: () => _handleLike(index),
                     onComment: () => _handleComment(video),
                     onShare: () => _handleShare(video),
@@ -1546,6 +1540,8 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
                         ),
                       );
                     },
+                    cacheManager:
+                        _cacheManager, // Connect cache manager for fast video delivery
                   ),
                 );
               },

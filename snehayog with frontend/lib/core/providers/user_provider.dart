@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:snehayog/services/user_service.dart';
+import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/model/usermodel.dart';
 
 class UserProvider extends ChangeNotifier {
@@ -8,7 +9,7 @@ class UserProvider extends ChangeNotifier {
   // Cache for follow status to avoid repeated API calls
   final Map<String, bool> _followStatusCache = {};
   final Set<String> _loadingFollowStatus = {};
-  
+
   // Cache for user data including follower counts
   final Map<String, UserModel> _userDataCache = {};
   final Set<String> _loadingUserData = {};
@@ -17,7 +18,7 @@ class UserProvider extends ChangeNotifier {
   bool isFollowingUser(String userId) => _followStatusCache[userId] ?? false;
   bool isLoadingFollowStatus(String userId) =>
       _loadingFollowStatus.contains(userId);
-      
+
   UserModel? getUserData(String userId) => _userDataCache[userId];
   bool isLoadingUserData(String userId) => _loadingUserData.contains(userId);
 
@@ -77,7 +78,7 @@ class UserProvider extends ChangeNotifier {
       final success = await _userService.followUser(userId);
       if (success) {
         _followStatusCache[userId] = true;
-        
+
         // Update follower count in cache
         if (_userDataCache.containsKey(userId)) {
           final currentUser = _userDataCache[userId]!;
@@ -86,7 +87,7 @@ class UserProvider extends ChangeNotifier {
             isFollowing: true,
           );
         }
-        
+
         notifyListeners();
       }
       return success;
@@ -102,16 +103,18 @@ class UserProvider extends ChangeNotifier {
       final success = await _userService.unfollowUser(userId);
       if (success) {
         _followStatusCache[userId] = false;
-        
+
         // Update follower count in cache
         if (_userDataCache.containsKey(userId)) {
           final currentUser = _userDataCache[userId]!;
           _userDataCache[userId] = currentUser.copyWith(
-            followersCount: (currentUser.followersCount - 1).clamp(0, double.infinity).toInt(),
+            followersCount: (currentUser.followersCount - 1)
+                .clamp(0, double.infinity)
+                .toInt(),
             isFollowing: false,
           );
         }
-        
+
         notifyListeners();
       }
       return success;
@@ -132,12 +135,33 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
-  /// Refresh user data (useful for profile screen updates)
-  Future<void> refreshUserData(String userId) async {
-    _userDataCache.remove(userId);
-    _followStatusCache.remove(userId);
-    await getUserDataWithFollowers(userId);
-    await checkFollowStatus(userId);
+// Add this method to your existing UserProvider class
+  Future<void> refreshUserData() async {
+    try {
+      final authService = AuthService();
+      final userData = await authService.getUserData();
+
+      if (userData != null && userData['id'] != null) {
+        print(
+            '🔄 UserProvider: Loading current user data for ID: ${userData['id']}');
+        await getUserDataWithFollowers(userData['id']);
+      } else {
+        print('❌ UserProvider: No current user data available');
+      }
+    } catch (e) {
+      print('❌ UserProvider: Error loading current user data: $e');
+    }
+  }
+
+  /// Refresh user data for a specific user ID
+  Future<void> refreshUserDataForId(String userId) async {
+    try {
+      print('🔄 UserProvider: Refreshing user data for ID: $userId');
+      await getUserDataWithFollowers(userId);
+      print('✅ UserProvider: User data refreshed successfully for ID: $userId');
+    } catch (e) {
+      print('❌ UserProvider: Error refreshing user data for ID $userId: $e');
+    }
   }
 
   /// Clear follow status cache

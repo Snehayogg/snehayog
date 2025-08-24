@@ -11,6 +11,7 @@ import 'package:snehayog/view/widget/video_player_widget.dart';
 import 'package:snehayog/services/ad_service.dart';
 import 'package:snehayog/services/authservices.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:snehayog/core/managers/video_cache_manager.dart';
 
 class VideoItemWidget extends StatefulWidget {
   final VideoModel video;
@@ -21,6 +22,7 @@ class VideoItemWidget extends StatefulWidget {
   final VoidCallback? onComment;
   final VoidCallback? onShare;
   final VoidCallback? onProfileTap;
+  final VideoCacheManager? cacheManager; // Add cache manager
 
   const VideoItemWidget({
     Key? key,
@@ -32,6 +34,7 @@ class VideoItemWidget extends StatefulWidget {
     this.onComment,
     this.onShare,
     this.onProfileTap,
+    this.cacheManager, // Add cache manager parameter
   }) : super(key: key);
 
   @override
@@ -247,44 +250,40 @@ class _VideoItemWidgetState extends State<VideoItemWidget> {
             controller: widget.controller,
             video: widget.video,
             play: widget.isActive,
+            cacheManager: widget.cacheManager, // Pass cache manager
           ),
         ),
 
-        // Video info overlay
+        // Video info overlay - ABOVE gesture detector, can receive touch events
         Positioned(
           left: 12,
           bottom: 12,
           right:
               120, // Increased from 100 to 120 to give maximum space for Visit Now button
           child: RepaintBoundary(
-            child: IgnorePointer(
-              child: VideoInfoWidget(video: widget.video),
-            ),
+            child: VideoInfoWidget(video: widget.video),
           ),
         ),
 
-        // Action buttons
+        // Action buttons - ABOVE gesture detector, can receive touch events
         Positioned(
           right: 12,
           bottom: 12,
           child: RepaintBoundary(
-            child: IgnorePointer(
-              child: ActionButtonsWidget(
-                video: widget.video,
-                index: widget.index,
-                isLiked:
+            child: ActionButtonsWidget(
+              video: widget.video,
+              index: widget.index,
+              isLiked: Provider.of<GoogleSignInController>(context,
+                              listen: false)
+                          .userData?['id'] !=
+                      null &&
+                  widget.video.likedBy.contains(
                     Provider.of<GoogleSignInController>(context, listen: false)
-                                .userData?['id'] !=
-                            null &&
-                        widget.video.likedBy.contains(
-                          Provider.of<GoogleSignInController>(context,
-                                  listen: false)
-                              .userData?['id'],
-                        ),
-                onLike: widget.onLike ?? () {},
-                onComment: widget.onComment ?? () {},
-                onShare: widget.onShare ?? () {},
-              ),
+                        .userData?['id'],
+                  ),
+              onLike: widget.onLike ?? () {},
+              onComment: widget.onComment ?? () {},
+              onShare: widget.onShare ?? () {},
             ),
           ),
         ),

@@ -110,12 +110,6 @@ class _UploaderInfoSection extends StatelessWidget {
             print('Follow status changed for ${video.uploader.name}');
           },
         ),
-
-        // Debug: Show link status (temporary)
-        if (video.link != null) ...[
-          const SizedBox(width: 8),
-          _LinkStatusBadge(link: video.link!),
-        ],
       ],
     );
   }
@@ -236,9 +230,9 @@ class _VisitNowButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: double.infinity, // Make it as wide as possible
+      width: double.infinity,
       margin: const EdgeInsets.only(
-          right: 8), // Reduced to 8 to come very close to share button
+          right: 8),
       child: ElevatedButton(
         onPressed: () async {
           final Uri uri = Uri.parse(link);

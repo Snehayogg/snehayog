@@ -4,33 +4,45 @@ import 'package:snehayog/model/video_model.dart';
 import 'package:snehayog/core/services/video_url_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:async';
+import 'package:snehayog/services/ad_impression_service.dart';
+import 'package:snehayog/utils/feature_flags.dart';
+import 'package:snehayog/core/managers/video_cache_manager.dart';
 
 class VideoPlayerWidget extends StatefulWidget {
   final VideoModel video;
   final bool play;
   final VideoPlayerController? controller;
+  final VideoCacheManager? cacheManager; // Add cache manager
 
   const VideoPlayerWidget({
     Key? key,
     required this.video,
     required this.play,
     this.controller,
+    this.cacheManager,
   }) : super(key: key);
 
   @override
   State<VideoPlayerWidget> createState() => _VideoPlayerWidgetState();
 }
 
-class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
+class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
+    with WidgetsBindingObserver {
   VideoPlayerController? _controller;
   bool _isInitialized = false;
   bool _isPlaying = false;
-  bool _isMuted = false; // Changed from true to false - videos start unmuted
+  bool _isMuted = false;
   bool _isLoading = true;
   String? _errorMessage;
   Timer? _loopCheckTimer;
   bool _showTapFeedback = false;
   Timer? _feedbackTimer;
+  final AdImpressionService _adImpressionService = AdImpressionService();
+
+  // Fast video delivery integration
+  bool _isPreloading = false;
+  double _preloadProgress = 0.0;
+  bool _isCached = false;
 
   @override
   void initState() {
@@ -38,23 +50,68 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     print(
         '🎬 VideoPlayerWidget: Initializing for video: ${widget.video.videoName}');
 
+    // DEBUG: Add this to see what's happening
+    print(
+        '🎬 VideoPlayerWidget: Controller provided: ${widget.controller != null}');
+    print('🎬 VideoPlayerWidget: Video URL: ${widget.video.videoUrl}');
+    print('🎬 VideoPlayerWidget: HLS URL: ${widget.video.hlsPlaylistUrl}');
+    print(
+        '🎬 VideoPlayerWidget: Cache manager provided: ${widget.cacheManager != null}');
+
+    // Check cache status if fast video delivery is enabled
+    if (Features.fastVideoDelivery.isEnabled && widget.cacheManager != null) {
+      _checkCacheStatus();
+    }
+
     if (widget.controller == null) {
+      print(
+          '🎬 VideoPlayerWidget: No controller provided, initializing new one...');
       _initializeController();
     } else {
+      print('🎬 VideoPlayerWidget: Using provided controller...');
       _controller = widget.controller;
       _setupController();
     }
   }
 
+  /// Check cache status for fast video delivery
+  Future<void> _checkCacheStatus() async {
+    if (widget.cacheManager == null) {
+      print(
+          '⚠️ VideoPlayerWidget: No cache manager provided for video: ${widget.video.videoName}');
+      return;
+    }
+
+    try {
+      _isCached = widget.cacheManager!.isVideoCached(widget.video.id);
+      _isPreloading = widget.cacheManager!.isPreloading(widget.video.id);
+      _preloadProgress =
+          widget.cacheManager!.getPreloadProgress(widget.video.id);
+
+      if (mounted) {
+        setState(() {});
+      }
+
+      print(
+          '🔍 VideoPlayerWidget: Cache status for "${widget.video.videoName}" - Cached: $_isCached, Preloading: $_isPreloading, Progress: ${(_preloadProgress * 100).toStringAsFixed(1)}%');
+      print(
+          '🔍 VideoPlayerWidget: Video ID: ${widget.video.id}, URL: ${widget.video.videoUrl}');
+    } catch (e) {
+      print('❌ VideoPlayerWidget: Error checking cache status: $e');
+    }
+  }
+
   Future<void> _initializeController() async {
     try {
+      print('🎬 VideoPlayerWidget: Starting controller initialization...');
+
       setState(() {
         _isLoading = true;
         _errorMessage = null;
       });
 
       final videoUrl = VideoUrlService.getBestVideoUrl(widget.video);
-      print('🎬 VideoPlayerWidget: Video URL: $videoUrl');
+      print('🎬 VideoPlayerWidget: Best video URL: $videoUrl');
 
       _controller = VideoPlayerController.networkUrl(
         Uri.parse(videoUrl),
@@ -64,11 +121,14 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
         ),
       );
 
+      print('🎬 VideoPlayerWidget: Controller created, setting up...');
       await _setupController();
 
       setState(() {
         _isLoading = false;
       });
+
+      print('🎬 VideoPlayerWidget: Initialization complete!');
     } catch (e) {
       print('❌ VideoPlayerWidget: Error initializing controller: $e');
       setState(() {
@@ -290,7 +350,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
         // Video player
         VideoPlayer(_controller!),
 
-        // Touch overlay for play/pause - YouTube Shorts style
+        // Touch overlay for play/pause - YouTube Shorts style (BELOW buttons)
         GestureDetector(
           onTap: _togglePlayPause,
           child: Container(
@@ -317,68 +377,11 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
             ),
           ),
 
-        // Audio control button - ALWAYS VISIBLE
-        Positioned(
-          top: 16,
-          right: 16,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.9),
-              borderRadius: BorderRadius.circular(25),
-              border: Border.all(color: Colors.white, width: 3),
-            ),
-            child: IconButton(
-              onPressed: _toggleMute,
-              icon: Icon(
-                _isMuted ? Icons.volume_off : Icons.volume_up,
-                color: Colors.white,
-                size: 24,
-              ),
-              iconSize: 24,
-              padding: const EdgeInsets.all(12),
-            ),
-          ),
-        ),
-
-        // Debug info overlay (temporary for testing)
+        // Mute button - positioned at top left, ABOVE gesture detector
         Positioned(
           top: 16,
           left: 16,
-          child: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.green.withOpacity(0.9),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.white, width: 2),
-            ),
-            child: Text(
-              'Playing: $_isPlaying\nMuted: $_isMuted\nReady: ${_controller?.value.isInitialized}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-
-        // Progress bar at bottom
-        Positioned(
-          bottom: 0,
-          left: 0,
-          right: 0,
-          child: Container(
-            height: 4,
-            child: VideoProgressIndicator(
-              _controller!,
-              allowScrubbing: true,
-              colors: VideoProgressColors(
-                playedColor: Colors.red,
-                bufferedColor: Colors.grey,
-                backgroundColor: Colors.black54,
-              ),
-            ),
-          ),
+          child: _buildMuteButton(),
         ),
       ],
     );
@@ -525,5 +528,119 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
         ),
       ),
     );
+  }
+
+  /// Build cache status indicator for fast video delivery
+  Widget _buildCacheStatusIndicator() {
+    if (!Features.fastVideoDelivery.isEnabled) return const SizedBox.shrink();
+
+    Color indicatorColor;
+    IconData indicatorIcon;
+    String statusText;
+
+    if (_isCached) {
+      indicatorColor = Colors.green;
+      indicatorIcon = Icons.check_circle;
+      statusText = 'Cached';
+    } else if (_isPreloading) {
+      indicatorColor = Colors.blue;
+      indicatorIcon = Icons.download;
+      statusText = 'Preloading';
+    } else {
+      indicatorColor = Colors.grey;
+      indicatorIcon = Icons.cloud_download;
+      statusText = 'Not Cached';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: indicatorColor.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            indicatorIcon,
+            color: Colors.white,
+            size: 16,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            statusText,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build mute button - 35% smaller and more professional
+  Widget _buildMuteButton() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 3,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: IconButton(
+        onPressed: _toggleMute,
+        icon: Icon(
+          _isMuted ? Icons.volume_off : Icons.volume_up,
+          color: Colors.white,
+          size: 12,
+        ),
+        iconSize: 12,
+        padding: const EdgeInsets.all(6),
+        constraints: const BoxConstraints(
+          minWidth: 24,
+          minHeight: 24,
+        ),
+      ),
+    );
+  }
+
+  // Add this to your video player widget
+  void _trackBannerAdImpression() {
+    _adImpressionService.trackBannerAdImpression(
+      videoId: widget.video.id,
+      adId: 'banner_${widget.video.id}',
+      userId: _getCurrentUserId(),
+    );
+  }
+
+  // Track carousel ad impression when user scrolls
+  void _trackCarouselAdImpression(int scrollPosition) {
+    _adImpressionService.trackCarouselAdImpression(
+      videoId: widget.video.id,
+      adId: 'carousel_${widget.video.id}',
+      userId: _getCurrentUserId(),
+      scrollPosition: scrollPosition,
+    );
+  }
+
+  String _getCurrentUserId() {
+    // In a real app, you'd get the user ID from AuthService
+    // For now, return a placeholder
+    return 'user_${DateTime.now().millisecondsSinceEpoch}';
   }
 }

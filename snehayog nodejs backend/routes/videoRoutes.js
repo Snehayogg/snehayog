@@ -712,54 +712,31 @@ router.get('/debug/profile-pics', async (req, res) => {
   }
 });
 
-// Get all videos (optimized for performance)
+// Get all videos (optimized for performance) - MODIFIED FOR HLS ONLY
 router.get('/', async (req, res) => {
   try {
-    console.log('📹 Fetching videos...');
+    console.log('📹 Fetching HLS videos...');
     
     // Get query parameters for pagination
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
     
-    // Use Promise.all to run queries in parallel for better performance
+    // MODIFIED: Only return HLS-encoded videos
     const [totalVideos, videos] = await Promise.all([
-      Video.countDocuments(),
-      Video.find()
-        .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description')
+      Video.countDocuments({ isHLSEncoded: true }), // Only count HLS videos
+      Video.find({ isHLSEncoded: true }) // Only find HLS videos
+        .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded') // Include HLS fields
         .populate('uploader', 'name profilePic googleId')
         .populate('comments.user', 'name profilePic')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .lean() // Use lean() for better performance (returns plain objects)
+        .lean()
     ]);
     
-    // Debug: Log uploader data for first few videos
-    console.log('🔍 Videos route: Checking uploader data...');
-    videos.slice(0, 3).forEach((video, index) => {
-      console.log(`🔍 Video ${index + 1}:`);
-      console.log(`  - ID: ${video._id}`);
-      console.log(`  - Name: ${video.videoName}`);
-      console.log(`  - Uploader: ${JSON.stringify(video.uploader)}`);
-      if (video.uploader && video.uploader.profilePic) {
-        console.log(`  - Profile Pic URL: ${video.uploader.profilePic}`);
-        console.log(`  - Profile Pic type: ${typeof video.uploader.profilePic}`);
-      } else {
-        console.log(`  - No profile pic found`);
-      }
-    });
+    console.log(`✅ Found ${videos.length} HLS videos (page ${page}, total: ${totalVideos})`);
     
-    console.log(`✅ Found ${videos.length} videos (page ${page}, total: ${totalVideos}) in ${Date.now()}ms`);
-    
-    // Add caching headers for better performance
-    res.set({
-      'Cache-Control': 'public, max-age=30', // Cache for 30 seconds
-      'ETag': `videos-${page}-${limit}-${totalVideos}`,
-      'Last-Modified': new Date().toUTCString()
-    });
-    
-    // Return in the format the Flutter app expects
     res.json({
       videos: videos,
       hasMore: (page * limit) < totalVideos,
@@ -768,9 +745,9 @@ router.get('/', async (req, res) => {
       totalPages: Math.ceil(totalVideos / limit)
     });
   } catch (error) {
-    console.error('❌ Error fetching videos:', error);
+    console.error('❌ Error fetching HLS videos:', error);
     res.status(500).json({ 
-      error: 'Failed to fetch videos',
+      error: 'Failed to fetch HLS videos',
       message: error.message 
     });
   }
