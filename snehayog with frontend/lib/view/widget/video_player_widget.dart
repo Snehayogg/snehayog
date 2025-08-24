@@ -53,8 +53,16 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
         _errorMessage = null;
       });
 
+      // Debug video URL information
+      VideoUrlService.debugVideoUrls(widget.video);
+
       final videoUrl = VideoUrlService.getBestVideoUrl(widget.video);
       print('🎬 VideoPlayerWidget: Video URL: $videoUrl');
+
+      // Validate URL before creating controller
+      if (!_isValidVideoUrl(videoUrl)) {
+        throw Exception('Invalid video URL format: $videoUrl');
+      }
 
       _controller = VideoPlayerController.networkUrl(
         Uri.parse(videoUrl),
@@ -71,11 +79,52 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
       });
     } catch (e) {
       print('❌ VideoPlayerWidget: Error initializing controller: $e');
-      setState(() {
-        _errorMessage = e.toString();
-        _isLoading = false;
-      });
+      await _handleVideoError(e);
     }
+  }
+
+  /// Validates if a video URL is properly formatted
+  bool _isValidVideoUrl(String url) {
+    try {
+      final uri = Uri.parse(url);
+      return uri.hasAbsolutePath && 
+             (uri.scheme == 'http' || uri.scheme == 'https');
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Handles video errors with fallback strategies
+  Future<void> _handleVideoError(dynamic error) async {
+    print('❌ VideoPlayerWidget: Handling video error: $error');
+    
+    // Determine error type and user-friendly message
+    String userMessage = 'Video playback error. Please try again.';
+    bool canRetry = true;
+
+    final errorString = error.toString().toLowerCase();
+    
+    if (errorString.contains('source error') || 
+        errorString.contains('file not found') ||
+        errorString.contains('404')) {
+      userMessage = 'Video file not found. This video may not be available.';
+      canRetry = false;
+    } else if (errorString.contains('network') || 
+               errorString.contains('timeout')) {
+      userMessage = 'Network error. Check your internet connection.';
+    } else if (errorString.contains('format') || 
+               errorString.contains('codec')) {
+      userMessage = 'Video format not supported by this device.';
+      canRetry = false;
+    } else if (errorString.contains('invalid video url')) {
+      userMessage = 'Invalid video URL. Video may be corrupted.';
+      canRetry = false;
+    }
+
+    setState(() {
+      _errorMessage = userMessage;
+      _isLoading = false;
+    });
   }
 
   Future<void> _setupController() async {
@@ -85,8 +134,18 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
       // Add listener for state changes
       _controller!.addListener(_onControllerStateChanged);
 
-      // Initialize controller
-      await _controller!.initialize();
+      // Initialize controller with timeout
+      await _controller!.initialize().timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          throw Exception('Video loading timeout. Please check your connection.');
+        },
+      );
+
+      // Verify controller is properly initialized
+      if (!_controller!.value.isInitialized) {
+        throw Exception('Video controller failed to initialize properly.');
+      }
 
       // Set looping - this should work but let's also add manual completion handling
       _controller!.setLooping(true);
@@ -115,10 +174,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
           '🎬 VideoPlayerWidget: Controller setup complete with looping enabled');
     } catch (e) {
       print('❌ VideoPlayerWidget: Error in setup: $e');
-      setState(() {
-        _errorMessage = e.toString();
-        _isLoading = false;
-      });
+      await _handleVideoError(e);
     }
   }
 
@@ -480,50 +536,80 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
   /// Build error widget when video fails to load
   Widget _buildErrorWidget() {
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: Colors.black,
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.error_outline,
-                color: Colors.red,
-                size: 64,
+    return Stack(
+      children: [
+        // Show thumbnail in background
+        _buildThumbnailBackground(),
+        
+        // Error overlay
+        Container(
+          width: double.infinity,
+          height: double.infinity,
+          color: Colors.black.withOpacity(0.8),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.red,
+                    size: 80,
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'HLS Video Playback Error',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _errorMessage ?? 'Video playback error. Please try again.',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 16,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Only HLS (.m3u8) format is supported for streaming.',
+                    style: TextStyle(
+                      color: Colors.white54,
+                      fontSize: 14,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 32),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _errorMessage = null;
+                      });
+                      _initializeController();
+                    },
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry HLS'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24, 
+                        vertical: 12
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              const Text(
-                'Video playback error. Please try again.',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _errorMessage = null;
-                  });
-                  _initializeController();
-                },
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 }
