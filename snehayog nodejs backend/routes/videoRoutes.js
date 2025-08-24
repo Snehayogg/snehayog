@@ -726,7 +726,7 @@ router.get('/', async (req, res) => {
     const [totalVideos, videos] = await Promise.all([
       Video.countDocuments(),
       Video.find()
-        .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description')
+        .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl hlsVariants isHLSEncoded')
         .populate('uploader', 'name profilePic googleId')
         .populate('comments.user', 'name profilePic')
         .sort({ createdAt: -1 })

@@ -39,8 +39,14 @@ class VideoControllerManager {
 
       // FORCE HLS ONLY - Reject MP4 videos
       if (video.isHLSEncoded != true) {
+        print('❌ VideoControllerManager: Video validation failed for ${video.videoName}');
+        print('❌ VideoControllerManager: isHLSEncoded = ${video.isHLSEncoded}');
+        print('❌ VideoControllerManager: hlsMasterPlaylistUrl = ${video.hlsMasterPlaylistUrl}');
+        print('❌ VideoControllerManager: hlsPlaylistUrl = ${video.hlsPlaylistUrl}');
+        print('❌ VideoControllerManager: videoUrl = ${video.videoUrl}');
+        
         throw Exception(
-            'Video is not HLS encoded. Only .m3u8 streaming videos are supported.');
+            'Video "${video.videoName}" is not HLS encoded. Only .m3u8 streaming videos are supported. Please contact support to convert this video to HLS format.');
       }
 
       // Check if this is an HLS video

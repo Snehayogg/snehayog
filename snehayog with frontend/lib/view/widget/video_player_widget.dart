@@ -253,6 +253,32 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     });
   }
 
+  /// Get a user-friendly error message based on the error type
+  String _getErrorMessage() {
+    if (_errorMessage == null) {
+      return 'Video playback error. Please try again.';
+    }
+
+    final errorLower = _errorMessage!.toLowerCase();
+    
+    if (errorLower.contains('not hls encoded')) {
+      return 'This video needs to be converted to streaming format.\nPlease contact support.';
+    } else if (errorLower.contains('network') || errorLower.contains('connection')) {
+      return 'Network error. Please check your internet connection.';
+    } else if (errorLower.contains('format') || errorLower.contains('codec')) {
+      return 'Unsupported video format. Only streaming videos (.m3u8) are supported.';
+    } else if (errorLower.contains('timeout')) {
+      return 'Video loading timed out. Please try again.';
+    } else if (errorLower.contains('404') || errorLower.contains('not found')) {
+      return 'Video not found. It may have been removed.';
+    } else if (errorLower.contains('permission') || errorLower.contains('forbidden')) {
+      return 'Access denied. You may not have permission to view this video.';
+    } else {
+      // For any other error, show a generic message with a hint
+      return 'Video playback error.\nPlease try refreshing or contact support if the issue persists.';
+    }
+  }
+
   @override
   void dispose() {
     // Cancel all timers
@@ -496,11 +522,11 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
                 size: 64,
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Video playback error. Please try again.',
-                style: TextStyle(
+              Text(
+                _getErrorMessage(),
+                style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 18,
+                  fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
                 textAlign: TextAlign.center,
