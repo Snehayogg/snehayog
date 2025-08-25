@@ -587,26 +587,31 @@ class VideoService {
   Future<List<VideoModel>> getUserVideos(String userId) async {
     try {
       final url = '$baseUrl/api/videos/user/$userId';
-      print('Fetching user videos from: $url');
+      print('🔍 VideoService: Fetching user videos from: $url');
+      print('🔍 VideoService: User ID type: ${userId.runtimeType}');
+      print('🔍 VideoService: User ID value: $userId');
+      print('🔍 VideoService: User ID length: ${userId.length}');
 
       final response = await _makeRequest(
         () => http.get(Uri.parse(url)),
         timeout: const Duration(seconds: 30),
       );
 
-      print('Response status code: ${response.statusCode}');
-      print('Response body: ${response.body}');
+      print('🔍 VideoService: Response status code: ${response.statusCode}');
+      print('🔍 VideoService: Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         try {
           final List<dynamic> videoList = json.decode(response.body);
-          print('Successfully decoded ${videoList.length} user videos');
+          print(
+              '✅ VideoService: Successfully decoded ${videoList.length} user videos');
 
           // Process each video to ensure URLs are complete
           final videos = videoList.map((json) {
-            print('Processing video: ${json['videoName']}');
-            print('Original videoUrl: ${json['videoUrl']}');
-            print('Original thumbnailUrl: ${json['thumbnailUrl']}');
+            print('🔍 VideoService: Processing video: ${json['videoName']}');
+            print('🔍 VideoService: Original videoUrl: ${json['videoUrl']}');
+            print(
+                '🔍 VideoService: Original thumbnailUrl: ${json['thumbnailUrl']}');
 
             // Ensure videoUrl has the base URL if it's a relative path
             if (json['videoUrl'] != null &&
@@ -626,27 +631,28 @@ class VideoService {
               json['thumbnailUrl'] = '$baseUrl${json['thumbnailUrl']}';
             }
 
-            print('Final videoUrl: ${json['videoUrl']}');
-            print('Final thumbnailUrl: ${json['thumbnailUrl']}');
+            print('🔍 VideoService: Final videoUrl: ${json['videoUrl']}');
+            print(
+                '🔍 VideoService: Final thumbnailUrl: ${json['thumbnailUrl']}');
 
             return VideoModel.fromJson(json);
           }).toList();
 
           return videos;
         } catch (e) {
-          print('Error parsing JSON response: $e');
+          print('❌ VideoService: Error parsing JSON response: $e');
           throw Exception('Invalid response format from server');
         }
       } else if (response.statusCode == 404) {
-        print('No videos found for user');
+        print('⚠️ VideoService: No videos found for user');
         return [];
       } else {
-        print('Server error: ${response.statusCode}');
-        print('Error response: ${response.body}');
+        print('❌ VideoService: Server error: ${response.statusCode}');
+        print('❌ VideoService: Error response: ${response.body}');
         throw Exception('Failed to fetch user videos: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error fetching user videos: $e');
+      print('❌ VideoService: Error fetching user videos: $e');
       if (e is TimeoutException) {
         throw Exception(
             'Request timed out. Please check your internet connection and try again.');

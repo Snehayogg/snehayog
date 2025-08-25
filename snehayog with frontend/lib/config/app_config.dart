@@ -30,7 +30,10 @@ class AppConfig {
   static const int minAdBudget = 1; // Minimum daily budget in dollars
 
   // **NEW: Fixed CPM for India market**
-  static const double fixedCpm = 30.0; // ₹30 fixed CPM (Cost Per Mille)
+  static const double fixedCpm =
+      30.0; // ₹30 fixed CPM (Cost Per Mille) for carousel and video feed ads
+  static const double bannerCpm =
+      10.0; // ₹10 fixed CPM (Cost Per Mille) for banner ads
 
   // **NEW: Creator Revenue Model**
   static const double creatorRevenueShare = 0.80; // 80% to creator
@@ -147,6 +150,10 @@ class AppConfig {
 
   static int calculateImpressionsFromBudget(double budget) {
     return (budget / fixedCpm * 1000).round();
+  }
+
+  static int calculateImpressionsFromBudgetWithCpm(double budget, double cpm) {
+    return (budget / cpm * 1000).round();
   }
 
   // **NEW: Check if backend is accessible**

@@ -23,6 +23,10 @@ router.post('/', validateCampaignData, asyncHandler(async (req, res) => {
     frequencyCap
   } = req.body;
 
+  // Use default CPM for carousel/video feed ads (₹30)
+  // Banner ads will use ₹10 CPM when created through ad creation
+  const defaultCpm = 30; // ₹30 per 1000 impressions for carousel and video feed ads
+
   const campaign = new AdCampaign({
     name,
     advertiserUserId: req.user.id,
@@ -32,7 +36,7 @@ router.post('/', validateCampaignData, asyncHandler(async (req, res) => {
     dailyBudget,
     totalBudget,
     bidType: bidType || 'CPM',
-    cpmINR: cpmINR || 30,
+    cpmINR: cpmINR || defaultCpm,
     target: target || {},
     pacing: pacing || 'smooth',
     frequencyCap: frequencyCap || 3

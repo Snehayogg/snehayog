@@ -426,9 +426,9 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
 
   /// Build thumbnail background
   Widget _buildThumbnailBackground() {
-    if (widget.video.thumbnailUrl?.isNotEmpty == true) {
+    if (widget.video.thumbnailUrl.isNotEmpty == true) {
       return CachedNetworkImage(
-        imageUrl: widget.video.thumbnailUrl!,
+        imageUrl: widget.video.thumbnailUrl,
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,

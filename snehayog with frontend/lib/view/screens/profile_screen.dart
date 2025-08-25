@@ -11,9 +11,12 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:snehayog/config/app_config.dart';
 import 'package:snehayog/core/managers/profile_state_manager.dart';
+import 'package:snehayog/services/video_service.dart';
 import 'package:provider/provider.dart';
 import 'package:snehayog/core/providers/user_provider.dart';
 import 'package:snehayog/model/usermodel.dart';
+import 'package:snehayog/services/authservices.dart';
+import 'package:snehayog/utils/feature_flags.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -35,6 +38,8 @@ class _ProfileScreenState extends State<ProfileScreen>
     with WidgetsBindingObserver {
   late final ProfileStateManager _stateManager;
   final ImagePicker _imagePicker = ImagePicker();
+  bool _isLoading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -42,14 +47,33 @@ class _ProfileScreenState extends State<ProfileScreen>
     WidgetsBinding.instance.addObserver(this);
     _stateManager = ProfileStateManager();
 
-    // Load user data immediately
-    _loadUserData();
+    // Initialize loading state
+    _isLoading = true;
+    _error = null;
 
-    // Load user data from UserProvider for real-time follower updates
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && widget.userId != null) {
-        final userProvider = Provider.of<UserProvider>(context, listen: false);
-        userProvider.getUserDataWithFollowers(widget.userId!);
+    // **FIXED: Use feature flag to control enhanced profile loading**
+    if (Features.enhancedProfileLoading.isEnabled) {
+      // NEW: Enhanced profile loading with post-frame callback
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          print(
+              '🔄 ProfileScreen: Enhanced loading enabled - post-frame callback');
+          _loadUserData();
+        }
+      });
+    } else {
+      // ORIGINAL: Standard initialization without post-frame callback
+      print('🔄 ProfileScreen: Using standard profile initialization');
+    }
+
+    // Add a timeout to prevent infinite loading
+    Timer(const Duration(seconds: 10), () {
+      if (mounted && _isLoading) {
+        print('⚠️ ProfileScreen: Loading timeout reached, forcing refresh');
+        setState(() {
+          _isLoading = false;
+          _error = 'Loading timeout reached';
+        });
       }
     });
   }
@@ -59,25 +83,48 @@ class _ProfileScreenState extends State<ProfileScreen>
     super.didChangeDependencies();
     _stateManager.setContext(context);
 
-    // Only load user data if we don't have it yet or if it's a different user
-    if (widget.userId != null && _stateManager.userData == null) {
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
-      userProvider.getUserDataWithFollowers(widget.userId!);
+    // **FIXED: Only load data if not already loading and no data available**
+    if (!_isLoading && _stateManager.userData == null && _error == null) {
+      print('🔍 ProfileScreen: didChangeDependencies - loading user data');
+      _loadUserData();
+    }
+  }
+
+  // **NEW: Method to handle when profile screen becomes visible**
+  void onProfileTabSelected() {
+    print(
+        '🔄 ProfileScreen: Profile tab selected - checking if data needs to be loaded');
+
+    // **FIXED: Use feature flag to control enhanced profile loading**
+    if (Features.enhancedProfileLoading.isEnabled) {
+      // If we don't have user data and we're not currently loading, load it
+      if (_stateManager.userData == null && !_isLoading && _error == null) {
+        print('🔄 ProfileScreen: Enhanced loading enabled - loading user data');
+        _loadUserData();
+      } else if (_stateManager.userData != null) {
+        print('✅ ProfileScreen: User data already available');
+      } else if (_isLoading) {
+        print('⏳ ProfileScreen: Already loading user data');
+      } else if (_error != null) {
+        print('⚠️ ProfileScreen: Error state, user can retry');
+      }
+    } else {
+      // ORIGINAL: No enhanced loading behavior
+      print(
+          '🔄 ProfileScreen: Enhanced loading disabled - using standard behavior');
     }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    // Refresh user data when app becomes visible
+    // **FIXED: Use consistent data refresh approach**
     if (state == AppLifecycleState.resumed) {
       print('🔄 ProfileScreen: App resumed, refreshing data...');
-      if (widget.userId != null) {
-        final userProvider = Provider.of<UserProvider>(context, listen: false);
-        userProvider.refreshUserDataForId(widget.userId!);
+      // Refresh all data using the main loading method
+      if (mounted && !_isLoading) {
+        _loadUserData();
       }
-      // Also refresh videos in profile
-      _stateManager.refreshVideosOnly();
     }
   }
 
@@ -91,30 +138,134 @@ class _ProfileScreenState extends State<ProfileScreen>
   Future<void> _loadUserData() async {
     print('🔄 ProfileScreen: Loading user data for userId: ${widget.userId}');
 
-    // First, check if we have any stored authentication data
     try {
+      // Set loading state
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+
+      // First, check if we have any stored authentication data
       final prefs = await SharedPreferences.getInstance();
       final hasJwtToken = prefs.getString('jwt_token') != null;
       final hasFallbackUser = prefs.getString('fallback_user') != null;
+
+      print(
+          '🔍 ProfileScreen: Auth check - JWT: $hasJwtToken, Fallback: $hasFallbackUser');
 
       if (!hasJwtToken && !hasFallbackUser) {
         print(
             '❌ ProfileScreen: No authentication data found - user needs to sign in');
         setState(() {
-          // Force the sign-in view to show
+          _isLoading = false;
+          _error = 'No authentication data found';
         });
         return;
       }
-    } catch (e) {
-      print('❌ ProfileScreen: Error checking authentication data: $e');
-    }
 
-    try {
+      // **FIXED: Always load user data via UserProvider for profile info**
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+
+      // If userId is provided, load that specific user's data
+      if (widget.userId != null) {
+        print(
+            '🔄 ProfileScreen: Loading user data via UserProvider for ID: ${widget.userId}');
+        print('🔄 ProfileScreen: userId type: ${widget.userId.runtimeType}');
+        print('🔄 ProfileScreen: userId length: ${widget.userId!.length}');
+
+        final userData =
+            await userProvider.getUserDataWithFollowers(widget.userId!);
+        if (userData != null) {
+          print(
+              '✅ ProfileScreen: User data loaded via UserProvider: ${userData.name}');
+        } else {
+          print('⚠️ ProfileScreen: UserProvider returned null data');
+        }
+      } else {
+        // If no userId, load current user's data from ProfileStateManager
+        print(
+            '🔄 ProfileScreen: Loading current user data from ProfileStateManager');
+
+        // **FIXED: Check if ProfileStateManager already has user data**
+        if (_stateManager.userData != null) {
+          // Get current user ID from ProfileStateManager
+          final currentUserId = _stateManager.userData!['id'];
+          print(
+              '🔄 ProfileScreen: Current user ID from ProfileStateManager: $currentUserId');
+          print(
+              '🔄 ProfileScreen: Current user ID type: ${currentUserId.runtimeType}');
+          print(
+              '🔄 ProfileScreen: Current user ID length: ${currentUserId?.length ?? 'null'}');
+
+          if (currentUserId != null) {
+            print(
+                '🔄 ProfileScreen: Loading current user data for ID: $currentUserId');
+            final userData =
+                await userProvider.getUserDataWithFollowers(currentUserId);
+            if (userData != null) {
+              print(
+                  '✅ ProfileScreen: Current user data loaded: ${userData.name}');
+            }
+          }
+        } else {
+          // **NEW: If ProfileStateManager doesn't have user data, try to get it from AuthService**
+          print(
+              '🔄 ProfileScreen: ProfileStateManager has no user data, trying AuthService');
+          try {
+            final authService = AuthService();
+            final authUserData = await authService.getUserData();
+            if (authUserData != null && authUserData['id'] != null) {
+              print(
+                  '🔄 ProfileScreen: Got user data from AuthService: ${authUserData['id']}');
+              final userData = await userProvider
+                  .getUserDataWithFollowers(authUserData['id']);
+              if (userData != null) {
+                print(
+                    '✅ ProfileScreen: User data loaded from AuthService: ${userData.name}');
+              }
+            }
+          } catch (e) {
+            print(
+                '⚠️ ProfileScreen: Error getting user data from AuthService: $e');
+          }
+        }
+      }
+
+      // **FIXED: Load profile data via ProfileStateManager for videos and profile info**
       await _stateManager.loadUserData(widget.userId);
-      print('✅ ProfileScreen: User data loaded successfully');
+      print('✅ ProfileScreen: Profile data loaded successfully');
+
+      // **DEBUG: Check what data was loaded**
+      print(
+          '🔍 ProfileScreen: ProfileStateManager userData: ${_stateManager.userData}');
+      print(
+          '🔍 ProfileScreen: ProfileStateManager userVideos count: ${_stateManager.userVideos.length}');
+
+      if (_stateManager.userData != null) {
+        print(
+            '🔍 ProfileScreen: User ID from ProfileStateManager: ${_stateManager.userData!['id']}');
+        print(
+            '🔍 ProfileScreen: User Name from ProfileStateManager: ${_stateManager.userData!['name']}');
+        print(
+            '🔍 ProfileScreen: User Email from ProfileStateManager: ${_stateManager.userData!['email']}');
+      }
+
+      // Trigger rebuild to show profile content
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = null;
+        });
+      }
     } catch (e) {
       print('❌ ProfileScreen: Error loading user data: $e');
+
       if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = e.toString();
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error loading profile: $e'),
@@ -423,56 +574,58 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Widget _buildSignInView() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.account_circle,
-              size: 100,
-              color: Color(0xFF757575),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Sign in to view your profile',
-              style: TextStyle(
-                fontSize: 20,
-                color: Color(0xFF424242),
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'You need to sign in with your Google account to access your profile, upload videos, and track your earnings.',
-              style: TextStyle(
-                fontSize: 14,
+    return RepaintBoundary(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.account_circle,
+                size: 100,
                 color: Color(0xFF757575),
               ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 30),
-            ElevatedButton.icon(
-              onPressed: _handleGoogleSignIn,
-              icon: Image.network(
-                'https://www.google.com/favicon.ico',
-                height: 24,
+              const SizedBox(height: 20),
+              const Text(
+                'Sign in to view your profile',
+                style: TextStyle(
+                  fontSize: 20,
+                  color: Color(0xFF424242),
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
               ),
-              label: const Text('Sign in with Google'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: const Color(0xFF424242),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  side: const BorderSide(color: Color(0xFFE0E0E0)),
+              const SizedBox(height: 12),
+              const Text(
+                'You need to sign in with your Google account to access your profile, upload videos, and track your earnings.',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF757575),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton.icon(
+                onPressed: _handleGoogleSignIn,
+                icon: Image.network(
+                  'https://www.google.com/favicon.ico',
+                  height: 24,
+                ),
+                label: const Text('Sign in with Google'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: const Color(0xFF424242),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: const BorderSide(color: Color(0xFFE0E0E0)),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -491,143 +644,125 @@ class _ProfileScreenState extends State<ProfileScreen>
             userModel = userProvider.getUserData(widget.userId!);
           }
 
-          // Wrap with ProfileStateManager Consumer to listen to its changes
-          return Consumer<ProfileStateManager>(
-            builder: (context, profileManager, child) {
-              return _buildBody(userProvider, userModel);
-            },
-          );
+          // Use the local _stateManager directly since it's not in Provider
+          return _buildBody(userProvider, userModel);
         },
       ),
     );
   }
 
   Widget _buildBody(UserProvider userProvider, UserModel? userModel) {
-    // Check if we have any authentication data
-    if (_stateManager.userData == null && !_stateManager.isLoading) {
-      // Check if we have stored authentication data
-      return FutureBuilder<SharedPreferences>(
-        future: SharedPreferences.getInstance(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+    // Debug logging
+    print('🔍 ProfileScreen: _buildBody called');
+    print('🔍 ProfileScreen: _isLoading: $_isLoading');
+    print('🔍 ProfileScreen: _error: $_error');
+    print(
+        '🔍 ProfileScreen: userData: ${_stateManager.userData != null ? "Available" : "Not Available"}');
+    print('🔍 ProfileScreen: userId: ${widget.userId}');
 
-          if (snapshot.hasData) {
-            final prefs = snapshot.data!;
-            final hasJwtToken = prefs.getString('jwt_token') != null;
-            final hasFallbackUser = prefs.getString('fallback_user') != null;
-
-            if (!hasJwtToken && !hasFallbackUser) {
-              // No authentication data - show sign-in view
-              return _buildSignInView();
-            } else {
-              // We have auth data but user data failed to load - show error with retry
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.error_outline,
-                      size: 64,
-                      color: Colors.red[300],
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Failed to load profile data',
-                      style: TextStyle(
-                        color: Colors.red[700],
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'You appear to be signed in, but we couldn\'t load your profile.',
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 14,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 24),
-                    ElevatedButton.icon(
-                      onPressed: _loadUserData,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Retry Loading Profile'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 24, vertical: 12),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextButton.icon(
-                      onPressed: _handleGoogleSignIn,
-                      icon: const Icon(Icons.login),
-                      label: const Text('Sign In Again'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.blue,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }
-          }
-
-          // Fallback to sign-in view if SharedPreferences fails
-          return _buildSignInView();
-        },
-      );
-    }
-
-    if (_stateManager.isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
-    }
-
-    if (_stateManager.error != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 64,
-              color: Colors.red[300],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              _stateManager.error!,
-              style: TextStyle(
-                color: Colors.red[700],
-                fontSize: 16,
+    // Show loading indicator
+    if (_isLoading) {
+      print('🔍 ProfileScreen: Showing loading indicator');
+      return RepaintBoundary(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              const Text('Loading profile...'),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: _loadUserData,
+                child: const Text('Retry'),
               ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _loadUserData,
-              child: const Text('Retry'),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
 
+    // Show error state
+    if (_error != null) {
+      print('🔍 ProfileScreen: Showing error: $_error');
+
+      // If it's an authentication error, show sign-in view
+      if (_error == 'No authentication data found') {
+        return _buildSignInView();
+      }
+
+      // Otherwise show error with retry
+      return RepaintBoundary(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 64,
+                color: Colors.red[300],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Failed to load profile data',
+                style: TextStyle(
+                  color: Colors.red[700],
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'You appear to be signed in, but we couldn\'t load your profile.',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: _loadUserData,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry Loading Profile'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextButton.icon(
+                onPressed: _handleGoogleSignIn,
+                icon: const Icon(Icons.login),
+                label: const Text('Sign In Again'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.blue,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Check if we have user data
+    if (_stateManager.userData == null) {
+      print('🔍 ProfileScreen: No user data available - showing sign-in view');
+      return _buildSignInView();
+    }
+
+    // If we reach here, we have user data and can show the profile
+    print('🔍 ProfileScreen: User data available - showing profile content');
+
+    print('🔍 ProfileScreen: Showing profile content - user data available');
     return RefreshIndicator(
       onRefresh: () async {
-        await _stateManager.refreshVideosOnly();
-        // Also refresh user data if needed
-        if (widget.userId != null) {
-          final userProvider =
-              Provider.of<UserProvider>(context, listen: false);
-          userProvider.refreshUserDataForId(widget.userId!);
-        }
+        print('🔍 ProfileScreen: Refresh triggered');
+        // **FIXED: Use consistent refresh approach**
+        await _loadUserData();
       },
       child: SingleChildScrollView(
         physics:
@@ -691,12 +826,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Debug Info:',
+                          const Text('Debug Info:',
                               style: TextStyle(fontWeight: FontWeight.bold)),
                           Text(
                               'User Data: ${_stateManager.userData != null ? "Available" : "Not Available"}'),
-                          Text('Loading: ${_stateManager.isLoading}'),
-                          Text('Error: ${_stateManager.error ?? "None"}'),
+                          Text('Loading: $_isLoading'),
+                          Text('Error: ${_error ?? "None"}'),
                         ],
                       ),
                     ),
@@ -774,11 +909,68 @@ class _ProfileScreenState extends State<ProfileScreen>
                       },
                     ),
                     ListTile(
+                      leading: const Icon(Icons.data_usage, color: Colors.blue),
+                      title: const Text('Debug State'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _debugState();
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.api, color: Colors.purple),
+                      title: const Text('Check API Endpoints'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _checkApiEndpoints();
+                      },
+                    ),
+                    ListTile(
                       leading: const Icon(Icons.clear_all, color: Colors.red),
                       title: const Text('Clear Auth Data'),
                       onTap: () {
                         Navigator.pop(context);
                         _clearAuthenticationData();
+                      },
+                    ),
+                    // **NEW: Video playback test**
+                    ListTile(
+                      leading:
+                          const Icon(Icons.play_circle, color: Colors.green),
+                      title: const Text('Test Video Playback'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _testVideoPlayback();
+                      },
+                    ),
+                    // **NEW: Feature flag controls for testing**
+                    const Divider(height: 1),
+                    const Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: Text('Feature Flags:',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 12)),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.flag, color: Colors.blue),
+                      title: const Text('Enhanced Profile Loading'),
+                      subtitle: Text(Features.enhancedProfileLoading.isEnabled
+                          ? 'Enabled'
+                          : 'Disabled'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _toggleFeatureFlag('enhanced_profile_loading');
+                      },
+                    ),
+                    ListTile(
+                      leading:
+                          const Icon(Icons.play_circle, color: Colors.green),
+                      title: const Text('Profile Video Playback Fix'),
+                      subtitle: Text(Features.profileVideoPlaybackFix.isEnabled
+                          ? 'Enabled'
+                          : 'Disabled'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _toggleFeatureFlag('profile_video_playback_fix');
                       },
                     ),
                     const SizedBox(height: 16),
@@ -793,7 +985,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Widget _buildProfileHeader(UserProvider userProvider, UserModel? userModel) {
-    return Container(
+    return RepaintBoundary(
+        child: Container(
       padding: ResponsiveHelper.getAdaptivePadding(context),
       child: Column(
         children: [
@@ -803,10 +996,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                 radius: ResponsiveHelper.isMobile(context) ? 50 : 75,
                 backgroundColor: const Color(0xFFF5F5F5),
                 backgroundImage: userModel?.profilePic != null
-                    ? userModel!.profilePic!.startsWith('http')
-                        ? NetworkImage(userModel!.profilePic!)
-                        : FileImage(File(userModel!.profilePic!))
-                            as ImageProvider
+                    ? userModel!.profilePic.startsWith('http')
+                        ? NetworkImage(userModel.profilePic)
+                        : FileImage(File(userModel.profilePic)) as ImageProvider
                     : null,
                 onBackgroundImageError: (exception, stackTrace) {
                   print('Error loading profile image: $exception');
@@ -942,11 +1134,12 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
         ],
       ),
-    );
+    ));
   }
 
   Widget _buildProfileContent(UserProvider userProvider, UserModel? userModel) {
-    return Column(
+    return RepaintBoundary(
+        child: Column(
       children: [
         Container(
           padding: EdgeInsets.symmetric(
@@ -1067,26 +1260,85 @@ class _ProfileScreenState extends State<ProfileScreen>
                     onTap: () {
                       // Single tap: Play video (navigate to VideoScreen)
                       if (!_stateManager.isSelecting) {
-                        final updatedVideos =
-                            _stateManager.userVideos.map((video) {
-                          if (userModel?.name != null) {
-                            return video.copyWith(
-                              uploader: video.uploader
-                                  .copyWith(name: userModel!.name),
-                            );
-                          }
-                          return video;
-                        }).toList();
+                        print(
+                            '🔍 ProfileScreen: Video tapped, preparing to navigate to VideoScreen');
+                        print('🔍 ProfileScreen: Video ID: ${video.id}');
+                        print('🔍 ProfileScreen: Video URL: ${video.videoUrl}');
+                        print(
+                            '🔍 ProfileScreen: Video Name: ${video.videoName}');
+                        print(
+                            '🔍 ProfileScreen: User Model: ${userModel?.name}');
+                        print(
+                            '🔍 ProfileScreen: Total videos: ${_stateManager.userVideos.length}');
 
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => VideoScreen(
-                              initialIndex: index,
-                              initialVideos: updatedVideos,
+                        // **FIXED: Use feature flag to control video loading approach**
+                        if (Features.profileVideoPlaybackFix.isEnabled) {
+                          // NEW: Enhanced video loading with user data update
+                          final updatedVideos =
+                              _stateManager.userVideos.map((video) {
+                            if (userModel?.name != null) {
+                              print(
+                                  '🔍 ProfileScreen: Updating video ${video.id} with uploader name: ${userModel!.name}');
+                              return video.copyWith(
+                                uploader: video.uploader
+                                    .copyWith(name: userModel!.name),
+                              );
+                            }
+                            return video;
+                          }).toList();
+
+                          print(
+                              '🔍 ProfileScreen: Updated videos count: ${updatedVideos.length}');
+                          print(
+                              '🔍 ProfileScreen: Navigating to VideoScreen with index: $index');
+
+                          // **DEBUG: Check video data structure**
+                          if (updatedVideos.isNotEmpty &&
+                              index < updatedVideos.length) {
+                            final targetVideo = updatedVideos[index];
+                            print('🔍 ProfileScreen: Target video details:');
+                            print(
+                                '🔍 ProfileScreen:   - ID: ${targetVideo.id}');
+                            print(
+                                '🔍 ProfileScreen:   - Name: ${targetVideo.videoName}');
+                            print(
+                                '🔍 ProfileScreen:   - URL: ${targetVideo.videoUrl}');
+                            print(
+                                '🔍 ProfileScreen:   - Thumbnail: ${targetVideo.thumbnailUrl}');
+                            print(
+                                '🔍 ProfileScreen:   - Uploader: ${targetVideo.uploader.name}');
+                            print(
+                                '🔍 ProfileScreen:   - Duration: ${targetVideo.duration}');
+                            print(
+                                '🔍 ProfileScreen:   - Video Type: ${targetVideo.videoType}');
+                          }
+
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => VideoScreen(
+                                initialIndex: index,
+                                initialVideos: updatedVideos,
+                              ),
                             ),
-                          ),
-                        );
+                          );
+                        } else {
+                          // **ORIGINAL WORKING APPROACH: Direct navigation without data modification**
+                          print(
+                              '🔍 ProfileScreen: Using original working video navigation approach');
+                          print(
+                              '🔍 ProfileScreen: Navigating to VideoScreen with index: $index');
+
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => VideoScreen(
+                                initialIndex: index,
+                                initialVideos: _stateManager.userVideos,
+                              ),
+                            ),
+                          );
+                        }
                       } else if (_stateManager.isSelecting && canSelectVideo) {
                         // Use proper logic for video selection
                         print('🔍 Video tapped in selection mode');
@@ -1267,7 +1519,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
         ),
       ],
-    );
+    ));
   }
 
   Future<bool> _checkPaymentSetupStatus() async {
@@ -1423,10 +1675,222 @@ class _ProfileScreenState extends State<ProfileScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error clearing authentication data: $e'),
-            backgroundColor: Colors.red,
           ),
         );
       }
     }
+  }
+
+  /// Check API endpoints being used
+  void _checkApiEndpoints() {
+    print('🔍 ProfileScreen: === CHECKING API ENDPOINTS ===');
+
+    // Check AppConfig.baseUrl
+    try {
+      final appConfig = AppConfig.baseUrl;
+      print('🔍 ProfileScreen: AppConfig.baseUrl: $appConfig');
+    } catch (e) {
+      print('❌ ProfileScreen: Error getting AppConfig.baseUrl: $e');
+    }
+
+    // Check VideoService.baseUrl
+    try {
+      final videoServiceUrl = VideoService.baseUrl;
+      print('🔍 ProfileScreen: VideoService.baseUrl: $videoServiceUrl');
+    } catch (e) {
+      print('❌ ProfileScreen: Error getting VideoService.baseUrl: $e');
+    }
+
+    // Check if endpoints are different
+    try {
+      final appConfig = AppConfig.baseUrl;
+      final videoServiceUrl = VideoService.baseUrl;
+      if (appConfig != videoServiceUrl) {
+        print('⚠️ ProfileScreen: WARNING - Different base URLs detected!');
+        print('   AppConfig: $appConfig');
+        print('   VideoService: $videoServiceUrl');
+        print('   This could cause API endpoint conflicts!');
+      } else {
+        print('✅ ProfileScreen: Base URLs are consistent');
+      }
+    } catch (e) {
+      print('❌ ProfileScreen: Error comparing base URLs: $e');
+    }
+
+    // Show in UI
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('API Endpoints Check'),
+          content: const Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Check the console for detailed endpoint information.'),
+              SizedBox(height: 16),
+              Text('Key endpoints used:'),
+              Text('• AuthService: /api/users/profile'),
+              Text('• UserService: /api/users/{userId}'),
+              Text('• VideoService: /api/videos/user/{userId}'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  /// Debug method to show current state
+  void _debugState() {
+    print('🔍 ProfileScreen: === DEBUG STATE ===');
+    print(
+        '🔍 ProfileScreen: userData: ${_stateManager.userData != null ? "Available" : "Not Available"}');
+    print('🔍 ProfileScreen: _isLoading: $_isLoading');
+    print('🔍 ProfileScreen: _error: $_error');
+    print(
+        '🔍 ProfileScreen: userVideos count: ${_stateManager.userVideos.length}');
+    print('🔍 ProfileScreen: userId: ${widget.userId}');
+
+    // **NEW: Check UserProvider data**
+    if (widget.userId != null) {
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final userModel = userProvider.getUserData(widget.userId!);
+      print(
+          '🔍 ProfileScreen: UserProvider data: ${userModel != null ? "Available" : "Not Available"}');
+      if (userModel != null) {
+        print(
+            '🔍 ProfileScreen: UserProvider - Name: ${userModel.name}, Followers: ${userModel.followersCount}');
+      }
+    }
+
+    // Check SharedPreferences
+    SharedPreferences.getInstance().then((prefs) {
+      final hasJwtToken = prefs.getString('jwt_token') != null;
+      final hasFallbackUser = prefs.getString('fallback_user') != null;
+      print(
+          '🔍 ProfileScreen: SharedPreferences - JWT: $hasJwtToken, Fallback: $hasFallbackUser');
+    });
+
+    // Show debug info in UI
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Debug State'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                  'User Data: ${_stateManager.userData != null ? "Available" : "Not Available"}'),
+              Text('Loading: $_isLoading'),
+              Text('Error: ${_error ?? "None"}'),
+              Text('Videos: ${_stateManager.userVideos.length}'),
+              Text('User ID: ${widget.userId ?? "None"}'),
+              // **NEW: Show UserProvider data**
+              if (widget.userId != null) ...[
+                const SizedBox(height: 8),
+                Consumer<UserProvider>(
+                  builder: (context, userProvider, child) {
+                    final userModel = userProvider.getUserData(widget.userId!);
+                    return Text(
+                        'UserProvider: ${userModel != null ? "Available" : "Not Available"}');
+                  },
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _loadUserData();
+              },
+              child: const Text('Force Load'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  /// **NEW: Test video playback to debug issues**
+  void _testVideoPlayback() {
+    print('🔍 ProfileScreen: === TESTING VIDEO PLAYBACK ===');
+
+    if (_stateManager.userVideos.isEmpty) {
+      print('❌ ProfileScreen: No videos available to test');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No videos available to test'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final testVideo = _stateManager.userVideos.first;
+    print('🔍 ProfileScreen: Testing with video: ${testVideo.videoName}');
+    print('🔍 ProfileScreen: Video URL: ${testVideo.videoUrl}');
+    print('🔍 ProfileScreen: Video ID: ${testVideo.id}');
+
+    // Try to navigate to VideoScreen with just this one video
+    try {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => VideoScreen(
+            initialIndex: 0,
+            initialVideos: [testVideo],
+          ),
+        ),
+      );
+      print('✅ ProfileScreen: Successfully navigated to VideoScreen');
+    } catch (e) {
+      print('❌ ProfileScreen: Error navigating to VideoScreen: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// **NEW: Toggle feature flags for testing**
+  void _toggleFeatureFlag(String featureName) {
+    final currentState = FeatureFlags.instance.isEnabled(featureName);
+    if (currentState) {
+      FeatureFlags.instance.disable(featureName);
+      print('🔧 ProfileScreen: Disabled feature flag: $featureName');
+    } else {
+      FeatureFlags.instance.enable(featureName);
+      print('🔧 ProfileScreen: Enabled feature flag: $featureName');
+    }
+
+    // Show feedback to user
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              '${featureName.replaceAll('_', ' ').toUpperCase()}: ${!currentState ? 'Enabled' : 'Disabled'}'),
+          backgroundColor: !currentState ? Colors.green : Colors.orange,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+
+    // Force rebuild to update UI
+    setState(() {});
   }
 }

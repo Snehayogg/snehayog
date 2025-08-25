@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
+import { config } from '../config.js';
 
 dotenv.config();
 
@@ -10,18 +11,41 @@ console.log('🔍 Using Google Client ID:', GOOGLE_CLIENT_ID.substring(0, 20) + 
 const client = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 export const verifyGoogleToken = async (idToken) => {
+    console.log('🔍 verifyGoogleToken Debug:');
+    console.log('🔍 Input idToken (first 50 chars):', idToken.substring(0, 50) + '...');
+    console.log('🔍 Input idToken length:', idToken.length);
+    
     const ticket = await client.verifyIdToken({
         idToken,
         audience: GOOGLE_CLIENT_ID,
     });
     const payload = ticket.getPayload();
+    
+    console.log('🔍 Google token payload extracted:');
+    console.log('🔍 payload.sub:', payload.sub);
+    console.log('🔍 payload.sub type:', typeof payload.sub);
+    console.log('🔍 payload.sub length:', payload.sub ? payload.sub.length : 'null');
+    console.log('🔍 Full payload keys:', Object.keys(payload));
+    
     return payload;
 };
 
 export const generateJWT = (userId) => {
-    const JWT_SECRET = process.env.JWT_SECRET || 'hT7#bY29!sK8@Lp$9vRn*qX2mNe%zW13';
+    const JWT_SECRET = process.env.JWT_SECRET || config.auth.jwtSecret;
+    console.log('🔍 JWT Generation Debug:');
+    console.log('🔍 Input userId:', userId);
+    console.log('🔍 Input userId type:', typeof userId);
+    console.log('🔍 Input userId length:', userId ? userId.length : 'null');
+    console.log('🔍 Input userId trimmed:', userId ? userId.trim() : 'null');
     console.log('🔍 Using JWT_SECRET:', JWT_SECRET.substring(0, 10) + '...');
-    return jwt.sign({ id: userId }, JWT_SECRET, { expiresIn: '1h' });
+    
+    const payload = { id: userId };
+    console.log('🔍 JWT payload being signed:', JSON.stringify(payload, null, 2));
+    
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
+    console.log('🔍 Generated JWT token (first 50 chars):', token.substring(0, 50) + '...');
+    
+    return token;
 };
 
 // Middleware to verify Google access token
@@ -85,16 +109,23 @@ export const verifyToken = async (req, res, next) => {
                         // Final fallback: try to verify as JWT token
         try {
             console.log('🔍 Trying JWT verification...');
-            const JWT_SECRET = process.env.JWT_SECRET || 'hT7#bY29!sK8@Lp$9vRn*qX2mNe%zW13';
+            const JWT_SECRET = process.env.JWT_SECRET || config.auth.jwtSecret;
             const decoded = jwt.verify(token, JWT_SECRET);
+            
+            console.log('🔍 JWT decoded successfully');
+            console.log('🔍 Full decoded token:', JSON.stringify(decoded, null, 2));
+            console.log('🔍 Token user ID type:', typeof decoded.id);
+            console.log('🔍 Token user ID value:', decoded.id);
+            console.log('🔍 Token user ID length:', decoded.id ? decoded.id.length : 'null');
+            console.log('🔍 Token user ID trimmed:', decoded.id ? decoded.id.trim() : 'null');
+            
             req.user = {
                 ...decoded,
                 googleId: decoded.id // Ensure googleId is set for JWT tokens too
             };
+            
             console.log('✅ JWT token verified successfully for user:', decoded.id);
-            console.log('🔍 Full decoded token:', JSON.stringify(decoded, null, 2));
-            console.log('🔍 Token user ID type:', typeof decoded.id);
-            console.log('🔍 Token user ID value:', decoded.id);
+            console.log('🔍 Final req.user object:', JSON.stringify(req.user, null, 2));
             next();
         } catch (jwtError) {
                     console.error('❌ All token verification methods failed');

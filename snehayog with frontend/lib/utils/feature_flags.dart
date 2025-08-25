@@ -23,6 +23,10 @@ class FeatureFlags {
     'instant_video_playback': true, // Zero loading time
     'video_memory_optimization': true, // Memory management
 
+    // Profile features
+    'enhanced_profile_loading': false, // NEW: Control new profile loading logic
+    'profile_video_playback_fix': false, // NEW: Control video playback fix
+
     // UI features
     'new_ui_theme': false,
     'dark_mode': true,
@@ -102,6 +106,10 @@ class Features {
   static const String smartVideoCaching = 'smart_video_caching';
   static const String instantVideoPlayback = 'instant_video_playback';
   static const String videoMemoryOptimization = 'video_memory_optimization';
+
+  // NEW: Profile features
+  static const String enhancedProfileLoading = 'enhanced_profile_loading';
+  static const String profileVideoPlaybackFix = 'profile_video_playback_fix';
 
   static const String newUITheme = 'new_ui_theme';
   static const String darkMode = 'dark_mode';

@@ -67,27 +67,36 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   /// Calculate revenue for a specific video based on AD IMPRESSIONS ONLY
   double _calculateVideoRevenue(VideoModel video) {
     try {
-      // Fixed CPM (Cost Per Mille) - ₹30 per 1000 ad impressions
-      const cpm = 30.0; // ₹30 per 1000 impressions
+      // Get ad impressions by type for this video
+      final bannerImpressions =
+          _adImpressionService.getBannerAdImpressions(video.id);
+      final carouselImpressions =
+          _adImpressionService.getCarouselAdImpressions(video.id);
 
-      // Get total ad impressions for this video
-      final totalAdImpressions = _getTotalAdImpressionsForVideo(video.id);
+      // Calculate revenue using different CPM values
+      // Banner ads: ₹10 per 1000 impressions, Carousel ads: ₹30 per 1000 impressions
+      const bannerCpm = 10.0; // ₹10 per 1000 banner ad impressions
+      const carouselCpm = 30.0; // ₹30 per 1000 carousel ad impressions
 
-      // Simple calculation: (Ad Impressions / 1000) × CPM
-      final revenue = (totalAdImpressions / 1000) * cpm;
+      final bannerRevenue = (bannerImpressions / 1000) * bannerCpm;
+      final carouselRevenue = (carouselImpressions / 1000) * carouselCpm;
+      final totalRevenue = bannerRevenue + carouselRevenue;
 
       print('💰 Video: ${video.videoName}');
-      print('💰 Ad Impressions: $totalAdImpressions');
-      print('💰 Revenue: ₹${revenue.toStringAsFixed(2)}');
+      print(
+          '💰 Banner Impressions: $bannerImpressions (₹${bannerRevenue.toStringAsFixed(2)})');
+      print(
+          '💰 Carousel Impressions: $carouselImpressions (₹${carouselRevenue.toStringAsFixed(2)})');
+      print('💰 Total Revenue: ₹${totalRevenue.toStringAsFixed(2)}');
 
-      return revenue;
+      return totalRevenue;
     } catch (e) {
       print('❌ Error calculating video revenue: $e');
       return 0.0;
     }
   }
 
-  /// Get total ad impressions (banner + carousel ads)
+  /// Get total ad impressions (banner + carousel ads) - for display purposes
   int _getTotalAdImpressionsForVideo(String videoId) {
     try {
       // Banner ads shown on this video
@@ -985,7 +994,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  subtitle: Text('${adImpressions} impressions'),
+                  subtitle: Text('$adImpressions impressions'),
                   trailing: Text(
                     '₹${revenue.toStringAsFixed(2)}',
                     style: const TextStyle(
