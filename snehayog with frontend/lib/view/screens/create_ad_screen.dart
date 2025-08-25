@@ -440,7 +440,11 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                   Text(
-                      '• Estimated ${(invoice['amount'] / 30 * 1000).round()} impressions'),
+                      '• Estimated ${(invoice['amount'] / (_selectedAdType == 'banner' ? 10 : 30) * 1000).round()} impressions'),
+                  Text(
+                    '• CPM: ₹${_selectedAdType == 'banner' ? '10' : '30'} per 1000 impressions',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  ),
                   const Text('• 80% revenue share for creators'),
                   const Text('• Real-time performance tracking'),
                   const Text('• Professional ad management'),
@@ -492,10 +496,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
         notes: 'Campaign payment for user: ${userData['id']}',
       );
 
-      // For now, simulate payment success since we don't have Razorpay checkout UI
-      // In production, you would integrate with razorpay_flutter package
-      await Future.delayed(
-          const Duration(seconds: 2)); // Simulate payment processing
+      await Future.delayed(const Duration(seconds: 2));
 
       // Simulate successful payment
       final paymentResult = {
@@ -913,6 +914,34 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                         color: Colors.grey.shade600,
                         fontSize: 12,
                         fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.blue.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline,
+                              size: 16, color: Colors.blue.shade700),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _selectedAdType == 'banner'
+                                  ? 'CPM: ₹10 per 1000 impressions (lower cost for static ads)'
+                                  : 'CPM: ₹30 per 1000 impressions (higher engagement for interactive ads)',
+                              style: TextStyle(
+                                color: Colors.blue.shade700,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 12),

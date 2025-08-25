@@ -37,9 +37,10 @@ class AdService {
         throw Exception('User not authenticated');
       }
 
-      // **NEW: Calculate impressions based on fixed CPM**
+      // **NEW: Calculate impressions based on ad type CPM**
+      final cpm = adType == 'banner' ? AppConfig.bannerCpm : AppConfig.fixedCpm;
       final impressions =
-          AppConfig.calculateImpressionsFromBudget(budget / 100.0);
+          AppConfig.calculateImpressionsFromBudgetWithCpm(budget / 100.0, cpm);
 
       // **NEW: Calculate revenue split**
       final revenueSplit =
@@ -68,7 +69,7 @@ class AdService {
           'uploaderProfilePic': userData['profilePic'],
           // **NEW: Revenue and impression data**
           'estimatedImpressions': impressions,
-          'fixedCpm': AppConfig.fixedCpm,
+          'fixedCpm': cpm,
           'creatorRevenue': revenueSplit['creator'],
           'platformRevenue': revenueSplit['platform'],
         }),
@@ -105,13 +106,15 @@ class AdService {
         throw Exception('User not authenticated');
       }
 
-      // Calculate impressions based on fixed CPM
-      final impressions = AppConfig.calculateImpressionsFromBudget(budget);
+      // Calculate impressions based on ad type CPM
+      final cpm = adType == 'banner' ? AppConfig.bannerCpm : AppConfig.fixedCpm;
+      final impressions =
+          AppConfig.calculateImpressionsFromBudgetWithCpm(budget, cpm);
       final revenueSplit = _razorpayService.calculateRevenueSplit(budget);
 
       print('🔍 AdService: Creating ad with payment...');
       print(
-          '🔍 AdService: Budget: ₹$budget, Estimated impressions: $impressions');
+          '🔍 AdService: Budget: ₹$budget, Ad Type: $adType, CPM: ₹$cpm, Estimated impressions: $impressions');
 
       final response = await http.post(
         Uri.parse('$baseUrl/api/ads/create-with-payment'),
@@ -135,7 +138,7 @@ class AdService {
           'uploaderName': userData['name'],
           'uploaderProfilePic': userData['profilePic'],
           'estimatedImpressions': impressions,
-          'fixedCpm': AppConfig.fixedCpm,
+          'fixedCpm': cpm,
           'creatorRevenue': revenueSplit['creator'],
           'platformRevenue': revenueSplit['platform'],
         }),

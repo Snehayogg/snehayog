@@ -111,6 +111,7 @@ class AuthService {
           // Return combined user data
           return {
             'id': googleUser.id,
+            'googleId': googleUser.id, // Add explicit googleId field
             'name': googleUser.displayName ?? 'User',
             'email': googleUser.email,
             'profilePic': googleUser.photoUrl,
@@ -186,6 +187,7 @@ class AuthService {
           'fallback_user',
           jsonEncode({
             'id': googleUser.id,
+            'googleId': googleUser.id, // Add explicit googleId field
             'name': googleUser.displayName ?? 'User',
             'email': googleUser.email,
             'profilePic': googleUser.photoUrl,
@@ -196,6 +198,7 @@ class AuthService {
 
       return {
         'id': googleUser.id,
+        'googleId': googleUser.id, // Add explicit googleId field
         'name': googleUser.displayName ?? 'User',
         'email': googleUser.email,
         'profilePic': googleUser.photoUrl,
@@ -269,7 +272,8 @@ class AuthService {
   }
 
   // Get user data from JWT token
-  Future<Map<String, dynamic>?> getUserData({bool skipTokenRefresh = false}) async {
+  Future<Map<String, dynamic>?> getUserData(
+      {bool skipTokenRefresh = false}) async {
     try {
       print('🔍 AuthService: Getting user data...');
 
@@ -315,6 +319,8 @@ class AuthService {
           final userData = jsonDecode(fallbackUser);
           return {
             'id': userData['id'],
+            'googleId': userData['googleId'] ??
+                userData['id'], // Add googleId if available
             'name': userData['name'],
             'email': userData['email'],
             'profilePic': userData['profilePic'],
@@ -326,6 +332,15 @@ class AuthService {
         // Try to verify token with backend and get actual user data
         try {
           print('🔍 Attempting to verify token with backend...');
+          if (token != null) {
+            print(
+                '🔍 Token being sent (first 20 chars): ${token.substring(0, 20)}...');
+            print('🔍 Token length: ${token.length}');
+            print('🔍 Token type: ${token.runtimeType}');
+          } else {
+            print('🔍 Token is null!');
+          }
+
           final response = await http.get(
             Uri.parse('${AppConfig.baseUrl}/api/users/profile'),
             headers: {'Authorization': 'Bearer $token'},
@@ -338,6 +353,8 @@ class AuthService {
             // Save this as fallback data for future use
             final fallbackData = {
               'id': userData['googleId'] ?? userData['id'],
+              'googleId':
+                  userData['googleId'] ?? userData['id'], // Preserve googleId
               'name': userData['name'],
               'email': userData['email'],
               'profilePic': userData['profilePic'],
@@ -346,6 +363,8 @@ class AuthService {
 
             return {
               'id': userData['googleId'] ?? userData['id'],
+              'googleId':
+                  userData['googleId'] ?? userData['id'], // Preserve googleId
               'name': userData['name'],
               'email': userData['email'],
               'profilePic': userData['profilePic'],
@@ -359,6 +378,8 @@ class AuthService {
               final userData = jsonDecode(fallbackUser);
               return {
                 'id': userData['id'],
+                'googleId': userData['googleId'] ??
+                    userData['id'], // Add googleId if available
                 'name': userData['name'],
                 'email': userData['email'],
                 'profilePic': userData['profilePic'],
@@ -375,6 +396,8 @@ class AuthService {
             final userData = jsonDecode(fallbackUser);
             return {
               'id': userData['id'],
+              'googleId': userData['googleId'] ??
+                  userData['id'], // Add googleId if available
               'name': userData['name'],
               'email': userData['email'],
               'profilePic': userData['profilePic'],
@@ -495,12 +518,13 @@ class AuthService {
       if (fallbackUser != null) {
         print('🔄 Using fallback user data for token refresh');
         final userData = jsonDecode(fallbackUser);
-        
+
         // Try to get a new token by re-authenticating with Google
         try {
           final newToken = await _reauthenticateWithGoogle();
           if (newToken != null) {
-            print('✅ Successfully obtained new token through re-authentication');
+            print(
+                '✅ Successfully obtained new token through re-authentication');
             return newToken;
           }
         } catch (e) {
@@ -520,7 +544,7 @@ class AuthService {
   Future<String?> _reauthenticateWithGoogle() async {
     try {
       print('🔄 Attempting to re-authenticate with Google...');
-      
+
       // Check if user is already signed in
       if (!await _googleSignIn.isSignedIn()) {
         print('❌ User not signed in with Google, cannot re-authenticate');
@@ -528,13 +552,15 @@ class AuthService {
       }
 
       // Get fresh authentication
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signInSilently();
+      final GoogleSignInAccount? googleUser =
+          await _googleSignIn.signInSilently();
       if (googleUser == null) {
         print('❌ Silent sign-in failed, user needs to re-authenticate');
         return null;
       }
 
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
       final idToken = googleAuth.idToken;
       if (idToken == null) {
         print('❌ Failed to get fresh ID token from Google');
@@ -553,11 +579,11 @@ class AuthService {
       if (authResponse.statusCode == 200) {
         final authData = jsonDecode(authResponse.body);
         final newToken = authData['token'];
-        
+
         // Save new token
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('jwt_token', newToken);
-        
+
         print('✅ Successfully obtained new JWT token');
         return newToken;
       } else {
@@ -575,10 +601,10 @@ class AuthService {
     try {
       print('🧹 Clearing expired tokens...');
       final prefs = await SharedPreferences.getInstance();
-      
+
       // Remove JWT token
       await prefs.remove('jwt_token');
-      
+
       // Keep fallback user data for re-authentication
       print('✅ Expired tokens cleared, user needs to re-login');
     } catch (e) {
@@ -591,15 +617,15 @@ class AuthService {
     try {
       final prefs = await SharedPreferences.getInstance();
       String? token = prefs.getString('jwt_token');
-      
+
       if (token == null) return true;
-      
+
       // Check if token is expired
       if (!isTokenValid(token)) {
         print('⚠️ Token is expired, user needs to re-login');
         return true;
       }
-      
+
       return false;
     } catch (e) {
       print('❌ Error checking re-login status: $e');

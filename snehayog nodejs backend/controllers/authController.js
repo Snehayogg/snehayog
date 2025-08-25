@@ -6,10 +6,19 @@ export const googleSignIn = async (req, res) => {
 
   try {
     const userData = await verifyGoogleToken(idToken);
+    
+    console.log('🔍 Google Token Verification Debug:');
+    console.log('🔍 userData received:', JSON.stringify(userData, null, 2));
+    console.log('🔍 userData.sub:', userData.sub);
+    console.log('🔍 userData.sub type:', typeof userData.sub);
+    console.log('🔍 userData.sub length:', userData.sub ? userData.sub.length : 'null');
 
     let user = await User.findOne({ googleId: userData.sub });
+    console.log('🔍 Auth Controller: Database lookup result:', user);
+    
     if (!user) {
       // Create new user
+      console.log('🔍 Auth Controller: Creating new user...');
       user = new User({
         googleId: userData.sub, // Add missing googleId field
         name: userData.name,
@@ -19,8 +28,10 @@ export const googleSignIn = async (req, res) => {
       });
       await user.save();
       console.log('✅ Created new user with profile picture:', userData.picture);
+      console.log('🔍 Auth Controller: New user saved:', JSON.stringify(user, null, 2));
     } else {
       // Update existing user's profile picture if they don't have one
+      console.log('🔍 Auth Controller: Found existing user:', JSON.stringify(user, null, 2));
       if (!user.profilePic || user.profilePic.trim() === '') {
         user.profilePic = userData.picture;
         await user.save();
@@ -29,7 +40,15 @@ export const googleSignIn = async (req, res) => {
     }
 
     // **FIXED: Generate JWT with Google ID instead of MongoDB ObjectId**
+    console.log('🔍 Auth Controller Debug:');
+    console.log('🔍 User object:', JSON.stringify(user, null, 2));
+    console.log('🔍 user.googleId:', user.googleId);
+    console.log('🔍 user.googleId type:', typeof user.googleId);
+    console.log('🔍 user.googleId length:', user.googleId ? user.googleId.length : 'null');
+    
     const token = generateJWT(user.googleId);
+    
+    console.log('🔍 Generated token (first 50 chars):', token.substring(0, 50) + '...');
 
     res.json({
       token,

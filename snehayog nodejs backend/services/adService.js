@@ -28,8 +28,9 @@ class AdService {
       uploaderProfilePic
     } = adData;
 
-    // Calculate estimated metrics
-    const estimatedImpressions = calculateEstimatedImpressions(budget, AD_CONFIG.DEFAULT_CPM);
+    // Calculate estimated metrics based on ad type
+    const cpm = adType === 'banner' ? AD_CONFIG.BANNER_CPM : AD_CONFIG.DEFAULT_CPM;
+    const estimatedImpressions = calculateEstimatedImpressions(budget, cpm);
     const { creatorRevenue, platformRevenue } = calculateRevenueSplit(budget, AD_CONFIG.CREATOR_REVENUE_SHARE);
 
     // Create ad creative
@@ -46,7 +47,7 @@ class AdService {
       targetAudience: targetAudience || 'all',
       targetKeywords: targetKeywords || [],
       estimatedImpressions,
-      fixedCpm: AD_CONFIG.DEFAULT_CPM,
+      fixedCpm: cpm,
       creatorRevenue,
       platformRevenue,
       status: 'draft'

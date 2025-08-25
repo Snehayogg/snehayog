@@ -177,22 +177,41 @@ class UserService {
   /// Get user data including follower counts
   Future<UserModel?> getUserData(String userId) async {
     try {
+      print('🔍 UserService: Getting user data for userId: $userId');
+      print('🔍 UserService: userId type: ${userId.runtimeType}');
+      print('🔍 UserService: userId length: ${userId.length}');
+
       final token = (await _authService.getUserData())?['token'];
+      print('🔍 UserService: Token retrieved: ${token != null ? 'Yes' : 'No'}');
+      if (token != null) {
+        print(
+            '🔍 UserService: Token (first 20 chars): ${token.substring(0, 20)}...');
+        print('🔍 UserService: Token length: ${token.length}');
+      }
+
       if (token == null) {
         throw Exception('Not authenticated');
       }
 
+      final url = '${VideoService.baseUrl}/api/users/$userId';
+      print('🔍 UserService: Making request to: $url');
+      print(
+          '🔍 UserService: Headers: Authorization: Bearer ${token.substring(0, 20)}...');
+
       final response = await http.get(
-        Uri.parse('${VideoService.baseUrl}/api/users/$userId'),
+        Uri.parse(url),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
       );
 
+      print('🔍 UserService: Response status: ${response.statusCode}');
+      print('🔍 UserService: Response body: ${response.body}');
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        
+
         // Also check follow status for current user
         bool isFollowing = false;
         try {
@@ -200,7 +219,7 @@ class UserService {
         } catch (e) {
           print('Error checking follow status: $e');
         }
-        
+
         // Create UserModel with all available data
         return UserModel(
           id: data['_id'] ?? data['id'] ?? data['googleId'] ?? '',
@@ -211,8 +230,8 @@ class UserService {
           followersCount: data['followersCount'] ?? data['followers'] ?? 0,
           followingCount: data['followingCount'] ?? data['following'] ?? 0,
           isFollowing: isFollowing,
-          createdAt: data['createdAt'] != null 
-              ? DateTime.parse(data['createdAt']) 
+          createdAt: data['createdAt'] != null
+              ? DateTime.parse(data['createdAt'])
               : null,
           bio: data['bio'],
           location: data['location'],

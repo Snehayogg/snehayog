@@ -1183,13 +1183,15 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
     try {
       // Revenue is based on AD IMPRESSIONS, not video views
       // CPM (Cost Per Mille) = Revenue per 1000 ad impressions
-      const cpm = 2.0; // Example: $2.00 per 1000 ad impressions
+      // Using weighted average CPM: 80% carousel/video feed ads (₹30), 20% banner ads (₹10)
+      const weightedCpm =
+          26.0; // ₹26 per 1000 ad impressions (weighted average)
 
       // Get ad impressions for this video
       final adImpressions = _getAdImpressionsForVideo(videoIndex, video);
 
       // Calculate revenue: (Ad Impressions / 1000) × CPM
-      double revenue = (adImpressions / 1000.0) * cpm;
+      double revenue = (adImpressions / 1000.0) * weightedCpm;
 
       // Apply ad performance multipliers
       final adPerformanceMultiplier = _calculateAdPerformanceMultiplier(video);

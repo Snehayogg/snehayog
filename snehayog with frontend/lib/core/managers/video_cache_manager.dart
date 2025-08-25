@@ -36,7 +36,7 @@ class VideoCacheManager {
 
   // Preload queue management
   final Queue<String> _preloadQueue = Queue<String>();
-  bool _isPreloading = false;
+  final bool _isPreloading = false;
 
   // Performance metrics
   int _cacheHits = 0;

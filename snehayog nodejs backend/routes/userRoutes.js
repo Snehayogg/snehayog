@@ -10,16 +10,41 @@ router.get('/profile', verifyToken, async (req, res) => {
   try {
     console.log('🔍 Profile API: Request received');
     console.log('🔍 Profile API: Current user from token:', req.user);
+    console.log('🔍 Profile API: req.user.id type:', typeof req.user.id);
+    console.log('🔍 Profile API: req.user.id value:', req.user.id);
+    console.log('🔍 Profile API: req.user.googleId type:', typeof req.user.googleId);
+    console.log('🔍 Profile API: req.user.googleId value:', req.user.googleId);
     
     const currentUserId = req.user.id; // This is the Google user ID
     
     console.log('🔍 Profile API: currentUserId:', currentUserId);
+    console.log('🔍 Profile API: currentUserId type:', typeof currentUserId);
+    
+    // **DEBUG: Log the exact query being made**
+    console.log('🔍 Profile API: Making query: User.findOne({ googleId: "' + currentUserId + '" })');
     
     // Find current user
     const currentUser = await User.findOne({ googleId: currentUserId });
+    console.log('🔍 Profile API: Query result:', currentUser);
+    
     if (!currentUser) {
-      return res.status(404).json({ error: 'User not found' });
+      console.log('❌ Profile API: User not found with googleId:', currentUserId);
+      
+      // **DEBUG: Try to find by other fields**
+      const allUsers = await User.find({}).limit(5);
+      console.log('🔍 Profile API: First 5 users in database:', allUsers.map(u => ({ googleId: u.googleId, name: u.name, email: u.email })));
+      
+      return res.status(404).json({ 
+        error: 'User not found',
+        debug: {
+          searchedFor: currentUserId,
+          searchedForType: typeof currentUserId,
+          availableUsers: allUsers.map(u => ({ googleId: u.googleId, name: u.name }))
+        }
+      });
     }
+    
+    console.log('✅ Profile API: User found successfully');
     
     res.json({
       id: currentUser.googleId,
@@ -36,7 +61,7 @@ router.get('/profile', verifyToken, async (req, res) => {
     });
   } catch (err) {
     console.error('Get profile error:', err);
-    res.status(500).json({ error: 'Failed to get profile' });
+    res.status(500).json({ error: 'Failed to get profile', details: err.message });
   }
 });
 

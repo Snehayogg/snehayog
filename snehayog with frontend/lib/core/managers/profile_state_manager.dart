@@ -46,10 +46,9 @@ class ProfileStateManager extends ChangeNotifier {
 
   // Profile management
   Future<void> loadUserData(String? userId) async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
 
     try {
       print('🔄 ProfileStateManager: Loading user data for userId: $userId');
@@ -66,44 +65,42 @@ class ProfileStateManager extends ChangeNotifier {
         return;
       }
 
-      final bool isMyProfile = userId == null || userId == loggedInUser?['id'];
+      final bool isMyProfile = userId == null ||
+          userId == loggedInUser['id'] ||
+          userId == loggedInUser['googleId'];
       print('🔄 ProfileStateManager: Is my profile: $isMyProfile');
 
       Map<String, dynamic>? userData;
       if (isMyProfile) {
         // Load own profile data
         userData = loggedInUser;
-        if (userData != null) {
-          // Load saved profile data for the logged-in user
-          final savedName = await _loadSavedName();
-          final savedProfilePic = await _loadSavedProfilePic();
-          userData['name'] = savedName ?? userData['name'];
-          userData['profilePic'] = savedProfilePic ?? userData['profilePic'];
-          print(
-              '🔄 ProfileStateManager: Loaded own profile data: ${userData['name']}');
-        }
+        // Load saved profile data for the logged-in user
+        final savedName = await _loadSavedName();
+        final savedProfilePic = await _loadSavedProfilePic();
+        userData['name'] = savedName ?? userData['name'];
+        userData['profilePic'] = savedProfilePic ?? userData['profilePic'];
+        print(
+            '🔄 ProfileStateManager: Loaded own profile data: ${userData['name']}');
       } else {
         // Fetch profile data for another user
         print(
             '🔄 ProfileStateManager: Fetching other user profile for ID: $userId');
         userData = await _userService.getUserById(userId);
         print(
-            '🔄 ProfileStateManager: Other user profile loaded: ${userData?['name']}');
+            '🔄 ProfileStateManager: Other user profile loaded: ${userData['name']}');
       }
 
-      if (userData != null) {
-        _userData = userData;
-        _isLoading = false;
-        notifyListeners();
-        print(
-            '🔄 ProfileStateManager: User data loaded successfully, now loading videos');
-        await loadUserVideos(userId);
-      } else {
-        _isLoading = false;
-        _error = ProfileConstants.errorLoadingData;
-        notifyListeners();
-        print('❌ ProfileStateManager: Failed to load user data');
-      }
+      _userData = userData;
+      print('🔄 ProfileStateManager: Stored user data: $_userData');
+      print(
+          '🔄 ProfileStateManager: Stored user googleId: ${_userData?['googleId']}');
+      print('🔄 ProfileStateManager: Stored user id: ${_userData?['id']}');
+
+      _isLoading = false;
+      notifyListeners();
+      print(
+          '🔄 ProfileStateManager: User data loaded successfully, now loading videos');
+      await loadUserVideos(userId);
     } catch (e) {
       print('❌ ProfileStateManager: Error loading user data: $e');
       _error = 'Error loading user data: ${e.toString()}';
@@ -117,26 +114,49 @@ class ProfileStateManager extends ChangeNotifier {
       print('🔄 ProfileStateManager: Loading videos for userId: $userId');
 
       final loggedInUser = await _authService.getUserData();
-      final bool isMyProfile = userId == null || userId == loggedInUser?['id'];
+      print('🔄 ProfileStateManager: Logged in user data: $loggedInUser');
+      print(
+          '🔄 ProfileStateManager: Logged in user googleId: ${loggedInUser?['googleId']}');
+      print(
+          '🔄 ProfileStateManager: Logged in user id: ${loggedInUser?['id']}');
+
+      final bool isMyProfile = userId == null ||
+          userId == loggedInUser?['id'] ||
+          userId == loggedInUser?['googleId'];
 
       print(
           '🔄 ProfileStateManager: Loading videos - isMyProfile: $isMyProfile');
 
       String targetUserId;
       if (isMyProfile) {
-        targetUserId = loggedInUser?['id'] ?? '';
+        // **FIXED: Use googleId for own profile instead of MongoDB _id**
+        targetUserId = loggedInUser?['googleId'] ?? loggedInUser?['id'] ?? '';
         print(
-            '🔄 ProfileStateManager: Loading own videos with ID: $targetUserId');
+            '🔄 ProfileStateManager: Loading own videos with googleId: $targetUserId');
       } else {
+        // **FIXED: Use provided userId for other user's profile**
         targetUserId = userId ?? '';
         print(
             '🔄 ProfileStateManager: Loading other user videos with ID: $targetUserId');
       }
 
       if (targetUserId.isNotEmpty) {
+        print(
+            '🔄 ProfileStateManager: Calling VideoService.getUserVideos($targetUserId)');
         final videos = await _videoService.getUserVideos(targetUserId);
         print(
-            '🔄 ProfileStateManager: Loaded ${videos.length} videos for user: $targetUserId');
+            '🔄 ProfileStateManager: Successfully loaded ${videos.length} videos for user: $targetUserId');
+
+        // **DEBUG: Log video details**
+        for (int i = 0; i < videos.length; i++) {
+          print(
+              '🔄 ProfileStateManager: Video $i: ${videos[i].videoName} (ID: ${videos[i].id})');
+          print('🔄 ProfileStateManager: Video $i URL: ${videos[i].videoUrl}');
+          print(
+              '🔄 ProfileStateManager: Video $i Thumbnail: ${videos[i].thumbnailUrl}');
+          print(
+              '🔄 ProfileStateManager: Video $i Uploader: ${videos[i].uploader.name}');
+        }
 
         _userVideos = videos;
         notifyListeners();
@@ -174,17 +194,15 @@ class ProfileStateManager extends ChangeNotifier {
         final newName = nameController.text.trim();
         await _saveProfileData(newName, _userData!['profilePic']);
 
-        setState(() {
-          _userData!['name'] = newName;
-          _isEditing = false;
-        });
+        _userData!['name'] = newName;
+        _isEditing = false;
+        notifyListeners();
 
         nameController.clear();
         notifyListeners();
       } catch (e) {
-        setState(() {
-          _error = 'Failed to save profile: ${e.toString()}';
-        });
+        _error = 'Failed to save profile: ${e.toString()}';
+        notifyListeners();
       }
     }
   }
@@ -192,9 +210,8 @@ class ProfileStateManager extends ChangeNotifier {
   Future<void> updateProfilePhoto(String? profilePic) async {
     if (_userData != null) {
       await _saveProfileData(_userData!['name'], profilePic);
-      setState(() {
-        _userData!['profilePic'] = profilePic;
-      });
+      _userData!['profilePic'] = profilePic;
+      notifyListeners();
       notifyListeners();
     }
   }
@@ -242,10 +259,9 @@ class ProfileStateManager extends ChangeNotifier {
       print(
           '🗑️ ProfileStateManager: Starting deletion of ${_selectedVideoIds.length} videos');
 
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
 
       // Create a copy of selected IDs for processing
       final videoIdsToDelete = List<String>.from(_selectedVideoIds);
@@ -264,9 +280,7 @@ class ProfileStateManager extends ChangeNotifier {
         // Clear selection and exit selection mode
         exitSelectionMode();
 
-        setState(() {
-          _isLoading = false;
-        });
+        _isLoading = false;
 
         // Notify VideoProvider to update the main video feed
         if (_context != null) {
@@ -289,12 +303,8 @@ class ProfileStateManager extends ChangeNotifier {
     } catch (e) {
       print('❌ ProfileStateManager: Error deleting videos: $e');
 
-      setState(() {
-        _isLoading = false;
-        _error = _getUserFriendlyErrorMessage(e);
-      });
-
-      // Don't exit selection mode on error - let user retry
+      _isLoading = false;
+      _error = _getUserFriendlyErrorMessage(e);
       notifyListeners();
     }
   }
@@ -304,10 +314,8 @@ class ProfileStateManager extends ChangeNotifier {
     try {
       print('🗑️ ProfileStateManager: Deleting single video: $videoId');
 
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
+      _isLoading = true;
+      _error = null;
 
       // Delete from backend
       final deletionSuccess = await _videoService.deleteVideo(videoId);
@@ -318,9 +326,7 @@ class ProfileStateManager extends ChangeNotifier {
         // Remove from local list
         _userVideos.removeWhere((video) => video.id == videoId);
 
-        setState(() {
-          _isLoading = false;
-        });
+        _isLoading = false;
 
         // Notify VideoProvider to update the main video feed
         if (_context != null) {
@@ -342,11 +348,9 @@ class ProfileStateManager extends ChangeNotifier {
     } catch (e) {
       print('❌ ProfileStateManager: Error deleting single video: $e');
 
-      setState(() {
-        _isLoading = false;
-        _error = _getUserFriendlyErrorMessage(e);
-      });
-
+      _isLoading = false;
+      _error = _getUserFriendlyErrorMessage(e);
+      notifyListeners();
       return false;
     }
   }
@@ -393,10 +397,7 @@ class ProfileStateManager extends ChangeNotifier {
     }
   }
 
-  void setState(VoidCallback fn) {
-    fn();
-    notifyListeners();
-  }
+  // Custom setState method removed - use notifyListeners() directly
 
   // Error handling
   void clearError() {
@@ -408,36 +409,39 @@ class ProfileStateManager extends ChangeNotifier {
   Future<void> handleLogout() async {
     try {
       await _authService.signOut();
-      setState(() {
-        _userData = null;
-        _userVideos = [];
-        _isEditing = false;
-        _isSelecting = false;
-        _selectedVideoIds.clear();
-      });
+      _userData = null;
+      _userVideos = [];
+      _isEditing = false;
+      _isSelecting = false;
+      _selectedVideoIds.clear();
+      notifyListeners();
     } catch (e) {
-      setState(() {
-        _error = 'Failed to logout: ${e.toString()}';
-      });
+      _error = 'Failed to logout: ${e.toString()}';
+      notifyListeners();
     }
   }
 
   Future<Map<String, dynamic>?> handleGoogleSignIn() async {
     try {
       final userData = await _authService.signInWithGoogle();
+      print(
+          '🔄 ProfileStateManager: Google sign-in returned user data: $userData');
+      print(
+          '🔄 ProfileStateManager: Google sign-in returned googleId: ${userData?['googleId']}');
+      print(
+          '🔄 ProfileStateManager: Google sign-in returned id: ${userData?['id']}');
+
       if (userData != null) {
-        setState(() {
-          _userData = userData;
-          _isLoading = false;
-          _error = null;
-        });
+        _userData = userData;
+        _isLoading = false;
+        _error = null;
+        notifyListeners();
         await loadUserVideos(null); // Load videos for the signed-in user
       }
       return userData;
     } catch (e) {
-      setState(() {
-        _error = 'Failed to sign in: ${e.toString()}';
-      });
+      _error = 'Failed to sign in: ${e.toString()}';
+      notifyListeners();
       return null;
     }
   }
@@ -454,13 +458,20 @@ class ProfileStateManager extends ChangeNotifier {
 
       // Get the current user ID from userData or logged in user
       String? targetUserId;
-      if (_userData != null && _userData!['id'] != null) {
+      if (_userData != null && _userData!['googleId'] != null) {
+        // **FIXED: Prioritize googleId over MongoDB _id**
+        targetUserId = _userData!['googleId'];
+        print(
+            '🔄 ProfileStateManager: Refreshing data for user with googleId: $targetUserId');
+      } else if (_userData != null && _userData!['id'] != null) {
+        // Fallback to MongoDB _id if googleId not available
         targetUserId = _userData!['id'];
         print(
-            '🔄 ProfileStateManager: Refreshing data for user: $targetUserId');
+            '🔄 ProfileStateManager: Refreshing data for user with MongoDB _id: $targetUserId');
       } else {
         final loggedInUser = await _authService.getUserData();
-        targetUserId = loggedInUser?['id'];
+        // **FIXED: Prioritize googleId over MongoDB _id**
+        targetUserId = loggedInUser?['googleId'] ?? loggedInUser?['id'];
         print(
             '🔄 ProfileStateManager: Refreshing data for logged in user: $targetUserId');
       }
@@ -487,13 +498,20 @@ class ProfileStateManager extends ChangeNotifier {
 
       // Get the current user ID from userData or logged in user
       String? targetUserId;
-      if (_userData != null && _userData!['id'] != null) {
+      if (_userData != null && _userData!['googleId'] != null) {
+        // **FIXED: Prioritize googleId over MongoDB _id**
+        targetUserId = _userData!['googleId'];
+        print(
+            '🔄 ProfileStateManager: Refreshing videos for user with googleId: $targetUserId');
+      } else if (_userData != null && _userData!['id'] != null) {
+        // Fallback to MongoDB _id if googleId not available
         targetUserId = _userData!['id'];
         print(
-            '🔄 ProfileStateManager: Refreshing videos for user: $targetUserId');
+            '🔄 ProfileStateManager: Refreshing videos for user with MongoDB _id: $targetUserId');
       } else {
         final loggedInUser = await _authService.getUserData();
-        targetUserId = loggedInUser?['id'];
+        // **FIXED: Prioritize googleId over MongoDB _id**
+        targetUserId = loggedInUser?['googleId'] ?? loggedInUser?['id'];
         print(
             '🔄 ProfileStateManager: Refreshing videos for logged in user: $targetUserId');
       }

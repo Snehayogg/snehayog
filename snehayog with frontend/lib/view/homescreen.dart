@@ -122,6 +122,38 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     }
   }
 
+  // Method to handle navigation taps
+  void _handleNavTap(int index, MainController mainController) {
+    if (index != mainController.currentIndex) {
+      print(
+          'Homescreen: Switching from index ${mainController.currentIndex} to $index');
+
+      // If leaving video tab, immediately pause videos through MainController
+      if (mainController.currentIndex == 0) {
+        print('Homescreen: Leaving video tab, pausing videos immediately');
+        mainController.forcePauseVideos();
+      }
+
+      // If switching to profile tab, ensure profile data is loaded
+      if (index == 3) {
+        print(
+            '🔄 Homescreen: Switching to profile tab - ensuring profile data is loaded');
+        final profileScreenState = _profileScreenKey.currentState;
+        if (profileScreenState != null) {
+          // Call the profile loading method if it exists
+          try {
+            (profileScreenState as dynamic).onProfileTabSelected();
+          } catch (e) {
+            print('⚠️ Homescreen: Could not call onProfileTabSelected: $e');
+          }
+        }
+      }
+
+      // Change index - MainController will handle additional video control
+      mainController.changeIndex(index);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<MainController>(
@@ -307,22 +339,3 @@ Widget _buildNavItem({
     ),
   );
 }
-
-// ... existing code ...
-void _handleNavTap(int index, MainController mainController) {
-  if (index != mainController.currentIndex) {
-    print(
-        'Homescreen: Switching from index ${mainController.currentIndex} to $index');
-
-    // If leaving video tab, immediately pause videos through MainController
-    if (mainController.currentIndex == 0) {
-      print('Homescreen: Leaving video tab, pausing videos immediately');
-      mainController.forcePauseVideos();
-    }
-
-    // Change index - MainController will handle additional video control
-    mainController.changeIndex(index);
-  }
-}
-
-// ... existing code ...
