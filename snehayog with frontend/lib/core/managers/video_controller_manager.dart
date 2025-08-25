@@ -17,6 +17,9 @@ class VideoControllerManager {
   // Track active page
   int _activePage = 0;
 
+  // **NEW: Track controllers being initialized to prevent race conditions**
+  final Set<int> _initializingControllers = {};
+
   // Fast video delivery integration
   late VideoCacheManager _cacheManager;
   List<VideoModel> _currentVideos = [];
@@ -52,44 +55,83 @@ class VideoControllerManager {
 
     try {
       if (_controllers.containsKey(index)) {
-        return; // Controller already exists
+        // **NEW: Check if existing controller is properly initialized**
+        final existingController = _controllers[index];
+        if (existingController != null &&
+            existingController.value.isInitialized) {
+          print(
+              '✅ VideoControllerManager: Controller already exists and initialized for index $index');
+          return;
+        } else if (existingController != null) {
+          print(
+              '⚠️ VideoControllerManager: Controller exists but not initialized, disposing...');
+          try {
+            await existingController.dispose();
+          } catch (e) {
+            print(
+                '⚠️ VideoControllerManager: Error disposing existing controller: $e');
+          }
+          _controllers.remove(index);
+        }
       }
 
       print(
           '🚀 VideoControllerManager: Initializing controller for index $index with fast delivery');
 
-      // Check if video is cached first
-      final cachedFile =
-          await _cacheManager.getCachedVideo(video.id, video.videoUrl);
-
-      if (cachedFile != null) {
-        // Use cached file for instant playback
+      // **NEW: Add initialization lock to prevent race conditions**
+      if (_initializingControllers.contains(index)) {
         print(
-            '⚡ VideoControllerManager: Using cached video for instant playback');
-        final controller = VideoPlayerController.file(
-          cachedFile,
-          videoPlayerOptions: _getStandardOptions(),
-        );
-
-        _controllers[index] = controller;
-        await controller.initialize();
-        print(
-            '✅ VideoControllerManager: Cached controller initialized instantly');
-      } else {
-        // Fallback to network loading
-        print(
-            '🌐 VideoControllerManager: Video not cached, loading from network');
-        await _initControllerOriginal(index, video);
-
-        // Start preloading this video for future use
-        _startBackgroundPreload(index, video);
+            '⏳ VideoControllerManager: Controller already initializing for index $index, waiting...');
+        // Wait for existing initialization to complete
+        while (_initializingControllers.contains(index)) {
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
+        return;
       }
 
-      // Trigger smart cache management
-      _scheduleCacheOptimization();
+      _initializingControllers.add(index);
+
+      try {
+        // Check if video is cached first
+        final cachedFile =
+            await _cacheManager.getCachedVideo(video.id, video.videoUrl);
+
+        if (cachedFile != null) {
+          // Use cached file for instant playback
+          print(
+              '⚡ VideoControllerManager: Using cached video for instant playback');
+          final controller = VideoPlayerController.file(
+            cachedFile,
+            videoPlayerOptions: _getStandardOptions(),
+          );
+
+          _controllers[index] = controller;
+          await controller.initialize();
+          print(
+              '✅ VideoControllerManager: Cached controller initialized instantly');
+        } else {
+          // Fallback to network loading
+          print(
+              '🌐 VideoControllerManager: Video not cached, loading from network');
+          await _initControllerOriginal(index, video);
+
+          // Start preloading this video for future use
+          _startBackgroundPreload(index, video);
+        }
+
+        // Trigger smart cache management
+        _scheduleCacheOptimization();
+      } finally {
+        _initializingControllers.remove(index);
+      }
     } catch (e) {
       print(
           '❌ VideoControllerManager: Error initializing controller for index $index: $e');
+
+      // **NEW: Clean up on error**
+      _initializingControllers.remove(index);
+      _controllers.remove(index);
+
       // Fallback to original method
       await _initControllerOriginal(index, video);
     }
@@ -617,7 +659,36 @@ class VideoControllerManager {
 
   /// Dispose all controllers (alias for disposeAll)
   void disposeAllControllers() {
-    disposeAll();
+    print('🔄 VideoControllerManager: Disposing all controllers...');
+    int disposedCount = 0;
+
+    for (var entry in _controllers.entries) {
+      try {
+        entry.value.dispose();
+        disposedCount++;
+      } catch (e) {
+        print('❌ Error disposing controller at index ${entry.key}: $e');
+      }
+    }
+
+    _controllers.clear();
+    _initializingControllers.clear();
+    print('✅ VideoControllerManager: Disposed $disposedCount controllers');
+  }
+
+  /// **NEW: Dispose a specific controller by index**
+  void disposeController(int index) {
+    final controller = _controllers[index];
+    if (controller != null) {
+      try {
+        controller.dispose();
+        _controllers.remove(index);
+        _initializingControllers.remove(index);
+        print('✅ VideoControllerManager: Disposed controller at index $index');
+      } catch (e) {
+        print('❌ Error disposing controller at index $index: $e');
+      }
+    }
   }
 
   /// Check if controller exists and is ready

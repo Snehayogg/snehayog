@@ -24,8 +24,9 @@ class FeatureFlags {
     'video_memory_optimization': true, // Memory management
 
     // Profile features
-    'enhanced_profile_loading': false, // NEW: Control new profile loading logic
-    'profile_video_playback_fix': false, // NEW: Control video playback fix
+    'enhanced_profile_loading': true, // NEW: Control new profile loading logic
+    'profile_video_playback_fix':
+        true, // NEW: Control video playback fix - ENABLED FOR TESTING
 
     // UI features
     'new_ui_theme': false,

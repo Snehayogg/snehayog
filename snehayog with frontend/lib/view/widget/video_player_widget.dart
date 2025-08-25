@@ -131,8 +131,44 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
       print('🎬 VideoPlayerWidget: Initialization complete!');
     } catch (e) {
       print('❌ VideoPlayerWidget: Error initializing controller: $e');
+
+      // **NEW: Add retry logic for first-time failures**
+      if (_errorMessage == null) {
+        print('🔄 VideoPlayerWidget: First initialization failed, retrying...');
+        await _retryInitialization();
+      } else {
+        setState(() {
+          _errorMessage = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  /// **NEW: Retry initialization with delay to handle race conditions**
+  Future<void> _retryInitialization() async {
+    try {
+      print('🔄 VideoPlayerWidget: Retrying controller initialization...');
+
+      // Wait a bit for any pending operations to complete
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Clear any existing controller
+      if (_controller != null) {
+        try {
+          await _controller!.dispose();
+        } catch (e) {
+          print('⚠️ VideoPlayerWidget: Error disposing old controller: $e');
+        }
+        _controller = null;
+      }
+
+      // Try initialization again
+      await _initializeController();
+    } catch (e) {
+      print('❌ VideoPlayerWidget: Retry failed: $e');
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = 'Failed to initialize video after retry: $e';
         _isLoading = false;
       });
     }
@@ -145,8 +181,16 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
       // Add listener for state changes
       _controller!.addListener(_onControllerStateChanged);
 
-      // Initialize controller
-      await _controller!.initialize();
+      // **NEW: Add timeout for initialization to prevent hanging**
+      final initializationFuture = _controller!.initialize();
+      final timeoutFuture = Future.delayed(const Duration(seconds: 10));
+
+      await Future.any([initializationFuture, timeoutFuture]);
+
+      // Check if initialization actually completed
+      if (!_controller!.value.isInitialized) {
+        throw Exception('Video initialization timed out');
+      }
 
       // Set looping - this should work but let's also add manual completion handling
       _controller!.setLooping(true);
@@ -175,10 +219,17 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
           '🎬 VideoPlayerWidget: Controller setup complete with looping enabled');
     } catch (e) {
       print('❌ VideoPlayerWidget: Error in setup: $e');
-      setState(() {
-        _errorMessage = e.toString();
-        _isLoading = false;
-      });
+
+      // **NEW: Handle setup errors with retry logic**
+      if (_errorMessage == null) {
+        print('🔄 VideoPlayerWidget: Setup failed, retrying...');
+        await _retryInitialization();
+      } else {
+        setState(() {
+          _errorMessage = e.toString();
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -253,28 +304,38 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
     }
   }
 
+  /// **NEW: Toggle play/pause with visual feedback**
   void _togglePlayPause() {
-    if (_controller == null || !_controller!.value.isInitialized) {
-      print('❌ VideoPlayerWidget: Controller not ready for play/pause');
-      return;
-    }
+    if (_controller == null || !_controller!.value.isInitialized) return;
 
-    print('🎬 VideoPlayerWidget: Screen tapped, toggling play/pause');
-
-    setState(() {
+    try {
       if (_isPlaying) {
         _controller!.pause();
         _isPlaying = false;
-        print('🎬 VideoPlayerWidget: Video paused via screen tap');
       } else {
         _controller!.play();
         _isPlaying = true;
-        print('🎬 VideoPlayerWidget: Video playing via screen tap');
       }
-    });
 
-    // Show visual feedback
-    _showTapFeedbackIndicator();
+      // Show tap feedback
+      setState(() {
+        _showTapFeedback = true;
+      });
+
+      // Hide feedback after animation
+      _feedbackTimer?.cancel();
+      _feedbackTimer = Timer(const Duration(milliseconds: 300), () {
+        if (mounted) {
+          setState(() {
+            _showTapFeedback = false;
+          });
+        }
+      });
+
+      print('🎬 VideoPlayerWidget: Play state toggled to: $_isPlaying');
+    } catch (e) {
+      print('❌ VideoPlayerWidget: Error toggling play/pause: $e');
+    }
   }
 
   void _showTapFeedbackIndicator() {
@@ -330,27 +391,214 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
 
   @override
   Widget build(BuildContext context) {
-    print(
-        '🎬 VideoPlayerWidget: Building widget, isInitialized: $_isInitialized, isLoading: $_isLoading, controller: ${_controller != null}');
-
-    if (_isLoading) {
-      return _buildThumbnailWithLoading();
-    }
-
     if (_errorMessage != null) {
       return _buildErrorWidget();
     }
 
-    if (_controller == null || !_controller!.value.isInitialized) {
-      return _buildThumbnailWithLoading();
+    if (_isLoading) {
+      return _buildLoadingWidget();
     }
 
+    if (!_isInitialized || _controller == null) {
+      return _buildInitializingWidget();
+    }
+
+    return _buildVideoPlayer();
+  }
+
+  /// **NEW: Error widget with retry functionality**
+  Widget _buildErrorWidget() {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: Colors.black87,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 64,
+              color: Colors.red[300],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Video Playback Error',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Text(
+                _errorMessage ?? 'Unknown error occurred',
+                style: TextStyle(
+                  color: Colors.grey[300],
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _errorMessage = null;
+                  _isLoading = true;
+                });
+                _retryInitialization();
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextButton.icon(
+              onPressed: () {
+                // Try to use original video URL as fallback
+                setState(() {
+                  _errorMessage = null;
+                  _isLoading = true;
+                });
+                _tryFallbackUrl();
+              },
+              icon: const Icon(Icons.link),
+              label: const Text('Try Original URL'),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.blue[300],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// **NEW: Try fallback URL when HLS conversion fails**
+  Future<void> _tryFallbackUrl() async {
+    try {
+      print('🔄 VideoPlayerWidget: Trying fallback URL...');
+
+      // Clear existing controller
+      if (_controller != null) {
+        try {
+          await _controller!.dispose();
+        } catch (e) {
+          print('⚠️ VideoPlayerWidget: Error disposing controller: $e');
+        }
+        _controller = null;
+      }
+
+      // Try using original video URL directly
+      _controller = VideoPlayerController.networkUrl(
+        Uri.parse(widget.video.videoUrl),
+        videoPlayerOptions: VideoPlayerOptions(
+          mixWithOthers: false,
+          allowBackgroundPlayback: false,
+        ),
+      );
+
+      await _setupController();
+    } catch (e) {
+      print('❌ VideoPlayerWidget: Fallback URL also failed: $e');
+      setState(() {
+        _errorMessage = 'Both HLS and original URL failed: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  /// **NEW: Loading widget with progress indicator**
+  Widget _buildLoadingWidget() {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: Colors.black87,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Loading Video...',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            if (_isPreloading) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Preloading for smooth playback...',
+                style: TextStyle(
+                  color: Colors.grey[400],
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// **NEW: Initializing widget for when controller is being set up**
+  Widget _buildInitializingWidget() {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: Colors.black87,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Preparing Video...',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Setting up video player...',
+              style: TextStyle(
+                color: Colors.grey[400],
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// **NEW: Main video player widget**
+  Widget _buildVideoPlayer() {
     return Stack(
       children: [
         // Video player
         VideoPlayer(_controller!),
 
-        // Touch overlay for play/pause - YouTube Shorts style (BELOW buttons)
+        // Touch overlay for play/pause - YouTube Shorts style
         GestureDetector(
           onTap: _togglePlayPause,
           child: Container(
@@ -377,7 +625,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
             ),
           ),
 
-        // Mute button - positioned at top left, ABOVE gesture detector
+        // Mute button - positioned at top left
         Positioned(
           top: 16,
           left: 16,
@@ -476,55 +724,6 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  /// Build error widget when video fails to load
-  Widget _buildErrorWidget() {
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: Colors.black,
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.error_outline,
-                color: Colors.red,
-                size: 64,
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Video playback error. Please try again.',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _errorMessage = null;
-                  });
-                  _initializeController();
-                },
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );
