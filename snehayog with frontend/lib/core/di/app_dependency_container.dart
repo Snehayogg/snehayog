@@ -1,11 +1,12 @@
-import 'package:snehayog/core/managers/video_player_state_manager.dart';
+import 'package:snehayog/core/managers/video_manager.dart';
 import 'package:snehayog/core/services/video_url_service.dart';
 import 'package:snehayog/core/services/error_logging_service.dart';
 
 /// Centralized dependency injection container for the Snehayog app
 /// This follows the Service Locator pattern for managing dependencies
 class AppDependencyContainer {
-  static final AppDependencyContainer _instance = AppDependencyContainer._internal();
+  static final AppDependencyContainer _instance =
+      AppDependencyContainer._internal();
   factory AppDependencyContainer() => _instance;
   AppDependencyContainer._internal();
 
@@ -14,28 +15,28 @@ class AppDependencyContainer {
   ErrorLoggingService? _errorLoggingService;
 
   // Manager instances
-  final Map<String, VideoPlayerStateManager> _videoPlayerManagers = {};
+  final Map<String, VideoManager> _videoManagers = {};
 
-  /// Get or create a VideoPlayerStateManager for a specific video
-  VideoPlayerStateManager getVideoPlayerManager(String videoId) {
-    if (!_videoPlayerManagers.containsKey(videoId)) {
-      _videoPlayerManagers[videoId] = VideoPlayerStateManager();
+  /// Get or create a VideoManager for a specific video
+  VideoManager getVideoManager(String videoId) {
+    if (!_videoManagers.containsKey(videoId)) {
+      _videoManagers[videoId] = VideoManager();
     }
-    return _videoPlayerManagers[videoId]!;
+    return _videoManagers[videoId]!;
   }
 
-  /// Dispose of a specific video player manager
-  void disposeVideoPlayerManager(String videoId) {
-    _videoPlayerManagers[videoId]?.dispose();
-    _videoPlayerManagers.remove(videoId);
+  /// Dispose of a specific video manager
+  void disposeVideoManager(String videoId) {
+    _videoManagers[videoId]?.dispose();
+    _videoManagers.remove(videoId);
   }
 
-  /// Dispose of all video player managers
-  void disposeAllVideoPlayerManagers() {
-    for (final manager in _videoPlayerManagers.values) {
+  /// Dispose of all video managers
+  void disposeAllVideoManagers() {
+    for (final manager in _videoManagers.values) {
       manager.dispose();
     }
-    _videoPlayerManagers.clear();
+    _videoManagers.clear();
   }
 
   /// Get the VideoUrlService instance
@@ -52,14 +53,14 @@ class AppDependencyContainer {
 
   /// Clean up all resources
   void dispose() {
-    disposeAllVideoPlayerManagers();
+    disposeAllVideoManagers();
     _videoUrlService = null;
     _errorLoggingService = null;
   }
 
-  /// Get the total number of active video player managers
-  int get activeVideoPlayerCount => _videoPlayerManagers.length;
+  /// Get the total number of active video managers
+  int get activeVideoCount => _videoManagers.length;
 
-  /// Check if a specific video player manager exists
-  bool hasVideoPlayerManager(String videoId) => _videoPlayerManagers.containsKey(videoId);
+  /// Check if a specific video manager exists
+  bool hasVideoManager(String videoId) => _videoManagers.containsKey(videoId);
 }

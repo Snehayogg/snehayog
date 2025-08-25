@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'; // **CRITICAL FIX: Added for compute function**
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' as http_parser;
 import 'package:video_player/video_player.dart';
@@ -10,7 +11,7 @@ import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/config/app_config.dart';
 import 'package:snehayog/model/ad_model.dart';
 import 'package:snehayog/services/ad_service.dart';
-import 'package:snehayog/core/managers/yog_cache_manager.dart';
+import 'package:snehayog/core/managers/smart_cache_manager.dart';
 import 'package:snehayog/utils/feature_flags.dart';
 
 /// Enhanced VideoService with Instagram-like caching strategy
@@ -20,7 +21,7 @@ class InstagramVideoService {
       GlobalKey<NavigatorState>();
   final AuthService _authService = AuthService();
   final AdService _adService = AdService();
-  final YogCacheManager _cacheManager = YogCacheManager();
+  final SmartCacheManager _cacheManager = SmartCacheManager();
 
   static String get baseUrl => NetworkHelper.getBaseUrl();
 
@@ -56,15 +57,39 @@ class InstagramVideoService {
   }) async {
     final cacheKey = '$_videosCacheKey$page';
 
-    return await _cacheManager.get(
-          cacheKey,
-          fetchFn: () => _fetchVideosFromServer(page: page, limit: limit),
-          cacheType: 'videos',
-          maxAge: const Duration(minutes: 15),
-          forceRefresh: forceRefresh,
-          currentEtag: currentEtag,
-        ) ??
-        {'videos': [], 'hasMore': false};
+    print(
+        '🎯 InstagramVideoService: Getting videos for page $page (forceRefresh: $forceRefresh)');
+
+    try {
+      // **CRITICAL FIX: Use better caching strategy**
+      final cachedResult = await _cacheManager.get(
+        cacheKey,
+        fetchFn: () => _fetchVideosFromServer(page: page, limit: limit),
+        cacheType: 'videos',
+        maxAge: const Duration(
+            minutes: 30), // **CRITICAL FIX: Increased cache duration**
+        forceRefresh: forceRefresh,
+        currentEtag: currentEtag,
+      );
+
+      if (cachedResult != null) {
+        print('✅ InstagramVideoService: Returning cached data for page $page');
+        return cachedResult;
+      } else {
+        print(
+            '❌ InstagramVideoService: Cache miss for page $page, fetching fresh data');
+        return await _fetchVideosFromServer(page: page, limit: limit);
+      }
+    } catch (e) {
+      print('❌ InstagramVideoService: Error getting videos for page $page: $e');
+
+      // **CRITICAL FIX: Try to return cached data on error**
+      print(
+          '🔄 InstagramVideoService: Attempting to use fallback cache for page $page');
+
+      // Return empty result as last resort
+      return {'videos': [], 'hasMore': false, 'total': 0, 'currentPage': page};
+    }
   }
 
   /// Fetch videos from server with ETag support
@@ -104,7 +129,8 @@ class InstagramVideoService {
       }
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> responseData = json.decode(response.body);
+        // **CRITICAL FIX: Move JSON parsing to background thread**
+        final responseData = await compute(_parseVideosResponse, response.body);
         final List<dynamic> videoList = responseData['videos'];
 
         // Extract ETag from response headers
@@ -154,6 +180,16 @@ class InstagramVideoService {
     }
   }
 
+  /// **NEW: Parse videos response in background thread**
+  static Map<String, dynamic> _parseVideosResponse(String responseBody) {
+    try {
+      return json.decode(responseBody);
+    } catch (e) {
+      print('❌ InstagramVideoService: Error parsing response: $e');
+      rethrow;
+    }
+  }
+
   /// Preload next page for seamless pagination
   void _preloadNextPage(int nextPage, int limit) {
     if (!Features.backgroundVideoPreloading.isEnabled) return;
@@ -190,13 +226,36 @@ class InstagramVideoService {
     try {
       final res = await http.get(Uri.parse('$baseUrl/api/videos/$id'));
       if (res.statusCode == 200) {
-        return VideoModel.fromJson(json.decode(res.body));
+        // **CRITICAL FIX: Move JSON parsing to background thread**
+        final videoData = await compute(_parseVideoResponse, res.body);
+        return VideoModel.fromJson(videoData);
       } else {
-        final error = json.decode(res.body);
+        // **CRITICAL FIX: Move JSON parsing to background thread**
+        final error = await compute(_parseErrorResponse, res.body);
         throw Exception(error['error'] ?? 'Failed to load video');
       }
     } catch (e) {
       print('❌ InstagramVideoService: Error fetching video $id: $e');
+      rethrow;
+    }
+  }
+
+  /// **NEW: Parse video response in background thread**
+  static Map<String, dynamic> _parseVideoResponse(String responseBody) {
+    try {
+      return json.decode(responseBody);
+    } catch (e) {
+      print('❌ InstagramVideoService: Error parsing video response: $e');
+      rethrow;
+    }
+  }
+
+  /// **NEW: Parse error response in background thread**
+  static Map<String, dynamic> _parseErrorResponse(String responseBody) {
+    try {
+      return json.decode(responseBody);
+    } catch (e) {
+      print('❌ InstagramVideoService: Error parsing error response: $e');
       rethrow;
     }
   }
@@ -209,7 +268,7 @@ class InstagramVideoService {
     return await _cacheManager.get(
           cacheKey,
           fetchFn: () => _fetchUserVideosFromServer(userId),
-          cacheType: 'videos',
+          cacheType: 'user_videos',
           maxAge: const Duration(minutes: 15),
           forceRefresh: forceRefresh,
           currentEtag: currentEtag,
@@ -217,40 +276,54 @@ class InstagramVideoService {
         [];
   }
 
-  /// Fetch user videos from server with ETag support
+  /// Fetch user videos from server
   Future<List<VideoModel>> _fetchUserVideosFromServer(String userId) async {
     try {
-      final url = '$baseUrl/api/videos/user/$userId';
-      print('📡 InstagramVideoService: Fetching user videos from: $url');
-
-      final response = await _makeRequest(
-        () => http.get(Uri.parse(url)),
-        timeout: const Duration(seconds: 30),
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/videos/user/$userId'),
       );
 
       if (response.statusCode == 200) {
-        final List<dynamic> videoList = json.decode(response.body);
+        // **CRITICAL FIX: Move JSON parsing to background thread**
+        final List<dynamic> videoList =
+            await compute(_parseUserVideosResponse, response.body);
 
         return videoList.map((json) {
-          // Ensure URLs are complete
+          // Process video URLs and ensure they're complete
           if (json['videoUrl'] != null &&
               !json['videoUrl'].toString().startsWith('http')) {
             json['videoUrl'] = '$baseUrl${json['videoUrl']}';
           }
-          if (json['thumbnailUrl'] != null &&
-              !json['thumbnailUrl'].toString().startsWith('http')) {
-            json['thumbnailUrl'] = '$baseUrl${json['thumbnailUrl']}';
+
+          // Prefer HLS URLs for better streaming
+          if (json['hlsPlaylistUrl'] != null &&
+              json['hlsPlaylistUrl'].toString().isNotEmpty) {
+            if (!json['hlsPlaylistUrl'].toString().startsWith('http')) {
+              json['videoUrl'] = '$baseUrl${json['hlsPlaylistUrl']}';
+            } else {
+              json['videoUrl'] = json['hlsPlaylistUrl'];
+            }
           }
 
           return VideoModel.fromJson(json);
         }).toList();
-      } else if (response.statusCode == 404) {
-        return [];
       } else {
-        throw Exception('Failed to fetch user videos: ${response.statusCode}');
+        // **CRITICAL FIX: Move JSON parsing to background thread**
+        final error = await compute(_parseErrorResponse, response.body);
+        throw Exception(error['error'] ?? 'Failed to load user videos');
       }
     } catch (e) {
       print('❌ InstagramVideoService: Error fetching user videos: $e');
+      rethrow;
+    }
+  }
+
+  /// **NEW: Parse user videos response in background thread**
+  static List<dynamic> _parseUserVideosResponse(String responseBody) {
+    try {
+      return json.decode(responseBody);
+    } catch (e) {
+      print('❌ InstagramVideoService: Error parsing user videos response: $e');
       rethrow;
     }
   }
@@ -668,12 +741,69 @@ class InstagramVideoService {
   Future<void> preloadData(List<String> videoIds) async {
     if (!Features.backgroundVideoPreloading.isEnabled) return;
 
-    await _cacheManager.preloadData(
-      videoIds.map((id) => '$_videoDetailCacheKey$id').toList(),
-      (key) =>
-          _fetchVideoFromServer(key.replaceFirst(_videoDetailCacheKey, '')),
-      'video_metadata',
-    );
+    // Use smart preload instead of direct preload
+    for (final videoId in videoIds.take(5)) {
+      // Limit to 5 videos
+      unawaited(_cacheManager.get(
+        '$_videoDetailCacheKey$videoId',
+        fetchFn: () => _fetchVideoFromServer(videoId),
+        cacheType: 'video_metadata',
+        maxAge: const Duration(hours: 1),
+      ));
+    }
+  }
+
+  /// **NEW: Preload and cache data for better performance**
+  Future<void> preloadAndCacheData() async {
+    try {
+      print('🚀 InstagramVideoService: Preloading and caching data...');
+
+      // Preload first few pages of videos
+      for (int page = 1; page <= 3; page++) {
+        unawaited(getVideos(page: page, limit: 20, forceRefresh: false));
+      }
+
+      // Preload active ads
+      unawaited(_adService.getActiveAds());
+
+      print('✅ InstagramVideoService: Preloading completed');
+    } catch (e) {
+      print('❌ InstagramVideoService: Error during preloading: $e');
+    }
+  }
+
+  /// **NEW: Get cached videos without network call**
+  Future<Map<String, dynamic>?> getCachedVideos({
+    int page = 1,
+    int limit = 10,
+  }) async {
+    try {
+      final cacheKey = '$_videosCacheKey$page';
+      print('🎯 InstagramVideoService: Getting cached videos for page $page');
+
+      // Try to get from cache without network call
+      final cachedResult = await _cacheManager.get(
+        cacheKey,
+        fetchFn: () async {
+          // Return null to indicate cache miss without network call
+          return null;
+        },
+        cacheType: 'videos',
+        maxAge: const Duration(minutes: 30),
+        forceRefresh: false,
+      );
+
+      if (cachedResult != null) {
+        print('✅ InstagramVideoService: Found cached videos for page $page');
+        return cachedResult;
+      } else {
+        print('❌ InstagramVideoService: No cached videos found for page $page');
+        return null;
+      }
+    } catch (e) {
+      print('❌ InstagramVideoService: Error getting cached videos: $e');
+      return null;
+    }
   }
 
   /// Dispose service

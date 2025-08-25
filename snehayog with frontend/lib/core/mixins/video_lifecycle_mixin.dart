@@ -1,19 +1,19 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:snehayog/core/managers/video_controller_manager.dart';
-import 'package:snehayog/core/managers/yog_cache_manager.dart';
+import 'package:snehayog/core/managers/smart_cache_manager.dart';
 
 /// Mixin for managing video lifecycle events
 mixin VideoLifecycleMixin<T extends StatefulWidget> on State<T> {
   late VideoControllerManager _controllerManager;
-  late YogCacheManager _cacheManager;
+  late SmartCacheManager _cacheManager;
   bool _isScreenVisible = true;
   Timer? _healthCheckTimer;
 
   /// Initialize lifecycle management
   void initializeVideoLifecycle() {
     _controllerManager = VideoControllerManager();
-    _cacheManager = YogCacheManager();
+    _cacheManager = SmartCacheManager();
     _cacheManager.initialize();
     _startHealthCheckTimer();
   }
@@ -112,7 +112,7 @@ mixin VideoLifecycleMixin<T extends StatefulWidget> on State<T> {
   VideoControllerManager get controllerManager => _controllerManager;
 
   /// Get cache manager
-  YogCacheManager get cacheManager => _cacheManager;
+  SmartCacheManager get cacheManager => _cacheManager;
 
   /// Pause all videos
   void pauseAllVideos() {
