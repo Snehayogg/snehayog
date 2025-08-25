@@ -283,21 +283,42 @@ class AdService {
         throw Exception('User not authenticated');
       }
 
+      // **FIXED: Use the correct user ID format that matches backend expectations**
+      // The backend expects req.user.id from JWT token, so we need to use the same ID format
+      String userId;
+      if (userData['id'] != null) {
+        userId = userData['id'].toString();
+      } else if (userData['googleId'] != null) {
+        userId = userData['googleId'].toString();
+      } else {
+        throw Exception('User ID not found in user data');
+      }
+
+      print('🔍 AdService: Fetching ads for user ID: $userId');
+      print('🔍 AdService: User data keys: ${userData.keys.toList()}');
+
       final response = await http.get(
-        Uri.parse(
-            '$baseUrl/api/ads/user/${userData['googleId'] ?? userData['id']}'),
+        Uri.parse('$baseUrl/api/ads/user/$userId'),
         headers: {
           'Authorization': 'Bearer ${userData['token']}',
         },
       );
 
+      print('🔍 AdService: Response status: ${response.statusCode}');
+      print('🔍 AdService: Response body: ${response.body}');
+
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        return data.map((json) => AdModel.fromJson(json)).toList();
+        final ads = data.map((json) => AdModel.fromJson(json)).toList();
+        print('✅ AdService: Successfully fetched ${ads.length} ads');
+        return ads;
       } else {
+        print(
+            '❌ AdService: Failed to fetch ads - Status: ${response.statusCode}, Body: ${response.body}');
         throw Exception('Failed to fetch ads: ${response.body}');
       }
     } catch (e) {
+      print('❌ AdService: Error in getUserAds: $e');
       throw Exception('Error fetching ads: $e');
     }
   }

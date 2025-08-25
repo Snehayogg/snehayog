@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/services/video_service.dart';
+import 'package:snehayog/services/instagram_video_service.dart';
 
 /// Manages video state, pagination, and data loading
 class VideoStateManager extends ChangeNotifier {
@@ -20,7 +20,7 @@ class VideoStateManager extends ChangeNotifier {
   String? _errorMessage;
 
   // Service
-  final VideoService _videoService = VideoService();
+  final InstagramVideoService _videoService = InstagramVideoService();
 
   // Getters
   List<VideoModel> get videos => _videos;
@@ -55,30 +55,67 @@ class VideoStateManager extends ChangeNotifier {
           '🎬 VideoStateManager: Loading videos - Page: $_currentPage, Initial: $isInitialLoad');
 
       final stopwatch = Stopwatch()..start();
-      final response = await _videoService.getVideos(page: _currentPage);
+      
+      // Use InstagramVideoService with caching to prevent repeated backend calls
+      final response = await _videoService.getVideos(
+        page: _currentPage,
+        limit: 10,
+        forceRefresh: false, // Use cached data if available
+      );
+      
       stopwatch.stop();
 
       print(
           '📡 VideoStateManager: API response received in ${stopwatch.elapsedMilliseconds}ms');
 
-      final List<VideoModel> fetchedVideos = response['videos'];
-      final bool hasMore = response['hasMore'];
+      // Handle 304 Not Modified response
+      if (response['status'] == 304) {
+        print('✅ VideoStateManager: Using cached videos (304 Not Modified)');
+        // Use existing videos if available, otherwise fetch fresh
+        if (_videos.isNotEmpty) {
+          _setLoadingState(isInitialLoad, false);
+          notifyListeners();
+          return;
+        } else {
+          // Force refresh if no cached data
+          final freshResponse = await _videoService.getVideos(
+            page: _currentPage,
+            limit: 10,
+            forceRefresh: true,
+          );
+          _processVideoResponse(freshResponse, isInitialLoad);
+        }
+      } else {
+        _processVideoResponse(response, isInitialLoad);
+      }
 
-      print('🎥 VideoStateManager: Fetched ${fetchedVideos.length} videos');
-
-      _videos.addAll(fetchedVideos);
-      _hasMore = hasMore;
-      _currentPage++;
-
-      _setLoadingState(isInitialLoad, false);
-
-      print('📱 VideoStateManager: Total videos now: ${_videos.length}');
-
-      notifyListeners();
     } catch (e) {
       print("❌ VideoStateManager: Error loading videos: $e");
       _setLoadingState(isInitialLoad, false);
     }
+  }
+
+  /// Process video response and update state
+  void _processVideoResponse(Map<String, dynamic> response, bool isInitialLoad) {
+    final List<VideoModel> fetchedVideos = response['videos'];
+    final bool hasMore = response['hasMore'];
+
+    print('🎥 VideoStateManager: Fetched ${fetchedVideos.length} videos');
+
+    if (isInitialLoad) {
+      _videos = fetchedVideos;
+    } else {
+      _videos.addAll(fetchedVideos);
+    }
+    
+    _hasMore = hasMore;
+    _currentPage++;
+
+    _setLoadingState(isInitialLoad, false);
+
+    print('📱 VideoStateManager: Total videos now: ${_videos.length}');
+
+    notifyListeners();
   }
 
   /// Load more videos for infinite scroll
@@ -91,24 +128,47 @@ class VideoStateManager extends ChangeNotifier {
     try {
       print('🔄 VideoStateManager: Loading more videos - Page: $_currentPage');
 
-      final response = await _videoService.getVideos(page: _currentPage);
-      final List<VideoModel> fetchedVideos = response['videos'];
-      final bool hasMore = response['hasMore'];
+      // Use InstagramVideoService with caching
+      final response = await _videoService.getVideos(
+        page: _currentPage,
+        limit: 10,
+        forceRefresh: false, // Use cached data if available
+      );
 
-      _videos.addAll(fetchedVideos);
-      _hasMore = hasMore;
-      _currentPage++;
-      _isLoadingMore = false;
+      // Handle 304 Not Modified response
+      if (response['status'] == 304) {
+        print('✅ VideoStateManager: Using cached videos for page $_currentPage');
+        // Use existing data or force refresh if needed
+        if (_videos.length < _currentPage * 10) {
+          final freshResponse = await _videoService.getVideos(
+            page: _currentPage,
+            limit: 10,
+            forceRefresh: true,
+          );
+          _processMoreVideosResponse(freshResponse);
+        }
+      } else {
+        _processMoreVideosResponse(response);
+      }
 
-      print(
-          '✅ VideoStateManager: Loaded ${fetchedVideos.length} more videos. Total: ${_videos.length}');
-
-      notifyListeners();
     } catch (e) {
-      print('❌ VideoStateManager: Error loading more videos: $e');
+      print("❌ VideoStateManager: Error loading more videos: $e");
+    } finally {
       _isLoadingMore = false;
       notifyListeners();
     }
+  }
+
+  /// Process more videos response
+  void _processMoreVideosResponse(Map<String, dynamic> response) {
+    final List<VideoModel> fetchedVideos = response['videos'];
+    final bool hasMore = response['hasMore'];
+
+    _videos.addAll(fetchedVideos);
+    _hasMore = hasMore;
+    _currentPage++;
+
+    print('📱 VideoStateManager: Added ${fetchedVideos.length} more videos. Total: ${_videos.length}');
   }
 
   /// Check if we need to load more videos for infinite scroll

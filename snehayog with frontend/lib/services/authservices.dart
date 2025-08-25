@@ -111,7 +111,7 @@ class AuthService {
           // Return combined user data
           return {
             'id': googleUser.id,
-            'googleId': googleUser.id, // Add explicit googleId field
+            'googleId': googleUser.id,
             'name': googleUser.displayName ?? 'User',
             'email': googleUser.email,
             'profilePic': googleUser.photoUrl,

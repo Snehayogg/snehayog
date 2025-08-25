@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/services/video_service.dart';
+import 'package:snehayog/services/instagram_video_service.dart';
 import 'package:snehayog/controller/google_sign_in_controller.dart';
 import 'package:provider/provider.dart';
 
 /// Bottom sheet widget for displaying and adding comments to a video
 class CommentsSheet extends StatefulWidget {
   final VideoModel video; // Video to show comments for
-  final VideoService videoService; // Service to handle comment operations
+  final InstagramVideoService videoService; // Service to handle comment operations
   final ValueChanged<List<Comment>>
       onCommentsUpdated; // Callback when comments change
 

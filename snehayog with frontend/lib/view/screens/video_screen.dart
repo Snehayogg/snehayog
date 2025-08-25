@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/services/video_service.dart';
+import 'package:snehayog/services/instagram_video_service.dart';
 import 'package:snehayog/services/authservices.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:provider/provider.dart';
@@ -9,7 +9,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'package:snehayog/view/screens/profile_screen.dart';
 import 'package:snehayog/controller/main_controller.dart';
 import 'package:snehayog/core/managers/video_controller_manager.dart';
-import 'package:snehayog/core/managers/video_cache_manager.dart';
+import 'package:snehayog/core/managers/smart_preload_manager.dart';
 import 'package:snehayog/core/managers/video_state_manager.dart';
 import 'package:snehayog/view/widget/video_item_widget.dart';
 import 'package:snehayog/view/widget/video_ui_components.dart' as ui_components;
@@ -35,11 +35,11 @@ class VideoScreen extends StatefulWidget {
 class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
   // Managers
   late VideoControllerManager _controllerManager;
-  late VideoCacheManager _cacheManager;
   late VideoStateManager _stateManager;
+  late SmartPreloadManager _smartPreloadManager;
 
   // Service
-  final VideoService _videoService = VideoService();
+  final InstagramVideoService _videoService = InstagramVideoService();
   final AuthService _authService = AuthService();
 
   // AdMob
@@ -136,16 +136,45 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
 
     // Initialize managers
     _controllerManager = VideoControllerManager();
-    _cacheManager = VideoCacheManager();
     _stateManager = VideoStateManager();
-
-    // Initialize fast video delivery system
-    _initializeFastVideoDelivery();
+    _smartPreloadManager = SmartPreloadManager();
 
     // Initialize other components
     _initializeComponents();
     _loadVideos();
     _initializeAdMob();
+
+    // Initialize smart preloading and track navigation
+    _initializeSmartPreloading();
+  }
+
+  /// Initialize smart preloading system
+  void _initializeSmartPreloading() async {
+    if (!Features.smartVideoCaching.isEnabled) return;
+
+    try {
+      print('🚀 VideoScreen: Initializing smart preloading...');
+
+      // Initialize smart preload manager
+      await _smartPreloadManager.initialize();
+
+      // Track navigation to video screen
+      _smartPreloadManager.trackNavigation('video_feed', context: {
+        'userId': await _getCurrentUserId(),
+        'screenType': 'video_feed',
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+
+      // Start smart preloading for other screens
+      await _smartPreloadManager.smartPreload('video_feed', userContext: {
+        'userId': await _getCurrentUserId(),
+        'currentScreen': 'video_feed',
+      });
+
+      print('✅ VideoScreen: Smart preloading initialized');
+    } catch (e) {
+      print('❌ VideoScreen: Error initializing smart preloading: $e');
+    }
   }
 
   /// Initialize fast video delivery system
@@ -158,11 +187,8 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
     try {
       print('🚀 VideoScreen: Initializing fast video delivery system...');
 
-      // Initialize cache manager
-      await _cacheManager.initialize();
-
-      // Initialize controller manager with cache manager
-      _controllerManager.initialize(_cacheManager);
+      // Initialize controller manager
+      _controllerManager.initialize();
 
       print('✅ VideoScreen: Fast video delivery system initialized');
     } catch (e) {
@@ -439,8 +465,6 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       // Use emergency stop for app background
       _controllerManager.emergencyStopAllVideos();
 
-      _cacheManager.automatedCacheCleanup();
-
       // Pause banner ad when app goes to background
       if (_bannerAd != null && _isBannerAdLoaded) {
         print('🛑 VideoScreen: Pausing banner ad');
@@ -644,19 +668,51 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
           _controllerManager.setCurrentVideos(widget.initialVideos!);
         }
       } else {
-        print('🌐 VideoScreen: Loading videos from service...');
-        final response = await _videoService.getVideos();
-        final videos = response['videos'] as List<VideoModel>;
-        _stateManager.initializeWithVideos(videos, 0);
+        print(
+            '🌐 VideoScreen: Loading videos from InstagramVideoService with caching...');
+
+        // Use InstagramVideoService with caching to prevent repeated backend calls
+        final response = await _videoService.getVideos(
+          page: 1,
+          limit: 20,
+          forceRefresh: false, // Use cached data if available
+        );
+
+        if (response['status'] == 304) {
+          print('✅ VideoScreen: Using cached videos (304 Not Modified)');
+          // Use cached data from previous response
+          final cachedVideos = _stateManager.videos;
+          if (cachedVideos.isNotEmpty) {
+            _stateManager.initializeWithVideos(cachedVideos, 0);
+            print(
+                '📹 VideoScreen: Loaded ${cachedVideos.length} cached videos');
+          } else {
+            // Fallback to fresh fetch if no cached data
+            final freshResponse = await _videoService.getVideos(
+              page: 1,
+              limit: 20,
+              forceRefresh: true,
+            );
+            final videos = freshResponse['videos'] as List<VideoModel>;
+            _stateManager.initializeWithVideos(videos, 0);
+            print('📹 VideoScreen: Loaded ${videos.length} fresh videos');
+          }
+        } else {
+          final videos = response['videos'] as List<VideoModel>;
+          _stateManager.initializeWithVideos(videos, 0);
+          print('📹 VideoScreen: Loaded ${videos.length} videos from service');
+        }
 
         // Set videos for fast video delivery preloading
         if (Features.fastVideoDelivery.isEnabled) {
-          _controllerManager.setCurrentVideos(videos);
+          _controllerManager.setCurrentVideos(_stateManager.videos);
 
           // Start preloading videos for instant playback
           print(
-              '🚀 VideoScreen: Starting video preloading for ${videos.length} videos');
-          await _cacheManager.preCacheVideos(videos, 0);
+              '🚀 VideoScreen: Starting video preloading for ${_stateManager.videos.length} videos');
+
+          // Preload next few pages for smooth scrolling
+          await _preloadNextPages();
         }
       }
 
@@ -671,6 +727,35 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
           ),
         );
       }
+    }
+  }
+
+  /// Preload next pages for smooth scrolling
+  Future<void> _preloadNextPages() async {
+    if (!Features.backgroundVideoPreloading.isEnabled) return;
+
+    try {
+      print('🚀 VideoScreen: Preloading next pages for smooth scrolling...');
+
+      // Preload next 2-3 pages
+      for (int page = 2; page <= 4; page++) {
+        unawaited(_videoService
+            .getVideos(
+          page: page,
+          limit: 20,
+          forceRefresh: false, // Use cache if available
+        )
+            .then((response) {
+          if (response['videos'] != null) {
+            print(
+                '📹 VideoScreen: Preloaded page $page with ${response['videos'].length} videos');
+          }
+        }));
+      }
+
+      print('✅ VideoScreen: Next pages preloading started');
+    } catch (e) {
+      print('⚠️ VideoScreen: Error preloading next pages: $e');
     }
   }
 
@@ -710,18 +795,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
     });
 
     // Cache management timers
-    Timer.periodic(const Duration(minutes: 2), (timer) {
-      if (mounted) {
-        _cacheManager.automatedCacheCleanup();
-      }
-    });
-
-    Timer.periodic(const Duration(minutes: 5), (timer) {
-      if (mounted) {
-        _cacheManager.smartCacheManagement(
-            _stateManager.totalVideos, _stateManager.activePage);
-      }
-    });
+    // Periodic tasks handled by controller manager if needed
   }
 
   /// Handle state changes
@@ -1226,17 +1300,42 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// Get cache info
+  /// Get cache info (removed as legacy cache manager is no longer used)
   Future<void> _getCacheInfo() async {
-    final cacheInfo = await _cacheManager.getCacheInfo();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-            '📊 Cache: ${cacheInfo['sizeMB']} MB, ${cacheInfo['fileCount']} files'),
-        backgroundColor: Colors.blue,
-        duration: const Duration(seconds: 3),
-      ),
-    );
+    try {
+      // Get cache statistics from InstagramVideoService
+      final cacheStats = _videoService.getCacheStats();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '📊 Cache Stats:\n'
+              'Hits: ${cacheStats['cacheHits']}, '
+              'Misses: ${cacheStats['cacheMisses']}\n'
+              'Hit Rate: ${cacheStats['hitRate']}%',
+            ),
+            backgroundColor: Colors.blue,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'Clear Cache',
+              textColor: Colors.white,
+              onPressed: () async {
+                await _videoService.clearCaches();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('🗑️ Cache cleared!'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ Error getting cache info: $e');
+    }
   }
 
   /// Debug method to test like functionality
@@ -1487,6 +1586,30 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
                       ),
                     ),
 
+                    // Cache status indicator
+                    SizedBox(
+                      width: 60,
+                      height: 60,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          IconButton(
+                            onPressed: () => _getCacheInfo(),
+                            icon: const Icon(
+                              Icons.storage,
+                              color: Colors.green,
+                              size: 20,
+                            ),
+                            tooltip: 'Cache Status (Tap to view)',
+                          ),
+                          const Text(
+                            '📊',
+                            style: TextStyle(fontSize: 10),
+                          ),
+                        ],
+                      ),
+                    ),
+
                     // Banner ad in the center (expanded)
                     Expanded(
                       child: GestureDetector(
@@ -1650,6 +1773,13 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
                         _refreshBannerAd();
                       }
 
+                      // Track navigation to profile screen for smart preloading
+                      _smartPreloadManager.trackNavigation('profile', context: {
+                        'userId': video.uploader.id,
+                        'fromScreen': 'video_feed',
+                        'timestamp': DateTime.now().toIso8601String(),
+                      });
+
                       Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -1658,8 +1788,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
                         ),
                       );
                     },
-                    cacheManager:
-                        _cacheManager, // Connect cache manager for fast video delivery
+                    // cacheManager removed; Instagram-like caching is internal
                   ),
                 );
               },
