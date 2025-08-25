@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:snehayog/services/ad_service.dart';
 import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/model/ad_model.dart';
+import 'package:http/http.dart' as http;
+import 'package:snehayog/config/app_config.dart';
 
 class AdManagementScreen extends StatefulWidget {
   const AdManagementScreen({super.key});
@@ -32,12 +34,16 @@ class _AdManagementScreenState extends State<AdManagementScreen> {
     });
 
     try {
+      print('🔍 AdManagementScreen: Loading user ads...');
       final ads = await _adService.getUserAds();
+      print('✅ AdManagementScreen: Successfully loaded ${ads.length} ads');
+
       setState(() {
         _ads = ads;
         _isLoading = false;
       });
     } catch (e) {
+      print('❌ AdManagementScreen: Error loading ads: $e');
       setState(() {
         _errorMessage = 'Error loading ads: $e';
         _isLoading = false;
@@ -98,11 +104,10 @@ class _AdManagementScreenState extends State<AdManagementScreen> {
       try {
         await _adService.deleteAd(ad.id);
         await _loadAds(); // Reload ads
-
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Advertisement deleted successfully'),
+            SnackBar(
+              content: Text('Ad "${ad.title}" deleted successfully'),
               backgroundColor: Colors.green,
             ),
           );
@@ -116,6 +121,121 @@ class _AdManagementScreenState extends State<AdManagementScreen> {
             ),
           );
         }
+      }
+    }
+  }
+
+  /// **NEW: Test API endpoint for debugging**
+  Future<void> _testApiEndpoint() async {
+    try {
+      print('🔍 AdManagementScreen: Testing API endpoint...');
+
+      final userData = await _authService.getUserData();
+      if (userData == null) {
+        throw Exception('User not authenticated');
+      }
+
+      final userId =
+          userData['id']?.toString() ?? userData['googleId']?.toString();
+      print('🔍 AdManagementScreen: User ID: $userId');
+      print('🔍 AdManagementScreen: User data keys: ${userData.keys.toList()}');
+
+      // Test the debug endpoint
+      final response = await http.get(
+        Uri.parse('${AppConfig.baseUrl}/api/ads/debug/check'),
+        headers: {
+          'Authorization': 'Bearer ${userData['token']}',
+        },
+      );
+
+      print(
+          '🔍 AdManagementScreen: Debug API response status: ${response.statusCode}');
+      print('🔍 AdManagementScreen: Debug API response body: ${response.body}');
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('API Test Results'),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Status: ${response.statusCode}'),
+                  Text('User ID: $userId'),
+                  Text('Response: ${response.body}'),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ AdManagementScreen: API test error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('API test failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// **NEW: Show user data for debugging**
+  void _showUserData() async {
+    try {
+      final userData = await _authService.getUserData();
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('User Data'),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('ID: ${userData?['id'] ?? 'Not found'}'),
+                  Text('Google ID: ${userData?['googleId'] ?? 'Not found'}'),
+                  Text('Name: ${userData?['name'] ?? 'Not found'}'),
+                  Text('Email: ${userData?['email'] ?? 'Not found'}'),
+                  Text(
+                      'Token: ${userData?['token'] != null ? 'Present' : 'Not found'}'),
+                  const SizedBox(height: 8),
+                  const Text('All Keys:',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  ...(userData?.keys
+                          .map((key) => Text('• $key: ${userData[key]}')) ??
+                      []),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error getting user data: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
@@ -340,6 +460,66 @@ class _AdManagementScreenState extends State<AdManagementScreen> {
                     ),
                   ),
                 ],
+              ),
+
+              // **NEW: Debug section for troubleshooting**
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.bug_report,
+                            color: Colors.orange[600], size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Debug Tools',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange[800],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _testApiEndpoint,
+                            icon: const Icon(Icons.api, size: 16),
+                            label: const Text('Test API'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _showUserData,
+                            icon: const Icon(Icons.person, size: 16),
+                            label: const Text('Show User Data'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

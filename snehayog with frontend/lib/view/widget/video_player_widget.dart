@@ -6,20 +6,18 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:async';
 import 'package:snehayog/services/ad_impression_service.dart';
 import 'package:snehayog/utils/feature_flags.dart';
-import 'package:snehayog/core/managers/video_cache_manager.dart';
+import 'package:snehayog/core/managers/yog_cache_manager.dart';
 
 class VideoPlayerWidget extends StatefulWidget {
   final VideoModel video;
   final bool play;
   final VideoPlayerController? controller;
-  final VideoCacheManager? cacheManager; // Add cache manager
 
   const VideoPlayerWidget({
     Key? key,
     required this.video,
     required this.play,
     this.controller,
-    this.cacheManager,
   }) : super(key: key);
 
   @override
@@ -39,11 +37,6 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
   Timer? _feedbackTimer;
   final AdImpressionService _adImpressionService = AdImpressionService();
 
-  // Fast video delivery integration
-  bool _isPreloading = false;
-  double _preloadProgress = 0.0;
-  bool _isCached = false;
-
   @override
   void initState() {
     super.initState();
@@ -55,13 +48,6 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
         '🎬 VideoPlayerWidget: Controller provided: ${widget.controller != null}');
     print('🎬 VideoPlayerWidget: Video URL: ${widget.video.videoUrl}');
     print('🎬 VideoPlayerWidget: HLS URL: ${widget.video.hlsPlaylistUrl}');
-    print(
-        '🎬 VideoPlayerWidget: Cache manager provided: ${widget.cacheManager != null}');
-
-    // Check cache status if fast video delivery is enabled
-    if (Features.fastVideoDelivery.isEnabled && widget.cacheManager != null) {
-      _checkCacheStatus();
-    }
 
     if (widget.controller == null) {
       print(
@@ -71,33 +57,6 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
       print('🎬 VideoPlayerWidget: Using provided controller...');
       _controller = widget.controller;
       _setupController();
-    }
-  }
-
-  /// Check cache status for fast video delivery
-  Future<void> _checkCacheStatus() async {
-    if (widget.cacheManager == null) {
-      print(
-          '⚠️ VideoPlayerWidget: No cache manager provided for video: ${widget.video.videoName}');
-      return;
-    }
-
-    try {
-      _isCached = widget.cacheManager!.isVideoCached(widget.video.id);
-      _isPreloading = widget.cacheManager!.isPreloading(widget.video.id);
-      _preloadProgress =
-          widget.cacheManager!.getPreloadProgress(widget.video.id);
-
-      if (mounted) {
-        setState(() {});
-      }
-
-      print(
-          '🔍 VideoPlayerWidget: Cache status for "${widget.video.videoName}" - Cached: $_isCached, Preloading: $_isPreloading, Progress: ${(_preloadProgress * 100).toStringAsFixed(1)}%');
-      print(
-          '🔍 VideoPlayerWidget: Video ID: ${widget.video.id}, URL: ${widget.video.videoUrl}');
-    } catch (e) {
-      print('❌ VideoPlayerWidget: Error checking cache status: $e');
     }
   }
 
@@ -422,7 +381,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
               color: Colors.red[300],
             ),
             const SizedBox(height: 16),
-            Text(
+            const Text(
               'Video Playback Error',
               style: TextStyle(
                 color: Colors.white,
@@ -523,14 +482,14 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
       width: double.infinity,
       height: double.infinity,
       color: Colors.black87,
-      child: Center(
+      child: const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const CircularProgressIndicator(
+            CircularProgressIndicator(
               valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             Text(
               'Loading Video...',
               style: TextStyle(
@@ -539,16 +498,6 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
                 fontWeight: FontWeight.w500,
               ),
             ),
-            if (_isPreloading) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Preloading for smooth playback...',
-                style: TextStyle(
-                  color: Colors.grey[400],
-                  fontSize: 12,
-                ),
-              ),
-            ],
           ],
         ),
       ),
@@ -569,7 +518,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
               valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
             ),
             const SizedBox(height: 16),
-            Text(
+            const Text(
               'Preparing Video...',
               style: TextStyle(
                 color: Colors.white,
@@ -729,62 +678,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
     );
   }
 
-  /// Build cache status indicator for fast video delivery
-  Widget _buildCacheStatusIndicator() {
-    if (!Features.fastVideoDelivery.isEnabled) return const SizedBox.shrink();
 
-    Color indicatorColor;
-    IconData indicatorIcon;
-    String statusText;
-
-    if (_isCached) {
-      indicatorColor = Colors.green;
-      indicatorIcon = Icons.check_circle;
-      statusText = 'Cached';
-    } else if (_isPreloading) {
-      indicatorColor = Colors.blue;
-      indicatorIcon = Icons.download;
-      statusText = 'Preloading';
-    } else {
-      indicatorColor = Colors.grey;
-      indicatorIcon = Icons.cloud_download;
-      statusText = 'Not Cached';
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: indicatorColor.withOpacity(0.9),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            indicatorIcon,
-            color: Colors.white,
-            size: 16,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            statusText,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   /// Build mute button - 35% smaller and more professional
   Widget _buildMuteButton() {

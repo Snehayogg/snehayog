@@ -11,7 +11,6 @@ import 'package:snehayog/view/widget/video_player_widget.dart';
 import 'package:snehayog/services/ad_service.dart';
 import 'package:snehayog/services/authservices.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:snehayog/core/managers/video_cache_manager.dart';
 
 class VideoItemWidget extends StatefulWidget {
   final VideoModel video;
@@ -22,8 +21,6 @@ class VideoItemWidget extends StatefulWidget {
   final VoidCallback? onComment;
   final VoidCallback? onShare;
   final VoidCallback? onProfileTap;
-  final VideoCacheManager? cacheManager; // Add cache manager
-
   const VideoItemWidget({
     Key? key,
     required this.video,
@@ -34,7 +31,6 @@ class VideoItemWidget extends StatefulWidget {
     this.onComment,
     this.onShare,
     this.onProfileTap,
-    this.cacheManager, // Add cache manager parameter
   }) : super(key: key);
 
   @override
@@ -250,7 +246,6 @@ class _VideoItemWidgetState extends State<VideoItemWidget> {
             controller: widget.controller,
             video: widget.video,
             play: widget.isActive,
-            cacheManager: widget.cacheManager, // Pass cache manager
           ),
         ),
 

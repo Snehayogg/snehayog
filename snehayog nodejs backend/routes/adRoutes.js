@@ -773,21 +773,80 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
   }
 });
 
+// **NEW: Debug route to check ads**
+router.get('/debug/check', verifyToken, async (req, res) => {
+  try {
+    console.log('🔍 Debug route - Checking ads...');
+    console.log('  - req.user:', JSON.stringify(req.user, null, 2));
+    
+    // Check if any ads exist
+    const totalAds = await AdCampaign.countDocuments();
+    const userAds = await AdCampaign.countDocuments({ advertiserUserId: req.user.id });
+    
+    console.log(`  - Total ads in database: ${totalAds}`);
+    console.log(`  - Ads for current user: ${userAds}`);
+    
+    res.json({
+      message: 'Debug info',
+      user: req.user,
+      totalAds,
+      userAds,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Debug route error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // **NEW: Get user's ads**
 router.get('/user/:userId', verifyToken, async (req, res) => {
   try {
     const { userId } = req.params;
     
-    // Verify the user is requesting their own ads
-    if (req.user.id !== userId) {
-      return res.status(403).json({ error: 'Access denied' });
+    console.log('🔍 Get user ads - Debug info:');
+    console.log('  - URL userId:', userId);
+    console.log('  - req.user.id:', req.user.id);
+    console.log('  - req.user:', JSON.stringify(req.user, null, 2));
+    
+    // **FIXED: More flexible user ID comparison**
+    // Check if the user ID matches either the JWT user ID or the Google ID
+    const jwtUserId = req.user.id?.toString();
+    const jwtGoogleId = req.user.googleId?.toString();
+    
+    if (jwtUserId !== userId && jwtGoogleId !== userId) {
+      console.log('❌ Access denied - User ID mismatch:');
+      console.log('  - JWT User ID:', jwtUserId);
+      console.log('  - JWT Google ID:', jwtGoogleId);
+      console.log('  - Requested User ID:', userId);
+      return res.status(403).json({ 
+        error: 'Access denied - User ID mismatch',
+        debug: {
+          jwtUserId,
+          jwtGoogleId,
+          requestedUserId: userId
+        }
+      });
     }
 
+    console.log('✅ Access granted - User ID verified');
+
+    // **FIXED: Use the verified user ID for database query**
+    const verifiedUserId = jwtUserId || jwtGoogleId;
+    
     // Get user's ad campaigns
-    const campaigns = await AdCampaign.find({ advertiserUserId: userId })
+    const campaigns = await AdCampaign.find({ advertiserUserId: verifiedUserId })
       .populate('creative')
       .populate('advertiserUserId', 'name profilePic')
       .sort({ createdAt: -1 });
+
+    console.log(`🔍 Found ${campaigns.length} campaigns for user ${verifiedUserId}`);
+
+    // **FIXED: Handle case when no ads are found**
+    if (campaigns.length === 0) {
+      console.log(`ℹ️ No ads found for user ${verifiedUserId} - returning empty array`);
+      return res.json([]);
+    }
 
     // Convert campaigns to the format expected by AdModel
     const ads = campaigns.map(campaign => ({
@@ -815,6 +874,7 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
       uploaderProfilePic: campaign.advertiserUserId?.profilePic || ''
     }));
 
+    console.log(`✅ Returning ${ads.length} ads for user ${verifiedUserId}`);
     res.json(ads);
   } catch (error) {
     console.error('❌ Get user ads error:', error);

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +9,7 @@ import 'package:snehayog/services/user_service.dart';
 import 'package:snehayog/services/video_service.dart';
 import 'package:snehayog/core/constants/profile_constants.dart';
 import 'package:snehayog/core/providers/video_provider.dart';
+import 'package:snehayog/utils/feature_flags.dart';
 
 class ProfileStateManager extends ChangeNotifier {
   final VideoService _videoService = VideoService();
@@ -33,6 +35,16 @@ class ProfileStateManager extends ChangeNotifier {
 
   // Controllers
   final TextEditingController nameController = TextEditingController();
+
+  // Instagram-like caching
+  final Map<String, dynamic> _cache = {};
+  final Map<String, DateTime> _cacheTimestamps = {};
+  final Map<String, String> _cacheEtags = {};
+
+  // Cache configuration
+  static const Duration _userProfileCacheTime = Duration(hours: 24);
+  static const Duration _userVideosCacheTime = Duration(minutes: 15);
+  static const Duration _staleWhileRevalidateTime = Duration(minutes: 5);
 
   // Getters
   List<VideoModel> get userVideos => _userVideos;
@@ -110,66 +122,125 @@ class ProfileStateManager extends ChangeNotifier {
   }
 
   Future<void> loadUserVideos(String? userId) async {
+    if (Features.smartVideoCaching.isEnabled) {
+      await _loadUserVideosWithCaching(userId);
+    } else {
+      await _loadUserVideosDirect(userId);
+    }
+  }
+
+  /// Load user videos with Instagram-like caching strategy
+  Future<void> _loadUserVideosWithCaching(String? userId) async {
     try {
-      print('🔄 ProfileStateManager: Loading videos for userId: $userId');
+      print(
+          '🔄 ProfileStateManager: Loading videos with Instagram-like caching for userId: $userId');
 
       final loggedInUser = await _authService.getUserData();
-      print('🔄 ProfileStateManager: Logged in user data: $loggedInUser');
-      print(
-          '🔄 ProfileStateManager: Logged in user googleId: ${loggedInUser?['googleId']}');
-      print(
-          '🔄 ProfileStateManager: Logged in user id: ${loggedInUser?['id']}');
-
       final bool isMyProfile = userId == null ||
           userId == loggedInUser?['id'] ||
           userId == loggedInUser?['googleId'];
 
-      print(
-          '🔄 ProfileStateManager: Loading videos - isMyProfile: $isMyProfile');
-
       String targetUserId;
       if (isMyProfile) {
-        // **FIXED: Use googleId for own profile instead of MongoDB _id**
         targetUserId = loggedInUser?['googleId'] ?? loggedInUser?['id'] ?? '';
-        print(
-            '🔄 ProfileStateManager: Loading own videos with googleId: $targetUserId');
       } else {
-        // **FIXED: Use provided userId for other user's profile**
         targetUserId = userId ?? '';
-        print(
-            '🔄 ProfileStateManager: Loading other user videos with ID: $targetUserId');
       }
 
       if (targetUserId.isNotEmpty) {
-        print(
-            '🔄 ProfileStateManager: Calling VideoService.getUserVideos($targetUserId)');
-        final videos = await _videoService.getUserVideos(targetUserId);
-        print(
-            '🔄 ProfileStateManager: Successfully loaded ${videos.length} videos for user: $targetUserId');
+        // Check cache first
+        final cacheKey = 'user_videos_$targetUserId';
+        final cachedData = _getFromCache(cacheKey);
 
-        // **DEBUG: Log video details**
-        for (int i = 0; i < videos.length; i++) {
+        if (cachedData != null) {
+          // Return cached data instantly
+          _userVideos = List<VideoModel>.from(cachedData);
           print(
-              '🔄 ProfileStateManager: Video $i: ${videos[i].videoName} (ID: ${videos[i].id})');
-          print('🔄 ProfileStateManager: Video $i URL: ${videos[i].videoUrl}');
-          print(
-              '🔄 ProfileStateManager: Video $i Thumbnail: ${videos[i].thumbnailUrl}');
-          print(
-              '🔄 ProfileStateManager: Video $i Uploader: ${videos[i].uploader.name}');
+              '⚡ ProfileStateManager: Instant cache hit for videos: ${_userVideos.length} videos');
+          notifyListeners();
+
+          // Start background refresh if data is stale
+          if (_isCacheStale(cacheKey, _userVideosCacheTime)) {
+            _scheduleBackgroundRefresh(
+                cacheKey, () => _fetchVideosFromServer(targetUserId));
+          }
+        } else {
+          // Cache miss - fetch from server
+          await _fetchAndCacheVideos(targetUserId, cacheKey);
         }
-
-        _userVideos = videos;
-        notifyListeners();
       } else {
-        print('⚠️ ProfileStateManager: No valid user ID for video loading');
         _userVideos = [];
         notifyListeners();
       }
     } catch (e) {
-      print('❌ ProfileStateManager: Error loading user videos: $e');
+      print('❌ ProfileStateManager: Error in cached video loading: $e');
+      // Fallback to direct loading
+      await _loadUserVideosDirect(userId);
+    }
+  }
+
+  /// Load user videos directly without caching (fallback)
+  Future<void> _loadUserVideosDirect(String? userId) async {
+    try {
+      print(
+          '🔄 ProfileStateManager: Loading videos directly for userId: $userId');
+
+      final loggedInUser = await _authService.getUserData();
+      final bool isMyProfile = userId == null ||
+          userId == loggedInUser?['id'] ||
+          userId == loggedInUser?['googleId'];
+
+      String targetUserId;
+      if (isMyProfile) {
+        targetUserId = loggedInUser?['googleId'] ?? loggedInUser?['id'] ?? '';
+      } else {
+        targetUserId = userId ?? '';
+      }
+
+      if (targetUserId.isNotEmpty) {
+        final videos = await _videoService.getUserVideos(targetUserId);
+        _userVideos = videos;
+        print('✅ ProfileStateManager: Directly loaded ${videos.length} videos');
+        notifyListeners();
+      } else {
+        _userVideos = [];
+        notifyListeners();
+      }
+    } catch (e) {
+      print('❌ ProfileStateManager: Error in direct video loading: $e');
       _error = '${ProfileConstants.errorLoadingVideos}${e.toString()}';
       _userVideos = [];
       notifyListeners();
+    }
+  }
+
+  /// Fetch videos from server and cache them
+  Future<void> _fetchAndCacheVideos(String userId, String cacheKey) async {
+    try {
+      print(
+          '📡 ProfileStateManager: Fetching videos from server for user: $userId');
+      final videos = await _videoService.getUserVideos(userId);
+
+      // Cache the videos
+      _setCache(cacheKey, videos, _userVideosCacheTime);
+
+      _userVideos = videos;
+      print(
+          '✅ ProfileStateManager: Fetched and cached ${videos.length} videos');
+      notifyListeners();
+    } catch (e) {
+      print('❌ ProfileStateManager: Error fetching videos from server: $e');
+      rethrow;
+    }
+  }
+
+  /// Fetch videos from server (for background refresh)
+  Future<List<VideoModel>> _fetchVideosFromServer(String userId) async {
+    try {
+      return await _videoService.getUserVideos(userId);
+    } catch (e) {
+      print('❌ ProfileStateManager: Error in background video fetch: $e');
+      return [];
     }
   }
 
@@ -499,29 +570,39 @@ class ProfileStateManager extends ChangeNotifier {
       // Get the current user ID from userData or logged in user
       String? targetUserId;
       if (_userData != null && _userData!['googleId'] != null) {
-        // **FIXED: Prioritize googleId over MongoDB _id**
         targetUserId = _userData!['googleId'];
         print(
             '🔄 ProfileStateManager: Refreshing videos for user with googleId: $targetUserId');
       } else if (_userData != null && _userData!['id'] != null) {
-        // Fallback to MongoDB _id if googleId not available
         targetUserId = _userData!['id'];
         print(
             '🔄 ProfileStateManager: Refreshing videos for user with MongoDB _id: $targetUserId');
       } else {
         final loggedInUser = await _authService.getUserData();
-        // **FIXED: Prioritize googleId over MongoDB _id**
         targetUserId = loggedInUser?['googleId'] ?? loggedInUser?['id'];
         print(
             '🔄 ProfileStateManager: Refreshing videos for logged in user: $targetUserId');
       }
 
       if (targetUserId != null && targetUserId.isNotEmpty) {
-        final videos = await _videoService.getUserVideos(targetUserId);
-        _userVideos = videos;
-        notifyListeners();
-        print(
-            '✅ ProfileStateManager: Videos refreshed successfully. Count: ${videos.length}');
+        if (Features.smartVideoCaching.isEnabled) {
+          // Clear cache and reload with fresh data
+          final cacheKey = 'user_videos_$targetUserId';
+          _cache.remove(cacheKey);
+          _cacheTimestamps.remove(cacheKey);
+          _cacheEtags.remove(cacheKey);
+          print('🧹 ProfileStateManager: Cleared cache for key: $cacheKey');
+
+          // Reload with fresh data
+          await _fetchAndCacheVideos(targetUserId, cacheKey);
+        } else {
+          // Direct refresh without caching
+          final videos = await _videoService.getUserVideos(targetUserId);
+          _userVideos = videos;
+          notifyListeners();
+          print(
+              '✅ ProfileStateManager: Videos refreshed directly. Count: ${videos.length}');
+        }
       } else {
         print('⚠️ ProfileStateManager: No valid user ID for video refresh');
       }
@@ -537,6 +618,19 @@ class ProfileStateManager extends ChangeNotifier {
     print(
         '➕ ProfileStateManager: Adding new video to profile: ${video.videoName}');
     _userVideos.insert(0, video); // Add to the beginning of the list
+
+    // Clear relevant caches when new video is added
+    if (Features.smartVideoCaching.isEnabled && _userData != null) {
+      final userId = _userData!['googleId'] ?? _userData!['id'];
+      if (userId != null) {
+        final cacheKey = 'user_videos_$userId';
+        _cache.remove(cacheKey);
+        _cacheTimestamps.remove(cacheKey);
+        _cacheEtags.remove(cacheKey);
+        print('🧹 ProfileStateManager: Cleared cache after adding new video');
+      }
+    }
+
     notifyListeners();
   }
 
@@ -544,7 +638,113 @@ class ProfileStateManager extends ChangeNotifier {
   void removeVideo(String videoId) {
     print('➖ ProfileStateManager: Removing video from profile: $videoId');
     _userVideos.removeWhere((video) => video.id == videoId);
+
+    // Clear relevant caches when video is removed
+    if (Features.smartVideoCaching.isEnabled && _userData != null) {
+      final userId = _userData!['googleId'] ?? _userData!['id'];
+      if (userId != null) {
+        final cacheKey = 'user_videos_$userId';
+        _cache.remove(cacheKey);
+        _cacheTimestamps.remove(cacheKey);
+        _cacheEtags.remove(cacheKey);
+        print('🧹 ProfileStateManager: Cleared cache after removing video');
+      }
+    }
+
     notifyListeners();
+  }
+
+  // Instagram-like caching methods
+  /// Get data from cache
+  dynamic _getFromCache(String key) {
+    if (_cache.containsKey(key) && _cacheTimestamps.containsKey(key)) {
+      final timestamp = _cacheTimestamps[key]!;
+      final now = DateTime.now();
+
+      if (now.difference(timestamp) < _userVideosCacheTime) {
+        print('⚡ ProfileStateManager: Cache hit for key: $key');
+        return _cache[key];
+      } else {
+        print('🔄 ProfileStateManager: Cache expired for key: $key');
+        _cache.remove(key);
+        _cacheTimestamps.remove(key);
+        _cacheEtags.remove(key);
+      }
+    }
+    return null;
+  }
+
+  /// Set data in cache
+  void _setCache(String key, dynamic data, Duration maxAge) {
+    _cache[key] = data;
+    _cacheTimestamps[key] = DateTime.now();
+    print('💾 ProfileStateManager: Cached data for key: $key');
+  }
+
+  /// Check if cache is stale (can be used but should be refreshed)
+  bool _isCacheStale(String key, Duration maxAge) {
+    if (_cacheTimestamps.containsKey(key)) {
+      final timestamp = _cacheTimestamps[key]!;
+      final now = DateTime.now();
+      final age = now.difference(timestamp);
+      return age > maxAge * 0.8; // Refresh when 80% of max age is reached
+    }
+    return false;
+  }
+
+  /// Schedule background refresh for stale data
+  void _scheduleBackgroundRefresh(
+      String key, Future<List<VideoModel>> Function() fetchFn) {
+    if (Features.backgroundVideoPreloading.isEnabled) {
+      print(
+          '🔄 ProfileStateManager: Scheduling background refresh for key: $key');
+      unawaited(_refreshCacheInBackground(key, fetchFn));
+    }
+  }
+
+  /// Refresh cache in background
+  Future<void> _refreshCacheInBackground(
+      String key, Future<List<VideoModel>> Function() fetchFn) async {
+    try {
+      await Future.delayed(
+          const Duration(seconds: 2)); // Small delay to avoid blocking UI
+      final freshData = await fetchFn();
+
+      if (freshData.isNotEmpty) {
+        _setCache(key, freshData, _userVideosCacheTime);
+        print(
+            '✅ ProfileStateManager: Background refresh completed for key: $key');
+
+        // Update UI if this is the current user's data
+        if (_userData != null &&
+            key.contains(_userData!['googleId'] ?? _userData!['id'])) {
+          _userVideos = freshData;
+          notifyListeners();
+        }
+      }
+    } catch (e) {
+      print(
+          '❌ ProfileStateManager: Background refresh failed for key: $key: $e');
+    }
+  }
+
+  /// Clear all caches
+  void _clearAllCaches() {
+    _cache.clear();
+    _cacheTimestamps.clear();
+    _cacheEtags.clear();
+    print('🧹 ProfileStateManager: All caches cleared');
+  }
+
+  /// Get cache statistics
+  Map<String, dynamic> getCacheStats() {
+    return {
+      'cacheSize': _cache.length,
+      'cacheKeys': _cache.keys.toList(),
+      'userProfileCacheTime': _userProfileCacheTime.inMinutes,
+      'userVideosCacheTime': _userVideosCacheTime.inMinutes,
+      'staleWhileRevalidateTime': _staleWhileRevalidateTime.inMinutes,
+    };
   }
 
   // Cleanup
