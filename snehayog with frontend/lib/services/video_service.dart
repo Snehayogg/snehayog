@@ -19,11 +19,112 @@ class VideoService {
   final AuthService _authService = AuthService();
   final AdService _adService = AdService();
 
+  // **NEW: Video tracking and navigation state management**
+  int _currentVisibleVideoIndex = 0;
+  bool _isVideoScreenActive = true;
+  bool _isAppInForeground = true;
+  final List<Function(int)> _videoIndexChangeListeners = [];
+  final List<Function(bool)> _videoScreenStateListeners = [];
+
   static String get baseUrl => NetworkHelper.getBaseUrl();
   // Optimized constants
   static const int maxRetries = 2; // Reduced from 3
   static const int retryDelay = 1; // Reduced from 2
   static const int maxShortVideoDuration = 120;
+
+  // **NEW: Getters for video tracking**
+  int get currentVisibleVideoIndex => _currentVisibleVideoIndex;
+  bool get isVideoScreenActive => _isVideoScreenActive;
+  bool get isAppInForeground => _isAppInForeground;
+  bool get shouldPlayVideos => _isVideoScreenActive && _isAppInForeground;
+
+  // **NEW: Video tracking methods**
+  /// Update the currently visible video index
+  void updateCurrentVideoIndex(int newIndex) {
+    if (_currentVisibleVideoIndex != newIndex) {
+      final oldIndex = _currentVisibleVideoIndex;
+      _currentVisibleVideoIndex = newIndex;
+      print('🎬 VideoService: Video index changed from $oldIndex to $newIndex');
+
+      // Notify listeners about video index change
+      for (final listener in _videoIndexChangeListeners) {
+        try {
+          listener(newIndex);
+        } catch (e) {
+          print('❌ VideoService: Error in video index change listener: $e');
+        }
+      }
+    }
+  }
+
+  /// Update video screen active state (called when switching tabs)
+  void updateVideoScreenState(bool isActive) {
+    if (_isVideoScreenActive != isActive) {
+      _isVideoScreenActive = isActive;
+      print(
+          '🔄 VideoService: Video screen state changed to ${isActive ? "ACTIVE" : "INACTIVE"}');
+
+      // Notify listeners about screen state change
+      for (final listener in _videoScreenStateListeners) {
+        try {
+          listener(isActive);
+        } catch (e) {
+          print('❌ VideoService: Error in video screen state listener: $e');
+        }
+      }
+    }
+  }
+
+  /// Update app foreground state
+  void updateAppForegroundState(bool inForeground) {
+    if (_isAppInForeground != inForeground) {
+      _isAppInForeground = inForeground;
+      print(
+          '📱 VideoService: App foreground state changed to ${inForeground ? "FOREGROUND" : "BACKGROUND"}');
+    }
+  }
+
+  /// Add listener for video index changes
+  void addVideoIndexChangeListener(Function(int) listener) {
+    if (!_videoIndexChangeListeners.contains(listener)) {
+      _videoIndexChangeListeners.add(listener);
+    }
+  }
+
+  /// Remove listener for video index changes
+  void removeVideoIndexChangeListener(Function(int) listener) {
+    _videoIndexChangeListeners.remove(listener);
+  }
+
+  /// Add listener for video screen state changes
+  void addVideoScreenStateListener(Function(bool) listener) {
+    if (!_videoScreenStateListeners.contains(listener)) {
+      _videoScreenStateListeners.add(listener);
+    }
+  }
+
+  /// Remove listener for video screen state changes
+  void removeVideoScreenStateListener(Function(bool) listener) {
+    _videoScreenStateListeners.remove(listener);
+  }
+
+  /// Get current video tracking info
+  Map<String, dynamic> getVideoTrackingInfo() {
+    return {
+      'currentVisibleVideoIndex': _currentVisibleVideoIndex,
+      'isVideoScreenActive': _isVideoScreenActive,
+      'isAppInForeground': _isAppInForeground,
+      'shouldPlayVideos': shouldPlayVideos,
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+  }
+
+  /// Clear all listeners (call in dispose)
+  void dispose() {
+    _videoIndexChangeListeners.clear();
+    _videoScreenStateListeners.clear();
+    print('🗑️ VideoService: Disposed all listeners');
+  }
 
   // Simplified server health check
   Future<bool> checkServerHealth() async {
