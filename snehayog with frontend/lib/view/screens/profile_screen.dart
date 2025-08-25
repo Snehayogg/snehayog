@@ -1281,7 +1281,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   '🔍 ProfileScreen: Updating video ${video.id} with uploader name: ${userModel!.name}');
                               return video.copyWith(
                                 uploader: video.uploader
-                                    .copyWith(name: userModel!.name),
+                                    .copyWith(name: userModel.name),
                               );
                             }
                             return video;

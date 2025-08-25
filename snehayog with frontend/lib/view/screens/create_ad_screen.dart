@@ -78,6 +78,8 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
           setState(() {
             _selectedImage = File(image.path);
             _selectedVideo = null;
+            // **NEW: Clear error messages when image is selected**
+            _clearErrorMessages();
           });
         }
       } else {
@@ -124,6 +126,8 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
         setState(() {
           _selectedVideo = File(result.files.single.path!);
           // Don't clear image for carousel/video feed ads
+          // **NEW: Clear error messages when video is selected**
+          _clearErrorMessages();
         });
       }
     } catch (e) {
@@ -147,6 +151,8 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
       setState(() {
         _startDate = picked.start;
         _endDate = picked.end;
+        // **NEW: Clear error messages when dates are selected**
+        _clearErrorMessages();
       });
     }
   }
@@ -154,79 +160,132 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
   // Manual validation method to check all required fields
   bool _validateAllFields() {
     bool isValid = true;
+    String errorMessage = '';
 
-    // Check title
-    if (_titleController.text.trim().isEmpty) {
-      print('❌ Validation: Title is empty');
-      isValid = false;
-    } else if (_titleController.text.trim().length < 5) {
-      print(
-          '❌ Validation: Title too short (${_titleController.text.trim().length} chars)');
-      isValid = false;
-    }
-
-    // Check description
-    if (_descriptionController.text.trim().isEmpty) {
-      print('❌ Validation: Description is empty');
-      isValid = false;
-    } else if (_descriptionController.text.trim().length < 10) {
-      print(
-          '❌ Validation: Description too short (${_descriptionController.text.trim().length} chars)');
-      isValid = false;
-    }
-
-    // Check budget
-    final budget = double.tryParse(_budgetController.text.trim());
-    if (budget == null || budget <= 0) {
-      print('❌ Validation: Invalid budget: ${_budgetController.text}');
-      isValid = false;
-    } else if (budget < 100) {
-      print('❌ Validation: Budget too low: $budget');
-      isValid = false;
-    }
-
-    // Check media selection based on ad type
-    if (_selectedAdType == 'banner') {
-      // Banner ads only need image
-      if (_selectedImage == null) {
-        print('❌ Validation: Banner ad requires an image');
+    try {
+      // Check title
+      if (_titleController.text.trim().isEmpty) {
+        print('❌ Validation: Title is empty');
+        errorMessage = 'Ad title is required';
+        isValid = false;
+      } else if (_titleController.text.trim().length < 5) {
+        print(
+            '❌ Validation: Title too short (${_titleController.text.trim().length} chars)');
+        errorMessage = 'Ad title must be at least 5 characters long';
+        isValid = false;
+      } else if (_titleController.text.trim().length > 100) {
+        print(
+            '❌ Validation: Title too long (${_titleController.text.trim().length} chars)');
+        errorMessage = 'Ad title must be less than 100 characters';
         isValid = false;
       }
-      if (_selectedVideo != null) {
-        print('❌ Validation: Banner ads cannot have videos');
+
+      // Check description
+      if (_descriptionController.text.trim().isEmpty) {
+        print('❌ Validation: Description is empty');
+        errorMessage = 'Ad description is required';
+        isValid = false;
+      } else if (_descriptionController.text.trim().length < 10) {
+        print(
+            '❌ Validation: Description too short (${_descriptionController.text.trim().length} chars)');
+        errorMessage = 'Ad description must be at least 10 characters long';
+        isValid = false;
+      } else if (_descriptionController.text.trim().length > 500) {
+        print(
+            '❌ Validation: Description too long (${_descriptionController.text.trim().length} chars)');
+        errorMessage = 'Ad description must be less than 500 characters';
         isValid = false;
       }
-    } else if (_selectedAdType == 'carousel' ||
-        _selectedAdType == 'video feed ad') {
-      // Carousel and video feed ads need at least one media type
-      if (_selectedImage == null && _selectedVideo == null) {
-        print('❌ Validation: Carousel/video feed ad requires image or video');
+
+      // Check budget
+      final budgetText = _budgetController.text.trim();
+      if (budgetText.isEmpty) {
+        print('❌ Validation: Budget is empty');
+        errorMessage = 'Daily budget is required';
+        isValid = false;
+      } else {
+        final budget = double.tryParse(budgetText);
+        if (budget == null || budget <= 0) {
+          print('❌ Validation: Invalid budget: $budgetText');
+          errorMessage = 'Please enter a valid budget amount';
+          isValid = false;
+        } else if (budget < 100) {
+          print('❌ Validation: Budget too low: $budget');
+          errorMessage = 'Minimum daily budget is ₹100.00';
+          isValid = false;
+        }
+      }
+
+      // Check media selection based on ad type
+      if (_selectedAdType == 'banner') {
+        // Banner ads only need image
+        if (_selectedImage == null) {
+          print('❌ Validation: Banner ad requires an image');
+          errorMessage = 'Banner ads require an image';
+          isValid = false;
+        }
+        if (_selectedVideo != null) {
+          print('❌ Validation: Banner ads cannot have videos');
+          errorMessage = 'Banner ads cannot have videos';
+          isValid = false;
+        }
+      } else if (_selectedAdType == 'carousel' ||
+          _selectedAdType == 'video feed ad') {
+        // Carousel and video feed ads need at least one media type
+        if (_selectedImage == null && _selectedVideo == null) {
+          print('❌ Validation: Carousel/video feed ad requires image or video');
+          errorMessage = 'Please select an image or video for your ad';
+          isValid = false;
+        }
+      }
+
+      // Check dates
+      if (_startDate == null || _endDate == null) {
+        print(
+            '❌ Validation: Dates not selected - Start: $_startDate, End: $_endDate');
+        errorMessage = 'Please select campaign start and end dates';
+        isValid = false;
+      } else if (_startDate!
+          .isBefore(DateTime.now().subtract(const Duration(days: 1)))) {
+        print('❌ Validation: Start date is in the past');
+        errorMessage = 'Start date cannot be in the past';
+        isValid = false;
+      } else if (_endDate!.isBefore(_startDate!)) {
+        print('❌ Validation: End date is before start date');
+        errorMessage = 'End date must be after start date';
+        isValid = false;
+      } else if (_endDate!.difference(_startDate!).inDays < 1) {
+        print('❌ Validation: Campaign duration too short');
+        errorMessage = 'Campaign must run for at least 1 day';
         isValid = false;
       }
-    }
 
-    // Check dates
-    if (_startDate == null || _endDate == null) {
-      print(
-          '❌ Validation: Dates not selected - Start: $_startDate, End: $_endDate');
-      isValid = false;
-    }
+      print('🔍 Validation result: $isValid');
 
-    print('🔍 Validation result: $isValid');
-    return isValid;
+      // If validation failed, set the error message
+      if (!isValid && errorMessage.isNotEmpty) {
+        setState(() {
+          _errorMessage = errorMessage;
+        });
+      }
+
+      return isValid;
+    } catch (e) {
+      print('❌ Validation error: $e');
+      setState(() {
+        _errorMessage = 'Validation error: $e';
+      });
+      return false;
+    }
   }
 
   Future<void> _submitAd() async {
     print('🔍 CreateAdScreen: Submit button pressed');
 
-    // First validate the form using Flutter's built-in validation
-    if (!_formKey.currentState!.validate()) {
-      print('❌ CreateAdScreen: Flutter form validation failed');
-      print('🔍 Debug: Form state - ${_formKey.currentState}');
-      return;
-    }
+    // **FIXED: Simplified validation approach - use only custom validation for now**
+    // The issue was with conflicting validation logic between Flutter's built-in and custom validation
 
-    // Then do our custom validation
+    // First do our custom validation
     if (!_validateAllFields()) {
       print('❌ CreateAdScreen: Custom validation failed');
       setState(() {
@@ -253,33 +312,30 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
       print('   Image Selected: ${_selectedImage != null}');
       print('   Video Selected: ${_selectedVideo != null}');
 
-      // Validate media selection
+      // **FIXED: Simplified media validation**
       if (_selectedAdType == 'banner') {
         if (_selectedImage == null) {
           throw Exception('Banner ads require an image');
         }
-        if (_selectedVideo != null) {
-          throw Exception('Banner ads cannot have videos');
-        }
+        // Banner ads can't have videos - this is already handled in _validateAllFields
       } else if (_selectedAdType == 'carousel' ||
           _selectedAdType == 'video feed ad') {
-        // Carousel and video feed ads need at least one media type
         if (_selectedImage == null && _selectedVideo == null) {
           throw Exception('Please select an image or video for your ad');
         }
       }
 
-      // Validate budget - convert to double and check minimum
+      // **FIXED: Simplified budget validation**
       final budgetText = _budgetController.text.trim();
       final budget = double.tryParse(budgetText);
       if (budget == null || budget <= 0) {
         throw Exception('Please enter a valid budget amount');
       }
-      if (budget < 1) {
-        throw Exception('Budget must be at least ₹1.00');
+      if (budget < 100) {
+        throw Exception('Budget must be at least ₹100.00');
       }
 
-      // Validate required fields
+      // **FIXED: Simplified required field validation**
       if (_titleController.text.trim().isEmpty) {
         throw Exception('Please enter an ad title');
       }
@@ -292,21 +348,32 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
 
       print('✅ CreateAdScreen: Form validation passed');
 
-      // Upload media to Cloudinary first
+      // **FIXED: Better error handling for media upload**
       String? mediaUrl;
-      if (_selectedImage != null) {
-        print('🔍 CreateAdScreen: Uploading image to Cloudinary...');
-        mediaUrl = await _cloudinaryService.uploadImage(_selectedImage!);
-      } else if (_selectedVideo != null) {
-        print('🔍 CreateAdScreen: Uploading video to Cloudinary...');
-        final result = await _cloudinaryService.uploadVideo(_selectedVideo!);
-        // Extract URL from the result map
-        mediaUrl = result['url'] ?? result['hls_urls']?['hls_stream'] ?? '';
+      try {
+        if (_selectedImage != null) {
+          print('🔍 CreateAdScreen: Uploading image to Cloudinary...');
+          mediaUrl = await _cloudinaryService.uploadImage(_selectedImage!);
+          print('✅ CreateAdScreen: Image uploaded successfully: $mediaUrl');
+        } else if (_selectedVideo != null) {
+          print('🔍 CreateAdScreen: Uploading video to Cloudinary...');
+          final result = await _cloudinaryService.uploadVideo(_selectedVideo!);
+          // Extract URL from the result map
+          mediaUrl = result['url'] ?? result['hls_urls']?['hls_stream'] ?? '';
+          print('✅ CreateAdScreen: Video uploaded successfully: $mediaUrl');
+        }
+      } catch (uploadError) {
+        print('❌ CreateAdScreen: Media upload failed: $uploadError');
+        throw Exception('Failed to upload media: $uploadError');
+      }
+
+      if (mediaUrl == null || mediaUrl.isEmpty) {
+        throw Exception('Media upload failed - no URL returned');
       }
 
       print('✅ CreateAdScreen: Media uploaded successfully: $mediaUrl');
 
-      // Create ad with payment processing
+      // **FIXED: Better error handling for ad creation**
       final result = await _adService.createAdWithPayment(
         title: _titleController.text.trim(),
         description: _descriptionController.text.trim(),
@@ -335,7 +402,8 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
           result['invoice'],
         );
       } else {
-        throw Exception('Failed to create ad');
+        throw Exception(
+            'Failed to create ad: ${result['message'] ?? 'Unknown error'}');
       }
     } catch (e) {
       print('❌ CreateAdScreen: Error submitting ad: $e');
@@ -361,6 +429,21 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
     _endDate = null;
     _selectedImage = null;
     _selectedVideo = null;
+
+    // **NEW: Clear error messages when form is cleared**
+    setState(() {
+      _errorMessage = null;
+      _successMessage = null;
+    });
+  }
+
+  // **NEW: Method to clear error messages when user makes changes**
+  void _clearErrorMessages() {
+    if (_errorMessage != null) {
+      setState(() {
+        _errorMessage = null;
+      });
+    }
   }
 
   void _showSuccessDialog(AdModel ad) {
@@ -974,6 +1057,9 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                             // Carousel and video feed ads can have both image and video
                             // No need to clear anything
                           }
+
+                          // **NEW: Clear error messages when ad type changes**
+                          _clearErrorMessages();
                         });
                       },
                     ),
@@ -1142,6 +1228,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                         hintText: 'Enter a compelling title for your ad',
                         border: OutlineInputBorder(),
                       ),
+                      onChanged: (value) => _clearErrorMessages(),
                       validator: (value) {
                         if (value == null || value.trim().isEmpty) {
                           return 'Please enter an ad title';
@@ -1164,6 +1251,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                         border: OutlineInputBorder(),
                       ),
                       maxLines: 3,
+                      onChanged: (value) => _clearErrorMessages(),
                       validator: (value) {
                         if (value == null || value.trim().isEmpty) {
                           return 'Please enter a description';
@@ -1216,6 +1304,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                         prefixIcon: Icon(Icons.attach_money),
                       ),
                       keyboardType: TextInputType.number,
+                      onChanged: (value) => _clearErrorMessages(),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Please enter a budget';
@@ -1239,6 +1328,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.people),
                       ),
+                      onChanged: (value) => _clearErrorMessages(),
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -1249,6 +1339,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.tag),
                       ),
+                      onChanged: (value) => _clearErrorMessages(),
                     ),
                     const SizedBox(height: 16),
                     Row(
@@ -1298,7 +1389,21 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: _isLoading ? null : _submitAd,
+              onPressed: _isLoading
+                  ? null
+                  : () {
+                      // **FIXED: Add error handling wrapper to prevent crashes**
+                      try {
+                        _submitAd();
+                      } catch (e) {
+                        print(
+                            '❌ CreateAdScreen: Unexpected error in submit button: $e');
+                        setState(() {
+                          _errorMessage = 'An unexpected error occurred: $e';
+                          _isLoading = false;
+                        });
+                      }
+                    },
               icon: _isLoading
                   ? const SizedBox(
                       width: 20,

@@ -237,6 +237,58 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
 
   void _initializeCurrentVideo() async {
     if (_stateManager.videos.isNotEmpty) {
+      try {
+        print(
+            '🎬 VideoScreen: Initializing current video at index ${_stateManager.activePage}');
+
+        // **NEW: Add timeout for video initialization**
+        final initFuture = _controllerManager.initController(
+          _stateManager.activePage,
+          _stateManager.videos[_stateManager.activePage],
+        );
+
+        final timeoutFuture = Future.delayed(const Duration(seconds: 15));
+
+        await Future.any([initFuture, timeoutFuture]);
+
+        // Check if initialization actually completed
+        final controller =
+            _controllerManager.controllers[_stateManager.activePage];
+        if (controller == null || !controller.value.isInitialized) {
+          print(
+              '⚠️ VideoScreen: Video initialization may have timed out, retrying...');
+          // Retry initialization
+          await _retryVideoInitialization();
+          return;
+        }
+
+        if (mounted) {
+          _playActiveVideo();
+          _preloadVideosAround(_stateManager.activePage);
+          setState(() {});
+        }
+
+        print('✅ VideoScreen: Current video initialized successfully');
+      } catch (e) {
+        print('❌ VideoScreen: Error initializing current video: $e');
+        // **NEW: Handle initialization errors gracefully**
+        await _handleVideoInitializationError(e);
+      }
+    }
+  }
+
+  /// **NEW: Retry video initialization with delay**
+  Future<void> _retryVideoInitialization() async {
+    try {
+      print('🔄 VideoScreen: Retrying video initialization...');
+
+      // Wait a bit before retrying
+      await Future.delayed(const Duration(milliseconds: 1000));
+
+      // Clear any existing controller for this index
+      _controllerManager.disposeController(_stateManager.activePage);
+
+      // Try initialization again
       await _controllerManager.initController(
         _stateManager.activePage,
         _stateManager.videos[_stateManager.activePage],
@@ -246,6 +298,70 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
         _playActiveVideo();
         _preloadVideosAround(_stateManager.activePage);
         setState(() {});
+      }
+
+      print('✅ VideoScreen: Video initialization retry successful');
+    } catch (e) {
+      print('❌ VideoScreen: Video initialization retry failed: $e');
+      // Show error to user
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load video: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: () => _retryVideoInitialization(),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  /// **NEW: Handle video initialization errors gracefully**
+  Future<void> _handleVideoInitializationError(dynamic error) async {
+    print('⚠️ VideoScreen: Handling video initialization error: $error');
+
+    // Try to recover by disposing and reinitializing
+    try {
+      _controllerManager.disposeController(_stateManager.activePage);
+
+      // Wait a bit before retrying
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Try to initialize again
+      await _controllerManager.initController(
+        _stateManager.activePage,
+        _stateManager.videos[_stateManager.activePage],
+      );
+
+      if (mounted) {
+        _playActiveVideo();
+        _preloadVideosAround(_stateManager.activePage);
+        setState(() {});
+      }
+
+      print('✅ VideoScreen: Error recovery successful');
+    } catch (e) {
+      print('❌ VideoScreen: Error recovery failed: $e');
+
+      // Show error to user
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Video playback error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: () => _handleVideoInitializationError(e),
+            ),
+          ),
+        );
       }
     }
   }
