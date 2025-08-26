@@ -1730,7 +1730,6 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
                       ),
                     ),
 
-                    // Cache status indicator
                     SizedBox(
                       width: 60,
                       height: 60,
