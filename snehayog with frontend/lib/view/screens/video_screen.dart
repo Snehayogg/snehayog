@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'; // **CRITICAL FIX: Added for compute function**
 import 'package:snehayog/model/video_model.dart';
 import 'package:snehayog/services/instagram_video_service.dart';
 import 'package:snehayog/services/authservices.dart';
@@ -9,8 +10,8 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'package:snehayog/view/screens/profile_screen.dart';
 import 'package:snehayog/controller/main_controller.dart';
 import 'package:snehayog/core/managers/video_controller_manager.dart';
-import 'package:snehayog/core/managers/smart_preload_manager.dart';
-import 'package:snehayog/core/managers/video_state_manager.dart';
+import 'package:snehayog/core/managers/smart_cache_manager.dart';
+import 'package:snehayog/core/managers/video_manager.dart';
 import 'package:snehayog/view/widget/video_item_widget.dart';
 import 'package:snehayog/view/widget/video_ui_components.dart' as ui_components;
 import 'package:snehayog/view/widget/comments_sheet.dart';
@@ -35,8 +36,8 @@ class VideoScreen extends StatefulWidget {
 class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
   // Managers
   late VideoControllerManager _controllerManager;
-  late VideoStateManager _stateManager;
-  late SmartPreloadManager _smartPreloadManager;
+  late SmartCacheManager _smartCacheManager;
+  late VideoManager _videoManager;
 
   // Service
   final InstagramVideoService _videoService = InstagramVideoService();
@@ -83,13 +84,13 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       _controllerManager.disposeAll();
 
       // Clear current videos and reset state
-      _stateManager.reset();
+      _videoManager.reset();
 
       // Load fresh videos
       await _loadVideos();
 
       // Reinitialize first video if available
-      if (_stateManager.videos.isNotEmpty) {
+      if (_videoManager.videos.isNotEmpty) {
         _initializeCurrentVideo();
       }
 
@@ -136,8 +137,11 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
 
     // Initialize managers
     _controllerManager = VideoControllerManager();
-    _stateManager = VideoStateManager();
-    _smartPreloadManager = SmartPreloadManager();
+    _smartCacheManager = SmartCacheManager();
+    _videoManager = VideoManager();
+
+    // Initialize VideoManager with controller manager
+    _videoManager.initialize(_controllerManager);
 
     // Initialize other components
     _initializeComponents();
@@ -155,18 +159,21 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
     try {
       print('🚀 VideoScreen: Initializing smart preloading...');
 
-      // Initialize smart preload manager
-      await _smartPreloadManager.initialize();
+      // Initialize smart cache manager
+      await _smartCacheManager.initialize();
+
+      // **NEW: Preload and cache data for better performance**
+      await _videoService.preloadAndCacheData();
 
       // Track navigation to video screen
-      _smartPreloadManager.trackNavigation('video_feed', context: {
+      _smartCacheManager.trackNavigation('video_feed', context: {
         'userId': await _getCurrentUserId(),
         'screenType': 'video_feed',
         'timestamp': DateTime.now().toIso8601String(),
       });
 
       // Start smart preloading for other screens
-      await _smartPreloadManager.smartPreload('video_feed', userContext: {
+      await _smartCacheManager.smartPreload('video_feed', userContext: {
         'userId': await _getCurrentUserId(),
         'currentScreen': 'video_feed',
       });
@@ -212,6 +219,20 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       mainController.registerPauseVideosCallback(_pauseAllVideos);
       mainController.registerResumeVideosCallback(_playActiveVideo);
       mainController.addListener(_onMainControllerChanged);
+
+      // **NEW: Set VideoManager reference in MainController**
+      mainController.setVideoManager(_videoManager);
+
+      // **NEW: Start periodic cleanup to prevent memory leaks**
+      _controllerManager.startPeriodicCleanup();
+
+      // Immediate check for current state
+      if (!mainController.isVideoScreen) {
+        print(
+            '🛑 VideoScreen: Initial state check - not on video tab, pausing videos');
+        _forcePauseAllVideos();
+        _videoManager.updateScreenVisibility(false);
+      }
     });
 
     // Check if videos were passed from another screen
@@ -225,15 +246,15 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
     _startHealthCheckTimer();
 
     // Listen to state changes
-    _stateManager.addListener(_onStateChanged);
+    _videoManager.addListener(_onStateChanged);
   }
 
   void _initializeWithVideos() {
-    _stateManager.initializeWithVideos(
+    _videoManager.initializeWithVideos(
       widget.initialVideos!,
       widget.initialIndex ?? 0,
     );
-    _pageController = PageController(initialPage: _stateManager.activePage);
+    _pageController = PageController(initialPage: _videoManager.activePage);
 
     // Initialize controller and preload
     _initializeCurrentVideo();
@@ -247,30 +268,30 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
     _pageController.addListener(() {
       if (_pageController.position.pixels >=
               _pageController.position.maxScrollExtent - 200 &&
-          !_stateManager.isLoadingMore) {
+          !_videoManager.isLoadingMore) {
         _loadVideos();
       }
 
       // Detect page changes
       final currentPage =
-          _pageController.page?.round() ?? _stateManager.activePage;
-      if (currentPage != _stateManager.activePage &&
-          _stateManager.isScreenVisible) {
+          _pageController.page?.round() ?? _videoManager.activePage;
+      if (currentPage != _videoManager.activePage &&
+          _videoManager.isScreenVisible) {
         _onVideoPageChanged(currentPage);
       }
     });
   }
 
   void _initializeCurrentVideo() async {
-    if (_stateManager.videos.isNotEmpty) {
+    if (_videoManager.videos.isNotEmpty) {
       try {
         print(
-            '🎬 VideoScreen: Initializing current video at index ${_stateManager.activePage}');
+            '🎬 VideoScreen: Initializing current video at index ${_videoManager.activePage}');
 
         // **NEW: Add timeout for video initialization**
         final initFuture = _controllerManager.initController(
-          _stateManager.activePage,
-          _stateManager.videos[_stateManager.activePage],
+          _videoManager.activePage,
+          _videoManager.videos[_videoManager.activePage],
         );
 
         final timeoutFuture = Future.delayed(const Duration(seconds: 15));
@@ -279,7 +300,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
 
         // Check if initialization actually completed
         final controller =
-            _controllerManager.controllers[_stateManager.activePage];
+            _controllerManager.controllers[_videoManager.activePage];
         if (controller == null || !controller.value.isInitialized) {
           print(
               '⚠️ VideoScreen: Video initialization may have timed out, retrying...');
@@ -290,7 +311,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
 
         if (mounted) {
           _playActiveVideo();
-          _preloadVideosAround(_stateManager.activePage);
+          _preloadVideosAround(_videoManager.activePage);
           setState(() {});
         }
 
@@ -312,17 +333,17 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       await Future.delayed(const Duration(milliseconds: 1000));
 
       // Clear any existing controller for this index
-      _controllerManager.disposeController(_stateManager.activePage);
+      _controllerManager.disposeController(_videoManager.activePage);
 
       // Try initialization again
       await _controllerManager.initController(
-        _stateManager.activePage,
-        _stateManager.videos[_stateManager.activePage],
+        _videoManager.activePage,
+        _videoManager.videos[_videoManager.activePage],
       );
 
       if (mounted) {
         _playActiveVideo();
-        _preloadVideosAround(_stateManager.activePage);
+        _preloadVideosAround(_videoManager.activePage);
         setState(() {});
       }
 
@@ -353,20 +374,20 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
 
     // Try to recover by disposing and reinitializing
     try {
-      _controllerManager.disposeController(_stateManager.activePage);
+      _controllerManager.disposeController(_videoManager.activePage);
 
       // Wait a bit before retrying
       await Future.delayed(const Duration(milliseconds: 500));
 
       // Try to initialize again
       await _controllerManager.initController(
-        _stateManager.activePage,
-        _stateManager.videos[_stateManager.activePage],
+        _videoManager.activePage,
+        _videoManager.videos[_videoManager.activePage],
       );
 
       if (mounted) {
         _playActiveVideo();
-        _preloadVideosAround(_stateManager.activePage);
+        _preloadVideosAround(_videoManager.activePage);
         setState(() {});
       }
 
@@ -396,9 +417,9 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
   void dispose() {
     print('🔄 VideoScreen: DISPOSE METHOD CALLED');
     print(
-        '🔄 VideoScreen: Current state - isScreenVisible: ${_stateManager.isScreenVisible}');
-    print('🔄 VideoScreen: Active page: ${_stateManager.activePage}');
-    print('🔄 VideoScreen: Total videos: ${_stateManager.videos.length}');
+        '🔄 VideoScreen: Current state - isScreenVisible: ${_videoManager.isScreenVisible}');
+    print('🔄 VideoScreen: Active page: ${_videoManager.activePage}');
+    print('🔄 VideoScreen: Total videos: ${_videoManager.videos.length}');
 
     WidgetsBinding.instance.removeObserver(this);
     _healthCheckTimer?.cancel();
@@ -420,9 +441,9 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
     _controllerManager.disposeAllControllers();
     print('🔄 VideoControllerManager disposed');
 
-    print('🔄 VideoScreen: Disposing VideoStateManager...');
-    _stateManager.dispose();
-    print('🔄 VideoStateManager disposed');
+    print('🔄 VideoScreen: Disposing VideoManager...');
+    _videoManager.dispose();
+    print('🔄 VideoManager disposed');
 
     print('🔄 VideoScreen: Disposing PageController...');
     _pageController.dispose();
@@ -460,7 +481,9 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached) {
       print('🛑 VideoScreen: App going to background - stopping all videos');
-      _stateManager.updateScreenVisibility(false);
+
+      // **NEW: Use VideoManager for app lifecycle state changes**
+      _videoManager.updateAppForegroundState(false);
 
       // Use emergency stop for app background
       _controllerManager.emergencyStopAllVideos();
@@ -471,14 +494,18 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       }
     } else if (state == AppLifecycleState.resumed) {
       print('👁️ VideoScreen: App resumed - checking video state');
-      if (_stateManager.isScreenVisible &&
+
+      // **NEW: Use VideoManager for app lifecycle state changes**
+      _videoManager.updateAppForegroundState(true);
+
+      if (_videoManager.isScreenVisible &&
           (ModalRoute.of(context)?.isCurrent ?? false)) {
         // Use the new video visible handler
         _controllerManager.handleVideoVisible();
 
         // Then play the active video
         Future.delayed(const Duration(milliseconds: 200), () {
-          if (mounted && _stateManager.isScreenVisible) {
+          if (mounted && _videoManager.isScreenVisible) {
             _playActiveVideo();
           }
         });
@@ -508,11 +535,24 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
     final mainController = Provider.of<MainController>(context, listen: false);
     final isVideoScreenActive = mainController.currentIndex == 0;
 
-    if (!isVideoScreenActive && _stateManager.isScreenVisible) {
-      _stateManager.updateScreenVisibility(false);
+    if (!isVideoScreenActive && _videoManager.isScreenVisible) {
+      print(
+          '🛑 VideoScreen: Screen visibility check - tab not active, pausing videos');
+      _videoManager.updateScreenVisibility(false);
       _forcePauseAllVideos();
-    } else if (isVideoScreenActive && !_stateManager.isScreenVisible) {
-      _stateManager.updateScreenVisibility(true);
+
+      // Additional safety measures
+      _controllerManager.handleVideoInvisible();
+
+      // Safety check after delay
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted && !mainController.isVideoScreen) {
+          print('🛑 VideoScreen: Visibility check safety pause');
+          _controllerManager.emergencyStopAllVideos();
+        }
+      });
+    } else if (isVideoScreenActive && !_videoManager.isScreenVisible) {
+      _videoManager.updateScreenVisibility(true);
       if (mainController.isAppInForeground) {
         _playActiveVideo();
       }
@@ -533,11 +573,11 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
           Provider.of<MainController>(context, listen: false);
       final isVideoScreenActive = mainController.currentIndex == 0;
 
-      if (isVideoScreenActive && !_stateManager.isScreenVisible) {
-        _stateManager.updateScreenVisibility(true);
+      if (isVideoScreenActive && !_videoManager.isScreenVisible) {
+        _videoManager.updateScreenVisibility(true);
         Future.delayed(const Duration(milliseconds: 100), () {
           if (mounted &&
-              _stateManager.isScreenVisible &&
+              _videoManager.isScreenVisible &&
               mainController.isAppInForeground) {
             _playActiveVideo();
           }
@@ -549,18 +589,41 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
               '🔄 VideoScreen: Refreshing banner ad after main controller change');
           _refreshBannerAd();
         }
-      } else if (!isVideoScreenActive && _stateManager.isScreenVisible) {
+      } else if (!isVideoScreenActive && _videoManager.isScreenVisible) {
         print('🛑 VideoScreen: Tab switched away, immediately pausing videos');
-        _stateManager.updateScreenVisibility(false);
+        _videoManager.updateScreenVisibility(false);
+
+        // IMMEDIATE video pause - no delay
+        _forcePauseAllVideos();
 
         // Use the new video invisible handler
         _controllerManager.handleVideoInvisible();
 
         // Additional safety pause after a short delay
-        Future.delayed(const Duration(milliseconds: 50), () {
+        Future.delayed(const Duration(milliseconds: 25), () {
           if (mounted && !mainController.isVideoScreen) {
-            print('🛑 VideoScreen: Safety pause after tab switch');
+            print('🛑 VideoScreen: Safety pause 1 after tab switch');
             _controllerManager.emergencyStopAllVideos();
+            _forcePauseAllVideos(); // Double safety
+          }
+        });
+
+        // Second safety check after longer delay
+        Future.delayed(const Duration(milliseconds: 75), () {
+          if (mounted && !mainController.isVideoScreen) {
+            print('🛑 VideoScreen: Safety pause 2 after tab switch');
+            _controllerManager.emergencyStopAllVideos();
+            _forcePauseAllVideos();
+          }
+        });
+
+        // Third safety check after longer delay
+        Future.delayed(const Duration(milliseconds: 150), () {
+          if (mounted && !mainController.isVideoScreen) {
+            print(
+                '🛑 VideoScreen: Final safety check - ensuring all videos stopped');
+            _controllerManager.comprehensivePause();
+            _forcePauseAllVideos();
           }
         });
 
@@ -577,38 +640,56 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// Handle video page changes
+  /// Handle video page changes with immediate pause and preload
   void _onVideoPageChanged(int newPage) {
-    if (newPage != _stateManager.activePage &&
+    if (newPage != _videoManager.activePage &&
         newPage >= 0 &&
-        newPage < _stateManager.videos.length) {
-      // Pause previous video
-      _controllerManager.pauseVideo(_stateManager.activePage);
+        newPage < _videoManager.videos.length) {
+      final oldPage = _videoManager.activePage;
+      print('🔄 VideoScreen: Video page changing from $oldPage to $newPage');
 
-      // Update state
-      _stateManager.updateActivePage(newPage);
-      _controllerManager.updateActivePage(newPage);
+      // **NEW: Update VideoManager with new video index**
+      _videoManager.updateCurrentVideoIndex(newPage);
 
-      // Smart preloading
+      // IMMEDIATELY pause the current video when scroll starts
+      if (_videoManager.isScreenVisible) {
+        _controllerManager.handleScrollStart(oldPage);
+        print(
+            '⏸️ VideoScreen: Immediately paused current video at index $oldPage');
+      }
+
+      _videoManager.updateCurrentVideoIndex(newPage);
+
+      _controllerManager.handleVideoPageChange(
+          oldPage, newPage, _videoManager.videos);
+
+      // Smart preloading based on direction
       _controllerManager.smartPreloadBasedOnDirection(
-          newPage, _stateManager.videos);
+          newPage, _videoManager.videos);
 
       // Optimize controllers
       _controllerManager.optimizeControllers();
 
       // Initialize banner ad for new video
-      _initializeVideoBannerAd(newPage, _stateManager.videos[newPage]);
+      _initializeVideoBannerAd(newPage, _videoManager.videos[newPage]);
 
-      // Play new video if screen is visible
-      if (_stateManager.isScreenVisible) {
-        _playActiveVideo();
+      // Play new video if screen is visible (with small delay for smooth transition)
+      if (_videoManager.isScreenVisible) {
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted &&
+              _videoManager.isScreenVisible &&
+              _videoManager.activePage == newPage) {
+            _playActiveVideo();
+            print('▶️ VideoScreen: Playing new video at index $newPage');
+          }
+        });
       }
 
       // Refresh banner ad if it's not loaded
       if (!_isVideoBannerAdLoaded(newPage) &&
           _videoBannerAds.containsKey(newPage)) {
         print('🔄 VideoScreen: Refreshing banner ad after video change');
-        _retryVideoBannerAd(newPage, _stateManager.videos[newPage]);
+        _retryVideoBannerAd(newPage, _videoManager.videos[newPage]);
       }
     }
   }
@@ -630,7 +711,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
         '🛑 VideoScreen: Comprehensive pause - ensuring all videos are stopped');
 
     // Update screen visibility
-    _stateManager.updateScreenVisibility(false);
+    _videoManager.updateScreenVisibility(false);
 
     // Use comprehensive pause from controller manager
     _controllerManager.comprehensivePause();
@@ -646,7 +727,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
 
   /// Play active video
   void _playActiveVideo() {
-    if (!_stateManager.isScreenVisible) return;
+    if (!_videoManager.isScreenVisible) return;
     _controllerManager.playActiveVideo();
   }
 
@@ -658,7 +739,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       if (widget.initialVideos != null && widget.initialVideos!.isNotEmpty) {
         print(
             '📹 VideoScreen: Using initial videos (${widget.initialVideos!.length})');
-        _stateManager.initializeWithVideos(
+        _videoManager.initializeWithVideos(
           widget.initialVideos!,
           widget.initialIndex ?? 0,
         );
@@ -669,9 +750,28 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
         }
       } else {
         print(
-            '🌐 VideoScreen: Loading videos from InstagramVideoService with caching...');
+            '🌐 VideoScreen: Loading videos from InstagramVideoService with enhanced caching...');
 
-        // Use InstagramVideoService with caching to prevent repeated backend calls
+        // **CRITICAL FIX: Try to get cached videos first**
+        Map<String, dynamic>? cachedVideos;
+        try {
+          cachedVideos =
+              await _videoService.getCachedVideos(page: 1, limit: 20);
+          if (cachedVideos != null && cachedVideos['videos'] != null) {
+            print('✅ VideoScreen: Found cached videos, using them instantly');
+            final videos = cachedVideos['videos'] as List<VideoModel>;
+            _videoManager.initializeWithVideos(videos, 0);
+            print('📹 VideoScreen: Loaded ${videos.length} cached videos');
+
+            // Start background refresh for fresh data
+            _refreshVideosInBackground();
+            return;
+          }
+        } catch (e) {
+          print('⚠️ VideoScreen: Error getting cached videos: $e');
+        }
+
+        // **CRITICAL FIX: Use InstagramVideoService with enhanced caching**
         final response = await _videoService.getVideos(
           page: 1,
           limit: 20,
@@ -681,9 +781,9 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
         if (response['status'] == 304) {
           print('✅ VideoScreen: Using cached videos (304 Not Modified)');
           // Use cached data from previous response
-          final cachedVideos = _stateManager.videos;
+          final cachedVideos = _videoManager.videos;
           if (cachedVideos.isNotEmpty) {
-            _stateManager.initializeWithVideos(cachedVideos, 0);
+            _videoManager.initializeWithVideos(cachedVideos, 0);
             print(
                 '📹 VideoScreen: Loaded ${cachedVideos.length} cached videos');
           } else {
@@ -694,22 +794,22 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
               forceRefresh: true,
             );
             final videos = freshResponse['videos'] as List<VideoModel>;
-            _stateManager.initializeWithVideos(videos, 0);
+            _videoManager.initializeWithVideos(videos, 0);
             print('📹 VideoScreen: Loaded ${videos.length} fresh videos');
           }
         } else {
           final videos = response['videos'] as List<VideoModel>;
-          _stateManager.initializeWithVideos(videos, 0);
+          _videoManager.initializeWithVideos(videos, 0);
           print('📹 VideoScreen: Loaded ${videos.length} videos from service');
         }
 
         // Set videos for fast video delivery preloading
         if (Features.fastVideoDelivery.isEnabled) {
-          _controllerManager.setCurrentVideos(_stateManager.videos);
+          _controllerManager.setCurrentVideos(_videoManager.videos);
 
           // Start preloading videos for instant playback
           print(
-              '🚀 VideoScreen: Starting video preloading for ${_stateManager.videos.length} videos');
+              '🚀 VideoScreen: Starting video preloading for ${_videoManager.videos.length} videos');
 
           // Preload next few pages for smooth scrolling
           await _preloadNextPages();
@@ -727,6 +827,50 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
           ),
         );
       }
+    }
+  }
+
+  /// **NEW: Refresh videos in background without blocking UI**
+  Future<void> _refreshVideosInBackground() async {
+    try {
+      print('🔄 VideoScreen: Starting background video refresh...');
+
+      // **CRITICAL FIX: Move heavy operations to background thread**
+      final response = await compute(_fetchVideosInBackground, {
+        'page': 1,
+        'limit': 20,
+        'forceRefresh': true,
+      });
+
+      if (response['videos'] != null && mounted) {
+        final videos = response['videos'] as List<VideoModel>;
+        _videoManager.initializeWithVideos(videos, 0);
+        print(
+            '✅ VideoScreen: Background refresh completed with ${videos.length} videos');
+
+        // Update UI if needed
+        if (mounted) {
+          setState(() {});
+        }
+      }
+    } catch (e) {
+      print('❌ VideoScreen: Background refresh failed: $e');
+    }
+  }
+
+  /// **NEW: Fetch videos in background thread**
+  static Future<Map<String, dynamic>> _fetchVideosInBackground(
+      Map<String, dynamic> params) async {
+    try {
+      final videoService = InstagramVideoService();
+      return await videoService.getVideos(
+        page: params['page'] as int,
+        limit: params['limit'] as int,
+        forceRefresh: params['forceRefresh'] as bool,
+      );
+    } catch (e) {
+      print('❌ VideoScreen: Error in background fetch: $e');
+      rethrow;
     }
   }
 
@@ -761,16 +905,16 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
 
   /// Preload videos around index
   Future<void> _preloadVideosAround(int index) async {
-    await _controllerManager.preloadVideosAround(index, _stateManager.videos);
+    await _controllerManager.preloadVideosAround(index, _videoManager.videos);
   }
 
   /// Start health check timer
   void _startHealthCheckTimer() {
     _healthCheckTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
-      if (mounted && _stateManager.isScreenVisible) {
+      if (mounted && _videoManager.isScreenVisible) {
         _controllerManager.checkVideoHealth();
         _controllerManager.optimizeControllers();
-      } else if (mounted && !_stateManager.isScreenVisible) {
+      } else if (mounted && !_videoManager.isScreenVisible) {
         print('🛑 VideoScreen: Health check - ensuring videos are paused');
 
         // Use the new video invisible handler
@@ -1105,7 +1249,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
 
   /// Generate session ID for analytics
   String _generateSessionId() {
-    return 'session_${DateTime.now().millisecondsSinceEpoch}_${_stateManager.activePage}';
+    return 'session_${DateTime.now().millisecondsSinceEpoch}_${_videoManager.activePage}';
   }
 
   /// Get banner ad for specific video
@@ -1147,7 +1291,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       }
 
       // Validate index
-      if (index < 0 || index >= _stateManager.videos.length) {
+      if (index < 0 || index >= _videoManager.videos.length) {
         print('❌ Like Handler: Invalid video index: $index');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -1172,7 +1316,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       }
 
       userId = userData['id']; // Assign to the top-level variable
-      final video = _stateManager.videos[index];
+      final video = _videoManager.videos[index];
       final isCurrentlyLiked = video.likedBy.contains(userId);
 
       print(
@@ -1183,7 +1327,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       final originalLikes = video.likes;
 
       // Optimistically update UI first
-      _stateManager.updateVideoLike(
+      _videoManager.updateVideoLike(
           index, userId!); // Use ! since we know it's not null here
 
       print('🔍 Like Handler: UI updated optimistically, calling API...');
@@ -1194,7 +1338,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       print('✅ Like Handler: API call successful, updating state...');
 
       // Update with server response
-      _stateManager.videos[index] = VideoModel.fromJson(updatedVideo.toJson());
+      _videoManager.videos[index] = VideoModel.fromJson(updatedVideo.toJson());
 
       // Show success message
       final action = isCurrentlyLiked ? 'unliked' : 'liked';
@@ -1213,9 +1357,9 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       print('❌ Like Handler Error Details: ${e.toString()}');
 
       // Revert optimistic update on error
-      if (index < _stateManager.videos.length && userId != null) {
+      if (index < _videoManager.videos.length && userId != null) {
         // Use the state manager to properly revert the like state
-        _stateManager.updateVideoLike(
+        _videoManager.updateVideoLike(
             index, userId); // Use ! since we checked it's not null
         print('🔄 Like Handler: Reverted optimistic update due to error');
       }
@@ -1273,8 +1417,8 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
         video: video,
         videoService: _videoService,
         onCommentsUpdated: (List<Comment> updatedComments) {
-          _stateManager.updateVideoComments(
-              _stateManager.activePage, updatedComments);
+          _videoManager.updateVideoComments(
+              _videoManager.activePage, updatedComments);
         },
       ),
     );
@@ -1341,11 +1485,11 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
   /// Debug method to test like functionality
   void _debugLikeFunctionality() {
     print('🔍 DEBUG LIKE FUNCTIONALITY:');
-    print('  - Total videos: ${_stateManager.videos.length}');
-    print('  - Active page: ${_stateManager.activePage}');
+    print('  - Total videos: ${_videoManager.videos.length}');
+    print('  - Active page: ${_videoManager.activePage}');
 
-    if (_stateManager.videos.isNotEmpty) {
-      final currentVideo = _stateManager.videos[_stateManager.activePage];
+    if (_videoManager.videos.isNotEmpty) {
+      final currentVideo = _videoManager.videos[_videoManager.activePage];
       print('  - Current video ID: ${currentVideo.id}');
       print('  - Current video likes: ${currentVideo.likes}');
       print('  - Current video likedBy: ${currentVideo.likedBy}');
@@ -1586,7 +1730,6 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
                       ),
                     ),
 
-                    // Cache status indicator
                     SizedBox(
                       width: 60,
                       height: 60,
@@ -1614,21 +1757,21 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
                     Expanded(
                       child: GestureDetector(
                         onTap: () {
-                          final currentIndex = _stateManager.activePage;
+                          final currentIndex = _videoManager.activePage;
                           if (!_isVideoBannerAdLoaded(currentIndex) &&
                               _videoBannerAds.containsKey(currentIndex)) {
                             _retryVideoBannerAd(currentIndex,
-                                _stateManager.videos[currentIndex]);
+                                _videoManager.videos[currentIndex]);
                           }
                         },
                         child: _isVideoBannerAdLoaded(
-                                    _stateManager.activePage) &&
+                                    _videoManager.activePage) &&
                                 _videoBannerAds
-                                    .containsKey(_stateManager.activePage) &&
-                                _videoBannerAds[_stateManager.activePage] !=
+                                    .containsKey(_videoManager.activePage) &&
+                                _videoBannerAds[_videoManager.activePage] !=
                                     null
                             ? AdWidget(
-                                ad: _videoBannerAds[_stateManager.activePage]!)
+                                ad: _videoBannerAds[_videoManager.activePage]!)
                             : const Center(
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
@@ -1658,7 +1801,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
                       width: 60,
                       height: 60,
                       child: Center(
-                        child: _stateManager.isLoading
+                        child: _videoManager.isLoading
                             ? const SizedBox(
                                 width: 20,
                                 height: 20,
@@ -1668,10 +1811,14 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
                                       Colors.blue),
                                 ),
                               )
-                            : const Icon(
-                                Icons.check_circle,
-                                color: Colors.green,
-                                size: 20,
+                            : IconButton(
+                                onPressed: _showCurrentVideoTrackingInfo,
+                                icon: const Icon(
+                                  Icons.info_outline,
+                                  color: Colors.blue,
+                                  size: 20,
+                                ),
+                                tooltip: 'Video Tracking Info',
                               ),
                       ),
                     ),
@@ -1698,12 +1845,12 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
         onVisibilityChanged: (VisibilityInfo visibilityInfo) {
           if (visibilityInfo.visibleFraction == 0) {
             print('🛑 VideoScreen: Screen not visible, pausing videos');
-            _stateManager.updateScreenVisibility(false);
+            _videoManager.updateScreenVisibility(false);
             _controllerManager.handleVideoInvisible();
           } else {
             print(
                 '👁️ VideoScreen: Screen visible, checking if should play videos');
-            _stateManager.updateScreenVisibility(true);
+            _videoManager.updateScreenVisibility(true);
             _controllerManager.handleVideoVisible();
 
             // Only play if we're on the video tab and app is in foreground
@@ -1712,7 +1859,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
             if (mainController.isVideoScreen &&
                 mainController.isAppInForeground) {
               Future.delayed(const Duration(milliseconds: 100), () {
-                if (mounted && _stateManager.isScreenVisible) {
+                if (mounted && _videoManager.isScreenVisible) {
                   _playActiveVideo();
                 }
               });
@@ -1722,9 +1869,22 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
         child: NotificationListener<ScrollNotification>(
           onNotification: (ScrollNotification scrollInfo) {
             if (scrollInfo is ScrollUpdateNotification) {
+              // Check if scrolling has started
+              if (scrollInfo.dragDetails != null) {
+                // User is actively scrolling - immediately pause current video
+                final currentIndex =
+                    _pageController.page?.round() ?? _videoManager.activePage;
+                if (_videoManager.isScreenVisible &&
+                    currentIndex == _videoManager.activePage) {
+                  print(
+                      '🔄 VideoScreen: Scroll detected - immediately pausing current video');
+                  _controllerManager.handleScrollStart(currentIndex);
+                }
+              }
+
               final currentIndex =
-                  _pageController.page?.round() ?? _stateManager.activePage;
-              _stateManager.checkAndLoadMoreVideos(currentIndex);
+                  _pageController.page?.round() ?? _videoManager.activePage;
+              _videoManager.checkAndLoadMoreVideos(currentIndex);
 
               // Refresh banner ad if it's not loaded
               if (!_isBannerAdLoaded && _bannerAd != null) {
@@ -1740,27 +1900,27 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
               controller: _pageController,
               scrollDirection: Axis.vertical,
               itemCount:
-                  _stateManager.videos.length + (_stateManager.hasMore ? 1 : 0),
+                  _videoManager.videos.length + (_videoManager.hasMore ? 1 : 0),
               onPageChanged: (index) {
                 print('📱 VideoScreen: PageView changed to index: $index');
                 _onVideoPageChanged(index);
               },
               itemBuilder: (context, index) {
                 // Show loading indicator at the end when loading more videos
-                if (index == _stateManager.videos.length) {
+                if (index == _videoManager.videos.length) {
                   return const RepaintBoundary(
                     child: ui_components.LoadingIndicatorWidget(),
                   );
                 }
 
-                final video = _stateManager.videos[index];
+                final video = _videoManager.videos[index];
                 final controller = _controllerManager.getController(index);
 
                 return RepaintBoundary(
                   child: VideoItemWidget(
                     video: video,
                     controller: controller,
-                    isActive: index == _stateManager.activePage,
+                    isActive: index == _videoManager.activePage,
                     index: index,
                     onLike: () => _handleLike(index),
                     onComment: () => _handleComment(video),
@@ -1774,7 +1934,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
                       }
 
                       // Track navigation to profile screen for smart preloading
-                      _smartPreloadManager.trackNavigation('profile', context: {
+                      _smartCacheManager.trackNavigation('profile', context: {
                         'userId': video.uploader.id,
                         'fromScreen': 'video_feed',
                         'timestamp': DateTime.now().toIso8601String(),
@@ -1801,10 +1961,10 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
 
   /// Build revenue display widget for current video
   Widget _buildRevenueDisplay() {
-    if (_stateManager.videos.isEmpty) return const SizedBox.shrink();
+    if (_videoManager.videos.isEmpty) return const SizedBox.shrink();
 
-    final currentVideo = _stateManager.videos[_stateManager.activePage];
-    final currentIndex = _stateManager.activePage;
+    final currentVideo = _videoManager.videos[_videoManager.activePage];
+    final currentIndex = _videoManager.activePage;
     final revenueAnalytics =
         _getVideoRevenueAnalytics(currentIndex, currentVideo);
     final estimatedRevenue = revenueAnalytics['estimated_revenue'] ?? 0.0;
@@ -1857,7 +2017,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
   /// Show revenue analytics for current video
   void _showCurrentVideoRevenueAnalytics() {
     try {
-      if (_stateManager.videos.isEmpty) {
+      if (_videoManager.videos.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('❌ No videos available for analytics'),
@@ -1867,8 +2027,8 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
         return;
       }
 
-      final currentVideo = _stateManager.videos[_stateManager.activePage];
-      final currentIndex = _stateManager.activePage;
+      final currentVideo = _videoManager.videos[_videoManager.activePage];
+      final currentIndex = _videoManager.activePage;
       final revenueAnalytics =
           _getVideoRevenueAnalytics(currentIndex, currentVideo);
 
@@ -1915,6 +2075,58 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('❌ Error showing revenue analytics: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// **NEW: Get current video tracking information**
+  Map<String, dynamic> getCurrentVideoTrackingInfo() {
+    return _videoManager.getVideoTrackingInfo();
+  }
+
+  /// **NEW: Get current visible video index**
+  int get currentVisibleVideoIndex => _videoManager.currentVisibleVideoIndex;
+
+  /// **NEW: Show current video tracking info in debug dialog**
+  void _showCurrentVideoTrackingInfo() {
+    try {
+      final trackingInfo = getCurrentVideoTrackingInfo();
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('🎬 Video Tracking Info'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                  'Current Video Index: ${trackingInfo['currentVisibleVideoIndex']}'),
+              Text(
+                  'Video Screen Active: ${trackingInfo['isVideoScreenActive']}'),
+              Text('App In Foreground: ${trackingInfo['isAppInForeground']}'),
+              Text('Should Play Videos: ${trackingInfo['shouldPlayVideos']}'),
+              Text('Last Active Tab: ${trackingInfo['lastActiveTabIndex']}'),
+              Text('Was On Video Tab: ${trackingInfo['wasOnVideoTab']}'),
+              Text('Is Initialized: ${trackingInfo['isInitialized']}'),
+              Text('Timestamp: ${trackingInfo['timestamp']}'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      print('❌ Error showing video tracking info: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Error showing video tracking info: $e'),
           backgroundColor: Colors.red,
         ),
       );

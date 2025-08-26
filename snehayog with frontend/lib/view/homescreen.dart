@@ -160,23 +160,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       builder: (context, mainController, child) {
         return Scaffold(
           backgroundColor: Colors.white,
-          body: IndexedStack(
-            index: mainController.currentIndex,
-            children: [
-              // VideoScreen with proper key for state management
-              VideoScreen(
-                key: _videoScreenKey,
-              ),
-              const SnehaScreen(key: PageStorageKey('snehaScreen')),
-              UploadScreen(
-                key: const PageStorageKey('uploadScreen'),
-                onVideoUploaded: _refreshVideoList, // Pass the refresh callback
-              ),
-              ProfileScreen(
-                key: _profileScreenKey,
-              ),
-            ],
-          ),
+          body: _buildCurrentScreen(mainController.currentIndex),
           bottomNavigationBar: Container(
             decoration: BoxDecoration(
               color: Colors.white,
@@ -237,10 +221,34 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               ),
             ),
           ),
-// ... existing code ...
         );
       },
     );
+  }
+
+  /// Build the current screen based on index
+  Widget _buildCurrentScreen(int index) {
+    switch (index) {
+      case 0:
+        return VideoScreen(
+          key: _videoScreenKey,
+        );
+      case 1:
+        return const SnehaScreen(key: PageStorageKey('snehaScreen'));
+      case 2:
+        return UploadScreen(
+          key: const PageStorageKey('uploadScreen'),
+          onVideoUploaded: _refreshVideoList,
+        );
+      case 3:
+        return ProfileScreen(
+          key: _profileScreenKey,
+        );
+      default:
+        return VideoScreen(
+          key: _videoScreenKey,
+        );
+    }
   }
 }
 

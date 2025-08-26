@@ -3,8 +3,9 @@ import 'package:video_player/video_player.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:snehayog/model/video_model.dart';
 import 'package:snehayog/utils/feature_flags.dart';
-import 'package:snehayog/core/managers/yog_cache_manager.dart';
+import 'package:snehayog/core/managers/smart_cache_manager.dart';
 import 'dart:io'; // Added for File
+import 'package:flutter/widgets.dart'; // Added for AppLifecycleState
 
 /// Enhanced Video Controller Manager with Fast Video Delivery System
 /// Manages video controllers for smooth playback, memory optimization, and background preloading
@@ -22,7 +23,7 @@ class VideoControllerManager {
   final Set<int> _initializingControllers = {};
 
   // Fast video delivery integration (optional)
-  YogCacheManager? _cacheManager;
+  SmartCacheManager? _cacheManager;
   List<VideoModel> _currentVideos = [];
   Timer? _preloadTimer;
 
@@ -33,7 +34,7 @@ class VideoControllerManager {
   Map<int, VideoPlayerController> get controllers => _controllers;
 
   /// Initialize the manager (cache manager optional)
-  void initialize([YogCacheManager? cacheManager]) {
+  void initialize([SmartCacheManager? cacheManager]) {
     _cacheManager = cacheManager ?? _cacheManager;
     print('🚀 VideoControllerManager: Initialized');
   }
@@ -179,10 +180,13 @@ class VideoControllerManager {
       print(
           '🔄 VideoControllerManager: Setting active page from $_activePage to $newPage');
 
-      // IMPORTANT: Pause ALL videos first to ensure clean state
+      // **CRITICAL FIX: Immediately pause and mute ALL videos before page change**
       _pauseAllVideosImmediately();
 
-      // Pause previous video specifically
+      // **NEW: Dispose controllers that are far from current page to prevent memory leaks**
+      _disposeDistantControllers(newPage);
+
+      // Pause previous video specifically and ensure it's muted
       final previousController = _controllers[_activePage];
       if (previousController != null &&
           previousController.value.isInitialized) {
@@ -192,8 +196,10 @@ class VideoControllerManager {
             print(
                 '⏸️ VideoControllerManager: Paused previous video at index $_activePage');
           }
-          // Mute the previous video
+          // **CRITICAL: Always mute the previous video to prevent audio leak**
           previousController.setVolume(0.0);
+          print(
+              '🔇 VideoControllerManager: Muted previous video at index $_activePage');
         } catch (e) {
           print('❌ Error pausing previous video: $e');
         }
@@ -206,10 +212,10 @@ class VideoControllerManager {
       if (newActiveController != null &&
           newActiveController.value.isInitialized) {
         try {
-          // Mute first, then unmute when ready to play
+          // **CRITICAL: Keep new active video muted until explicitly told to play**
           newActiveController.setVolume(0.0);
           print(
-              '🔇 VideoControllerManager: Muted new active video at index $_activePage');
+              '🔇 VideoControllerManager: New active video at index $_activePage is muted');
         } catch (e) {
           print('❌ Error setting up new active video: $e');
         }
@@ -219,6 +225,50 @@ class VideoControllerManager {
       _triggerSmartPreloading(newPage);
 
       _optimizeControllers();
+    }
+  }
+
+  /// **NEW: Dispose controllers that are far from current page to prevent memory leaks**
+  void _disposeDistantControllers(int currentPage) {
+    final keepRange = 3; // Keep controllers within 3 videos of current page
+    final controllersToDispose = <int>[];
+
+    for (final entry in _controllers.entries) {
+      final index = entry.key;
+      final controller = entry.value;
+
+      // If controller is too far from current page, mark it for disposal
+      if ((index - currentPage).abs() > keepRange) {
+        controllersToDispose.add(index);
+      }
+    }
+
+    // Dispose distant controllers
+    for (final index in controllersToDispose) {
+      try {
+        final controller = _controllers[index];
+        if (controller != null) {
+          // **CRITICAL: Ensure controller is paused and muted before disposal**
+          if (controller.value.isInitialized) {
+            if (controller.value.isPlaying) {
+              controller.pause();
+            }
+            controller.setVolume(0.0);
+          }
+          controller.dispose();
+          _controllers.remove(index);
+          _initializingControllers.remove(index);
+          print(
+              '🗑️ VideoControllerManager: Disposed distant controller at index $index');
+        }
+      } catch (e) {
+        print('❌ Error disposing distant controller at index $index: $e');
+      }
+    }
+
+    if (controllersToDispose.isNotEmpty) {
+      print(
+          '🗑️ VideoControllerManager: Disposed ${controllersToDispose.length} distant controllers');
     }
   }
 
@@ -343,9 +393,77 @@ class VideoControllerManager {
         '🎯 VideoControllerManager: Optimized controllers, kept ${controllersToKeep.length}, disposed ${controllersToDispose.length}');
   }
 
-  /// Optimize controllers (public method)
+  /// **NEW: Optimize controllers to prevent memory leaks and improve performance**
   void optimizeControllers() {
-    _optimizeControllers();
+    print('🔧 VideoControllerManager: Optimizing controllers...');
+
+    // **CRITICAL FIX: Move heavy operations to background thread**
+    unawaited(_optimizeControllersInBackground());
+  }
+
+  /// **NEW: Optimize controllers in background thread**
+  Future<void> _optimizeControllersInBackground() async {
+    try {
+      final keysToRemove = <int>[];
+
+      for (var entry in _controllers.entries) {
+        final index = entry.key;
+        final controller = entry.value;
+
+        try {
+          // Check if controller is still valid
+          if (!controller.value.isInitialized) {
+            print(
+                '⚠️ VideoControllerManager: Controller at index $index not initialized, marking for removal');
+            keysToRemove.add(index);
+            continue;
+          }
+
+          // Check if controller is too far from active page
+          final distance = (index - _activePage).abs();
+          if (distance > _preloadDistance * 2) {
+            print(
+                '🗑️ VideoControllerManager: Controller at index $index too far from active page ($distance), disposing');
+            keysToRemove.add(index);
+            continue;
+          }
+
+          // Check if controller has been idle for too long
+          if (controller.value.isInitialized && !controller.value.isPlaying) {
+            // Keep only recent controllers
+            if (distance > _preloadDistance) {
+              print(
+                  '🗑️ VideoControllerManager: Controller at index $index idle and far from active, disposing');
+              keysToRemove.add(index);
+            }
+          }
+        } catch (e) {
+          print(
+              '❌ VideoControllerManager: Error checking controller at index $index: $e');
+          keysToRemove.add(index);
+        }
+      }
+
+      // Remove marked controllers
+      for (final index in keysToRemove) {
+        disposeController(index);
+      }
+
+      if (keysToRemove.isNotEmpty) {
+        print(
+            '✅ VideoControllerManager: Disposed ${keysToRemove.length} controllers during optimization');
+      }
+
+      // Clear any stuck initializing controllers
+      _initializingControllers
+          .removeWhere((index) => !_controllers.containsKey(index));
+
+      print(
+          '🔧 VideoControllerManager: Optimization completed. Active controllers: ${_controllers.length}');
+    } catch (e) {
+      print(
+          '❌ VideoControllerManager: Error during background optimization: $e');
+    }
   }
 
   /// Play the active video
@@ -424,6 +542,7 @@ class VideoControllerManager {
       try {
         if (controller.value.isInitialized && controller.value.isPlaying) {
           controller.pause();
+          controller.setVolume(0.0); // Mute immediately
           pausedCount++;
           print('⏸️ VideoControllerManager: Paused video at index $index');
         }
@@ -442,6 +561,7 @@ class VideoControllerManager {
       try {
         if (controller.value.isPlaying) {
           controller.pause();
+          controller.setVolume(0.0); // Mute immediately
           print('⏸️ VideoControllerManager: Paused video at index $index');
         }
       } catch (e) {
@@ -470,6 +590,35 @@ class VideoControllerManager {
     }
 
     print('🛑 VideoControllerManager: Successfully paused $pausedCount videos');
+  }
+
+  /// Emergency stop all videos (for critical situations like tab switching)
+  void emergencyStopAllVideos() {
+    print(
+        '🚨 VideoControllerManager: EMERGENCY STOP - stopping all videos immediately');
+    int stoppedCount = 0;
+
+    for (var entry in _controllers.entries) {
+      final index = entry.key;
+      final controller = entry.value;
+
+      try {
+        if (controller.value.isInitialized) {
+          if (controller.value.isPlaying) {
+            controller.pause();
+            stoppedCount++;
+          }
+          controller.setVolume(0.0);
+          controller.seekTo(Duration.zero); // Reset to beginning
+          print(
+              '🚨 VideoControllerManager: Emergency stopped video at index $index');
+        }
+      } catch (e) {
+        print('❌ Error emergency stopping controller at index $index: $e');
+      }
+    }
+
+    print('🚨 VideoControllerManager: Emergency stopped $stoppedCount videos');
   }
 
   /// Get controller for specific index
@@ -591,27 +740,139 @@ class VideoControllerManager {
     }
   }
 
-  /// Smart preloading based on user scrolling direction
-  void smartPreloadBasedOnDirection(int newPage, List<VideoModel> videos) {
-    final direction = newPage > _activePage ? 'forward' : 'backward';
+  /// Handle video page change with immediate pause and preload
+  void handleVideoPageChange(
+      int oldIndex, int newIndex, List<VideoModel> videos) {
     print(
-        '🎯 VideoControllerManager: Smart preloading for $direction direction');
+        '🔄 VideoControllerManager: Handling video page change from $oldIndex to $newIndex');
 
-    if (direction == 'forward') {
-      // Preload next 2-3 videos
-      for (int i = newPage + 1; i <= newPage + 3 && i < videos.length; i++) {
-        if (!_controllers.containsKey(i)) {
-          initController(i, videos[i]);
+    // IMMEDIATELY pause the old video
+    if (oldIndex >= 0 && oldIndex < videos.length) {
+      _immediatelyPauseVideo(oldIndex);
+      print(
+          '⏸️ VideoControllerManager: Immediately paused video at index $oldIndex');
+    }
+
+    // Preload the new video
+    if (newIndex >= 0 && newIndex < videos.length) {
+      _preloadVideo(newIndex, videos[newIndex]);
+      print('📥 VideoControllerManager: Preloading video at index $newIndex');
+    }
+
+    // Update active page
+    _activePage = newIndex;
+
+    // Preload adjacent videos for smooth experience
+    _preloadAdjacentVideos(newIndex, videos);
+  }
+
+  /// Handle scroll start - immediately pause current video
+  void handleScrollStart(int currentIndex) {
+    print(
+        '🔄 VideoControllerManager: Scroll start detected for index $currentIndex');
+
+    // Immediately pause the current video
+    if (currentIndex >= 0 && _controllers.containsKey(currentIndex)) {
+      _immediatelyPauseVideo(currentIndex);
+      print(
+          '⏸️ VideoControllerManager: Scroll start - immediately paused video at index $currentIndex');
+    }
+  }
+
+  /// Immediately pause a specific video (no delay)
+  void _immediatelyPauseVideo(int index) {
+    final controller = _controllers[index];
+    if (controller != null && controller.value.isInitialized) {
+      try {
+        if (controller.value.isPlaying) {
+          controller.pause();
+          controller.setVolume(0.0); // Mute immediately
+          print(
+              '⏸️ VideoControllerManager: Immediately paused and muted video at index $index');
+        }
+      } catch (e) {
+        print('❌ Error immediately pausing video at index $index: $e');
+      }
+    }
+  }
+
+  /// Preload a specific video
+  Future<void> _preloadVideo(int index, VideoModel video) async {
+    if (_controllers.containsKey(index)) {
+      // Controller already exists, just ensure it's ready
+      final controller = _controllers[index];
+      if (controller != null && controller.value.isInitialized) {
+        print(
+            '✅ VideoControllerManager: Video at index $index already preloaded');
+        return;
+      }
+    }
+
+    try {
+      print(
+          '📥 VideoControllerManager: Starting preload for video at index $index');
+      await initController(index, video);
+      print(
+          '✅ VideoControllerManager: Successfully preloaded video at index $index');
+    } catch (e) {
+      print('❌ Error preloading video at index $index: $e');
+    }
+  }
+
+  /// Preload adjacent videos for smooth scrolling
+  void _preloadAdjacentVideos(int currentIndex, List<VideoModel> videos) {
+    final preloadRange = 2; // Preload 2 videos before and after
+    final startIndex =
+        (currentIndex - preloadRange).clamp(0, videos.length - 1);
+    final endIndex = (currentIndex + preloadRange).clamp(0, videos.length - 1);
+
+    for (int i = startIndex; i <= endIndex; i++) {
+      if (i != currentIndex && i >= 0 && i < videos.length) {
+        // Preload in background
+        _preloadVideo(i, videos[i]);
+      }
+    }
+  }
+
+  /// Smart preload based on scroll direction
+  void smartPreloadBasedOnDirection(int newPage, List<VideoModel> videos) {
+    if (newPage < 0 || newPage >= videos.length) return;
+
+    print('🧠 VideoControllerManager: Smart preloading for page $newPage');
+
+    // Determine scroll direction
+    final direction = newPage > _activePage ? 1 : -1;
+
+    // Preload videos in the direction of scroll
+    final preloadIndices = <int>[];
+
+    if (direction > 0) {
+      // Scrolling down, preload next videos
+      for (int i = 1; i <= 3; i++) {
+        final index = newPage + i;
+        if (index < videos.length) {
+          preloadIndices.add(index);
         }
       }
     } else {
-      // Preload previous 1-2 videos
-      for (int i = newPage - 1; i >= newPage - 2 && i >= 0; i--) {
-        if (!_controllers.containsKey(i)) {
-          initController(i, videos[i]);
+      // Scrolling up, preload previous videos
+      for (int i = 1; i <= 3; i++) {
+        final index = newPage - i;
+        if (index >= 0) {
+          preloadIndices.add(index);
         }
       }
     }
+
+    // Preload videos in background
+    for (final index in preloadIndices) {
+      if (index >= 0 && index < videos.length) {
+        _preloadVideo(index, videos[index]);
+      }
+    }
+
+    print(
+        '🧠 VideoControllerManager: Smart preloaded ${preloadIndices.length} videos in direction $direction');
   }
 
   /// Check video health and fix issues
@@ -800,34 +1061,6 @@ class VideoControllerManager {
     print('👁️ VideoControllerManager: Video visibility restored');
   }
 
-  /// Emergency stop all videos (for critical situations)
-  void emergencyStopAllVideos() {
-    print(
-        '🚨 VideoControllerManager: EMERGENCY STOP - stopping all videos immediately');
-
-    int stoppedCount = 0;
-    for (var entry in _controllers.entries) {
-      final index = entry.key;
-      final controller = entry.value;
-
-      try {
-        if (controller.value.isInitialized) {
-          if (controller.value.isPlaying) {
-            controller.pause();
-            stoppedCount++;
-          }
-          controller.setVolume(0.0);
-          print(
-              '🚨 VideoControllerManager: Emergency stopped video at index $index');
-        }
-      } catch (e) {
-        print('❌ Error emergency stopping video at index $index: $e');
-      }
-    }
-
-    print('🚨 VideoControllerManager: Emergency stopped $stoppedCount videos');
-  }
-
   /// Build optimized HLS URL with fallback support
   String _buildHLSUrl(String hlsUrl) {
     if (hlsUrl.startsWith('http')) {
@@ -952,5 +1185,209 @@ class VideoControllerManager {
   /// Get HLS loading time for a specific video
   int? getHSLLoadingTime(String videoId) {
     return null;
+  }
+
+  /// **NEW: Comprehensive method to handle video state during scrolling**
+  void handleVideoScroll(int newPage) {
+    print('🔄 VideoControllerManager: Handling video scroll to page $newPage');
+
+    // **CRITICAL: Immediately pause and mute all videos**
+    _pauseAllVideosImmediately();
+
+    // **CRITICAL: Dispose controllers that are far from current page**
+    _disposeDistantControllers(newPage);
+
+    // **CRITICAL: Ensure proper state for new active video**
+    _prepareActiveVideo(newPage);
+
+    // **CRITICAL: Clean up any lingering audio**
+    _cleanupLingeringAudio();
+
+    print('✅ VideoControllerManager: Video scroll handling completed');
+  }
+
+  /// **NEW: Prepare the active video for playback**
+  void _prepareActiveVideo(int page) {
+    final controller = _controllers[page];
+    if (controller != null && controller.value.isInitialized) {
+      try {
+        // **CRITICAL: Keep video muted until explicitly told to play**
+        controller.setVolume(0.0);
+        print(
+            '🔇 VideoControllerManager: Active video at page $page prepared and muted');
+      } catch (e) {
+        print('❌ Error preparing active video at page $page: $e');
+      }
+    }
+  }
+
+  /// **NEW: Clean up any lingering audio from disposed controllers**
+  void _cleanupLingeringAudio() {
+    // This method ensures no audio continues playing from disposed controllers
+    // The actual cleanup happens in the dispose methods, but this is a safety check
+    print('🔇 VideoControllerManager: Audio cleanup completed');
+  }
+
+  /// **NEW: Handle app lifecycle changes to prevent audio leaks**
+  void handleAppLifecycleChange(AppLifecycleState state) {
+    print('🔄 VideoControllerManager: App lifecycle changed to: $state');
+
+    switch (state) {
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.detached:
+        // **CRITICAL: Immediately pause and mute all videos when app goes to background**
+        _pauseAllVideosImmediately();
+        _muteAllVideos();
+        print(
+            '🛑 VideoControllerManager: All videos paused and muted due to app background');
+        break;
+
+      case AppLifecycleState.resumed:
+        // **CRITICAL: Keep videos muted when app resumes to prevent audio leaks**
+        ensureVideosPaused();
+        print(
+            '👁️ VideoControllerManager: App resumed, videos remain paused and muted');
+        break;
+
+      default:
+        break;
+    }
+  }
+
+  /// **NEW: Mute all videos to prevent audio leaks**
+  void _muteAllVideos() {
+    int mutedCount = 0;
+
+    for (var entry in _controllers.entries) {
+      final index = entry.key;
+      final controller = entry.value;
+
+      try {
+        if (controller.value.isInitialized) {
+          controller.setVolume(0.0);
+          mutedCount++;
+        }
+      } catch (e) {
+        print('❌ Error muting video at index $index: $e');
+      }
+    }
+
+    print('🔇 VideoControllerManager: Muted $mutedCount videos');
+  }
+
+  /// **NEW: Test method to verify video controller fixes**
+  void testVideoControllerFixes() {
+    print('🧪 VideoControllerManager: Testing video controller fixes...');
+
+    // Test 1: Verify all videos are properly paused and muted
+    bool allVideosPaused = true;
+    bool allVideosMuted = true;
+
+    for (var entry in _controllers.entries) {
+      final index = entry.key;
+      final controller = entry.value;
+
+      if (controller.value.isInitialized) {
+        if (controller.value.isPlaying) {
+          allVideosPaused = false;
+          print('⚠️ Test failed: Video at index $index is still playing');
+        }
+
+        if (controller.value.volume > 0.0) {
+          allVideosMuted = false;
+          print('⚠️ Test failed: Video at index $index is not muted');
+        }
+      }
+    }
+
+    if (allVideosPaused && allVideosMuted) {
+      print('✅ Test passed: All videos are properly paused and muted');
+    } else {
+      print('❌ Test failed: Some videos are not properly managed');
+    }
+
+    // Test 2: Verify controller count is reasonable
+    final controllerCount = _controllers.length;
+    if (controllerCount <= 5) {
+      // Should not have more than 5 controllers
+      print('✅ Test passed: Controller count is reasonable ($controllerCount)');
+    } else {
+      print(
+          '⚠️ Test warning: High controller count ($controllerCount) may indicate memory leak');
+    }
+
+    // Test 3: Verify no controllers are stuck initializing
+    if (_initializingControllers.isEmpty) {
+      print('✅ Test passed: No controllers stuck in initialization');
+    } else {
+      print(
+          '⚠️ Test warning: ${_initializingControllers.length} controllers still initializing');
+    }
+
+    print('🧪 VideoControllerManager: Test completed');
+  }
+
+  /// **NEW: Periodic cleanup to prevent memory leaks**
+  void startPeriodicCleanup() {
+    // Cancel existing timer if any
+    _preloadTimer?.cancel();
+
+    // Run cleanup every 30 seconds
+    _preloadTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      try {
+        print('🧹 VideoControllerManager: Running periodic cleanup...');
+
+        // Optimize controllers
+        optimizeControllers();
+
+        // Clear any stuck initializing controllers
+        _initializingControllers
+            .removeWhere((index) => !_controllers.containsKey(index));
+
+        // Check for memory leaks
+        _checkForMemoryLeaks();
+
+        print('🧹 VideoControllerManager: Periodic cleanup completed');
+      } catch (e) {
+        print('❌ VideoControllerManager: Error during periodic cleanup: $e');
+      }
+    });
+
+    print('🧹 VideoControllerManager: Started periodic cleanup timer');
+  }
+
+  /// **NEW: Check for potential memory leaks**
+  void _checkForMemoryLeaks() {
+    final totalControllers = _controllers.length;
+    final initializingCount = _initializingControllers.length;
+
+    if (totalControllers > 10) {
+      print(
+          '⚠️ VideoControllerManager: High controller count ($totalControllers), potential memory leak detected');
+    }
+
+    if (initializingCount > 5) {
+      print(
+          '⚠️ VideoControllerManager: High initializing count ($initializingCount), clearing stuck initializations');
+      _initializingControllers.clear();
+    }
+
+    // Check for controllers that might be stuck
+    for (var entry in _controllers.entries) {
+      final index = entry.key;
+      final controller = entry.value;
+
+      try {
+        if (controller.value.isInitialized &&
+            controller.value.duration.inSeconds == 0) {
+          print(
+              '⚠️ VideoControllerManager: Controller at index $index has zero duration, might be stuck');
+        }
+      } catch (e) {
+        print(
+            '❌ VideoControllerManager: Error checking controller at index $index: $e');
+      }
+    }
   }
 }

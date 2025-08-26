@@ -116,11 +116,20 @@ class _VideoScreenRefactoredState extends State<VideoScreenRefactored>
     if (newPage != _activePage && newPage >= 0) {
       final provider = Provider.of<VideoProvider>(context, listen: false);
       if (newPage < provider.videos.length) {
-        _controllerManager.setActivePage(newPage);
+        print('🔄 VideoScreen: Page changing from $_activePage to $newPage');
+
+        // **CRITICAL FIX: Use comprehensive scroll handling to prevent audio leaks**
+        _controllerManager.handleVideoScroll(newPage);
+
         _activePage = newPage;
 
         if (_isScreenVisible) {
-          _controllerManager.playActiveVideo();
+          // **NEW: Add delay to ensure proper state transition**
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (mounted && _isScreenVisible) {
+              _controllerManager.playActiveVideo();
+            }
+          });
         }
       }
     }
