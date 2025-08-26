@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -65,6 +64,24 @@ class ProfileStateManager extends ChangeNotifier {
     try {
       print('🔄 ProfileStateManager: Loading user data for userId: $userId');
 
+      // **OPTIMIZED: Check cache first for instant response**
+      final cacheKey = 'user_profile_$userId';
+      final cachedProfile = _getFromCache(cacheKey);
+
+      if (cachedProfile != null &&
+          !_isCacheStale(cacheKey, _userProfileCacheTime)) {
+        print('⚡ ProfileStateManager: Cache hit for profile data');
+        _userData = cachedProfile;
+        _isLoading = false;
+        notifyListeners();
+
+        // Load videos in background
+        loadUserVideos(userId).catchError((e) {
+          print('⚠️ Background video load failed: $e');
+        });
+        return;
+      }
+
       final loggedInUser = await _authService.getUserData();
       print('🔄 ProfileStateManager: Logged in user: ${loggedInUser?['id']}');
 
@@ -102,6 +119,9 @@ class ProfileStateManager extends ChangeNotifier {
             '🔄 ProfileStateManager: Other user profile loaded: ${userData['name']}');
       }
 
+      // **OPTIMIZED: Cache the profile data**
+      _setCache(cacheKey, userData, _userProfileCacheTime);
+
       _userData = userData;
       print('🔄 ProfileStateManager: Stored user data: $_userData');
       print(
@@ -112,7 +132,11 @@ class ProfileStateManager extends ChangeNotifier {
       notifyListeners();
       print(
           '🔄 ProfileStateManager: User data loaded successfully, now loading videos');
-      await loadUserVideos(userId);
+
+      // **OPTIMIZED: Load videos in parallel with profile data**
+      loadUserVideos(userId).catchError((e) {
+        print('⚠️ Background video load failed: $e');
+      });
     } catch (e) {
       print('❌ ProfileStateManager: Error loading user data: $e');
       _error = 'Error loading user data: ${e.toString()}';
@@ -661,7 +685,12 @@ class ProfileStateManager extends ChangeNotifier {
       final timestamp = _cacheTimestamps[key]!;
       final now = DateTime.now();
 
-      if (now.difference(timestamp) < _userVideosCacheTime) {
+      // Use appropriate cache time based on key type
+      Duration cacheTime = key.contains('user_profile')
+          ? _userProfileCacheTime
+          : _userVideosCacheTime;
+
+      if (now.difference(timestamp) < cacheTime) {
         print('⚡ ProfileStateManager: Cache hit for key: $key');
         return _cache[key];
       } else {

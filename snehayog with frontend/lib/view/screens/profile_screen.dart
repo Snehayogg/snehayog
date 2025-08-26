@@ -3,7 +3,6 @@ import 'package:snehayog/utils/responsive_helper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
-import 'dart:async';
 import 'package:snehayog/view/screens/video_screen.dart';
 import 'package:snehayog/view/screens/creator_payment_setup_screen.dart';
 import 'package:snehayog/view/screens/creator_revenue_screen.dart';
@@ -11,12 +10,9 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:snehayog/config/app_config.dart';
 import 'package:snehayog/core/managers/profile_state_manager.dart';
-import 'package:snehayog/services/video_service.dart';
 import 'package:provider/provider.dart';
 import 'package:snehayog/core/providers/user_provider.dart';
 import 'package:snehayog/model/usermodel.dart';
-import 'package:snehayog/services/authservices.dart';
-import 'package:snehayog/utils/feature_flags.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -25,7 +21,6 @@ class ProfileScreen extends StatefulWidget {
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 
-  // Public method to refresh videos (called from MainScreen)
   static void refreshVideos(GlobalKey<State<ProfileScreen>> key) {
     final state = key.currentState;
     if (state != null) {
@@ -35,7 +30,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen>
-    with WidgetsBindingObserver {
+    with AutomaticKeepAliveClientMixin {
   late final ProfileStateManager _stateManager;
   final ImagePicker _imagePicker = ImagePicker();
   bool _isLoading = true;
@@ -44,118 +39,41 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _stateManager = ProfileStateManager();
-
-    // Initialize loading state
-    _isLoading = true;
-    _error = null;
-
-    // **FIXED: Use feature flag to control enhanced profile loading**
-    if (Features.enhancedProfileLoading.isEnabled) {
-      // NEW: Enhanced profile loading with post-frame callback
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          print(
-              '🔄 ProfileScreen: Enhanced loading enabled - post-frame callback');
-          _loadUserData();
-        }
-      });
-    } else {
-      // ORIGINAL: Standard initialization without post-frame callback
-      print('🔄 ProfileScreen: Using standard profile initialization');
-    }
-
-    // Add a timeout to prevent infinite loading
-    Timer(const Duration(seconds: 10), () {
-      if (mounted && _isLoading) {
-        print('⚠️ ProfileScreen: Loading timeout reached, forcing refresh');
-        setState(() {
-          _isLoading = false;
-          _error = 'Loading timeout reached';
-        });
-      }
-    });
+    // Initialize loading state properly
+    _isLoading = false;
+    _loadUserData();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _stateManager.setContext(context);
-
-    // **FIXED: Only load data if not already loading and no data available**
-    if (!_isLoading && _stateManager.userData == null && _error == null) {
-      print('🔍 ProfileScreen: didChangeDependencies - loading user data');
-      _loadUserData();
-    }
-  }
-
-  // **NEW: Method to handle when profile screen becomes visible**
-  void onProfileTabSelected() {
-    print(
-        '🔄 ProfileScreen: Profile tab selected - checking if data needs to be loaded');
-
-    // **FIXED: Use feature flag to control enhanced profile loading**
-    if (Features.enhancedProfileLoading.isEnabled) {
-      // If we don't have user data and we're not currently loading, load it
-      if (_stateManager.userData == null && !_isLoading && _error == null) {
-        print('🔄 ProfileScreen: Enhanced loading enabled - loading user data');
-        _loadUserData();
-      } else if (_stateManager.userData != null) {
-        print('✅ ProfileScreen: User data already available');
-      } else if (_isLoading) {
-        print('⏳ ProfileScreen: Already loading user data');
-      } else if (_error != null) {
-        print('⚠️ ProfileScreen: Error state, user can retry');
-      }
-    } else {
-      // ORIGINAL: No enhanced loading behavior
-      print(
-          '🔄 ProfileScreen: Enhanced loading disabled - using standard behavior');
-    }
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    // **FIXED: Use consistent data refresh approach**
-    if (state == AppLifecycleState.resumed) {
-      print('🔄 ProfileScreen: App resumed, refreshing data...');
-      // Refresh all data using the main loading method
-      if (mounted && !_isLoading) {
-        _loadUserData();
-      }
-    }
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _stateManager.dispose();
     super.dispose();
   }
 
+  @override
+  bool get wantKeepAlive => true;
+
   Future<void> _loadUserData() async {
-    print('🔄 ProfileScreen: Loading user data for userId: ${widget.userId}');
+    // Remove the early return that was causing infinite loop
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
 
     try {
-      // Set loading state
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
-
-      // First, check if we have any stored authentication data
+      // Check authentication
       final prefs = await SharedPreferences.getInstance();
       final hasJwtToken = prefs.getString('jwt_token') != null;
       final hasFallbackUser = prefs.getString('fallback_user') != null;
 
-      print(
-          '🔍 ProfileScreen: Auth check - JWT: $hasJwtToken, Fallback: $hasFallbackUser');
-
       if (!hasJwtToken && !hasFallbackUser) {
-        print(
-            '❌ ProfileScreen: No authentication data found - user needs to sign in');
         setState(() {
           _isLoading = false;
           _error = 'No authentication data found';
@@ -163,109 +81,48 @@ class _ProfileScreenState extends State<ProfileScreen>
         return;
       }
 
-      // **FIXED: Always load user data via UserProvider for profile info**
+      // **OPTIMIZED: Parallel API calls instead of sequential**
       final userProvider = Provider.of<UserProvider>(context, listen: false);
 
-      // If userId is provided, load that specific user's data
-      if (widget.userId != null) {
-        print(
-            '🔄 ProfileScreen: Loading user data via UserProvider for ID: ${widget.userId}');
-        print('🔄 ProfileScreen: userId type: ${widget.userId.runtimeType}');
-        print('🔄 ProfileScreen: userId length: ${widget.userId!.length}');
+      // Start all API calls simultaneously
+      final List<Future> parallelTasks = [
+        // Task 1: Load profile data via ProfileStateManager
+        _stateManager.loadUserData(widget.userId),
 
-        final userData =
-            await userProvider.getUserDataWithFollowers(widget.userId!);
-        if (userData != null) {
-          print(
-              '✅ ProfileScreen: User data loaded via UserProvider: ${userData.name}');
-        } else {
-          print('⚠️ ProfileScreen: UserProvider returned null data');
-        }
-      } else {
-        // If no userId, load current user's data from ProfileStateManager
-        print(
-            '🔄 ProfileScreen: Loading current user data from ProfileStateManager');
+        // Task 2: Load user data + followers via UserProvider (if needed)
+        if (widget.userId != null)
+          userProvider.getUserDataWithFollowers(widget.userId!)
+        else
+          Future.value(null),
+      ];
 
-        // **FIXED: Check if ProfileStateManager already has user data**
-        if (_stateManager.userData != null) {
-          // Get current user ID from ProfileStateManager
-          final currentUserId = _stateManager.userData!['id'];
-          print(
-              '🔄 ProfileScreen: Current user ID from ProfileStateManager: $currentUserId');
-          print(
-              '🔄 ProfileScreen: Current user ID type: ${currentUserId.runtimeType}');
-          print(
-              '🔄 ProfileScreen: Current user ID length: ${currentUserId?.length ?? 'null'}');
+      // Wait for all tasks to complete
+      await Future.wait(parallelTasks);
 
-          if (currentUserId != null) {
-            print(
-                '🔄 ProfileScreen: Loading current user data for ID: $currentUserId');
-            final userData =
-                await userProvider.getUserDataWithFollowers(currentUserId);
-            if (userData != null) {
-              print(
-                  '✅ ProfileScreen: Current user data loaded: ${userData.name}');
-            }
-          }
-        } else {
-          // **NEW: If ProfileStateManager doesn't have user data, try to get it from AuthService**
-          print(
-              '🔄 ProfileScreen: ProfileStateManager has no user data, trying AuthService');
-          try {
-            final authService = AuthService();
-            final authUserData = await authService.getUserData();
-            if (authUserData != null && authUserData['id'] != null) {
-              print(
-                  '🔄 ProfileScreen: Got user data from AuthService: ${authUserData['id']}');
-              final userData = await userProvider
-                  .getUserDataWithFollowers(authUserData['id']);
-              if (userData != null) {
-                print(
-                    '✅ ProfileScreen: User data loaded from AuthService: ${userData.name}');
-              }
-            }
-          } catch (e) {
-            print(
-                '⚠️ ProfileScreen: Error getting user data from AuthService: $e');
-          }
+      // **OPTIMIZED: Load additional user data only if needed**
+      if (widget.userId == null && _stateManager.userData != null) {
+        final currentUserId = _stateManager.userData!['id'] ??
+            _stateManager.userData!['googleId'];
+        if (currentUserId != null) {
+          // Load this in background without blocking UI
+          userProvider.getUserDataWithFollowers(currentUserId).catchError((e) {
+            print('⚠️ Background user data load failed: $e');
+          });
         }
       }
 
-      // **FIXED: Load profile data via ProfileStateManager for videos and profile info**
-      await _stateManager.loadUserData(widget.userId);
-      print('✅ ProfileScreen: Profile data loaded successfully');
-
-      // **DEBUG: Check what data was loaded**
-      print(
-          '🔍 ProfileScreen: ProfileStateManager userData: ${_stateManager.userData}');
-      print(
-          '🔍 ProfileScreen: ProfileStateManager userVideos count: ${_stateManager.userVideos.length}');
-
-      if (_stateManager.userData != null) {
-        print(
-            '🔍 ProfileScreen: User ID from ProfileStateManager: ${_stateManager.userData!['id']}');
-        print(
-            '🔍 ProfileScreen: User Name from ProfileStateManager: ${_stateManager.userData!['name']}');
-        print(
-            '🔍 ProfileScreen: User Email from ProfileStateManager: ${_stateManager.userData!['email']}');
-      }
-
-      // Trigger rebuild to show profile content
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _error = null;
-        });
-      }
+      setState(() {
+        _isLoading = false;
+        _error = null;
+      });
     } catch (e) {
-      print('❌ ProfileScreen: Error loading user data: $e');
+      print('❌ ProfileScreen: Error in _loadUserData: $e');
+      setState(() {
+        _isLoading = false;
+        _error = e.toString();
+      });
 
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _error = e.toString();
-        });
-
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error loading profile: $e'),
@@ -284,15 +141,10 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Future<void> _handleLogout() async {
     try {
-      // Clear payment setup flag on logout
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('has_payment_setup');
-
-      // Clear all authentication data
       await prefs.remove('jwt_token');
       await prefs.remove('fallback_user');
-
-      print('✅ ProfileScreen: Authentication data cleared');
 
       await _stateManager.handleLogout();
 
@@ -319,16 +171,9 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Future<void> _handleGoogleSignIn() async {
     try {
-      print('🔐 ProfileScreen: Starting Google sign-in process...');
-
       final userData = await _stateManager.handleGoogleSignIn();
       if (userData != null) {
-        print('✅ ProfileScreen: Google sign-in successful');
-
-        // Since this is a fresh sign-in, we're on our own profile.
-        // We can reload all data.
         await _loadUserData();
-
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -339,7 +184,6 @@ class _ProfileScreenState extends State<ProfileScreen>
           );
         }
       } else {
-        print('❌ ProfileScreen: Google sign-in failed - no user data returned');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -351,7 +195,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         }
       }
     } catch (e) {
-      print('❌ ProfileScreen: Error during Google sign-in: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -370,7 +213,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   Future<void> _handleSaveProfile() async {
     try {
       final newName = _stateManager.nameController.text.trim();
-
       if (newName.isEmpty) {
         throw 'Name cannot be empty';
       }
@@ -402,23 +244,13 @@ class _ProfileScreenState extends State<ProfileScreen>
     _stateManager.cancelEditing();
   }
 
-  /// Handles deletion of selected videos with professional error handling
   Future<void> _handleDeleteSelectedVideos() async {
     try {
-      // Show confirmation dialog
       final shouldDelete = await _showDeleteConfirmationDialog();
-
       if (!shouldDelete) return;
 
-      print('🗑️ ProfileScreen: Starting video deletion process');
-      print(
-          '🗑️ ProfileScreen: Selected videos: ${_stateManager.selectedVideoIds}');
-      print('🗑️ ProfileScreen: User data: ${_stateManager.userData}');
-
-      // Perform deletion
       await _stateManager.deleteSelectedVideos();
 
-      // Show success message
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -426,25 +258,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                 '${_stateManager.selectedVideoIds.length} videos deleted successfully!'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 3),
-            action: SnackBarAction(
-              label: 'Undo',
-              textColor: Colors.white,
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Undo functionality not implemented yet'),
-                    backgroundColor: Colors.orange,
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              },
-            ),
           ),
         );
       }
     } catch (e) {
-      print('❌ ProfileScreen: Error in _handleDeleteSelectedVideos: $e');
-      // Error handling is done in ProfileStateManager, just show the error
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -462,7 +279,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  /// Shows a confirmation dialog before deleting videos
   Future<bool> _showDeleteConfirmationDialog() async {
     return await showDialog<bool>(
           context: context,
@@ -501,7 +317,6 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Future<void> _handleProfilePhotoChange() async {
     try {
-      // Show options to pick image
       final XFile? image = await showDialog<XFile>(
         context: context,
         builder: (BuildContext context) {
@@ -535,7 +350,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       );
 
       if (image != null) {
-        // Show loading indicator
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -545,12 +359,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           );
         }
 
-        // Here you would typically upload the image to your server
-        // For now, we'll just use the local file path
-        final String imagePath = image.path;
-
-        // Update the profile photo
-        await _stateManager.updateProfilePhoto(imagePath);
+        await _stateManager.updateProfilePhoto(image.path);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -570,6 +379,21 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
         );
       }
+    }
+  }
+
+  /// **NEW: Toggle feature flags for testing**
+  void _toggleFeatureFlag(String featureName) {
+    // For now, just show a placeholder message since Features class is not defined
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'Feature flag toggle: $featureName (Features class not implemented)'),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 2),
+        ),
+      );
     }
   }
 
@@ -633,6 +457,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: _buildAppBar(),
@@ -648,44 +473,30 @@ class _ProfileScreenState extends State<ProfileScreen>
           return _buildBody(userProvider, userModel);
         },
       ),
+      // **NEW: Floating action button for delete when videos are selected**
+      floatingActionButton: _stateManager.isSelecting &&
+              _stateManager.selectedVideoIds.isNotEmpty
+          ? FloatingActionButton.extended(
+              onPressed: _handleDeleteSelectedVideos,
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.delete),
+              label: Text('Delete ${_stateManager.selectedVideoIds.length}'),
+            )
+          : null,
     );
   }
 
   Widget _buildBody(UserProvider userProvider, UserModel? userModel) {
-    // Debug logging
-    print('🔍 ProfileScreen: _buildBody called');
-    print('🔍 ProfileScreen: _isLoading: $_isLoading');
-    print('🔍 ProfileScreen: _error: $_error');
-    print(
-        '🔍 ProfileScreen: userData: ${_stateManager.userData != null ? "Available" : "Not Available"}');
-    print('🔍 ProfileScreen: userId: ${widget.userId}');
-
     // Show loading indicator
     if (_isLoading) {
-      print('🔍 ProfileScreen: Showing loading indicator');
       return RepaintBoundary(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 16),
-              const Text('Loading profile...'),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: _loadUserData,
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
+        child: _buildSkeletonLoading(),
       );
     }
 
     // Show error state
     if (_error != null) {
-      print('🔍 ProfileScreen: Showing error: $_error');
-
       // If it's an authentication error, show sign-in view
       if (_error == 'No authentication data found') {
         return _buildSignInView();
@@ -750,18 +561,12 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     // Check if we have user data
     if (_stateManager.userData == null) {
-      print('🔍 ProfileScreen: No user data available - showing sign-in view');
       return _buildSignInView();
     }
 
     // If we reach here, we have user data and can show the profile
-    print('🔍 ProfileScreen: User data available - showing profile content');
-
-    print('🔍 ProfileScreen: Showing profile content - user data available');
     return RefreshIndicator(
       onRefresh: () async {
-        print('🔍 ProfileScreen: Refresh triggered');
-        // **FIXED: Use consistent refresh approach**
         await _loadUserData();
       },
       child: SingleChildScrollView(
@@ -777,6 +582,143 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  // **NEW: Skeleton loading for better UX**
+  Widget _buildSkeletonLoading() {
+    return RepaintBoundary(
+      child: SingleChildScrollView(
+        child: Column(
+          children: [
+            // Profile header skeleton
+            RepaintBoundary(
+              child: Container(
+                padding: ResponsiveHelper.getAdaptivePadding(context),
+                child: Column(
+                  children: [
+                    // Profile picture skeleton
+                    Container(
+                      width: ResponsiveHelper.isMobile(context) ? 100 : 150,
+                      height: ResponsiveHelper.isMobile(context) ? 100 : 150,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Name skeleton
+                    Container(
+                      width: 200,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Edit button skeleton
+                    Container(
+                      width: 120,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Stats skeleton
+            RepaintBoundary(
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                decoration: const BoxDecoration(
+                  border: Border(
+                    top: BorderSide(color: Color(0xFFE0E0E0)),
+                    bottom: BorderSide(color: Color(0xFFE0E0E0)),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: List.generate(
+                      3,
+                      (index) => Column(
+                            children: [
+                              Container(
+                                width: 60,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[300],
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                width: 80,
+                                height: 20,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[300],
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                            ],
+                          )),
+                ),
+              ),
+            ),
+
+            // Videos section skeleton
+            RepaintBoundary(
+              child: Padding(
+                padding: ResponsiveHelper.getAdaptivePadding(context),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Title skeleton
+                    Container(
+                      width: 150,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Video grid skeleton
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount:
+                            ResponsiveHelper.isMobile(context) ? 2 : 3,
+                        crossAxisSpacing:
+                            ResponsiveHelper.isMobile(context) ? 16 : 24,
+                        mainAxisSpacing:
+                            ResponsiveHelper.isMobile(context) ? 16 : 24,
+                        childAspectRatio:
+                            ResponsiveHelper.isMobile(context) ? 0.75 : 0.8,
+                      ),
+                      itemCount: 6, // Show 6 skeleton videos
+                      itemBuilder: (context, index) => Container(
+                        decoration: BoxDecoration(
+                          color: Colors.grey[300],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   AppBar _buildAppBar() {
     return AppBar(
       backgroundColor: Colors.white,
@@ -785,6 +727,26 @@ class _ProfileScreenState extends State<ProfileScreen>
         style: const TextStyle(color: Color(0xFF424242)),
       ),
       actions: [
+        // Debug button to check cache status
+        IconButton(
+          icon: const Icon(Icons.bug_report, color: Colors.orange),
+          onPressed: () {
+            final stats = _stateManager.getCacheStats();
+            print('📊 Cache Stats: $stats');
+            print('📊 User Data: ${_stateManager.userData}');
+            print('📊 Videos Count: ${_stateManager.userVideos.length}');
+            print('📊 Loading: ${_stateManager.isLoading}');
+            print('📊 Error: ${_stateManager.error}');
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                    'Cache: ${stats['cacheSize']}, Videos: ${_stateManager.userVideos.length}'),
+                duration: Duration(seconds: 3),
+              ),
+            );
+          },
+        ),
         IconButton(
           icon: const Icon(Icons.more_vert, color: Color(0xFF424242)),
           onPressed: () {
@@ -820,56 +782,15 @@ class _ProfileScreenState extends State<ProfileScreen>
                     ),
                     const Divider(height: 1),
 
-                    // Debug info
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Debug Info:',
-                              style: TextStyle(fontWeight: FontWeight.bold)),
-                          Text(
-                              'User Data: ${_stateManager.userData != null ? "Available" : "Not Available"}'),
-                          Text('Loading: $_isLoading'),
-                          Text('Error: ${_error ?? "None"}'),
-                        ],
-                      ),
-                    ),
-                    const Divider(height: 1),
-
                     // Menu items
                     if (_stateManager.userData != null) ...[
                       ListTile(
-                        leading:
-                            const Icon(Icons.select_all, color: Colors.blue),
-                        title: const Text('Select & Delete Videos'),
+                        leading: const Icon(Icons.delete, color: Colors.red),
+                        title: const Text('Delete Videos'),
+                        subtitle: const Text('Select and delete your videos'),
                         onTap: () {
                           Navigator.pop(context);
                           _stateManager.enterSelectionMode();
-                        },
-                      ),
-                      ListTile(
-                        leading: const Icon(Icons.refresh, color: Colors.green),
-                        title: const Text('Refresh Profile'),
-                        onTap: () {
-                          Navigator.pop(context);
-                          _stateManager.refreshData();
-                        },
-                      ),
-                      ListTile(
-                        leading:
-                            const Icon(Icons.video_library, color: Colors.blue),
-                        title: const Text('Refresh Videos'),
-                        onTap: () {
-                          Navigator.pop(context);
-                          _stateManager.refreshVideosOnly();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('🔄 Refreshing videos...'),
-                              duration: Duration(seconds: 2),
-                              backgroundColor: Colors.blue,
-                            ),
-                          );
                         },
                       ),
                       ListTile(
@@ -890,89 +811,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                         },
                       ),
                     ],
-
-                    // Debug options
-                    const Divider(height: 1),
-                    const Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: Text('Debug Options:',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 12)),
-                    ),
-                    ListTile(
-                      leading:
-                          const Icon(Icons.bug_report, color: Colors.orange),
-                      title: const Text('Force Refresh'),
-                      onTap: () {
-                        Navigator.pop(context);
-                        _loadUserData();
-                      },
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.data_usage, color: Colors.blue),
-                      title: const Text('Debug State'),
-                      onTap: () {
-                        Navigator.pop(context);
-                        _debugState();
-                      },
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.api, color: Colors.purple),
-                      title: const Text('Check API Endpoints'),
-                      onTap: () {
-                        Navigator.pop(context);
-                        _checkApiEndpoints();
-                      },
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.clear_all, color: Colors.red),
-                      title: const Text('Clear Auth Data'),
-                      onTap: () {
-                        Navigator.pop(context);
-                        _clearAuthenticationData();
-                      },
-                    ),
-                    // **NEW: Video playback test**
-                    ListTile(
-                      leading:
-                          const Icon(Icons.play_circle, color: Colors.green),
-                      title: const Text('Test Video Playback'),
-                      onTap: () {
-                        Navigator.pop(context);
-                        _testVideoPlayback();
-                      },
-                    ),
-                    // **NEW: Feature flag controls for testing**
-                    const Divider(height: 1),
-                    const Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: Text('Feature Flags:',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 12)),
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.flag, color: Colors.blue),
-                      title: const Text('Enhanced Profile Loading'),
-                      subtitle: Text(Features.enhancedProfileLoading.isEnabled
-                          ? 'Enabled'
-                          : 'Disabled'),
-                      onTap: () {
-                        Navigator.pop(context);
-                        _toggleFeatureFlag('enhanced_profile_loading');
-                      },
-                    ),
-                    ListTile(
-                      leading:
-                          const Icon(Icons.play_circle, color: Colors.green),
-                      title: const Text('Profile Video Playback Fix'),
-                      subtitle: Text(Features.profileVideoPlaybackFix.isEnabled
-                          ? 'Enabled'
-                          : 'Disabled'),
-                      onTap: () {
-                        Navigator.pop(context);
-                        _toggleFeatureFlag('profile_video_playback_fix');
-                      },
-                    ),
                     const SizedBox(height: 16),
                   ],
                 ),
@@ -986,540 +824,668 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Widget _buildProfileHeader(UserProvider userProvider, UserModel? userModel) {
     return RepaintBoundary(
-        child: Container(
-      padding: ResponsiveHelper.getAdaptivePadding(context),
-      child: Column(
-        children: [
-          Stack(
-            children: [
-              CircleAvatar(
-                radius: ResponsiveHelper.isMobile(context) ? 50 : 75,
-                backgroundColor: const Color(0xFFF5F5F5),
-                backgroundImage: userModel?.profilePic != null
-                    ? userModel!.profilePic.startsWith('http')
-                        ? NetworkImage(userModel.profilePic)
-                        : FileImage(File(userModel.profilePic)) as ImageProvider
-                    : null,
-                onBackgroundImageError: (exception, stackTrace) {
-                  print('Error loading profile image: $exception');
-                },
-                child: userModel?.profilePic == null
-                    ? Icon(
-                        Icons.person,
-                        size: ResponsiveHelper.getAdaptiveIconSize(context),
-                        color: const Color(0xFF757575),
-                      )
-                    : null,
+      child: Container(
+        padding: ResponsiveHelper.getAdaptivePadding(context),
+        child: Column(
+          children: [
+            RepaintBoundary(
+              child: Stack(
+                children: [
+                  CircleAvatar(
+                    radius: ResponsiveHelper.isMobile(context) ? 50 : 75,
+                    backgroundColor: const Color(0xFFF5F5F5),
+                    // **FIXED: Use ProfileStateManager data first, then fall back to UserProvider data**
+                    backgroundImage: _getProfileImage(),
+                    onBackgroundImageError: (exception, stackTrace) {
+                      print('Error loading profile image: $exception');
+                    },
+                    child: _getProfileImage() == null
+                        ? Icon(
+                            Icons.person,
+                            size: ResponsiveHelper.getAdaptiveIconSize(context),
+                            color: const Color(0xFF757575),
+                          )
+                        : null,
+                  ),
+                  if (_stateManager.isEditing)
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: IconButton(
+                        icon: const Icon(Icons.camera_alt),
+                        onPressed: _handleProfilePhotoChange,
+                        color: Colors.white,
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                        ),
+                      ),
+                    ),
+                ],
               ),
-              if (_stateManager.isEditing)
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: IconButton(
-                    icon: const Icon(Icons.camera_alt),
-                    onPressed: _handleProfilePhotoChange,
-                    color: Colors.white,
-                    style: IconButton.styleFrom(
-                      backgroundColor: Colors.blue,
+            ),
+            SizedBox(height: ResponsiveHelper.isMobile(context) ? 16 : 24),
+
+            // Authentication status indicator
+            RepaintBoundary(
+              child: FutureBuilder<SharedPreferences>(
+                future: SharedPreferences.getInstance(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasData) {
+                    final prefs = snapshot.data!;
+                    final hasJwtToken = prefs.getString('jwt_token') != null;
+                    final hasFallbackUser =
+                        prefs.getString('fallback_user') != null;
+                    final isAuthenticated = hasJwtToken || hasFallbackUser;
+
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isAuthenticated
+                            ? Colors.green[100]
+                            : Colors.orange[100],
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isAuthenticated
+                              ? Colors.green[300]!
+                              : Colors.orange[300]!,
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isAuthenticated
+                                ? Icons.check_circle
+                                : Icons.warning,
+                            size: 16,
+                            color: isAuthenticated
+                                ? Colors.green[700]
+                                : Colors.orange[700],
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            isAuthenticated
+                                ? 'Authenticated'
+                                : 'Authentication Issue',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isAuthenticated
+                                  ? Colors.green[700]
+                                  : Colors.orange[700],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+            ),
+
+            SizedBox(height: ResponsiveHelper.isMobile(context) ? 16 : 24),
+
+            if (_stateManager.isEditing)
+              RepaintBoundary(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: TextField(
+                    controller: _stateManager.nameController,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: 'Name',
+                      hintText: 'Enter a unique name',
                     ),
                   ),
                 ),
-            ],
-          ),
-          SizedBox(height: ResponsiveHelper.isMobile(context) ? 16 : 24),
-
-          // Authentication status indicator
-          FutureBuilder<SharedPreferences>(
-            future: SharedPreferences.getInstance(),
-            builder: (context, snapshot) {
-              if (snapshot.hasData) {
-                final prefs = snapshot.data!;
-                final hasJwtToken = prefs.getString('jwt_token') != null;
-                final hasFallbackUser =
-                    prefs.getString('fallback_user') != null;
-                final isAuthenticated = hasJwtToken || hasFallbackUser;
-
-                return Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: isAuthenticated
-                        ? Colors.green[100]
-                        : Colors.orange[100],
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: isAuthenticated
-                          ? Colors.green[300]!
-                          : Colors.orange[300]!,
-                      width: 1,
-                    ),
+              )
+            else
+              RepaintBoundary(
+                child: Text(
+                  _getUserName(),
+                  style: TextStyle(
+                    color: const Color(0xFF424242),
+                    fontSize: ResponsiveHelper.getAdaptiveFontSize(context, 24),
+                    fontWeight: FontWeight.bold,
                   ),
+                ),
+              ),
+            if (_stateManager.isEditing)
+              RepaintBoundary(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
                   child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        isAuthenticated ? Icons.check_circle : Icons.warning,
-                        size: 16,
-                        color: isAuthenticated
-                            ? Colors.green[700]
-                            : Colors.orange[700],
+                      ElevatedButton(
+                        onPressed: _handleCancelEdit,
+                        child: const Text('Cancel'),
                       ),
-                      const SizedBox(width: 6),
-                      Text(
-                        isAuthenticated
-                            ? 'Authenticated'
-                            : 'Authentication Issue',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isAuthenticated
-                              ? Colors.green[700]
-                              : Colors.orange[700],
-                          fontWeight: FontWeight.w500,
-                        ),
+                      const SizedBox(width: 16),
+                      ElevatedButton(
+                        onPressed: _handleSaveProfile,
+                        child: const Text('Save'),
                       ),
                     ],
                   ),
-                );
-              }
-              return const SizedBox.shrink();
-            },
-          ),
-
-          SizedBox(height: ResponsiveHelper.isMobile(context) ? 16 : 24),
-
-          if (_stateManager.isEditing)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: TextField(
-                controller: _stateManager.nameController,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  labelText: 'Name',
-                  hintText: 'Enter a unique name',
+                ),
+              )
+            else
+              RepaintBoundary(
+                child: TextButton.icon(
+                  onPressed: _handleEditProfile,
+                  icon: const Icon(Icons.edit),
+                  label: const Text('Edit Profile'),
                 ),
               ),
-            )
-          else
-            Text(
-              userModel?.name ?? 'User',
-              style: TextStyle(
-                color: const Color(0xFF424242),
-                fontSize: ResponsiveHelper.getAdaptiveFontSize(context, 24),
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          if (_stateManager.isEditing)
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ElevatedButton(
-                    onPressed: _handleCancelEdit,
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 16),
-                  ElevatedButton(
-                    onPressed: _handleSaveProfile,
-                    child: const Text('Save'),
-                  ),
-                ],
-              ),
-            )
-          else
-            TextButton.icon(
-              onPressed: _handleEditProfile,
-              icon: const Icon(Icons.edit),
-              label: const Text('Edit Profile'),
-            ),
-        ],
+          ],
+        ),
       ),
-    ));
+    );
+  }
+
+  // **NEW: Helper method to get profile image with fallback logic**
+  ImageProvider? _getProfileImage() {
+    // **FIXED: Prioritize ProfileStateManager data, then fall back to UserProvider data**
+    if (_stateManager.userData != null &&
+        _stateManager.userData!['profilePic'] != null) {
+      final profilePic = _stateManager.userData!['profilePic'];
+      print(
+          '🔍 ProfileScreen: Using profile pic from ProfileStateManager: $profilePic');
+
+      if (profilePic.startsWith('http')) {
+        return NetworkImage(profilePic);
+      } else if (profilePic.isNotEmpty) {
+        try {
+          return FileImage(File(profilePic));
+        } catch (e) {
+          print('⚠️ ProfileScreen: Error creating FileImage: $e');
+          return null;
+        }
+      }
+    }
+
+    // Fall back to UserProvider data
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    if (widget.userId != null) {
+      final userModel = userProvider.getUserData(widget.userId!);
+      if (userModel?.profilePic != null) {
+        final profilePic = userModel!.profilePic;
+        print(
+            '🔍 ProfileScreen: Using profile pic from UserProvider: $profilePic');
+
+        if (profilePic.startsWith('http')) {
+          return NetworkImage(profilePic);
+        } else if (profilePic.isNotEmpty) {
+          try {
+            return FileImage(File(profilePic));
+          } catch (e) {
+            print('⚠️ ProfileScreen: Error creating FileImage: $e');
+            return null;
+          }
+        }
+      }
+    }
+
+    print('🔍 ProfileScreen: No profile pic available');
+    return null;
+  }
+
+  // **NEW: Helper method to get user name with fallback logic**
+  String _getUserName() {
+    // **FIXED: Prioritize ProfileStateManager data, then fall back to UserProvider data**
+    if (_stateManager.userData != null &&
+        _stateManager.userData!['name'] != null) {
+      final name = _stateManager.userData!['name'];
+      print('🔍 ProfileScreen: Using name from ProfileStateManager: $name');
+      return name;
+    }
+
+    // Fall back to UserProvider data
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    if (widget.userId != null) {
+      final userModel = userProvider.getUserData(widget.userId!);
+      if (userModel?.name != null) {
+        final name = userModel!.name;
+        print('🔍 ProfileScreen: Using name from UserProvider: $name');
+        return name;
+      }
+    }
+
+    // Final fallback
+    print('🔍 ProfileScreen: No name available, using default');
+    return 'User';
   }
 
   Widget _buildProfileContent(UserProvider userProvider, UserModel? userModel) {
     return RepaintBoundary(
-        child: Column(
-      children: [
-        Container(
-          padding: EdgeInsets.symmetric(
-            vertical: ResponsiveHelper.isMobile(context) ? 20 : 30,
-          ),
-          decoration: const BoxDecoration(
-            border: Border(
-              top: BorderSide(color: Color(0xFFE0E0E0)),
-              bottom: BorderSide(color: Color(0xFFE0E0E0)),
+      child: Column(
+        children: [
+          RepaintBoundary(
+            child: Container(
+              padding: EdgeInsets.symmetric(
+                vertical: ResponsiveHelper.isMobile(context) ? 20 : 30,
+              ),
+              decoration: const BoxDecoration(
+                border: Border(
+                  top: BorderSide(color: Color(0xFFE0E0E0)),
+                  bottom: BorderSide(color: Color(0xFFE0E0E0)),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildStatColumn('Videos', _stateManager.userVideos.length),
+                  _buildStatColumn(
+                    'Followers',
+                    _getFollowersCount(),
+                  ),
+                  _buildStatColumn(
+                    'Earnings',
+                    _getCurrentMonthRevenue(), // Current month's revenue
+                    isEarnings: true,
+                    onTap: () async {
+                      // Check if user has completed payment setup
+                      final hasPaymentSetup = await _checkPaymentSetupStatus();
+
+                      if (hasPaymentSetup) {
+                        // Navigate to revenue screen if payment setup is complete
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const CreatorRevenueScreen(),
+                          ),
+                        );
+                      } else {
+                        // Navigate to payment setup screen if not complete
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                const CreatorPaymentSetupScreen(),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _buildStatColumn('Videos', _stateManager.userVideos.length),
-              _buildStatColumn(
-                'Followers',
-                userModel?.followersCount ?? 0,
-              ),
-              _buildStatColumn(
-                'Earnings',
-                _getCurrentMonthRevenue(), // Current month's revenue
-                isEarnings: true,
-                onTap: () async {
-                  // Check if user has completed payment setup
-                  final hasPaymentSetup = await _checkPaymentSetupStatus();
-
-                  if (hasPaymentSetup) {
-                    // Navigate to revenue screen if payment setup is complete
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const CreatorRevenueScreen(),
-                      ),
-                    );
-                  } else {
-                    // Navigate to payment setup screen if not complete
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const CreatorPaymentSetupScreen(),
-                      ),
-                    );
-                  }
-                },
-              ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: ResponsiveHelper.getAdaptivePadding(context),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Your Videos',
-                style: TextStyle(
-                  color: const Color(0xFF424242),
-                  fontSize: ResponsiveHelper.getAdaptiveFontSize(context, 20),
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              SizedBox(height: ResponsiveHelper.isMobile(context) ? 8 : 12),
-              // Add helpful instruction text for delete feature
-              if (userModel != null)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: Colors.blue.withOpacity(0.3),
-                      width: 1,
+          RepaintBoundary(
+            child: Padding(
+              padding: ResponsiveHelper.getAdaptivePadding(context),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Your Videos',
+                    style: TextStyle(
+                      color: const Color(0xFF424242),
+                      fontSize:
+                          ResponsiveHelper.getAdaptiveFontSize(context, 20),
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.info_outline,
-                        color: Colors.blue[600],
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Long press on any video to enter selection mode, then tap videos to select them for deletion.',
-                          style: TextStyle(
-                            color: Colors.blue[700],
-                            fontSize: 12,
-                          ),
+                  SizedBox(height: ResponsiveHelper.isMobile(context) ? 8 : 12),
+                  // Add helpful instruction text for delete feature
+                  if (_stateManager.userData != null)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Colors.blue.withOpacity(0.3),
+                          width: 1,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              SizedBox(height: ResponsiveHelper.isMobile(context) ? 16 : 24),
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: ResponsiveHelper.isMobile(context) ? 2 : 3,
-                  crossAxisSpacing:
-                      ResponsiveHelper.isMobile(context) ? 16 : 24,
-                  mainAxisSpacing: ResponsiveHelper.isMobile(context) ? 16 : 24,
-                  childAspectRatio:
-                      ResponsiveHelper.isMobile(context) ? 0.75 : 0.8,
-                ),
-                itemCount: _stateManager.userVideos.length,
-                itemBuilder: (context, index) {
-                  final video = _stateManager.userVideos[index];
-                  final isSelected =
-                      _stateManager.selectedVideoIds.contains(video.id);
-
-                  // Simplified video selection logic
-                  final canSelectVideo =
-                      _stateManager.isSelecting && userModel != null;
-                  return GestureDetector(
-                    onTap: () {
-                      // Single tap: Play video (navigate to VideoScreen)
-                      if (!_stateManager.isSelecting) {
-                        print(
-                            '🔍 ProfileScreen: Video tapped, preparing to navigate to VideoScreen');
-                        print('🔍 ProfileScreen: Video ID: ${video.id}');
-                        print('🔍 ProfileScreen: Video URL: ${video.videoUrl}');
-                        print(
-                            '🔍 ProfileScreen: Video Name: ${video.videoName}');
-                        print(
-                            '🔍 ProfileScreen: User Model: ${userModel?.name}');
-                        print(
-                            '🔍 ProfileScreen: Total videos: ${_stateManager.userVideos.length}');
-
-                        // **FIXED: Use feature flag to control video loading approach**
-                        if (Features.profileVideoPlaybackFix.isEnabled) {
-                          // NEW: Enhanced video loading with user data update
-                          final updatedVideos =
-                              _stateManager.userVideos.map((video) {
-                            if (userModel?.name != null) {
-                              print(
-                                  '🔍 ProfileScreen: Updating video ${video.id} with uploader name: ${userModel!.name}');
-                              return video.copyWith(
-                                uploader: video.uploader
-                                    .copyWith(name: userModel.name),
-                              );
-                            }
-                            return video;
-                          }).toList();
-
-                          print(
-                              '🔍 ProfileScreen: Updated videos count: ${updatedVideos.length}');
-                          print(
-                              '🔍 ProfileScreen: Navigating to VideoScreen with index: $index');
-
-                          // **DEBUG: Check video data structure**
-                          if (updatedVideos.isNotEmpty &&
-                              index < updatedVideos.length) {
-                            final targetVideo = updatedVideos[index];
-                            print('🔍 ProfileScreen: Target video details:');
-                            print(
-                                '🔍 ProfileScreen:   - ID: ${targetVideo.id}');
-                            print(
-                                '🔍 ProfileScreen:   - Name: ${targetVideo.videoName}');
-                            print(
-                                '🔍 ProfileScreen:   - URL: ${targetVideo.videoUrl}');
-                            print(
-                                '🔍 ProfileScreen:   - Thumbnail: ${targetVideo.thumbnailUrl}');
-                            print(
-                                '🔍 ProfileScreen:   - Uploader: ${targetVideo.uploader.name}');
-                            print(
-                                '🔍 ProfileScreen:   - Duration: ${targetVideo.duration}');
-                            print(
-                                '🔍 ProfileScreen:   - Video Type: ${targetVideo.videoType}');
-                          }
-
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => VideoScreen(
-                                initialIndex: index,
-                                initialVideos: updatedVideos,
-                              ),
-                            ),
-                          );
-                        } else {
-                          // **ORIGINAL WORKING APPROACH: Direct navigation without data modification**
-                          print(
-                              '🔍 ProfileScreen: Using original working video navigation approach');
-                          print(
-                              '🔍 ProfileScreen: Navigating to VideoScreen with index: $index');
-
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => VideoScreen(
-                                initialIndex: index,
-                                initialVideos: _stateManager.userVideos,
-                              ),
-                            ),
-                          );
-                        }
-                      } else if (_stateManager.isSelecting && canSelectVideo) {
-                        // Use proper logic for video selection
-                        print('🔍 Video tapped in selection mode');
-                        print('🔍 Video ID: ${video.id}');
-                        print('🔍 Can select: $canSelectVideo');
-                        _stateManager.toggleVideoSelection(video.id);
-                      } else {
-                        print('🔍 Video tapped but not selectable');
-                        print('🔍 isSelecting: ${_stateManager.isSelecting}');
-                        print('🔍 canSelectVideo: $canSelectVideo');
-                      }
-                    },
-                    onLongPress: () {
-                      // Long press: Enter selection mode for deletion
-                      print('🔍 Long press detected on video');
-                      print('🔍 isMyProfile: ${userModel != null}');
-                      print('🔍 canSelectVideo: $canSelectVideo');
-                      print('🔍 isSelecting: ${_stateManager.isSelecting}');
-
-                      if (userModel != null && !_stateManager.isSelecting) {
-                        print('🔍 Entering selection mode via long press');
-                        _stateManager.enterSelectionMode();
-                        _stateManager.toggleVideoSelection(video.id);
-                      } else {
-                        print('🔍 Cannot enter selection mode via long press');
-                      }
-                    },
-                    child: Stack(
-                      children: [
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          decoration: BoxDecoration(
-                            border: isSelected
-                                ? Border.all(color: Colors.blue, width: 3)
-                                : null,
-                            borderRadius: BorderRadius.circular(12),
-                            // Add shadow when selected
-                            boxShadow: isSelected
-                                ? [
-                                    BoxShadow(
-                                      color: Colors.blue.withOpacity(0.3),
-                                      blurRadius: 8,
-                                      spreadRadius: 2,
-                                    )
-                                  ]
-                                : null,
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            color: Colors.blue[600],
+                            size: 20,
                           ),
-                          child: Card(
-                            color: isSelected
-                                ? Colors.blue.withOpacity(0.05)
-                                : const Color(0xFFF5F5F5),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Long press on any video to enter selection mode, then tap videos to select them for deletion.',
+                              style: TextStyle(
+                                color: Colors.blue[700],
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  SizedBox(
+                      height: ResponsiveHelper.isMobile(context) ? 16 : 24),
+                  RepaintBoundary(
+                    child: GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount:
+                            ResponsiveHelper.isMobile(context) ? 2 : 3,
+                        crossAxisSpacing:
+                            ResponsiveHelper.isMobile(context) ? 16 : 24,
+                        mainAxisSpacing:
+                            ResponsiveHelper.isMobile(context) ? 16 : 24,
+                        childAspectRatio:
+                            ResponsiveHelper.isMobile(context) ? 0.75 : 0.8,
+                      ),
+                      itemCount: _stateManager.userVideos.length,
+                      itemBuilder: (context, index) {
+                        final video = _stateManager.userVideos[index];
+                        final isSelected =
+                            _stateManager.selectedVideoIds.contains(video.id);
+
+                        // Simplified video selection logic
+                        final canSelectVideo = _stateManager.isSelecting &&
+                            _stateManager.userData != null;
+                        return RepaintBoundary(
+                          child: GestureDetector(
+                            onTap: () {
+                              // Single tap: Play video (navigate to VideoScreen)
+                              if (!_stateManager.isSelecting) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => VideoScreen(
+                                      initialIndex: index,
+                                      initialVideos: _stateManager.userVideos,
+                                    ),
+                                  ),
+                                );
+                              } else if (_stateManager.isSelecting &&
+                                  canSelectVideo) {
+                                // Use proper logic for video selection
+                                print('🔍 Video tapped in selection mode');
+                                print('🔍 Video ID: ${video.id}');
+                                print('🔍 Can select: $canSelectVideo');
+                                _stateManager.toggleVideoSelection(video.id);
+                              } else {
+                                print('🔍 Video tapped but not selectable');
+                                print(
+                                    '🔍 isSelecting: ${_stateManager.isSelecting}');
+                                print('🔍 canSelectVideo: $canSelectVideo');
+                              }
+                            },
+                            onLongPress: () {
+                              // Long press: Enter selection mode for deletion
+                              print('🔍 Long press detected on video');
+                              print(
+                                  '🔍 userData: ${_stateManager.userData != null}');
+                              print('🔍 canSelectVideo: $canSelectVideo');
+                              print(
+                                  '🔍 isSelecting: ${_stateManager.isSelecting}');
+
+                              if (_stateManager.userData != null &&
+                                  !_stateManager.isSelecting) {
+                                print(
+                                    '🔍 Entering selection mode via long press');
+                                _stateManager.enterSelectionMode();
+                                _stateManager.toggleVideoSelection(video.id);
+                              } else {
+                                print(
+                                    '🔍 Cannot enter selection mode via long press');
+                              }
+                            },
+                            child: Stack(
                               children: [
-                                Expanded(
-                                  child: Stack(
-                                    children: [
-                                      Image.network(
-                                        video.videoUrl,
-                                        fit: BoxFit.cover,
-                                        errorBuilder:
-                                            (context, error, stackTrace) {
-                                          print(
-                                              'Error loading thumbnail: $error');
-                                          return Center(
-                                            child: Icon(
-                                              Icons.video_library,
-                                              color: const Color(0xFF424242),
-                                              size: ResponsiveHelper
-                                                  .getAdaptiveIconSize(context),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                      // Selection overlay
-                                      if (isSelected)
-                                        Positioned.fill(
-                                          child: Container(
-                                            decoration: BoxDecoration(
+                                AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  decoration: BoxDecoration(
+                                    border: isSelected
+                                        ? Border.all(
+                                            color: Colors.blue, width: 3)
+                                        : null,
+                                    borderRadius: BorderRadius.circular(12),
+                                    // Add shadow when selected
+                                    boxShadow: isSelected
+                                        ? [
+                                            BoxShadow(
                                               color:
                                                   Colors.blue.withOpacity(0.3),
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                            ),
-                                            child: const Center(
-                                              child: Icon(
-                                                Icons.check_circle,
-                                                color: Colors.white,
-                                                size: 48,
+                                              blurRadius: 8,
+                                              spreadRadius: 2,
+                                            )
+                                          ]
+                                        : null,
+                                  ),
+                                  child: Card(
+                                    color: isSelected
+                                        ? Colors.blue.withOpacity(0.05)
+                                        : const Color(0xFFF5F5F5),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        Expanded(
+                                          child: Stack(
+                                            children: [
+                                              Image.network(
+                                                video.videoUrl,
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (context, error,
+                                                    stackTrace) {
+                                                  print(
+                                                      'Error loading thumbnail: $error');
+                                                  return Center(
+                                                    child: Icon(
+                                                      Icons.video_library,
+                                                      color: const Color(
+                                                          0xFF424242),
+                                                      size: ResponsiveHelper
+                                                          .getAdaptiveIconSize(
+                                                              context),
+                                                    ),
+                                                  );
+                                                },
                                               ),
-                                            ),
+                                              // Selection overlay
+                                              if (isSelected)
+                                                Positioned.fill(
+                                                  child: Container(
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.blue
+                                                          .withOpacity(0.3),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              12),
+                                                    ),
+                                                    child: const Center(
+                                                      child: Icon(
+                                                        Icons.check_circle,
+                                                        color: Colors.white,
+                                                        size: 48,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
                                           ),
                                         ),
-                                    ],
-                                  ),
-                                ),
-                                Padding(
-                                  padding: EdgeInsets.all(
-                                    ResponsiveHelper.isMobile(context)
-                                        ? 8.0
-                                        : 12.0,
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        video.videoName,
-                                        style: TextStyle(
-                                          color: const Color(0xFF424242),
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: ResponsiveHelper
-                                              .getAdaptiveFontSize(context, 14),
+                                        Padding(
+                                          padding: EdgeInsets.all(
+                                            ResponsiveHelper.isMobile(context)
+                                                ? 8.0
+                                                : 12.0,
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                video.videoName,
+                                                style: TextStyle(
+                                                  color:
+                                                      const Color(0xFF424242),
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: ResponsiveHelper
+                                                      .getAdaptiveFontSize(
+                                                          context, 14),
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              SizedBox(
+                                                  height:
+                                                      ResponsiveHelper.isMobile(
+                                                              context)
+                                                          ? 4
+                                                          : 8),
+                                              Row(
+                                                children: [
+                                                  Icon(
+                                                    Icons.visibility,
+                                                    color:
+                                                        const Color(0xFF757575),
+                                                    size: ResponsiveHelper
+                                                            .getAdaptiveIconSize(
+                                                                context) *
+                                                        0.6,
+                                                  ),
+                                                  SizedBox(
+                                                      width: ResponsiveHelper
+                                                              .isMobile(context)
+                                                          ? 4
+                                                          : 8),
+                                                  Text(
+                                                    '${video.views}',
+                                                    style: TextStyle(
+                                                      color: const Color(
+                                                          0xFF757575),
+                                                      fontSize: ResponsiveHelper
+                                                          .getAdaptiveFontSize(
+                                                              context, 12),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      SizedBox(
-                                          height:
-                                              ResponsiveHelper.isMobile(context)
-                                                  ? 4
-                                                  : 8),
-                                      Row(
-                                        children: [
-                                          Icon(
-                                            Icons.visibility,
-                                            color: const Color(0xFF757575),
-                                            size: ResponsiveHelper
-                                                    .getAdaptiveIconSize(
-                                                        context) *
-                                                0.6,
-                                          ),
-                                          SizedBox(
-                                              width: ResponsiveHelper.isMobile(
-                                                      context)
-                                                  ? 4
-                                                  : 8),
-                                          Text(
-                                            '${video.views}',
-                                            style: TextStyle(
-                                              color: const Color(0xFF757575),
-                                              fontSize: ResponsiveHelper
-                                                  .getAdaptiveFontSize(
-                                                      context, 12),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
+                                if (_stateManager.isSelecting &&
+                                    canSelectVideo) // Use proper logic for video selection
+                                  Positioned(
+                                    top: 8,
+                                    right: 8,
+                                    child: Checkbox(
+                                      value: isSelected,
+                                      activeColor: Colors.blue,
+                                      checkColor: Colors.white,
+                                      side: const BorderSide(
+                                          color: Colors.blue, width: 2),
+                                      onChanged: (checked) {
+                                        _stateManager
+                                            .toggleVideoSelection(video.id);
+                                      },
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
-                        ),
-                        if (_stateManager.isSelecting &&
-                            canSelectVideo) // Use proper logic for video selection
-                          Positioned(
-                            top: 8,
-                            right: 8,
-                            child: Checkbox(
-                              value: isSelected,
-                              activeColor: Colors.blue,
-                              checkColor: Colors.white,
-                              side: const BorderSide(
-                                  color: Colors.blue, width: 2),
-                              onChanged: (checked) {
-                                _stateManager.toggleVideoSelection(video.id);
-                              },
-                            ),
-                          ),
-                      ],
+                        );
+                      },
                     ),
-                  );
-                },
+                  ),
+
+                  // **NEW: Delete button when videos are selected**
+                  if (_stateManager.isSelecting &&
+                      _stateManager.selectedVideoIds.isNotEmpty)
+                    RepaintBoundary(
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            const Divider(height: 1),
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  '${_stateManager.selectedVideoIds.length} video${_stateManager.selectedVideoIds.length == 1 ? '' : 's'} selected',
+                                  style: TextStyle(
+                                    color: Colors.blue[700],
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                Row(
+                                  children: [
+                                    TextButton(
+                                      onPressed: () {
+                                        _stateManager.exitSelectionMode();
+                                      },
+                                      child: const Text('Cancel'),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    ElevatedButton.icon(
+                                      onPressed: _handleDeleteSelectedVideos,
+                                      icon: const Icon(Icons.delete,
+                                          color: Colors.white),
+                                      label: Text(
+                                          'Delete ${_stateManager.selectedVideoIds.length}'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 24, vertical: 12),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ],
-    ));
+        ],
+      ),
+    );
+  }
+
+  // **NEW: Helper method to get followers count with fallback logic**
+  int _getFollowersCount() {
+    // **FIXED: Prioritize UserProvider data for followers count, then fall back to ProfileStateManager**
+    if (widget.userId != null) {
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final userModel = userProvider.getUserData(widget.userId!);
+      if (userModel?.followersCount != null) {
+        print(
+            '🔍 ProfileScreen: Using followers count from UserProvider: ${userModel!.followersCount}');
+        return userModel.followersCount;
+      }
+    }
+
+    // Fall back to ProfileStateManager data
+    if (_stateManager.userData != null &&
+        _stateManager.userData!['followersCount'] != null) {
+      final followersCount = _stateManager.userData!['followersCount'];
+      print(
+          '🔍 ProfileScreen: Using followers count from ProfileStateManager: $followersCount');
+      return followersCount;
+    }
+
+    // Final fallback
+    print('🔍 ProfileScreen: No followers count available, using default');
+    return 0;
   }
 
   Future<bool> _checkPaymentSetupStatus() async {
@@ -1619,35 +1585,39 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Widget _buildStatColumn(String label, dynamic value,
       {bool isEarnings = false, VoidCallback? onTap}) {
-    return Builder(
-      builder: (context) => Column(
-        children: [
-          GestureDetector(
-            onTap: onTap,
-            child: MouseRegion(
-              cursor: isEarnings
-                  ? SystemMouseCursors.click
-                  : SystemMouseCursors.basic,
-              child: Text(
-                isEarnings ? '₹${value.toStringAsFixed(2)}' : value.toString(),
-                style: TextStyle(
-                  color: const Color(0xFF424242),
-                  fontSize: ResponsiveHelper.getAdaptiveFontSize(context, 24),
-                  fontWeight: FontWeight.bold,
+    return RepaintBoundary(
+      child: Builder(
+        builder: (context) => Column(
+          children: [
+            GestureDetector(
+              onTap: onTap,
+              child: MouseRegion(
+                cursor: isEarnings
+                    ? SystemMouseCursors.click
+                    : SystemMouseCursors.basic,
+                child: Text(
+                  isEarnings
+                      ? '₹${value.toStringAsFixed(2)}'
+                      : value.toString(),
+                  style: TextStyle(
+                    color: const Color(0xFF424242),
+                    fontSize: ResponsiveHelper.getAdaptiveFontSize(context, 24),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
-          ),
-          SizedBox(height: ResponsiveHelper.isMobile(context) ? 4 : 8),
-          SizedBox(height: ResponsiveHelper.isMobile(context) ? 4 : 8),
-          Text(
-            label,
-            style: TextStyle(
-              color: const Color(0xFF757575),
-              fontSize: ResponsiveHelper.getAdaptiveFontSize(context, 14),
+            SizedBox(height: ResponsiveHelper.isMobile(context) ? 4 : 8),
+            SizedBox(height: ResponsiveHelper.isMobile(context) ? 4 : 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: const Color(0xFF757575),
+                fontSize: ResponsiveHelper.getAdaptiveFontSize(context, 14),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1694,28 +1664,11 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
 
     // Check VideoService.baseUrl
-    try {
-      final videoServiceUrl = VideoService.baseUrl;
-      print('🔍 ProfileScreen: VideoService.baseUrl: $videoServiceUrl');
-    } catch (e) {
-      print('❌ ProfileScreen: Error getting VideoService.baseUrl: $e');
-    }
+    print('🔍 ProfileScreen: VideoService.baseUrl: Not implemented');
 
     // Check if endpoints are different
-    try {
-      final appConfig = AppConfig.baseUrl;
-      final videoServiceUrl = VideoService.baseUrl;
-      if (appConfig != videoServiceUrl) {
-        print('⚠️ ProfileScreen: WARNING - Different base URLs detected!');
-        print('   AppConfig: $appConfig');
-        print('   VideoService: $videoServiceUrl');
-        print('   This could cause API endpoint conflicts!');
-      } else {
-        print('✅ ProfileScreen: Base URLs are consistent');
-      }
-    } catch (e) {
-      print('❌ ProfileScreen: Error comparing base URLs: $e');
-    }
+    print(
+        '🔍 ProfileScreen: VideoService not implemented - skipping endpoint comparison');
 
     // Show in UI
     if (mounted) {
@@ -1867,30 +1820,83 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  /// **NEW: Toggle feature flags for testing**
-  void _toggleFeatureFlag(String featureName) {
-    final currentState = FeatureFlags.instance.isEnabled(featureName);
-    if (currentState) {
-      FeatureFlags.instance.disable(featureName);
-      print('🔧 ProfileScreen: Disabled feature flag: $featureName');
-    } else {
-      FeatureFlags.instance.enable(featureName);
-      print('🔧 ProfileScreen: Enabled feature flag: $featureName');
-    }
+  /// **NEW: Method to force refresh ProfileStateManager data**
+  Future<void> _forceRefreshProfileData() async {
+    print('🔄 ProfileScreen: Force refreshing profile data...');
 
-    // Show feedback to user
+    try {
+      // Clear any existing data by calling handleLogout and then reloading
+      await _stateManager.handleLogout();
+
+      // Force reload from scratch
+      await _loadUserData();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile data refreshed successfully'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ ProfileScreen: Error force refreshing profile data: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error refreshing profile data: $e'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  /// **NEW: Method to check ProfileStateManager state**
+  void _checkProfileStateManagerState() {
+    print('🔍 ProfileScreen: === CHECKING ProfileStateManager STATE ===');
+    print('🔍 ProfileScreen: userData: ${_stateManager.userData}');
+    print('🔍 ProfileScreen: _isLoading: $_isLoading');
+    print('🔍 ProfileScreen: _error: $_error');
+    print('🔍 ProfileScreen: isEditing: ${_stateManager.isEditing}');
+    print('🔍 ProfileScreen: isSelecting: ${_stateManager.isSelecting}');
+    print(
+        '🔍 ProfileScreen: selectedVideoIds: ${_stateManager.selectedVideoIds}');
+    print(
+        '🔍 ProfileScreen: userVideos count: ${_stateManager.userVideos.length}');
+    print(
+        '🔍 ProfileScreen: nameController text: ${_stateManager.nameController.text}');
+
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              '${featureName.replaceAll('_', ' ').toUpperCase()}: ${!currentState ? 'Enabled' : 'Disabled'}'),
-          backgroundColor: !currentState ? Colors.green : Colors.orange,
-          duration: const Duration(seconds: 2),
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('ProfileStateManager Debug'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('User Data: ${_stateManager.userData}'),
+              Text('Loading: $_isLoading'),
+              Text('Error: $_error'),
+              Text('Editing: ${_stateManager.isEditing}'),
+              Text('Selecting: ${_stateManager.isSelecting}'),
+              Text('Selected Videos: ${_stateManager.selectedVideoIds}'),
+              Text('Videos Count: ${_stateManager.userVideos.length}'),
+              Text(
+                  'Name Controller Text: ${_stateManager.nameController.text}'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
         ),
       );
     }
-
-    // Force rebuild to update UI
-    setState(() {});
   }
 }

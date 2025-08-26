@@ -2,8 +2,7 @@ import 'package:snehayog/core/managers/video_player_state_manager.dart';
 import 'package:snehayog/core/services/video_url_service.dart';
 import 'package:snehayog/core/services/error_logging_service.dart';
 
-/// Centralized dependency injection container for the Snehayog app
-/// This follows the Service Locator pattern for managing dependencies
+
 class AppDependencyContainer {
   static final AppDependencyContainer _instance = AppDependencyContainer._internal();
   factory AppDependencyContainer() => _instance;
