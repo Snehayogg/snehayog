@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
@@ -31,9 +30,9 @@ class VideoManager extends ChangeNotifier {
   bool _isBuffering = false;
   bool _isMuted = true;
   double _volume = 0.0;
-  bool _isHLS = false;
-  bool _showPlayPauseOverlay = false;
-  bool _isSeeking = false;
+  final bool _isHLS = false;
+  final bool _showPlayPauseOverlay = false;
+  final bool _isSeeking = false;
 
   // ===== SCREEN & NAVIGATION STATE =====
   bool _isScreenVisible = true;

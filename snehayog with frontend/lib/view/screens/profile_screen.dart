@@ -742,7 +742,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               SnackBar(
                 content: Text(
                     'Cache: ${stats['cacheSize']}, Videos: ${_stateManager.userVideos.length}'),
-                duration: Duration(seconds: 3),
+                duration: const Duration(seconds: 3),
               ),
             );
           },
@@ -1847,7 +1847,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           SnackBar(
             content: Text('Error refreshing profile data: $e'),
             backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
+            duration: const Duration(seconds: 3),
           ),
         );
       }

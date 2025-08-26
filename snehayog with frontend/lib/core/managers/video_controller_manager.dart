@@ -230,7 +230,7 @@ class VideoControllerManager {
 
   /// **NEW: Dispose controllers that are far from current page to prevent memory leaks**
   void _disposeDistantControllers(int currentPage) {
-    final keepRange = 3; // Keep controllers within 3 videos of current page
+    const keepRange = 3; // Keep controllers within 3 videos of current page
     final controllersToDispose = <int>[];
 
     for (final entry in _controllers.entries) {
@@ -821,7 +821,7 @@ class VideoControllerManager {
 
   /// Preload adjacent videos for smooth scrolling
   void _preloadAdjacentVideos(int currentIndex, List<VideoModel> videos) {
-    final preloadRange = 2; // Preload 2 videos before and after
+    const preloadRange = 2; // Preload 2 videos before and after
     final startIndex =
         (currentIndex - preloadRange).clamp(0, videos.length - 1);
     final endIndex = (currentIndex + preloadRange).clamp(0, videos.length - 1);

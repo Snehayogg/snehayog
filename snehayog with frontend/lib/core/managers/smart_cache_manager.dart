@@ -166,8 +166,8 @@ class SmartCacheManager {
   // Cache metrics
   int _cacheHits = 0;
   int _cacheMisses = 0;
-  int _etagHits = 0;
-  int _notModifiedResponses = 0;
+  final int _etagHits = 0;
+  final int _notModifiedResponses = 0;
   int _staleResponses = 0;
   int _backgroundRefreshes = 0;
 
