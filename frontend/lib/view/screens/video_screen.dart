@@ -1498,7 +1498,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
       print('❌ Like Handler Error Details: ${e.toString()}');
 
       // Revert optimistic update on error
-      if (index < _videoManager.videos.length && userId != null) {
+      if (index < _videoManager.videos.length) {
         // Use the state manager to properly revert the like state
         _videoManager.updateVideoLike(
             index, userId); // Use ! since we checked it's not null
