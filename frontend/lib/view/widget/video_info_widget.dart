@@ -20,36 +20,38 @@ class VideoInfoWidget extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Video title
+          // Video title - **REDUCED from 15 to 13**
           Text(
             video.videoName,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 15,
+              fontSize: 11,
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 4),
+          // **REDUCED spacing from 4 to 2**
+          const SizedBox(height: 2),
 
-          // Video description (limited to 2 lines)
+          // Video description (limited to 2 lines) - **REDUCED from 13 to 11**
           if (video.description != null && video.description!.isNotEmpty)
             Text(
               video.description!,
               style: const TextStyle(
                 color: Colors.white,
-                fontSize: 13,
+                fontSize: 11,
               ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
-          const SizedBox(height: 8),
+          // **REDUCED spacing from 8 to 4**
+          const SizedBox(height: 4),
 
           // Uploader information (tappable to go to profile)
           _UploaderInfoSection(video: video),
 
           // Visit Now button below uploader info (if video has a link)
           if (video.link != null && video.link!.isNotEmpty) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             _VisitNowButton(link: video.link!),
           ],
         ],
@@ -90,7 +92,8 @@ class _UploaderInfoSection extends StatelessWidget {
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w500,
-                      fontSize: 13,
+                      // **REDUCED from 13 to 11**
+                      fontSize: 11,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -186,7 +189,8 @@ class _UploaderAvatar extends StatelessWidget {
           initials,
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 12,
+            // **REDUCED from 12 to 10 to match smaller avatar**
+            fontSize: 10,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -231,8 +235,7 @@ class _VisitNowButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(
-          right: 8),
+      margin: const EdgeInsets.only(right: 8),
       child: ElevatedButton(
         onPressed: () async {
           final Uri uri = Uri.parse(link);
@@ -248,23 +251,27 @@ class _VisitNowButton extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF2196F3), // Blue color
           foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+          // **REDUCED padding for more compact look**
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(6),
           ),
-          elevation: 2,
+          elevation: 1,
         ),
         child: const Row(
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.open_in_new, color: Colors.white, size: 16),
-            SizedBox(width: 8),
+            // **REDUCED icon size from 16 to 14**
+            Icon(Icons.open_in_new, color: Colors.white, size: 14),
+            // **REDUCED spacing from 8 to 6**
+            SizedBox(width: 6),
             Text(
               'Visit Now',
               style: TextStyle(
                 color: Colors.white,
-                fontSize: 13,
+                // **REDUCED from 13 to 11**
+                fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
             ),

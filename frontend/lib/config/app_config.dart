@@ -40,16 +40,24 @@ class AppConfig {
   static const double platformRevenueShare = 0.20; // 20% to platform
 
   // **NEW: Razorpay Configuration (India)**
-  static const String razorpayKeyId = 'your_razorpay_key_id';
-  static const String razorpayKeySecret = 'your_razorpay_key_secret';
-  static const String razorpayWebhookSecret = 'your_webhook_secret';
+  static const String razorpayKeyId =
+      'rzp_test_YOUR_TEST_KEY_ID'; // Replace with your test key
+  static const String razorpayKeySecret =
+      'YOUR_TEST_SECRET_KEY'; // Replace with your test secret
+  static const String razorpayWebhookSecret =
+      'YOUR_WEBHOOK_SECRET'; // Replace with your webhook secret
 
-  // **NEW: Payment Configuration**
+  // **NEW: Supported Payment Methods for Razorpay**
   static const List<String> supportedPaymentMethods = [
-    'UPI',
-    'Cards',
-    'NetBanking',
-    'Wallets'
+    'card',
+    'netbanking',
+    'wallet',
+    'upi',
+    'paytm',
+    'phonepe',
+    'amazonpay',
+    'googlepay',
+    'applepay',
   ];
 
   // **NEW: Ad Serving Rules**

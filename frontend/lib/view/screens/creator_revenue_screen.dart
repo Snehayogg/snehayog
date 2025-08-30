@@ -310,6 +310,11 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
           // **NEW: Revenue Overview Card**
           _buildRevenueOverviewCard(),
 
+          const SizedBox(height: 16),
+
+          // **NEW: Important Note for Creators**
+          _buildImportantNoteCard(),
+
           const SizedBox(height: 24),
 
           // **NEW: Revenue Analytics Card**
@@ -1035,6 +1040,39 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildImportantNoteCard() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Important Note for Creators',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Ad Impressions are counted based on the number of times an ad is displayed to a user. '
+              'This includes both banner and carousel ads. '
+              'For banner ads, it\'s 1000 impressions per ₹10. '
+              'For carousel ads, it\'s 1000 impressions per ₹30. '
+              'The revenue calculation is based on these impressions.',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[700],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

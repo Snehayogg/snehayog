@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:snehayog/services/instagram_video_service.dart';
+import 'package:snehayog/services/video_service.dart';
 import 'package:snehayog/core/managers/video_disk_cache_manager.dart';
 import 'package:snehayog/model/video_model.dart';
 import 'package:snehayog/utils/feature_flags.dart';
 
 class VideoCacheManager extends ChangeNotifier {
-  final InstagramVideoService _videoService = InstagramVideoService();
+  final VideoService _videoService = VideoService();
   final VideoDiskCacheManager _diskCacheManager = VideoDiskCacheManager();
 
   final Map<String, dynamic> _cache = {};
@@ -54,27 +54,22 @@ class VideoCacheManager extends ChangeNotifier {
           print('🔍 VideoCacheManager: Cached ETag: $cachedEtag');
           print(
               '🔍 VideoCacheManager: Cached Last-Modified: $cachedLastModified');
-
-          // Use conditional request for CDN optimization
           try {
-            final response =
-                await _videoService.getVideosWithConditionalRequest(
+            final response = await _videoService.getVideos(
               page: page,
               limit: limit,
-              etag: cachedEtag,
-              lastModified: cachedLastModified,
-              forceRefresh: false,
             );
 
-            if (response['status'] == 304) {
-              print('✅ VideoCacheManager: CDN cache hit (304 Not Modified)');
-              // Return cached data since nothing changed
-              return cachedData;
-            } else if (response['status'] == 200) {
+            // Check if we have fresh data
+            if (response['videos'] != null && response['videos'].isNotEmpty) {
               print('✅ VideoCacheManager: Fresh data from CDN, updating cache');
-              // Update cache with new data and headers
+              // Update cache with new data
               _updateCacheWithCDNData(cacheKey, response);
               return response;
+            } else {
+              print('✅ VideoCacheManager: CDN cache hit (no new data)');
+              // Return cached data since nothing changed
+              return cachedData;
             }
           } catch (e) {
             print(
@@ -85,18 +80,13 @@ class VideoCacheManager extends ChangeNotifier {
         }
       }
 
-      // Cache miss or force refresh - fetch fresh data
       print('📡 VideoCacheManager: Fetching fresh data from CDN');
       try {
-        final freshData = await _videoService.getVideosWithConditionalRequest(
+        final freshData = await _videoService.getVideos(
           page: page,
           limit: limit,
-          forceRefresh: true,
         );
-
-        // Cache the fresh data with CDN headers
         _updateCacheWithCDNData(cacheKey, freshData);
-
         return freshData;
       } catch (e) {
         print(
@@ -107,7 +97,6 @@ class VideoCacheManager extends ChangeNotifier {
           final fallbackData = await _videoService.getVideos(
             page: page,
             limit: limit,
-            forceRefresh: true,
           );
 
           print('✅ VideoCacheManager: Fallback method succeeded');
@@ -417,10 +406,9 @@ class VideoCacheManager extends ChangeNotifier {
       print('📡 VideoCacheManager: Fetching videos from CDN for page $page');
 
       // **NEW: Use CDN-optimized method instead of direct API call**
-      final response = await _videoService.getVideosWithConditionalRequest(
+      final response = await _videoService.getVideos(
         page: page,
         limit: limit,
-        forceRefresh: true, // Force fresh data for preloading
       );
 
       print(

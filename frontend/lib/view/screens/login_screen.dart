@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:snehayog/controller/google_sign_in_controller.dart';
-import 'package:snehayog/utils/debug_helper.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
@@ -181,20 +180,6 @@ class LoginScreen extends StatelessWidget {
                   ),
 
                   const SizedBox(height: 24),
-
-                  // Debug Button (only in development)
-                  TextButton(
-                    onPressed: () => DebugHelper.showDebugInfo(context),
-                    child: const Text(
-                      '🔍 Debug Info',
-                      style: TextStyle(
-                        color: Colors.white60,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
 
                   // Creator Credit
                   Container(

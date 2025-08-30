@@ -14,6 +14,8 @@ import 'package:provider/provider.dart';
 import 'package:snehayog/core/providers/user_provider.dart';
 import 'package:snehayog/model/usermodel.dart';
 import 'package:snehayog/services/video_service.dart';
+import 'package:snehayog/core/services/profile_screen_logger.dart';
+import 'dart:async';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -34,16 +36,204 @@ class _ProfileScreenState extends State<ProfileScreen>
     with AutomaticKeepAliveClientMixin {
   late final ProfileStateManager _stateManager;
   final ImagePicker _imagePicker = ImagePicker();
+
+  // Progressive loading states
+  bool _isProfileDataLoaded = false;
+  bool _isVideosLoaded = false;
+  bool _isFollowersLoaded = false;
   bool _isLoading = true;
   String? _error;
+
+  // Progressive loading timers
+  Timer? _progressiveLoadTimer;
+  int _currentLoadStep = 0;
 
   @override
   void initState() {
     super.initState();
+    ProfileScreenLogger.logProfileScreenInit();
     _stateManager = ProfileStateManager();
-    // Initialize loading state properly
-    _isLoading = false;
-    _loadUserData();
+
+    // Start progressive loading immediately
+    _startProgressiveLoading();
+  }
+
+  void _startProgressiveLoading() {
+    // Step 1: Load basic profile data first (fastest)
+    _loadBasicProfileData();
+
+    // Step 2: Start progressive loading timer for other data
+    _progressiveLoadTimer =
+        Timer.periodic(const Duration(milliseconds: 300), (timer) {
+      if (_currentLoadStep < 3) {
+        _executeNextLoadStep();
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
+  void _executeNextLoadStep() {
+    switch (_currentLoadStep) {
+      case 0:
+        // Step 1: Load videos (after profile data)
+        if (_isProfileDataLoaded && !_isVideosLoaded) {
+          _loadVideosProgressive();
+        }
+        break;
+      case 1:
+        // Step 2: Load followers data
+        if (_isVideosLoaded && !_isFollowersLoaded) {
+          _loadFollowersProgressive();
+        }
+        break;
+      case 2:
+        // Step 3: Load additional user data
+        if (_isFollowersLoaded) {
+          _loadAdditionalUserData();
+        }
+        break;
+    }
+    _currentLoadStep++;
+  }
+
+  Future<void> _loadBasicProfileData() async {
+    try {
+      ProfileScreenLogger.logProfileLoad();
+
+      // Check authentication first
+      final prefs = await SharedPreferences.getInstance();
+      final hasJwtToken = prefs.getString('jwt_token') != null;
+      final hasFallbackUser = prefs.getString('fallback_user') != null;
+
+      if (!hasJwtToken && !hasFallbackUser) {
+        setState(() {
+          _error = 'No authentication data found';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // Load basic profile data only
+      await _stateManager.loadUserData(widget.userId);
+
+      if (_stateManager.userData != null) {
+        setState(() {
+          _isProfileDataLoaded = true;
+          _isLoading = false;
+        });
+
+        ProfileScreenLogger.logProfileLoadSuccess(userId: widget.userId);
+
+        // Show success feedback
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Profile loaded! Loading videos...'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      ProfileScreenLogger.logProfileLoadError(e.toString());
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadVideosProgressive() async {
+    if (_stateManager.userData == null) return;
+
+    try {
+      final currentUserId =
+          _stateManager.userData!['id'] ?? _stateManager.userData!['googleId'];
+      if (currentUserId != null) {
+        ProfileScreenLogger.logVideoLoad(userId: currentUserId);
+
+        // Load videos in background
+        await _stateManager.loadUserVideos(currentUserId);
+
+        setState(() {
+          _isVideosLoaded = true;
+        });
+
+        ProfileScreenLogger.logVideoLoadSuccess(
+            count: _stateManager.userVideos.length);
+
+        // Show progress feedback
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  '✅ ${_stateManager.userVideos.length} videos loaded! Loading followers...'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      ProfileScreenLogger.logVideoLoadError(e.toString());
+      // Don't block UI for video loading errors
+    }
+  }
+
+  Future<void> _loadFollowersProgressive() async {
+    try {
+      if (widget.userId != null) {
+        final userProvider = Provider.of<UserProvider>(context, listen: false);
+        await userProvider.getUserDataWithFollowers(widget.userId!);
+
+        setState(() {
+          _isFollowersLoaded = true;
+        });
+
+        // Show progress feedback
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Followers data loaded!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 1),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      ProfileScreenLogger.logWarning('Followers load failed: $e');
+      // Don't block UI for followers loading errors
+    }
+  }
+
+  Future<void> _loadAdditionalUserData() async {
+    try {
+      if (widget.userId == null && _stateManager.userData != null) {
+        final currentUserId = _stateManager.userData!['id'] ??
+            _stateManager.userData!['googleId'];
+        if (currentUserId != null) {
+          final userProvider =
+              Provider.of<UserProvider>(context, listen: false);
+          await userProvider.getUserDataWithFollowers(currentUserId);
+
+          // Show completion feedback
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('🎉 All profile data loaded successfully!'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      ProfileScreenLogger.logWarning('Additional user data load failed: $e');
+    }
   }
 
   @override
@@ -54,6 +244,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   @override
   void dispose() {
+    _progressiveLoadTimer?.cancel();
+    ProfileScreenLogger.logProfileScreenDispose();
     _stateManager.dispose();
     super.dispose();
   }
@@ -61,100 +253,9 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   bool get wantKeepAlive => true;
 
-  Future<void> _loadUserData() async {
-    // Remove the early return that was causing infinite loop
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    try {
-      // Check authentication
-      final prefs = await SharedPreferences.getInstance();
-      final hasJwtToken = prefs.getString('jwt_token') != null;
-      final hasFallbackUser = prefs.getString('fallback_user') != null;
-
-      if (!hasJwtToken && !hasFallbackUser) {
-        setState(() {
-          _isLoading = false;
-          _error = 'No authentication data found';
-        });
-        return;
-      }
-
-      // **FIXED: Load profile data first, then videos synchronously**
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
-
-      // Step 1: Load profile data via ProfileStateManager
-      await _stateManager.loadUserData(widget.userId);
-
-      // Step 2: Start loading videos in background so UI can render profile first
-      if (_stateManager.userData != null) {
-        final currentUserId = _stateManager.userData!['id'] ??
-            _stateManager.userData!['googleId'];
-        if (currentUserId != null) {
-          print('🔍 ProfileScreen: Loading videos for user: $currentUserId');
-          print(
-              '🔍 ProfileScreen: Before loading videos: ${_stateManager.userVideos.length}');
-          _stateManager.loadUserVideos(currentUserId);
-          print(
-              '✅ ProfileScreen: After loading videos: ${_stateManager.userVideos.length}');
-          print(
-              '✅ ProfileScreen: Videos data: ${_stateManager.userVideos.map((v) => v.videoName).toList()}');
-        } else {
-          print('⚠️ ProfileScreen: No currentUserId found in userData');
-        }
-      } else {
-        print('⚠️ ProfileScreen: No userData available after loadUserData');
-      }
-
-      // Step 3: Load user data + followers via UserProvider (if needed)
-      if (widget.userId != null) {
-        await userProvider.getUserDataWithFollowers(widget.userId!);
-      }
-
-      // Step 4: Load additional user data only if needed
-      if (widget.userId == null && _stateManager.userData != null) {
-        final currentUserId = _stateManager.userData!['id'] ??
-            _stateManager.userData!['googleId'];
-        if (currentUserId != null) {
-          // Load this in background without blocking UI
-          userProvider.getUserDataWithFollowers(currentUserId).catchError((e) {
-            print('⚠️ Background user data load failed: $e');
-          });
-        }
-      }
-
-      setState(() {
-        _isLoading = false;
-        _error = null;
-      });
-    } catch (e) {
-      print('❌ ProfileScreen: Error in _loadUserData: $e');
-      setState(() {
-        _isLoading = false;
-        _error = e.toString();
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error loading profile: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
-            action: SnackBarAction(
-              label: 'Retry',
-              textColor: Colors.white,
-              onPressed: () => _loadUserData(),
-            ),
-          ),
-        );
-      }
-    }
-  }
-
   Future<void> _handleLogout() async {
     try {
+      ProfileScreenLogger.logLogout();
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('has_payment_setup');
       await prefs.remove('jwt_token');
@@ -171,7 +272,9 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
         );
       }
+      ProfileScreenLogger.logLogoutSuccess();
     } catch (e) {
+      ProfileScreenLogger.logLogoutError(e.toString());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -185,9 +288,10 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Future<void> _handleGoogleSignIn() async {
     try {
+      ProfileScreenLogger.logGoogleSignIn();
       final userData = await _stateManager.handleGoogleSignIn();
       if (userData != null) {
-        await _loadUserData();
+        _restartProgressiveLoading();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -197,6 +301,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
           );
         }
+        ProfileScreenLogger.logGoogleSignInSuccess();
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -209,6 +314,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         }
       }
     } catch (e) {
+      ProfileScreenLogger.logGoogleSignInError(e.toString());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -220,12 +326,30 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
+  void _restartProgressiveLoading() {
+    // Reset all loading states
+    setState(() {
+      _isProfileDataLoaded = false;
+      _isVideosLoaded = false;
+      _isFollowersLoaded = false;
+      _isLoading = true;
+      _error = null;
+      _currentLoadStep = 0;
+    });
+
+    // Cancel existing timer and restart
+    _progressiveLoadTimer?.cancel();
+    _startProgressiveLoading();
+  }
+
   Future<void> _handleEditProfile() async {
+    ProfileScreenLogger.logProfileEditStart();
     _stateManager.startEditing();
   }
 
   Future<void> _handleSaveProfile() async {
     try {
+      ProfileScreenLogger.logProfileEditSave();
       final newName = _stateManager.nameController.text.trim();
       if (newName.isEmpty) {
         throw 'Name cannot be empty';
@@ -242,7 +366,9 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
         );
       }
+      ProfileScreenLogger.logProfileEditSaveSuccess();
     } catch (e) {
+      ProfileScreenLogger.logProfileEditSaveError(e.toString());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -255,12 +381,14 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Future<void> _handleCancelEdit() async {
+    ProfileScreenLogger.logProfileEditCancel();
     _stateManager.cancelEditing();
   }
 
   Future<void> _handleDeleteSelectedVideos() async {
     try {
       final initialCount = _stateManager.selectedVideoIds.length;
+      ProfileScreenLogger.logVideoDeletion(count: initialCount);
       final shouldDelete = await _showDeleteConfirmationDialog();
       if (!shouldDelete) return;
 
@@ -275,7 +403,9 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
         );
       }
+      ProfileScreenLogger.logVideoDeletionSuccess(count: initialCount);
     } catch (e) {
+      ProfileScreenLogger.logVideoDeletionError(e.toString());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -331,6 +461,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Future<void> _handleProfilePhotoChange() async {
     try {
+      ProfileScreenLogger.logProfilePhotoChange();
       final XFile? image = await showDialog<XFile>(
         context: context,
         builder: (BuildContext context) {
@@ -383,8 +514,10 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
           );
         }
+        ProfileScreenLogger.logProfilePhotoChangeSuccess();
       }
     } catch (e) {
+      ProfileScreenLogger.logProfilePhotoChangeError(e.toString());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -508,8 +641,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Widget _buildBody(UserProvider userProvider, UserModel? userModel) {
-    // Show loading indicator
-    if (_isLoading) {
+    // Show loading indicator only for initial profile data
+    if (_isLoading && !_isProfileDataLoaded) {
       return RepaintBoundary(
         child: _buildSkeletonLoading(),
       );
@@ -554,7 +687,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               ),
               const SizedBox(height: 24),
               ElevatedButton.icon(
-                onPressed: _loadUserData,
+                onPressed: _restartProgressiveLoading,
                 icon: const Icon(Icons.refresh),
                 label: const Text('Retry Loading Profile'),
                 style: ElevatedButton.styleFrom(
@@ -587,7 +720,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     // If we reach here, we have user data and can show the profile
     return RefreshIndicator(
       onRefresh: () async {
-        await _loadUserData();
+        _restartProgressiveLoading();
       },
       child: SingleChildScrollView(
         physics:
@@ -596,6 +729,10 @@ class _ProfileScreenState extends State<ProfileScreen>
           children: [
             _buildProfileHeader(userProvider, userModel),
             _buildProfileContent(userProvider, userModel),
+            // Show loading indicators for progressive loading
+            if (!_isVideosLoaded) _buildVideosLoadingIndicator(),
+            if (!_isFollowersLoaded && _isVideosLoaded)
+              _buildFollowersLoadingIndicator(),
           ],
         ),
       ),
@@ -756,19 +893,28 @@ class _ProfileScreenState extends State<ProfileScreen>
                 icon: const Icon(Icons.bug_report, color: Colors.orange),
                 onPressed: () {
                   final stats = stateManager.getCacheStats();
-                  print('📊 Cache Stats: $stats');
-                  print('📊 User Data: ${stateManager.userData}');
-                  print('📊 Videos Count: ${stateManager.userVideos.length}');
-                  print('📊 Loading: ${stateManager.isLoading}');
-                  print('📊 Error: ${stateManager.error}');
+                  ProfileScreenLogger.logCacheStats(stats);
+                  ProfileScreenLogger.logDebugInfo(
+                      'User Data: ${stateManager.userData}');
+                  ProfileScreenLogger.logDebugInfo(
+                      'Videos Count: ${stateManager.userVideos.length}');
+                  ProfileScreenLogger.logDebugInfo(
+                      'Loading: ${stateManager.isLoading}');
+                  ProfileScreenLogger.logDebugInfo(
+                      'Error: ${stateManager.error}');
 
                   // **NEW: Additional debug info**
                   if (stateManager.userData != null) {
                     final currentUserId = stateManager.userData!['id'] ??
                         stateManager.userData!['googleId'];
-                    print('📊 Current User ID: $currentUserId');
-                    print('📊 User ID type: ${currentUserId.runtimeType}');
+                    ProfileScreenLogger.logDebugInfo(
+                        'Current User ID: $currentUserId');
+                    ProfileScreenLogger.logDebugInfo(
+                        'User ID type: ${currentUserId.runtimeType}');
                   }
+
+                  // **NEW: Check HLS conversion status for all videos**
+                  _showHlsConversionStatus();
 
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -879,7 +1025,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                         // **FIXED: Use ProfileStateManager data first, then fall back to UserProvider data**
                         backgroundImage: _getProfileImage(),
                         onBackgroundImageError: (exception, stackTrace) {
-                          print('Error loading profile image: $exception');
+                          ProfileScreenLogger.logError(
+                              'Error loading profile image: $exception');
                         },
                         child: _getProfileImage() == null
                             ? Icon(
@@ -1055,8 +1202,8 @@ class _ProfileScreenState extends State<ProfileScreen>
     if (_stateManager.userData != null &&
         _stateManager.userData!['profilePic'] != null) {
       final profilePic = _stateManager.userData!['profilePic'];
-      print(
-          '🔍 ProfileScreen: Using profile pic from ProfileStateManager: $profilePic');
+      ProfileScreenLogger.logDebugInfo(
+          'Using profile pic from ProfileStateManager: $profilePic');
 
       if (profilePic.startsWith('http')) {
         return NetworkImage(profilePic);
@@ -1064,7 +1211,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         try {
           return FileImage(File(profilePic));
         } catch (e) {
-          print('⚠️ ProfileScreen: Error creating FileImage: $e');
+          ProfileScreenLogger.logWarning('Error creating FileImage: $e');
           return null;
         }
       }
@@ -1076,8 +1223,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       final userModel = userProvider.getUserData(widget.userId!);
       if (userModel?.profilePic != null) {
         final profilePic = userModel!.profilePic;
-        print(
-            '🔍 ProfileScreen: Using profile pic from UserProvider: $profilePic');
+        ProfileScreenLogger.logDebugInfo(
+            'Using profile pic from UserProvider: $profilePic');
 
         if (profilePic.startsWith('http')) {
           return NetworkImage(profilePic);
@@ -1085,14 +1232,14 @@ class _ProfileScreenState extends State<ProfileScreen>
           try {
             return FileImage(File(profilePic));
           } catch (e) {
-            print('⚠️ ProfileScreen: Error creating FileImage: $e');
+            ProfileScreenLogger.logWarning('Error creating FileImage: $e');
             return null;
           }
         }
       }
     }
 
-    print('🔍 ProfileScreen: No profile pic available');
+    ProfileScreenLogger.logDebugInfo('No profile pic available');
     return null;
   }
 
@@ -1102,7 +1249,8 @@ class _ProfileScreenState extends State<ProfileScreen>
     if (_stateManager.userData != null &&
         _stateManager.userData!['name'] != null) {
       final name = _stateManager.userData!['name'];
-      print('🔍 ProfileScreen: Using name from ProfileStateManager: $name');
+      ProfileScreenLogger.logDebugInfo(
+          'Using name from ProfileStateManager: $name');
       return name;
     }
 
@@ -1112,13 +1260,13 @@ class _ProfileScreenState extends State<ProfileScreen>
       final userModel = userProvider.getUserData(widget.userId!);
       if (userModel?.name != null) {
         final name = userModel!.name;
-        print('🔍 ProfileScreen: Using name from UserProvider: $name');
+        ProfileScreenLogger.logDebugInfo('Using name from UserProvider: $name');
         return name;
       }
     }
 
     // Final fallback
-    print('🔍 ProfileScreen: No name available, using default');
+    ProfileScreenLogger.logDebugInfo('No name available, using default');
     return 'User';
   }
 
@@ -1143,10 +1291,16 @@ class _ProfileScreenState extends State<ProfileScreen>
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       _buildStatColumn(
-                          'Videos', stateManager.userVideos.length),
+                        'Videos',
+                        _isVideosLoaded
+                            ? stateManager.userVideos.length
+                            : '...',
+                        isLoading: !_isVideosLoaded,
+                      ),
                       _buildStatColumn(
                         'Followers',
-                        _getFollowersCount(),
+                        _isFollowersLoaded ? _getFollowersCount() : '...',
+                        isLoading: !_isFollowersLoaded,
                       ),
                       _buildStatColumn(
                         'Earnings',
@@ -1200,42 +1354,71 @@ class _ProfileScreenState extends State<ProfileScreen>
                     ),
                   ),
                   SizedBox(height: ResponsiveHelper.isMobile(context) ? 8 : 12),
-                  // Add helpful instruction text for delete feature
-                  if (_stateManager.userData != null)
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.blue.withOpacity(0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.info_outline,
-                            color: Colors.blue[600],
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Long press on any video to enter selection mode, then tap videos to select them for deletion.',
-                              style: TextStyle(
-                                color: Colors.blue[700],
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+
                   SizedBox(
                       height: ResponsiveHelper.isMobile(context) ? 16 : 24),
                   Consumer<ProfileStateManager>(
                     builder: (context, stateManager, child) {
+                      if (!_isVideosLoaded) {
+                        return RepaintBoundary(
+                          child: Container(
+                            padding: const EdgeInsets.all(32),
+                            child: Column(
+                              children: [
+                                const SizedBox(
+                                  width: 40,
+                                  height: 40,
+                                  child: CircularProgressIndicator(),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Loading your videos...',
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
+
+                      if (stateManager.userVideos.isEmpty) {
+                        return RepaintBoundary(
+                          child: Container(
+                            padding: const EdgeInsets.all(32),
+                            child: Column(
+                              children: [
+                                Icon(
+                                  Icons.video_library_outlined,
+                                  size: 64,
+                                  color: Colors.grey[400],
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No videos yet',
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Upload your first video to get started!',
+                                  style: TextStyle(
+                                    color: Colors.grey[500],
+                                    fontSize: 14,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
+
                       return RepaintBoundary(
                         child: GridView.builder(
                           shrinkWrap: true,
@@ -1263,7 +1446,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                             return RepaintBoundary(
                               child: GestureDetector(
                                 onTap: () {
-                                  // Single tap: Play video (navigate to VideoScreen)
                                   if (!stateManager.isSelecting) {
                                     Navigator.push(
                                       context,
@@ -1278,35 +1460,45 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   } else if (stateManager.isSelecting &&
                                       canSelectVideo) {
                                     // Use proper logic for video selection
-                                    print('🔍 Video tapped in selection mode');
-                                    print('🔍 Video ID: ${video.id}');
-                                    print('🔍 Can select: $canSelectVideo');
+                                    ProfileScreenLogger.logVideoSelection(
+                                        videoId: video.id,
+                                        isSelected: !stateManager
+                                            .selectedVideoIds
+                                            .contains(video.id));
+                                    ProfileScreenLogger.logDebugInfo(
+                                        'Video ID: ${video.id}');
+                                    ProfileScreenLogger.logDebugInfo(
+                                        'Can select: $canSelectVideo');
                                     stateManager.toggleVideoSelection(video.id);
                                   } else {
-                                    print('🔍 Video tapped but not selectable');
-                                    print(
-                                        '🔍 isSelecting: ${stateManager.isSelecting}');
-                                    print('🔍 canSelectVideo: $canSelectVideo');
+                                    ProfileScreenLogger.logDebugInfo(
+                                        'Video tapped but not selectable');
+                                    ProfileScreenLogger.logDebugInfo(
+                                        'isSelecting: ${stateManager.isSelecting}');
+                                    ProfileScreenLogger.logDebugInfo(
+                                        'canSelectVideo: $canSelectVideo');
                                   }
                                 },
                                 onLongPress: () {
                                   // Long press: Enter selection mode for deletion
-                                  print('🔍 Long press detected on video');
-                                  print(
-                                      '🔍 userData: ${stateManager.userData != null}');
-                                  print('🔍 canSelectVideo: $canSelectVideo');
-                                  print(
-                                      '🔍 isSelecting: ${stateManager.isSelecting}');
+                                  ProfileScreenLogger.logDebugInfo(
+                                      'Long press detected on video');
+                                  ProfileScreenLogger.logDebugInfo(
+                                      'userData: ${stateManager.userData != null}');
+                                  ProfileScreenLogger.logDebugInfo(
+                                      'canSelectVideo: $canSelectVideo');
+                                  ProfileScreenLogger.logDebugInfo(
+                                      'isSelecting: ${stateManager.isSelecting}');
 
                                   if (stateManager.userData != null &&
                                       !stateManager.isSelecting) {
-                                    print(
-                                        '🔍 Entering selection mode via long press');
+                                    ProfileScreenLogger.logDebugInfo(
+                                        'Entering selection mode via long press');
                                     stateManager.enterSelectionMode();
                                     stateManager.toggleVideoSelection(video.id);
                                   } else {
-                                    print(
-                                        '🔍 Cannot enter selection mode via long press');
+                                    ProfileScreenLogger.logDebugInfo(
+                                        'Cannot enter selection mode via long press');
                                   }
                                 },
                                 child: Stack(
@@ -1348,7 +1540,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                                     fit: BoxFit.cover,
                                                     errorBuilder: (context,
                                                         error, stackTrace) {
-                                                      print(
+                                                      ProfileScreenLogger.logError(
                                                           'Error loading thumbnail: $error');
                                                       return Center(
                                                         child: Icon(
@@ -1556,8 +1748,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       final userModel = userProvider.getUserData(widget.userId!);
       if (userModel?.followersCount != null) {
-        print(
-            '🔍 ProfileScreen: Using followers count from UserProvider: ${userModel!.followersCount}');
+        ProfileScreenLogger.logDebugInfo(
+            'Using followers count from UserProvider: ${userModel!.followersCount}');
         return userModel.followersCount;
       }
     }
@@ -1566,44 +1758,47 @@ class _ProfileScreenState extends State<ProfileScreen>
     if (_stateManager.userData != null &&
         _stateManager.userData!['followersCount'] != null) {
       final followersCount = _stateManager.userData!['followersCount'];
-      print(
-          '🔍 ProfileScreen: Using followers count from ProfileStateManager: $followersCount');
+      ProfileScreenLogger.logDebugInfo(
+          'Using followers count from ProfileStateManager: $followersCount');
       return followersCount;
     }
 
     // Final fallback
-    print('🔍 ProfileScreen: No followers count available, using default');
+    ProfileScreenLogger.logDebugInfo(
+        'No followers count available, using default');
     return 0;
   }
 
   Future<bool> _checkPaymentSetupStatus() async {
     try {
       // **FIXED: Prioritize SharedPreferences flag first**
+      ProfileScreenLogger.logPaymentSetupCheck();
       final prefs = await SharedPreferences.getInstance();
       final hasPaymentSetup = prefs.getBool('has_payment_setup') ?? false;
 
       if (hasPaymentSetup) {
-        print('✅ Payment setup flag found in SharedPreferences');
+        ProfileScreenLogger.logPaymentSetupFound();
         return true;
       }
 
       // **NEW: If no flag, try to load payment setup data from backend**
       if (_stateManager.userData != null &&
           _stateManager.userData!['id'] != null) {
-        print('🔍 No payment setup flag found, checking backend data...');
+        ProfileScreenLogger.logDebugInfo(
+            'No payment setup flag found, checking backend data...');
         final hasBackendSetup = await _checkBackendPaymentSetup();
         if (hasBackendSetup) {
           // Set the flag for future use
           await prefs.setBool('has_payment_setup', true);
-          print('✅ Backend payment setup found, setting flag');
+          ProfileScreenLogger.logPaymentSetupFound();
           return true;
         }
       }
 
-      print('❌ No payment setup found');
+      ProfileScreenLogger.logPaymentSetupNotFound();
       return false;
     } catch (e) {
-      print('Error checking payment setup status: $e');
+      ProfileScreenLogger.logPaymentSetupCheckError(e.toString());
       return false;
     }
   }
@@ -1611,17 +1806,19 @@ class _ProfileScreenState extends State<ProfileScreen>
   // **NEW: Method to check payment setup from backend**
   Future<bool> _checkBackendPaymentSetup() async {
     try {
-      print('🔍 _checkBackendPaymentSetup: Starting backend check...');
+      ProfileScreenLogger.logDebugInfo(
+          'Starting backend payment setup check...');
       final userData = _stateManager.getUserData();
       final token = userData?['token'];
 
       if (token == null) {
-        print('❌ _checkBackendPaymentSetup: No token available');
+        ProfileScreenLogger.logError(
+            'No token available for backend payment setup check');
         return false;
       }
 
-      print(
-          '🔍 _checkBackendPaymentSetup: Making API call to creator-payouts/profile');
+      ProfileScreenLogger.logApiCall(
+          endpoint: 'creator-payouts/profile', method: 'GET');
       final response = await http.get(
         Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/profile'),
         headers: {
@@ -1630,36 +1827,43 @@ class _ProfileScreenState extends State<ProfileScreen>
         },
       );
 
-      print(
-          '🔍 _checkBackendPaymentSetup: Response status: ${response.statusCode}');
-      print('🔍 _checkBackendPaymentSetup: Response body: ${response.body}');
+      ProfileScreenLogger.logApiResponse(
+        endpoint: 'creator-payouts/profile',
+        statusCode: response.statusCode,
+        body: response.body,
+      );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final paymentMethod = data['creator']?['preferredPaymentMethod'];
         final paymentDetails = data['paymentDetails'];
 
-        print('🔍 _checkBackendPaymentSetup: Payment method: $paymentMethod');
-        print('🔍 _checkBackendPaymentSetup: Payment details: $paymentDetails');
+        ProfileScreenLogger.logDebugInfo('Payment method: $paymentMethod');
+        ProfileScreenLogger.logDebugInfo('Payment details: $paymentDetails');
 
         // Check if user has completed payment setup
         if (paymentMethod != null &&
             paymentMethod.isNotEmpty &&
             paymentDetails != null) {
-          print('✅ Backend payment setup found: $paymentMethod');
+          ProfileScreenLogger.logPaymentSetupFound(method: paymentMethod);
           return true;
         } else {
-          print(
-              '❌ _checkBackendPaymentSetup: Payment setup incomplete - method: $paymentMethod, details: $paymentDetails');
+          ProfileScreenLogger.logDebugWarning(
+              'Payment setup incomplete - method: $paymentMethod, details: $paymentDetails');
         }
       } else {
-        print(
-            '❌ _checkBackendPaymentSetup: API call failed with status ${response.statusCode}');
+        ProfileScreenLogger.logApiError(
+          endpoint: 'creator-payouts/profile',
+          error: 'API call failed with status ${response.statusCode}',
+        );
       }
 
       return false;
     } catch (e) {
-      print('❌ _checkBackendPaymentSetup: Error: $e');
+      ProfileScreenLogger.logApiError(
+        endpoint: 'creator-payouts/profile',
+        error: e.toString(),
+      );
       return false;
     }
   }
@@ -1672,7 +1876,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Widget _buildStatColumn(String label, dynamic value,
-      {bool isEarnings = false, VoidCallback? onTap}) {
+      {bool isEarnings = false, VoidCallback? onTap, bool isLoading = false}) {
     return RepaintBoundary(
       child: Builder(
         builder: (context) => Column(
@@ -1684,9 +1888,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                     ? SystemMouseCursors.click
                     : SystemMouseCursors.basic,
                 child: Text(
-                  isEarnings
-                      ? '₹${value.toStringAsFixed(2)}'
-                      : value.toString(),
+                  isLoading
+                      ? '...'
+                      : (isEarnings
+                          ? '₹${value.toStringAsFixed(2)}'
+                          : value.toString()),
                   style: TextStyle(
                     color: const Color(0xFF424242),
                     fontSize: ResponsiveHelper.getAdaptiveFontSize(context, 24),
@@ -1716,8 +1922,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       await prefs.remove('jwt_token');
       await prefs.remove('fallback_user');
       await prefs.remove('has_payment_setup');
-      print(
-          '✅ ProfileScreen: Authentication data cleared from SharedPreferences');
+      ProfileScreenLogger.logSuccess(
+          'Authentication data cleared from SharedPreferences');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -1729,6 +1935,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
       await _stateManager.handleLogout(); // Also clear state manager's data
     } catch (e) {
+      ProfileScreenLogger.logError('Error clearing authentication data: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1741,22 +1948,22 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   /// Check API endpoints being used
   void _checkApiEndpoints() {
-    print('🔍 ProfileScreen: === CHECKING API ENDPOINTS ===');
+    ProfileScreenLogger.logDebugInfo('=== CHECKING API ENDPOINTS ===');
 
     // Check AppConfig.baseUrl
     try {
       final appConfig = AppConfig.baseUrl;
-      print('🔍 ProfileScreen: AppConfig.baseUrl: $appConfig');
+      ProfileScreenLogger.logDebugInfo('AppConfig.baseUrl: $appConfig');
     } catch (e) {
-      print('❌ ProfileScreen: Error getting AppConfig.baseUrl: $e');
+      ProfileScreenLogger.logError('Error getting AppConfig.baseUrl: $e');
     }
 
     // Check VideoService.baseUrl
-    print('🔍 ProfileScreen: VideoService.baseUrl: Not implemented');
+    ProfileScreenLogger.logDebugInfo('VideoService.baseUrl: Not implemented');
 
     // Check if endpoints are different
-    print(
-        '🔍 ProfileScreen: VideoService not implemented - skipping endpoint comparison');
+    ProfileScreenLogger.logDebugInfo(
+        'VideoService not implemented - skipping endpoint comparison');
 
     // Show in UI
     if (mounted) {
@@ -1789,24 +1996,24 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   /// Debug method to show current state
   void _debugState() {
-    print('🔍 ProfileScreen: === DEBUG STATE ===');
-    print(
-        '🔍 ProfileScreen: userData: ${_stateManager.userData != null ? "Available" : "Not Available"}');
-    print('🔍 ProfileScreen: _isLoading: $_isLoading');
-    print('🔍 ProfileScreen: _error: $_error');
-    print(
-        '🔍 ProfileScreen: userVideos count: ${_stateManager.userVideos.length}');
-    print('🔍 ProfileScreen: userId: ${widget.userId}');
+    ProfileScreenLogger.logDebugState();
+    ProfileScreenLogger.logDebugInfo(
+        'userData: ${_stateManager.userData != null ? "Available" : "Not Available"}');
+    ProfileScreenLogger.logDebugInfo('_isLoading: $_isLoading');
+    ProfileScreenLogger.logDebugInfo('_error: $_error');
+    ProfileScreenLogger.logDebugInfo(
+        'userVideos count: ${_stateManager.userVideos.length}');
+    ProfileScreenLogger.logDebugInfo('userId: ${widget.userId}');
 
     // **NEW: Check UserProvider data**
     if (widget.userId != null) {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       final userModel = userProvider.getUserData(widget.userId!);
-      print(
-          '🔍 ProfileScreen: UserProvider data: ${userModel != null ? "Available" : "Not Available"}');
+      ProfileScreenLogger.logDebugInfo(
+          'UserProvider data: ${userModel != null ? "Available" : "Not Available"}');
       if (userModel != null) {
-        print(
-            '🔍 ProfileScreen: UserProvider - Name: ${userModel.name}, Followers: ${userModel.followersCount}');
+        ProfileScreenLogger.logDebugInfo(
+            'UserProvider - Name: ${userModel.name}, Followers: ${userModel.followersCount}');
       }
     }
 
@@ -1814,8 +2021,8 @@ class _ProfileScreenState extends State<ProfileScreen>
     SharedPreferences.getInstance().then((prefs) {
       final hasJwtToken = prefs.getString('jwt_token') != null;
       final hasFallbackUser = prefs.getString('fallback_user') != null;
-      print(
-          '🔍 ProfileScreen: SharedPreferences - JWT: $hasJwtToken, Fallback: $hasFallbackUser');
+      ProfileScreenLogger.logDebugInfo(
+          'SharedPreferences - JWT: $hasJwtToken, Fallback: $hasFallbackUser');
     });
 
     // Show debug info in UI
@@ -1855,7 +2062,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
-                _loadUserData();
+                _restartProgressiveLoading();
               },
               child: const Text('Force Load'),
             ),
@@ -1894,10 +2101,10 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   /// **NEW: Test video playback to debug issues**
   void _testVideoPlayback() {
-    print('🔍 ProfileScreen: === TESTING VIDEO PLAYBACK ===');
+    ProfileScreenLogger.logDebugInfo('=== TESTING VIDEO PLAYBACK ===');
 
     if (_stateManager.userVideos.isEmpty) {
-      print('❌ ProfileScreen: No videos available to test');
+      ProfileScreenLogger.logError('No videos available to test');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('No videos available to test'),
@@ -1908,9 +2115,10 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
 
     final testVideo = _stateManager.userVideos.first;
-    print('🔍 ProfileScreen: Testing with video: ${testVideo.videoName}');
-    print('🔍 ProfileScreen: Video URL: ${testVideo.videoUrl}');
-    print('🔍 ProfileScreen: Video ID: ${testVideo.id}');
+    ProfileScreenLogger.logDebugInfo(
+        'Testing with video: ${testVideo.videoName}');
+    ProfileScreenLogger.logDebugInfo('Video URL: ${testVideo.videoUrl}');
+    ProfileScreenLogger.logDebugInfo('Video ID: ${testVideo.id}');
 
     // Try to navigate to VideoScreen with just this one video
     try {
@@ -1923,9 +2131,9 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
         ),
       );
-      print('✅ ProfileScreen: Successfully navigated to VideoScreen');
+      ProfileScreenLogger.logSuccess('Successfully navigated to VideoScreen');
     } catch (e) {
-      print('❌ ProfileScreen: Error navigating to VideoScreen: $e');
+      ProfileScreenLogger.logError('Error navigating to VideoScreen: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error: $e'),
@@ -1937,14 +2145,14 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   /// **NEW: Method to force refresh ProfileStateManager data**
   Future<void> _forceRefreshProfileData() async {
-    print('🔄 ProfileScreen: Force refreshing profile data...');
+    ProfileScreenLogger.logVideoRefresh();
 
     try {
       // Clear any existing data by calling handleLogout and then reloading
       await _stateManager.handleLogout();
 
       // Force reload from scratch
-      await _loadUserData();
+      _restartProgressiveLoading();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1956,7 +2164,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         );
       }
     } catch (e) {
-      print('❌ ProfileScreen: Error force refreshing profile data: $e');
+      ProfileScreenLogger.logError('Error force refreshing profile data: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1971,17 +2179,18 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   /// **NEW: Method to force refresh only videos**
   Future<void> _forceRefreshVideos() async {
-    print('🔄 ProfileScreen: Force refreshing videos only...');
+    ProfileScreenLogger.logVideoRefresh();
 
     try {
       if (_stateManager.userData != null) {
         final currentUserId = _stateManager.userData!['id'] ??
             _stateManager.userData!['googleId'];
         if (currentUserId != null) {
-          print('🔍 ProfileScreen: Refreshing videos for user: $currentUserId');
+          ProfileScreenLogger.logDebugInfo(
+              'Refreshing videos for user: $currentUserId');
           await _stateManager.loadUserVideos(currentUserId);
-          print(
-              '✅ ProfileScreen: Videos refreshed: ${_stateManager.userVideos.length}');
+          ProfileScreenLogger.logVideoRefreshSuccess(
+              count: _stateManager.userVideos.length);
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -1994,13 +2203,15 @@ class _ProfileScreenState extends State<ProfileScreen>
             );
           }
         } else {
-          print('⚠️ ProfileScreen: No currentUserId found for video refresh');
+          ProfileScreenLogger.logWarning(
+              'No currentUserId found for video refresh');
         }
       } else {
-        print('⚠️ ProfileScreen: No userData available for video refresh');
+        ProfileScreenLogger.logWarning(
+            'No userData available for video refresh');
       }
     } catch (e) {
-      print('❌ ProfileScreen: Error refreshing videos: $e');
+      ProfileScreenLogger.logVideoRefreshError(e.toString());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -2015,23 +2226,25 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   /// **NEW: Test VideoService directly**
   Future<void> _testVideoService() async {
-    print('🔍 ProfileScreen: Testing VideoService directly...');
+    ProfileScreenLogger.logDebugInfo('Testing VideoService directly...');
 
     try {
       if (_stateManager.userData != null) {
         final currentUserId = _stateManager.userData!['id'] ??
             _stateManager.userData!['googleId'];
         if (currentUserId != null) {
-          print('🔍 ProfileScreen: Testing with user ID: $currentUserId');
+          ProfileScreenLogger.logDebugInfo(
+              'Testing with user ID: $currentUserId');
 
           // Import VideoService and test it directly
           final videoService = VideoService();
           final videos = await videoService.getUserVideos(currentUserId);
 
-          print(
-              '✅ ProfileScreen: VideoService returned ${videos.length} videos');
+          ProfileScreenLogger.logSuccess(
+              'VideoService returned ${videos.length} videos');
           for (int i = 0; i < videos.length; i++) {
-            print('  Video $i: ${videos[i].videoName} (ID: ${videos[i].id})');
+            ProfileScreenLogger.logDebugInfo(
+                '  Video $i: ${videos[i].videoName} (ID: ${videos[i].id})');
           }
 
           if (mounted) {
@@ -2045,13 +2258,14 @@ class _ProfileScreenState extends State<ProfileScreen>
             );
           }
         } else {
-          print('⚠️ ProfileScreen: No currentUserId for VideoService test');
+          ProfileScreenLogger.logWarning(
+              'No currentUserId for VideoService test');
         }
       } else {
-        print('⚠️ ProfileScreen: No userData for VideoService test');
+        ProfileScreenLogger.logWarning('No userData for VideoService test');
       }
     } catch (e) {
-      print('❌ ProfileScreen: VideoService test failed: $e');
+      ProfileScreenLogger.logError('VideoService test failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -2066,18 +2280,19 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   /// **NEW: Method to check ProfileStateManager state**
   void _checkProfileStateManagerState() {
-    print('🔍 ProfileScreen: === CHECKING ProfileStateManager STATE ===');
-    print('🔍 ProfileScreen: userData: ${_stateManager.userData}');
-    print('🔍 ProfileScreen: _isLoading: $_isLoading');
-    print('🔍 ProfileScreen: _error: $_error');
-    print('🔍 ProfileScreen: isEditing: ${_stateManager.isEditing}');
-    print('🔍 ProfileScreen: isSelecting: ${_stateManager.isSelecting}');
-    print(
-        '🔍 ProfileScreen: selectedVideoIds: ${_stateManager.selectedVideoIds}');
-    print(
-        '🔍 ProfileScreen: userVideos count: ${_stateManager.userVideos.length}');
-    print(
-        '🔍 ProfileScreen: nameController text: ${_stateManager.nameController.text}');
+    ProfileScreenLogger.logDebugState();
+    ProfileScreenLogger.logDebugInfo('userData: ${_stateManager.userData}');
+    ProfileScreenLogger.logDebugInfo('_isLoading: $_isLoading');
+    ProfileScreenLogger.logDebugInfo('_error: $_error');
+    ProfileScreenLogger.logDebugInfo('isEditing: ${_stateManager.isEditing}');
+    ProfileScreenLogger.logDebugInfo(
+        'isSelecting: ${_stateManager.isSelecting}');
+    ProfileScreenLogger.logDebugInfo(
+        'selectedVideoIds: ${_stateManager.selectedVideoIds}');
+    ProfileScreenLogger.logDebugInfo(
+        'userVideos count: ${_stateManager.userVideos.length}');
+    ProfileScreenLogger.logDebugInfo(
+        'nameController text: ${_stateManager.nameController.text}');
 
     if (mounted) {
       showDialog(
@@ -2108,5 +2323,219 @@ class _ProfileScreenState extends State<ProfileScreen>
         ),
       );
     }
+  }
+
+  /// **NEW: Method to show HLS conversion status for all videos**
+  void _showHlsConversionStatus() {
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('HLS Conversion Status'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: _stateManager.userVideos.map((video) {
+                // **FIXED: Use existing VideoModel fields and VideoUrlService**
+                final hasHlsMaster = video.hlsMasterPlaylistUrl != null &&
+                    video.hlsMasterPlaylistUrl!.isNotEmpty;
+                final hasHlsPlaylist = video.hlsPlaylistUrl != null &&
+                    video.hlsPlaylistUrl!.isNotEmpty;
+                final isHlsEncoded = video.isHLSEncoded ?? false;
+
+                // Determine conversion status
+                String status;
+                Color statusColor;
+                if (hasHlsMaster || hasHlsPlaylist || isHlsEncoded) {
+                  status = 'HLS Ready';
+                  statusColor = Colors.green;
+                } else if (video.videoUrl.isNotEmpty) {
+                  status = 'Needs HLS Conversion';
+                  statusColor = Colors.orange;
+                } else {
+                  status = 'No Video URL';
+                  statusColor = Colors.red;
+                }
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${video.videoName} (ID: ${video.id})',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: ResponsiveHelper.getAdaptiveFontSize(
+                                context, 14),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Status: $status',
+                            style: TextStyle(
+                              fontSize: ResponsiveHelper.getAdaptiveFontSize(
+                                  context, 12),
+                              color: statusColor,
+                            ),
+                          ),
+                          Text(
+                            'HLS Master: ${hasHlsMaster ? "Yes" : "No"}',
+                            style: TextStyle(
+                              fontSize: ResponsiveHelper.getAdaptiveFontSize(
+                                  context, 10),
+                              color: hasHlsMaster ? Colors.green : Colors.grey,
+                            ),
+                          ),
+                          Text(
+                            'HLS Playlist: ${hasHlsPlaylist ? "Yes" : "No"}',
+                            style: TextStyle(
+                              fontSize: ResponsiveHelper.getAdaptiveFontSize(
+                                  context, 10),
+                              color:
+                                  hasHlsPlaylist ? Colors.green : Colors.grey,
+                            ),
+                          ),
+                          Text(
+                            'HLS Encoded: ${isHlsEncoded ? "Yes" : "No"}',
+                            style: TextStyle(
+                              fontSize: ResponsiveHelper.getAdaptiveFontSize(
+                                  context, 10),
+                              color: isHlsEncoded ? Colors.green : Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                // Show conversion recommendations
+                _showConversionRecommendations();
+              },
+              child: const Text('Get Help'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  /// **NEW: Show conversion recommendations**
+  void _showConversionRecommendations() {
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('HLS Conversion Help'),
+          content: const Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'To fix video playback issues, your videos need to be converted to HLS format:',
+                style: TextStyle(fontSize: 16),
+              ),
+              SizedBox(height: 16),
+              Text(
+                'What is HLS?',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              SizedBox(height: 8),
+              Text(
+                '• HTTP Live Streaming (HLS) is a streaming protocol\n'
+                '• Provides better playback compatibility\n'
+                '• Enables adaptive bitrate streaming\n'
+                '• Required for smooth video playback',
+                style: TextStyle(fontSize: 12),
+              ),
+              SizedBox(height: 16),
+              Text(
+                'How to convert:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              SizedBox(height: 8),
+              Text(
+                '1. Contact support to request HLS conversion\n'
+                '2. Use video processing tools (FFmpeg)\n'
+                '3. Re-upload videos in HLS format\n'
+                '4. Wait for automatic server-side conversion',
+                style: TextStyle(fontSize: 12),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  Widget _buildFollowersLoadingIndicator() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            'Loading followers data...',
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVideosLoadingIndicator() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            'Loading videos...',
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

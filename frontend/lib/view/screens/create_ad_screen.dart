@@ -6,10 +6,11 @@ import 'dart:convert';
 import 'package:snehayog/services/ad_service.dart';
 import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/model/ad_model.dart';
-import 'package:snehayog/services/razorpay_service.dart';
 import 'package:snehayog/services/cloudinary_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:snehayog/config/app_config.dart';
+// Removed razorpay_flutter import - using custom RazorpayService instead
+import 'package:snehayog_monetization/snehayog_monetization.dart';
 
 class CreateAdScreen extends StatefulWidget {
   const CreateAdScreen({super.key});
@@ -35,11 +36,11 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
   bool _isLoading = false;
   String? _errorMessage;
   String? _successMessage;
+  bool _isProcessingPayment = false;
 
   final AdService _adService = AdService();
   final AuthService _authService = AuthService();
-  final RazorpayService _razorpayService =
-      RazorpayService(); // Added RazorpayService instance
+  final RazorpayService _razorpayService = RazorpayService();
   final CloudinaryService _cloudinaryService = CloudinaryService();
 
   final List<String> _adTypes = ['banner', 'carousel', 'video feed ad'];
@@ -72,11 +73,57 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
           maxWidth: 1920,
           maxHeight: 1080,
           imageQuality: 85,
+          // **FIXED: Add specific image type filtering**
+          preferredCameraDevice: CameraDevice.rear,
+          // **NEW: Add more restrictive image picker options**
+          requestFullMetadata: true,
         );
 
         if (image != null) {
+          // **NEW: Validate file type before proceeding**
+          final file = File(image.path);
+          final fileName = image.name.toLowerCase();
+
+          // Check file extension
+          if (!fileName.endsWith('.jpg') &&
+              !fileName.endsWith('.jpeg') &&
+              !fileName.endsWith('.png') &&
+              !fileName.endsWith('.gif') &&
+              !fileName.endsWith('.webp')) {
+            setState(() {
+              _errorMessage =
+                  'Please select a valid image file (JPG, PNG, GIF, or WebP)';
+            });
+            return;
+          }
+
+          // **NEW: Check file size (max 10MB for images)**
+          final fileSize = await file.length();
+          if (fileSize > 10 * 1024 * 1024) {
+            // 10MB
+            setState(() {
+              _errorMessage = 'Image file size must be less than 10MB';
+            });
+            return;
+          }
+
+          // **NEW: Verify file is actually an image**
+          if (!await _isValidImageFile(file)) {
+            setState(() {
+              _errorMessage =
+                  'The selected file does not appear to be a valid image. Please try selecting a different file.';
+            });
+            return;
+          }
+
+          print('🔍 CreateAdScreen: Image selected successfully');
+          print('   File path: ${image.path}');
+          print('   File name: ${image.name}');
+          print(
+              '   File size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
+
           setState(() {
-            _selectedImage = File(image.path);
+            _selectedImage = file;
             _selectedVideo = null;
             // **NEW: Clear error messages when image is selected**
             _clearErrorMessages();
@@ -93,13 +140,56 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
         );
 
         if (image != null) {
+          // **NEW: Validate file type for carousel/video feed ads too**
+          final file = File(image.path);
+          final fileName = image.name.toLowerCase();
+
+          // Check file extension
+          if (!fileName.endsWith('.jpg') &&
+              !fileName.endsWith('.jpeg') &&
+              !fileName.endsWith('.png') &&
+              !fileName.endsWith('.gif') &&
+              !fileName.endsWith('.webp')) {
+            setState(() {
+              _errorMessage =
+                  'Please select a valid image file (JPG, PNG, GIF, or WebP)';
+            });
+            return;
+          }
+
+          // **NEW: Check file size (max 10MB for images)**
+          final fileSize = await file.length();
+          if (fileSize > 10 * 1024 * 1024) {
+            // 10MB
+            setState(() {
+              _errorMessage = 'Image file size must be less than 10MB';
+            });
+            return;
+          }
+
+          // **NEW: Verify file is actually an image**
+          if (!await _isValidImageFile(file)) {
+            setState(() {
+              _errorMessage =
+                  'The selected file does not appear to be a valid image. Please try selecting a different file.';
+            });
+            return;
+          }
+
+          print('🔍 CreateAdScreen: Image selected for carousel/video feed ad');
+          print('   File path: ${image.path}');
+          print('   File name: ${image.name}');
+          print(
+              '   File size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
+
           setState(() {
-            _selectedImage = File(image.path);
+            _selectedImage = file;
             // Don't clear video for carousel and video feed ads
           });
         }
       }
     } catch (e) {
+      print('❌ CreateAdScreen: Error picking image: $e');
       setState(() {
         _errorMessage = 'Error picking image: $e';
       });
@@ -120,17 +210,79 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.video,
         allowMultiple: false,
+        // **FIXED: Remove allowedExtensions when using FileType.video**
+        // allowedExtensions: ['mp4', 'webm', 'avi', 'mov', 'mkv'], // This causes the error
       );
 
       if (result != null) {
+        final file = File(result.files.single.path!);
+        final fileName = result.files.single.name.toLowerCase();
+
+        print('🔍 CreateAdScreen: Video file selected: $fileName');
+
+        // **NEW: Enhanced file extension validation**
+        final supportedVideoExtensions = [
+          '.mp4',
+          '.webm',
+          '.avi',
+          '.mov',
+          '.mkv'
+        ];
+        bool hasValidExtension = false;
+
+        for (final extension in supportedVideoExtensions) {
+          if (fileName.endsWith(extension)) {
+            hasValidExtension = true;
+            break;
+          }
+        }
+
+        if (!hasValidExtension) {
+          setState(() {
+            _errorMessage =
+                '''Unsupported video format. Please select a video with one of these formats:
+            
+🎬 MP4, WebM, AVI, MOV, or MKV
+
+The selected file "$fileName" is not supported.''';
+          });
+          return;
+        }
+
+        // **NEW: Check file size (max 100MB for videos)**
+        final fileSize = await file.length();
+        if (fileSize > 100 * 1024 * 1024) {
+          // 100MB
+          setState(() {
+            _errorMessage = 'Video file size must be less than 100MB';
+          });
+          return;
+        }
+
+        // **NEW: Verify file is actually a video**
+        if (!await _isValidVideoFile(file)) {
+          setState(() {
+            _errorMessage =
+                'The selected file does not appear to be a valid video. Please try selecting a different file.';
+          });
+          return;
+        }
+
+        print('🔍 CreateAdScreen: Video selected successfully');
+        print('   File path: ${result.files.single.path}');
+        print('   File name: ${result.files.single.name}');
+        print(
+            '   File size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
+
         setState(() {
-          _selectedVideo = File(result.files.single.path!);
+          _selectedVideo = file;
           // Don't clear image for carousel/video feed ads
           // **NEW: Clear error messages when video is selected**
           _clearErrorMessages();
         });
       }
     } catch (e) {
+      print('❌ CreateAdScreen: Error picking video: $e');
       setState(() {
         _errorMessage = 'Error picking video: $e';
       });
@@ -279,6 +431,160 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
     }
   }
 
+  // **NEW: Method to validate files before upload**
+  Future<bool> _validateFiles() async {
+    try {
+      if (_selectedAdType == 'banner') {
+        if (_selectedImage == null) {
+          setState(() {
+            _errorMessage =
+                'Banner ads require an image. Please select an image file.';
+          });
+          return false;
+        }
+
+        // Validate image file
+        final fileName = _selectedImage!.path.split('/').last.toLowerCase();
+        if (!fileName.endsWith('.jpg') &&
+            !fileName.endsWith('.jpeg') &&
+            !fileName.endsWith('.png') &&
+            !fileName.endsWith('.gif') &&
+            !fileName.endsWith('.webp')) {
+          setState(() {
+            _errorMessage =
+                'Please select a valid image file (JPG, PNG, GIF, or WebP)';
+          });
+          return false;
+        }
+
+        // **NEW: Verify file is actually an image**
+        if (!await _isValidImageFile(_selectedImage!)) {
+          setState(() {
+            _errorMessage =
+                'The selected image file appears to be corrupted or invalid. Please try selecting a different file.';
+          });
+          return false;
+        }
+      } else if (_selectedAdType == 'carousel' ||
+          _selectedAdType == 'video feed ad') {
+        if (_selectedImage == null && _selectedVideo == null) {
+          setState(() {
+            _errorMessage = 'Please select an image or video for your ad';
+          });
+          return false;
+        }
+
+        // Validate image if selected
+        if (_selectedImage != null) {
+          final fileName = _selectedImage!.path.split('/').last.toLowerCase();
+          if (!fileName.endsWith('.jpg') &&
+              !fileName.endsWith('.jpeg') &&
+              !fileName.endsWith('.png') &&
+              !fileName.endsWith('.gif') &&
+              !fileName.endsWith('.webp')) {
+            setState(() {
+              _errorMessage =
+                  'Please select a valid image file (JPG, PNG, GIF, or WebP)';
+            });
+            return false;
+          }
+
+          // **NEW: Verify file is actually an image**
+          if (!await _isValidImageFile(_selectedImage!)) {
+            setState(() {
+              _errorMessage =
+                  'The selected image file appears to be corrupted or invalid. Please try selecting a different file.';
+            });
+            return false;
+          }
+        }
+
+        // Validate video if selected
+        if (_selectedVideo != null) {
+          final fileName = _selectedVideo!.path.split('/').last.toLowerCase();
+          if (!fileName.endsWith('.mp4') &&
+              !fileName.endsWith('.webm') &&
+              !fileName.endsWith('.avi') &&
+              !fileName.endsWith('.mov') &&
+              !fileName.endsWith('.mkv')) {
+            setState(() {
+              _errorMessage =
+                  'Please select a valid video file (MP4, WebM, AVI, MOV, or MKV)';
+            });
+            return false;
+          }
+
+          // **NEW: Verify file is actually a video**
+          if (!await _isValidVideoFile(_selectedVideo!)) {
+            setState(() {
+              _errorMessage =
+                  'The selected video file appears to be corrupted or invalid. Please try selecting a different file.';
+            });
+            return false;
+          }
+        }
+      }
+
+      return true;
+    } catch (e) {
+      print('❌ CreateAdScreen: File validation error: $e');
+      setState(() {
+        _errorMessage = 'Error validating files: $e';
+      });
+      return false;
+    }
+  }
+
+  // **NEW: Method to verify file is actually an image**
+  Future<bool> _isValidImageFile(File file) async {
+    try {
+      // Read first few bytes to check file signature
+      final bytes = await file.openRead(0, 12).first;
+      final hex = bytes
+          .map((b) => b.toRadixString(16).padLeft(2, '0'))
+          .join(' ')
+          .toUpperCase();
+
+      // Check for common image file signatures
+      if (hex.startsWith('FF D8 FF')) return true; // JPEG
+      if (hex.startsWith('89 50 4E 47')) return true; // PNG
+      if (hex.startsWith('47 49 46 38')) return true; // GIF
+      if (hex.startsWith('52 49 46 46')) return true; // WebP (RIFF)
+
+      print('❌ CreateAdScreen: Invalid image file signature: $hex');
+      return false;
+    } catch (e) {
+      print('❌ CreateAdScreen: Error checking image file signature: $e');
+      return false;
+    }
+  }
+
+  // **NEW: Method to verify file is actually a video**
+  Future<bool> _isValidVideoFile(File file) async {
+    try {
+      // Read first few bytes to check file signature
+      final bytes = await file.openRead(0, 16).first;
+      final hex = bytes
+          .map((b) => b.toRadixString(16).padLeft(2, '0'))
+          .join(' ')
+          .toUpperCase();
+
+      // Check for common video file signatures
+      if (hex.startsWith('00 00 00 18 66 74 79 70')) return true; // MP4
+      if (hex.startsWith('1A 45 DF A3')) return true; // WebM/MKV
+      if (hex.startsWith('52 49 46 46')) return true; // AVI (RIFF)
+      if (hex.startsWith('00 00 00 14 66 74 79 70 71 74')) return true; // MOV
+      if (hex.startsWith('00 00 00 20 66 74 79 70 4D 53 4E 56'))
+        return true; // MP4 variant
+
+      print('❌ CreateAdScreen: Invalid video file signature: $hex');
+      return false;
+    } catch (e) {
+      print('❌ CreateAdScreen: Error checking video file signature: $e');
+      return false;
+    }
+  }
+
   Future<void> _submitAd() async {
     print('🔍 CreateAdScreen: Submit button pressed');
 
@@ -291,6 +597,12 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
       setState(() {
         _errorMessage = 'Please complete all required fields correctly';
       });
+      return;
+    }
+
+    // **NEW: Validate files before upload**
+    if (!await _validateFiles()) {
+      print('❌ CreateAdScreen: File validation failed');
       return;
     }
 
@@ -364,7 +676,9 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
         }
       } catch (uploadError) {
         print('❌ CreateAdScreen: Media upload failed: $uploadError');
-        throw Exception('Failed to upload media: $uploadError');
+        // **NEW: Use improved error handling**
+        _handleMediaUploadError('Failed to upload media: $uploadError');
+        return; // Exit early to prevent further processing
       }
 
       if (mediaUrl == null || mediaUrl.isEmpty) {
@@ -444,6 +758,53 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
         _errorMessage = null;
       });
     }
+  }
+
+  // **NEW: Method to clear media selection when there are errors**
+  void _clearMediaSelection() {
+    setState(() {
+      _selectedImage = null;
+      _selectedVideo = null;
+    });
+  }
+
+  // **NEW: Method to handle media upload errors**
+  void _handleMediaUploadError(String error) {
+    print('❌ CreateAdScreen: Media upload error: $error');
+
+    // **NEW: Provide more helpful error messages**
+    String userFriendlyError = error;
+
+    if (error.contains('Invalid file type')) {
+      userFriendlyError =
+          '''File type not supported. Please ensure your file is one of these formats:
+      
+📸 Images: JPG, JPEG, PNG, GIF, WebP
+🎬 Videos: MP4, WebM, AVI, MOV, MKV
+
+Try selecting a different file or converting your file to a supported format.''';
+    } else if (error.contains('File too large')) {
+      userFriendlyError = '''File size too large. Please ensure:
+      
+📸 Images: Less than 10MB
+🎬 Videos: Less than 100MB
+
+Try compressing your file or selecting a smaller one.''';
+    } else if (error.contains('Failed to upload')) {
+      userFriendlyError = '''Upload failed. This could be due to:
+      
+• Network connection issues
+• File corruption
+• Server temporarily unavailable
+
+Please try again or contact support if the problem persists.''';
+    }
+
+    setState(() {
+      _errorMessage = userFriendlyError;
+      // Clear media selection on error to allow user to try again
+      _clearMediaSelection();
+    });
   }
 
   void _showSuccessDialog(AdModel ad) {
@@ -544,7 +905,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              _initiatePayment(invoice);
+              _initiateRazorpayPayment();
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green,
@@ -557,12 +918,11 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
     );
   }
 
-  // **NEW: Initiate Razorpay payment**
-  void _initiatePayment(Map<String, dynamic> order) async {
+  /// **NEW: Initiate Razorpay payment**
+  Future<void> _initiateRazorpayPayment() async {
     try {
       setState(() {
-        _isLoading = true;
-        _successMessage = 'Processing payment...';
+        _isProcessingPayment = true;
       });
 
       // Get user data for payment
@@ -571,58 +931,99 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
         throw Exception('User not authenticated');
       }
 
-      // Create Razorpay order
-      final razorpayOrder = await _razorpayService.createOrder(
-        amount: order['amount']?.toDouble() ?? 0.0,
+      // Calculate total amount
+      final totalAmount = _calculateTotalAmount();
+
+      // Make payment using Razorpay
+      await _razorpayService.makePayment(
+        amount: totalAmount,
         currency: 'INR',
-        receipt: order['id']?.toString() ?? '',
-        notes: 'Campaign payment for user: ${userData['id']}',
-      );
+        name: 'Snehayog Ad Campaign',
+        description: 'Advertisement campaign payment',
+        email: userData['email'] ?? 'user@example.com',
+        contact: userData['phone'] ?? '9999999999',
+        userName: userData['name'] ?? 'User',
+        onSuccess: (Map<String, dynamic> response) async {
+          print('✅ Payment successful: ${response['paymentId']}');
 
-      await Future.delayed(const Duration(seconds: 2));
-
-      // Simulate successful payment
-      final paymentResult = {
-        'status': 'success',
-        'razorpay_order_id': razorpayOrder['id'],
-        'razorpay_payment_id': 'pay_${DateTime.now().millisecondsSinceEpoch}',
-        'razorpay_signature':
-            'simulated_signature_${DateTime.now().millisecondsSinceEpoch}',
-      };
-
-      if (paymentResult['status'] == 'success') {
-        // Verify payment with backend
-        final verificationResult = await _verifyPaymentWithBackend(
-          orderId: paymentResult['razorpay_order_id'],
-          paymentId: paymentResult['razorpay_payment_id'],
-          signature: paymentResult['razorpay_signature'],
-        );
-
-        if (verificationResult['verified']) {
-          // Activate campaign
-          await _activateCampaign(order['campaignId']?.toString() ?? '');
-
+          // Process successful payment
+          await _processSuccessfulPayment(
+            orderId: response['orderId'] ?? '',
+            paymentId: response['paymentId'] ?? '',
+            signature: response['signature'] ?? '',
+          );
+        },
+        onError: (String errorMessage) {
+          print('❌ Payment failed: $errorMessage');
           setState(() {
-            _successMessage = 'Payment successful! Your ad is now active.';
-            _clearForm();
+            _isProcessingPayment = false;
           });
 
-          if (mounted) {
-            _showPaymentSuccessDialog();
-          }
-        } else {
-          throw Exception('Payment verification failed');
-        }
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Payment failed: $errorMessage'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        },
+      );
+    } catch (e) {
+      print('❌ Error initiating payment: $e');
+      setState(() {
+        _isProcessingPayment = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Payment error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// **NEW: Process successful payment with backend verification**
+  Future<void> _processSuccessfulPayment({
+    required String orderId,
+    required String paymentId,
+    required String signature,
+  }) async {
+    try {
+      // Verify payment with backend
+      final verificationResult =
+          await _razorpayService.verifyPaymentWithBackend(
+        orderId: orderId,
+        paymentId: paymentId,
+        signature: signature,
+      );
+
+      if (verificationResult['message'] == 'Payment verified successfully') {
+        // Payment verified successfully
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('✅ Payment verified! Ad campaign created successfully.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        // Clear form and navigate back
+        _clearForm();
+        Navigator.pop(context);
       } else {
-        throw Exception('Payment failed: ${paymentResult['error']}');
+        throw Exception('Payment verification failed');
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Payment error: $e';
-      });
+      print('❌ Error processing payment: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Payment verification failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     } finally {
       setState(() {
-        _isLoading = false;
+        _isProcessingPayment = false;
       });
     }
   }
@@ -855,6 +1256,24 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
     );
   }
 
+  /// **NEW: Calculate total amount for ad campaign**
+  double _calculateTotalAmount() {
+    // Calculate based on ad type and estimated impressions
+    double basePrice = 100.0; // Base price in INR
+    double adTypeMultiplier = _selectedAdType == 'banner'
+        ? 1.0
+        : _selectedAdType == 'carousel'
+            ? 1.5
+            : 2.0;
+
+    // Estimate impressions based on ad type
+    double estimatedImpressions = _selectedAdType == 'banner' ? 10000 : 5000;
+    double cpm =
+        _selectedAdType == 'banner' ? 10.0 : 30.0; // Cost per 1000 impressions
+
+    return (estimatedImpressions / 1000) * cpm * adTypeMultiplier;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -941,9 +1360,54 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.red.shade300),
                 ),
-                child: Text(
-                  _errorMessage!,
-                  style: TextStyle(color: Colors.red.shade800),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _errorMessage!,
+                      style: TextStyle(color: Colors.red.shade800),
+                    ),
+                    // **NEW: Add retry button for media upload errors**
+                    if (_errorMessage!.contains('upload') ||
+                        _errorMessage!.contains('media'))
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Row(
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  _errorMessage = null;
+                                });
+                                // Clear media selection to allow retry
+                                _clearMediaSelection();
+                              },
+                              icon: const Icon(Icons.refresh, size: 16),
+                              label: const Text('Try Again'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red.shade600,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 6),
+                                minimumSize: const Size(0, 32),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            TextButton(
+                              onPressed: () {
+                                setState(() {
+                                  _errorMessage = null;
+                                });
+                              },
+                              child: Text(
+                                'Dismiss',
+                                style: TextStyle(color: Colors.red.shade600),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
               ),
             // Benefits Button
@@ -1202,10 +1666,104 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                         fontStyle: FontStyle.italic,
                       ),
                     ),
+                    // **NEW: Add supported file types information**
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.blue.shade200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.info_outline,
+                                  size: 16, color: Colors.blue.shade700),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Supported File Types:',
+                                style: TextStyle(
+                                  color: Colors.blue.shade700,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Images: JPG, PNG, GIF, WebP (max 10MB)\nVideos: MP4, WebM, AVI, MOV, MKV (max 100MB)',
+                            style: TextStyle(
+                              color: Colors.blue.shade700,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
+            // **NEW: Add helpful tip about file formats**
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.lightbulb_outline,
+                      size: 16, color: Colors.orange.shade700),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '💡 Tip: If you\'re having trouble uploading, try converting your file to JPG or PNG format. Some image formats (like HEIC from iPhone) may not be supported.',
+                      style: TextStyle(
+                        color: Colors.orange.shade700,
+                        fontSize: 11,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // **NEW: Add video selection tip for video feed ads**
+            if (_selectedAdType == 'video feed ad')
+              Container(
+                margin: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.green.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.video_library,
+                        size: 16, color: Colors.green.shade700),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '🎬 Video Tip: For best results, use MP4 videos with H.264 encoding. Keep file size under 100MB for faster uploads.',
+                        style: TextStyle(
+                          color: Colors.green.shade700,
+                          fontSize: 11,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 16),
             Card(
               child: Padding(

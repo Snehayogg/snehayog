@@ -5,7 +5,6 @@ import 'package:snehayog/view/widget/video_info_widget.dart';
 import 'package:snehayog/view/widget/action_buttons_widget.dart';
 import 'package:provider/provider.dart';
 import 'package:snehayog/controller/google_sign_in_controller.dart';
-import 'package:snehayog/view/widget/video_player_widget.dart';
 
 class VideoCardWidget extends StatelessWidget {
   final VideoModel video;
@@ -24,12 +23,8 @@ class VideoCardWidget extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        VideoPlayerWidget(
-          key: ValueKey(video.id),
-          controller: controller,
-          video: video,
-          play: isActive,
-        ),
+        // **NEW: Simple video player without deleted widget**
+        _buildVideoPlayer(),
         Positioned(
           left: 12,
           bottom: 12,
@@ -56,5 +51,23 @@ class VideoCardWidget extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  /// **NEW: Simple video player implementation**
+  Widget _buildVideoPlayer() {
+    if (controller == null || !controller!.value.isInitialized) {
+      return Container(
+        color: Colors.black,
+        child: Center(
+          child: Icon(
+            Icons.video_library,
+            size: 64,
+            color: Colors.grey[400],
+          ),
+        ),
+      );
+    }
+
+    return VideoPlayer(controller!);
   }
 }

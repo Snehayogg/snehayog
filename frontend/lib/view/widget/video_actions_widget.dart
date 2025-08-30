@@ -6,6 +6,7 @@ import 'package:snehayog/core/constants/app_constants.dart';
 import 'package:snehayog/services/video_service.dart';
 import 'package:snehayog/view/widget/comments_sheet_widget.dart';
 import 'package:share_plus/share_plus.dart';
+
 class VideoActionsWidget extends StatelessWidget {
   final VideoModel video;
   final int index;
@@ -42,7 +43,8 @@ class VideoActionsWidget extends StatelessWidget {
               label: '${video.likes}',
             ),
 
-            const SizedBox(height: 20),
+            // **REDUCED spacing from 20 to 12 for more compact look**
+            const SizedBox(height: 12),
 
             // Comment button
             _ActionButton(
@@ -55,7 +57,8 @@ class VideoActionsWidget extends StatelessWidget {
               label: '${video.comments.length}',
             ),
 
-            const SizedBox(height: 20),
+            // **REDUCED spacing from 20 to 12 for more compact look**
+            const SizedBox(height: 12),
 
             // Share button
             _ActionButton(

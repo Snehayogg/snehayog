@@ -136,6 +136,10 @@ class VideoModel {
       'duration': duration.inSeconds,
       'comments': comments.map((comment) => comment.toJson()).toList(),
       'link': link,
+      'hlsMasterPlaylistUrl': hlsMasterPlaylistUrl,
+      'hlsPlaylistUrl': hlsPlaylistUrl,
+      'hlsVariants': hlsVariants,
+      'isHLSEncoded': isHLSEncoded,
     };
   }
 
@@ -156,6 +160,11 @@ class VideoModel {
     Duration? duration,
     List<Comment>? comments,
     String? link,
+    // **CRITICAL FIX: Add HLS fields to copyWith**
+    String? hlsMasterPlaylistUrl,
+    String? hlsPlaylistUrl,
+    List<Map<String, dynamic>>? hlsVariants,
+    bool? isHLSEncoded,
   }) {
     return VideoModel(
       id: id ?? this.id,
@@ -175,6 +184,11 @@ class VideoModel {
       duration: duration ?? this.duration,
       comments: comments ?? this.comments,
       link: link ?? this.link,
+      // **CRITICAL FIX: Handle HLS fields in copyWith**
+      hlsMasterPlaylistUrl: hlsMasterPlaylistUrl ?? this.hlsMasterPlaylistUrl,
+      hlsPlaylistUrl: hlsPlaylistUrl ?? this.hlsPlaylistUrl,
+      hlsVariants: hlsVariants ?? this.hlsVariants,
+      isHLSEncoded: isHLSEncoded ?? this.isHLSEncoded,
     );
   }
 

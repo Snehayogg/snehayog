@@ -226,33 +226,34 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     );
   }
 
-  /// Build the current screen based on index
-  Widget _buildCurrentScreen(int index) {
-    switch (index) {
-      case 0:
-        return VideoScreen(
-          key: _videoScreenKey,
-        );
-      case 1:
-        return const SnehaScreen(key: PageStorageKey('snehaScreen'));
-      case 2:
-        return UploadScreen(
-          key: const PageStorageKey('uploadScreen'),
-          onVideoUploaded: _refreshVideoList,
-        );
-      case 3:
-        return ProfileScreen(
-          key: _profileScreenKey,
-        );
-      default:
-        return VideoScreen(
-          key: _videoScreenKey,
-        );
-    }
+/// Build the current screen based on index
+Widget _buildCurrentScreen(int index) {
+  switch (index) {
+    case 0:
+      return const VideoScreen(
+        key:  PageStorageKey('videoScreen'), // **FIXED: Use PageStorageKey instead of _videoScreenKey**
+      );
+    case 1:
+      return const SnehaScreen(key: PageStorageKey('snehaScreen'));
+    case 2:
+      return UploadScreen(
+        key: const PageStorageKey('uploadScreen'),
+        onVideoUploaded: _refreshVideoList,
+      );
+    case 3:
+      return ProfileScreen(
+        key: _profileScreenKey,
+      );
+    default:
+      return const VideoScreen(
+        key: PageStorageKey('videoScreen'),
+      );
   }
+}
 
   /// Build navigation item with double-tap support for Yog tab
   Widget _buildNavItem({
+
     required int index,
     required int currentIndex,
     required IconData icon,
@@ -359,4 +360,5 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       ),
     );
   }
+  
 }

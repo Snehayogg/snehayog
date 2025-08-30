@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:snehayog/model/ad_model.dart';
 import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/services/cloudinary_service.dart';
-import 'package:snehayog/services/razorpay_service.dart';
+// import 'package:snehayog/services/razorpay_service.dart';  // Temporarily commented
 import 'package:snehayog/config/app_config.dart';
 
 class AdService {
@@ -15,7 +15,7 @@ class AdService {
   static String get baseUrl => AppConfig.baseUrl;
   final AuthService _authService = AuthService();
   final CloudinaryService _cloudinaryService = CloudinaryService();
-  final RazorpayService _razorpayService = RazorpayService();
+  // final RazorpayService _razorpayService = RazorpayService();  // Temporarily commented
 
   // Create a new ad
   Future<AdModel> createAd({
@@ -39,12 +39,14 @@ class AdService {
 
       // **NEW: Calculate impressions based on ad type CPM**
       final cpm = adType == 'banner' ? AppConfig.bannerCpm : AppConfig.fixedCpm;
-      final impressions =
-          AppConfig.calculateImpressionsFromBudgetWithCpm(budget / 100.0, cpm);
+      final impressions = AppConfig.calculateImpressionsFromBudgetWithCpm(
+        budget / 100.0,
+        cpm,
+      );
 
       // **NEW: Calculate revenue split**
-      final revenueSplit =
-          _razorpayService.calculateRevenueSplit(budget / 100.0);
+      // final revenueSplit =
+      //     _razorpayService.calculateRevenueSplit(budget / 100.0);  // Temporarily commented
 
       final response = await http.post(
         Uri.parse('$baseUrl/api/ads'),
@@ -70,8 +72,8 @@ class AdService {
           // **NEW: Revenue and impression data**
           'estimatedImpressions': impressions,
           'fixedCpm': cpm,
-          'creatorRevenue': revenueSplit['creator'],
-          'platformRevenue': revenueSplit['platform'],
+          // 'creatorRevenue': revenueSplit['creator'],  // Temporarily commented
+          // 'platformRevenue': revenueSplit['platform'],  // Temporarily commented
         }),
       );
 
@@ -108,13 +110,77 @@ class AdService {
 
       // Calculate impressions based on ad type CPM
       final cpm = adType == 'banner' ? AppConfig.bannerCpm : AppConfig.fixedCpm;
-      final impressions =
-          AppConfig.calculateImpressionsFromBudgetWithCpm(budget, cpm);
-      final revenueSplit = _razorpayService.calculateRevenueSplit(budget);
+      final impressions = AppConfig.calculateImpressionsFromBudgetWithCpm(
+        budget,
+        cpm,
+      );
+      // final revenueSplit = _razorpayService.calculateRevenueSplit(budget);  // Temporarily commented
 
       print('🔍 AdService: Creating ad with payment...');
       print(
-          '🔍 AdService: Budget: ₹$budget, Ad Type: $adType, CPM: ₹$cpm, Estimated impressions: $impressions');
+        '🔍 AdService: Budget: ₹$budget, Ad Type: $adType, CPM: ₹$cpm, Estimated impressions: $impressions',
+      );
+
+      // **NEW: Debug the data being sent**
+      final requestData = {
+        'title': title,
+        'description': description,
+        'imageUrl': imageUrl,
+        'videoUrl': videoUrl,
+        'link': link,
+        'adType': adType,
+        'budget': budget is int
+            ? budget
+            : budget.toInt(), // **NEW: Ensure budget is integer**
+        'targetAudience': targetAudience,
+        'uploaderId': userData['googleId'] ?? userData['id'],
+        'uploaderName': userData['name'],
+        'uploaderProfilePic': userData['profilePic'],
+        'estimatedImpressions': impressions,
+        'fixedCpm': cpm,
+        // **FIXED: Add duration field that backend expects**
+        'duration': startDate != null && endDate != null
+            ? endDate.difference(startDate).inDays + 1
+            : 1,
+      };
+
+      // **NEW: Validate required fields before sending**
+      if (title.isEmpty ||
+          description.isEmpty ||
+          adType.isEmpty ||
+          budget <= 0) {
+        throw Exception(
+            'Required fields validation failed: title=$title, description=$description, adType=$adType, budget=$budget');
+      }
+
+      final uploaderId = userData['googleId'] ?? userData['id'];
+      if (uploaderId == null || uploaderId.toString().isEmpty) {
+        throw Exception('Uploader ID is missing or empty: $uploaderId');
+      }
+
+      // **NEW: Add uploaderId to request data**
+      requestData['uploaderId'] = uploaderId;
+      requestData['targetKeywords'] = targetKeywords;
+      requestData['startDate'] = startDate?.toIso8601String();
+      requestData['endDate'] = endDate?.toIso8601String();
+
+      print('🔍 AdService: Request data being sent:');
+      print('   Title: $title');
+      print('   Description: $description');
+      print('   Image URL: $imageUrl');
+      print('   Video URL: $videoUrl');
+      print('   Link: $link');
+      print('   Ad Type: $adType');
+      print('   Budget: $budget');
+      print('   Target Audience: $targetAudience');
+      print('   Target Keywords: $targetKeywords');
+      print('   Start Date: ${startDate?.toIso8601String()}');
+      print('   End Date: ${endDate?.toIso8601String()}');
+      print('   Uploader ID: ${userData['googleId'] ?? userData['id']}');
+      print('   Uploader Name: ${userData['name']}');
+      print('   Uploader Profile Pic: ${userData['profilePic']}');
+      print('   Estimated Impressions: $impressions');
+      print('   Fixed CPM: $cpm');
 
       final response = await http.post(
         Uri.parse('$baseUrl/api/ads/create-with-payment'),
@@ -122,26 +188,7 @@ class AdService {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ${userData['token']}',
         },
-        body: json.encode({
-          'title': title,
-          'description': description,
-          'imageUrl': imageUrl,
-          'videoUrl': videoUrl,
-          'link': link,
-          'adType': adType,
-          'budget': budget,
-          'targetAudience': targetAudience,
-          'targetKeywords': targetKeywords,
-          'startDate': startDate?.toIso8601String(),
-          'endDate': endDate?.toIso8601String(),
-          'uploaderId': userData['googleId'] ?? userData['id'],
-          'uploaderName': userData['name'],
-          'uploaderProfilePic': userData['profilePic'],
-          'estimatedImpressions': impressions,
-          'fixedCpm': cpm,
-          'creatorRevenue': revenueSplit['creator'],
-          'platformRevenue': revenueSplit['platform'],
-        }),
+        body: json.encode(requestData),
       );
 
       if (response.statusCode == 201) {
@@ -152,10 +199,17 @@ class AdService {
           'success': true,
           'ad': data['ad'],
           'invoice': data['invoice'],
-          'message': data['message']
+          'message': data['message'],
         };
       } else {
+        // **NEW: Enhanced error logging**
+        print(
+            '❌ AdService: Backend returned error status: ${response.statusCode}');
+        print('❌ AdService: Response body: ${response.body}');
+
         final error = json.decode(response.body);
+        print('❌ AdService: Parsed error: $error');
+
         throw Exception(error['error'] ?? 'Failed to create ad');
       }
     } catch (e) {
@@ -202,7 +256,7 @@ class AdService {
           'success': true,
           'ad': data['ad'],
           'invoice': data['invoice'],
-          'message': data['message']
+          'message': data['message'],
         };
       } else {
         final error = json.decode(response.body);
@@ -227,18 +281,18 @@ class AdService {
       }
 
       // Verify payment with Razorpay
-      final paymentDetails =
-          await _razorpayService.getPaymentDetails(paymentId);
+      // final paymentDetails =
+      //     await _razorpayService.getPaymentDetails(paymentId); // Temporarily commented
 
-      if (paymentDetails['status'] != 'captured') {
-        throw Exception('Payment not completed');
-      }
+      // if (paymentDetails['status'] != 'captured') {
+      //   throw Exception('Payment not completed');
+      // }
 
       // Update ad status to active
       final updatedAd = await updateAdStatus(adId, 'active');
 
       // **NEW: Record payment and revenue split**
-      await _recordPaymentAndRevenue(adId, paymentDetails);
+      // await _recordPaymentAndRevenue(adId, paymentDetails); // Temporarily commented
 
       return updatedAd;
     } catch (e) {
@@ -248,10 +302,12 @@ class AdService {
 
   // **NEW: Record payment and calculate revenue split**
   Future<void> _recordPaymentAndRevenue(
-      String adId, Map<String, dynamic> paymentDetails) async {
+    String adId,
+    Map<String, dynamic> paymentDetails,
+  ) async {
     try {
       final amount = paymentDetails['amount'] / 100.0; // Convert from paise
-      final revenueSplit = _razorpayService.calculateRevenueSplit(amount);
+      // final revenueSplit = _razorpayService.calculateRevenueSplit(amount); // Temporarily commented
 
       await http.post(
         Uri.parse('$baseUrl/api/ads/$adId/payment'),
@@ -265,8 +321,8 @@ class AdService {
           'amount': amount,
           'currency': paymentDetails['currency'],
           'paymentMethod': paymentDetails['method'],
-          'creatorRevenue': revenueSplit['creator'],
-          'platformRevenue': revenueSplit['platform'],
+          // 'creatorRevenue': revenueSplit['creator'],
+          // 'platformRevenue': revenueSplit['platform'],
           'status': 'completed',
         }),
       );
@@ -299,9 +355,7 @@ class AdService {
 
       final response = await http.get(
         Uri.parse('$baseUrl/api/ads/user/$userId'),
-        headers: {
-          'Authorization': 'Bearer ${userData['token']}',
-        },
+        headers: {'Authorization': 'Bearer ${userData['token']}'},
       );
 
       print('🔍 AdService: Response status: ${response.statusCode}');
@@ -314,7 +368,8 @@ class AdService {
         return ads;
       } else {
         print(
-            '❌ AdService: Failed to fetch ads - Status: ${response.statusCode}, Body: ${response.body}');
+          '❌ AdService: Failed to fetch ads - Status: ${response.statusCode}, Body: ${response.body}',
+        );
         throw Exception('Failed to fetch ads: ${response.body}');
       }
     } catch (e) {
@@ -326,9 +381,7 @@ class AdService {
   // Get all active ads (for display)
   Future<List<AdModel>> getActiveAds() async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/ads/active'),
-      );
+      final response = await http.get(Uri.parse('$baseUrl/api/ads/active'));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -406,9 +459,7 @@ class AdService {
 
       final response = await http.delete(
         Uri.parse('$baseUrl/api/ads/$adId'),
-        headers: {
-          'Authorization': 'Bearer ${userData['token']}',
-        },
+        headers: {'Authorization': 'Bearer ${userData['token']}'},
       );
 
       return response.statusCode == 200 || response.statusCode == 204;
@@ -427,10 +478,9 @@ class AdService {
 
       final response = await http.get(
         Uri.parse(
-            '$baseUrl/api/ads/analytics/$adId?userId=${userData['googleId'] ?? userData['id']}'),
-        headers: {
-          'Authorization': 'Bearer ${userData['token']}',
-        },
+          '$baseUrl/api/ads/analytics/$adId?userId=${userData['googleId'] ?? userData['id']}',
+        ),
+        headers: {'Authorization': 'Bearer ${userData['token']}'},
       );
 
       if (response.statusCode == 200) {
@@ -505,11 +555,15 @@ class AdService {
   Future<String> uploadAdMedia(File file, String mediaType) async {
     try {
       if (mediaType == 'image') {
-        return await _cloudinaryService.uploadImage(file,
-            folder: 'snehayog/ads/images');
+        return await _cloudinaryService.uploadImage(
+          file,
+          folder: 'snehayog/ads/images',
+        );
       } else if (mediaType == 'video') {
-        final result = await _cloudinaryService.uploadVideo(file,
-            folder: 'snehayog/ads/videos');
+        final result = await _cloudinaryService.uploadVideo(
+          file,
+          folder: 'snehayog/ads/videos',
+        );
         // Extract URL from the result map
         return result['url'] ?? result['hls_urls']?['hls_stream'] ?? '';
       } else {
@@ -549,9 +603,7 @@ class AdService {
 
       final response = await http.get(
         Uri.parse('$baseUrl/api/ads/$adId/performance'),
-        headers: {
-          'Authorization': 'Bearer ${userData['token']}',
-        },
+        headers: {'Authorization': 'Bearer ${userData['token']}'},
       );
 
       if (response.statusCode == 200) {
@@ -574,10 +626,9 @@ class AdService {
 
       final response = await http.get(
         Uri.parse(
-            '$baseUrl/api/ads/creator/revenue/${userData['googleId'] ?? userData['id']}'),
-        headers: {
-          'Authorization': 'Bearer ${userData['token']}',
-        },
+          '$baseUrl/api/ads/creator/revenue/${userData['googleId'] ?? userData['id']}',
+        ),
+        headers: {'Authorization': 'Bearer ${userData['token']}'},
       );
 
       if (response.statusCode == 200) {

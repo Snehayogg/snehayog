@@ -53,9 +53,18 @@ dependencies:
   video_player_platform_interface: ^6.2.0
   video_player_android: ^2.3.7
   video_player_avfoundation: ^2.3.7
+  # **NEW: Advanced video optimization package**
+  video_thumbnail: ^0.5.3
   http_parser: ^4.0.2
   google_mobile_ads: ^6.0.0
   visibility_detector: ^0.4.0+2
+  
+  # Deep link handling
+  app_links: ^3.4.5
+
+  # **NEW: Snehayog Monetization Package**
+  snehayog_monetization:
+    path: ../../snehayog_monetization
 
   jwt_decoder: ^2.0.1
   flutter_cache_manager: ^3.3.1
@@ -120,3 +129,8 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+
+# **NEW: Fluttertoast removed to fix compilation issues - using SnackBar instead**
+# **NEW: Custom Razorpay implementation using web-based checkout**
+# **NEW: No more fluttertoast dependency issues**

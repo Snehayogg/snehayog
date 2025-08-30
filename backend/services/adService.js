@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import AdCreative from '../models/AdCreative.js';
 import AdCampaign from '../models/AdCampaign.js';
 import Invoice from '../models/Invoice.js';
@@ -13,6 +14,8 @@ class AdService {
    * Create a new ad with payment processing
    */
   async createAdWithPayment(adData) {
+    console.log('🔍 AdService: Received ad data:', JSON.stringify(adData, null, 2));
+    
     const {
       title,
       description,
@@ -25,51 +28,127 @@ class AdService {
       targetKeywords,
       uploaderId,
       uploaderName,
-      uploaderProfilePic
+      uploaderProfilePic,
+      startDate,
+      endDate
     } = adData;
 
-    // Calculate estimated metrics based on ad type
-    const cpm = adType === 'banner' ? AD_CONFIG.BANNER_CPM : AD_CONFIG.DEFAULT_CPM;
-    const estimatedImpressions = calculateEstimatedImpressions(budget, cpm);
-    const { creatorRevenue, platformRevenue } = calculateRevenueSplit(budget, AD_CONFIG.CREATOR_REVENUE_SHARE);
+    // **NEW: Validate required fields**
+    if (!title || !description || !adType || !budget || !uploaderId) {
+      console.log('❌ AdService: Missing required fields:');
+      console.log('   Title:', !!title);
+      console.log('   Description:', !!description);
+      console.log('   Ad Type:', !!adType);
+      console.log('   Budget:', !!budget);
+      console.log('   Uploader ID:', !!uploaderId);
+      throw new Error('Missing required fields: title, description, adType, budget, and uploaderId are required');
+    }
 
-    // Create ad creative
-    const adCreative = new AdCreative({
-      title,
-      description,
-      imageUrl,
-      videoUrl,
-      link,
-      adType,
-      uploaderId,
-      uploaderName,
-      uploaderProfilePic,
-      targetAudience: targetAudience || 'all',
-      targetKeywords: targetKeywords || [],
-      estimatedImpressions,
-      fixedCpm: cpm,
-      creatorRevenue,
-      platformRevenue,
-      status: 'draft'
+    // **NEW: Find User by googleId to get ObjectId**
+    const User = mongoose.model('User');
+    const user = await User.findOne({ googleId: uploaderId });
+    if (!user) {
+      throw new Error(`User not found with googleId: ${uploaderId}`);
+    }
+    console.log('✅ AdService: Found user:', user._id);
+
+    // **NEW: Create AdCampaign first**
+    const campaign = new AdCampaign({
+      name: title,
+      advertiserUserId: user._id, // Use the actual User ObjectId
+      objective: 'awareness',
+      startDate: startDate ? new Date(startDate) : new Date(),
+      endDate: endDate ? new Date(endDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      dailyBudget: Math.max(budget, 100), // Ensure minimum ₹100
+      totalBudget: Math.max(budget * 30, 1000), // Ensure minimum ₹1000
+      bidType: 'CPM',
+      cpmINR: adType === 'banner' ? 10 : 30,
+      target: {
+        age: { min: 18, max: 65 },
+        gender: 'all',
+        locations: [],
+        interests: [],
+        platforms: ['android', 'ios', 'web'],
+        os: ['android', 'ios']
+      },
+      pacing: 'smooth',
+      frequencyCap: 3
     });
 
-    await adCreative.save();
+    try {
+      await campaign.save();
+      console.log('✅ AdService: Created campaign:', campaign._id);
+    } catch (campaignError) {
+      console.error('❌ AdService: Campaign creation failed:', campaignError);
+      throw new Error(`Campaign creation failed: ${campaignError.message}`);
+    }
+
+    // **NEW: Determine media type and aspect ratio**
+    const mediaType = videoUrl ? 'video' : 'image';
+    const cloudinaryUrl = videoUrl || imageUrl;
+    
+    // **NEW: Calculate aspect ratio (default to 16:9 for now)**
+    const aspectRatio = '16:9'; // This should be calculated from actual image/video dimensions
+    
+    // **NEW: Determine call to action label based on link type**
+    let callToActionLabel = 'Learn More';
+    if (link && link.includes('shop') || link.includes('buy') || link.includes('purchase')) {
+      callToActionLabel = 'Shop Now';
+    } else if (link && link.includes('download')) {
+      callToActionLabel = 'Download';
+    } else if (link && link.includes('signup') || link.includes('register')) {
+      callToActionLabel = 'Sign Up';
+    }
+
+    // **NEW: Create AdCreative with correct field mapping**
+    const adCreative = new AdCreative({
+      campaignId: campaign._id,
+      adType: adType === 'banner' ? 'banner' : adType === 'carousel' ? 'carousel ads' : 'video feeds',
+      type: mediaType,
+      cloudinaryUrl: cloudinaryUrl,
+      thumbnail: imageUrl, // Use image as thumbnail for videos
+      aspectRatio: aspectRatio,
+      durationSec: mediaType === 'video' ? 15 : undefined, // Default 15 seconds for videos
+      callToAction: {
+        label: callToActionLabel,
+        url: link || 'https://example.com'
+      },
+      reviewStatus: 'pending',
+      isActive: false
+    });
+
+    try {
+      await adCreative.save();
+      console.log('✅ AdService: Created ad creative:', adCreative._id);
+    } catch (creativeError) {
+      console.error('❌ AdService: AdCreative creation failed:', creativeError);
+      throw new Error(`AdCreative creation failed: ${creativeError.message}`);
+    }
 
     // Create invoice for payment
     const invoice = new Invoice({
-      campaignId: adCreative._id,
+      campaignId: campaign._id,
       orderId: generateOrderId(),
       amountINR: budget,
       status: 'created',
       description: `Payment for ad: ${title}`,
       dueDate: new Date(Date.now() + PAYMENT_CONFIG.INVOICE_DUE_HOURS * 60 * 60 * 1000),
-      totalAmount: budget
+      totalAmount: budget,
+      // **FIXED: Add required invoiceNumber field**
+      invoiceNumber: `INV-${Date.now()}-${Math.floor(Math.random() * 1000)}`
     });
 
-    await invoice.save();
+    try {
+      await invoice.save();
+      console.log('✅ AdService: Created invoice:', invoice._id);
+    } catch (invoiceError) {
+      console.error('❌ AdService: Invoice creation failed:', invoiceError);
+      throw new Error(`Invoice creation failed: ${invoiceError.message}`);
+    }
 
     return {
       ad: adCreative,
+      campaign: campaign,
       invoice: {
         id: invoice._id,
         orderId: invoice.orderId,

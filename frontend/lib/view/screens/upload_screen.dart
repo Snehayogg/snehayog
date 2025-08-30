@@ -19,11 +19,10 @@ class UploadScreen extends StatefulWidget {
 class _UploadScreenState extends State<UploadScreen> {
   File? _selectedVideo;
   bool _isUploading = false;
-  bool _isProcessing = false; // Renamed from _isCompressing
+  bool _isProcessing = false;
   String? _errorMessage;
-  bool _showUploadForm = false; // New state variable to control form visibility
+  bool _showUploadForm = false;
 
-  // Upload progress tracking
   double _uploadProgress = 0.0;
   int _uploadStartTime = 0;
   int _elapsedSeconds = 0;
@@ -31,7 +30,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController =
-      TextEditingController(); // Add description controller
+      TextEditingController(); 
   final TextEditingController _linkController = TextEditingController();
   final VideoService _videoService = VideoService();
   final AuthService _authService = AuthService();
@@ -64,11 +63,8 @@ class _UploadScreenState extends State<UploadScreen> {
           _errorMessage = null;
         });
 
-        // For HLS processing, we don't need to compress the video
-        // The backend will handle the conversion to HLS format
         final videoFile = File(result.files.single.path!);
 
-        // Check file size
         final fileSize = await videoFile.length();
         const maxSize = 100 * 1024 * 1024;
 

@@ -180,8 +180,25 @@ class VideoProvider extends ChangeNotifier {
       print('✅ VideoProvider: Videos removed from local list, UI updated');
 
       // Call backend to delete videos
-      await _videoService.deleteVideos(videoIds);
-      print('✅ VideoProvider: Videos deleted from backend successfully');
+      bool allDeleted = true;
+      for (final videoId in videoIds) {
+        try {
+          final success = await _videoService.deleteVideo(videoId);
+          if (!success) {
+            allDeleted = false;
+            print('❌ VideoProvider: Failed to delete video: $videoId');
+          }
+        } catch (e) {
+          allDeleted = false;
+          print('❌ VideoProvider: Error deleting video $videoId: $e');
+        }
+      }
+
+      if (allDeleted) {
+        print('✅ VideoProvider: Videos deleted from backend successfully');
+      } else {
+        throw Exception('Some videos failed to delete');
+      }
     } catch (e) {
       print('❌ VideoProvider: Error bulk deleting videos: $e');
 

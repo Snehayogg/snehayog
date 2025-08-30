@@ -8,14 +8,15 @@ class AppConstants {
   static const Duration videoTransitionDelay = Duration(milliseconds: 100);
 
   // UI constants - optimized sizes
-  static const double actionButtonSize = 28.0; // reduced from 32.0
+  static const double actionButtonSize =
+      26.0; // **REDUCED from 28.0 for more compact look**
   static const double avatarRadius =
-      12.0; // reduced from 14.0 for better proportion with follow button
+      10.0; // **REDUCED from 12.0 for better proportion with compact follow button**
   static const double commentSheetHeight = 200.0; // reduced from 250.0
   static const double followButtonHeight =
-      22.0; // reduced from 28.0 for more professional look
+      20.0; // reduced from 22.0 for more professional look
   static const double followButtonPadding =
-      8.0; // reduced from 12.0 for more compact design
+      6.0; // reduced from 8.0 for more compact design
 
   // API constants
   static const int initialPage = 1;

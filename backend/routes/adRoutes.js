@@ -113,6 +113,9 @@ router.post('/campaigns', async (req, res) => {
 // **NEW: Create ad with payment processing**
 router.post('/create-with-payment', async (req, res) => {
   try {
+    console.log('🔍 Backend: Received ad creation request');
+    console.log('🔍 Backend: Request body:', JSON.stringify(req.body, null, 2));
+    
     const {
       title,
       description,
@@ -134,8 +137,33 @@ router.post('/create-with-payment', async (req, res) => {
       platformRevenue
     } = req.body;
 
+    // **NEW: Debug each field**
+    console.log('🔍 Backend: Parsed fields:');
+    console.log('   Title:', title);
+    console.log('   Description:', description);
+    console.log('   Image URL:', imageUrl);
+    console.log('   Video URL:', videoUrl);
+    console.log('   Link:', link);
+    console.log('   Ad Type:', adType);
+    console.log('   Budget:', budget);
+    console.log('   Target Audience:', targetAudience);
+    console.log('   Target Keywords:', targetKeywords);
+    console.log('   Start Date:', startDate);
+    console.log('   End Date:', endDate);
+    console.log('   Uploader ID:', uploaderId);
+    console.log('   Uploader Name:', uploaderName);
+    console.log('   Uploader Profile Pic:', uploaderProfilePic);
+    console.log('   Estimated Impressions:', estimatedImpressions);
+    console.log('   Fixed CPM:', fixedCpm);
+
     // Validate required fields
     if (!title || !description || !adType || !budget || !uploaderId) {
+      console.log('❌ Backend: Missing required fields validation failed:');
+      console.log('   Title exists:', !!title);
+      console.log('   Description exists:', !!description);
+      console.log('   Ad Type exists:', !!adType);
+      console.log('   Budget exists:', !!budget);
+      console.log('   Uploader ID exists:', !!uploaderId);
       return res.status(400).json({ error: 'Missing required fields' });
     }
 

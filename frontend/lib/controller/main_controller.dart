@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/core/managers/video_manager.dart';
+// Removed: import 'package:snehayog/core/managers/video_manager.dart';
 
 class MainController extends ChangeNotifier {
   int _currentIndex = 0;
@@ -10,21 +10,9 @@ class MainController extends ChangeNotifier {
   VoidCallback? _pauseVideosCallback;
   VoidCallback? _resumeVideosCallback;
 
-  // **NEW: VideoManager integration**
-  VideoManager? _videoManager;
-
   int get currentIndex => _currentIndex;
   String get currentRoute => _routes[_currentIndex];
   bool get isAppInForeground => _isAppInForeground;
-
-  /// **NEW: Set VideoManager reference**
-  void setVideoManager(VideoManager videoManager) {
-    _videoManager = videoManager;
-    print('🔗 MainController: VideoManager reference set');
-  }
-
-  /// **NEW: Get VideoManager reference**
-  VideoManager? get videoManager => _videoManager;
 
   /// Change the current index and handle video control
   void changeIndex(int index) {
@@ -32,19 +20,15 @@ class MainController extends ChangeNotifier {
 
     print('🔄 MainController: Changing index from $_currentIndex to $index');
 
-    // **NEW: Use VideoManager for navigation state management**
-    if (_videoManager != null) {
-      _videoManager!.onNavigationTabChanged(index);
-    } else {
-      // Fallback to original behavior if VideoManager not available
-      _handleIndexChangeFallback(index);
-    }
+    _handleIndexChangeFallback(index);
 
-    // Update the current index
-    _currentIndex = index;
-    print('🔄 MainController: Index updated to $_currentIndex');
-
-    notifyListeners();
+    // **CRITICAL FIX: Add delay before updating index to ensure proper state transition**
+    Future.delayed(const Duration(milliseconds: 100), () {
+      // Update the current index
+      _currentIndex = index;
+      print('🔄 MainController: Index updated to $_currentIndex');
+      notifyListeners();
+    });
   }
 
   /// **NEW: Fallback method for when VideoManager is not available**
@@ -101,10 +85,7 @@ class MainController extends ChangeNotifier {
       print(
           '📱 MainController: App foreground state changed to ${inForeground ? "FOREGROUND" : "BACKGROUND"}');
 
-      // **NEW: Update VideoManager with app foreground state**
-      if (_videoManager != null) {
-        _videoManager!.updateAppForegroundState(inForeground);
-      }
+      // **SIMPLIFIED: App foreground state update (VideoManager removed)**
 
       notifyListeners();
     }
@@ -116,20 +97,14 @@ class MainController extends ChangeNotifier {
   /// Check if videos should be playing based on current state
   bool get shouldPlayVideos => _isAppInForeground && isVideoScreen;
 
-  /// **NEW: Get current video tracking info from VideoManager**
+  /// **SIMPLIFIED: Video tracking info (VideoManager removed)**
   Map<String, dynamic>? getVideoTrackingInfo() {
-    if (_videoManager != null) {
-      return _videoManager!.getVideoTrackingInfo();
-    }
-    return null;
+    return null; // VideoManager was removed
   }
 
-  /// **NEW: Get current visible video index from VideoManager**
+  /// **SIMPLIFIED: Current visible video index (VideoManager removed)**
   int get currentVisibleVideoIndex {
-    if (_videoManager != null) {
-      return _videoManager!.currentVisibleVideoIndex;
-    }
-    return 0;
+    return 0; // VideoManager was removed
   }
 
   /// Register callback to pause videos
@@ -152,13 +127,8 @@ class MainController extends ChangeNotifier {
   void forcePauseVideos() {
     print('🛑 MainController: Force pausing all videos');
 
-    // **NEW: Use VideoManager if available**
-    if (_videoManager != null) {
-      _videoManager!.forcePauseAllVideos();
-    } else {
-      // Fallback to callback
-      _pauseVideosCallback?.call();
-    }
+    // **SIMPLIFIED: Use callback since VideoManager was removed**
+    _pauseVideosCallback?.call();
   }
 
   /// Check if videos should be paused based on current state
@@ -168,47 +138,33 @@ class MainController extends ChangeNotifier {
   void emergencyStopVideos() {
     print('🚨 MainController: EMERGENCY STOP - pausing all videos immediately');
 
-    // **NEW: Use VideoManager if available**
-    if (_videoManager != null) {
-      _videoManager!.forcePauseAllVideos();
-    } else {
-      // Fallback to callback
+    // **SIMPLIFIED: Use callback since VideoManager was removed**
+    _pauseVideosCallback?.call();
+
+    // Multiple safety calls to ensure videos are stopped
+    Future.delayed(const Duration(milliseconds: 50), () {
       _pauseVideosCallback?.call();
+    });
 
-      // Multiple safety calls to ensure videos are stopped
-      Future.delayed(const Duration(milliseconds: 50), () {
-        _pauseVideosCallback?.call();
-      });
-
-      Future.delayed(const Duration(milliseconds: 150), () {
-        _pauseVideosCallback?.call();
-      });
-    }
+    Future.delayed(const Duration(milliseconds: 150), () {
+      _pauseVideosCallback?.call();
+    });
   }
 
-  /// **NEW: Update current video index (called from VideoScreen)**
+  /// **SIMPLIFIED: Update current video index (VideoManager removed)**
   void updateCurrentVideoIndex(int newIndex) {
-    if (_videoManager != null) {
-      _videoManager!.updateCurrentVideoIndex(newIndex);
-    }
+    // VideoManager was removed
   }
 
-  /// **NEW: Get comprehensive video state info**
+  /// **SIMPLIFIED: Get comprehensive video state info (VideoManager removed)**
   Map<String, dynamic> getComprehensiveVideoState() {
-    final baseState = <String, dynamic>{
+    return <String, dynamic>{
       'currentIndex': _currentIndex,
       'isVideoScreen': isVideoScreen,
       'isAppInForeground': _isAppInForeground,
       'shouldPlayVideos': shouldPlayVideos,
       'shouldPauseVideos': shouldPauseVideos,
-      'hasVideoManager': _videoManager != null,
+      'hasVideoManager': false, // VideoManager was removed
     };
-
-    // Add VideoManager info if available
-    if (_videoManager != null) {
-      baseState.addAll(_videoManager!.getVideoTrackingInfo());
-    }
-
-    return baseState;
   }
 }

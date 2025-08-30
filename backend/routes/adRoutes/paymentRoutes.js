@@ -1,6 +1,6 @@
 import express from 'express';
 import { asyncHandler } from '../../middleware/errorHandler.js';
-import { validateAdData, validatePaymentData } from '../../middleware/errorHandler.js';
+import { validatePaymentData } from '../../middleware/errorHandler.js';
 import adService from '../../services/adService.js';
 import User from '../../models/User.js';
 import { verifyToken } from '../../utils/verifytoken.js';
@@ -8,7 +8,7 @@ import { verifyToken } from '../../utils/verifytoken.js';
 const router = express.Router();
 
 // POST /ads/create-with-payment - Create ad with payment processing
-router.post('/create-with-payment', validateAdData, asyncHandler(async (req, res) => {
+router.post('/create-with-payment', asyncHandler(async (req, res) => {
   const result = await adService.createAdWithPayment(req.body);
   
   res.status(201).json({

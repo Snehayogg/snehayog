@@ -1,14 +1,15 @@
 import 'package:video_player/video_player.dart';
 import 'package:snehayog/model/video_model.dart';
 import 'package:snehayog/core/services/video_player_config_service.dart';
-import 'package:snehayog/core/services/video_url_service.dart';
+// Removed: import 'package:snehayog/core/services/video_url_service.dart';
 
 /// Factory for creating VideoPlayerController instances with optimized configuration
 class VideoControllerFactory {
-  /// Creates a VideoPlayerController with optimized settings for reels feed
+  /// Creates a VideoPlayerController with optimized settings for reels feed (SIMPLIFIED)
   static VideoPlayerController createController(VideoModel video) {
-    final videoUrl = VideoUrlService.getBestVideoUrl(video);
-    final isHLS = VideoUrlService.shouldUseHLS(video);
+    // **SIMPLIFIED: Use video.videoUrl directly instead of VideoUrlService**
+    final videoUrl = video.videoUrl;
+    final isHLS = videoUrl.contains('.m3u8') || videoUrl.contains('/hls/');
 
     // Get quality preset for reels feed (720p optimization)
     final qualityPreset =
@@ -45,10 +46,11 @@ class VideoControllerFactory {
     );
   }
 
-  /// Creates a VideoPlayerController with custom quality preset
+  /// Creates a VideoPlayerController with custom quality preset (SIMPLIFIED)
   static VideoPlayerController createControllerWithQuality(
       VideoModel video, String qualityUseCase) {
-    final videoUrl = VideoUrlService.getBestVideoUrl(video);
+    // **SIMPLIFIED: Use video.videoUrl directly instead of VideoUrlService**
+    final videoUrl = video.videoUrl;
     final qualityPreset =
         VideoPlayerConfigService.getQualityPreset(qualityUseCase);
     final optimizedUrl =

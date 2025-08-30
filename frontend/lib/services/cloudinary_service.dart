@@ -3,16 +3,85 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:snehayog/config/app_config.dart';
 import 'package:snehayog/services/authservices.dart';
+import 'package:http_parser/http_parser.dart';
 
 class CloudinaryService {
   static final CloudinaryService _instance = CloudinaryService._internal();
   factory CloudinaryService() => _instance;
   CloudinaryService._internal();
 
+  /// **NEW: Test file before upload to ensure it's valid**
+  Future<bool> _testFileBeforeUpload(File file) async {
+    try {
+      // Check if file exists and is readable
+      if (!await file.exists()) {
+        print('❌ CloudinaryService: File does not exist: ${file.path}');
+        return false;
+      }
+
+      // Check file size
+      final fileSize = await file.length();
+      if (fileSize == 0) {
+        print('❌ CloudinaryService: File is empty: ${file.path}');
+        return false;
+      }
+
+      // Try to read first few bytes to ensure file is accessible
+      final bytes = await file.openRead(0, 1).first;
+      if (bytes.isEmpty) {
+        print('❌ CloudinaryService: Cannot read file: ${file.path}');
+        return false;
+      }
+
+      print(
+          '✅ CloudinaryService: File test passed - size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
+      return true;
+    } catch (e) {
+      print('❌ CloudinaryService: File test failed: $e');
+      return false;
+    }
+  }
+
   /// Upload image through your backend (which handles Cloudinary)
   Future<String> uploadImage(File imageFile, {String? folder}) async {
     try {
-      // Get user data for authentication
+      // **NEW: Validate file exists and is readable**
+      if (!await imageFile.exists()) {
+        throw Exception('Image file does not exist');
+      }
+
+      // **NEW: Validate file size**
+      final fileSize = await imageFile.length();
+      if (fileSize == 0) {
+        throw Exception('Image file is empty');
+      }
+      if (fileSize > 10 * 1024 * 1024) {
+        // 10MB limit
+        throw Exception('Image file size must be less than 10MB');
+      }
+
+      // **NEW: Validate file extension**
+      final fileName = imageFile.path.split('/').last.toLowerCase();
+      if (!fileName.endsWith('.jpg') &&
+          !fileName.endsWith('.jpeg') &&
+          !fileName.endsWith('.png') &&
+          !fileName.endsWith('.gif') &&
+          !fileName.endsWith('.webp')) {
+        throw Exception(
+            'Invalid image file type. Only JPG, PNG, GIF, and WebP are supported');
+      }
+
+      print('🔍 CloudinaryService: Starting image upload...');
+      print('   File path: ${imageFile.path}');
+      print('   File name: $fileName');
+      print('   File size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
+      print('   Folder: ${folder ?? 'snehayog/ads/images'}');
+
+      if (!await _testFileBeforeUpload(imageFile)) {
+        throw Exception(
+            'File validation failed - file may be corrupted or inaccessible');
+      }
+
       final authService = AuthService();
       final userData = await authService.getUserData();
 
@@ -20,7 +89,6 @@ class CloudinaryService {
         throw Exception('User not authenticated');
       }
 
-      // Create multipart request to your backend
       final request = http.MultipartRequest(
         'POST',
         Uri.parse('${AppConfig.baseUrl}/api/upload/image'),
@@ -28,33 +96,90 @@ class CloudinaryService {
 
       // Add authorization header
       request.headers['Authorization'] = 'Bearer ${userData['token']}';
+      request.headers['Content-Type'] = 'multipart/form-data';
 
-      // Add the image file
-      request.files.add(
-        await http.MultipartFile.fromPath('image', imageFile.path),
+      String mimeType = 'image/jpeg';
+      if (fileName.endsWith('.png')) {
+        mimeType = 'image/png';
+      } else if (fileName.endsWith('.gif')) {
+        mimeType = 'image/gif';
+      } else if (fileName.endsWith('.webp')) {
+        mimeType = 'image/webp';
+      } else if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) {
+        mimeType = 'image/jpeg';
+      }
+
+      print('🔍 CloudinaryService: Using MIME type: $mimeType');
+
+      // **NEW: Add the image file with proper MIME type**
+      final multipartFile = await http.MultipartFile.fromPath(
+        'image',
+        imageFile.path,
+        contentType: MediaType.parse(mimeType),
       );
+
+      print('🔍 CloudinaryService: MultipartFile details:');
+      print('   Field name: ${multipartFile.field}');
+      print('   File path: ${multipartFile.filename}');
+      print('   Content type: ${multipartFile.contentType}');
+      print('   File length: ${multipartFile.length}');
+
+      // **NEW: Verify the multipart file was created correctly**
+      if (multipartFile.contentType == null) {
+        print('⚠️ CloudinaryService: Content type is null, using fallback');
+        // Fallback: create without content type and let backend handle it
+        final fallbackFile =
+            await http.MultipartFile.fromPath('image', imageFile.path);
+        request.files.add(fallbackFile);
+      } else {
+        request.files.add(multipartFile);
+      }
+
+      // **NEW: Alternative fallback - try simple multipart file creation**
+      try {
+        if (request.files.isEmpty) {
+          print(
+              '⚠️ CloudinaryService: No files added, trying simple multipart file creation');
+          final simpleFile =
+              await http.MultipartFile.fromPath('image', imageFile.path);
+          request.files.add(simpleFile);
+        }
+      } catch (e) {
+        print('❌ CloudinaryService: Simple multipart file creation failed: $e');
+        throw Exception('Failed to create multipart file: $e');
+      }
 
       // Add folder if specified
       if (folder != null) {
         request.fields['folder'] = folder;
       }
 
+      print('🔍 CloudinaryService: Sending request to backend...');
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
+
+      print(
+          '🔍 CloudinaryService: Backend response status: ${response.statusCode}');
+      print('🔍 CloudinaryService: Backend response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
+          print('✅ CloudinaryService: Image uploaded successfully');
+          print('   URL: ${data['url']}');
           return data['url'] ?? '';
         } else {
           throw Exception('Upload failed: ${data['error'] ?? 'Unknown error'}');
         }
       } else {
         final errorData = json.decode(response.body);
-        throw Exception(
-            'Failed to upload image: ${errorData['error'] ?? response.body}');
+        final errorMessage =
+            errorData['error'] ?? errorData['details'] ?? response.body;
+        print('❌ CloudinaryService: Backend error: $errorMessage');
+        throw Exception('Failed to upload image: $errorMessage');
       }
     } catch (e) {
+      print('❌ CloudinaryService: Error uploading image: $e');
       throw Exception('Error uploading image: $e');
     }
   }
@@ -89,9 +214,30 @@ class CloudinaryService {
       // Add authorization header
       request.headers['Authorization'] = 'Bearer ${userData['token']}';
 
-      // Add the video file
+      // **NEW: Determine MIME type based on file extension**
+      String mimeType = 'video/mp4'; // Default
+      final fileName = videoFile.path.split('/').last.toLowerCase();
+      if (fileName.endsWith('.webm')) {
+        mimeType = 'video/webm';
+      } else if (fileName.endsWith('.avi')) {
+        mimeType = 'video/avi';
+      } else if (fileName.endsWith('.mov')) {
+        mimeType = 'video/mov';
+      } else if (fileName.endsWith('.mkv')) {
+        mimeType = 'video/mkv';
+      } else if (fileName.endsWith('.mp4')) {
+        mimeType = 'video/mp4';
+      }
+
+      print('🔍 CloudinaryService: Using video MIME type: $mimeType');
+
+      // **NEW: Add the video file with proper MIME type**
       request.files.add(
-        await http.MultipartFile.fromPath('video', videoFile.path),
+        await http.MultipartFile.fromPath(
+          'video',
+          videoFile.path,
+          contentType: MediaType.parse(mimeType),
+        ),
       );
 
       // Add folder if specified
@@ -164,9 +310,30 @@ class CloudinaryService {
       // Add authorization header
       request.headers['Authorization'] = 'Bearer ${userData['token']}';
 
-      // Add the video file
+      // **NEW: Determine MIME type based on file extension**
+      String mimeType = 'video/mp4'; // Default
+      final fileName = videoFile.path.split('/').last.toLowerCase();
+      if (fileName.endsWith('.webm')) {
+        mimeType = 'video/webm';
+      } else if (fileName.endsWith('.avi')) {
+        mimeType = 'video/avi';
+      } else if (fileName.endsWith('.mov')) {
+        mimeType = 'video/mov';
+      } else if (fileName.endsWith('.mkv')) {
+        mimeType = 'video/mkv';
+      } else if (fileName.endsWith('.mp4')) {
+        mimeType = 'video/mp4';
+      }
+
+      print('🔍 CloudinaryService: Using video MIME type for ad: $mimeType');
+
+      // **NEW: Add the video file with proper MIME type**
       request.files.add(
-        await http.MultipartFile.fromPath('video', videoFile.path),
+        await http.MultipartFile.fromPath(
+          'video',
+          videoFile.path,
+          contentType: MediaType.parse(mimeType),
+        ),
       );
 
       // Add folder if specified

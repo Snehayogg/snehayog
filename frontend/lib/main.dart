@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:snehayog/view/homescreen.dart';
@@ -12,6 +13,12 @@ import 'package:snehayog/services/video_service.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:snehayog/core/services/error_logging_service.dart';
 import 'package:snehayog/core/theme/app_theme.dart';
+import 'package:snehayog_monetization/services/razorpay_service.dart';
+import 'package:snehayog/config/app_config.dart';
+import 'package:app_links/app_links.dart';
+
+// Shared instance for Razorpay
+final RazorpayService razorpayService = RazorpayService();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,6 +26,14 @@ void main() async {
   // Initialize AdMob
   await MobileAds.instance.initialize();
   ErrorLoggingService.logServiceInitialization('AdMob');
+
+  // Initialize Razorpay
+  razorpayService.initialize(
+    keyId: AppConfig.razorpayKeyId,
+    keySecret: AppConfig.razorpayKeySecret,
+    webhookSecret: AppConfig.razorpayWebhookSecret,
+    baseUrl: AppConfig.baseUrl,
+  );
 
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -52,15 +67,20 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  StreamSubscription? _sub;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     ErrorLoggingService.logAppLifecycle('started');
+
+    _initUniLinks();
   }
 
   @override
   void dispose() {
+    _sub?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -87,6 +107,71 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       case AppLifecycleState.hidden:
         ErrorLoggingService.logAppLifecycle('Hidden');
         break;
+    }
+  }
+
+  Future<void> _initUniLinks() async {
+    final appLinks = AppLinks();
+
+    // Handle initial link if app launched from deep link
+    try {
+      final initial = await appLinks.getInitialAppLink();
+      if (initial != null) {
+        _handleIncomingUri(initial);
+      }
+    } catch (_) {}
+
+    // Listen for links while app is running
+    _sub = appLinks.uriLinkStream.listen((Uri? uri) {
+      if (uri != null) {
+        _handleIncomingUri(uri);
+      }
+    }, onError: (err) {});
+  }
+
+  Future<void> _handleIncomingUri(Uri uri) async {
+    if (uri.scheme == 'snehayog' && uri.host == 'payment-callback') {
+      final orderId = uri.queryParameters['razorpay_order_id'] ?? '';
+      final paymentId = uri.queryParameters['razorpay_payment_id'] ?? '';
+      final signature = uri.queryParameters['razorpay_signature'] ?? '';
+
+      if (orderId.isEmpty || paymentId.isEmpty || signature.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Payment callback missing data'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      try {
+        final result = await razorpayService.verifyPaymentWithBackend(
+          orderId: orderId,
+          paymentId: paymentId,
+          signature: signature,
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] ?? 'Payment verified'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Verification failed: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
     }
   }
 

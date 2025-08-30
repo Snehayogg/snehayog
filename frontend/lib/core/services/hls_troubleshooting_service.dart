@@ -195,7 +195,6 @@ class HLSTroubleshootingService {
     }
   }
 
-  /// Test content type validation
   Future<Map<String, dynamic>> _testContentType(String hlsUrl) async {
     try {
       final uri = Uri.parse(hlsUrl);

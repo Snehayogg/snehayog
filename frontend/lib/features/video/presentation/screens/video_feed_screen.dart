@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/video_provider.dart';
-import '../widgets/video_card_widget.dart';
 import '../widgets/video_loading_states.dart';
 import '../../../../core/di/dependency_injection.dart';
 
@@ -86,14 +85,29 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
                   }
 
                   final video = provider.videos[index];
-                  return VideoCardWidget(
-                    video: video,
-                    onLike: () =>
-                        provider.toggleLike(video.id, 'current_user_id'),
-                    onComment: (text) => provider.addComment(
-                      videoId: video.id,
-                      text: text,
-                      userId: 'current_user_id',
+                  return Card(
+                    margin: const EdgeInsets.all(8.0),
+                    child: ListTile(
+                      title: Text(video.title),
+                      subtitle: Text(video.description),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.favorite_border),
+                            onPressed: () => provider.toggleLike(
+                                video.id, 'current_user_id'),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.comment_outlined),
+                            onPressed: () => provider.addComment(
+                              videoId: video.id,
+                              text: 'Comment',
+                              userId: 'current_user_id',
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   );
                 },

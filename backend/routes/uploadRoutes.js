@@ -31,14 +31,57 @@ const upload = multer({
     fileSize: 100 * 1024 * 1024, // 100MB limit for video files (increased for high quality)
   },
   fileFilter: (req, file, cb) => {
+    console.log('🔍 Upload: File filter check:', {
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size
+    });
+    
+    // **NEW: Enhanced MIME type detection**
     const allowedMimeTypes = [
       'image/jpeg', 'image/png', 'image/gif', 'image/webp',
       'video/mp4', 'video/webm', 'video/avi', 'video/mov', 'video/mkv'
     ];
+    
+    // **NEW: Check if MIME type is in allowed list**
     if (allowedMimeTypes.includes(file.mimetype)) {
+      console.log('✅ Upload: File type accepted:', file.mimetype);
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only images and videos are allowed.'), false);
+      // **NEW: Try to detect MIME type from file extension as fallback**
+      const fileName = file.originalname.toLowerCase();
+      let detectedMimeType = null;
+      
+      if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) {
+        detectedMimeType = 'image/jpeg';
+      } else if (fileName.endsWith('.png')) {
+        detectedMimeType = 'image/png';
+      } else if (fileName.endsWith('.gif')) {
+        detectedMimeType = 'image/gif';
+      } else if (fileName.endsWith('.webp')) {
+        detectedMimeType = 'image/webp';
+      } else if (fileName.endsWith('.mp4')) {
+        detectedMimeType = 'video/mp4';
+      } else if (fileName.endsWith('.webm')) {
+        detectedMimeType = 'video/webm';
+      } else if (fileName.endsWith('.avi')) {
+        detectedMimeType = 'video/avi';
+      } else if (fileName.endsWith('.mov')) {
+        detectedMimeType = 'video/mov';
+      } else if (fileName.endsWith('.mkv')) {
+        detectedMimeType = 'video/mkv';
+      }
+      
+      if (detectedMimeType) {
+        console.log('⚠️ Upload: MIME type mismatch, but file extension suggests: $detectedMimeType');
+        console.log('⚠️ Upload: Original MIME type was: ${file.mimetype}');
+        console.log('⚠️ Upload: Accepting file based on extension');
+        cb(null, true);
+      } else {
+        console.log('❌ Upload: File type rejected:', file.mimetype);
+        console.log('❌ Upload: Allowed types:', allowedMimeTypes);
+        cb(new Error(`Invalid file type: ${file.mimetype}. Only images (JPEG, PNG, GIF, WebP) and videos (MP4, WebM, AVI, MOV, MKV) are allowed.`), false);
+      }
     }
   }
 });
@@ -52,6 +95,16 @@ router.post('/image', verifyToken, upload.single('image'), async (req, res) => {
 
     console.log('📸 Upload: Starting image upload to Cloudinary...');
     console.log('📸 Upload: File:', req.file.originalname, 'Size:', req.file.size);
+    console.log('📸 Upload: MIME type:', req.file.mimetype);
+
+    // **NEW: Additional file validation**
+    if (!req.file.mimetype.startsWith('image/')) {
+      return res.status(400).json({ 
+        error: 'Invalid file type',
+        details: `File must be an image, got: ${req.file.mimetype}`,
+        allowedTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+      });
+    }
 
     // Upload to Cloudinary
     const result = await cloudinary.uploader.upload(req.file.path, {
@@ -95,6 +148,31 @@ router.post('/image', verifyToken, upload.single('image'), async (req, res) => {
       details: error.message 
     });
   }
+}, (error, req, res, next) => {
+  // **NEW: Handle multer errors specifically**
+  console.error('❌ Upload: Multer error:', error);
+  
+  if (error instanceof multer.MulterError) {
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ 
+        error: 'File too large',
+        details: 'File size exceeds the 100MB limit'
+      });
+    }
+  }
+  
+  if (error.message.includes('Invalid file type')) {
+    return res.status(400).json({ 
+      error: 'Invalid file type',
+      details: error.message,
+      allowedTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/webm', 'video/avi', 'video/mov', 'video/mkv']
+    });
+  }
+  
+  res.status(400).json({ 
+    error: 'File upload error',
+    details: error.message 
+  });
 });
 
 // POST /api/upload/video - Upload video to Cloudinary with custom streaming profiles
