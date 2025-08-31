@@ -9,7 +9,6 @@ import 'package:snehayog/model/ad_model.dart';
 import 'package:snehayog/services/cloudinary_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:snehayog/config/app_config.dart';
-// Removed razorpay_flutter import - using custom RazorpayService instead
 import 'package:snehayog_monetization/snehayog_monetization.dart';
 
 class CreateAdScreen extends StatefulWidget {
@@ -33,14 +32,16 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
   DateTime? _endDate;
   File? _selectedImage;
   File? _selectedVideo;
+  // **NEW: Multiple images for carousel ads**
+  List<File> _selectedImages = [];
   bool _isLoading = false;
   String? _errorMessage;
   String? _successMessage;
   bool _isProcessingPayment = false;
-
+  // **REMOVED: _upiId variable - not needed since Razorpay handles UPI**
   final AdService _adService = AdService();
   final AuthService _authService = AuthService();
-  final RazorpayService _razorpayService = RazorpayService();
+  late final RazorpayService _razorpayService;
   final CloudinaryService _cloudinaryService = CloudinaryService();
 
   final List<String> _adTypes = ['banner', 'carousel', 'video feed ad'];
@@ -50,6 +51,14 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
     super.initState();
     _budgetController.text = '10.00';
     _targetAudienceController.text = 'all';
+
+    _razorpayService = RazorpayService();
+    _razorpayService.initialize(
+      keyId: AppConfig.razorpayKeyId,
+      keySecret: AppConfig.razorpayKeySecret,
+      webhookSecret: AppConfig.razorpayWebhookSecret,
+      baseUrl: AppConfig.baseUrl,
+    );
   }
 
   @override
@@ -65,7 +74,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
 
   Future<void> _pickImage() async {
     try {
-      // For banner ads, only allow images
+      // For banner ads, only allow single image
       if (_selectedAdType == 'banner') {
         final ImagePicker picker = ImagePicker();
         final XFile? image = await picker.pickImage(
@@ -73,18 +82,15 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
           maxWidth: 1920,
           maxHeight: 1080,
           imageQuality: 85,
-          // **FIXED: Add specific image type filtering**
           preferredCameraDevice: CameraDevice.rear,
-          // **NEW: Add more restrictive image picker options**
           requestFullMetadata: true,
         );
 
         if (image != null) {
-          // **NEW: Validate file type before proceeding**
           final file = File(image.path);
           final fileName = image.name.toLowerCase();
 
-          // Check file extension
+          // Validate file type
           if (!fileName.endsWith('.jpg') &&
               !fileName.endsWith('.jpeg') &&
               !fileName.endsWith('.png') &&
@@ -97,17 +103,16 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
             return;
           }
 
-          // **NEW: Check file size (max 10MB for images)**
+          // Check file size
           final fileSize = await file.length();
           if (fileSize > 10 * 1024 * 1024) {
-            // 10MB
             setState(() {
               _errorMessage = 'Image file size must be less than 10MB';
             });
             return;
           }
 
-          // **NEW: Verify file is actually an image**
+          // Verify file is actually an image
           if (!await _isValidImageFile(file)) {
             setState(() {
               _errorMessage =
@@ -116,21 +121,138 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
             return;
           }
 
-          print('🔍 CreateAdScreen: Image selected successfully');
-          print('   File path: ${image.path}');
-          print('   File name: ${image.name}');
-          print(
-              '   File size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
-
+          print('🔍 CreateAdScreen: Image selected for banner ad');
           setState(() {
             _selectedImage = file;
             _selectedVideo = null;
-            // **NEW: Clear error messages when image is selected**
+            _selectedImages.clear(); // Clear multiple images for banner
             _clearErrorMessages();
           });
         }
+      } else if (_selectedAdType == 'carousel') {
+        // **UPDATED: For carousel ads, enforce exclusive selection - either images OR video**
+        String? choice;
+
+        // If user already has images selected, ask if they want to switch to video
+        if (_selectedImages.isNotEmpty) {
+          choice = await showDialog<String>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Switch to Video?'),
+              content: const Text(
+                  'You currently have images selected. Would you like to switch to video? This will remove all selected images.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, 'switch_to_video'),
+                  child: const Text('Switch to Video'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, 'keep_images'),
+                  child: const Text('Keep Images'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, 'cancel'),
+                  child: const Text('Cancel'),
+                ),
+              ],
+            ),
+          );
+
+          if (choice == 'switch_to_video') {
+            setState(() {
+              _selectedImages.clear();
+              _selectedImage = null;
+            });
+            await _pickVideo();
+            return;
+          } else if (choice == 'keep_images') {
+            // Allow adding more images if under limit
+            if (_selectedImages.length < 3) {
+              await _pickMultipleImages();
+            } else {
+              setState(() {
+                _errorMessage = 'Maximum 3 images already selected';
+              });
+            }
+            return;
+          } else {
+            return; // Cancel
+          }
+        }
+
+        // If user already has video selected, ask if they want to switch to images
+        if (_selectedVideo != null) {
+          choice = await showDialog<String>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Switch to Images?'),
+              content: const Text(
+                  'You currently have a video selected. Would you like to switch to images? This will remove the selected video.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, 'switch_to_images'),
+                  child: const Text('Switch to Images'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, 'keep_video'),
+                  child: const Text('Keep Video'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, 'cancel'),
+                  child: const Text('Cancel'),
+                ),
+              ],
+            ),
+          );
+
+          if (choice == 'switch_to_images') {
+            setState(() {
+              _selectedVideo = null;
+            });
+            await _pickMultipleImages();
+            return;
+          } else if (choice == 'keep_video') {
+            return; // Keep current video
+          } else {
+            return; // Cancel
+          }
+        }
+
+        // If no media selected yet, show initial choice
+        choice = await showDialog<String>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Select Media Type'),
+            content: const Text(
+                'Carousel ads support either multiple images (up to 3) OR a single video. Choose one:'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, 'multiple_images'),
+                child: const Text('Add Images (up to 3)'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, 'video'),
+                child: const Text('Add Video'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, 'cancel'),
+                child: const Text('Cancel'),
+              ),
+            ],
+          ),
+        );
+
+        if (choice == 'cancel' || choice == null) {
+          return;
+        }
+
+        if (choice == 'multiple_images') {
+          await _pickMultipleImages();
+        } else if (choice == 'video') {
+          await _pickVideo();
+        }
       } else {
-        // For carousel and video feed ads, allow both image and video
+        // For video feed ads, allow single image
         final ImagePicker picker = ImagePicker();
         final XFile? image = await picker.pickImage(
           source: ImageSource.gallery,
@@ -140,11 +262,10 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
         );
 
         if (image != null) {
-          // **NEW: Validate file type for carousel/video feed ads too**
           final file = File(image.path);
           final fileName = image.name.toLowerCase();
 
-          // Check file extension
+          // Validate file type
           if (!fileName.endsWith('.jpg') &&
               !fileName.endsWith('.jpeg') &&
               !fileName.endsWith('.png') &&
@@ -157,17 +278,16 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
             return;
           }
 
-          // **NEW: Check file size (max 10MB for images)**
+          // Check file size
           final fileSize = await file.length();
           if (fileSize > 10 * 1024 * 1024) {
-            // 10MB
             setState(() {
               _errorMessage = 'Image file size must be less than 10MB';
             });
             return;
           }
 
-          // **NEW: Verify file is actually an image**
+          // Verify file is actually an image
           if (!await _isValidImageFile(file)) {
             setState(() {
               _errorMessage =
@@ -176,15 +296,11 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
             return;
           }
 
-          print('🔍 CreateAdScreen: Image selected for carousel/video feed ad');
-          print('   File path: ${image.path}');
-          print('   File name: ${image.name}');
-          print(
-              '   File size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
-
+          print('🔍 CreateAdScreen: Image selected for video feed ad');
           setState(() {
             _selectedImage = file;
-            // Don't clear video for carousel and video feed ads
+            _selectedImages.clear(); // Clear multiple images for video feed
+            _clearErrorMessages();
           });
         }
       }
@@ -193,6 +309,240 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
       setState(() {
         _errorMessage = 'Error picking image: $e';
       });
+    }
+  }
+
+  // **UPDATED: Pick multiple images for carousel ads**
+  Future<void> _pickMultipleImages() async {
+    try {
+      // **NEW: For carousel ads, clear video when adding images**
+      if (_selectedAdType == 'carousel' && _selectedVideo != null) {
+        setState(() {
+          _selectedVideo = null;
+        });
+      }
+
+      // Check if already at maximum limit
+      if (_selectedImages.length >= 3) {
+        setState(() {
+          _errorMessage = 'Maximum 3 images allowed for carousel ads';
+        });
+        return;
+      }
+
+      final ImagePicker picker = ImagePicker();
+      final List<XFile> images = await picker.pickMultiImage(
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+
+      if (images.isNotEmpty) {
+        final List<File> validImages = [];
+
+        for (final image in images) {
+          // Check if we've reached the limit
+          if (_selectedImages.length + validImages.length >= 3) {
+            break;
+          }
+
+          final file = File(image.path);
+          final fileName = image.name.toLowerCase();
+
+          // Validate file type
+          if (!fileName.endsWith('.jpg') &&
+              !fileName.endsWith('.jpeg') &&
+              !fileName.endsWith('.png') &&
+              !fileName.endsWith('.gif') &&
+              !fileName.endsWith('.webp')) {
+            continue; // Skip invalid files
+          }
+
+          // Check file size
+          final fileSize = await file.length();
+          if (fileSize > 10 * 1024 * 1024) {
+            continue; // Skip large files
+          }
+
+          // Verify file is actually an image
+          if (!await _isValidImageFile(file)) {
+            continue; // Skip invalid files
+          }
+
+          validImages.add(file);
+        }
+
+        if (validImages.isNotEmpty) {
+          setState(() {
+            _selectedImages.addAll(validImages);
+            _clearErrorMessages();
+          });
+
+          print(
+              '🔍 CreateAdScreen: Added ${validImages.length} images to carousel');
+          print('   Total images: ${_selectedImages.length}/3');
+        } else {
+          setState(() {
+            _errorMessage =
+                'No valid images selected. Please ensure files are valid image formats under 10MB.';
+          });
+        }
+      }
+    } catch (e) {
+      print('❌ CreateAdScreen: Error picking multiple images: $e');
+      setState(() {
+        _errorMessage = 'Error picking images: $e';
+      });
+    }
+  }
+
+  // **NEW: Remove image from carousel**
+  void _removeImageFromCarousel(int index) {
+    setState(() {
+      _selectedImages.removeAt(index);
+      _clearErrorMessages();
+    });
+    print('🔍 CreateAdScreen: Removed image at index $index');
+    print('   Remaining images: ${_selectedImages.length}/3');
+  }
+
+  // **UPDATED: Build media preview widget**
+  Widget _buildMediaPreview() {
+    if (_selectedAdType == 'carousel' && _selectedImages.isNotEmpty) {
+      // **UPDATED: Show multiple images for carousel (exclusive with video)**
+      return ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: _selectedImages.length,
+        itemBuilder: (context, index) {
+          return Container(
+            width: 150,
+            margin: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.file(
+                    _selectedImages[index],
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: double.infinity,
+                  ),
+                ),
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: GestureDetector(
+                    onTap: () => _removeImageFromCarousel(index),
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.8),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.close,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: 4,
+                  left: 4,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      '${index + 1}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    } else if (_selectedImage != null) {
+      // Show single image for banner/video feed ads
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.file(
+          _selectedImage!,
+          fit: BoxFit.cover,
+          width: double.infinity,
+        ),
+      );
+    } else if (_selectedVideo != null) {
+      // Show video preview
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          color: Colors.black,
+          child: const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.video_file, size: 48, color: Colors.white),
+                Text(
+                  'Video Selected',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } else {
+      // Show placeholder
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            _selectedAdType == 'banner'
+                ? Icons.image
+                : Icons.add_photo_alternate,
+            size: 48,
+            color: Colors.grey,
+          ),
+          Text(
+            _selectedAdType == 'banner'
+                ? 'Select Image *'
+                : _selectedAdType == 'carousel'
+                    ? 'Select Images OR Video *'
+                    : 'Select Image or Video *',
+            style: const TextStyle(
+              color: Colors.grey,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _selectedAdType == 'banner'
+                ? 'Banner ads require an image'
+                : _selectedAdType == 'carousel'
+                    ? 'Carousel ads: either up to 3 images OR 1 video'
+                    : 'Video feed ads support both',
+            style: const TextStyle(
+              color: Colors.red,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      );
     }
   }
 
@@ -205,6 +555,17 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
               'Banner ads only support images. Please select an image instead.';
         });
         return;
+      }
+
+      // **UPDATED: For carousel ads, ensure exclusive selection**
+      if (_selectedAdType == 'carousel') {
+        // If images are already selected, clear them when adding video
+        if (_selectedImages.isNotEmpty) {
+          setState(() {
+            _selectedImages.clear();
+            _selectedImage = null;
+          });
+        }
       }
 
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -370,7 +731,7 @@ The selected file "$fileName" is not supported.''';
 
       // Check media selection based on ad type
       if (_selectedAdType == 'banner') {
-        // Banner ads only need image
+        // Banner ads only need single image
         if (_selectedImage == null) {
           print('❌ Validation: Banner ad requires an image');
           errorMessage = 'Banner ads require an image';
@@ -381,11 +742,31 @@ The selected file "$fileName" is not supported.''';
           errorMessage = 'Banner ads cannot have videos';
           isValid = false;
         }
-      } else if (_selectedAdType == 'carousel' ||
-          _selectedAdType == 'video feed ad') {
-        // Carousel and video feed ads need at least one media type
+      } else if (_selectedAdType == 'carousel') {
+        // **UPDATED: Carousel ads need exclusive selection - either images OR video**
+        if (_selectedImages.isEmpty && _selectedVideo == null) {
+          print('❌ Validation: Carousel ad requires either images or video');
+          errorMessage =
+              'Please select either images (up to 3) OR a video for your carousel ad';
+          isValid = false;
+        }
+        // **NEW: Check for exclusive selection - not both images and video**
+        if (_selectedImages.isNotEmpty && _selectedVideo != null) {
+          print('❌ Validation: Carousel ad cannot have both images and video');
+          errorMessage =
+              'Carousel ads must have either images OR video, not both';
+          isValid = false;
+        }
+        // Check if too many images
+        if (_selectedImages.length > 3) {
+          print('❌ Validation: Carousel ad cannot have more than 3 images');
+          errorMessage = 'Carousel ads can have maximum 3 images';
+          isValid = false;
+        }
+      } else if (_selectedAdType == 'video feed ad') {
+        // Video feed ads need at least one media type
         if (_selectedImage == null && _selectedVideo == null) {
-          print('❌ Validation: Carousel/video feed ad requires image or video');
+          print('❌ Validation: Video feed ad requires image or video');
           errorMessage = 'Please select an image or video for your ad';
           isValid = false;
         }
@@ -410,6 +791,28 @@ The selected file "$fileName" is not supported.''';
         print('❌ Validation: Campaign duration too short');
         errorMessage = 'Campaign must run for at least 1 day';
         isValid = false;
+      }
+
+      // **NEW: Campaign validation using AppConfig**
+      if (_startDate != null && _endDate != null) {
+        final campaignDays = _endDate!.difference(_startDate!).inDays + 1;
+        final budgetText = _budgetController.text.trim();
+        if (budgetText.isNotEmpty) {
+          final dailyBudget = double.tryParse(budgetText) ?? 0.0;
+          final validation = AppConfig.validateCampaign(
+            dailyBudget: dailyBudget,
+            campaignDays: campaignDays,
+            adType: _selectedAdType,
+          );
+
+          if (!validation['isValid']) {
+            final errors = validation['errors'] as List<String>;
+            if (errors.isNotEmpty) {
+              errorMessage = errors.first;
+              isValid = false;
+            }
+          }
+        }
       }
 
       print('🔍 Validation result: $isValid');
@@ -574,8 +977,9 @@ The selected file "$fileName" is not supported.''';
       if (hex.startsWith('1A 45 DF A3')) return true; // WebM/MKV
       if (hex.startsWith('52 49 46 46')) return true; // AVI (RIFF)
       if (hex.startsWith('00 00 00 14 66 74 79 70 71 74')) return true; // MOV
-      if (hex.startsWith('00 00 00 20 66 74 79 70 4D 53 4E 56'))
+      if (hex.startsWith('00 00 00 20 66 74 79 70 4D 53 4E 56')) {
         return true; // MP4 variant
+      }
 
       print('❌ CreateAdScreen: Invalid video file signature: $hex');
       return false;
@@ -630,8 +1034,12 @@ The selected file "$fileName" is not supported.''';
           throw Exception('Banner ads require an image');
         }
         // Banner ads can't have videos - this is already handled in _validateAllFields
-      } else if (_selectedAdType == 'carousel' ||
-          _selectedAdType == 'video feed ad') {
+      } else if (_selectedAdType == 'carousel') {
+        if (_selectedImages.isEmpty && _selectedVideo == null) {
+          throw Exception(
+              'Please select at least one image or video for your carousel ad');
+        }
+      } else if (_selectedAdType == 'video feed ad') {
         if (_selectedImage == null && _selectedVideo == null) {
           throw Exception('Please select an image or video for your ad');
         }
@@ -660,39 +1068,82 @@ The selected file "$fileName" is not supported.''';
 
       print('✅ CreateAdScreen: Form validation passed');
 
-      // **FIXED: Better error handling for media upload**
-      String? mediaUrl;
+      List<String> mediaUrls = [];
       try {
-        if (_selectedImage != null) {
-          print('🔍 CreateAdScreen: Uploading image to Cloudinary...');
-          mediaUrl = await _cloudinaryService.uploadImage(_selectedImage!);
-          print('✅ CreateAdScreen: Image uploaded successfully: $mediaUrl');
-        } else if (_selectedVideo != null) {
-          print('🔍 CreateAdScreen: Uploading video to Cloudinary...');
-          final result = await _cloudinaryService.uploadVideo(_selectedVideo!);
-          // Extract URL from the result map
-          mediaUrl = result['url'] ?? result['hls_urls']?['hls_stream'] ?? '';
-          print('✅ CreateAdScreen: Video uploaded successfully: $mediaUrl');
+        if (_selectedAdType == 'banner' && _selectedImage != null) {
+          print('🔍 CreateAdScreen: Uploading banner image to Cloudinary...');
+          final imageUrl =
+              await _cloudinaryService.uploadImage(_selectedImage!);
+          mediaUrls.add(imageUrl);
+          print(
+              '✅ CreateAdScreen: Banner image uploaded successfully: $imageUrl');
+        } else if (_selectedAdType == 'carousel') {
+          // **NEW: Upload multiple images for carousel**
+          if (_selectedImages.isNotEmpty) {
+            print(
+                '🔍 CreateAdScreen: Uploading ${_selectedImages.length} carousel images to Cloudinary...');
+            for (int i = 0; i < _selectedImages.length; i++) {
+              final imageUrl =
+                  await _cloudinaryService.uploadImage(_selectedImages[i]);
+              mediaUrls.add(imageUrl);
+              print(
+                  '✅ CreateAdScreen: Carousel image ${i + 1} uploaded successfully: $imageUrl');
+            }
+          }
+          if (_selectedVideo != null) {
+            print(
+                '🔍 CreateAdScreen: Uploading carousel video to Cloudinary...');
+            final result =
+                await _cloudinaryService.uploadVideo(_selectedVideo!);
+            final videoUrl =
+                result['url'] ?? result['hls_urls']?['hls_stream'] ?? '';
+            mediaUrls.add(videoUrl);
+            print(
+                '✅ CreateAdScreen: Carousel video uploaded successfully: $videoUrl');
+          }
+        } else if (_selectedAdType == 'video feed ad') {
+          if (_selectedImage != null) {
+            print(
+                '🔍 CreateAdScreen: Uploading video feed image to Cloudinary...');
+            final imageUrl =
+                await _cloudinaryService.uploadImage(_selectedImage!);
+            mediaUrls.add(imageUrl);
+            print(
+                '✅ CreateAdScreen: Video feed image uploaded successfully: $imageUrl');
+          } else if (_selectedVideo != null) {
+            print(
+                '🔍 CreateAdScreen: Uploading video feed video to Cloudinary...');
+            final result =
+                await _cloudinaryService.uploadVideo(_selectedVideo!);
+            final videoUrl =
+                result['url'] ?? result['hls_urls']?['hls_stream'] ?? '';
+            mediaUrls.add(videoUrl);
+            print(
+                '✅ CreateAdScreen: Video feed video uploaded successfully: $videoUrl');
+          }
         }
       } catch (uploadError) {
         print('❌ CreateAdScreen: Media upload failed: $uploadError');
-        // **NEW: Use improved error handling**
         _handleMediaUploadError('Failed to upload media: $uploadError');
         return; // Exit early to prevent further processing
       }
 
-      if (mediaUrl == null || mediaUrl.isEmpty) {
-        throw Exception('Media upload failed - no URL returned');
+      if (mediaUrls.isEmpty) {
+        throw Exception('Media upload failed - no URLs returned');
       }
 
-      print('✅ CreateAdScreen: Media uploaded successfully: $mediaUrl');
+      print(
+          '✅ CreateAdScreen: Media uploaded successfully: ${mediaUrls.length} items');
 
       // **FIXED: Better error handling for ad creation**
       final result = await _adService.createAdWithPayment(
         title: _titleController.text.trim(),
         description: _descriptionController.text.trim(),
-        imageUrl: _selectedImage != null ? mediaUrl : null,
-        videoUrl: _selectedVideo != null ? mediaUrl : null,
+        imageUrl: (_selectedAdType == 'banner' && _selectedImage != null) ||
+                (_selectedAdType == 'carousel' && mediaUrls.isNotEmpty)
+            ? mediaUrls.first
+            : null,
+        videoUrl: _selectedVideo != null ? mediaUrls.first : null,
         link: _linkController.text.trim(),
         adType: _selectedAdType,
         budget: budget,
@@ -743,6 +1194,8 @@ The selected file "$fileName" is not supported.''';
     _endDate = null;
     _selectedImage = null;
     _selectedVideo = null;
+    // **NEW: Clear multiple images**
+    _selectedImages.clear();
 
     // **NEW: Clear error messages when form is cleared**
     setState(() {
@@ -765,6 +1218,7 @@ The selected file "$fileName" is not supported.''';
     setState(() {
       _selectedImage = null;
       _selectedVideo = null;
+      _selectedImages.clear();
     });
   }
 
@@ -880,21 +1334,27 @@ Please try again or contact support if the problem persists.''';
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    '💰 What you get:',
+                    '💰 Campaign Metrics:',
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  Text(
-                      '• Estimated ${(invoice['amount'] / (_selectedAdType == 'banner' ? 10 : 30) * 1000).round()} impressions'),
-                  Text(
-                    '• CPM: ₹${_selectedAdType == 'banner' ? '10' : '30'} per 1000 impressions',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  const SizedBox(height: 8),
+                  // **NEW: Display calculated campaign metrics**
+                  ..._buildCampaignMetricsDisplay(),
+                  const SizedBox(height: 8),
+                  const Text(
+                    '✅ What you get:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                   const Text('• 80% revenue share for creators'),
                   const Text('• Real-time performance tracking'),
                   const Text('• Professional ad management'),
+                  const Text('• Guaranteed impressions delivery'),
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+            // **REMOVED: UPI ID input field - Razorpay checkout handles UPI natively**
+            // **REMOVED: Test Payment Info - not needed in production**
           ],
         ),
         actions: [
@@ -902,13 +1362,15 @@ Please try again or contact support if the problem persists.''';
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
+          // **REMOVED: Test Payment Button - not needed in production**
+          // **REMOVED: UPI Payment Button - Razorpay checkout handles UPI natively**
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
               _initiateRazorpayPayment();
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
+              backgroundColor: Colors.blue,
               foregroundColor: Colors.white,
             ),
             child: const Text('Pay Now'),
@@ -934,7 +1396,9 @@ Please try again or contact support if the problem persists.''';
       // Calculate total amount
       final totalAmount = _calculateTotalAmount();
 
-      // Make payment using Razorpay
+      print('🔍 CreateAdScreen: Initiating payment for amount: ₹$totalAmount');
+
+      // **FIXED: Make payment using Razorpay with proper error handling**
       await _razorpayService.makePayment(
         amount: totalAmount,
         currency: 'INR',
@@ -973,14 +1437,25 @@ Please try again or contact support if the problem persists.''';
         _isProcessingPayment = false;
       });
 
+      // **FIXED: Better error message for debugging**
+      String errorMessage = 'Payment error: $e';
+      if (e.toString().contains('No host specified')) {
+        errorMessage =
+            'Payment service configuration error. Please check your internet connection and try again.';
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Payment error: $e'),
+          content: Text(errorMessage),
           backgroundColor: Colors.red,
         ),
       );
     }
   }
+
+  // **REMOVED: UPI payment method - Razorpay checkout handles UPI natively**
+
+  // **REMOVED: Test payment method - not needed in production**
 
   /// **NEW: Process successful payment with backend verification**
   Future<void> _processSuccessfulPayment({
@@ -1258,20 +1733,86 @@ Please try again or contact support if the problem persists.''';
 
   /// **NEW: Calculate total amount for ad campaign**
   double _calculateTotalAmount() {
-    // Calculate based on ad type and estimated impressions
-    double basePrice = 100.0; // Base price in INR
-    double adTypeMultiplier = _selectedAdType == 'banner'
-        ? 1.0
-        : _selectedAdType == 'carousel'
-            ? 1.5
-            : 2.0;
+    if (_startDate == null || _endDate == null) {
+      return 0.0;
+    }
 
-    // Estimate impressions based on ad type
-    double estimatedImpressions = _selectedAdType == 'banner' ? 10000 : 5000;
-    double cpm =
-        _selectedAdType == 'banner' ? 10.0 : 30.0; // Cost per 1000 impressions
+    final campaignDays = _endDate!.difference(_startDate!).inDays + 1;
+    final dailyBudget = double.tryParse(_budgetController.text.trim()) ?? 100.0;
 
-    return (estimatedImpressions / 1000) * cpm * adTypeMultiplier;
+    // Use the new campaign calculation logic
+    final metrics = AppConfig.calculateCampaignMetrics(
+      dailyBudget: dailyBudget,
+      campaignDays: campaignDays,
+      adType: _selectedAdType,
+    );
+
+    return metrics['totalBudget'] as double;
+  }
+
+  /// **NEW: Get campaign metrics for display**
+  Map<String, dynamic> _getCampaignMetrics() {
+    if (_startDate == null || _endDate == null) {
+      return {};
+    }
+
+    final campaignDays = _endDate!.difference(_startDate!).inDays + 1;
+    final dailyBudget = double.tryParse(_budgetController.text.trim()) ?? 100.0;
+
+    return AppConfig.calculateCampaignMetrics(
+      dailyBudget: dailyBudget,
+      campaignDays: campaignDays,
+      adType: _selectedAdType,
+    );
+  }
+
+  /// **NEW: Build campaign metrics display widgets**
+  List<Widget> _buildCampaignMetricsDisplay() {
+    final metrics = _getCampaignMetrics();
+    if (metrics.isEmpty) {
+      return [
+        const Text('Please select campaign dates to see metrics'),
+      ];
+    }
+
+    return [
+      _buildMetricRow(
+          '💰 Total Budget', '₹${metrics['totalBudget']?.toStringAsFixed(0)}'),
+      _buildMetricRow('📊 Expected Impressions',
+          '${metrics['expectedImpressions']?.toStringAsFixed(0)}'),
+      _buildMetricRow(
+          '📅 Campaign Duration', '${metrics['campaignDays']} days'),
+      _buildMetricRow('📈 Daily Impressions',
+          '${metrics['dailyImpressions']?.toStringAsFixed(0)}'),
+      _buildMetricRow(
+          '💵 CPM Rate', '₹${metrics['cpm']?.toStringAsFixed(0)} per 1000'),
+      _buildMetricRow(
+          '⏱️ Estimated Duration', '${metrics['estimatedDuration']} days'),
+    ];
+  }
+
+  /// **NEW: Build individual metric row**
+  Widget _buildMetricRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Colors.blue,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -1455,7 +1996,7 @@ Please try again or contact support if the problem persists.''';
                       _selectedAdType == 'banner'
                           ? 'Banner ads are static image advertisements displayed at the top or sides of content'
                           : _selectedAdType == 'carousel'
-                              ? 'Carousel ads allow multiple images/videos to be displayed in a swipeable format'
+                              ? 'Carousel ads support up to 3 images and 1 video in a swipeable format. You can add multiple media items to create an engaging slideshow.'
                               : 'Video feed ads appear between video content like Instagram Reels',
                       style: TextStyle(
                         color: Colors.grey.shade600,
@@ -1516,10 +2057,31 @@ Please try again or contact support if the problem persists.''';
                               _errorMessage =
                                   'Banner ads only support images. Video has been removed.';
                             }
-                          } else if (value == 'carousel' ||
-                              value == 'video feed ad') {
-                            // Carousel and video feed ads can have both image and video
-                            // No need to clear anything
+                            // Clear multiple images for banner
+                            if (_selectedImages.isNotEmpty) {
+                              _selectedImages.clear();
+                              _errorMessage =
+                                  'Banner ads only support single images. Multiple images have been removed.';
+                            }
+                          } else if (value == 'carousel') {
+                            // **NEW: For carousel ads, clear all media to enforce exclusive selection**
+                            if (_selectedImage != null ||
+                                _selectedVideo != null ||
+                                _selectedImages.isNotEmpty) {
+                              _selectedImage = null;
+                              _selectedVideo = null;
+                              _selectedImages.clear();
+                              _errorMessage =
+                                  'Carousel ads require exclusive selection. Please choose either images OR video.';
+                            }
+                          } else if (value == 'video feed ad') {
+                            // Video feed ads can have both image and video
+                            // Clear multiple images for video feed ads
+                            if (_selectedImages.isNotEmpty) {
+                              _selectedImages.clear();
+                              _errorMessage =
+                                  'Video feed ads only support single images. Multiple images have been removed.';
+                            }
                           }
 
                           // **NEW: Clear error messages when ad type changes**
@@ -1552,73 +2114,7 @@ Please try again or contact support if the problem persists.''';
                         border: Border.all(color: Colors.grey.shade300),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: _selectedImage != null
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.file(
-                                _selectedImage!,
-                                fit: BoxFit.cover,
-                                width: double.infinity,
-                              ),
-                            )
-                          : _selectedVideo != null
-                              ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Container(
-                                    color: Colors.black,
-                                    child: const Center(
-                                      child: Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Icon(
-                                            Icons.video_file,
-                                            size: 48,
-                                            color: Colors.white,
-                                          ),
-                                          Text(
-                                            'Video Selected',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 16,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                )
-                              : Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      _selectedAdType == 'banner'
-                                          ? Icons.image
-                                          : Icons.add_photo_alternate,
-                                      size: 48,
-                                      color: Colors.grey,
-                                    ),
-                                    Text(
-                                      _selectedAdType == 'banner'
-                                          ? 'Select Image *'
-                                          : 'Select Image or Video *',
-                                      style: const TextStyle(
-                                        color: Colors.grey,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      _selectedAdType == 'banner'
-                                          ? 'Banner ads require an image'
-                                          : 'Carousel and video feed ads support both',
-                                      style: const TextStyle(
-                                        color: Colors.red,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                      child: _buildMediaPreview(),
                     ),
                     const SizedBox(height: 12),
                     Row(
@@ -1629,7 +2125,11 @@ Please try again or contact support if the problem persists.''';
                             icon: const Icon(Icons.image),
                             label: Text(_selectedAdType == 'banner'
                                 ? 'Select Image *'
-                                : 'Select Image'),
+                                : _selectedAdType == 'carousel'
+                                    ? _selectedImages.isNotEmpty
+                                        ? 'Add More Images (${_selectedImages.length}/3)'
+                                        : 'Add Images (up to 3)'
+                                    : 'Select Image'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blue,
                               foregroundColor: Colors.white,
@@ -1644,7 +2144,11 @@ Please try again or contact support if the problem persists.''';
                             icon: const Icon(Icons.video_library),
                             label: Text(_selectedAdType == 'banner'
                                 ? 'Video Not Allowed'
-                                : 'Select Video'),
+                                : _selectedAdType == 'carousel'
+                                    ? _selectedVideo != null
+                                        ? 'Video Selected'
+                                        : 'Add Video'
+                                    : 'Select Video'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: _selectedAdType == 'banner'
                                   ? Colors.grey
@@ -1659,80 +2163,17 @@ Please try again or contact support if the problem persists.''';
                     Text(
                       _selectedAdType == 'banner'
                           ? 'Banner ads only support images'
-                          : 'Carousel and video feed ads support both images and videos',
+                          : _selectedAdType == 'carousel'
+                              ? 'Carousel ads: choose either up to 3 images OR 1 video (not both)'
+                              : 'Video feed ads support both images and videos',
                       style: TextStyle(
                         color: Colors.grey.shade600,
                         fontSize: 12,
                         fontStyle: FontStyle.italic,
                       ),
                     ),
-                    // **NEW: Add supported file types information**
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.blue.shade200),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.info_outline,
-                                  size: 16, color: Colors.blue.shade700),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Supported File Types:',
-                                style: TextStyle(
-                                  color: Colors.blue.shade700,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Images: JPG, PNG, GIF, WebP (max 10MB)\nVideos: MP4, WebM, AVI, MOV, MKV (max 100MB)',
-                            style: TextStyle(
-                              color: Colors.blue.shade700,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                   ],
                 ),
-              ),
-            ),
-            // **NEW: Add helpful tip about file formats**
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.orange.shade200),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.lightbulb_outline,
-                      size: 16, color: Colors.orange.shade700),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '💡 Tip: If you\'re having trouble uploading, try converting your file to JPG or PNG format. Some image formats (like HEIC from iPhone) may not be supported.',
-                      style: TextStyle(
-                        color: Colors.orange.shade700,
-                        fontSize: 11,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ),
-                ],
               ),
             ),
 
@@ -1756,6 +2197,35 @@ Please try again or contact support if the problem persists.''';
                         '🎬 Video Tip: For best results, use MP4 videos with H.264 encoding. Keep file size under 100MB for faster uploads.',
                         style: TextStyle(
                           color: Colors.green.shade700,
+                          fontSize: 11,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            // **NEW: Add carousel tip for carousel ads**
+            if (_selectedAdType == 'carousel')
+              Container(
+                margin: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.view_carousel,
+                        size: 16, color: Colors.orange.shade700),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '🎠 Carousel Tip: Choose either multiple images (up to 3) OR a single video for your carousel. This creates a cleaner, more focused ad experience.',
+                        style: TextStyle(
+                          color: Colors.orange.shade700,
                           fontSize: 11,
                           fontStyle: FontStyle.italic,
                         ),
@@ -1827,12 +2297,56 @@ Please try again or contact support if the problem persists.''';
                     TextFormField(
                       controller: _linkController,
                       decoration: const InputDecoration(
-                        labelText: 'Landing Page URL',
+                        labelText: 'Landing Page URL (Optional)',
                         hintText: 'https://your-website.com',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.link),
+                        helperText:
+                            'Enter your website URL where users will land after clicking the ad',
                       ),
                       keyboardType: TextInputType.url,
+                      onChanged: (value) => _clearErrorMessages(),
+                      validator: (value) {
+                        if (value != null && value.trim().isNotEmpty) {
+                          // Check if it's a valid URL
+                          if (!value.trim().startsWith('http://') &&
+                              !value.trim().startsWith('https://')) {
+                            return 'Please enter a valid URL starting with http:// or https://';
+                          }
+                          try {
+                            Uri.parse(value.trim());
+                          } catch (e) {
+                            return 'Please enter a valid URL';
+                          }
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.blue.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline,
+                              size: 16, color: Colors.blue.shade700),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '💡 This field is for your website URL where users will go after clicking your ad. Leave empty if you don\'t have a website.',
+                              style: TextStyle(
+                                color: Colors.blue.shade700,
+                                fontSize: 11,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -1945,6 +2459,62 @@ Please try again or contact support if the problem persists.''';
                 ),
               ),
             ),
+            // **NEW: Campaign Preview Section**
+            if (_startDate != null &&
+                _endDate != null &&
+                _budgetController.text.isNotEmpty)
+              Card(
+                margin: const EdgeInsets.only(bottom: 16),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.analytics, color: Colors.blue.shade600),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Campaign Preview',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      ..._buildCampaignMetricsDisplay(),
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.green.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.check_circle,
+                                size: 16, color: Colors.green.shade700),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '✅ Campaign configuration looks good! You can proceed to create your ad.',
+                                style: TextStyle(
+                                  color: Colors.green.shade700,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: _isLoading

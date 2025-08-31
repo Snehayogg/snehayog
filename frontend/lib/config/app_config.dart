@@ -5,49 +5,42 @@ class AppConfig {
   // Backend API configuration
   static String get baseUrl {
     if (_isDevelopment) {
-      // Development: Use local network IP for physical device testing
       return 'http://192.168.0.190:5001';
     } else {
-      // Production: Use your local network IP for physical device testing
       return 'http://192.168.0.190:5001';
     }
   }
 
   // **NEW: Fallback URLs for development**
   static const List<String> fallbackUrls = [
-    'http://192.168.0.190:5001', // **PRIORITY: Your local network IP for physical devices**
+    'http://192.168.0.190:5001',
     'http://localhost:5001',
-    'http://10.0.2.2:5001', // Android emulator
+    'http://10.0.2.2:5001',
   ];
 
   // **NEW: Network timeout configurations**
-  static const Duration authTimeout = Duration(seconds: 10);
-  static const Duration apiTimeout = Duration(seconds: 15);
-  static const Duration uploadTimeout = Duration(minutes: 5);
+  static const Duration authTimeout = Duration(seconds: 30);
+  static const Duration apiTimeout = Duration(seconds: 45);
+  static const Duration uploadTimeout = Duration(minutes: 10);
+
+  static const int maxRetries = 3;
+  static const Duration retryDelay = Duration(seconds: 2);
 
   // Ad configuration
   static const int maxAdBudget = 1000; // Maximum daily budget in dollars
   static const int minAdBudget = 1; // Minimum daily budget in dollars
 
   // **NEW: Fixed CPM for India market**
-  static const double fixedCpm =
-      30.0; // ₹30 fixed CPM (Cost Per Mille) for carousel and video feed ads
-  static const double bannerCpm =
-      10.0; // ₹10 fixed CPM (Cost Per Mille) for banner ads
+  static const double fixedCpm = 30.0;
+  static const double bannerCpm = 10.0;
 
-  // **NEW: Creator Revenue Model**
-  static const double creatorRevenueShare = 0.80; // 80% to creator
-  static const double platformRevenueShare = 0.20; // 20% to platform
+  static const double creatorRevenueShare = 0.80;
+  static const double platformRevenueShare = 0.20;
 
-  // **NEW: Razorpay Configuration (India)**
-  static const String razorpayKeyId =
-      'rzp_test_YOUR_TEST_KEY_ID'; // Replace with your test key
-  static const String razorpayKeySecret =
-      'YOUR_TEST_SECRET_KEY'; // Replace with your test secret
-  static const String razorpayWebhookSecret =
-      'YOUR_WEBHOOK_SECRET'; // Replace with your webhook secret
+  static const String razorpayKeyId = 'rzp_test_RBiIx4GqiPJgsc';
+  static const String razorpayKeySecret = 'ZfJRn3obw6qAg3FkZuEN8CkD';
+  static const String razorpayWebhookSecret = 'M_6mvVtUguwMwp3';
 
-  // **NEW: Supported Payment Methods for Razorpay**
   static const List<String> supportedPaymentMethods = [
     'card',
     'netbanking',
@@ -65,17 +58,157 @@ class AppConfig {
       2; // Every alternate screen (2nd screen)
   static const int maxAdsPerSession = 10; // Maximum ads shown per user session
 
+  // **NEW: Enhanced Ad Serving Logic**
+  static const Map<String, Map<String, dynamic>> adTypeConfig = {
+    'banner': {
+      'cpm': 10.0, // ₹10 per 1000 impressions
+      'maxFileSize': 5 * 1024 * 1024, // 5MB
+      'supportedFormats': ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+      'displayFrequency': 2, // Every 2nd screen
+      'priority': 1, // Lower priority than video ads
+      'estimatedImpressionsPerDay': 50000, // Based on user base
+    },
+    'carousel': {
+      'cpm': 30.0, // ₹30 per 1000 impressions
+      'maxFileSize': 10 * 1024 * 1024, // 10MB
+      'supportedFormats': ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+      'displayFrequency': 3, // Every 3rd screen
+      'priority': 2, // Medium priority
+      'estimatedImpressionsPerDay': 25000,
+    },
+    'video feed ad': {
+      'cpm': 30.0,
+      'maxFileSize': 100 * 1024 * 1024, // 100MB
+      'supportedFormats': ['mp4', 'webm', 'avi', 'mov', 'mkv'],
+      'displayFrequency': 4, // Every 4th screen
+      'priority': 3, // Highest priority
+      'estimatedImpressionsPerDay': 15000,
+    },
+  };
+
+  // **NEW: Campaign Duration & Budget Logic**
+  static const Map<String, int> campaignDurationLimits = {
+    'min_days': 1,
+    'max_days': 365,
+    'recommended_min_days': 7,
+    'recommended_max_days': 90,
+  };
+
+  // **NEW: Budget & Impression Management**
+  static const Map<String, dynamic> budgetConfig = {
+    'min_daily_budget': 100.0, // ₹100 minimum
+    'max_daily_budget': 10000.0, // ₹10,000 maximum
+    'budget_multiplier': 1.0, // For campaign duration
+    'impression_buffer': 0.1, // 10% buffer for over-delivery
+  };
+
+  // **NEW: Ad Serving Algorithm Parameters**
+  static const Map<String, dynamic> servingConfig = {
+    'impression_frequency_cap': 3, // Max impressions per user per day
+    'session_frequency_cap': 5, // Max impressions per user session
+    'quality_score_threshold': 0.7, // Minimum quality score for ad display
+    'relevance_threshold': 0.6, // Minimum relevance score
+    'competition_window': 300, // 5 minutes between competing ads
+  };
+
+  // **NEW: Calculate campaign metrics**
+  static Map<String, dynamic> calculateCampaignMetrics({
+    required double dailyBudget,
+    required int campaignDays,
+    required String adType,
+  }) {
+    final config = adTypeConfig[adType] ?? adTypeConfig['banner']!;
+    final cpm = config['cpm'] as double;
+    final estimatedDailyImpressions =
+        config['estimatedImpressionsPerDay'] as int;
+
+    // Calculate total budget
+    final totalBudget = dailyBudget * campaignDays;
+
+    // Calculate expected impressions
+    final expectedImpressions = (totalBudget / cpm) * 1000;
+
+    // Calculate daily impressions
+    final dailyImpressions = (expectedImpressions / campaignDays).round();
+
+    // Calculate actual campaign duration based on budget
+    final actualDuration =
+        (expectedImpressions / estimatedDailyImpressions).ceil();
+
+    return {
+      'totalBudget': totalBudget,
+      'expectedImpressions': expectedImpressions,
+      'dailyImpressions': dailyImpressions,
+      'estimatedDuration': actualDuration,
+      'cpm': cpm,
+      'dailyBudget': dailyBudget,
+      'campaignDays': campaignDays,
+    };
+  }
+
+  // **NEW: Validate campaign parameters**
+  static Map<String, dynamic> validateCampaign({
+    required double dailyBudget,
+    required int campaignDays,
+    required String adType,
+  }) {
+    final errors = <String>[];
+    final warnings = <String>[];
+
+    // Budget validation
+    if (dailyBudget < budgetConfig['min_daily_budget']) {
+      errors.add(
+          'Daily budget must be at least ₹${budgetConfig['min_daily_budget']}');
+    }
+    if (dailyBudget > budgetConfig['max_daily_budget']) {
+      errors.add(
+          'Daily budget cannot exceed ₹${budgetConfig['max_daily_budget']}');
+    }
+
+    // Duration validation
+    if (campaignDays < campaignDurationLimits['min_days']!) {
+      errors.add(
+          'Campaign must run for at least ${campaignDurationLimits['min_days']} day');
+    }
+    if (campaignDays > campaignDurationLimits['max_days']!) {
+      errors.add(
+          'Campaign cannot exceed ${campaignDurationLimits['max_days']} days');
+    }
+
+    // Recommendations
+    if (campaignDays < campaignDurationLimits['recommended_min_days']!) {
+      warnings.add(
+          'Consider running for at least ${campaignDurationLimits['recommended_min_days']} days for better results');
+    }
+    if (campaignDays > campaignDurationLimits['recommended_max_days']!) {
+      warnings.add(
+          'Long campaigns may have diminishing returns. Consider shorter, focused campaigns');
+    }
+
+    // Calculate metrics
+    final metrics = calculateCampaignMetrics(
+      dailyBudget: dailyBudget,
+      campaignDays: campaignDays,
+      adType: adType,
+    );
+
+    return {
+      'isValid': errors.isEmpty,
+      'errors': errors,
+      'warnings': warnings,
+      'metrics': metrics,
+    };
+  }
+
   // Media upload configuration
-  static const int maxImageSize = 5 * 1024 * 1024; // 5MB
-  static const int maxVideoSize = 100 * 1024 * 1024; // 100MB
+  static const int maxImageSize = 5 * 1024 * 1024;
+  static const int maxVideoSize = 100 * 1024 * 1024;
 
   // **NEW: Cloudinary Configuration for HLS Streaming**
   static const String cloudinaryCloudName =
       'dgq0hlygs'; // Replace with your actual cloud name
-  static const String cloudinaryApiKey =
-      '441141219573521'; // Replace with your actual API key
-  static const String cloudinaryApiSecret =
-      'mVM4MKP69IW0SGWHsS12aygq1uU'; // Replace with your actual API secret
+  static const String cloudinaryApiKey = '441141219573521';
+  static const String cloudinaryApiSecret = 'mVM4MKP69IW0SGWHsS12aygq1uU';
 
   // Cloudinary streaming profiles
   static const Map<String, Map<String, dynamic>> streamingProfiles = {

@@ -33,6 +33,11 @@ class AdService {
       endDate
     } = adData;
 
+    // **NEW: Log link field details for debugging**
+    console.log('🔍 AdService: Link field value:', link);
+    console.log('🔍 AdService: Link field type:', typeof link);
+    console.log('🔍 AdService: Link field length:', link ? link.length : 'null');
+
     // **NEW: Validate required fields**
     if (!title || !description || !adType || !budget || !uploaderId) {
       console.log('❌ AdService: Missing required fields:');
@@ -90,14 +95,24 @@ class AdService {
     // **NEW: Calculate aspect ratio (default to 16:9 for now)**
     const aspectRatio = '16:9'; // This should be calculated from actual image/video dimensions
     
-    // **NEW: Determine call to action label based on link type**
+    // **NEW: Determine call to action label and URL**
     let callToActionLabel = 'Learn More';
-    if (link && link.includes('shop') || link.includes('buy') || link.includes('purchase')) {
-      callToActionLabel = 'Shop Now';
-    } else if (link && link.includes('download')) {
-      callToActionLabel = 'Download';
-    } else if (link && link.includes('signup') || link.includes('register')) {
-      callToActionLabel = 'Sign Up';
+    let callToActionUrl = 'https://example.com'; // Default URL
+    
+    // Only use link if it's a valid URL
+    if (link && link.trim().startsWith('http')) {
+      callToActionUrl = link.trim();
+      // Determine label based on URL content
+      if (link.includes('shop') || link.includes('buy') || link.includes('purchase')) {
+        callToActionLabel = 'Shop Now';
+      } else if (link.includes('download')) {
+        callToActionLabel = 'Download';
+      } else if (link.includes('signup') || link.includes('register')) {
+        callToActionLabel = 'Sign Up';
+      }
+    } else {
+      // If link is not a valid URL, use default
+      console.log('⚠️ AdService: Link is not a valid URL, using default:', link);
     }
 
     // **NEW: Create AdCreative with correct field mapping**
@@ -111,7 +126,7 @@ class AdService {
       durationSec: mediaType === 'video' ? 15 : undefined, // Default 15 seconds for videos
       callToAction: {
         label: callToActionLabel,
-        url: link || 'https://example.com'
+        url: callToActionUrl
       },
       reviewStatus: 'pending',
       isActive: false

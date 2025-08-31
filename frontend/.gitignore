@@ -9,6 +9,7 @@
 .buildlog/
 .history
 .svn/
+.env
 .swiftpm/
 migrate_working_dir/
 
@@ -43,3 +44,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# **NEW: Configuration files with sensitive data**
+# Never commit files containing API keys, secrets, or sensitive configuration
+lib/config/app_config.dart
