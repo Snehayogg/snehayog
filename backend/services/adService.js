@@ -73,8 +73,7 @@ class AdService {
         gender: 'all',
         locations: [],
         interests: [],
-        platforms: ['android', 'ios', 'web'],
-        os: ['android', 'ios']
+        platforms: ['android', 'ios', 'web']
       },
       pacing: 'smooth',
       frequencyCap: 3

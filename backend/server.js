@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 
 // Import database manager
 import databaseManager from './config/database.js';
+import './models/index.js';
 
 // Import routes
 import videoRoutes from './routes/videoRoutes.js';
@@ -41,7 +42,7 @@ if (missingEnvVars.length > 0) {
 
 // Port and Host configuration
 const PORT = process.env.PORT || 5001;
-const HOST = process.env.HOST || '0.0.0.0';
+const HOST = process.env.HOST || '192.168.0.190'; // Use your network IP
 
 console.log('🔧 Server Configuration:');
 console.log(`   📍 Port: ${PORT}`);
@@ -52,7 +53,31 @@ console.log('');
 
 // Middleware
 app.use(compression()); // Enable gzip compression
-app.use(cors());
+
+// **ENHANCED: CORS Configuration for Flutter app**
+app.use(cors({
+  origin: [
+    'http://192.168.0.190:5001', // Backend URL
+    'http://localhost:5001',      // Local development
+    'http://10.0.2.2:5001',      // Android emulator
+    'http://127.0.0.1:5001',     // Localhost alternative
+    '*'                           // Allow all origins for development
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'Access-Control-Request-Method',
+    'Access-Control-Request-Headers'
+  ],
+  exposedHeaders: ['Content-Length', 'Content-Range', 'Accept-Ranges'],
+  maxAge: 86400 // 24 hours
+}));
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -81,7 +106,28 @@ app.use('/hls', (req, res, next) => {
   }
   
   next();
-}, express.static(path.join(__dirname, 'uploads/hls')));
+}, express.static(path.join(__dirname, 'uploads/hls'), {
+  // **FIXED: Add better error handling for missing files**
+  fallthrough: false,
+  setHeaders: (res, path) => {
+    // Add cache headers for better performance
+    if (path.endsWith('.m3u8')) {
+      res.setHeader('Cache-Control', 'public, max-age=300'); // 5 minutes for playlists
+    } else if (path.endsWith('.ts')) {
+      res.setHeader('Cache-Control', 'public, max-age=86400'); // 24 hours for segments
+    }
+  }
+}));
+
+// **FIXED: Add error handler for HLS files**
+app.use('/hls', (err, req, res, next) => {
+  console.error('❌ HLS serving error:', err);
+  if (err.code === 'ENOENT') {
+    res.status(404).json({ error: 'HLS file not found', path: req.path });
+  } else {
+    res.status(500).json({ error: 'Internal server error serving HLS file' });
+  }
+});
 
 // API Routes
 app.use('/api/users', userRoutes);
@@ -99,7 +145,36 @@ app.get('/health', (req, res) => {
     status: 'OK',
     timestamp: new Date().toISOString(),
     database: dbStatus,
-    uptime: process.uptime()
+    server: {
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      version: process.version,
+      platform: process.platform
+    },
+    cors: {
+      origin: req.headers.origin || 'No origin header',
+      method: req.method,
+      headers: req.headers
+    },
+    message: 'Backend is running successfully!'
+  });
+});
+
+app.get('/api/health', (req, res) => {
+  const dbStatus = databaseManager.getConnectionStatus();
+  res.json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    database: dbStatus,
+    message: 'Backend API is running successfully',
+    endpoints: {
+      auth: '/api/auth',
+      users: '/api/users',
+      videos: '/api/videos',
+      ads: '/api/ads',
+      billing: '/api/billing',
+      upload: '/api/upload'
+    }
   });
 });
 

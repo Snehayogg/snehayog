@@ -12,6 +12,7 @@ class VideoProvider extends ChangeNotifier {
   int _currentPage = AppConstants.initialPage;
   bool _hasMore = true;
   String? _errorMessage;
+  String? _currentVideoType; // Track current video type filter
 
   // Getters
   List<VideoModel> get videos => _videos;
@@ -20,9 +21,11 @@ class VideoProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get isLoading => _loadState == VideoLoadState.loading;
   bool get isLoadingMore => _loadState == VideoLoadState.loadingMore;
+  String? get currentVideoType => _currentVideoType;
 
   /// Load videos from API
-  Future<void> loadVideos({bool isInitialLoad = true}) async {
+  Future<void> loadVideos(
+      {bool isInitialLoad = true, String? videoType}) async {
     // Prevent multiple simultaneous calls
     if (_loadState == VideoLoadState.loading ||
         _loadState == VideoLoadState.loadingMore) {
@@ -35,12 +38,24 @@ class VideoProvider extends ChangeNotifier {
       return;
     }
 
+    // If videoType changed, reset pagination
+    if (videoType != _currentVideoType) {
+      _currentVideoType = videoType;
+      _currentPage = AppConstants.initialPage;
+      _videos.clear();
+      _hasMore = true;
+      print(
+          '🔄 VideoProvider: VideoType changed to $videoType, resetting pagination');
+    }
+
     _setLoadState(
         isInitialLoad ? VideoLoadState.loading : VideoLoadState.loadingMore);
 
     try {
-      print('🔄 VideoProvider: Loading videos, page: $_currentPage');
-      final response = await _videoService.getVideos(page: _currentPage);
+      print(
+          '🔄 VideoProvider: Loading videos, page: $_currentPage, videoType: $videoType');
+      final response = await _videoService.getVideos(
+          page: _currentPage, videoType: videoType);
       final List<VideoModel> fetchedVideos = response['videos'];
       final bool hasMore = response['hasMore'];
 
@@ -75,7 +90,7 @@ class VideoProvider extends ChangeNotifier {
   /// Toggle like for a video
   Future<void> toggleLike(String videoId, String userId) async {
     try {
-      final updatedVideo = await _videoService.toggleLike(videoId, userId);
+      final updatedVideo = await _videoService.toggleLike(videoId);
 
       // Update the video in the list
       final index = _videos.indexWhere((v) => v.id == videoId);
@@ -259,6 +274,45 @@ class VideoProvider extends ChangeNotifier {
   void clearError() {
     _errorMessage = null;
     notifyListeners();
+  }
+
+  /// **FIXED: Clear all videos and reset state on logout**
+  void clearAllVideos() {
+    print('🗑️ VideoProvider: Clearing all videos and resetting state...');
+    _videos.clear();
+    _currentPage = AppConstants.initialPage;
+    _hasMore = true;
+    _errorMessage = null;
+    _loadState = VideoLoadState.initial;
+    print('✅ VideoProvider: All videos cleared and state reset');
+    notifyListeners();
+  }
+
+  /// Filter videos by type (yog or sneha)
+  Future<void> filterVideosByType(String videoType) async {
+    if (videoType != 'yog' && videoType != 'sneha') {
+      print('⚠️ VideoProvider: Invalid videoType: $videoType');
+      return;
+    }
+
+    print('🔍 VideoProvider: Filtering videos by type: $videoType');
+    await loadVideos(isInitialLoad: true, videoType: videoType);
+  }
+
+  /// Get yog videos only
+  Future<void> loadYogVideos() async {
+    await filterVideosByType('yog');
+  }
+
+  /// Get sneha videos only
+  Future<void> loadSnehaVideos() async {
+    await filterVideosByType('sneha');
+  }
+
+  /// Load all videos (no filter)
+  Future<void> loadAllVideos() async {
+    print('🔍 VideoProvider: Loading all videos (no filter)');
+    await loadVideos(isInitialLoad: true, videoType: null);
   }
 
   void _setLoadState(VideoLoadState state) {

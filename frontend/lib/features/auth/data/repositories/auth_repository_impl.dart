@@ -8,8 +8,7 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<UserEntity> signInWithGoogle(UserEntity user) async {
     // Simulate API call delay
     await Future.delayed(const Duration(milliseconds: 500));
-    
-    // Store user locally for now
+
     _currentUser = user;
     return user;
   }
@@ -18,24 +17,19 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<void> signOut() async {
     // Simulate API call delay
     await Future.delayed(const Duration(milliseconds: 300));
-    
-    // Clear local user
+
     _currentUser = null;
   }
 
   @override
   Future<UserEntity?> getCurrentUser() async {
-    // Simulate API call delay
     await Future.delayed(const Duration(milliseconds: 200));
-    
     return _currentUser;
   }
 
   @override
   Future<bool> isAuthenticated() async {
-    // Simulate API call delay
     await Future.delayed(const Duration(milliseconds: 100));
-    
     return _currentUser != null;
   }
 

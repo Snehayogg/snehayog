@@ -188,6 +188,17 @@ class UserProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// **FIXED: Clear all caches and state on logout**
+  void clearAllCaches() {
+    print('🗑️ UserProvider: Clearing all caches and state...');
+    _followStatusCache.clear();
+    _loadingFollowStatus.clear();
+    _userDataCache.clear();
+    _loadingUserData.clear();
+    print('✅ UserProvider: All caches cleared');
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _followStatusCache.clear();

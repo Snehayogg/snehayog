@@ -2,7 +2,7 @@ import 'package:http/http.dart' as http;
 import '../../features/video/data/datasources/video_remote_datasource.dart';
 import '../../features/video/data/repositories/video_repository_impl.dart';
 import '../../features/video/domain/repositories/video_repository.dart';
-import '../../features/video/presentation/providers/video_provider.dart';
+import '../providers/video_provider.dart';
 
 /// Simple service locator for dependency injection
 /// This provides a lightweight alternative to external DI libraries
@@ -18,17 +18,17 @@ class ServiceLocator {
 
   // Getters
   http.Client get httpClient => _httpClient ??= http.Client();
-  VideoRemoteDataSource get videoRemoteDataSource => 
+  VideoRemoteDataSource get videoRemoteDataSource =>
       _videoRemoteDataSource ??= VideoRemoteDataSource(httpClient: httpClient);
-  VideoRepository get videoRepository => 
-      _videoRepository ??= VideoRepositoryImpl(remoteDataSource: videoRemoteDataSource);
+  VideoRepository get videoRepository => _videoRepository ??=
+      VideoRepositoryImpl(remoteDataSource: videoRemoteDataSource);
 
   /// Creates a new VideoProvider instance
   VideoProvider createVideoProvider() {
-    return VideoProvider(repository: videoRepository);
+    return VideoProvider();
   }
 
-  /// Cleans up all dependencies
+  /// Cleans up all dependencie
   void dispose() {
     _httpClient?.close();
     _httpClient = null;

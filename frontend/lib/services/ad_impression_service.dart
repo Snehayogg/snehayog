@@ -110,32 +110,55 @@ class AdImpressionService {
     }
   }
 
-  /// Get banner ad impressions for a video (mock data for now)
-  int getBannerAdImpressions(String videoId) {
-    // Mock implementation - replace with actual API call
-    // This simulates banner ads shown on video views
-    return _getMockAdImpressions(videoId, 'banner');
+  /// Get banner ad impressions for a video (real API call)
+  Future<int> getBannerAdImpressions(String videoId) async {
+    try {
+      final userData = await _authService.getUserData();
+      if (userData == null) return 0;
+
+      final response = await http.get(
+        Uri.parse(
+            '${AppConfig.baseUrl}/api/ad-impressions/video/$videoId/banner'),
+        headers: {
+          'Authorization': 'Bearer ${userData['token']}',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['count'] ?? 0;
+      }
+
+      return 0;
+    } catch (e) {
+      print('❌ Error getting banner ad impressions: $e');
+      return 0;
+    }
   }
 
-  /// Get carousel ad impressions for a video (mock data for now)
-  int getCarouselAdImpressions(String videoId) {
-    // Mock implementation - replace with actual API call
-    // This simulates carousel ads shown when scrolling
-    return _getMockAdImpressions(videoId, 'carousel');
-  }
+  /// Get carousel ad impressions for a video (real API call)
+  Future<int> getCarouselAdImpressions(String videoId) async {
+    try {
+      final userData = await _authService.getUserData();
+      if (userData == null) return 0;
 
-  /// Mock ad impressions for development/testing
-  int _getMockAdImpressions(String videoId, String adType) {
-    // Generate realistic mock data based on video ID
-    final hash = videoId.hashCode;
-    final random = (hash % 1000) + 1;
+      final response = await http.get(
+        Uri.parse(
+            '${AppConfig.baseUrl}/api/ad-impressions/video/$videoId/carousel'),
+        headers: {
+          'Authorization': 'Bearer ${userData['token']}',
+        },
+      );
 
-    if (adType == 'banner') {
-      // Banner ads: 1 impression per video view (simplified)
-      return random * 2; // 2x multiplier for banner
-    } else {
-      // Carousel ads: 0.5 impression per video view (less frequent)
-      return (random * 0.5).round();
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['count'] ?? 0;
+      }
+
+      return 0;
+    } catch (e) {
+      print('❌ Error getting carousel ad impressions: $e');
+      return 0;
     }
   }
 }

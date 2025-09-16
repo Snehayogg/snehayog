@@ -26,106 +26,370 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
 
   Future<void> _loadDashboardData() async {
     try {
-      setState(() => _isLoading = true);
+      setState(() {
+        _isLoading = true;
+        _error = null; // Clear previous errors
+      });
 
+      print('🔍 CreatorPayoutDashboard: Starting data load...');
       final userData = await _authService.getUserData();
+      print('🔍 CreatorPayoutDashboard: User data loaded: ${userData != null}');
+
       final token = userData?['token'];
+      print('🔍 CreatorPayoutDashboard: Token available: ${token != null}');
 
       if (token == null) {
+        print('❌ CreatorPayoutDashboard: No token found');
         setState(() {
-          _error = 'Please login first';
+          _error = 'Please login first to view payout dashboard';
           _isLoading = false;
         });
         return;
       }
 
+      print('🔍 Token found, making API calls...');
+      print('🔍 Base URL: ${AppConfig.baseUrl}');
+
       // Load profile data
+      final profileUrl = '${AppConfig.baseUrl}/api/creator-payouts/profile';
+      print('🔍 CreatorPayoutDashboard: Profile URL: $profileUrl');
+
       final profileResponse = await http.get(
-        Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/profile'),
+        Uri.parse(profileUrl),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
+      ).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw Exception('Profile API request timed out');
+        },
       );
+
+      print('🔍 Profile response status: ${profileResponse.statusCode}');
+      print('🔍 Profile response body: ${profileResponse.body}');
 
       if (profileResponse.statusCode == 200) {
         _profileData = json.decode(profileResponse.body);
+        print('✅ Profile data loaded successfully');
+      } else if (profileResponse.statusCode == 404) {
+        // User doesn't have creator profile yet - show setup message
+        print(
+            '⚠️ Creator profile not found - user needs to set up creator account');
+        setState(() {
+          _profileData = {
+            'creator': {
+              'name': 'Creator Account Not Set Up',
+              'email': 'Please complete setup',
+              'country': 'IN',
+              'currency': 'INR',
+              'preferredPaymentMethod': null
+            },
+            'thresholds': {
+              'firstPayout': {'INR': 'No minimum'},
+              'subsequentPayouts': {'INR': '₹200 minimum'}
+            },
+            'paymentMethods': ['upi', 'bank_transfer', 'paytm']
+          };
+          _isLoading = false;
+        });
+        return;
+      } else {
+        print('❌ Profile data failed: ${profileResponse.statusCode}');
+        setState(() {
+          _error =
+              'Failed to load profile data (${profileResponse.statusCode}): ${profileResponse.body}';
+          _isLoading = false;
+        });
+        return;
       }
 
       // Load payout history
+      final historyUrl = '${AppConfig.baseUrl}/api/creator-payouts/monthly';
+      print('🔍 History URL: $historyUrl');
+
       final historyResponse = await http.get(
-        Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/monthly'),
+        Uri.parse(historyUrl),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
+
+      print('🔍 History response status: ${historyResponse.statusCode}');
+      print('🔍 History response body: ${historyResponse.body}');
 
       if (historyResponse.statusCode == 200) {
         final historyData = json.decode(historyResponse.body);
         _payoutHistory =
             List<Map<String, dynamic>>.from(historyData['payouts'] ?? []);
+        print('✅ Payout history loaded: ${_payoutHistory.length} records');
+      } else {
+        // Don't fail completely if history fails, just log it
+        print(
+            '⚠️ Warning: Failed to load payout history (${historyResponse.statusCode}): ${historyResponse.body}');
+        _payoutHistory = []; // Initialize empty list
+      }
+
+      setState(() {
+        _isLoading = false;
+      });
+      print('✅ Dashboard data loading completed');
+    } catch (e) {
+      print('❌ CreatorPayoutDashboard: Error loading dashboard data: $e');
+      setState(() {
+        _error = 'Failed to load dashboard: ${e.toString()}';
+        _isLoading = false;
+      });
+
+      // Show error to user immediately
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Dashboard Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: _loadDashboardData,
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _testBackendConnection() async {
+    try {
+      print('🔍 Testing backend connection...');
+
+      // Test the health endpoint first (no auth required)
+      final healthUrl = '${AppConfig.baseUrl}/api/creator-payouts/health';
+      print('🔍 Testing health endpoint: $healthUrl');
+
+      final healthResponse = await http.get(Uri.parse(healthUrl));
+      print('🔍 Health response status: ${healthResponse.statusCode}');
+      print('🔍 Health response body: ${healthResponse.body}');
+
+      if (healthResponse.statusCode == 200) {
+        // Test the test endpoint
+        final testUrl = '${AppConfig.baseUrl}/api/creator-payouts/test';
+        print('🔍 Testing test endpoint: $testUrl');
+
+        final testResponse = await http.get(Uri.parse(testUrl));
+        print('🔍 Test response status: ${testResponse.statusCode}');
+        print('🔍 Test response body: ${testResponse.body}');
+
+        if (testResponse.statusCode == 200) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('✅ Backend connection successful!'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content:
+                    Text('❌ Test endpoint failed: ${testResponse.statusCode}'),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content:
+                  Text('❌ Health check failed: ${healthResponse.statusCode}'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
       }
     } catch (e) {
-      setState(() => _error = 'Error loading data: $e');
-    } finally {
-      setState(() => _isLoading = false);
+      print('❌ Backend connection test failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Connection failed: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[200],
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('💰 Creator Payout Dashboard'),
-        backgroundColor: Colors.grey[700], // Changed from Colors.blue
+        backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
+            icon: const Icon(Icons.bug_report),
+            onPressed: _testBackendConnection,
+            tooltip: 'Test Backend',
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadDashboardData,
+            tooltip: 'Refresh',
           ),
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? _buildLoadingWidget()
           : _error != null
               ? _buildErrorWidget()
               : _buildDashboardContent(),
     );
   }
 
-  Widget _buildErrorWidget() {
+  Widget _buildLoadingWidget() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.error_outline, size: 64, color: Colors.red),
+          const CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+          ),
           const SizedBox(height: 16),
           const Text(
-            'Error Loading Dashboard',
+            'Loading Dashboard...',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Text(
-            _error!,
+            'Please wait while we fetch your payout data',
             style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: _loadDashboardData,
-            child: const Text('Retry'),
           ),
         ],
       ),
     );
   }
 
+  Widget _buildErrorWidget() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            const SizedBox(height: 16),
+            const Text(
+              'Unable to Load Dashboard',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _error!,
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _loadDashboardData,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                ElevatedButton.icon(
+                  onPressed: _testBackendConnection,
+                  icon: const Icon(Icons.bug_report),
+                  label: const Text('Test Connection'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('Go Back'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildDashboardContent() {
     if (_profileData == null) {
-      return const Center(child: Text('No profile data available'));
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.info_outline, size: 64, color: Colors.orange),
+              const SizedBox(height: 16),
+              const Text(
+                'Creator Dashboard',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Welcome to your creator dashboard! Here you can track your earnings, manage payouts, and view your creator statistics.',
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _loadDashboardData,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Load Data'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  ElevatedButton.icon(
+                    onPressed: _testBackendConnection,
+                    icon: const Icon(Icons.bug_report),
+                    label: const Text('Test API'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     return SingleChildScrollView(

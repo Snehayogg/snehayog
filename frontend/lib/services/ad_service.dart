@@ -101,6 +101,14 @@ class AdService {
     required List<String> targetKeywords,
     DateTime? startDate,
     DateTime? endDate,
+    // **NEW: Advanced targeting parameters**
+    int? minAge,
+    int? maxAge,
+    String? gender,
+    List<String>? locations,
+    List<String>? interests,
+    List<String>? platforms,
+    String? appVersion,
   }) async {
     try {
       final userData = await _authService.getUserData();
@@ -163,6 +171,24 @@ class AdService {
       requestData['targetKeywords'] = targetKeywords;
       requestData['startDate'] = startDate?.toIso8601String();
       requestData['endDate'] = endDate?.toIso8601String();
+
+      // **NEW: Add advanced targeting data**
+      if (minAge != null ||
+          maxAge != null ||
+          gender != null ||
+          locations != null ||
+          interests != null ||
+          platforms != null ||
+          appVersion != null) {
+        requestData['target'] = {
+          if (minAge != null) 'age': {'min': minAge, 'max': maxAge ?? 65},
+          if (gender != null) 'gender': gender,
+          if (locations != null && locations.isNotEmpty) 'locations': locations,
+          if (interests != null && interests.isNotEmpty) 'interests': interests,
+          if (platforms != null && platforms.isNotEmpty) 'platforms': platforms,
+          if (appVersion != null) 'appVersion': appVersion,
+        };
+      }
 
       print('🔍 AdService: Request data being sent:');
       print('   Title: $title');

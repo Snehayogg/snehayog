@@ -10,7 +10,6 @@ mixin VideoScreenLifecycleMixin<T extends StatefulWidget> on State<T> {
   bool _isTabActive = true;
   Timer? _visibilityTimer;
 
-  /// Initialize the mixin with required managers
   void initializeLifecycleMixin(
     VideoControllerManager controllerManager,
   ) {
@@ -105,7 +104,7 @@ mixin VideoScreenLifecycleMixin<T extends StatefulWidget> on State<T> {
   void _pauseAllVideos() {
     try {
       print('⏸️ VideoScreenLifecycleMixin: Pausing all videos');
-      _controllerManager.comprehensivePause();
+      _controllerManager.pauseAllVideos();
     } catch (e) {
       print('❌ VideoScreenLifecycleMixin: Error pausing videos: $e');
     }

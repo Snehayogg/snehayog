@@ -21,6 +21,14 @@ class VideoModel {
   final List<Map<String, dynamic>>? hlsVariants;
   final bool? isHLSEncoded;
 
+  // **NEW: Quality URLs for adaptive streaming**
+  final String? lowQualityUrl; // 480p for slow networks
+  final String? mediumQualityUrl; // 720p for medium networks
+  final String? highQualityUrl; // 1080p for fast networks
+
+  // **NEW: Preload quality URL (lowest quality for fast preloading)**
+  final String? preloadQualityUrl; // 360p or lower for instant preloading
+
   VideoModel({
     required this.id,
     required this.videoName,
@@ -36,82 +44,221 @@ class VideoModel {
     required this.videoType,
     required this.aspectRatio,
     required this.duration,
-    required this.comments,
+    required List<Comment> comments, // **FIXED: Explicit type annotation**
     this.link,
     this.hlsMasterPlaylistUrl,
     this.hlsPlaylistUrl,
     this.hlsVariants,
     this.isHLSEncoded,
-  });
+    this.lowQualityUrl,
+    this.mediumQualityUrl,
+    this.highQualityUrl,
+    this.preloadQualityUrl,
+  }) : comments = comments; // **FIXED: Initialize the field**
 
   factory VideoModel.fromJson(Map<String, dynamic> json) {
-    print('Parsing video JSON: $json');
-    return VideoModel(
-      id: json['_id'] ?? json['id'],
-      videoName: json['videoName'] ?? '',
-      videoUrl: json['videoUrl'] ?? '',
-      thumbnailUrl: json['thumbnailUrl'] ?? '',
-      likes: json['likes'] ?? 0,
-      views: json['views'] ?? 0,
-      shares: json['shares'] ?? 0,
-      description: json['description'], // Parse description field
+    try {
+      print('Parsing video JSON: $json');
 
-      uploader: () {
-        print('🔍 VideoModel: Parsing uploader data...');
-        print('🔍 VideoModel: json["uploader"] = ${json['uploader']}');
-        print(
-            '🔍 VideoModel: json["uploader"] type = ${json['uploader'].runtimeType}');
+      return VideoModel(
+        id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
+        videoName: json['videoName']?.toString() ?? '',
+        videoUrl: json['videoUrl']?.toString() ?? '',
+        thumbnailUrl: json['thumbnailUrl']?.toString() ?? '',
+        likes: (json['likes'] is int)
+            ? json['likes']
+            : int.tryParse(json['likes']?.toString() ?? '0') ?? 0,
+        views: (json['views'] is int)
+            ? json['views']
+            : int.tryParse(json['views']?.toString() ?? '0') ?? 0,
+        shares: (json['shares'] is int)
+            ? json['shares']
+            : int.tryParse(json['shares']?.toString() ?? '0') ?? 0,
+        description: json['description']?.toString(), // Parse description field
 
-        if (json['uploader'] is Map<String, dynamic>) {
-          print('🔍 VideoModel: uploader is Map, calling Uploader.fromJson');
-          final uploader = Uploader.fromJson(json['uploader']);
-          print('🔍 VideoModel: parsed uploader = ${uploader.toJson()}');
-          return uploader;
-        } else {
+        uploader: () {
+          print('🔍 VideoModel: Parsing uploader data...');
+          print('🔍 VideoModel: json["uploader"] = ${json['uploader']}');
           print(
-              '🔍 VideoModel: uploader is not Map, creating default Uploader');
-          return Uploader(
-              id: json['uploader'].toString(), name: 'Unknown', profilePic: '');
-        }
-      }(),
-      uploadedAt: json['uploadedAt'] != null
-          ? DateTime.parse(json['uploadedAt'])
-          : DateTime.now(),
-      likedBy: List<String>.from(json['likedBy'] ?? []),
-      videoType: json['videoType'] ?? 'reel',
-      aspectRatio: (json['aspectRatio'] ?? 9 / 16).toDouble(),
-      duration: Duration(seconds: json['duration'] ?? 0),
-      comments: (json['comments'] as List<dynamic>?)
-              ?.map((comment) => Comment.fromJson(comment))
-              .toList() ??
-          [],
-      link: () {
-        // Try multiple possible field names for the link
-        final possibleFields = ['link', 'externalLink', 'websiteUrl', 'url'];
+              '🔍 VideoModel: json["uploader"] type = ${json['uploader']?.runtimeType}');
 
-        for (final field in possibleFields) {
-          if (json.containsKey(field)) {
-            final linkValue = json[field]?.toString().trim();
-            if (linkValue?.isNotEmpty == true) {
+          if (json['uploader'] is Map<String, dynamic>) {
+            print('🔍 VideoModel: uploader is Map, calling Uploader.fromJson');
+            final uploader = Uploader.fromJson(json['uploader']);
+            print('🔍 VideoModel: parsed uploader = ${uploader.toJson()}');
+            return uploader;
+          } else {
+            print(
+                '🔍 VideoModel: uploader is not Map, creating default Uploader');
+            return Uploader(
+                id: json['uploader']?.toString() ?? 'unknown',
+                name: 'Unknown',
+                profilePic: '');
+          }
+        }(),
+        uploadedAt: json['uploadedAt'] != null
+            ? DateTime.tryParse(json['uploadedAt'].toString()) ?? DateTime.now()
+            : DateTime.now(),
+        likedBy: () {
+          try {
+            if (json['likedBy'] == null) {
+              return <String>[];
+            }
+
+            // **FIXED: More explicit type checking and conversion**
+            if (json['likedBy'] is List<dynamic>) {
+              final likedByList = json['likedBy'] as List<dynamic>;
+              if (likedByList.isEmpty) {
+                return <String>[];
+              }
+
+              final List<String> parsedLikedBy = <String>[];
+              for (final dynamic item in likedByList) {
+                parsedLikedBy.add(item.toString());
+              }
+              return parsedLikedBy;
+            }
+
+            return <String>[];
+          } catch (e) {
+            print('⚠️ VideoModel: Error parsing likedBy: $e');
+            return <String>[];
+          }
+        }(),
+        videoType: json['videoType']?.toString() ?? 'reel',
+        aspectRatio: (json['aspectRatio'] is num)
+            ? json['aspectRatio'].toDouble()
+            : double.tryParse(json['aspectRatio']?.toString() ?? '0.5625') ??
+                9 / 16,
+        duration: Duration(
+            seconds: (json['duration'] is int)
+                ? json['duration']
+                : int.tryParse(json['duration']?.toString() ?? '0') ?? 0),
+        comments: () {
+          try {
+            print('🔍 VideoModel: Parsing comments field...');
+            print('🔍 VideoModel: json["comments"] = ${json['comments']}');
+            print(
+                '🔍 VideoModel: json["comments"] type = ${json['comments']?.runtimeType}');
+
+            if (json['comments'] == null) {
+              print('🔍 VideoModel: comments is null, returning empty list');
+              return <Comment>[];
+            }
+
+            // **FIXED: More explicit type checking and conversion**
+            if (json['comments'] is List<dynamic>) {
+              final commentsList = json['comments'] as List<dynamic>;
               print(
-                  '🔗 VideoModel: Found link in field "$field": "$linkValue"');
-              return linkValue;
+                  '🔍 VideoModel: comments is List<dynamic> with ${commentsList.length} items');
+
+              if (commentsList.isEmpty) {
+                print(
+                    '🔍 VideoModel: comments list is empty, returning empty list');
+                return <Comment>[];
+              }
+
+              final List<Comment> parsedComments = <Comment>[];
+
+              for (final dynamic comment in commentsList) {
+                print(
+                    '🔍 VideoModel: Processing comment: $comment (type: ${comment.runtimeType})');
+                if (comment is Map<String, dynamic>) {
+                  try {
+                    final parsedComment = Comment.fromJson(comment);
+                    print(
+                        '🔍 VideoModel: Successfully parsed comment: ${parsedComment.toJson()}');
+                    parsedComments.add(parsedComment);
+                  } catch (e) {
+                    print(
+                        '⚠️ VideoModel: Error parsing individual comment: $e');
+                    // Skip invalid comments
+                  }
+                } else {
+                  print(
+                      '⚠️ VideoModel: Skipping invalid comment (not Map): $comment');
+                }
+              }
+
+              print(
+                  '🔍 VideoModel: Successfully parsed ${parsedComments.length} comments');
+              return parsedComments;
+            }
+
+            print(
+                '🔍 VideoModel: comments is not a List<dynamic>, returning empty list');
+            return <Comment>[];
+          } catch (e) {
+            print('❌ VideoModel: Error parsing comments: $e');
+            print('❌ Stack trace: ${StackTrace.current}');
+            return <Comment>[];
+          }
+        }(),
+        link: () {
+          // Try multiple possible field names for the link
+          final possibleFields = ['link', 'externalLink', 'websiteUrl', 'url'];
+
+          for (final field in possibleFields) {
+            if (json.containsKey(field)) {
+              final linkValue = json[field]?.toString().trim();
+              if (linkValue?.isNotEmpty == true) {
+                print(
+                    '🔗 VideoModel: Found link in field "$field": "$linkValue"');
+                return linkValue;
+              }
             }
           }
-        }
 
-        print('🔗 VideoModel: No link field found in video data');
-        print('🔗 VideoModel: Available fields: ${json.keys.toList()}');
-        return null;
-      }(),
-      // Parse HLS streaming fields
-      hlsMasterPlaylistUrl: json['hlsMasterPlaylistUrl'],
-      hlsPlaylistUrl: json['hlsPlaylistUrl'],
-      hlsVariants: json['hlsVariants'] != null
-          ? List<Map<String, dynamic>>.from(json['hlsVariants'])
-          : null,
-      isHLSEncoded: json['isHLSEncoded'] ?? false,
-    );
+          print('🔗 VideoModel: No link field found in video data');
+          print('🔗 VideoModel: Available fields: ${json.keys.toList()}');
+          return null;
+        }(),
+        // Parse HLS streaming fields
+        hlsMasterPlaylistUrl: json['hlsMasterPlaylistUrl']?.toString(),
+        hlsPlaylistUrl: json['hlsPlaylistUrl']?.toString(),
+        hlsVariants: () {
+          try {
+            if (json['hlsVariants'] == null) {
+              return null;
+            }
+
+            // **FIXED: More explicit type checking and conversion**
+            if (json['hlsVariants'] is List<dynamic>) {
+              final variantsList = json['hlsVariants'] as List<dynamic>;
+              if (variantsList.isEmpty) {
+                return null;
+              }
+
+              final List<Map<String, dynamic>> parsedVariants =
+                  <Map<String, dynamic>>[];
+              for (final dynamic variant in variantsList) {
+                if (variant is Map<String, dynamic>) {
+                  parsedVariants.add(variant);
+                } else {
+                  print('⚠️ VideoModel: Skipping invalid hlsVariant: $variant');
+                }
+              }
+              return parsedVariants;
+            }
+
+            return null;
+          } catch (e) {
+            print('⚠️ VideoModel: Error parsing hlsVariants: $e');
+            return null;
+          }
+        }(),
+        isHLSEncoded: json['isHLSEncoded'] == true,
+        lowQualityUrl: json['lowQualityUrl']?.toString(),
+        mediumQualityUrl: json['mediumQualityUrl']?.toString(),
+        highQualityUrl: json['highQualityUrl']?.toString(),
+        preloadQualityUrl: json['preloadQualityUrl']?.toString(),
+      );
+    } catch (e, stackTrace) {
+      print('❌ VideoModel.fromJson Error: $e');
+      print('❌ Stack trace: $stackTrace');
+      print('❌ JSON data: $json');
+      rethrow;
+    }
   }
 
   Map<String, dynamic> toJson() {
@@ -140,6 +287,10 @@ class VideoModel {
       'hlsPlaylistUrl': hlsPlaylistUrl,
       'hlsVariants': hlsVariants,
       'isHLSEncoded': isHLSEncoded,
+      'lowQualityUrl': lowQualityUrl,
+      'mediumQualityUrl': mediumQualityUrl,
+      'highQualityUrl': highQualityUrl,
+      'preloadQualityUrl': preloadQualityUrl,
     };
   }
 
@@ -165,6 +316,10 @@ class VideoModel {
     String? hlsPlaylistUrl,
     List<Map<String, dynamic>>? hlsVariants,
     bool? isHLSEncoded,
+    String? lowQualityUrl,
+    String? mediumQualityUrl,
+    String? highQualityUrl,
+    String? preloadQualityUrl,
   }) {
     return VideoModel(
       id: id ?? this.id,
@@ -189,6 +344,10 @@ class VideoModel {
       hlsPlaylistUrl: hlsPlaylistUrl ?? this.hlsPlaylistUrl,
       hlsVariants: hlsVariants ?? this.hlsVariants,
       isHLSEncoded: isHLSEncoded ?? this.isHLSEncoded,
+      lowQualityUrl: lowQualityUrl ?? this.lowQualityUrl,
+      mediumQualityUrl: mediumQualityUrl ?? this.mediumQualityUrl,
+      highQualityUrl: highQualityUrl ?? this.highQualityUrl,
+      preloadQualityUrl: preloadQualityUrl ?? this.preloadQualityUrl,
     );
   }
 
@@ -211,6 +370,49 @@ class VideoModel {
       likes: updatedLikes,
     );
   }
+
+  /// **NEW: Get optimal quality URL based on network speed**
+  String getOptimalQualityUrl(double networkSpeedMbps) {
+    // **NEW: Use preload quality for fastest loading if available**
+    if (preloadQualityUrl != null && preloadQualityUrl!.isNotEmpty) {
+      return preloadQualityUrl!;
+    }
+
+    // **NEW: Select quality based on network speed**
+    if (networkSpeedMbps > 10) {
+      // 10+ Mbps
+      return highQualityUrl ?? videoUrl; // 1080p or fallback
+    } else if (networkSpeedMbps > 5) {
+      // 5+ Mbps
+      return mediumQualityUrl ?? videoUrl; // 720p or fallback
+    } else {
+      return lowQualityUrl ?? videoUrl; // 480p or fallback
+    }
+  }
+
+  /// **NEW: Get preload quality URL for fast loading**
+  String getPreloadQualityUrl() {
+    // **NEW: Prioritize preload quality for instant access**
+    if (preloadQualityUrl != null && preloadQualityUrl!.isNotEmpty) {
+      return preloadQualityUrl!;
+    }
+
+    // **NEW: Fallback to lowest available quality for fast preloading**
+    if (lowQualityUrl != null && lowQualityUrl!.isNotEmpty) {
+      return lowQualityUrl!;
+    }
+
+    // **NEW: If no quality URLs, use original but with range request for first 1MB**
+    return videoUrl;
+  }
+
+  /// **NEW: Check if video has multiple quality options**
+  bool get hasMultipleQualities {
+    return (lowQualityUrl != null && lowQualityUrl!.isNotEmpty) ||
+        (mediumQualityUrl != null && mediumQualityUrl!.isNotEmpty) ||
+        (highQualityUrl != null && highQualityUrl!.isNotEmpty) ||
+        (preloadQualityUrl != null && preloadQualityUrl!.isNotEmpty);
+  }
 }
 
 class Uploader {
@@ -225,11 +427,21 @@ class Uploader {
   });
 
   factory Uploader.fromJson(Map<String, dynamic> json) {
-    return Uploader(
-      id: json['googleId'] ?? json['_id'] ?? json['id'] ?? '',
-      name: json['name'] ?? '',
-      profilePic: json['profilePic'] ?? '',
-    );
+    try {
+      return Uploader(
+        id: json['googleId']?.toString() ??
+            json['_id']?.toString() ??
+            json['id']?.toString() ??
+            '',
+        name: json['name']?.toString() ?? '',
+        profilePic: json['profilePic']?.toString() ?? '',
+      );
+    } catch (e, stackTrace) {
+      print('❌ Uploader.fromJson Error: $e');
+      print('❌ Stack trace: $stackTrace');
+      print('❌ Uploader JSON data: $json');
+      rethrow;
+    }
   }
 
   Uploader copyWith({
@@ -271,17 +483,30 @@ class Comment {
   });
 
   factory Comment.fromJson(Map<String, dynamic> json) {
-    return Comment(
-      id: json['_id'] ?? json['id'] ?? '',
-      userId: json['user']?['_id'] ?? json['userId'] ?? '',
-      userName: json['user']?['name'] ?? json['userName'] ?? '',
-      userProfilePic:
-          json['user']?['profilePic'] ?? json['userProfilePic'] ?? '',
-      text: json['text'] ?? '',
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'])
-          : DateTime.now(),
-    );
+    try {
+      return Comment(
+        id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
+        userId: json['user']?['_id']?.toString() ??
+            json['user']?['googleId']?.toString() ??
+            json['userId']?.toString() ??
+            '',
+        userName: json['user']?['name']?.toString() ??
+            json['userName']?.toString() ??
+            '',
+        userProfilePic: json['user']?['profilePic']?.toString() ??
+            json['userProfilePic']?.toString() ??
+            '',
+        text: json['text']?.toString() ?? '',
+        createdAt: json['createdAt'] != null
+            ? DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now()
+            : DateTime.now(),
+      );
+    } catch (e, stackTrace) {
+      print('❌ Comment.fromJson Error: $e');
+      print('❌ Stack trace: $stackTrace');
+      print('❌ Comment JSON data: $json');
+      rethrow;
+    }
   }
 
   Map<String, dynamic> toJson() {

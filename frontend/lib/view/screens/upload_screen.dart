@@ -4,7 +4,7 @@ import 'dart:io';
 import 'dart:async';
 import 'package:snehayog/services/video_service.dart';
 import 'package:snehayog/services/authservices.dart';
-import 'package:snehayog/view/screens/create_ad_screen.dart';
+import 'package:snehayog/view/screens/create_ad_screen_refactored.dart';
 import 'package:snehayog/view/screens/ad_management_screen.dart';
 
 class UploadScreen extends StatefulWidget {
@@ -29,8 +29,7 @@ class _UploadScreenState extends State<UploadScreen> {
   String _uploadStatus = '';
 
   final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _descriptionController =
-      TextEditingController(); 
+  final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _linkController = TextEditingController();
   final VideoService _videoService = VideoService();
   final AuthService _authService = AuthService();
@@ -560,7 +559,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                       context,
                                       MaterialPageRoute(
                                         builder: (context) =>
-                                            const CreateAdScreen(),
+                                            const CreateAdScreenRefactored(),
                                       ),
                                     );
                                   }
@@ -715,75 +714,6 @@ class _UploadScreenState extends State<UploadScreen> {
                                         ),
                             ),
                             const SizedBox(height: 24),
-                            // HLS Processing Info
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                    color: Colors.blue.withOpacity(0.3)),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Icon(Icons.info_outline,
-                                          color: Colors.blue[600]),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Text(
-                                          'HLS Video Processing',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.blue[800],
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Your video will be automatically converted to HLS (.m3u8) format for optimal streaming performance across all devices.',
-                                    style: TextStyle(
-                                      color: Colors.blue[700],
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: Colors.orange.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(
-                                          color:
-                                              Colors.orange.withOpacity(0.3)),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.speed,
-                                            size: 16,
-                                            color: Colors.orange[600]),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            '💡 Tip: Use WiFi for faster uploads. Large videos may take several minutes.',
-                                            style: TextStyle(
-                                              color: Colors.orange[700],
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 16),
                             TextField(
                               controller: _titleController,
                               decoration: const InputDecoration(
@@ -882,8 +812,9 @@ class _UploadScreenState extends State<UploadScreen> {
                                       value: _uploadProgress,
                                       backgroundColor:
                                           Colors.blue.withOpacity(0.2),
-                                      valueColor: const AlwaysStoppedAnimation<Color>(
-                                          Colors.blue),
+                                      valueColor:
+                                          const AlwaysStoppedAnimation<Color>(
+                                              Colors.blue),
                                     ),
 
                                     const SizedBox(height: 8),

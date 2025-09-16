@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:snehayog/view/screens/video_screen.dart';
 import 'package:snehayog/view/screens/creator_payment_setup_screen.dart';
 import 'package:snehayog/view/screens/creator_revenue_screen.dart';
+import 'package:snehayog/view/screens/creator_payout_dashboard.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:snehayog/config/app_config.dart';
@@ -15,6 +16,7 @@ import 'package:snehayog/core/providers/user_provider.dart';
 import 'package:snehayog/model/usermodel.dart';
 import 'package:snehayog/services/video_service.dart';
 import 'package:snehayog/core/services/profile_screen_logger.dart';
+import 'package:snehayog/core/services/auto_scroll_settings.dart';
 import 'dart:async';
 
 class ProfileScreen extends StatefulWidget {
@@ -36,6 +38,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     with AutomaticKeepAliveClientMixin {
   late final ProfileStateManager _stateManager;
   final ImagePicker _imagePicker = ImagePicker();
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   // Progressive loading states
   bool _isProfileDataLoaded = false;
@@ -82,8 +85,8 @@ class _ProfileScreenState extends State<ProfileScreen>
         }
         break;
       case 1:
-        // Step 2: Load followers data
-        if (_isVideosLoaded && !_isFollowersLoaded) {
+        // Step 2: Load followers data (do not depend on videos)
+        if (_isProfileDataLoaded && !_isFollowersLoaded) {
           _loadFollowersProgressive();
         }
         break;
@@ -125,16 +128,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
         ProfileScreenLogger.logProfileLoadSuccess(userId: widget.userId);
 
-        // Show success feedback
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('✅ Profile loaded! Loading videos...'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
+        // Profile loaded successfully
       }
     } catch (e) {
       ProfileScreenLogger.logProfileLoadError(e.toString());
@@ -150,7 +144,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     try {
       final currentUserId =
-          _stateManager.userData!['id'] ?? _stateManager.userData!['googleId'];
+          _stateManager.userData!['_id'] ?? _stateManager.userData!['id'];
       if (currentUserId != null) {
         ProfileScreenLogger.logVideoLoad(userId: currentUserId);
 
@@ -164,17 +158,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         ProfileScreenLogger.logVideoLoadSuccess(
             count: _stateManager.userVideos.length);
 
-        // Show progress feedback
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                  '✅ ${_stateManager.userVideos.length} videos loaded! Loading followers...'),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        }
+        // Videos loaded successfully
       }
     } catch (e) {
       ProfileScreenLogger.logVideoLoadError(e.toString());
@@ -184,51 +168,78 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Future<void> _loadFollowersProgressive() async {
     try {
-      if (widget.userId != null) {
-        final userProvider = Provider.of<UserProvider>(context, listen: false);
-        await userProvider.getUserDataWithFollowers(widget.userId!);
+      // Build candidate IDs: prefer googleId, then Mongo _id/id, then widget.userId
+      final List<String> idsToTry = <String?>[
+        _stateManager.userData?['googleId'],
+        _stateManager.userData?['_id'] ?? _stateManager.userData?['id'],
+        widget.userId,
+      ]
+          .where((e) => e != null && (e).isNotEmpty)
+          .map((e) => e as String)
+          .toList()
+          .toSet()
+          .toList();
 
+      if (idsToTry.isEmpty) {
+        ProfileScreenLogger.logWarning(
+            'No user ID available for followers load');
         setState(() {
           _isFollowersLoaded = true;
         });
+        return;
+      }
 
-        // Show progress feedback
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('✅ Followers data loaded!'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 1),
-            ),
-          );
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      bool loadedAny = false;
+      for (final candidateId in idsToTry) {
+        try {
+          ProfileScreenLogger.logDebugInfo(
+              'Loading followers for user: $candidateId');
+          await userProvider.getUserDataWithFollowers(candidateId);
+
+          final model = userProvider.getUserData(candidateId);
+          final followersCount = model?.followersCount ??
+              (_stateManager.userData != null
+                  ? (_stateManager.userData!['followers'] ??
+                      _stateManager.userData!['followersCount'] ??
+                      0)
+                  : 0);
+          if (model != null || followersCount > 0) {
+            loadedAny = true;
+            break;
+          }
+        } catch (e) {
+          ProfileScreenLogger.logWarning(
+              'Followers load failed for $candidateId: $e');
         }
+      }
+
+      setState(() {
+        _isFollowersLoaded = true;
+      });
+
+      if (!loadedAny) {
+        ProfileScreenLogger.logWarning(
+            'Followers data not found for any candidate ID');
       }
     } catch (e) {
       ProfileScreenLogger.logWarning('Followers load failed: $e');
-      // Don't block UI for followers loading errors
+      // Mark as loaded to avoid infinite loading
+      setState(() {
+        _isFollowersLoaded = true;
+      });
     }
   }
 
   Future<void> _loadAdditionalUserData() async {
     try {
       if (widget.userId == null && _stateManager.userData != null) {
-        final currentUserId = _stateManager.userData!['id'] ??
-            _stateManager.userData!['googleId'];
+        final currentUserId =
+            _stateManager.userData!['_id'] ?? _stateManager.userData!['id'];
         if (currentUserId != null) {
           final userProvider =
               Provider.of<UserProvider>(context, listen: false);
           await userProvider.getUserDataWithFollowers(currentUserId);
-
-          // Show completion feedback
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('🎉 All profile data loaded successfully!'),
-                backgroundColor: Colors.green,
-                duration: Duration(seconds: 2),
-              ),
-            );
-          }
         }
       }
     } catch (e) {
@@ -585,13 +596,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                 ),
                 label: const Text('Sign in with Google'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: const Color(0xFF424242),
+                  backgroundColor: Colors.grey[700],
+                  foregroundColor: Colors.white,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
-                    side: const BorderSide(color: Color(0xFFE0E0E0)),
+                    side: BorderSide(color: Colors.grey[600]!),
                   ),
                 ),
               ),
@@ -608,8 +619,10 @@ class _ProfileScreenState extends State<ProfileScreen>
     return ChangeNotifierProvider.value(
       value: _stateManager,
       child: Scaffold(
+        key: _scaffoldKey,
         backgroundColor: Colors.white,
         appBar: _buildAppBar(),
+        drawer: _buildSideMenu(),
         body: Consumer<UserProvider>(
           builder: (context, userProvider, child) {
             UserModel? userModel;
@@ -618,22 +631,6 @@ class _ProfileScreenState extends State<ProfileScreen>
             }
             // Use the local _stateManager directly since it's not in Provider
             return _buildBody(userProvider, userModel);
-          },
-        ),
-        // **NEW: Floating action button for delete when videos are selected**
-        floatingActionButton: Consumer<ProfileStateManager>(
-          builder: (context, stateManager, child) {
-            if (stateManager.isSelecting &&
-                stateManager.selectedVideoIds.isNotEmpty) {
-              return FloatingActionButton.extended(
-                onPressed: _handleDeleteSelectedVideos,
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-                icon: const Icon(Icons.delete),
-                label: Text('Delete ${stateManager.selectedVideoIds.length}'),
-              );
-            }
-            return const SizedBox.shrink();
           },
         ),
       ),
@@ -858,7 +855,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                         childAspectRatio:
                             ResponsiveHelper.isMobile(context) ? 0.75 : 0.8,
                       ),
-                      itemCount: 6, // Show 6 skeleton videos
+                      itemCount: 6,
                       itemBuilder: (context, index) => Container(
                         decoration: BoxDecoration(
                           color: Colors.grey[300],
@@ -882,128 +879,512 @@ class _ProfileScreenState extends State<ProfileScreen>
       child: Consumer<ProfileStateManager>(
         builder: (context, stateManager, child) {
           return AppBar(
-            backgroundColor: Colors.white,
+            backgroundColor: Colors.black,
+            elevation: 0,
             title: Text(
               stateManager.userData?['name'] ?? 'Profile',
-              style: const TextStyle(color: Color(0xFF424242)),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-            actions: [
-              // Debug button to check cache status
-              IconButton(
-                icon: const Icon(Icons.bug_report, color: Colors.orange),
-                onPressed: () {
-                  final stats = stateManager.getCacheStats();
-                  ProfileScreenLogger.logCacheStats(stats);
-                  ProfileScreenLogger.logDebugInfo(
-                      'User Data: ${stateManager.userData}');
-                  ProfileScreenLogger.logDebugInfo(
-                      'Videos Count: ${stateManager.userVideos.length}');
-                  ProfileScreenLogger.logDebugInfo(
-                      'Loading: ${stateManager.isLoading}');
-                  ProfileScreenLogger.logDebugInfo(
-                      'Error: ${stateManager.error}');
-
-                  // **NEW: Additional debug info**
-                  if (stateManager.userData != null) {
-                    final currentUserId = stateManager.userData!['id'] ??
-                        stateManager.userData!['googleId'];
-                    ProfileScreenLogger.logDebugInfo(
-                        'Current User ID: $currentUserId');
-                    ProfileScreenLogger.logDebugInfo(
-                        'User ID type: ${currentUserId.runtimeType}');
-                  }
-
-                  // **NEW: Check HLS conversion status for all videos**
-                  _showHlsConversionStatus();
-
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                          'Cache: ${stats['cacheSize']}, Videos: ${stateManager.userVideos.length}'),
-                      duration: const Duration(seconds: 3),
-                    ),
-                  );
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.more_vert, color: Color(0xFF424242)),
-                onPressed: () {
-                  showModalBottomSheet(
-                    context: context,
-                    backgroundColor: Colors.white,
-                    shape: const RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.vertical(top: Radius.circular(16)),
-                    ),
-                    builder: (context) => SafeArea(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Header
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            child: Row(
-                              children: [
-                                const Text(
-                                  'Menu Options',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const Spacer(),
-                                IconButton(
-                                  onPressed: () => Navigator.pop(context),
-                                  icon: const Icon(Icons.close),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Divider(height: 1),
-
-                          // Menu items
-                          if (stateManager.userData != null) ...[
-                            ListTile(
-                              leading:
-                                  const Icon(Icons.delete, color: Colors.red),
-                              title: const Text('Delete Videos'),
-                              subtitle:
-                                  const Text('Select and delete your videos'),
-                              onTap: () {
-                                Navigator.pop(context);
-                                stateManager.enterSelectionMode();
-                              },
-                            ),
-                            ListTile(
-                              leading:
-                                  const Icon(Icons.logout, color: Colors.red),
-                              title: const Text('Logout'),
-                              onTap: () {
-                                Navigator.pop(context);
-                                _handleLogout();
-                              },
-                            ),
-                          ] else ...[
-                            ListTile(
-                              leading:
-                                  const Icon(Icons.login, color: Colors.blue),
-                              title: const Text('Sign In'),
-                              onTap: () {
-                                Navigator.pop(context);
-                                _handleGoogleSignIn();
-                              },
-                            ),
-                          ],
-                          const SizedBox(height: 16),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ],
+            leading: IconButton(
+              icon: const Icon(Icons.menu, color: Colors.white),
+              tooltip: 'Menu',
+              onPressed: () {
+                _scaffoldKey.currentState?.openDrawer();
+              },
+            ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildSideMenu() {
+    return Drawer(
+      child: Container(
+        color: Colors.black,
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                child: const Row(
+                  children: [
+                    Icon(Icons.menu, color: Colors.white),
+                    SizedBox(width: 12),
+                    Text(
+                      'Menu',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(
+                  color: Color(0xFF303030), height: 1, thickness: 0.5),
+              Expanded(
+                child: Consumer<ProfileStateManager>(
+                  builder: (context, stateManager, child) {
+                    return ListView(
+                      children: [
+                        FutureBuilder<bool>(
+                          future: AutoScrollSettings.isEnabled(),
+                          builder: (context, snapshot) {
+                            final enabled = snapshot.data ?? false;
+                            return ListTile(
+                              leading: const Icon(Icons.swap_vert_circle,
+                                  color: Colors.grey),
+                              title: const Text('Auto Scroll',
+                                  style: TextStyle(color: Colors.white)),
+                              subtitle: Text(
+                                enabled
+                                    ? 'Auto-scroll is ON'
+                                    : 'Auto-scroll is OFF',
+                                style:
+                                    const TextStyle(color: Color(0xFF9E9E9E)),
+                              ),
+                              trailing: Switch(
+                                value: enabled,
+                                activeThumbColor: Colors.white,
+                                activeTrackColor: const Color(0xFF616161),
+                                inactiveThumbColor: const Color(0xFFBDBDBD),
+                                inactiveTrackColor: const Color(0xFF303030),
+                                onChanged: (val) async {
+                                  await AutoScrollSettings.setEnabled(val);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                            'Auto Scroll: ${val ? 'ON' : 'OFF'}'),
+                                        duration: const Duration(seconds: 1),
+                                      ),
+                                    );
+                                  }
+                                  (context as Element).markNeedsBuild();
+                                },
+                              ),
+                              onTap: () async {
+                                final next = !enabled;
+                                await AutoScrollSettings.setEnabled(next);
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                          'Auto Scroll: ${next ? 'ON' : 'OFF'}'),
+                                      duration: const Duration(seconds: 1),
+                                    ),
+                                  );
+                                }
+                                (context as Element).markNeedsBuild();
+                              },
+                            );
+                          },
+                        ),
+                        const Divider(
+                            color: Color(0xFF303030),
+                            height: 1,
+                            thickness: 0.5),
+                        // Edit Profile / Save / Cancel
+                        if (!stateManager.isEditing) ...[
+                          ListTile(
+                            leading: const Icon(Icons.edit, color: Colors.grey),
+                            title: const Text('Edit Profile',
+                                style: TextStyle(color: Colors.white)),
+                            subtitle: const Text(
+                                'Update your profile information',
+                                style: TextStyle(color: Color(0xFF9E9E9E))),
+                            onTap: () {
+                              Navigator.pop(context);
+                              _handleEditProfile();
+                            },
+                          ),
+                          const Divider(
+                              color: Color(0xFF303030),
+                              height: 1,
+                              thickness: 0.5),
+                        ] else ...[
+                          ListTile(
+                            leading: const Icon(Icons.save, color: Colors.grey),
+                            title: const Text('Save Changes',
+                                style: TextStyle(color: Colors.white)),
+                            subtitle: const Text('Apply your edits',
+                                style: TextStyle(color: Color(0xFF9E9E9E))),
+                            onTap: () {
+                              Navigator.pop(context);
+                              _handleSaveProfile();
+                            },
+                          ),
+                          ListTile(
+                            leading:
+                                const Icon(Icons.close, color: Colors.grey),
+                            title: const Text('Cancel Edit',
+                                style: TextStyle(color: Colors.white)),
+                            subtitle: const Text('Discard changes',
+                                style: TextStyle(color: Color(0xFF9E9E9E))),
+                            onTap: () {
+                              Navigator.pop(context);
+                              _handleCancelEdit();
+                            },
+                          ),
+                          const Divider(
+                              color: Color(0xFF303030),
+                              height: 1,
+                              thickness: 0.5),
+                        ],
+                        ListTile(
+                          leading:
+                              const Icon(Icons.dashboard, color: Colors.grey),
+                          title: const Text('Creator Dashboard',
+                              style: TextStyle(color: Colors.white)),
+                          subtitle: const Text('View earnings and analytics',
+                              style: TextStyle(color: Color(0xFF9E9E9E))),
+                          onTap: () {
+                            Navigator.pop(context);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const CreatorPayoutDashboard(),
+                              ),
+                            );
+                          },
+                        ),
+                        const Divider(
+                            color: Color(0xFF303030),
+                            height: 1,
+                            thickness: 0.5),
+                        ListTile(
+                          leading: const Icon(Icons.delete_outline,
+                              color: Colors.grey),
+                          title: const Text('Delete Videos',
+                              style: TextStyle(color: Colors.white)),
+                          subtitle: const Text('Select and delete your videos',
+                              style: TextStyle(color: Color(0xFF9E9E9E))),
+                          onTap: () {
+                            Navigator.pop(context);
+                            stateManager.enterSelectionMode();
+                          },
+                        ),
+                        const Divider(
+                            color: Color(0xFF303030),
+                            height: 1,
+                            thickness: 0.5),
+                        ListTile(
+                          leading:
+                              const Icon(Icons.settings, color: Colors.grey),
+                          title: const Text('Settings',
+                              style: TextStyle(color: Colors.white)),
+                          subtitle: const Text('App settings and preferences',
+                              style: TextStyle(color: Color(0xFF9E9E9E))),
+                          onTap: () {
+                            Navigator.pop(context);
+                            _showSettingsBottomSheet();
+                          },
+                        ),
+                        const Divider(
+                            color: Color(0xFF303030),
+                            height: 1,
+                            thickness: 0.5),
+                        ListTile(
+                          leading: const Icon(Icons.logout, color: Colors.grey),
+                          title: const Text('Sign Out',
+                              style: TextStyle(color: Colors.white)),
+                          subtitle: const Text('Sign out of your account',
+                              style: TextStyle(color: Color(0xFF9E9E9E))),
+                          onTap: () {
+                            Navigator.pop(context);
+                            _handleLogout();
+                          },
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// **NEW: Professional Settings Bottom Sheet**
+  void _showSettingsBottomSheet() {
+    print('🔧 ProfileScreen: Opening Settings Bottom Sheet');
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.black,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  const Icon(Icons.settings, color: Colors.white, size: 24),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Settings',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(color: Colors.grey, height: 1),
+
+            // Settings options
+            Consumer<ProfileStateManager>(
+              builder: (context, stateManager, child) {
+                if (stateManager.userData != null) {
+                  return Column(
+                    children: [
+                      _buildSettingsTile(
+                        icon: Icons.swap_vert_circle,
+                        title: 'Auto Scroll',
+                        subtitle: 'Auto-scroll to next video after finish',
+                        onTap: () async {
+                          // Toggle the preference
+                          final enabled = await AutoScrollSettings.isEnabled();
+                          await AutoScrollSettings.setEnabled(!enabled);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                    'Auto Scroll: ${!enabled ? 'ON' : 'OFF'}'),
+                                duration: const Duration(seconds: 1),
+                              ),
+                            );
+                          }
+                          Navigator.pop(context);
+                        },
+                        iconColor: Colors.grey,
+                      ),
+                      _buildSettingsTile(
+                        icon: Icons.edit,
+                        title: 'Edit Profile',
+                        subtitle: 'Update your profile information',
+                        onTap: () {
+                          Navigator.pop(context);
+                          _handleEditProfile();
+                        },
+                      ),
+                      _buildSettingsTile(
+                        icon: Icons.video_library,
+                        title: 'Manage Videos',
+                        subtitle: 'View and manage your videos',
+                        onTap: () {
+                          Navigator.pop(context);
+                          // Already on profile screen, just scroll to videos
+                        },
+                      ),
+                      _buildSettingsTile(
+                        icon: Icons.dashboard,
+                        title: 'Creator Dashboard',
+                        subtitle: 'View earnings and analytics',
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  const CreatorPayoutDashboard(),
+                            ),
+                          );
+                        },
+                      ),
+                      _buildSettingsTile(
+                        icon: Icons.analytics,
+                        title: 'Revenue Analytics',
+                        subtitle: 'Track your earnings',
+                        onTap: () async {
+                          Navigator.pop(context);
+                          final hasPaymentSetup =
+                              await _checkPaymentSetupStatus();
+                          if (hasPaymentSetup) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const CreatorRevenueScreen(),
+                              ),
+                            );
+                          } else {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const CreatorPaymentSetupScreen(),
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                      _buildSettingsTile(
+                        icon: Icons.help_outline,
+                        title: 'Help & Support',
+                        subtitle: 'Get help with your account',
+                        onTap: () {
+                          Navigator.pop(context);
+                          _showHelpDialog();
+                        },
+                      ),
+                    ],
+                  );
+                } else {
+                  return Column(
+                    children: [
+                      _buildSettingsTile(
+                        icon: Icons.login,
+                        title: 'Sign In',
+                        subtitle: 'Sign in to access your profile',
+                        onTap: () {
+                          Navigator.pop(context);
+                          _handleGoogleSignIn();
+                        },
+                      ),
+                      _buildSettingsTile(
+                        icon: Icons.help_outline,
+                        title: 'Help & Support',
+                        subtitle: 'Get help with your account',
+                        onTap: () {
+                          Navigator.pop(context);
+                          _showHelpDialog();
+                        },
+                      ),
+                    ],
+                  );
+                }
+              },
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// **NEW: Professional Settings Tile**
+  Widget _buildSettingsTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    Color? iconColor,
+  }) {
+    return ListTile(
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: (iconColor ?? Colors.grey).withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(
+          icon,
+          color: iconColor ?? Colors.grey,
+          size: 20,
+        ),
+      ),
+      title: Text(
+        title,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: const TextStyle(
+          color: Colors.grey,
+          fontSize: 14,
+        ),
+      ),
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+    );
+  }
+
+  /// **NEW: Help Dialog**
+  void _showHelpDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.black,
+        title: const Row(
+          children: [
+            Icon(Icons.help_outline, color: Colors.white),
+            SizedBox(width: 12),
+            Text(
+              'Help & Support',
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Need help? Here are some common solutions:',
+              style: TextStyle(color: Colors.grey, fontSize: 16),
+            ),
+            SizedBox(height: 16),
+            Text(
+              '• Profile Issues: Try refreshing your profile',
+              style: TextStyle(color: Colors.white, fontSize: 14),
+            ),
+            Text(
+              '• Video Problems: Check if videos need HLS conversion',
+              style: TextStyle(color: Colors.white, fontSize: 14),
+            ),
+            Text(
+              '• Payment Setup: Complete payment setup for earnings',
+              style: TextStyle(color: Colors.white, fontSize: 14),
+            ),
+            Text(
+              '• Account Issues: Try signing out and back in',
+              style: TextStyle(color: Colors.white, fontSize: 14),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _debugState();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Debug Info'),
+          ),
+        ],
       ),
     );
   }
@@ -1062,70 +1443,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               ),
             ),
             SizedBox(height: ResponsiveHelper.isMobile(context) ? 16 : 24),
-
-            // Authentication status indicator
-            RepaintBoundary(
-              child: FutureBuilder<SharedPreferences>(
-                future: SharedPreferences.getInstance(),
-                builder: (context, snapshot) {
-                  if (snapshot.hasData) {
-                    final prefs = snapshot.data!;
-                    final hasJwtToken = prefs.getString('jwt_token') != null;
-                    final hasFallbackUser =
-                        prefs.getString('fallback_user') != null;
-                    final isAuthenticated = hasJwtToken || hasFallbackUser;
-
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: isAuthenticated
-                            ? Colors.green[100]
-                            : Colors.orange[100],
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: isAuthenticated
-                              ? Colors.green[300]!
-                              : Colors.orange[300]!,
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            isAuthenticated
-                                ? Icons.check_circle
-                                : Icons.warning,
-                            size: 16,
-                            color: isAuthenticated
-                                ? Colors.green[700]
-                                : Colors.orange[700],
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            isAuthenticated
-                                ? 'Authenticated'
-                                : 'Authentication Issue',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isAuthenticated
-                                  ? Colors.green[700]
-                                  : Colors.orange[700],
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-                  return const SizedBox.shrink();
-                },
-              ),
-            ),
-
             SizedBox(height: ResponsiveHelper.isMobile(context) ? 16 : 24),
-
             Consumer<ProfileStateManager>(
               builder: (context, stateManager, child) {
                 if (stateManager.isEditing) {
@@ -1180,13 +1498,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     ),
                   );
                 } else {
-                  return RepaintBoundary(
-                    child: TextButton.icon(
-                      onPressed: _handleEditProfile,
-                      icon: const Icon(Icons.edit),
-                      label: const Text('Edit Profile'),
-                    ),
-                  );
+                  return const SizedBox.shrink();
                 }
               },
             ),
@@ -1198,7 +1510,6 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   // **NEW: Helper method to get profile image with fallback logic**
   ImageProvider? _getProfileImage() {
-    // **FIXED: Prioritize ProfileStateManager data, then fall back to UserProvider data**
     if (_stateManager.userData != null &&
         _stateManager.userData!['profilePic'] != null) {
       final profilePic = _stateManager.userData!['profilePic'];
@@ -1301,6 +1612,68 @@ class _ProfileScreenState extends State<ProfileScreen>
                         'Followers',
                         _isFollowersLoaded ? _getFollowersCount() : '...',
                         isLoading: !_isFollowersLoaded,
+                        onTap: () {
+                          // **NEW: Debug followers loading**
+                          ProfileScreenLogger.logDebugInfo(
+                              '=== FOLLOWERS DEBUG ===');
+                          ProfileScreenLogger.logDebugInfo(
+                              '_isFollowersLoaded: $_isFollowersLoaded');
+                          ProfileScreenLogger.logDebugInfo(
+                              'widget.userId: ${widget.userId}');
+                          ProfileScreenLogger.logDebugInfo(
+                              '_stateManager.userData: ${_stateManager.userData != null}');
+                          if (_stateManager.userData != null) {
+                            ProfileScreenLogger.logDebugInfo(
+                                'Current user ID: ${_stateManager.userData!['_id'] ?? _stateManager.userData!['id']}');
+                          }
+
+                          // Show debug info
+                          if (mounted) {
+                            showDialog(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: const Text('Followers Debug Info'),
+                                content: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                        'Followers Loaded: $_isFollowersLoaded'),
+                                    Text(
+                                        'User ID: ${widget.userId ?? "Own Profile"}'),
+                                    Text(
+                                        'Followers Count: ${_getFollowersCount()}'),
+                                    Text(
+                                        'User Data Available: ${_stateManager.userData != null}'),
+                                    if (_stateManager.userData != null) ...[
+                                      Text(
+                                          'ObjectID: ${_stateManager.userData!['_id'] ?? "Not Set"}'),
+                                      Text(
+                                          'ID: ${_stateManager.userData!['id'] ?? "Not Set"}'),
+                                    ],
+                                  ],
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: const Text('Close'),
+                                  ),
+                                  ElevatedButton(
+                                    onPressed: () {
+                                      Navigator.pop(context);
+                                      // Force reload followers
+                                      setState(() {
+                                        _isFollowersLoaded = false;
+                                      });
+                                      _loadFollowersProgressive();
+                                    },
+                                    child: const Text('Reload Followers'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+                        },
                       ),
                       _buildStatColumn(
                         'Earnings',
@@ -1741,16 +2114,49 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // **NEW: Helper method to get followers count with fallback logic**
+  // **NEW: Helper method to get followers count using MongoDB ObjectID**
   int _getFollowersCount() {
-    // **FIXED: Prioritize UserProvider data for followers count, then fall back to ProfileStateManager**
-    if (widget.userId != null) {
+    ProfileScreenLogger.logDebugInfo('=== GETTING FOLLOWERS COUNT ===');
+    ProfileScreenLogger.logDebugInfo('widget.userId: ${widget.userId}');
+    ProfileScreenLogger.logDebugInfo(
+        '_stateManager.userData: ${_stateManager.userData != null}');
+
+    // Build candidate IDs to query provider with
+    final List<String> idsToTry = <String?>[
+      widget.userId,
+      _stateManager.userData?['googleId'],
+      _stateManager.userData?['_id'] ?? _stateManager.userData?['id'],
+    ]
+        .where((e) => e != null && (e).isNotEmpty)
+        .map((e) => e as String)
+        .toList()
+        .toSet()
+        .toList();
+
+    if (idsToTry.isNotEmpty) {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
-      final userModel = userProvider.getUserData(widget.userId!);
-      if (userModel?.followersCount != null) {
+      for (final candidateId in idsToTry) {
+        final userModel = userProvider.getUserData(candidateId);
+        if (userModel?.followersCount != null) {
+          ProfileScreenLogger.logDebugInfo(
+              'Using followers count from UserProvider for $candidateId: ${userModel!.followersCount}');
+          return userModel.followersCount;
+        }
+      }
+    }
+
+    // **NEW: Check if we're viewing own profile**
+    if (widget.userId == null && _stateManager.userData != null) {
+      ProfileScreenLogger.logDebugInfo('Viewing own profile');
+
+      // Prefer counts available in userData
+      final followersCount = _stateManager.userData!['followers'] ??
+          _stateManager.userData!['followersCount'] ??
+          0;
+      if (followersCount != 0) {
         ProfileScreenLogger.logDebugInfo(
-            'Using followers count from UserProvider: ${userModel!.followersCount}');
-        return userModel.followersCount;
+            'Using followers count from ProfileStateManager: $followersCount');
+        return followersCount;
       }
     }
 
@@ -1765,7 +2171,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     // Final fallback
     ProfileScreenLogger.logDebugInfo(
-        'No followers count available, using default');
+        'No followers count available, using default: 0');
     return 0;
   }
 
@@ -1783,7 +2189,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       // **NEW: If no flag, try to load payment setup data from backend**
       if (_stateManager.userData != null &&
-          _stateManager.userData!['id'] != null) {
+          _stateManager.userData!['_id'] != null) {
         ProfileScreenLogger.logDebugInfo(
             'No payment setup flag found, checking backend data...');
         final hasBackendSetup = await _checkBackendPaymentSetup();
@@ -2077,8 +2483,8 @@ class _ProfileScreenState extends State<ProfileScreen>
               onPressed: () {
                 Navigator.pop(context);
                 if (_stateManager.userData != null) {
-                  final currentUserId = _stateManager.userData!['id'] ??
-                      _stateManager.userData!['googleId'];
+                  final currentUserId = _stateManager.userData!['_id'] ??
+                      _stateManager.userData!['id'];
                   if (currentUserId != null) {
                     _stateManager.forceRefreshVideos(currentUserId);
                   }
@@ -2183,8 +2589,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     try {
       if (_stateManager.userData != null) {
-        final currentUserId = _stateManager.userData!['id'] ??
-            _stateManager.userData!['googleId'];
+        final currentUserId =
+            _stateManager.userData!['_id'] ?? _stateManager.userData!['id'];
         if (currentUserId != null) {
           ProfileScreenLogger.logDebugInfo(
               'Refreshing videos for user: $currentUserId');
@@ -2230,8 +2636,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     try {
       if (_stateManager.userData != null) {
-        final currentUserId = _stateManager.userData!['id'] ??
-            _stateManager.userData!['googleId'];
+        final currentUserId =
+            _stateManager.userData!['_id'] ?? _stateManager.userData!['id'];
         if (currentUserId != null) {
           ProfileScreenLogger.logDebugInfo(
               'Testing with user ID: $currentUserId');

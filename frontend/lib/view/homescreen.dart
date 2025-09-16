@@ -16,8 +16,7 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   final _videoScreenKey = GlobalKey(); // Keep as generic key
-  final _profileScreenKey = GlobalKey<
-      State<ProfileScreen>>(); // Add profile screen key with correct type
+  final _profileScreenKey = GlobalKey<State<ProfileScreen>>();
   final AuthService _authService = AuthService();
 
   // Method to refresh video list and profile
@@ -160,7 +159,22 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       builder: (context, mainController, child) {
         return Scaffold(
           backgroundColor: Colors.white,
-          body: _buildCurrentScreen(mainController.currentIndex),
+          body: IndexedStack(
+            index: mainController.currentIndex,
+            children: [
+              const VideoScreen(
+                key: PageStorageKey('videoScreen'),
+              ),
+              const SnehaScreen(key: PageStorageKey('snehaScreen')),
+              UploadScreen(
+                key: const PageStorageKey('uploadScreen'),
+                onVideoUploaded: _refreshVideoList,
+              ),
+              ProfileScreen(
+                key: _profileScreenKey,
+              ),
+            ],
+          ),
           bottomNavigationBar: Container(
             decoration: BoxDecoration(
               color: Colors.white,
@@ -226,34 +240,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     );
   }
 
-/// Build the current screen based on index
-Widget _buildCurrentScreen(int index) {
-  switch (index) {
-    case 0:
-      return const VideoScreen(
-        key:  PageStorageKey('videoScreen'), // **FIXED: Use PageStorageKey instead of _videoScreenKey**
-      );
-    case 1:
-      return const SnehaScreen(key: PageStorageKey('snehaScreen'));
-    case 2:
-      return UploadScreen(
-        key: const PageStorageKey('uploadScreen'),
-        onVideoUploaded: _refreshVideoList,
-      );
-    case 3:
-      return ProfileScreen(
-        key: _profileScreenKey,
-      );
-    default:
-      return const VideoScreen(
-        key: PageStorageKey('videoScreen'),
-      );
-  }
-}
-
   /// Build navigation item with double-tap support for Yog tab
   Widget _buildNavItem({
-
     required int index,
     required int currentIndex,
     required IconData icon,
@@ -360,5 +348,4 @@ Widget _buildCurrentScreen(int index) {
       ),
     );
   }
-  
 }

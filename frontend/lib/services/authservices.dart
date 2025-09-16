@@ -245,14 +245,33 @@ class AuthService {
   Future<void> signOut() async {
     try {
       print('🚪 Signing out user...');
+
+      // **FIXED: Sign out from Google first**
       await _googleSignIn.signOut();
 
-      // Clear stored tokens and data
+      // **FIXED: Clear ALL stored authentication data**
       SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.remove('jwt_token');
       await prefs.remove('fallback_user');
 
-      print('✅ Sign out successful');
+      // **FIXED: Clear any cached user data**
+      await prefs.remove('user_profile');
+      await prefs.remove('user_videos');
+      await prefs.remove('last_user_id');
+
+      // **FIXED: Clear all SharedPreferences keys related to user data**
+      final keys = prefs.getKeys();
+      for (String key in keys) {
+        if (key.startsWith('user_') ||
+            key.startsWith('video_') ||
+            key.startsWith('profile_') ||
+            key.startsWith('auth_')) {
+          await prefs.remove(key);
+          print('🗑️ Cleared cached data: $key');
+        }
+      }
+
+      print('✅ Sign out successful - All user data cleared');
     } catch (e) {
       print('❌ Error during sign out: $e');
       throw Exception('Sign out failed: $e');
@@ -274,6 +293,22 @@ class AuthService {
     try {
       print('🔍 AuthService: Getting user data...');
 
+      // **OPTIMIZED: Add overall timeout to prevent hanging**
+      return await Future.any([
+        _getUserDataInternal(skipTokenRefresh: skipTokenRefresh),
+        Future.delayed(
+            const Duration(seconds: 5), () => null), // 5 second timeout
+      ]);
+    } catch (e) {
+      print('❌ AuthService: Error getting user data: $e');
+      return null;
+    }
+  }
+
+  /// **INTERNAL: Actual user data retrieval logic**
+  Future<Map<String, dynamic>?> _getUserDataInternal(
+      {bool skipTokenRefresh = false}) async {
+    try {
       final prefs = await SharedPreferences.getInstance();
       String? token = prefs.getString('jwt_token');
       String? fallbackUser = prefs.getString('fallback_user');
@@ -338,7 +373,8 @@ class AuthService {
         final response = await http.get(
           Uri.parse('${AppConfig.baseUrl}/api/users/profile'),
           headers: {'Authorization': 'Bearer $token'},
-        ).timeout(const Duration(seconds: 10)); // Increased timeout
+        ).timeout(const Duration(
+            seconds: 3)); // **OPTIMIZED: Reduced timeout for faster startup**
 
         if (response.statusCode == 200) {
           final userData = jsonDecode(response.body);
@@ -404,16 +440,11 @@ class AuthService {
       // If we reach here, no valid data is available
       print('⚠️ No valid user data available, returning null');
       return null;
-
-      print('❌ No JWT token found');
-      return null;
     } catch (e) {
       print('❌ Error getting user data: $e');
       return null;
     }
   }
-
-  // **NEW: JWT Token Validation Methods**
 
   /// Check if JWT token is valid and not expired
   bool isTokenValid(String? token) {

@@ -42,7 +42,9 @@ class HLSEncodingService {
     } = options;
 
     return new Promise((resolve, reject) => {
-      const outputDir = path.join(this.hlsOutputDir, videoId);
+      // **FIXED: Use proper video ID instead of temporary names**
+      const cleanVideoId = videoId.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const outputDir = path.join(this.hlsOutputDir, cleanVideoId);
       const playlistPath = path.join(outputDir, 'playlist.m3u8');
       
       // Create output directory
@@ -153,7 +155,7 @@ class HLSEncodingService {
           resolve({
             success: true,
             playlistPath,
-            playlistUrl: `/uploads/hls/${videoId}/playlist.m3u8`,
+            playlistUrl: `/uploads/hls/${cleanVideoId}/playlist.m3u8`,
             segments: segments.length,
             outputDir,
             segmentDuration,
@@ -201,43 +203,55 @@ async checkFFmpegInstallation() {
    * @returns {Promise<Object>} - Multi-quality HLS result
    */
   async generateAdaptiveHLS(inputPath, videoId) {
-    const outputDir = path.join(this.hlsOutputDir, videoId);
+    // **FIXED: Use proper video ID instead of temporary names**
+    const cleanVideoId = videoId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const outputDir = path.join(this.hlsOutputDir, cleanVideoId);
     const masterPlaylistPath = path.join(outputDir, 'master.m3u8');
     
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
 
-    // Quality variants optimized for fast startup and efficient streaming
-    // Segment duration: 2-4 seconds for fast startup
-    // CRF ~23 for good quality, baseline profile for compatibility
+    // Quality variants optimized for INSTANT loading and fast startup
+    // Segment duration: 2 seconds for fastest possible startup
+    // CRF ~20 for better quality, ultrafast preset for speed
+    // **UPDATED: 9:16 aspect ratio for reels-style full screen videos**
     const variants = [
       { 
         name: '720p', 
-        crf: 23, 
-        width: 1280, 
-        height: 720, 
+        crf: 20, 
+        width: 720, 
+        height: 1280, // 9:16 aspect ratio
         audioBitrate: '128k', 
-        targetBitrate: '1500k',
-        segmentDuration: 3 // 3 seconds for optimal startup
+        targetBitrate: '2000k',
+        segmentDuration: 2 // 2 seconds for instant startup
       },
       { 
         name: '480p', 
-        crf: 23, 
-        width: 854, 
-        height: 480, 
+        crf: 20, 
+        width: 480, 
+        height: 854, // 9:16 aspect ratio
         audioBitrate: '96k', 
-        targetBitrate: '800k',
-        segmentDuration: 3
+        targetBitrate: '1000k',
+        segmentDuration: 2
+      },
+      { 
+        name: '360p', 
+        crf: 20, 
+        width: 360, 
+        height: 640, // 9:16 aspect ratio
+        audioBitrate: '64k', 
+        targetBitrate: '500k',
+        segmentDuration: 2
       },
       { 
         name: '240p', 
-        crf: 23, 
-        width: 426, 
-        height: 240, 
-        audioBitrate: '64k', 
-        targetBitrate: '300k',
-        segmentDuration: 3
+        crf: 20, 
+        width: 240, 
+        height: 426, // 9:16 aspect ratio
+        audioBitrate: '48k', 
+        targetBitrate: '200k',
+        segmentDuration: 2
       }
     ];
 
@@ -250,7 +264,7 @@ async checkFFmpegInstallation() {
         fs.mkdirSync(variantDir, { recursive: true });
       }
 
-      const promise = this.encodeVariant(inputPath, variantDir, variant, variant.segmentDuration);
+      const promise = this.encodeVariant(inputPath, variantDir, variant, variant.segmentDuration, videoId);
       promises.push(promise);
     }
 
@@ -264,7 +278,7 @@ async checkFFmpegInstallation() {
       return {
         success: true,
         masterPlaylistPath,
-        masterPlaylistUrl: `/uploads/hls/${videoId}/master.m3u8`,
+        masterPlaylistUrl: `/uploads/hls/${cleanVideoId}/master.m3u8`,
         variants: results,
         segmentDuration: variants[0].segmentDuration,
         qualityRange: `${variants[0].name} to ${variants[variants.length - 1].name}`
@@ -277,61 +291,75 @@ async checkFFmpegInstallation() {
   /**
    * Encode a single quality variant
    */
-  async encodeVariant(inputPath, outputDir, variant, segmentDuration) {
+  async encodeVariant(inputPath, outputDir, variant, segmentDuration, videoId) {
     return new Promise((resolve, reject) => {
       const playlistPath = path.join(outputDir, 'playlist.m3u8');
+      // **FIXED: Use proper video ID instead of temporary names**
+      const cleanVideoId = videoId.replace(/[^a-zA-Z0-9_-]/g, '_');
+      
+      console.log(`🎬 Encoding variant ${variant.name} for video ${videoId}`);
+      console.log(`📁 Input: ${inputPath}`);
+      console.log(`📁 Output: ${playlistPath}`);
+      console.log(`⚙️ Settings: ${variant.width}x${variant.height}, ${variant.targetBitrate}`);
       
       ffmpeg(inputPath)
         .inputOptions(['-y', '-hide_banner', '-loglevel error'])
         .outputOptions([
-          // Video codec settings - optimized for HLS streaming
+          // Video codec settings - simplified for reliability
           '-c:v', 'libx264',
-          '-preset', 'fast',           // Fast encoding for production
+          '-preset', 'fast',           // Fast preset for better compatibility
           '-profile:v', 'baseline',    // Baseline profile for maximum compatibility
-          '-level', '3.1',             // H.264 level for broad device support
-          '-crf', variant.crf.toString(), // Constant Rate Factor ~23 for good quality
-          '-maxrate', variant.targetBitrate, // Maximum bitrate constraint
-          '-bufsize', `${parseInt(variant.targetBitrate) * 2}k`, // Buffer size for bitrate control
-          '-sc_threshold', '0',        // Disable scene change detection for consistent quality
-          '-g', '48',                  // GOP size for 3-second segments
-          '-keyint_min', '48',         // Minimum keyframe interval
-          '-force_key_frames', 'expr:gte(t,n_forced*3)', // Force keyframes every 3 seconds
+          '-level', '3.0',             // H.264 level for broad device support
+          '-crf', variant.crf.toString(),
+          '-maxrate', variant.targetBitrate,
+          '-bufsize', `${parseInt(variant.targetBitrate) * 2}k`,
           
           // Audio codec settings
           '-c:a', 'aac',
           '-b:a', variant.audioBitrate,
-          '-ac', '2',                  // Stereo audio
-          '-ar', '44100',              // 44.1kHz sample rate
+          '-ac', '2',
+          '-ar', '44100',
           
-          // HLS specific settings
           '-f', 'hls',
           '-hls_time', segmentDuration.toString(),
-          '-hls_list_size', '0',       // Keep all segments
+          '-hls_list_size', '0',
           '-hls_segment_filename', path.join(outputDir, 'segment_%03d.ts'),
-          '-hls_playlist_type', 'vod', // Video on demand
-          '-hls_flags', 'independent_segments+delete_segments', // Better segment management
-          '-hls_segment_type', 'mpegts', // MPEG-TS segments for compatibility
+          '-hls_playlist_type', 'vod',
+          '-hls_flags', 'independent_segments',
+          '-hls_segment_type', 'mpegts',
           
-          // Additional optimizations
-          '-movflags', '+faststart',   // Optimize for streaming
-          '-pix_fmt', 'yuv420p'       // Pixel format for maximum compatibility
+          // Basic optimizations
+          '-pix_fmt', 'yuv420p'
         ])
         .size(`${variant.width}x${variant.height}`)
-        .aspect('16:9')
         .output(playlistPath)
-        .on('end', () => {
-          const segments = fs.readdirSync(outputDir).filter(file => file.endsWith('.ts'));
-          resolve({
-            name: variant.name,
-            playlistPath,
-            playlistUrl: `/uploads/hls/${videoId}/${variant.name}/playlist.m3u8`,
-            segments: segments.length,
-            resolution: `${variant.width}x${variant.height}`,
-            bitrate: variant.targetBitrate,
-            segmentDuration: segmentDuration
-          });
+        .on('start', (commandLine) => {
+          console.log(`🚀 FFmpeg command: ${commandLine}`);
         })
-        .on('error', reject)
+        .on('progress', (progress) => {
+          console.log(`📊 ${variant.name} encoding progress: ${progress.percent}%`);
+        })
+        .on('end', () => {
+          console.log(`✅ ${variant.name} encoding completed`);
+          try {
+            const segments = fs.readdirSync(outputDir).filter(file => file.endsWith('.ts'));
+            resolve({
+              name: variant.name,
+              playlistPath,
+              playlistUrl: `/uploads/hls/${cleanVideoId}/${variant.name}/playlist.m3u8`,
+              segments: segments.length,
+              resolution: `${variant.width}x${variant.height}`,
+              bitrate: variant.targetBitrate,
+              segmentDuration: segmentDuration
+            });
+          } catch (error) {
+            reject(new Error(`Failed to read output directory: ${error.message}`));
+          }
+        })
+        .on('error', (error) => {
+          console.error(`❌ ${variant.name} encoding failed:`, error);
+          reject(new Error(`FFmpeg encoding failed: ${error.message}`));
+        })
         .run();
     });
   }
@@ -341,12 +369,18 @@ async checkFFmpegInstallation() {
    */
   generateMasterPlaylist(variants, segmentDuration) {
     let playlist = '#EXTM3U\n';
-    playlist += '#EXT-X-VERSION:3\n';
-    playlist += `#EXT-X-TARGETDURATION:${segmentDuration}\n`;
-    playlist += '#EXT-X-MEDIA-SEQUENCE:0\n\n';
+    playlist += '#EXT-X-VERSION:6\n';
+    playlist += `#EXT-X-TARGETDURATION:${segmentDuration}\n\n`;
 
-    for (const variant of variants) {
-      playlist += `#EXT-X-STREAM-INF:BANDWIDTH=${this.estimateBandwidth(variant)},RESOLUTION=${variant.resolution}\n`;
+    // Sort variants by bandwidth (lowest first for better compatibility)
+    const sortedVariants = variants.sort((a, b) => this.estimateBandwidth(a) - this.estimateBandwidth(b));
+
+    for (const variant of sortedVariants) {
+      const bandwidth = this.estimateBandwidth(variant);
+      const resolution = variant.resolution;
+      const codecs = 'avc1.42e01e,mp4a.40.2'; // H.264 Baseline + AAC
+      
+      playlist += `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth},RESOLUTION=${resolution},CODECS="${codecs}"\n`;
       playlist += `${variant.name}/playlist.m3u8\n`;
     }
 
@@ -358,12 +392,13 @@ async checkFFmpegInstallation() {
    */
   estimateBandwidth(variant) {
     const baseBandwidth = {
-      '720p': 1500000,  // 1.5 Mbps for 720p
-      '480p': 800000,   // 800 Kbps for 480p
-      '240p': 300000    // 300 Kbps for 240p
+      '720p': 2000000,  // 2.0 Mbps for 720p (increased for better quality)
+      '480p': 1000000,  // 1.0 Mbps for 480p (increased for better quality)
+      '360p': 500000,   // 500 Kbps for 360p (new quality level)
+      '240p': 200000    // 200 Kbps for 240p (optimized for slow connections)
     };
     
-    return baseBandwidth[variant.name] || 800000; // Default to 480p bitrate
+    return baseBandwidth[variant.name] || 1000000; // Default to 480p bitrate
   }
 
   /**
@@ -387,9 +422,34 @@ async checkFFmpegInstallation() {
    * Clean up HLS files for a video
    */
   async cleanupHLS(videoId) {
-    const outputDir = path.join(this.hlsOutputDir, videoId);
+    const cleanVideoId = videoId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const outputDir = path.join(this.hlsOutputDir, cleanVideoId);
     if (fs.existsSync(outputDir)) {
       fs.rmSync(outputDir, { recursive: true, force: true });
+    }
+  }
+
+  /**
+   * Clean up old temporary HLS directories
+   */
+  async cleanupTempHLSDirectories() {
+    try {
+      const files = fs.readdirSync(this.hlsOutputDir);
+      const tempDirs = files.filter(file => file.startsWith('temp_'));
+      
+      console.log(`🧹 Found ${tempDirs.length} temporary HLS directories to clean up`);
+      
+      for (const tempDir of tempDirs) {
+        const tempPath = path.join(this.hlsOutputDir, tempDir);
+        try {
+          fs.rmSync(tempPath, { recursive: true, force: true });
+          console.log(`✅ Cleaned up temporary directory: ${tempDir}`);
+        } catch (error) {
+          console.error(`❌ Failed to clean up ${tempDir}:`, error);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error cleaning up temporary HLS directories:', error);
     }
   }
 
@@ -429,38 +489,56 @@ async checkFFmpegInstallation() {
    * @returns {Promise<Object>} - Adaptive HLS result
    */
   async generateNetworkAwareHLS(inputPath, videoId, options = {}) {
-    const {
-      targetBitrate = 'auto', // auto, low, medium, high
-      maxQuality = '1080p',   // Maximum quality to generate
-      minQuality = '144p'     // Minimum quality to ensure
-    } = options;
+    try {
+      const {
+        targetBitrate = 'auto', // auto, low, medium, high
+        maxQuality = '1080p',   // Maximum quality to generate
+        minQuality = '144p'     // Minimum quality to ensure
+      } = options;
 
-    // Quality tiers based on network conditions
-    const qualityTiers = {
-      low: ['144p', '240p', '360p'],           // Slow internet (2G/3G)
-      medium: ['360p', '480p', '720p'],        // Average internet (4G)
-      high: ['480p', '720p', '1080p'],         // Fast internet (4G+/5G)
-      ultra: ['720p', '1080p', '1440p', '4k']  // Very fast internet (5G/Fiber)
-    };
+      console.log(`🎬 Starting network-aware HLS generation for ${videoId}`);
+      console.log(`📁 Input path: ${inputPath}`);
+      console.log(`⚙️ Options:`, options);
 
-    // Auto-detect based on common network patterns
-    let selectedTier = targetBitrate;
-    if (targetBitrate === 'auto') {
-      // Default to medium for better compatibility
-      selectedTier = 'medium';
+      // Check if input file exists
+      if (!fs.existsSync(inputPath)) {
+        throw new Error(`Input file does not exist: ${inputPath}`);
+      }
+
+      // Quality tiers based on network conditions
+      const qualityTiers = {
+        low: ['144p', '240p', '360p'],           // Slow internet (2G/3G)
+        medium: ['360p', '480p', '720p'],        // Average internet (4G)
+        high: ['480p', '720p', '1080p'],         // Fast internet (4G+/5G)
+        ultra: ['720p', '1080p', '1440p', '4k']  // Very fast internet (5G/Fiber)
+      };
+
+      // Auto-detect based on common network patterns
+      let selectedTier = targetBitrate;
+      if (targetBitrate === 'auto') {
+        // Default to medium for better compatibility
+        selectedTier = 'medium';
+      }
+
+      const selectedQualities = qualityTiers[selectedTier] || qualityTiers.medium;
+      
+      // Filter variants based on selected qualities
+      const variants = this.getQualityVariants().filter(variant => 
+        selectedQualities.includes(variant.name) &&
+        this.isQualityInRange(variant.name, minQuality, maxQuality)
+      );
+
+      if (variants.length === 0) {
+        throw new Error('No quality variants selected for encoding');
+      }
+
+      console.log(`🎬 Generating network-aware HLS for ${videoId}: ${variants.map(v => v.name).join(', ')}`);
+
+      return await this.generateAdaptiveHLSWithVariants(inputPath, videoId, variants);
+    } catch (error) {
+      console.error(`❌ Network-aware HLS generation failed for ${videoId}:`, error);
+      throw new Error(`HLS generation failed: ${error.message}`);
     }
-
-    const selectedQualities = qualityTiers[selectedTier] || qualityTiers.medium;
-    
-    // Filter variants based on selected qualities
-    const variants = this.getQualityVariants().filter(variant => 
-      selectedQualities.includes(variant.name) &&
-      this.isQualityInRange(variant.name, minQuality, maxQuality)
-    );
-
-    console.log(`🎬 Generating network-aware HLS for ${videoId}: ${variants.map(v => v.name).join(', ')}`);
-
-    return this.generateAdaptiveHLSWithVariants(inputPath, videoId, variants);
   }
 
   /**
@@ -471,30 +549,39 @@ async checkFFmpegInstallation() {
     return [
       { 
         name: '720p', 
-        crf: 23, 
-        width: 1280, 
-        height: 720, 
+        crf: 20, 
+        width: 720, 
+        height: 1280, // 9:16 aspect ratio
         audioBitrate: '128k', 
-        targetBitrate: '1500k',
-        segmentDuration: 3
+        targetBitrate: '2000k',
+        segmentDuration: 2
       },
       { 
         name: '480p', 
-        crf: 23, 
-        width: 854, 
-        height: 480, 
+        crf: 20, 
+        width: 480, 
+        height: 854, // 9:16 aspect ratio
         audioBitrate: '96k', 
-        targetBitrate: '800k',
-        segmentDuration: 3
+        targetBitrate: '1000k',
+        segmentDuration: 2
+      },
+      { 
+        name: '360p', 
+        crf: 20, 
+        width: 360, 
+        height: 640, // 9:16 aspect ratio
+        audioBitrate: '64k', 
+        targetBitrate: '500k',
+        segmentDuration: 2
       },
       { 
         name: '240p', 
-        crf: 23, 
-        width: 426, 
-        height: 240, 
-        audioBitrate: '64k', 
-        targetBitrate: '300k',
-        segmentDuration: 3
+        crf: 20, 
+        width: 240, 
+        height: 426, // 9:16 aspect ratio
+        audioBitrate: '48k', 
+        targetBitrate: '200k',
+        segmentDuration: 2
       }
     ];
   }
@@ -523,43 +610,55 @@ async checkFFmpegInstallation() {
    * @returns {Promise<Object>} - Adaptive HLS result
    */
   async generateAdaptiveHLSWithVariants(inputPath, videoId, variants) {
-    const outputDir = path.join(this.hlsOutputDir, videoId);
-    const masterPlaylistPath = path.join(outputDir, 'master.m3u8');
-    
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true });
-    }
-
-    const segmentDuration = 6;
-    const promises = [];
-
-    // Generate each quality variant
-    for (const variant of variants) {
-      const variantDir = path.join(outputDir, variant.name);
-      if (!fs.existsSync(variantDir)) {
-        fs.mkdirSync(variantDir, { recursive: true });
+    try {
+      // **FIXED: Use proper video ID instead of temporary names**
+      const cleanVideoId = videoId.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const outputDir = path.join(this.hlsOutputDir, cleanVideoId);
+      const masterPlaylistPath = path.join(outputDir, 'master.m3u8');
+      
+      console.log(`🎬 Creating output directory: ${outputDir}`);
+      if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
       }
 
-      const promise = this.encodeVariant(inputPath, variantDir, variant, segmentDuration);
-      promises.push(promise);
-    }
+      const segmentDuration = 6;
+      const promises = [];
 
-    try {
+      console.log(`🎬 Starting encoding of ${variants.length} variants`);
+
+      // Generate each quality variant
+      for (const variant of variants) {
+        const variantDir = path.join(outputDir, variant.name);
+        if (!fs.existsSync(variantDir)) {
+          fs.mkdirSync(variantDir, { recursive: true });
+        }
+
+        console.log(`🎬 Starting encoding for ${variant.name}`);
+        const promise = this.encodeVariant(inputPath, variantDir, variant, segmentDuration, videoId);
+        promises.push(promise);
+      }
+
+      console.log(`🎬 Waiting for all variants to complete...`);
       const results = await Promise.all(promises);
+      
+      console.log(`✅ All variants completed, generating master playlist`);
       
       // Generate master playlist
       const masterPlaylist = this.generateMasterPlaylist(results, segmentDuration);
       fs.writeFileSync(masterPlaylistPath, masterPlaylist);
 
+      console.log(`✅ Master playlist created: ${masterPlaylistPath}`);
+
       return {
         success: true,
         masterPlaylistPath,
-        masterPlaylistUrl: `/uploads/hls/${videoId}/master.m3u8`,
+        masterPlaylistUrl: `/uploads/hls/${cleanVideoId}/master.m3u8`,
         variants: results,
         segmentDuration,
         qualityRange: `${variants[0].name} to ${variants[variants.length - 1].name}`
       };
     } catch (error) {
+      console.error(`❌ Adaptive HLS generation failed:`, error);
       throw new Error(`Adaptive HLS generation failed: ${error.message}`);
     }
   }

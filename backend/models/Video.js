@@ -1,25 +1,10 @@
 import mongoose from 'mongoose';
 
-const commentSchema = new mongoose.Schema({
-  user: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  text: {
-    type: String,
-    required: true
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  }
-});
-
 const videoSchema = new mongoose.Schema({
   videoName: {
     type: String,
-    required: true
+    required: true,
+    trim: true
   },
   videoUrl: {
     type: String,
@@ -28,6 +13,19 @@ const videoSchema = new mongoose.Schema({
   thumbnailUrl: {
     type: String,
     required: true
+  },
+  description: {
+    type: String,
+    trim: true
+  },
+  uploader: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  uploadedAt: {
+    type: Date,
+    default: Date.now
   },
   likes: {
     type: Number,
@@ -41,22 +39,13 @@ const videoSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-
-  uploader: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  uploadedAt: {
-    type: Date,
-    default: Date.now
-  },
   likedBy: [{
-    type: String
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   }],
   videoType: {
     type: String,
-    default: 'reel'
+    default: 'yog'
   },
   aspectRatio: {
     type: Number,
@@ -66,30 +55,86 @@ const videoSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  description: {
-    type: String,
-    required: false // Optional for user videos, but can be required for ads
-  },
-  comments: [commentSchema],
+  comments: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Comment'
+  }],
   link: {
     type: String,
-    default: null
+    trim: true
   },
-  // HLS Streaming fields
-  hlsMasterPlaylistUrl: {
+  
+  // **NEW: Quality URLs for adaptive streaming**
+  preloadQualityUrl: {
     type: String,
-    default: null
+    description: '360p - Fastest loading for preloading'
   },
-  hlsPlaylistUrl: {
+  lowQualityUrl: {
     type: String,
-    default: null
+    description: '480p - Low quality for slow networks (2-5 Mbps)'
   },
-  hlsVariants: [{
-    name: String,
-    playlistUrl: String,
-    resolution: String,
+  mediumQualityUrl: {
+    type: String,
+    description: '720p - Medium quality for average networks (5-10 Mbps)'
+  },
+  highQualityUrl: {
+    type: String,
+    description: '1080p - High quality for fast networks (10+ Mbps)'
+  },
+  
+  // **NEW: Video processing status**
+  processingStatus: {
+    type: String,
+    enum: ['pending', 'processing', 'completed', 'failed'],
+    default: 'pending'
+  },
+  processingProgress: {
+    type: Number,
+    min: 0,
+    max: 100,
+    default: 0
+  },
+  processingError: {
+    type: String
+  },
+  
+  // **NEW: Video metadata**
+  originalSize: {
+    type: Number,
+    description: 'Original file size in bytes'
+  },
+  originalFormat: {
+    type: String,
+    description: 'Original video format (mp4, mov, etc.)'
+  },
+  originalResolution: {
+    width: Number,
+    height: Number
+  },
+  
+  // **NEW: Quality metadata**
+  qualitiesGenerated: [{
+    quality: String, // preload, low, medium, high
+    url: String,
+    size: Number,
+    resolution: {
+      width: Number,
+      height: Number
+    },
     bitrate: String,
-    segments: Number
+    generatedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  
+  // **NEW: HLS Streaming fields**
+  hlsMasterPlaylistUrl: String,
+  hlsPlaylistUrl: String,
+  hlsVariants: [{
+    bandwidth: Number,
+    resolution: String,
+    url: String
   }],
   isHLSEncoded: {
     type: Boolean,
@@ -99,14 +144,60 @@ const videoSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Add indexes for better performance
-videoSchema.index({ createdAt: -1 }); // For sorting by upload date
-videoSchema.index({ uploader: 1 }); // For finding videos by uploader
-videoSchema.index({ videoType: 1 }); // For filtering by video type
-videoSchema.index({ likes: -1 }); // For sorting by popularity
+// **NEW: Index for faster queries**
+videoSchema.index({ uploader: 1, uploadedAt: -1 });
+videoSchema.index({ processingStatus: 1 });
+videoSchema.index({ 'qualitiesGenerated.quality': 1 });
 
-// Add compound index for common queries
-videoSchema.index({ uploader: 1, createdAt: -1 });
+// **NEW: Virtual field to check if video has multiple qualities**
+videoSchema.virtual('hasMultipleQualities').get(function() {
+  return !!(this.preloadQualityUrl || this.lowQualityUrl || 
+           this.mediumQualityUrl || this.highQualityUrl);
+});
+
+// **NEW: Method to get optimal quality URL based on network speed**
+videoSchema.methods.getOptimalQualityUrl = function(networkSpeedMbps) {
+  if (networkSpeedMbps > 10) {
+    return this.highQualityUrl || this.videoUrl; // 1080p for fast networks
+  } else if (networkSpeedMbps > 5) {
+    return this.mediumQualityUrl || this.videoUrl; // 720p for medium networks
+  } else {
+    return this.lowQualityUrl || this.videoUrl; // 480p for slow networks
+  }
+};
+
+// **NEW: Method to get preload quality URL for fast loading**
+videoSchema.methods.getPreloadQualityUrl = function() {
+  return this.preloadQualityUrl || this.lowQualityUrl || this.videoUrl;
+};
+
+// **NEW: Method to update processing status**
+videoSchema.methods.updateProcessingStatus = function(status, progress = null, error = null) {
+  this.processingStatus = status;
+  if (progress !== null) this.processingProgress = progress;
+  if (error !== null) this.processingError = error;
+  return this.save();
+};
+
+// **NEW: Method to add quality version**
+videoSchema.methods.addQualityVersion = function(quality, url, metadata) {
+  this.qualitiesGenerated.push({
+    quality,
+    url,
+    size: metadata.size || 0,
+    resolution: metadata.resolution || {},
+    bitrate: metadata.bitrate || '',
+    generatedAt: new Date()
+  });
+  
+  // Update the corresponding quality URL field
+  const fieldName = `${quality}QualityUrl`;
+  if (this.schema.paths[fieldName]) {
+    this[fieldName] = url;
+  }
+  
+  return this.save();
+};
 
 export default mongoose.model('Video', videoSchema);
 

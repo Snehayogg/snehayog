@@ -5,7 +5,7 @@ class AppConfig {
   // Backend API configuration
   static String get baseUrl {
     if (_isDevelopment) {
-      return 'http://192.168.0.190:5001';
+      return 'http://192.168.0.190:5001'; // Use network IP for development
     } else {
       return 'http://192.168.0.190:5001';
     }
@@ -205,37 +205,55 @@ class AppConfig {
   static const int maxVideoSize = 100 * 1024 * 1024;
 
   // **NEW: Cloudinary Configuration for HLS Streaming**
-  static const String cloudinaryCloudName =
-      'dgq0hlygs'; // Replace with your actual cloud name
-  static const String cloudinaryApiKey = '441141219573521';
-  static const String cloudinaryApiSecret = 'mVM4MKP69IW0SGWHsS12aygq1uU';
+  // Note: API credentials should be fetched from backend for security
+  static const String cloudinaryCloudName = 'dkklingts';
 
-  // Cloudinary streaming profiles
+  // SECURITY WARNING: Never hardcode API secrets in frontend code!
+  // These should be fetched from backend API endpoints
+  static const String cloudinaryApiKey = ''; // Empty - fetch from backend
+  static const String cloudinaryApiSecret =
+      ''; // Empty - never store in frontend
+
+  // **SECURITY NOTE**: All Cloudinary operations are handled securely via backend:
+  // 1. Frontend requests signed URLs from backend
+  // 2. Backend generates signed URLs using server-side credentials
+  // 3. Frontend receives pre-signed URLs for video streaming
+  // This ensures API secrets never leave the server
+
+  // Cloudinary streaming profiles - Cost optimized (720p max)
   static const Map<String, Map<String, dynamic>> streamingProfiles = {
     'portrait_reels': {
       'name': 'Portrait Reels',
       'aspect_ratio': '9:16',
       'quality_levels': [
-        {'resolution': '1080x1920', 'bitrate': '3.5 Mbps', 'profile': 'HD'},
-        {'resolution': '720x1280', 'bitrate': '1.8 Mbps', 'profile': 'HD'},
+        {
+          'resolution': '720x1280',
+          'bitrate': '1.8 Mbps',
+          'profile': 'HD'
+        }, // 720p as highest
         {'resolution': '480x854', 'bitrate': '0.9 Mbps', 'profile': 'SD'},
         {'resolution': '360x640', 'bitrate': '0.6 Mbps', 'profile': 'SD'},
+        {'resolution': '240x427', 'bitrate': '0.3 Mbps', 'profile': 'LOW'},
       ],
       'segment_duration': 2,
       'keyframe_interval': 2,
-      'optimized_for': 'Mobile Scrolling'
+      'optimized_for': 'Mobile Scrolling - Cost Optimized'
     },
     'landscape_standard': {
       'name': 'Landscape Standard',
       'aspect_ratio': '16:9',
       'quality_levels': [
-        {'resolution': '1920x1080', 'bitrate': '4.0 Mbps', 'profile': 'HD'},
-        {'resolution': '1280x720', 'bitrate': '2.0 Mbps', 'profile': 'HD'},
+        {
+          'resolution': '1280x720',
+          'bitrate': '2.0 Mbps',
+          'profile': 'HD'
+        }, // 720p as highest
         {'resolution': '854x480', 'bitrate': '1.0 Mbps', 'profile': 'SD'},
+        {'resolution': '640x360', 'bitrate': '0.5 Mbps', 'profile': 'LOW'},
       ],
       'segment_duration': 2,
       'keyframe_interval': 2,
-      'optimized_for': 'Standard Video'
+      'optimized_for': 'Standard Video - Cost Optimized'
     }
   };
 

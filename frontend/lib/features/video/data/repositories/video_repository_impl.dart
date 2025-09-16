@@ -2,7 +2,7 @@ import 'dart:io';
 import '../datasources/video_remote_datasource.dart';
 import '../../domain/repositories/video_repository.dart';
 import '../../domain/entities/video_entity.dart';
-import '../models/video_model.dart';
+import '../../../../model/video_model.dart';
 // import '../models/comment_model.dart'; // Not needed - we only work with entities
 
 /// Implementation of the VideoRepository interface
@@ -27,7 +27,32 @@ class VideoRepositoryImpl implements VideoRepository {
       // Convert VideoModel to VideoEntity
       final videos = (result['videos'] as List<dynamic>)
           .cast<VideoModel>()
-          .map((model) => model.toEntity())
+          .map((model) => VideoEntity(
+                id: model.id,
+                title: model.videoName,
+                description: model.description ?? '',
+                videoUrl: model.videoUrl,
+                thumbnailUrl: model.thumbnailUrl,
+                originalVideoUrl: model.videoUrl,
+                uploaderId: model.uploader.id,
+                uploaderName: model.uploader.name,
+                uploadTime: model.uploadedAt,
+                views: model.views,
+                likes: model.likes,
+                shares: model.shares,
+                comments: model.comments
+                    .map((c) => CommentEntity(
+                          id: c.id,
+                          text: c.text,
+                          userId: c.userId,
+                          userName: c.userName,
+                          createdAt: c.createdAt,
+                        ))
+                    .toList(),
+                videoType: model.videoType,
+                link: model.link,
+                isLongVideo: model.videoType == 'yog',
+              ))
           .toList();
 
       return {
@@ -43,7 +68,32 @@ class VideoRepositoryImpl implements VideoRepository {
   Future<VideoEntity> getVideoById(String id) async {
     try {
       final videoModel = await _remoteDataSource.getVideoById(id);
-      return videoModel.toEntity();
+      return VideoEntity(
+        id: videoModel.id,
+        title: videoModel.videoName,
+        description: videoModel.description ?? '',
+        videoUrl: videoModel.videoUrl,
+        thumbnailUrl: videoModel.thumbnailUrl,
+        originalVideoUrl: videoModel.videoUrl,
+        uploaderId: videoModel.uploader.id,
+        uploaderName: videoModel.uploader.name,
+        uploadTime: videoModel.uploadedAt,
+        views: videoModel.views,
+        likes: videoModel.likes,
+        shares: videoModel.shares,
+        comments: videoModel.comments
+            .map((c) => CommentEntity(
+                  id: c.id,
+                  text: c.text,
+                  userId: c.userId,
+                  userName: c.userName,
+                  createdAt: c.createdAt,
+                ))
+            .toList(),
+        videoType: videoModel.videoType,
+        link: videoModel.link,
+        isLongVideo: videoModel.videoType == 'yog',
+      );
     } catch (e) {
       rethrow;
     }
@@ -53,7 +103,34 @@ class VideoRepositoryImpl implements VideoRepository {
   Future<List<VideoEntity>> getUserVideos(String userId) async {
     try {
       final videoModels = await _remoteDataSource.getUserVideos(userId);
-      return videoModels.map((model) => model.toEntity()).toList();
+      return videoModels
+          .map((model) => VideoEntity(
+                id: model.id,
+                title: model.videoName,
+                description: model.description ?? '',
+                videoUrl: model.videoUrl,
+                thumbnailUrl: model.thumbnailUrl,
+                originalVideoUrl: model.videoUrl,
+                uploaderId: model.uploader.id,
+                uploaderName: model.uploader.name,
+                uploadTime: model.uploadedAt,
+                views: model.views,
+                likes: model.likes,
+                shares: model.shares,
+                comments: model.comments
+                    .map((c) => CommentEntity(
+                          id: c.id,
+                          text: c.text,
+                          userId: c.userId,
+                          userName: c.userName,
+                          createdAt: c.createdAt,
+                        ))
+                    .toList(),
+                videoType: model.videoType,
+                link: model.link,
+                isLongVideo: model.videoType == 'yog',
+              ))
+          .toList();
     } catch (e) {
       rethrow;
     }
@@ -84,7 +161,32 @@ class VideoRepositoryImpl implements VideoRepository {
   Future<VideoEntity> toggleLike(String videoId, String userId) async {
     try {
       final videoModel = await _remoteDataSource.toggleLike(videoId, userId);
-      return videoModel.toEntity();
+      return VideoEntity(
+        id: videoModel.id,
+        title: videoModel.videoName,
+        description: videoModel.description ?? '',
+        videoUrl: videoModel.videoUrl,
+        thumbnailUrl: videoModel.thumbnailUrl,
+        originalVideoUrl: videoModel.videoUrl,
+        uploaderId: videoModel.uploader.id,
+        uploaderName: videoModel.uploader.name,
+        uploadTime: videoModel.uploadedAt,
+        views: videoModel.views,
+        likes: videoModel.likes,
+        shares: videoModel.shares,
+        comments: videoModel.comments
+            .map((c) => CommentEntity(
+                  id: c.id,
+                  text: c.text,
+                  userId: c.userId,
+                  userName: c.userName,
+                  createdAt: c.createdAt,
+                ))
+            .toList(),
+        videoType: videoModel.videoType,
+        link: videoModel.link,
+        isLongVideo: videoModel.videoType == 'yog',
+      );
     } catch (e) {
       rethrow;
     }

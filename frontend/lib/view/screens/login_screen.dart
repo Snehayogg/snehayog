@@ -100,27 +100,125 @@ class LoginScreen extends StatelessWidget {
                       if (authController.error != null) {
                         return Column(
                           children: [
+                            // **ENHANCED: Professional Error Card**
                             Container(
                               width: double.infinity,
-                              padding: const EdgeInsets.all(16),
+                              padding: const EdgeInsets.all(20),
                               decoration: BoxDecoration(
-                                color: Colors.red[50],
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.red[200]!),
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    Colors.red[50]!,
+                                    Colors.red[100]!,
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: Colors.red[200]!,
+                                  width: 1.5,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.red.withOpacity(0.1),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
                               ),
-                              child: Row(
+                              child: Column(
                                 children: [
-                                  Icon(Icons.error_outline,
-                                      color: Colors.red[600]),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      authController.error!,
-                                      style: TextStyle(
-                                        color: Colors.red[700],
-                                        fontSize: 14,
+                                  // **Error Icon with Animation**
+                                  Container(
+                                    width: 60,
+                                    height: 60,
+                                    decoration: BoxDecoration(
+                                      color: Colors.red[100],
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      Icons.wifi_off_rounded,
+                                      color: Colors.red[600],
+                                      size: 30,
+                                    ),
+                                  ),
+
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'Connection Failed',
+                                    style: TextStyle(
+                                      color: Colors.red[800],
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+
+                                  const SizedBox(height: 8),
+
+                                  // **Error Message**
+                                  Text(
+                                    authController.error!,
+                                    style: TextStyle(
+                                      color: Colors.red[700],
+                                      fontSize: 14,
+                                      height: 1.4,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+
+                                  const SizedBox(height: 20),
+
+                                  // **Professional Retry Button**
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 50,
+                                    child: ElevatedButton.icon(
+                                      onPressed: () async {
+                                        // Clear error and retry
+                                        authController.clearError();
+                                        final user =
+                                            await authController.signIn();
+                                        if (user != null && context.mounted) {
+                                          Navigator.pushReplacementNamed(
+                                              context, '/home');
+                                        }
+                                      },
+                                      icon: const Icon(
+                                        Icons.refresh_rounded,
+                                        color: Colors.white,
+                                        size: 20,
+                                      ),
+                                      label: const Text(
+                                        'Retry Connection',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red[600],
+                                        foregroundColor: Colors.white,
+                                        elevation: 0,
+                                        shadowColor: Colors.transparent,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                        ),
                                       ),
                                     ),
+                                  ),
+
+                                  const SizedBox(height: 12),
+
+                                  // **Additional Help Text**
+                                  Text(
+                                    'Check your internet connection and try again',
+                                    style: TextStyle(
+                                      color: Colors.red[600],
+                                      fontSize: 12,
+                                    ),
+                                    textAlign: TextAlign.center,
                                   ),
                                 ],
                               ),
@@ -141,8 +239,8 @@ class LoginScreen extends StatelessWidget {
                             }
                           },
                           icon: const Icon(
-                            Icons.login,
-                            color: Colors.grey,
+                            Icons.login_rounded,
+                            color: Colors.white,
                             size: 24,
                           ),
                           label: const Text(
@@ -150,14 +248,14 @@ class LoginScreen extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
-                              color: Colors.grey,
+                              color: Colors.white,
                             ),
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: Colors.grey,
-                            elevation: 4,
-                            shadowColor: Colors.black.withOpacity(0.2),
+                            backgroundColor: Colors.grey[600],
+                            foregroundColor: Colors.white,
+                            elevation: 6,
+                            shadowColor: Colors.grey.withOpacity(0.3),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),

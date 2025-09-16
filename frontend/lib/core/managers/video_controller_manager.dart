@@ -1,421 +1,533 @@
-import 'dart:async';
-import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import 'package:snehayog/core/managers/video_cache_manager.dart';
+import 'package:snehayog/core/managers/video_position_cache_manager.dart';
+import 'package:snehayog/services/signed_url_service.dart';
+import 'package:snehayog/core/factories/video_controller_factory.dart';
 import 'package:snehayog/model/video_model.dart';
+import 'dart:collection';
+import 'dart:async';
 
-/// **NEW APPROACH: Simple Video Controller Manager**
-/// This manager prevents continuous loading and pipeline overflow by:
-/// 1. One controller per video index
-/// 2. Simple state tracking
-/// 3. No complex preloading
-/// 4. Immediate disposal of unused controllers
 class VideoControllerManager {
-  // **SIMPLE: One controller per index**
+  static final VideoControllerManager _instance =
+      VideoControllerManager._internal();
+  factory VideoControllerManager() => _instance;
+  VideoControllerManager._internal();
+
   final Map<int, VideoPlayerController> _controllers = {};
+  final Queue<int> _order = Queue();
+  final Set<int> _pinned = {};
+  final Set<int> _intentionallyPaused = {};
+  final Map<int, String> _controllerSourceUrl = {};
+  final Map<int, String> _controllerVideoIds = {};
 
-  // **SIMPLE: Track active video**
-  int _activeIndex = -1;
+  final VideoPositionCacheManager _positionCache = VideoPositionCacheManager();
 
-  // **SIMPLE: Track initialization state**
-  final Set<int> _initializing = {};
+  final int maxPoolSize = 1;
 
-  // **SIMPLE: Maximum controllers to prevent memory issues**
-  static const int _maxControllers = 3;
+  Future<VideoPlayerController> getController(
+      int index, VideoModel video) async {
+    // Resolve the intended final URL (with HLS signing if needed) before deciding reuse
+    String finalUrl = video.videoUrl;
+    if (video.videoUrl.contains('.m3u8')) {
+      print('🔐 VideoControllerManager: Getting signed URL for HLS stream');
+      try {
+        final signedUrlService = SignedUrlService();
+        final signedUrl =
+            await signedUrlService.getBestSignedUrl(video.videoUrl).timeout(
+          const Duration(seconds: 3), // Short timeout for signed URL
+          onTimeout: () {
+            print(
+                '⏰ VideoControllerManager: Signed URL timeout, using original URL');
+            return video.videoUrl;
+          },
+        );
 
-  /// **SIMPLE: Initialize controller**
-  Future<void> initController(int index, VideoModel video) async {
-    try {
-      // **SIMPLE: Check if already initializing**
-      if (_initializing.contains(index)) {
-        print('⏳ VideoControllerManager: Already initializing index $index');
-        return;
-      }
-
-      // **SIMPLE: Check if controller already exists and is healthy**
-      if (_isControllerHealthy(index)) {
+        if (signedUrl != null && signedUrl != video.videoUrl) {
+          finalUrl = signedUrl;
+          print('✅ VideoControllerManager: Using signed URL: $finalUrl');
+        } else {
+          print('⚠️ VideoControllerManager: Using original URL: $finalUrl');
+        }
+      } catch (e) {
         print(
-            '✅ VideoControllerManager: Controller already healthy for index $index');
-        return;
+            '❌ VideoControllerManager: Signed URL service error: $e, using original URL');
+        finalUrl = video.videoUrl;
       }
+    }
 
-      // **SIMPLE: Mark as initializing**
-      _initializing.add(index);
+    // **OPTIMIZED: Reuse existing controller if available and valid**
+    if (_controllers.containsKey(index)) {
+      final existingController = _controllers[index];
+      if (existingController != null &&
+          existingController.value.isInitialized &&
+          !existingController.value.hasError) {
+        print('♻️ VideoControllerManager: Reusing existing controller $index');
+        return existingController;
+      } else {
+        print('🔄 VideoControllerManager: Disposing invalid controller $index');
+        _disposeController(index);
+      }
+    }
 
-      print(
-          '🔄 VideoControllerManager: Initializing controller for index $index');
+    // **MEMORY MANAGEMENT: Only dispose controllers that are far from current index**
+    final currentIndex = index;
+    final controllersToRemove = <int>[];
 
-      // **SIMPLE: Dispose existing controller if any**
-      await _disposeController(index);
+    for (final key in _controllers.keys) {
+      if (key != currentIndex && (key - currentIndex).abs() > 2) {
+        controllersToRemove.add(key);
+      }
+    }
 
-      // **SIMPLE: Create new controller**
-      final controller = VideoPlayerController.networkUrl(
-        Uri.parse(video.videoUrl),
-        videoPlayerOptions: VideoPlayerOptions(
-          mixWithOthers: false,
-          allowBackgroundPlayback: false,
-        ),
-      );
+    for (final key in controllersToRemove) {
+      print('🗑️ VideoControllerManager: Disposing distant controller $key');
+      _disposeController(key);
+    }
 
-      // **SIMPLE: Initialize with timeout**
+    // Create video model with signed URL if needed
+    final videoWithSignedUrl =
+        finalUrl != video.videoUrl ? video.copyWith(videoUrl: finalUrl) : video;
+
+    // Use VideoControllerFactory to create optimized controller
+    final controller =
+        await VideoControllerFactory.createController(videoWithSignedUrl);
+
+    try {
       await controller.initialize().timeout(
         const Duration(seconds: 10),
         onTimeout: () {
-          throw TimeoutException('Controller initialization timed out');
+          throw TimeoutException(
+              'Video initialization timeout', const Duration(seconds: 10));
         },
       );
 
-      // **SIMPLE: Set basic properties**
-      await controller.setVolume(1.0);
-      await controller.setLooping(true);
-
-      // **SIMPLE: Add to controllers map**
+      controller.setLooping(true);
       _controllers[index] = controller;
+      _controllerSourceUrl[index] = finalUrl;
+      _controllerVideoIds[index] =
+          video.id; // Store video ID for position caching
+      _order.addLast(index);
+      _warmNetwork(finalUrl);
+      _evictIfNeeded();
 
-      // **SIMPLE: Cleanup if too many controllers**
-      _cleanupIfNeeded();
+      // **POSITION CACHING: Restore video position and state**
+      await _positionCache.restoreVideoState(controller, video.id);
+
+      // **POSITION CACHING: Start tracking position for this video**
+      _positionCache.startPositionTracking(controller, video.id);
 
       print(
-          '✅ VideoControllerManager: Successfully initialized controller for index $index');
-    } catch (e) {
-      print(
-          '❌ VideoControllerManager: Failed to initialize controller for index $index: $e');
-      // **SIMPLE: Clean up failed controller**
-      await _disposeController(index);
-      rethrow;
-    } finally {
-      _initializing.remove(index);
-    }
-  }
-
-  /// **FIXED: Less strict controller health check to prevent unnecessary disposal**
-  bool _isControllerHealthy(int index) {
-    try {
-      final controller = _controllers[index];
-      if (controller == null) return false;
-
-      // **FIXED: Only check essential properties, not dimensions**
-      final isHealthy =
-          controller.value.isInitialized && !controller.value.hasError;
-
-      if (!isHealthy) {
-        print('⚠️ VideoControllerManager: Controller $index is unhealthy:');
-        print('  - Initialized: ${controller.value.isInitialized}');
-        print('  - Has Error: ${controller.value.hasError}');
-
-        // **FIXED: Don't auto-dispose, let the calling code decide**
-        return false;
-      }
-
-      return true;
-    } catch (e) {
-      print(
-          '❌ VideoControllerManager: Error checking controller health for index $index: $e');
-      // **FIXED: Don't auto-dispose on error, let the calling code decide**
-      return false;
-    }
-  }
-
-  /// **SIMPLE: Get controller**
-  VideoPlayerController? getController(int index) {
-    final controller = _controllers[index];
-    if (controller != null && _isControllerHealthy(index)) {
+          '✅ VideoControllerManager: Successfully created controller using VideoControllerFactory for ${video.videoName} with position caching');
       return controller;
-    }
-    return null;
-  }
-
-  /// **SIMPLE: Play video**
-  Future<void> playVideo(int index) async {
-    try {
-      final controller = getController(index);
-      if (controller == null) {
-        print(
-            '⚠️ VideoControllerManager: No healthy controller for index $index');
-        return;
-      }
-
-      // **SIMPLE: Update active index**
-      _activeIndex = index;
-
-      // **SIMPLE: Pause other videos**
-      await _pauseOtherVideos(index);
-
-      // **SIMPLE: Play current video**
-      await controller.play();
-
-      print('▶️ VideoControllerManager: Playing video at index $index');
     } catch (e) {
       print(
-          '❌ VideoControllerManager: Error playing video at index $index: $e');
+          '❌ VideoControllerManager: Failed to initialize controller for ${video.videoName}: $e');
+
+      // Try fallback URL if this is an HLS URL
+      if (finalUrl.contains('.m3u8')) {
+        final fallbackUrl = _getFallbackUrl(finalUrl);
+        if (fallbackUrl != finalUrl) {
+          print('🔄 VideoControllerManager: Trying fallback URL: $fallbackUrl');
+          final fallbackVideo = video.copyWith(videoUrl: fallbackUrl);
+          return await getController(index, fallbackVideo);
+        }
+      }
+      rethrow;
     }
   }
 
-  /// **SIMPLE: Pause other videos**
-  Future<void> _pauseOtherVideos(int currentIndex) async {
-    for (final entry in _controllers.entries) {
-      if (entry.key != currentIndex && entry.value.value.isPlaying) {
-        try {
-          await entry.value.pause();
+  /// Get controller for video index with URL (legacy method for backward compatibility)
+  Future<VideoPlayerController> getControllerWithUrl(
+      int index, String url) async {
+    // Create a minimal VideoModel for backward compatibility
+    final video = VideoModel(
+      id: 'legacy_$index',
+      videoName: 'Legacy Video $index',
+      videoUrl: url,
+      thumbnailUrl: '',
+      likes: 0,
+      views: 0,
+      shares: 0,
+      uploader: Uploader(id: 'legacy', name: 'Legacy', profilePic: ''),
+      uploadedAt: DateTime.now(),
+      likedBy: [],
+      videoType: 'reel',
+      aspectRatio: 9 / 16,
+      duration: const Duration(seconds: 0),
+      comments: [],
+    );
+
+    return getController(index, video);
+  }
+
+  /// Preload controller but don't play yet using VideoModel
+  Future<void> preloadController(int index, VideoModel video) async {
+    try {
+      print(
+          '🚀 VideoControllerManager: Preloading controller $index for ${video.videoName}');
+
+      // **CACHING INTEGRATION: Use VideoCacheManager for progressive streaming**
+      if (video.videoUrl.contains('.m3u8')) {
+        print(
+            '🎬 VideoControllerManager: Using progressive HLS streaming for preload');
+        final cacheManager = VideoCacheManager();
+        await cacheManager.init(); // Ensure cache manager is initialized
+
+        // Start progressive streaming in background
+        cacheManager.getProgressiveStream(video.videoUrl).then((stream) {
           print(
-              '⏸️ VideoControllerManager: Paused video at index ${entry.key}');
-        } catch (e) {
+              '✅ VideoControllerManager: Progressive HLS stream started for ${video.videoName}');
+        }).catchError((e) {
           print(
-              '⚠️ VideoControllerManager: Error pausing video at index ${entry.key}: $e');
+              '⚠️ VideoControllerManager: Progressive streaming failed, falling back to standard: $e');
+        });
+      }
+
+      await getController(index, video);
+      _warmNetwork(video.videoUrl);
+    } catch (e) {
+      print('❌ VideoControllerManager: Error preloading controller $index: $e');
+    }
+  }
+
+  /// Preload controller with URL (legacy method for backward compatibility)
+  Future<void> preloadControllerWithUrl(int index, String url) async {
+    // Create a minimal VideoModel for backward compatibility
+    final video = VideoModel(
+      id: 'legacy_$index',
+      videoName: 'Legacy Video $index',
+      videoUrl: url,
+      thumbnailUrl: '',
+      likes: 0,
+      views: 0,
+      shares: 0,
+      uploader: Uploader(id: 'legacy', name: 'Legacy', profilePic: ''),
+      uploadedAt: DateTime.now(),
+      likedBy: [],
+      videoType: 'yog',
+      aspectRatio: 9 / 16,
+      duration: const Duration(seconds: 0),
+      comments: [],
+    );
+
+    await preloadController(index, video);
+  }
+
+  /// Play controller instantly (already initialized)
+  Future<void> playController(int index) async {
+    if (_controllers.containsKey(index)) {
+      final controller = _controllers[index]!;
+      if (controller.value.isInitialized && !controller.value.hasError) {
+        // **AUDIO FIX: Pause all other videos before playing to prevent echo**
+        await pauseAllVideos();
+
+        // If the video is at the end (or very close), reset to start before playing
+        final duration = controller.value.duration;
+        final position = controller.value.position;
+        if (duration.inMilliseconds > 0 &&
+            (position >= duration - const Duration(milliseconds: 300))) {
+          try {
+            await controller.seekTo(Duration.zero);
+          } catch (_) {}
+        }
+        await controller.play();
+        _intentionallyPaused.remove(index);
+
+        // **POSITION CACHING: Save last video info**
+        final videoId = _controllerVideoIds[index];
+        if (videoId != null) {
+          await _positionCache.saveLastVideo(videoId, index);
         }
       }
     }
   }
 
-  /// **SIMPLE: Pause specific video**
-  Future<void> pauseVideo(int index) async {
-    try {
-      final controller = _controllers[index];
-      if (controller != null && controller.value.isPlaying) {
-        await controller.pause();
-        print('⏸️ VideoControllerManager: Paused video at index $index');
-      }
-    } catch (e) {
-      print(
-          '❌ VideoControllerManager: Error pausing video at index $index: $e');
+  /// Pause controller
+  Future<void> pauseController(int index) async {
+    if (_controllers.containsKey(index)) {
+      await _controllers[index]!.pause();
+      _intentionallyPaused.add(index);
     }
   }
 
-  /// **SIMPLE: Handle scroll direction**
-  void onForwardScroll(int newIndex) {
-    print('🔄 VideoControllerManager: Forward scroll to index $newIndex');
-    _handleScrollChange(newIndex);
-  }
-
-  void onBackwardScroll(int newIndex) {
-    print('🔄 VideoControllerManager: Backward scroll to index $newIndex');
-    _handleScrollChange(newIndex);
-  }
-
-  /// **SIMPLE: Handle scroll change**
-  void _handleScrollChange(int newIndex) {
-    try {
-      // **SIMPLE: Pause old video**
-      if (_activeIndex != -1 && _activeIndex != newIndex) {
-        pauseVideo(_activeIndex);
-      }
-
-      // **SIMPLE: Update active index**
-      _activeIndex = newIndex;
-
-      // **SIMPLE: Cleanup old controllers**
-      _cleanupIfNeeded();
-    } catch (e) {
-      print('❌ VideoControllerManager: Error handling scroll change: $e');
+  /// Play active video (for compatibility)
+  Future<void> playActiveVideo() async {
+    if (_controllers.isNotEmpty) {
+      final activeIndex = _order.isNotEmpty ? _order.last : 0;
+      await playController(activeIndex);
     }
   }
 
-  /// **SIMPLE: Cleanup if too many controllers**
-  void _cleanupIfNeeded() {
-    if (_controllers.length <= _maxControllers) return;
+  /// Pause all videos
+  Future<void> pauseAllVideos() async {
+    for (final index in _controllers.keys) {
+      await pauseController(index);
+    }
+  }
 
-    // **SIMPLE: Remove controllers that are not active or adjacent**
-    final toRemove = <int>[];
+  /// Check if video is intentionally paused
+  bool isVideoIntentionallyPaused(int index) {
+    return _intentionallyPaused.contains(index);
+  }
 
-    for (final entry in _controllers.entries) {
-      final index = entry.key;
-      if (index != _activeIndex &&
-          index != _activeIndex - 1 &&
-          index != _activeIndex + 1) {
-        toRemove.add(index);
+  /// Get controller count
+  int get controllerCount => _controllers.length;
+
+  /// Pin indices to prevent eviction
+  void pinIndices(Set<int> indices) {
+    _pinned.addAll(indices);
+  }
+
+  /// Unpin indices
+  void unpinIndices(Set<int> indices) {
+    _pinned.removeAll(indices);
+  }
+
+  /// Optimize controllers (dispose old ones)
+  void optimizeControllers() {
+    // Dispose controllers that are not pinned and are old
+    final toDispose = <int>[];
+    for (final index in _controllers.keys) {
+      if (!_pinned.contains(index) && _order.length > 2) {
+        toDispose.add(index);
       }
     }
 
-    // **SIMPLE: Remove excess controllers**
-    while (_controllers.length > _maxControllers && toRemove.isNotEmpty) {
-      final index = toRemove.removeAt(0);
+    for (final index in toDispose) {
       _disposeController(index);
     }
   }
 
-  /// **SIMPLE: Dispose specific controller**
-  Future<void> _disposeController(int index) async {
-    final controller = _controllers[index];
-    if (controller != null) {
+  /// Dispose all controllers
+  void disposeAllControllers() {
+    print('🗑️ VideoControllerManager: Disposing all controllers');
+    for (final index in List<int>.from(_controllers.keys)) {
+      _disposeController(index);
+    }
+  }
+
+  /// Dispose specific controller with proper cleanup
+  void _disposeController(int index) {
+    if (_controllers.containsKey(index)) {
       try {
-        await controller.dispose();
-        print(
-            '🧹 VideoControllerManager: Disposed controller for index $index');
+        final controller = _controllers[index]!;
+
+        // **CRITICAL: Pause and stop before disposing**
+        if (controller.value.isInitialized) {
+          controller.pause();
+          controller.setVolume(0.0);
+        }
+
+        // **CACHING: Only dispose if we have too many controllers**
+        if (_controllers.length > maxPoolSize) {
+          // **MEMORY: Properly dispose controller to free MediaCodec resources**
+          controller.dispose();
+          _controllers.remove(index);
+          _order.removeWhere((i) => i == index);
+          _intentionallyPaused.remove(index);
+          _controllerSourceUrl.remove(index);
+          print(
+              '🗑️ VideoControllerManager: Disposed controller $index and freed MediaCodec memory');
+        } else {
+          // **CACHING: Keep controller in cache but pause it**
+          controller.pause();
+          controller.setVolume(0.0);
+          _intentionallyPaused.add(index);
+          print(
+              '💾 VideoControllerManager: Cached controller $index for reuse');
+        }
+
+        // **FORCE: Small delay to ensure MediaCodec cleanup**
+        Future.delayed(const Duration(milliseconds: 50), () {
+          print(
+              '🗑️ VideoControllerManager: Disposed controller $index and freed MediaCodec memory');
+        });
       } catch (e) {
         print(
-            '⚠️ VideoControllerManager: Error disposing controller for index $index: $e');
+            '❌ VideoControllerManager: Error disposing controller $index: $e');
       }
-      _controllers.remove(index);
     }
   }
 
-  /// **SIMPLE: Handle app lifecycle changes**
-  void onAppLifecycleChanged(AppLifecycleState state) {
-    switch (state) {
-      case AppLifecycleState.paused:
-      case AppLifecycleState.inactive:
-        _pauseAllVideos();
-        break;
-      case AppLifecycleState.resumed:
-        // Do nothing - let user manually resume
-        break;
-      default:
-        break;
-    }
-  }
-
-  /// **SIMPLE: Pause all videos**
-  Future<void> _pauseAllVideos() async {
-    for (final controller in _controllers.values) {
-      if (controller.value.isPlaying) {
-        try {
-          await controller.pause();
-        } catch (e) {
-          print(
-              '⚠️ VideoControllerManager: Error pausing video on app pause: $e');
+  /// Evict controllers if pool is too large
+  void _evictIfNeeded() {
+    while (_controllers.length > maxPoolSize) {
+      // Find victim (oldest non-pinned)
+      int? victim;
+      for (final index in _order) {
+        if (!_pinned.contains(index)) {
+          victim = index;
+          break;
         }
       }
+
+      if (victim == null) break;
+      _order.removeWhere((i) => i == victim);
+      _disposeController(victim);
     }
   }
 
-  /// **SIMPLE: Dispose all controllers**
-  Future<void> disposeAll() async {
+  void _warmNetwork(String url) {
+    try {
+      VideoCacheManager().preloadFile(url);
+    } catch (_) {}
+  }
+
+  /// Get fallback URL for HLS streams
+  String _getFallbackUrl(String originalUrl) {
+    if (!originalUrl.contains('.m3u8')) return originalUrl;
+
+    // Try different Cloudinary streaming profiles
+    if (originalUrl.contains('sp_hd')) {
+      // Try SD profile instead of HD
+      return originalUrl.replaceAll('sp_hd', 'sp_sd');
+    } else if (originalUrl.contains('sp_sd')) {
+      // Try basic streaming profile
+      return originalUrl.replaceAll('sp_sd', 'sp_auto');
+    } else if (originalUrl.contains('sp_auto')) {
+      // Try without streaming profile
+      return originalUrl.replaceAll(RegExp(r'sp_[^,]+,'), '');
+    }
+
+    return originalUrl;
+  }
+
+  /// Clear all with proper MediaCodec cleanup
+  void clear() {
+    print(
+        '🗑️ VideoControllerManager: Clearing all controllers and freeing MediaCodec memory');
+
     for (final entry in _controllers.entries) {
       try {
-        await entry.value.dispose();
+        final controller = entry.value;
+
+        // **CRITICAL: Pause and stop before disposing**
+        if (controller.value.isInitialized) {
+          controller.pause();
+          controller.setVolume(0.0);
+        }
+
+        controller.dispose();
+        print('🗑️ VideoControllerManager: Disposed controller ${entry.key}');
       } catch (e) {
-        print('⚠️ VideoControllerManager: Error disposing controller: $e');
+        print(
+            '❌ VideoControllerManager: Error disposing controller ${entry.key}: $e');
       }
     }
 
     _controllers.clear();
-    _initializing.clear();
-    print('🧹 VideoControllerManager: All controllers disposed');
+    _order.clear();
+    _pinned.clear();
+    _intentionallyPaused.clear();
+    _controllerSourceUrl.clear();
+
+    // **FORCE: Delay to ensure MediaCodec cleanup completes**
+    Future.delayed(const Duration(milliseconds: 100), () {
+      print('✅ VideoControllerManager: All MediaCodec resources freed');
+    });
   }
 
-  /// **SIMPLE: Get status for debugging**
-  Map<String, dynamic> getStatus() {
-    return {
-      'controllersCount': _controllers.length,
-      'maxControllers': _maxControllers,
-      'activeIndex': _activeIndex,
-      'initializing': _initializing.toList(),
-      'controllerKeys': _controllers.keys.toList(),
-    };
+  // **COMPATIBILITY METHODS** - For existing code
+  Future<void> initController(int index, dynamic video) async {
+    await getController(index, video.videoUrl);
   }
 
-  /// **NEW: Get controller count for memory management**
-  int get controllerCount => _controllers.length;
+  VideoPlayerController? getControllerByIndex(int index) {
+    return _controllers[index];
+  }
 
-  /// **NEW: Dispose specific controller by index**
+  Future<void> playVideo(int index) async {
+    await playController(index);
+  }
+
+  Future<void> pauseVideo(int index) async {
+    await pauseController(index);
+  }
+
   Future<void> disposeController(int index) async {
-    await _disposeController(index);
+    _disposeController(index);
   }
 
-  /// **NEW: Dispose all controllers**
-  Future<void> disposeAllControllers() async {
-    await disposeAll();
+  /// Check if controller is cached and valid
+  bool isControllerCached(int index) {
+    if (!_controllers.containsKey(index)) return false;
+    final controller = _controllers[index]!;
+    return controller.value.isInitialized && !controller.value.hasError;
   }
 
-  /// **NEW: Check if video was intentionally paused**
-  bool isVideoIntentionallyPaused(int index) {
-    // **SIMPLIFIED: Always return false for now**
-    return false;
+  /// Get cached controller count
+  int get cachedControllerCount => _controllers.length;
+
+  /// Cleanup all controllers
+  void cleanup() {
+    clear();
   }
 
-  /// **NEW: Optimize controllers for memory management**
-  void optimizeControllers() {
-    // **SIMPLIFIED: Just cleanup if too many**
-    _cleanupIfNeeded();
-  }
+  /// **TAB CHANGE DETECTION: Pause all videos when user switches tabs**
+  Future<void> pauseAllVideosOnTabChange() async {
+    print(
+        '⏸️ VideoControllerManager: Tab change detected - pausing all videos');
 
-  /// **NEW: Get controllers map for external access**
-  Map<int, VideoPlayerController> get controllers =>
-      Map.unmodifiable(_controllers);
-
-  /// **NEW: Play active video**
-  Future<void> playActiveVideo() async {
-    if (_activeIndex != -1) {
-      await playVideo(_activeIndex);
-    }
-  }
-
-  /// **NEW: Comprehensive pause all videos**
-  Future<void> comprehensivePause() async {
-    await _pauseAllVideos();
-  }
-
-  /// **NEW: Force restore active controller**
-  Future<void> forceRestoreActiveController(VideoModel video) async {
-    if (_activeIndex != -1) {
-      await _disposeController(_activeIndex);
-      await initController(_activeIndex, video);
-    }
-  }
-
-  /// **NEW: Gentle pause for tab switch**
-  Future<void> gentlePauseForTabSwitch() async {
-    if (_activeIndex != -1) {
-      await pauseVideo(_activeIndex);
-    }
-  }
-
-  /// **NEW: Restore volume for tab switch**
-  Future<void> restoreVolumeForTabSwitch() async {
-    // **SIMPLIFIED: Do nothing for now**
-    print('🔊 VideoControllerManager: Volume restore not implemented');
-  }
-
-  /// **NEW: Handle video visible**
-  Future<void> handleVideoVisible() async {
-    if (_activeIndex != -1) {
-      await playVideo(_activeIndex);
-    }
-  }
-
-  /// **NEW: Emergency stop all videos**
-  Future<void> emergencyStopAllVideos() async {
-    for (final entry in _controllers.entries) {
-      try {
-        if (entry.value.value.isPlaying) {
-          await entry.value.pause();
+    for (final index in _controllers.keys) {
+      final controller = _controllers[index];
+      if (controller != null &&
+          controller.value.isInitialized &&
+          controller.value.isPlaying) {
+        try {
+          await controller.pause();
+          _intentionallyPaused.add(index);
+          print('⏸️ VideoControllerManager: Paused video at index $index');
+        } catch (e) {
+          print(
+              '❌ VideoControllerManager: Error pausing video at index $index: $e');
         }
-      } catch (e) {
-        print('⚠️ VideoControllerManager: Error emergency stopping video: $e');
       }
     }
   }
 
-  /// **NEW: Set active page**
-  void setActivePage(int page) {
-    _activeIndex = page;
-  }
+  /// **TAB CHANGE DETECTION: Resume videos when returning to video tab**
+  Future<void> resumeVideosOnTabReturn() async {
+    print(
+        '▶️ VideoControllerManager: Returning to video tab - resuming videos');
 
-  /// **NEW: Preload videos around current index**
-  Future<void> preloadVideosAround() async {
-    // **SIMPLIFIED: Preload adjacent videos**
-    final indices = <int>[];
-
-    if (_activeIndex > 0) indices.add(_activeIndex - 1);
-    if (_activeIndex < 100) indices.add(_activeIndex + 1);
-
-    for (final index in indices) {
-      if (!_controllers.containsKey(index)) {
-        // Note: This would need video data to actually preload
-        print('🔄 VideoControllerManager: Would preload video at index $index');
+    // Only resume the current active video, not all videos
+    if (_controllers.isNotEmpty) {
+      final activeIndex =
+          _order.isNotEmpty ? _order.last : _controllers.keys.first;
+      if (_controllers.containsKey(activeIndex)) {
+        final controller = _controllers[activeIndex]!;
+        if (controller.value.isInitialized &&
+            !controller.value.hasError &&
+            !controller.value.isPlaying) {
+          try {
+            await controller.play();
+            _intentionallyPaused.remove(activeIndex);
+            print(
+                '▶️ VideoControllerManager: Resumed video at index $activeIndex');
+          } catch (e) {
+            print(
+                '❌ VideoControllerManager: Error resuming video at index $activeIndex: $e');
+          }
+        }
       }
     }
   }
 
-  /// **NEW: Handle scroll start**
-  void handleScrollStart() {
-    // **SIMPLIFIED: Pause current video when scrolling starts**
-    if (_activeIndex != -1) {
-      pauseVideo(_activeIndex);
-    }
-  }
+  /// **TAB CHANGE DETECTION: Force pause all videos immediately (for critical situations)**
+  void forcePauseAllVideos() {
+    print('🛑 VideoControllerManager: Force pausing all videos immediately');
 
-  /// **NEW: Pause all videos**
-  Future<void> pauseAllVideos() async {
-    await _pauseAllVideos();
+    for (final index in _controllers.keys) {
+      final controller = _controllers[index];
+      if (controller != null && controller.value.isInitialized) {
+        try {
+          controller.pause();
+          _intentionallyPaused.add(index);
+        } catch (e) {
+          print(
+              '❌ VideoControllerManager: Error force pausing video at index $index: $e');
+        }
+      }
+    }
   }
 }

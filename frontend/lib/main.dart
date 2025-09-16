@@ -9,6 +9,7 @@ import 'package:snehayog/controller/main_controller.dart';
 import 'package:snehayog/core/providers/video_provider.dart';
 import 'package:snehayog/core/providers/user_provider.dart';
 import 'package:snehayog/view/screens/login_screen.dart';
+import 'package:snehayog/view/screens/video_screen.dart';
 import 'package:snehayog/services/video_service.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:snehayog/core/services/error_logging_service.dart';
@@ -17,30 +18,12 @@ import 'package:snehayog_monetization/services/razorpay_service.dart';
 import 'package:snehayog/config/app_config.dart';
 import 'package:app_links/app_links.dart';
 
-// Shared instance for Razorpay
 final RazorpayService razorpayService = RazorpayService();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize AdMob
-  await MobileAds.instance.initialize();
-  ErrorLoggingService.logServiceInitialization('AdMob');
-
-  // Initialize Razorpay
-  razorpayService.initialize(
-    keyId: AppConfig.razorpayKeyId,
-    keySecret: AppConfig.razorpayKeySecret,
-    webhookSecret: AppConfig.razorpayWebhookSecret,
-    baseUrl: AppConfig.baseUrl,
-  );
-
-  SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.landscapeLeft,
-    DeviceOrientation.landscapeRight,
-  ]);
-
+  // **OPTIMIZED: Start app immediately, initialize services in background**
   runApp(
     MultiProvider(
       providers: [
@@ -57,6 +40,37 @@ void main() async {
       ),
     ),
   );
+
+  // **BACKGROUND: Initialize heavy services after app starts**
+  _initializeServicesInBackground();
+}
+
+/// **OPTIMIZED: Initialize heavy services in background**
+void _initializeServicesInBackground() async {
+  try {
+    // Initialize AdMob in background
+    await MobileAds.instance.initialize();
+    ErrorLoggingService.logServiceInitialization('AdMob');
+
+    // Initialize Razorpay in background
+    razorpayService.initialize(
+      keyId: AppConfig.razorpayKeyId,
+      keySecret: AppConfig.razorpayKeySecret,
+      webhookSecret: AppConfig.razorpayWebhookSecret,
+      baseUrl: AppConfig.baseUrl,
+    );
+
+    // Set orientation in background
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+
+    print('✅ Background services initialized successfully');
+  } catch (e) {
+    print('⚠️ Error initializing background services: $e');
+  }
 }
 
 class MyApp extends StatefulWidget {
@@ -130,6 +144,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _handleIncomingUri(Uri uri) async {
+    print('🔗 Deep link received: $uri');
+
+    // Handle payment callback
     if (uri.scheme == 'snehayog' && uri.host == 'payment-callback') {
       final orderId = uri.queryParameters['razorpay_order_id'] ?? '';
       final paymentId = uri.queryParameters['razorpay_payment_id'] ?? '';
@@ -173,6 +190,39 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         }
       }
     }
+    // Handle video deep links
+    else if ((uri.scheme == 'snehayog' && uri.host == 'video') ||
+        (uri.scheme == 'https' &&
+            uri.host == 'snehayog.app' &&
+            uri.path.startsWith('/video'))) {
+      final videoId = uri.queryParameters['id'] ?? uri.pathSegments.last;
+
+      if (videoId.isNotEmpty) {
+        print('🎬 Opening video with ID: $videoId');
+        _navigateToVideo(videoId);
+      } else {
+        print('❌ No video ID found in deep link');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Invalid video link'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  void _navigateToVideo(String videoId) {
+    if (!mounted) return;
+
+    // Navigate to video screen with the specific video ID
+    Navigator.pushNamed(
+      context,
+      '/video',
+      arguments: {'videoId': videoId},
+    );
   }
 
   @override
@@ -191,6 +241,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       },
       routes: {
         '/home': (context) => const MainScreen(),
+        '/video': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments
+              as Map<String, dynamic>?;
+          final videoId = args?['videoId'] as String?;
+          return VideoScreen(initialVideoId: videoId);
+        },
       },
       home: const AuthWrapper(),
     );
@@ -204,12 +260,6 @@ class AuthWrapper extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<GoogleSignInController>(
       builder: (context, authController, _) {
-        if (authController.isLoading) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-
         if (authController.isSignedIn) {
           return const MainScreen();
         }

@@ -11,7 +11,7 @@ class CommentModel extends CommentEntity {
     required super.createdAt,
   });
 
-  /// Creates a CommentModel from JSON data
+
   factory CommentModel.fromJson(Map<String, dynamic> json) {
     return CommentModel(
       id: json['_id'] ?? json['id'] ?? '',

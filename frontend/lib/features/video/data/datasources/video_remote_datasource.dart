@@ -5,8 +5,9 @@ import 'package:http_parser/http_parser.dart';
 import 'package:video_player/video_player.dart';
 import '../../../../config/app_config.dart';
 import '../../../../core/exceptions/app_exceptions.dart';
-import '../models/video_model.dart';
+import '../../../../model/video_model.dart';
 import '../models/comment_model.dart';
+import '../../../../services/authservices.dart';
 
 /// Remote data source for video operations
 /// Handles all HTTP requests to the video API
@@ -152,7 +153,7 @@ class VideoRemoteDataSource {
       // Add other fields
       request.fields['videoName'] = title;
       request.fields['description'] = description;
-      request.fields['videoType'] = isLong ? 'yog' : 'sneha';
+      request.fields['videoType'] = isLong ? 'sneha' : 'yog';
       if (link != null && link.isNotEmpty) {
         request.fields['link'] = link;
       }
@@ -199,11 +200,22 @@ class VideoRemoteDataSource {
   /// Toggles the like status of a video
   Future<VideoModel> toggleLike(String videoId, String userId) async {
     try {
+      // Use auth token as backend reads userId from token
+      final auth = AuthService();
+      final userData = await auth.getUserData();
+      if (userData == null || userData['token'] == null) {
+        throw const UnauthorizedException(
+            'Please sign in again to like videos');
+      }
+      final headers = {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ${userData['token']}',
+      };
       final response = await _makeRequest(
         () => _httpClient.post(
           Uri.parse('${NetworkHelper.videosEndpoint}/$videoId/like'),
-          headers: {'Content-Type': 'application/json'},
-          body: json.encode({'userId': userId}),
+          headers: headers,
+          body: json.encode({}), // backend derives user from token
         ),
         timeout: NetworkHelper.defaultTimeout,
       );

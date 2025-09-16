@@ -222,7 +222,10 @@ class UserService {
 
         // Create UserModel with all available data
         return UserModel(
-          id: data['_id'] ?? data['id'] ?? data['googleId'] ?? '',
+          id: data['googleId'] ??
+              data['id'] ??
+              data['_id'] ??
+              '',
           name: data['name'] ?? '',
           email: data['email'] ?? '',
           profilePic: data['profilePic'] ?? '',

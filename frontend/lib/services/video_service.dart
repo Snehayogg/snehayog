@@ -116,9 +116,14 @@ class VideoService {
   // **CORE VIDEO METHODS - Merged from all services**
 
   /// **Get videos with pagination and HLS support**
-  Future<Map<String, dynamic>> getVideos({int page = 1, int limit = 10}) async {
+  Future<Map<String, dynamic>> getVideos(
+      {int page = 1, int limit = 10, String? videoType}) async {
     try {
-      final url = '$baseUrl/api/videos?page=$page&limit=$limit';
+      String url = '$baseUrl/api/videos?page=$page&limit=$limit';
+      if (videoType != null && (videoType == 'yog' || videoType == 'sneha')) {
+        url += '&videoType=$videoType';
+        print('🔍 VideoService: Filtering by videoType: $videoType');
+      }
       final response = await _makeRequest(
         () => http.get(Uri.parse(url)),
         timeout: const Duration(seconds: 15),
@@ -129,6 +134,14 @@ class VideoService {
         final List<dynamic> videoList = responseData['videos'];
 
         final videos = videoList.map((json) {
+          // **DEBUG: Log all video data for debugging**
+          print('🔍 VideoService: Video data for ${json['videoName']}:');
+          print('  - videoUrl: ${json['videoUrl']}');
+          print('  - hlsPlaylistUrl: ${json['hlsPlaylistUrl']}');
+          print('  - hlsMasterPlaylistUrl: ${json['hlsMasterPlaylistUrl']}');
+          print('  - isHLSEncoded: ${json['isHLSEncoded']}');
+          print('  - hlsVariants: ${json['hlsVariants']?.length ?? 0}');
+
           // **HLS URL Priority**: Use HLS for better streaming
           if (json['hlsPlaylistUrl'] != null &&
               json['hlsPlaylistUrl'].toString().isNotEmpty) {
@@ -187,22 +200,19 @@ class VideoService {
     }
   }
 
-  /// **Toggle like for a video**
-  Future<VideoModel> toggleLike(String videoId, String userId) async {
+  /// **Toggle like for a video (like/unlike)**
+  Future<VideoModel> toggleLike(String videoId) async {
     try {
-      print(
-          '🔍 VideoService: Starting toggleLike for video: $videoId, user: $userId');
+      print('🔄 VideoService: Toggling like for video: $videoId');
 
-      final userData = await _authService.getUserData();
-      if (userData == null) {
-        throw Exception('Please sign in to like videos');
-      }
+      final headers = await _getAuthHeaders();
+      headers['Content-Type'] = 'application/json';
 
       final res = await http
           .post(
             Uri.parse('$baseUrl/api/videos/$videoId/like'),
-            headers: {'Content-Type': 'application/json'},
-            body: json.encode({'userId': userId}),
+            headers: headers,
+            body: json.encode({}),
           )
           .timeout(const Duration(seconds: 15));
 
@@ -210,13 +220,13 @@ class VideoService {
         final data = json.decode(res.body);
         return VideoModel.fromJson(data);
       } else if (res.statusCode == 401) {
-        throw Exception('Please sign in again to like videos');
+        throw Exception('Please sign in to like videos');
       } else {
         final error = json.decode(res.body);
-        throw Exception(error['error'] ?? 'Failed to like video');
+        throw Exception(error['error'] ?? 'Failed to toggle like');
       }
     } catch (e) {
-      print('❌ VideoService: Error in toggleLike: $e');
+      print('❌ VideoService: Error toggling like: $e');
       if (e is TimeoutException) {
         throw Exception('Request timed out. Please try again.');
       }
@@ -224,19 +234,25 @@ class VideoService {
     }
   }
 
+  /// **Like a video (for backward compatibility)**
+  Future<VideoModel> likeVideo(String videoId) async {
+    return await toggleLike(videoId);
+  }
+
+  /// **Unlike a video (for backward compatibility)**
+  Future<VideoModel> unlikeVideo(String videoId) async {
+    return await toggleLike(videoId);
+  }
+
   /// **Add comment to a video**
   Future<List<Comment>> addComment(
       String videoId, String text, String userId) async {
     try {
-      final userData = await _authService.getUserData();
-      if (userData == null) {
-        throw Exception('Please sign in to add comments');
-      }
-
+      final headers = await _getAuthHeaders();
       final res = await http
           .post(
             Uri.parse('$baseUrl/api/videos/$videoId/comments'),
-            headers: {'Content-Type': 'application/json'},
+            headers: headers,
             body: json.encode({'userId': userId, 'text': text}),
           )
           .timeout(const Duration(seconds: 10));
@@ -370,7 +386,7 @@ class VideoService {
       // **Add fields**
       request.fields['videoName'] = title;
       request.fields['description'] = description ?? '';
-      request.fields['videoType'] = isLong ? 'yog' : 'sneha';
+      request.fields['videoType'] = isLong ? 'sneha' : 'yog';
       if (link != null && link.isNotEmpty) {
         request.fields['link'] = link;
       }
@@ -386,6 +402,10 @@ class VideoService {
 
       final responseBody = await streamedResponse.stream.bytesToString();
       final responseData = json.decode(responseBody);
+
+      print(
+          '📡 VideoService: Upload response status: ${streamedResponse.statusCode}');
+      print('📄 VideoService: Upload response body: $responseBody');
 
       if (streamedResponse.statusCode == 201) {
         final videoData = responseData['video'];
@@ -403,9 +423,14 @@ class VideoService {
           'link': videoData['link'],
         };
       } else {
-        final errorMessage =
-            responseData['error']?.toString() ?? 'Failed to upload video';
-        throw Exception(errorMessage);
+        print(
+            '❌ VideoService: Upload failed with status ${streamedResponse.statusCode}');
+        print('❌ VideoService: Error details: ${responseData.toString()}');
+
+        final errorMessage = responseData['error']?.toString() ??
+            responseData['details']?.toString() ??
+            'Failed to upload video (Status: ${streamedResponse.statusCode})';
+        throw Exception('❌ $errorMessage');
       }
     } catch (e) {
       print('❌ VideoService: Error uploading video: $e');
@@ -464,9 +489,22 @@ class VideoService {
   Future<VideoModel> shareVideo(
       String videoId, String videoUrl, String description) async {
     try {
+      // Get the proper URL for sharing
+      String shareUrl = videoUrl;
+
+      // If it's a custom scheme URL, convert it to web URL
+      if (videoUrl.startsWith('snehayog://')) {
+        shareUrl = 'https://snehayog.app/video/$videoId';
+      }
+
+      // If it's an HLS URL, use it directly
+      if (videoUrl.contains('.m3u8')) {
+        shareUrl = videoUrl;
+      }
+
       // **Share using platform dialog**
       await Share.share(
-        'Check out this video on Snehayog!\n\n$description\n\n$videoUrl',
+        '🎬 Check out this video on Snehayog!\n\n📹 $description\n\n🔗 Watch on Snehayog: $shareUrl\n🌐 Web version: https://snehayog.app/video/$videoId\n\n#Snehayog #Video',
         subject: 'Snehayog Video',
       );
 

@@ -47,6 +47,7 @@ router.get('/profile', verifyToken, async (req, res) => {
     console.log('✅ Profile API: User found successfully');
     
     res.json({
+      _id: currentUser._id, // MongoDB ObjectID
       id: currentUser.googleId,
       googleId: currentUser.googleId,
       name: currentUser.name,
@@ -86,6 +87,7 @@ router.get('/:id', async (req, res) => {
     }
 
     res.json({
+      _id: user._id, // MongoDB ObjectID
       id: user.googleId,
       name: user.name,
       email: user.email,

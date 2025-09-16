@@ -8,6 +8,11 @@ const cloudName = process.env.CLOUD_NAME;
 const apiKey = process.env.CLOUD_KEY;
 const apiSecret = process.env.CLOUD_SECRET;
 
+// Function to check if Cloudinary is properly configured
+export function isCloudinaryConfigured() {
+  return !!(cloudName && apiKey && apiSecret);
+}
+
 if (!cloudName || !apiKey || !apiSecret) {
   console.warn('⚠️ Cloudinary environment variables not set:');
   console.warn('   CLOUD_NAME:', cloudName ? 'Set' : 'Missing');
@@ -22,38 +27,44 @@ if (!cloudName || !apiKey || !apiSecret) {
   console.log('✅ Cloudinary environment variables loaded');
 }
 
-cloudinary.config({
-  cloud_name: cloudName,
-  api_key: apiKey,
-  api_secret: apiSecret,
-  secure: true,
-});
+// Configure Cloudinary with environment variables
+if (cloudName && apiKey && apiSecret) {
+  cloudinary.config({
+    cloud_name: cloudName,
+    api_key: apiKey,
+    api_secret: apiSecret,
+    secure: true,
+  });
+  console.log('✅ Cloudinary configured successfully');
+} else {
+  console.error('❌ Cloudinary configuration failed - missing credentials');
+}
 
 // Custom streaming profiles for smooth scrolling (Instagram Reels style)
 export const STREAMING_PROFILES = {
-  // Portrait 9:16 aspect ratio optimized for mobile
+  // Portrait 9:16 aspect ratio - Cost optimized (720p max)
   PORTRAIT_REELS: {
     name: 'portrait_reels',
     transformations: [
-      // 1080p - 3.5 Mbps
+      // 720p - 1.8 Mbps (highest quality for cost optimization)
       {
-        width: 1080,
-        height: 1920,
+        width: 720,
+        height: 1280,
         crop: 'fill',
         video_codec: 'h264',
-        bit_rate: '3.5m',
+        bit_rate: '1.8m',
         audio_codec: 'aac',
         audio_bitrate: '128k',
         fps: 30,
         keyframe_interval: 60, // 2 seconds at 30fps
         segment_duration: 2,
         streaming_profile: 'hd',
-        quality: 'auto:best'
+        quality: 'auto:good'
       },
-      // 720p - 1.8 Mbps
+      // 480p - 0.9 Mbps
       {
-        width: 720,
-        height: 1280,
+        width: 480,
+        height: 854,
         crop: 'fill',
         video_codec: 'h264',
         bit_rate: '1.8m',
@@ -98,32 +109,32 @@ export const STREAMING_PROFILES = {
     ]
   },
   
-  // Landscape 16:9 aspect ratio for regular videos
+  // Landscape 16:9 aspect ratio - Cost optimized (720p max)
   LANDSCAPE_STANDARD: {
     name: 'landscape_standard',
     transformations: [
-      // 1080p - 4.0 Mbps
-      {
-        width: 1920,
-        height: 1080,
-        crop: 'fill',
-        video_codec: 'h264',
-        bit_rate: '4.0m',
-        audio_codec: 'aac',
-        audio_bitrate: '128k',
-        fps: 30,
-        keyframe_interval: 60,
-        segment_duration: 2,
-        streaming_profile: 'hd',
-        quality: 'auto:best'
-      },
-      // 720p - 2.0 Mbps
+      // 720p - 2.0 Mbps (highest quality for cost optimization)
       {
         width: 1280,
         height: 720,
         crop: 'fill',
         video_codec: 'h264',
         bit_rate: '2.0m',
+        audio_codec: 'aac',
+        audio_bitrate: '128k',
+        fps: 30,
+        keyframe_interval: 60,
+        segment_duration: 2,
+        streaming_profile: 'hd',
+        quality: 'auto:good'
+      },
+      // 480p - 1.0 Mbps
+      {
+        width: 854,
+        height: 480,
+        crop: 'fill',
+        video_codec: 'h264',
+        bit_rate: '1.0m',
         audio_codec: 'aac',
         audio_bitrate: '128k',
         fps: 30,

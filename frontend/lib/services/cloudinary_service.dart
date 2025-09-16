@@ -125,16 +125,8 @@ class CloudinaryService {
       print('   File length: ${multipartFile.length}');
 
       // **NEW: Verify the multipart file was created correctly**
-      if (multipartFile.contentType == null) {
-        print('⚠️ CloudinaryService: Content type is null, using fallback');
-        // Fallback: create without content type and let backend handle it
-        final fallbackFile =
-            await http.MultipartFile.fromPath('image', imageFile.path);
-        request.files.add(fallbackFile);
-      } else {
-        request.files.add(multipartFile);
-      }
-
+      request.files.add(multipartFile);
+    
       // **NEW: Alternative fallback - try simple multipart file creation**
       try {
         if (request.files.isEmpty) {

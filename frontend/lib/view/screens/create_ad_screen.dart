@@ -28,12 +28,21 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
   final _keywordsController = TextEditingController();
 
   String _selectedAdType = 'banner';
+
+  // **NEW: Advanced Targeting Variables**
+  int? _minAge;
+  int? _maxAge;
+  String _selectedGender = 'all';
+  final List<String> _selectedLocations = [];
+  final List<String> _selectedInterests = [];
+  final List<String> _selectedPlatforms = [];
+  String? _appVersion;
   DateTime? _startDate;
   DateTime? _endDate;
   File? _selectedImage;
   File? _selectedVideo;
   // **NEW: Multiple images for carousel ads**
-  List<File> _selectedImages = [];
+  final List<File> _selectedImages = [];
   bool _isLoading = false;
   String? _errorMessage;
   String? _successMessage;
@@ -45,6 +54,136 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
   final CloudinaryService _cloudinaryService = CloudinaryService();
 
   final List<String> _adTypes = ['banner', 'carousel', 'video feed ad'];
+
+  // **NEW: Targeting Options**
+  final List<String> _genderOptions = ['all', 'male', 'female', 'other'];
+  final List<String> _platformOptions = ['android', 'ios', 'web'];
+  final List<String> _locationOptions = [
+    'All India',
+    'Delhi',
+    'Mumbai',
+    'Bangalore',
+    'Chennai',
+    'Kolkata',
+    'Hyderabad',
+    'Pune',
+    'Ahmedabad',
+    'Jaipur',
+    'Surat',
+    'Lucknow',
+    'Kanpur',
+    'Nagpur',
+    'Indore',
+    'Thane',
+    'Bhopal',
+    'Visakhapatnam',
+    'Pimpri-Chinchwad',
+    'Patna',
+    'Vadodara',
+    'Ghaziabad',
+    'Ludhiana',
+    'Agra',
+    'Nashik',
+    'Faridabad',
+    'Meerut',
+    'Rajkot',
+    'Kalyan-Dombivali',
+    'Vasai-Virar',
+    'Varanasi',
+    'Srinagar',
+    'Aurangabad',
+    'Navi Mumbai',
+    'Solapur',
+    'Vijayawada',
+    'Kolhapur',
+    'Amritsar',
+    'Noida',
+    'Ranchi',
+    'Howrah',
+    'Coimbatore',
+    'Raipur',
+    'Jabalpur',
+    'Gwalior',
+    'Chandigarh',
+    'Tiruchirappalli',
+    'Mysore',
+    'Bhubaneswar',
+    'Kochi',
+    'Bhavnagar',
+    'Salem',
+    'Warangal',
+    'Guntur',
+    'Bhiwandi',
+    'Amravati',
+    'Nanded',
+    'Kolhapur',
+    'Sangli',
+    'Malegaon',
+    'Ulhasnagar',
+    'Jalgaon',
+    'Latur',
+    'Ahmadnagar',
+    'Dhule',
+    'Ichalkaranji',
+    'Parbhani',
+    'Jalna',
+    'Bhusawal',
+    'Panvel',
+    'Satara',
+    'Beed',
+    'Yavatmal',
+    'Kamptee',
+    'Gondia',
+    'Barshi',
+    'Achalpur',
+    'Osmanabad',
+    'Nandurbar',
+    'Wardha',
+    'Udgir',
+    'Hinganghat'
+  ];
+  final List<String> _interestOptions = [
+    'Technology',
+    'Entertainment',
+    'Sports',
+    'Fashion',
+    'Food',
+    'Travel',
+    'Health & Fitness',
+    'Education',
+    'Business',
+    'Finance',
+    'Automotive',
+    'Real Estate',
+    'Beauty',
+    'Gaming',
+    'Music',
+    'Movies',
+    'Books',
+    'Photography',
+    'Art & Design',
+    'Home & Garden',
+    'Pets',
+    'Parenting',
+    'Lifestyle',
+    'News',
+    'Politics',
+    'Science',
+    'Environment',
+    'Social Media',
+    'Shopping',
+    'Cooking',
+    'DIY',
+    'Outdoor Activities',
+    'Fitness',
+    'Yoga',
+    'Meditation',
+    'Spirituality',
+    'Religion',
+    'Culture',
+    'History',
+    'Nature'
+  ];
 
   @override
   void initState() {
@@ -1156,6 +1295,14 @@ The selected file "$fileName" is not supported.''';
             .toList(),
         startDate: _startDate,
         endDate: _endDate,
+        // **NEW: Advanced targeting parameters**
+        minAge: _minAge,
+        maxAge: _maxAge,
+        gender: _selectedGender != 'all' ? _selectedGender : null,
+        locations: _selectedLocations.isNotEmpty ? _selectedLocations : null,
+        interests: _selectedInterests.isNotEmpty ? _selectedInterests : null,
+        platforms: _selectedPlatforms.isNotEmpty ? _selectedPlatforms : null,
+        appVersion: _appVersion,
       );
 
       if (result['success']) {
@@ -1196,6 +1343,15 @@ The selected file "$fileName" is not supported.''';
     _selectedVideo = null;
     // **NEW: Clear multiple images**
     _selectedImages.clear();
+
+    // **NEW: Clear targeting variables**
+    _minAge = null;
+    _maxAge = null;
+    _selectedGender = 'all';
+    _selectedLocations.clear();
+    _selectedInterests.clear();
+    _selectedPlatforms.clear();
+    _appVersion = null;
 
     // **NEW: Clear error messages when form is cleared**
     setState(() {
@@ -1815,6 +1971,272 @@ Please try again or contact support if the problem persists.''';
     );
   }
 
+  /// **NEW: Build Advanced Targeting Section**
+  Widget _buildAdvancedTargetingSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.gps_fixed, color: Colors.blue.shade600),
+            const SizedBox(width: 8),
+            const Text(
+              'Advanced Targeting',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Age Range
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<int>(
+                initialValue: _minAge,
+                decoration: const InputDecoration(
+                  labelText: 'Min Age',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.person),
+                ),
+                items: List.generate(53, (index) => index + 13)
+                    .map((age) => DropdownMenuItem(
+                          value: age,
+                          child: Text('$age'),
+                        ))
+                    .toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _minAge = value;
+                    if (_maxAge != null &&
+                        _minAge != null &&
+                        _minAge! > _maxAge!) {
+                      _maxAge = _minAge;
+                    }
+                  });
+                },
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: DropdownButtonFormField<int>(
+                initialValue: _maxAge,
+                decoration: const InputDecoration(
+                  labelText: 'Max Age',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.person_outline),
+                ),
+                items: List.generate(53, (index) => index + 13)
+                    .where((age) => _minAge == null || age >= _minAge!)
+                    .map((age) => DropdownMenuItem(
+                          value: age,
+                          child: Text('$age'),
+                        ))
+                    .toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _maxAge = value;
+                  });
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Gender Selection
+        DropdownButtonFormField<String>(
+          initialValue: _selectedGender,
+          decoration: const InputDecoration(
+            labelText: 'Gender',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.wc),
+          ),
+          items: _genderOptions.map((gender) {
+            return DropdownMenuItem(
+              value: gender,
+              child: Text(gender.toUpperCase()),
+            );
+          }).toList(),
+          onChanged: (value) {
+            setState(() {
+              _selectedGender = value!;
+            });
+          },
+        ),
+        const SizedBox(height: 16),
+
+        // Location Targeting
+        _buildMultiSelectField(
+          'Locations',
+          _selectedLocations,
+          _locationOptions,
+          Icons.location_on,
+          'Select target locations',
+        ),
+        const SizedBox(height: 16),
+
+        // Interests Selection
+        _buildMultiSelectField(
+          'Interests',
+          _selectedInterests,
+          _interestOptions,
+          Icons.favorite,
+          'Select target interests',
+        ),
+        const SizedBox(height: 16),
+
+        // Platform Targeting
+        _buildMultiSelectField(
+          'Platforms',
+          _selectedPlatforms,
+          _platformOptions,
+          Icons.phone_android,
+          'Select target platforms',
+        ),
+        const SizedBox(height: 16),
+
+        // App Version
+        TextFormField(
+          initialValue: _appVersion,
+          decoration: const InputDecoration(
+            labelText: 'App Version (Optional)',
+            hintText: 'e.g., 1.0.0',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.apps),
+            helperText: 'Target specific app versions',
+          ),
+          onChanged: (value) {
+            _appVersion = value.trim().isEmpty ? null : value.trim();
+          },
+        ),
+      ],
+    );
+  }
+
+  /// **NEW: Build Multi-Select Field**
+  Widget _buildMultiSelectField(
+    String label,
+    List<String> selectedItems,
+    List<String> options,
+    IconData icon,
+    String hint,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Selected items display
+              if (selectedItems.isNotEmpty) ...[
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: selectedItems.map((item) {
+                    return Chip(
+                      label: Text(item),
+                      deleteIcon: const Icon(Icons.close, size: 18),
+                      onDeleted: () {
+                        setState(() {
+                          selectedItems.remove(item);
+                        });
+                      },
+                      backgroundColor: Colors.blue.shade100,
+                      labelStyle: TextStyle(color: Colors.blue.shade800),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // Add button
+              ElevatedButton.icon(
+                onPressed: () =>
+                    _showMultiSelectDialog(label, selectedItems, options),
+                icon: Icon(icon, size: 18),
+                label: Text(selectedItems.isEmpty ? hint : 'Add More'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue.shade50,
+                  foregroundColor: Colors.blue.shade700,
+                  elevation: 0,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// **NEW: Show Multi-Select Dialog**
+  void _showMultiSelectDialog(
+      String title, List<String> selectedItems, List<String> options) {
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Select $title'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 400,
+            child: ListView.builder(
+              itemCount: options.length,
+              itemBuilder: (context, index) {
+                final option = options[index];
+                final isSelected = selectedItems.contains(option);
+
+                return CheckboxListTile(
+                  title: Text(option),
+                  value: isSelected,
+                  onChanged: (value) {
+                    setDialogState(() {
+                      if (value == true) {
+                        selectedItems.add(option);
+                      } else {
+                        selectedItems.remove(option);
+                      }
+                    });
+                  },
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {});
+                Navigator.pop(context);
+              },
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -2392,27 +2814,8 @@ Please try again or contact support if the problem persists.''';
                       },
                     ),
                     const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _targetAudienceController,
-                      decoration: const InputDecoration(
-                        labelText: 'Target Audience',
-                        hintText: 'all, youth, professionals, etc.',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.people),
-                      ),
-                      onChanged: (value) => _clearErrorMessages(),
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _keywordsController,
-                      decoration: const InputDecoration(
-                        labelText: 'Target Keywords',
-                        hintText: 'Enter keywords separated by commas',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.tag),
-                      ),
-                      onChanged: (value) => _clearErrorMessages(),
-                    ),
+                    // **NEW: Advanced Targeting Section**
+                    _buildAdvancedTargetingSection(),
                     const SizedBox(height: 16),
                     Row(
                       children: [

@@ -71,10 +71,6 @@ const AdCampaignSchema = new mongoose.Schema({
       type: String,
       enum: ['android', 'ios', 'web']
     }],
-    os: [{
-      type: String,
-      enum: ['android', 'ios', 'windows', 'macos', 'linux']
-    }],
     appVersion: {
       type: String
     }

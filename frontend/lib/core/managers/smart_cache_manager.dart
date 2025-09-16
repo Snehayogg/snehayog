@@ -118,6 +118,12 @@ class SmartCacheManager {
   // Disk cache for persistence
   late Directory _cacheDir;
 
+  // Initialization state
+  bool _isInitialized = false;
+
+  /// Check if cache manager is initialized
+  bool get isInitialized => _isInitialized;
+
   // Cache configurations for different data types
   final Map<String, InstagramCacheConfig> _cacheConfigs = {
     'videos': const InstagramCacheConfig(
@@ -204,9 +210,11 @@ class SmartCacheManager {
       // Start background workers
       _startBackgroundWorkers();
 
+      _isInitialized = true;
       print('✅ SmartCacheManager: Initialization completed successfully');
     } catch (e) {
       print('❌ SmartCacheManager: Initialization failed: $e');
+      _isInitialized = false;
     }
   }
 
@@ -445,7 +453,6 @@ class SmartCacheManager {
   /// Clean up expired cache entries
   void _cleanupExpiredEntries() {
     try {
-      final now = DateTime.now();
       final keysToRemove = <String>[];
 
       for (final entry in _memoryCache.entries) {
@@ -948,6 +955,8 @@ class SmartCacheManager {
   }
 
   /// Get cache configuration for specific cache type
+  // TODO: Remove unused method
+  /*
   InstagramCacheConfig _getCacheConfig(String cacheType) {
     switch (cacheType) {
       case 'videos':
@@ -997,14 +1006,20 @@ class SmartCacheManager {
         );
     }
   }
+  */
 
   /// **NEW: Check for potential memory leaks**
+  // TODO: Remove unused method
+  /*
   void _checkForMemoryLeaks() {
     // **CRITICAL FIX: Move heavy operations to background thread**
     unawaited(_checkForMemoryLeaksInBackground());
   }
+  */
 
   /// **NEW: Check for memory leaks in background thread**
+  // TODO: Remove unused method
+  /*
   Future<void> _checkForMemoryLeaksInBackground() async {
     try {
       final totalControllers = _memoryCache.length;
@@ -1038,4 +1053,5 @@ class SmartCacheManager {
       print('❌ SmartCacheManager: Error during memory leak check: $e');
     }
   }
+  */
 }

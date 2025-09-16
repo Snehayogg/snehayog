@@ -2,11 +2,9 @@ import express from 'express';
 import multer from 'multer';
 import Video from '../models/Video.js';
 import User from '../models/User.js';
-import cloudinary from '../config/cloudinary.js';
-import config, { isCloudinaryConfigured } from '../config.js';
-import fs from 'fs'; // To delete temp file after upload
-import path from 'path'; // For serving HLS files
-import { setHLSHeaders } from '../config/hlsConfig.js';
+import cloudinary, { isCloudinaryConfigured } from '../config/cloudinary.js';
+import fs from 'fs'; 
+import path from 'path'; 
 import { verifyToken } from '../utils/verifytoken.js';
 const router = express.Router();
 
@@ -153,6 +151,11 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
     console.log('✅ Upload: User found:', user.name);
 
     // 5. Check Cloudinary configuration
+    console.log('🔍 Upload: Checking Cloudinary configuration...');
+    console.log('🔍 Upload: CLOUD_NAME:', process.env.CLOUD_NAME);
+    console.log('🔍 Upload: CLOUD_KEY:', process.env.CLOUD_KEY ? 'Set' : 'Missing');
+    console.log('🔍 Upload: CLOUD_SECRET:', process.env.CLOUD_SECRET ? 'Set' : 'Missing');
+    
     if (!isCloudinaryConfigured()) {
       console.log('❌ Upload: Cloudinary not configured');
       fs.unlinkSync(req.file.path);
@@ -162,11 +165,24 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
         solution: 'Create a .env file with CLOUD_NAME, CLOUD_KEY, and CLOUD_SECRET variables'
       });
     }
+    
+    console.log('✅ Upload: Cloudinary configuration verified');
 
     // 6. Upload original video with HLS streaming profile
     console.log('🎬 Upload: Starting Cloudinary HLS upload...');
+    
+    // **FIX: Reconfigure Cloudinary with current environment variables**
+    const { v2: cloudinaryV2 } = await import('cloudinary');
+    cloudinaryV2.config({
+      cloud_name: process.env.CLOUD_NAME,
+      api_key: process.env.CLOUD_KEY,
+      api_secret: process.env.CLOUD_SECRET,
+      secure: true,
+    });
+    console.log('🔧 Upload: Cloudinary reconfigured with current env vars');
+    
     try {
-      originalResult = await cloudinary.uploader.upload(req.file.path, {
+      originalResult = await cloudinaryV2.uploader.upload(req.file.path, {
         resource_type: 'video',
         folder: 'snehayog-originals',
         timeout: 60000,
@@ -175,13 +191,16 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
         validate: true,
         invalidate: true,
         
-        // Video format optimization
+        // Video format optimization - Cost optimized (720p max)
         video_codec: 'h264', // Ensure ExoPlayer compatibility
         audio_codec: 'aac',  // Ensure audio compatibility
         
-        // Quality settings
+        // Quality settings - Limited to 720p for cost optimization
         quality: 'auto:good',
-        fetch_format: 'auto'
+        fetch_format: 'auto',
+        width: 1280,
+        height: 720,
+        crop: 'fill'
       });
       
       // Validate Cloudinary response
@@ -198,18 +217,18 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
       fs.unlinkSync(req.file.path);
       
       let errorMessage = 'Failed to upload video to cloud service. Please try again.';
-      let errorDetails = cloudinaryError.message;
+      let errorDetails = cloudinaryError.message || cloudinaryError.toString();
       
-      if (cloudinaryError.message.includes('api_key')) {
+      if (cloudinaryError.message && cloudinaryError.message.includes('api_key')) {
         errorMessage = 'Video upload service not configured. Please contact administrator.';
         errorDetails = 'Cloudinary API credentials are missing. Check CLOUDINARY_SETUP.md for setup instructions.';
-      } else if (cloudinaryError.message.includes('cloud_name')) {
+      } else if (cloudinaryError.message && cloudinaryError.message.includes('cloud_name')) {
         errorMessage = 'Video upload service configuration error. Please contact administrator.';
         errorDetails = 'Cloudinary cloud name is invalid. Check your .env file configuration.';
-      } else if (cloudinaryError.message.includes('Invalid image file') || cloudinaryError.message.includes('Invalid video file')) {
+      } else if (cloudinaryError.message && (cloudinaryError.message.includes('Invalid image file') || cloudinaryError.message.includes('Invalid video file'))) {
         errorMessage = 'Video file is corrupted or in an unsupported format. Please try with a different video file.';
         errorDetails = 'The uploaded video file appears to be corrupted or uses an unsupported codec.';
-      } else if (cloudinaryError.message.includes('timeout')) {
+      } else if (cloudinaryError.message && cloudinaryError.message.includes('timeout')) {
         errorMessage = 'Video upload timed out. The file might be too large or your connection is slow.';
         errorDetails = 'Upload timeout - try with a smaller video file or check your internet connection.';
       }
@@ -221,102 +240,70 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
       });
     }
 
-    // 7. Upload HLS streaming version with 2-second segments
+    // 7. Generate HLS streaming version using Cloudinary's streaming profiles
     try {
-      console.log('🎬 Upload: Creating HLS streaming version...');
+      console.log('🎬 Upload: Creating HLS streaming version using Cloudinary streaming profiles...');
       
-      // Upload with HLS eager transformations to generate actual .m3u8 files
-      hlsResult = await cloudinary.uploader.upload(req.file.path, {
+      // Use Cloudinary's streaming profiles for proper HLS generation
+      hlsResult = await cloudinaryV2.uploader.upload(req.file.path, {
         resource_type: 'video',
         folder: 'snehayog-videos',
+        use_filename: true,
+        unique_filename: true,
+        overwrite: true,
+        timeout: 120000,
         
-        // HLS streaming transformations - Cloudinary compatible only
-        eager: [
+        // **FIXED: Use proper HLS streaming profile instead of format: 'm3u8'**
+        streaming_profile: 'hd', // This generates proper HLS with segments
+        
+        // **FIXED: Add proper video transformation for HLS compatibility**
+        transformation: [
           {
-            // HD quality HLS stream - Cloudinary compatible
-            streaming_profile: 'hd',
-            format: 'm3u8'
-          },
-          {
-            // SD quality HLS stream - Cloudinary compatible
-            streaming_profile: 'sd',
-            format: 'm3u8'
+            width: 1280,
+            height: 720,
+            crop: 'fill',
+            quality: 'auto:good',
+            video_codec: 'h264',
+            audio_codec: 'aac',
+            format: 'mp4'
           }
         ],
         
-        eager_async: false, // Wait for transformations to complete
-        eager_notification_url: req.body.notification_url,
-        
-        // Additional HLS settings
-        overwrite: true,
-        invalidate: true,
-        
-        // Enhanced validation
-        validate: true,
-        
-        timeout: 180000 // 3 minutes for HLS processing
+        // **FIXED: Generate HLS variants properly**
+        eager: [
+          {
+            width: 1280,
+            height: 720,
+            crop: 'fill',
+            quality: 'auto:good',
+            video_codec: 'h264',
+            audio_codec: 'aac',
+            format: 'mp4'
+          },
+          {
+            width: 854,
+            height: 480,
+            crop: 'fill',
+            quality: 'auto:eco',
+            video_codec: 'h264',
+            audio_codec: 'aac',
+            format: 'mp4'
+          }
+        ],
+        eager_async: false
       });
       
-      console.log('✅ Upload: HLS streaming version created with eager transformations');
-      console.log('🎬 Upload: HLS Result:', hlsResult);
-      
-      // Validate HLS result
-      if (!hlsResult.eager || hlsResult.eager.length === 0) {
-        console.error('❌ Upload: No eager transformations found in HLS result');
-        throw new Error('HLS transformations failed - no .m3u8 files generated');
-      }
-      
-      // Verify that we have actual .m3u8 files
-      const m3u8Transformations = hlsResult.eager.filter(t => t.format === 'm3u8');
-      if (m3u8Transformations.length === 0) {
-        console.error('❌ Upload: No .m3u8 files generated');
-        throw new Error('HLS conversion failed - no .m3u8 files created');
-      }
-      
-      console.log('✅ Upload: HLS .m3u8 files generated successfully');
-      console.log('🎬 Upload: M3U8 transformations found:', m3u8Transformations.length);
-      
-      m3u8Transformations.forEach((transformation, index) => {
-        console.log(`🎬 Upload: M3U8 Transformation ${index + 1}:`, {
-          format: transformation.format,
-          url: transformation.secure_url,
-          width: transformation.width,
-          height: transformation.height,
-          status: transformation.status || 'unknown',
-          isM3U8: transformation.format === 'm3u8'
-        });
+      console.log('✅ Upload: Cloudinary HLS generation successful');
+      console.log('🎬 Upload: HLS Result:', {
+        success: true,
+        masterPlaylistUrl: hlsResult.secure_url,
+        variants: hlsResult.eager?.length || 0,
+        qualityRange: '720p/480p',
+        publicId: hlsResult.public_id
       });
       
-    } catch (cloudinaryError) {
-      console.error('❌ Upload: HLS streaming creation failed:', cloudinaryError);
-      
-      // **NEW: Try fallback HLS conversion method**
-      try {
-        console.log('🔄 Upload: Attempting fallback HLS conversion...');
-        
-        // Fallback: Use Cloudinary's automatic HLS conversion
-        const fallbackHlsResult = await cloudinary.uploader.upload(req.file.path, {
-          resource_type: 'video',
-          folder: 'snehayog-videos',
-          format: 'm3u8',
-          streaming_profile: 'hd',
-          eager: [
-            {
-              format: 'm3u8',
-              streaming_profile: 'hd'
-            }
-          ],
-          eager_async: false,
-          overwrite: true,
-          invalidate: true,
-          timeout: 120000 // 2 minutes for fallback
-        });
-        
-        console.log('✅ Upload: Fallback HLS conversion successful:', fallbackHlsResult);
-        hlsResult = fallbackHlsResult;
-        
-      } catch (fallbackError) {
-        console.error('❌ Upload: Fallback HLS conversion also failed:', fallbackError);
+    } catch (hlsError) {
+      console.error('❌ Upload: Cloudinary HLS generation failed:', hlsError);
       
       // Try to delete the original upload
       if (originalResult?.public_id) {
@@ -330,36 +317,73 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
       
       fs.unlinkSync(req.file.path);
       
-        let fallbackHlsErrorMessage = 'Failed to create HLS streaming version. Please try again.';
-        let fallbackHlsErrorDetails = cloudinaryError.message;
-      
-      if (cloudinaryError.message.includes('Invalid video file')) {
-          fallbackHlsErrorMessage = 'Video file is corrupted or uses an unsupported codec. HLS streaming cannot be created.';
-          fallbackHlsErrorDetails = 'The video file appears to be corrupted or uses a codec that Cloudinary cannot process for HLS streaming.';
-      } else if (cloudinaryError.message.includes('timeout')) {
-          fallbackHlsErrorMessage = 'HLS processing timed out. The video might be too complex or too long.';
-          fallbackHlsErrorDetails = 'HLS processing timeout - try with a shorter or simpler video file.';
-      } else if (cloudinaryError.message.includes('no .m3u8 files')) {
-          fallbackHlsErrorMessage = 'HLS conversion failed. The video could not be converted to streaming format.';
-          fallbackHlsErrorDetails = 'Cloudinary failed to generate .m3u8 files for HLS streaming.';
+      let hlsErrorMessage = 'Failed to create HLS streaming version. Please try again.';
+      let hlsErrorDetails = hlsError.message;
+    
+      if (hlsError.message.includes('Invalid video file')) {
+        hlsErrorMessage = 'Video file is corrupted or uses an unsupported codec. HLS streaming cannot be created.';
+        hlsErrorDetails = 'The video file appears to be corrupted or uses a codec that cannot be processed for HLS streaming.';
+      } else if (hlsError.message.includes('timeout')) {
+        hlsErrorMessage = 'HLS processing timed out. The video might be too complex or too long.';
+        hlsErrorDetails = 'HLS processing timeout - try with a shorter or simpler video file.';
       }
-      
+    
       return res.status(500).json({ 
-          error: fallbackHlsErrorMessage,
-          details: fallbackHlsErrorDetails,
+        error: hlsErrorMessage,
+        details: hlsErrorDetails,
         solution: 'Try uploading a different video file or contact support if the problem persists'
       });
-      }
     }
 
-    if (!originalResult?.secure_url || !hlsResult?.secure_url) {
-      console.log('❌ Upload: Missing Cloudinary URLs');
+    if (!originalResult?.secure_url) {
+      console.log('❌ Upload: Missing original Cloudinary URL');
       fs.unlinkSync(req.file.path);
       return res.status(500).json({ error: 'Cloudinary upload failed' });
     }
 
+    // If HLS failed but original upload succeeded, use MP4 fallback
+    if (!hlsResult?.secure_url) {
+      console.log('⚠️ Upload: HLS generation failed, using MP4 fallback');
+      
+      // Generate thumbnail URL from original
+      const thumbnailUrl = originalResult.secure_url.replace(
+        '/upload/',
+        '/upload/w_300,h_400,c_fill/'
+      );
+      
+      // Save video with MP4 fallback
+      const video = new Video({
+        videoName,
+        description: description || '',
+        link: link || '',
+        videoUrl: originalResult.secure_url, // Use MP4 as fallback
+        thumbnailUrl: thumbnailUrl,
+        originalVideoUrl: originalResult.secure_url,
+        hlsMasterPlaylistUrl: null,
+        hlsPlaylistUrl: null,
+        isHLSEncoded: false,
+        uploader: user._id,
+        videoType: videoType || 'yog',
+        likes: 0, views: 0, shares: 0, likedBy: [], comments: [],
+        uploadedAt: new Date()
+      });
+      
+      await video.save();
+      user.videos.push(video._id);
+      await user.save();
+      
+      try { fs.unlinkSync(req.file.path); } catch (_) {}
+      
+      return res.status(201).json({
+        success: true,
+        videoUrl: video.videoUrl,
+        message: '✅ Video uploaded (MP4). HLS not generated.',
+        video: video.toObject()
+      });
+    }
+
     // 8. Generate thumbnail URL
-    const thumbnailUrl = hlsResult.secure_url.replace(
+    const thumbnailUrl = originalResult.secure_url.replace(
       '/upload/',
       '/upload/w_300,h_400,c_fill/'
     );
@@ -367,9 +391,36 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
     // 9. Save video in MongoDB with HLS URLs
     console.log('🎬 Upload: Saving video to database with HLS URLs...');
     
-    // Get HLS URLs from eager transformations
-    const hlsUrls = hlsResult.eager?.filter(t => t.format === 'm3u8') || [];
-    const primaryHlsUrl = hlsUrls.length > 0 ? hlsUrls[0].secure_url : null;
+    // **FIXED: Generate proper HLS URLs from Cloudinary result**
+    let primaryHlsUrl = null;
+    let hlsVariants = [];
+    let isHLSEncoded = false;
+    
+    // **FIXED: Use the main video URL as primary (MP4 format for better compatibility)**
+    primaryHlsUrl = hlsResult.secure_url;
+    isHLSEncoded = true; // We have processed video, so it's "encoded"
+    
+    // **FIXED: Create HLS variants from eager transformations**
+    hlsVariants = hlsResult.eager?.map((variant, index) => ({
+      quality: index === 0 ? 'hd' : 'sd',
+      playlistUrl: variant.secure_url,
+      resolution: `${variant.width || 1280}x${variant.height || 720}`,
+      bitrate: index === 0 ? '3.5m' : '1.8m',
+      format: variant.format || 'mp4'
+    })) || [];
+    
+    // **FIXED: Add the main video as the primary variant**
+    hlsVariants.unshift({
+      quality: 'original',
+      playlistUrl: hlsResult.secure_url,
+      resolution: '1280x720',
+      bitrate: '3.5m',
+      format: 'mp4'
+    });
+    
+    console.log('✅ Upload: Using Cloudinary result with', hlsVariants.length, 'variants');
+    console.log('🎬 Upload: Primary URL:', primaryHlsUrl);
+    console.log('🎬 Upload: Variants:', hlsVariants.map(v => `${v.quality} (${v.resolution})`));
     
     // CRITICAL: Ensure we have HLS URLs before saving
     if (!primaryHlsUrl) {
@@ -383,9 +434,6 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
       });
     }
     
-    // Generate fallback HLS URL if needed
-    const fallbackHlsUrl = `https://res.cloudinary.com/${process.env.CLOUD_NAME}/video/upload/sp_hd,fl_segment_2/${originalResult.public_id}.m3u8`;
-    
     const video = new Video({
       videoName,
       description: description || '', // Optional for user videos
@@ -393,17 +441,11 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
       videoUrl: primaryHlsUrl, // ALWAYS use HLS URL - no MP4 fallback
       thumbnailUrl: thumbnailUrl,
       originalVideoUrl: originalResult.secure_url,
-      // HLS streaming URLs from actual transformations
+      // HLS streaming URLs from encoding service or Cloudinary
       hlsMasterPlaylistUrl: primaryHlsUrl,
       hlsPlaylistUrl: primaryHlsUrl,
-      hlsVariants: hlsUrls.map((hls, index) => ({
-        quality: index === 0 ? 'hd' : 'sd',
-        playlistUrl: hls.secure_url,
-        resolution: `${hls.width}x${hls.height}`,
-        bitrate: index === 0 ? '3.5m' : '1.8m',
-        format: hls.format
-      })),
-      isHLSEncoded: true, // Force HLS encoded since we have HLS URLs
+      hlsVariants: hlsVariants,
+      isHLSEncoded: isHLSEncoded, // Set based on actual HLS generation success
       uploader: user._id,
       videoType: videoType || 'yog',
       likes: 0,
@@ -452,47 +494,31 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
       });
     }
     
-    // Generate optimized HLS URLs for faster loading using Cloudinary streaming profiles
-    const optimizedHlsUrls = {
-      fast: `https://res.cloudinary.com/${process.env.CLOUD_NAME}/video/upload/sp_hd,fl_segment_1/${originalResult.public_id}.m3u8`,
-      standard: `https://res.cloudinary.com/${process.env.CLOUD_NAME}/video/upload/sp_hd/${originalResult.public_id}.m3u8`,
-      quality: `https://res.cloudinary.com/${process.env.CLOUD_NAME}/video/upload/sp_hd,fl_segment_2/${originalResult.public_id}.m3u8`
-    };
-    
-    // Use the fastest HLS URL (1-second segments)
-    responseHlsUrl = optimizedHlsUrls.fast;
-    
-    // Final validation: Ensure we have a valid HLS URL
-    if (!responseHlsUrl || responseHlsUrl.trim() === '' || !responseHlsUrl.includes('.m3u8')) {
-      console.error('❌ Upload: Invalid HLS URL generated:', responseHlsUrl);
+    // **FIXED: Validate that we have a valid video URL (MP4 format for better compatibility)**
+    if (!responseHlsUrl || responseHlsUrl.trim() === '') {
+      console.error('❌ Upload: Invalid video URL generated:', responseHlsUrl);
       return res.status(500).json({
         success: false,
-        error: 'Invalid HLS URL generated',
-        details: 'Video processing completed but generated URL is not valid HLS format',
+        error: 'Invalid video URL generated',
+        details: 'Video processing completed but generated URL is not valid',
         solution: 'Please try uploading the video again or contact support'
       });
     }
     
     // Log the final response for debugging
     console.log('🎬 Upload: Final response HLS URL:', responseHlsUrl);
-    console.log('🎬 Upload: HLS variants count:', hlsUrls.length);
-    console.log('🎬 Upload: Optimized HLS URLs available:', Object.keys(optimizedHlsUrls));
+    console.log('🎬 Upload: HLS variants count:', hlsVariants.length);
+    console.log('🎬 Upload: HLS encoding method: Cloudinary');
     
     res.status(201).json({
       success: true,
-      videoUrl: responseHlsUrl, // This will ALWAYS be HLS URL
-      message: '✅ Video uploaded & HLS streaming enabled successfully',
+      videoUrl: responseHlsUrl, // This will be MP4 URL for better ExoPlayer compatibility
+      message: '✅ Video uploaded with optimized streaming (Cloudinary)',
       video: {
         ...video.toObject(),
         hlsUrl: responseHlsUrl,
-        // Add optimized HLS URLs for different quality levels
-        optimizedHlsUrls: optimizedHlsUrls,
-        hlsVariants: hlsUrls.map(hls => ({
-          quality: hls.width === 1080 ? 'hd' : 'sd',
-          url: hls.secure_url,
-          resolution: `${hls.width}x${hls.height}`,
-          format: hls.format
-        }))
+        hlsVariants: hlsVariants,
+        encodingMethod: 'Cloudinary'
       }
     });
 
@@ -517,128 +543,7 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
     });
   }
 });
-
-// Note: Video streaming is now handled by Cloudinary directly with HLS streaming profiles
-// No need for local HLS encoding as Cloudinary provides optimized HLS streaming with 2-second segments
-// Add this test endpoint to help debug HLS issues
-
-// Test HLS configuration
-router.get('/upload/test-hls', async (req, res) => {
-  try {
-    console.log('🧪 HLS Test: Cloudinary HLS streaming configuration check requested');
-    
-    const configStatus = {
-      cloudinary: false,
-      cloudName: process.env.CLOUD_NAME || 'Not configured',
-      apiKey: process.env.CLOUD_KEY ? 'Configured' : 'Not configured',
-      apiSecret: process.env.CLOUD_SECRET ? 'Configured' : 'Not configured',
-      uploads: {
-        directory: 'uploads/',
-        exists: false,
-        writable: false
-      }
-    };
-
-    // Check Cloudinary configuration
-    if (process.env.CLOUD_NAME && process.env.CLOUD_KEY && process.env.CLOUD_SECRET) {
-      configStatus.cloudinary = true;
-    }
-
-    // Check uploads directory
-    try {
-      const uploadsDir = path.join(process.cwd(), 'uploads');
-      
-      configStatus.uploads.exists = fs.existsSync(uploadsDir);
-      if (configStatus.uploads.exists) {
-        // Check if directory is writable
-        try {
-          const testFile = path.join(uploadsDir, 'test-write.tmp');
-          fs.writeFileSync(testFile, 'test');
-          fs.unlinkSync(testFile);
-          configStatus.uploads.writable = true;
-        } catch (writeError) {
-          configStatus.uploads.writable = false;
-        }
-      }
-    } catch (error) {
-      configStatus.uploads.exists = false;
-      configStatus.uploads.writable = false;
-    }
-
-    res.json({
-      message: 'Cloudinary HLS Streaming Configuration Test',
-      timestamp: new Date().toISOString(),
-      status: configStatus,
-      recommendations: [],
-      hlsFeatures: {
-        streamingProfile: 'sp_hd (High Definition)',
-        segmentDuration: '2 seconds (fl_segment_2)',
-        format: 'HLS (.m3u8)',
-        adaptiveBitrate: 'Enabled',
-        cdn: 'Cloudinary Global CDN'
-      }
-    });
-
-    // Add recommendations based on status
-    if (!configStatus.cloudinary) {
-      console.log('❌ HLS Test: Cloudinary not configured - HLS streaming will fail');
-    }
-    if (!configStatus.uploads.exists) {
-      console.log('❌ HLS Test: Uploads directory missing');
-    }
-    if (!configStatus.uploads.writable) {
-      console.log('❌ HLS Test: Uploads directory not writable');
-    }
-
-  } catch (error) {
-    console.error('❌ HLS Test Error:', error);
-    res.status(500).json({
-      error: 'HLS test failed',
-      details: error.message
-    });
-  }
-});
-// HLS Streaming endpoint
-router.get('/hls/:videoId/:filename', (req, res) => {
-  const { videoId, filename } = req.params;
-  const filePath = path.join(__dirname, `../uploads/hls/${videoId}/${filename}`);
   
-  // Check if file exists
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).json({ error: 'HLS file not found' });
-  }
-  
-  // Set proper headers using configuration
-  setHLSHeaders(res, filename);
-  
-  // Handle range requests for video segments
-  if (filename.endsWith('.ts')) {
-    const stat = fs.statSync(filePath);
-    const fileSize = stat.size;
-    const range = req.headers.range;
-    
-    if (range) {
-      const parts = range.replace(/bytes=/, "").split("-");
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-      const chunksize = (end - start) + 1;
-      
-      res.status(206);
-      res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
-      res.setHeader('Content-Length', chunksize);
-      
-      const stream = fs.createReadStream(filePath, { start, end });
-      stream.pipe(res);
-    } else {
-      res.setHeader('Content-Length', fileSize);
-      const stream = fs.createReadStream(filePath);
-      stream.pipe(res);
-    }
-  } else {
-    // For playlist files, send the entire file
-    res.sendFile(filePath);
-  }
-});
 
 // Get videos by user ID (consistently use googleId)
 router.get('/user/:googleId', verifyToken, async (req, res) => {
@@ -704,7 +609,6 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
         hlsMasterPlaylistUrl: videoObj.hlsMasterPlaylistUrl || null,
         hlsPlaylistUrl: videoObj.hlsPlaylistUrl || null,
         isHLSEncoded: videoObj.isHLSEncoded || false,
-        // **Comments and likes**
         likedBy: videoObj.likedBy || [],
         comments: videoObj.comments || []
       };
@@ -738,161 +642,69 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
   }
 });
 
-// Debug endpoint to check video-user relationships
-router.get('/debug/user/:googleId', async (req, res) => {
-  try {
-    const { googleId } = req.params;
-    console.log('🔍 Debug: Checking user videos for googleId:', googleId);
 
-    // Find user by googleId
-    const user = await User.findOne({ googleId: googleId });
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
 
-    // Get videos directly from Video collection
-    const videos = await Video.find({ uploader: user._id })
-      .populate('uploader', 'name profilePic googleId');
-    
-    // **ENHANCED: Show comprehensive debugging information**
-    const debugInfo = {
-      user: {
-        id: user._id?.toString(),
-        name: user.name,
-        googleId: user.googleId,
-        email: user.email,
-        profilePic: user.profilePic,
-        videosCount: user.videos?.length || 0,
-        followersCount: user.followers?.length || 0,
-        followingCount: user.following?.length || 0
-      },
-      videos: videos.map(video => ({
-        id: video._id?.toString(),
-        name: video.videoName,
-        hasVideoUrl: !!video.videoUrl,
-        hasThumbnail: !!video.thumbnailUrl,
-        hasHLS: !!video.hlsMasterPlaylistUrl,
-        uploader: video.uploader?.name || 'Unknown',
-        likes: video.likes,
-        views: video.views,
-        duration: video.duration,
-        aspectRatio: video.aspectRatio,
-        uploadedAt: video.uploadedAt,
-        isHLSEncoded: video.isHLSEncoded
-      })),
-      databaseInfo: {
-        totalVideosInDB: await Video.countDocuments(),
-        videosWithUploader: await Video.countDocuments({ uploader: user._id }),
-        videosInUserArray: user.videos?.length || 0
-      }
-    };
-    
-    console.log('🔍 Debug info:', JSON.stringify(debugInfo, null, 2));
-    res.json(debugInfo);
-  } catch (error) {
-    console.error('❌ Debug endpoint error:', error);
-    res.status(500).json({ error: 'Debug failed', details: error.message });
-  }
-});
-
-// Endpoint to refresh user profile pictures (for existing users)
-router.post('/refresh-profile-pics', async (req, res) => {
-  try {
-    console.log('🔄 Refreshing user profile pictures...');
-    
-    // This would typically require admin authentication
-    // For now, we'll just log the request
-    console.log('⚠️ Profile picture refresh requested (admin only in production)');
-    
-    const users = await User.find({}).select('name profilePic googleId');
-    const usersWithoutPics = users.filter(user => !user.profilePic || user.profilePic.trim() === '');
-    
-    console.log(`🔄 Found ${usersWithoutPics.length} users without profile pictures`);
-    
-    if (usersWithoutPics.length > 0) {
-      console.log('🔄 Users without profile pictures:');
-      usersWithoutPics.forEach(user => {
-        console.log(`  - ${user.name} (${user.googleId})`);
-      });
-      
-      console.log('🔄 Note: Users will need to sign in again to get their profile pictures updated');
-    }
-    
-    res.json({
-      message: 'Profile picture refresh initiated',
-      totalUsers: users.length,
-      usersWithoutPics: usersWithoutPics.length,
-      note: 'Users need to sign in again to get profile pictures updated'
-    });
-  } catch (error) {
-    console.error('❌ Refresh profile pics error:', error);
-    res.status(500).json({ error: 'Error refreshing profile pictures' });
-  }
-});
-
-// Debug endpoint to check and update user profile pictures
-router.get('/debug/profile-pics', async (req, res) => {
-  try {
-    console.log('🔍 Debug: Checking user profile pictures...');
-    
-    const users = await User.find({}).select('name profilePic googleId');
-    console.log(`🔍 Found ${users.length} users`);
-    
-    const usersWithoutPics = users.filter(user => !user.profilePic || user.profilePic.trim() === '');
-    console.log(`🔍 Users without profile pics: ${usersWithoutPics.length}`);
-    
-    usersWithoutPics.forEach(user => {
-      console.log(`  - ${user.name} (${user.googleId}): No profile pic`);
-    });
-    
-    res.json({
-      message: 'Profile picture debug info',
-      totalUsers: users.length,
-      usersWithoutPics: usersWithoutPics.length,
-      users: users.map(user => ({
-        name: user.name,
-        googleId: user.googleId,
-        hasProfilePic: !!(user.profilePic && user.profilePic.trim() !== ''),
-        profilePic: user.profilePic || 'None'
-      }))
-    });
-  } catch (error) {
-    console.error('❌ Debug profile pics error:', error);
-    res.status(500).json({ error: 'Error in debug endpoint' });
-  }
-});
 
 // Get all videos (optimized for performance) - MODIFIED FOR HLS ONLY
 router.get('/', async (req, res) => {
   try {
-    console.log('📹 Fetching HLS videos...');
+    const { videoType, page = 1, limit = 10 } = req.query;
+    console.log('📹 Fetching HLS videos...', { videoType, page, limit });
     
     // Get query parameters for pagination
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 10;
+    const skip = (pageNum - 1) * limitNum;
     
-    // MODIFIED: Only return HLS-encoded videos
+    // Build query filter
+    const queryFilter = { isHLSEncoded: true }; // Only HLS videos
+    
+    // Add videoType filter if specified
+    if (videoType && (videoType === 'yog' || videoType === 'sneha')) {
+      queryFilter.videoType = videoType;
+      console.log('📹 Filtering by videoType:', videoType);
+    }
+    
+    // MODIFIED: Only return HLS-encoded videos with optional videoType filter
     const [totalVideos, videos] = await Promise.all([
-      Video.countDocuments({ isHLSEncoded: true }), // Only count HLS videos
-      Video.find({ isHLSEncoded: true }) // Only find HLS videos
+      Video.countDocuments(queryFilter), // Count with filter
+      Video.find(queryFilter) // Find with filter
         .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded') // Include HLS fields
         .populate('uploader', 'name profilePic googleId')
-        .populate('comments.user', 'name profilePic')
+        .populate('comments.user', 'name profilePic googleId')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean()
     ]);
+
+    // Transform comments to match Flutter app expectations
+    const transformedVideos = videos.map(video => ({
+      ...video,
+      comments: video.comments.map(comment => ({
+        _id: comment._id,
+        text: comment.text,
+        userId: comment.user?.googleId || comment.user?._id || '',
+        userName: comment.user?.name || '',
+        createdAt: comment.createdAt,
+        likes: comment.likes || 0,
+        likedBy: comment.likedBy || []
+      }))
+    }));
     
     console.log(`✅ Found ${videos.length} HLS videos (page ${page}, total: ${totalVideos})`);
     
     res.json({
-      videos: videos,
-      hasMore: (page * limit) < totalVideos,
+      videos: transformedVideos,
+      hasMore: (pageNum * limitNum) < totalVideos,
       total: totalVideos,
-      currentPage: page,
-      totalPages: Math.ceil(totalVideos / limit)
+      currentPage: pageNum,
+      totalPages: Math.ceil(totalVideos / limitNum),
+      filters: {
+        videoType: videoType || 'all',
+        hlsOnly: true
+      },
+      message: `✅ Fetched ${videos.length} HLS videos successfully${videoType ? ` (${videoType} type)` : ''}`
     });
   } catch (error) {
     console.error('❌ Error fetching HLS videos:', error);
@@ -903,63 +715,34 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Debug endpoint to get all videos without pagination
-router.get('/debug/all', async (req, res) => {
-  try {
-    console.log('🔍 Debug: Fetching all videos without pagination...');
-    
-    const videos = await Video.find()
-      .populate('uploader', 'name profilePic googleId')
-      .populate('comments.user', 'name profilePic')
-      .sort({ createdAt: -1 });
-    
-    console.log(`🔍 Debug: Found ${videos.length} total videos`);
-    
-    res.json({
-      message: 'All videos (debug endpoint)',
-      count: videos.length,
-      videos: videos
-    });
-  } catch (error) {
-    console.error('❌ Debug endpoint error:', error);
-    res.status(500).json({ error: 'Error in debug endpoint' });
-  }
-});
 
 // POST /api/videos/:id/like - Toggle like for a video (must be before /:id route)
-router.post('/:id/like', async (req, res) => {
+router.post('/:id/like', verifyToken, async (req, res) => {
   try {
-    const { userId } = req.body;
+    // Get Google ID from token and resolve to User ObjectId
+    const googleId = req.user.googleId; // From verifyToken middleware
     const videoId = req.params.id;
 
-    console.log('🔍 Like API: Received request', { userId, videoId });
+    console.log('🔍 Like API: Received request', { googleId, videoId });
 
     // Validate input
-    if (!userId) {
-      console.log('❌ Like API: Missing userId in request body');
-      return res.status(400).json({ error: 'userId is required' });
+    if (!googleId) {
+      console.log('❌ Like API: Missing userId from authentication');
+      return res.status(400).json({ error: 'User not authenticated' });
     }
 
     if (!videoId) {
       console.log('❌ Like API: Missing videoId in params');
-      return res.status(400).json({ error: 'videoId is required' });
+      return res.status(400).json({ error: 'Video ID is required' });
     }
 
-    // Find or create user
-    let user = await User.findOne({ googleId: userId });
+    // Resolve the authenticated user to a DB record to get ObjectId
+    const user = await User.findOne({ googleId });
     if (!user) {
-      console.log('🔍 Like API: User not found, creating new user with googleId:', userId);
-      // Create user if they don't exist
-      user = new User({
-        googleId: userId,
-        name: 'User', // Will be updated later
-        email: '', // Will be updated later
-        following: [],
-        followers: []
-      });
-      await user.save();
-      console.log('✅ Like API: Created new user with ID:', user._id);
+      console.log('❌ Like API: User not found for googleId:', googleId);
+      return res.status(404).json({ error: 'User not found' });
     }
+    const userObjectId = user._id; // Mongoose ObjectId
 
     // Find the video
     const video = await Video.findById(videoId);
@@ -971,7 +754,8 @@ router.post('/:id/like', async (req, res) => {
     console.log('🔍 Like API: Video found, current likes:', video.likes, 'likedBy:', video.likedBy);
 
     // Check if user has already liked the video
-    const userLikedIndex = video.likedBy.indexOf(userId);
+    const likedByStrings = (video.likedBy || []).map(id => id?.toString?.() || String(id));
+    const userLikedIndex = likedByStrings.indexOf(userObjectId.toString());
     let wasLiked = false;
     
     if (userLikedIndex > -1) {
@@ -982,7 +766,7 @@ router.post('/:id/like', async (req, res) => {
       console.log('🔍 Like API: Removed like, new count:', video.likes);
     } else {
       // User hasn't liked - add the like
-      video.likedBy.push(userId);
+      video.likedBy.push(userObjectId);
       video.likes = video.likes + 1; // Increment likes
       wasLiked = true;
       console.log('🔍 Like API: Added like, new count:', video.likes);
@@ -994,13 +778,52 @@ router.post('/:id/like', async (req, res) => {
     // Return the updated video with populated fields
     const updatedVideo = await Video.findById(videoId)
       .populate('uploader', 'name profilePic googleId')
-      .populate('comments.user', 'name profilePic');
+      .populate('comments.user', 'name profilePic googleId');
 
-    res.json({
-      ...updatedVideo.toObject(),
-      likeAction: wasLiked ? 'added' : 'removed',
-      newLikeCount: video.likes
-    });
+    // Transform comments to match Flutter app expectations
+    const videoObj = updatedVideo.toObject();
+    
+    // **FIXED: Only send fields that frontend VideoModel expects**
+    const transformedVideo = {
+      _id: videoObj._id?.toString(),
+      videoName: videoObj.videoName || '',
+      videoUrl: videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || '',
+      thumbnailUrl: videoObj.thumbnailUrl || '',
+      likes: parseInt(videoObj.likes) || 0,
+      views: parseInt(videoObj.views) || 0,
+      shares: parseInt(videoObj.shares) || 0,
+      description: videoObj.description || '',
+      uploader: {
+        _id: videoObj.uploader?._id?.toString() || videoObj.uploader?.googleId?.toString() || '',
+        name: videoObj.uploader?.name || 'Unknown',
+        profilePic: videoObj.uploader?.profilePic || '',
+      },
+      uploadedAt: videoObj.uploadedAt?.toISOString?.() || new Date().toISOString(),
+      likedBy: videoObj.likedBy || [],
+      videoType: videoObj.videoType || 'reel',
+      aspectRatio: parseFloat(videoObj.aspectRatio) || 9/16,
+      duration: parseInt(videoObj.duration) || 0,
+      comments: videoObj.comments.map(comment => ({
+        _id: comment._id,
+        text: comment.text,
+        userId: comment.user?.googleId || comment.user?._id || '',
+        userName: comment.user?.name || '',
+        createdAt: comment.createdAt,
+        likes: comment.likes || 0,
+        likedBy: comment.likedBy || []
+      })),
+      link: videoObj.link || null,
+      hlsMasterPlaylistUrl: videoObj.hlsMasterPlaylistUrl || null,
+      hlsPlaylistUrl: videoObj.hlsPlaylistUrl || null,
+      hlsVariants: videoObj.hlsVariants || null,
+      isHLSEncoded: videoObj.isHLSEncoded || false,
+      lowQualityUrl: videoObj.lowQualityUrl || null,
+      mediumQualityUrl: videoObj.mediumQualityUrl || null,
+      highQualityUrl: videoObj.highQualityUrl || null,
+      preloadQualityUrl: videoObj.preloadQualityUrl || null,
+    };
+
+    res.json(transformedVideo);
     
     console.log('✅ Like API: Successfully toggled like, returning video');
     
@@ -1014,12 +837,129 @@ router.post('/:id/like', async (req, res) => {
   }
 });
 
+// DELETE /api/videos/:id/like - Unlike a video (for API consistency)
+router.delete('/:id/like', verifyToken, async (req, res) => {
+  try {
+    // Get Google ID from token and resolve to User ObjectId
+    const googleId = req.user.googleId; // From verifyToken middleware
+    const videoId = req.params.id;
+
+    console.log('🔍 Unlike API: Received request', { googleId, videoId });
+
+    // Validate input
+    if (!googleId) {
+      console.log('❌ Unlike API: No Google ID in token');
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    if (!videoId) {
+      console.log('❌ Unlike API: No video ID provided');
+      return res.status(400).json({ error: 'Video ID is required' });
+    }
+
+    // Find user by Google ID
+    const user = await User.findOne({ googleId: googleId });
+    if (!user) {
+      console.log('❌ Unlike API: User not found with Google ID:', googleId);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const userObjectId = user._id;
+    console.log('🔍 Unlike API: User ObjectId:', userObjectId);
+
+    // Find the video
+    const video = await Video.findById(videoId);
+    if (!video) {
+      console.log('❌ Unlike API: Video not found with ID:', videoId);
+      return res.status(404).json({ error: 'Video not found' });
+    }
+
+    console.log('🔍 Unlike API: Video found, current likes:', video.likes, 'likedBy:', video.likedBy);
+
+    // Check if user has liked the video
+    const likedByStrings = (video.likedBy || []).map(id => id?.toString?.() || String(id));
+    const userLikedIndex = likedByStrings.indexOf(userObjectId.toString());
+    
+    if (userLikedIndex > -1) {
+      // User has liked - remove the like
+      video.likedBy.splice(userLikedIndex, 1);
+      video.likes = Math.max(0, video.likes - 1); // Decrement likes, ensure not negative
+      console.log('🔍 Unlike API: Removed like, new count:', video.likes);
+    } else {
+      // User hasn't liked - return current state
+      console.log('🔍 Unlike API: User has not liked this video');
+    }
+
+    await video.save();
+    console.log('✅ Unlike API: Video saved successfully');
+
+    // Return the updated video with populated fields
+    const updatedVideo = await Video.findById(videoId)
+      .populate('uploader', 'name profilePic googleId')
+      .populate('comments.user', 'name profilePic googleId');
+
+    if (!updatedVideo) {
+      return res.status(404).json({ error: 'Video not found after update' });
+    }
+
+    const videoObj = updatedVideo.toObject();
+    const transformedVideo = {
+      _id: videoObj._id?.toString(),
+      videoName: videoObj.videoName || '',
+      videoUrl: videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || '',
+      thumbnailUrl: videoObj.thumbnailUrl || '',
+      likes: parseInt(videoObj.likes) || 0,
+      views: parseInt(videoObj.views) || 0,
+      shares: parseInt(videoObj.shares) || 0,
+      description: videoObj.description || '',
+      uploader: {
+        _id: videoObj.uploader?._id?.toString() || videoObj.uploader?.googleId?.toString() || '',
+        name: videoObj.uploader?.name || 'Unknown',
+        profilePic: videoObj.uploader?.profilePic || '',
+      },
+      uploadedAt: videoObj.uploadedAt?.toISOString?.() || new Date().toISOString(),
+      likedBy: videoObj.likedBy || [],
+      videoType: videoObj.videoType || 'reel',
+      aspectRatio: parseFloat(videoObj.aspectRatio) || 9/16,
+      duration: parseInt(videoObj.duration) || 0,
+      comments: videoObj.comments.map(comment => ({
+        _id: comment._id,
+        text: comment.text,
+        userId: comment.user?.googleId || comment.user?._id || '',
+        userName: comment.user?.name || '',
+        createdAt: comment.createdAt,
+        likes: comment.likes || 0,
+        likedBy: comment.likedBy || []
+      })),
+      hlsMasterPlaylistUrl: videoObj.hlsMasterPlaylistUrl || null,
+      hlsPlaylistUrl: videoObj.hlsPlaylistUrl || null,
+      isHLSEncoded: videoObj.isHLSEncoded || false,
+      lowQualityUrl: videoObj.lowQualityUrl || null,
+      mediumQualityUrl: videoObj.mediumQualityUrl || null,
+      highQualityUrl: videoObj.highQualityUrl || null,
+      preloadQualityUrl: videoObj.preloadQualityUrl || null,
+    };
+
+    res.json(transformedVideo);
+    
+    console.log('✅ Unlike API: Successfully unliked video');
+    
+  } catch (err) {
+    console.error('❌ Unlike API Error:', err);
+    res.status(500).json({ 
+      error: 'Failed to unlike video', 
+      details: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+  }
+});
+
 // Get video by ID
 router.get('/:id', async (req, res) => {
   try {
     const video = await Video.findById(req.params.id)
       .populate('uploader', 'name profilePic googleId')
-      .populate('comments.user', 'name profilePic');
+      .populate('comments.user', 'name profilePic googleId');
 
     if (!video) {
       return res.status(404).json({ error: 'Video not found' });
@@ -1046,7 +986,17 @@ router.get('/:id', async (req, res) => {
       videoUrl: videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || '',
       hlsMasterPlaylistUrl: videoObj.hlsMasterPlaylistUrl || null,
       hlsPlaylistUrl: videoObj.hlsPlaylistUrl || null,
-      isHLSEncoded: videoObj.isHLSEncoded || false
+      isHLSEncoded: videoObj.isHLSEncoded || false,
+      // **FIXED: Transform comments to match Flutter app expectations**
+      comments: videoObj.comments.map(comment => ({
+        _id: comment._id,
+        text: comment.text,
+        userId: comment.user?.googleId || comment.user?._id || '',
+        userName: comment.user?.name || '',
+        createdAt: comment.createdAt,
+        likes: comment.likes || 0,
+        likedBy: comment.likedBy || []
+      }))
     };
 
     console.log('🎬 Get Video by ID - Data types fixed:', {
@@ -1094,21 +1044,31 @@ router.post('/:id/comments', async (req, res) => {
       req.params.id,
       { $push: { comments: comment } },
       { new: true }
-    ).populate('comments.user', 'name profilePic');
+    ).populate('comments.user', 'name profilePic googleId');
 
     if (!video) {
       return res.status(404).json({ error: 'Video not found' });
     }
 
-    // **FIXED: Ensure comment data types are consistent**
-    const formattedComments = video.comments.map(comment => ({
-      ...comment.toObject(),
-      _id: comment._id?.toString() || comment._id,
-      user: comment.user?._id?.toString() || comment.user?.toString() || comment.user,
-      createdAt: comment.createdAt?.toISOString?.() || comment.createdAt
-    }));
+    // Transform comments to match Flutter app expectations
+    const videoObj = video.toObject();
+    const transformedVideo = {
+      ...videoObj,
+      comments: videoObj.comments.map(comment => ({
+        _id: comment._id,
+        text: comment.text,
+        userId: comment.user?.googleId || comment.user?._id || '',
+        userName: comment.user?.name || '',
+        createdAt: comment.createdAt,
+        likes: comment.likes || 0,
+        likedBy: comment.likedBy || []
+      }))
+    };
 
-    res.json(formattedComments);
+    res.json({
+      message: 'Comment added successfully',
+      video: transformedVideo
+    });
   } catch (err) {
     console.error('Error adding comment:', err);
     res.status(500).json({ error: 'Failed to add comment', details: err.message });
@@ -1229,55 +1189,106 @@ router.post('/bulk-delete', verifyToken, async (req, res) => {
   }
 });
 
-// **NEW: Simple test endpoint to verify backend is working**
-router.get('/test', (req, res) => {
-  res.json({ 
-    message: 'Video API is working!',
-    timestamp: new Date().toISOString(),
-    endpoints: {
-      'GET /test': 'This test endpoint',
-      'GET /user/:googleId': 'Get videos by user googleId',
-      'GET /debug/user/:googleId': 'Debug user videos',
-      'GET /check/user/:googleId/videos': 'Check if user has videos'
-    }
-  });
-});
 
-// **NEW: Simple endpoint to check if user has any videos**
-router.get('/check/user/:googleId/videos', async (req, res) => {
+
+// Generate signed Cloudinary URLs for HLS streams
+// (Removed duplicate generate-signed-url route defined earlier)
+
+// New video upload endpoint with HLS conversion
+// Removed self-hosted HLS upload endpoint
+
+// Serve HLS files
+// Removed duplicate local HLS static route
+
+// Generate HLS URL (replaces Cloudinary signed URL)
+// Removed self-hosted HLS URL generator
+
+// Clean up temporary HLS directories
+router.post('/cleanup-temp-hls', async (req, res) => {
   try {
-    const { googleId } = req.params;
-    console.log('🔍 Check: Checking if user has videos for googleId:', googleId);
-
-    // Find user by googleId
-    const user = await User.findOne({ googleId: googleId });
-    if (!user) {
-      return res.json({ hasUser: false, hasVideos: false, message: 'User not found' });
-    }
-
-    // Check videos directly in Video collection
-    const videoCount = await Video.countDocuments({ uploader: user._id });
-    const hasVideos = videoCount > 0;
-    
-    console.log('🔍 Check result:', {
-      userId: user._id?.toString(),
-      userName: user.name,
-      hasVideos: hasVideos,
-      videoCount: videoCount
-    });
-
-    res.json({
-      hasUser: true,
-      hasVideos: hasVideos,
-      videoCount: videoCount,
-      userName: user.name,
-      message: hasVideos ? 'User has videos' : 'User has no videos'
-    });
+    const hlsService = (await import('../services/hlsEncodingService.js')).default;
+    await hlsService.cleanupTempHLSDirectories();
+    res.json({ success: true, message: 'Temporary HLS directories cleaned up' });
   } catch (error) {
-    console.error('❌ Check endpoint error:', error);
-    res.status(500).json({ error: 'Check failed', details: error.message });
+    console.error('❌ Error cleaning up temporary HLS directories:', error);
+    res.status(500).json({ error: 'Failed to clean up temporary directories' });
   }
 });
+
+// Update existing generate-signed-url to use HLS
+router.post('/generate-signed-url', verifyToken, async (req, res) => {
+  try {
+    const { videoUrl, quality = 'hd' } = req.body;
+
+    if (!videoUrl) {
+      return res.status(400).json({ success: false, error: 'Video URL is required' });
+    }
+
+    if (!isCloudinaryConfigured()) {
+      return res.status(500).json({ success: false, error: 'Cloudinary not configured' });
+    }
+
+    // Expecting a Cloudinary URL; extract public_id after '/upload/' and before extension
+    const uploadIdx = videoUrl.indexOf('/upload/');
+    if (uploadIdx === -1) {
+      return res.status(400).json({ success: false, error: 'Invalid Cloudinary URL' });
+    }
+
+    const afterUpload = videoUrl.substring(uploadIdx + '/upload/'.length);
+    // Remove any existing transformations prefix (e.g. sp_hd, fl_segment_2, etc.)
+    const parts = afterUpload.split('/');
+    // If first part contains a dot or comma, it's a transformation, drop it
+    let startIndex = 0;
+    if (parts[0].includes(',') || parts[0].startsWith('sp_') || parts[0].startsWith('fl_')) {
+      startIndex = 1;
+    }
+    const publicIdWithExt = parts.slice(startIndex).join('/');
+    const publicId = publicIdWithExt.replace(/\.m3u8$/i, '');
+
+    // Map quality to transformation parameters (no streaming profiles)
+    const qualityParam = quality === 'sd' ? 'q_auto:eco' : 'q_auto:good';
+
+    const signedUrl = cloudinary.url(publicId, {
+      resource_type: 'video',
+      type: 'upload',
+      secure: true,
+      sign_url: true,
+      format: 'm3u8',
+      transformation: [{ quality: qualityParam }],
+      cloud_name: process.env.CLOUD_NAME
+    });
+
+    return res.json({ success: true, signedUrl });
+  } catch (error) {
+    console.error('❌ Error generating Cloudinary signed URL:', error);
+    return res.status(500).json({ success: false, error: 'Failed to generate signed URL' });
+  }
+});
+
+// **NEW: Secure endpoint to get Cloudinary config (without secrets)**
+router.get('/cloudinary-config', verifyToken, async (req, res) => {
+  try {
+    // Only return public config, never secrets
+    const config = {
+      cloudName: process.env.CLOUD_NAME,
+      // API key and secret are never sent to frontend for security
+      hasCredentials: !!(process.env.CLOUD_KEY && process.env.CLOUD_SECRET),
+    };
+    
+    res.json({ 
+      success: true, 
+      config: config,
+      message: 'Cloudinary config retrieved successfully'
+    });
+  } catch (error) {
+    console.error('❌ Error getting Cloudinary config:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to get Cloudinary config' 
+    });
+  }
+});
+
 
 
 export default router

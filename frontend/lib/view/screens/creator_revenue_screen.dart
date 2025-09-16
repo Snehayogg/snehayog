@@ -64,14 +64,14 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     }
   }
 
-  /// Calculate revenue for a specific video based on AD IMPRESSIONS ONLY
-  double _calculateVideoRevenue(VideoModel video) {
+  /// Calculate revenue for a specific video based on REAL AD IMPRESSIONS ONLY
+  Future<double> _calculateVideoRevenue(VideoModel video) async {
     try {
-      // Get ad impressions by type for this video
+      // Get real ad impressions by type for this video
       final bannerImpressions =
-          _adImpressionService.getBannerAdImpressions(video.id);
+          await _adImpressionService.getBannerAdImpressions(video.id);
       final carouselImpressions =
-          _adImpressionService.getCarouselAdImpressions(video.id);
+          await _adImpressionService.getCarouselAdImpressions(video.id);
 
       // Calculate revenue using different CPM values
       // Banner ads: ₹10 per 1000 impressions, Carousel ads: ₹30 per 1000 impressions
@@ -97,15 +97,15 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   /// Get total ad impressions (banner + carousel ads) - for display purposes
-  int _getTotalAdImpressionsForVideo(String videoId) {
+  Future<int> _getTotalAdImpressionsForVideo(String videoId) async {
     try {
       // Banner ads shown on this video
       final bannerImpressions =
-          _adImpressionService.getBannerAdImpressions(videoId);
+          await _adImpressionService.getBannerAdImpressions(videoId);
 
       // Carousel ads shown when user scrolls through this video
       final carouselImpressions =
-          _adImpressionService.getCarouselAdImpressions(videoId);
+          await _adImpressionService.getCarouselAdImpressions(videoId);
 
       // Total impressions = Banner + Carousel
       final totalImpressions = bannerImpressions + carouselImpressions;
@@ -120,42 +120,6 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     }
   }
 
-  /// Calculate ad performance multiplier based on engagement
-  double _calculateAdPerformanceMultiplier(VideoModel video) {
-    try {
-      double multiplier = 1.0;
-
-      // Higher engagement = better ad performance = higher revenue
-
-      // Likes factor: +0.1 for every 100 likes
-      if (video.likes > 0) {
-        multiplier += (video.likes / 100.0) * 0.1;
-      }
-
-      // Comments factor: +0.05 for every 10 comments
-      if (video.comments.isNotEmpty) {
-        multiplier += (video.comments.length / 10.0) * 0.05;
-      }
-
-      // Video completion rate factor
-      // Higher completion rate = better ad retention
-      if (video.views > 0) {
-        // Assume 70% completion rate as baseline
-        const estimatedCompletionRate = 0.7;
-        if (estimatedCompletionRate > 0.7) {
-          multiplier += (estimatedCompletionRate - 0.7) *
-              0.5; // +0.5 for every 10% above 70%
-        }
-      }
-
-      // Cap multiplier to reasonable bounds
-      return multiplier.clamp(0.5, 2.0);
-    } catch (e) {
-      print('❌ Error calculating ad performance multiplier: $e');
-      return 1.0;
-    }
-  }
-
   /// Calculate total revenue from all videos
   Future<void> _calculateTotalRevenue() async {
     try {
@@ -163,7 +127,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
       _videoRevenueMap.clear();
 
       for (final video in _userVideos) {
-        final videoRevenue = _calculateVideoRevenue(video);
+        final videoRevenue = await _calculateVideoRevenue(video);
         _videoRevenueMap[video.id] = videoRevenue;
         totalRevenue += videoRevenue;
       }
@@ -173,7 +137,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
       });
 
       print(
-          '💰 CreatorRevenueScreen: Total revenue calculated: \$${totalRevenue.toStringAsFixed(4)}');
+          '💰 CreatorRevenueScreen: Total revenue calculated: ₹${totalRevenue.toStringAsFixed(2)}');
       print(
           '💰 CreatorRevenueScreen: Video revenue breakdown: $_videoRevenueMap');
     } catch (e) {
@@ -801,60 +765,67 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
             // Show top 5 videos by revenue
             ..._userVideos.take(5).map((video) {
               final revenue = _videoRevenueMap[video.id] ?? 0.0;
-              final adImpressions = _getTotalAdImpressionsForVideo(video.id);
 
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey[200]!),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              return FutureBuilder<int>(
+                future: _getTotalAdImpressionsForVideo(video.id),
+                builder: (context, snapshot) {
+                  final adImpressions = snapshot.data ?? 0;
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey[200]!),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Text(
-                              video.videoName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  video.videoName,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                              Text(
+                                '₹${revenue.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
                           ),
-                          Text(
-                            '₹${revenue.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green,
-                              fontSize: 16,
-                            ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              _buildVideoStat('Views', '${video.views}'),
+                              const SizedBox(width: 16),
+                              _buildVideoStat('Likes', '${video.likes}'),
+                              const SizedBox(width: 16),
+                              _buildVideoStat(
+                                  'Comments', '${video.comments.length}'),
+                              const SizedBox(width: 16),
+                              _buildVideoStat(
+                                  'Ad Impressions', '$adImpressions'),
+                            ],
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          _buildVideoStat('Views', '${video.views ?? 0}'),
-                          const SizedBox(width: 16),
-                          _buildVideoStat('Likes', '${video.likes}'),
-                          const SizedBox(width: 16),
-                          _buildVideoStat(
-                              'Comments', '${video.comments.length}'),
-                          const SizedBox(width: 16),
-                          _buildVideoStat('Ad Impressions', '$adImpressions'),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               );
             }).toList(),
 
@@ -973,40 +944,46 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
             child: Column(
               children: _userVideos.map((video) {
                 final revenue = _videoRevenueMap[video.id] ?? 0.0;
-                final adImpressions = _getTotalAdImpressionsForVideo(video.id);
 
-                return ListTile(
-                  leading: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      video.thumbnailUrl,
-                      width: 50,
-                      height: 50,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
+                return FutureBuilder<int>(
+                  future: _getTotalAdImpressionsForVideo(video.id),
+                  builder: (context, snapshot) {
+                    final adImpressions = snapshot.data ?? 0;
+
+                    return ListTile(
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(
+                          video.thumbnailUrl,
                           width: 50,
                           height: 50,
-                          color: Colors.grey[300],
-                          child: const Icon(Icons.video_library, size: 24),
-                        );
-                      },
-                    ),
-                  ),
-                  title: Text(
-                    video.videoName,
-                    style: const TextStyle(fontSize: 14),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text('$adImpressions impressions'),
-                  trailing: Text(
-                    '₹${revenue.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green,
-                    ),
-                  ),
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              width: 50,
+                              height: 50,
+                              color: Colors.grey[300],
+                              child: const Icon(Icons.video_library, size: 24),
+                            );
+                          },
+                        ),
+                      ),
+                      title: Text(
+                        video.videoName,
+                        style: const TextStyle(fontSize: 14),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text('$adImpressions impressions'),
+                      trailing: Text(
+                        '₹${revenue.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green,
+                        ),
+                      ),
+                    );
+                  },
                 );
               }).toList(),
             ),
@@ -1019,27 +996,6 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildDetailedStat(String label, String value) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[600],
-          ),
-        ),
-      ],
     );
   }
 
@@ -1060,14 +1016,39 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Ad Impressions are counted based on the number of times an ad is displayed to a user. '
-              'This includes both banner and carousel ads. '
-              'For banner ads, it\'s 1000 impressions per ₹10. '
-              'For carousel ads, it\'s 1000 impressions per ₹30. '
-              'The revenue calculation is based on these impressions.',
+              'Revenue is calculated based on REAL ad impressions only. '
+              'If you see ₹0.00 revenue, it means no ads have been shown on your videos yet. '
+              'Ad impressions are counted when banner or carousel ads are actually displayed to users. '
+              'For banner ads: ₹10 per 1000 impressions. '
+              'For carousel ads: ₹30 per 1000 impressions.',
               style: TextStyle(
                 fontSize: 14,
                 color: Colors.grey[700],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue[200]!),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.blue[700], size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'No fake data: Revenue shown is based on actual ad impressions from the backend.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.blue[700],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],

@@ -114,15 +114,43 @@ class ProfileStateManager extends ChangeNotifier {
 
       Map<String, dynamic>? userData;
       if (isMyProfile) {
-        // Load own profile data
-        userData = loggedInUser;
-        // Load saved profile data for the logged-in user
-        final savedName = await _loadSavedName();
+        final myId = loggedInUser['googleId'] ?? loggedInUser['id'];
+        try {
+          final backendUser =
+              myId != null ? await _userService.getUserById(myId) : null;
+          if (backendUser != null) {
+            userData = backendUser;
+            print(
+                '🔄 ProfileStateManager: Loaded own profile from backend: ${userData['name']}');
+            // Merge counts from previously working local source if backend lacks them
+            final localFollowers =
+                loggedInUser['followers'] ?? loggedInUser['followersCount'];
+            final localFollowing =
+                loggedInUser['following'] ?? loggedInUser['followingCount'];
+            if ((userData['followers'] == null || userData['followers'] == 0) &&
+                localFollowers != null) {
+              userData['followers'] = localFollowers;
+              userData['followersCount'] = localFollowers;
+            }
+            if ((userData['following'] == null || userData['following'] == 0) &&
+                localFollowing != null) {
+              userData['following'] = localFollowing;
+              userData['followingCount'] = localFollowing;
+            }
+          } else {
+            userData = loggedInUser;
+          }
+        } catch (e) {
+          print(
+              '⚠️ ProfileStateManager: Failed to fetch own profile from backend, using local: $e');
+          userData = loggedInUser;
+        }
+
+        // Apply locally saved avatar if any (do not override backend name)
         final savedProfilePic = await _loadSavedProfilePic();
-        userData['name'] = savedName ?? userData['name'];
-        userData['profilePic'] = savedProfilePic ?? userData['profilePic'];
-        print(
-            '🔄 ProfileStateManager: Loaded own profile data: ${userData['name']}');
+        if (savedProfilePic != null && savedProfilePic.isNotEmpty) {
+          userData['profilePic'] = savedProfilePic;
+        }
       } else {
         // Fetch profile data for another user
         print(
@@ -205,8 +233,7 @@ class ProfileStateManager extends ChangeNotifier {
         print(
             '🔍 ProfileStateManager: loggedInUser googleId: ${loggedInUser?['googleId']}');
       } else {
-        // **IMPROVED: For other profiles, use the provided userId (should be googleId)**
-        targetUserId = userId ?? '';
+        targetUserId = userId;
         print(
             '🔍 ProfileStateManager: Other profile - targetUserId: $targetUserId');
       }
@@ -279,35 +306,46 @@ class ProfileStateManager extends ChangeNotifier {
       print(
           '🔍 ProfileStateManager: Direct loading - loggedInUser googleId: ${loggedInUser?['googleId']}');
 
-      String targetUserId;
-      if (isMyProfile) {
-        // **IMPROVED: Always use googleId for consistency**
-        targetUserId = loggedInUser?['googleId'] ?? '';
-        print(
-            '🔍 ProfileStateManager: Direct loading - My profile - using googleId: $targetUserId');
-      } else {
-        // **IMPROVED: For other profiles, try to get their googleId**
-        targetUserId = userId ?? '';
-        print(
-            '🔍 ProfileStateManager: Direct loading - Other profile - targetUserId: $targetUserId');
+      // Build a prioritized list of IDs to try (googleId then Mongo _id, then provided userId)
+      final idsToTry = <String?>[
+        if (isMyProfile) loggedInUser?['googleId'] else null,
+        if (isMyProfile) loggedInUser?['id'] else null,
+        if (!isMyProfile) userId else null,
+        // If we have already loaded userData for other profile, try both ids from it
+        _userData?['googleId'],
+        _userData?['id'],
+      ]
+          .where((e) => e != null && (e).isNotEmpty)
+          .map((e) => e as String)
+          .toList()
+          .toSet()
+          .toList();
+
+      print('🔍 ProfileStateManager: Direct loading - idsToTry: $idsToTry');
+
+      _userVideos = [];
+      for (final candidateId in idsToTry) {
+        try {
+          print(
+              '🔍 ProfileStateManager: Trying VideoService.getUserVideos with id: $candidateId');
+          final videos = await _videoService.getUserVideos(candidateId);
+          if (videos.isNotEmpty) {
+            _userVideos = videos;
+            print(
+                '✅ ProfileStateManager: Loaded ${videos.length} videos using id: $candidateId');
+            break;
+          } else {
+            print(
+                'ℹ️ ProfileStateManager: No videos for id: $candidateId, trying next');
+          }
+        } catch (e) {
+          print(
+              '⚠️ ProfileStateManager: Error fetching videos for id $candidateId: $e');
+        }
       }
 
-      if (targetUserId.isNotEmpty) {
-        print(
-            '🔍 ProfileStateManager: Calling VideoService.getUserVideos with googleId: $targetUserId');
-        final videos = await _videoService.getUserVideos(targetUserId);
-        print(
-            '🔍 ProfileStateManager: VideoService returned ${videos.length} videos');
-        print('🔍 ProfileStateManager: Videos data: $videos');
-
-        _userVideos = videos;
-        print('✅ ProfileStateManager: Directly loaded ${videos.length} videos');
-        notifyListeners();
-      } else {
-        print('⚠️ ProfileStateManager: Direct loading - targetUserId is empty');
-        _userVideos = [];
-        notifyListeners();
-      }
+      // Notify UI regardless
+      notifyListeners();
     } catch (e) {
       print('❌ ProfileStateManager: Error in direct video loading: $e');
       _error = '${ProfileConstants.errorLoadingVideos}${e.toString()}';
@@ -321,7 +359,36 @@ class ProfileStateManager extends ChangeNotifier {
     try {
       print(
           '📡 ProfileStateManager: Fetching videos from server for user: $userId');
-      final videos = await _videoService.getUserVideos(userId);
+      List<VideoModel> videos = [];
+      // Try primary id first
+      try {
+        videos = await _videoService.getUserVideos(userId);
+      } catch (e) {
+        print('⚠️ ProfileStateManager: Primary id fetch failed: $e');
+      }
+
+      // If empty, try alternate id (switch between googleId and Mongo _id)
+      if (videos.isEmpty) {
+        String? altId;
+        // Prefer switching based on available userData or logged in user
+        if (_userData != null) {
+          if (_userData!['googleId'] == userId) {
+            altId = _userData!['id'];
+          } else if (_userData!['id'] == userId) {
+            altId = _userData!['googleId'];
+          }
+        }
+        altId ??= (await _authService.getUserData())?['id'];
+        if (altId != null && altId.isNotEmpty && altId != userId) {
+          print(
+              '🔄 ProfileStateManager: Trying alternate id for fetch: $altId');
+          try {
+            videos = await _videoService.getUserVideos(altId);
+          } catch (e) {
+            print('⚠️ ProfileStateManager: Alternate id fetch also failed: $e');
+          }
+        }
+      }
 
       print(
           '📡 ProfileStateManager: Videos fetched from server: ${videos.length}');
@@ -625,14 +692,30 @@ class ProfileStateManager extends ChangeNotifier {
   // Authentication methods
   Future<void> handleLogout() async {
     try {
+      print('🚪 ProfileStateManager: Starting logout process...');
+
       await _authService.signOut();
+
+      // **FIXED: Clear ALL user data and state**
       _userData = null;
       _userVideos = [];
       _isEditing = false;
       _isSelecting = false;
       _selectedVideoIds.clear();
+
+      // **FIXED: Clear all caches**
+      _cache.clear();
+      _cacheTimestamps.clear();
+      _cacheEtags.clear();
+
+      // **FIXED: Reset all state variables**
+      _isLoading = false;
+      _error = null;
+
+      print('✅ ProfileStateManager: Logout completed - All state cleared');
       notifyListeners();
     } catch (e) {
+      print('❌ ProfileStateManager: Error during logout: $e');
       _error = 'Failed to logout: ${e.toString()}';
       notifyListeners();
     }
@@ -952,14 +1035,6 @@ class ProfileStateManager extends ChangeNotifier {
   /// **NEW: Check if cache is still valid (not manually cleared)**
   bool _isCacheValid(String key) {
     return _cache.containsKey(key) && _cacheTimestamps.containsKey(key);
-  }
-
-  /// Clear all caches
-  void _clearAllCaches() {
-    _cache.clear();
-    _cacheTimestamps.clear();
-    _cacheEtags.clear();
-    print('🧹 ProfileStateManager: All caches cleared');
   }
 
   /// **NEW: Force refresh videos by clearing cache and reloading**

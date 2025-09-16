@@ -12,6 +12,8 @@ class VideoActionsWidget extends StatelessWidget {
   final int index;
   final Function(int) onLike;
   final VideoService videoService;
+  final int currentHorizontalIndex;
+  final Function(int) onHorizontalIndexChanged;
 
   const VideoActionsWidget({
     Key? key,
@@ -19,6 +21,8 @@ class VideoActionsWidget extends StatelessWidget {
     required this.index,
     required this.onLike,
     required this.videoService,
+    required this.currentHorizontalIndex,
+    required this.onHorizontalIndexChanged,
   }) : super(key: key);
 
   @override
@@ -70,6 +74,15 @@ class VideoActionsWidget extends StatelessWidget {
               onPressed: () => _handleShare(),
               label: '${video.shares}',
             ),
+
+            // **REDUCED spacing from 20 to 12 for more compact look**
+            const SizedBox(height: 12),
+
+            // Ad toggle button
+            _AdToggleButton(
+              currentHorizontalIndex: currentHorizontalIndex,
+              onHorizontalIndexChanged: onHorizontalIndexChanged,
+            ),
           ],
         );
       },
@@ -98,8 +111,30 @@ class VideoActionsWidget extends StatelessWidget {
 
   void _handleShare() async {
     try {
+      // Get the proper URL for sharing
+      String shareUrl = video.videoUrl;
+
+      // If it's a custom scheme URL, convert it to web URL
+      if (video.videoUrl.startsWith('snehayog://')) {
+        final videoId = video.id;
+        shareUrl = 'https://snehayog.app/video/$videoId';
+      }
+
+      // If it's an HLS URL, use it directly
+      if (video.videoUrl.contains('.m3u8')) {
+        shareUrl = video.videoUrl;
+      }
+
+      // If we have HLS URLs, prefer them
+      if (video.hlsPlaylistUrl != null && video.hlsPlaylistUrl!.isNotEmpty) {
+        shareUrl = video.hlsPlaylistUrl!;
+      } else if (video.hlsMasterPlaylistUrl != null &&
+          video.hlsMasterPlaylistUrl!.isNotEmpty) {
+        shareUrl = video.hlsMasterPlaylistUrl!;
+      }
+
       await Share.share(
-        'Check out this video: ${video.videoName}\n\n${video.videoUrl}',
+        '🎬 Check out this video on Snehayog!\n\n📹 ${video.videoName}\n👤 by ${video.uploader.name}\n\n🔗 Watch on Snehayog: $shareUrl\n🌐 Web version: https://snehayog.app/video/${video.id}\n\n#Snehayog #Video #${video.uploader.name}',
         subject: 'Snehayog Video',
       );
     } catch (e) {
@@ -133,6 +168,40 @@ class _ActionButton extends StatelessWidget {
           style: const TextStyle(color: Colors.white),
         ),
       ],
+    );
+  }
+}
+
+// Ad toggle button widget
+class _AdToggleButton extends StatelessWidget {
+  final int currentHorizontalIndex;
+  final Function(int) onHorizontalIndexChanged;
+
+  const _AdToggleButton({
+    required this.currentHorizontalIndex,
+    required this.onHorizontalIndexChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isOnAd = currentHorizontalIndex > 0;
+
+    return _ActionButton(
+      icon: Icon(
+        isOnAd ? Icons.arrow_back : Icons.arrow_forward,
+        color: Colors.white,
+        size: AppConstants.actionButtonSize,
+      ),
+      onPressed: () {
+        if (isOnAd) {
+          // Return to video
+          onHorizontalIndexChanged(0);
+        } else {
+          // Go to ad
+          onHorizontalIndexChanged(1);
+        }
+      },
+      label: isOnAd ? 'Back' : 'Product',
     );
   }
 }
