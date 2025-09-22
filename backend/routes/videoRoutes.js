@@ -1,11 +1,11 @@
 import express from 'express';
 import multer from 'multer';
+import mongoose from 'mongoose';
 import Video from '../models/Video.js';
 import User from '../models/User.js';
-import cloudinary, { isCloudinaryConfigured } from '../config/cloudinary.js';
 import fs from 'fs'; 
-import path from 'path'; 
 import { verifyToken } from '../utils/verifytoken.js';
+import { isCloudinaryConfigured } from '../config.js';
 const router = express.Router();
 
 
@@ -253,43 +253,24 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
         overwrite: true,
         timeout: 120000,
         
-        // **FIXED: Use proper HLS streaming profile instead of format: 'm3u8'**
-        streaming_profile: 'hd', // This generates proper HLS with segments
+        // **FIXED: Only create 480p variant - no multiple qualities**
+        streaming_profile: 'sd', // Use SD profile for 480p only
         
-        // **FIXED: Add proper video transformation for HLS compatibility**
+        // **SIMPLIFIED: Only 480p transformation**
         transformation: [
-          {
-            width: 1280,
-            height: 720,
-            crop: 'fill',
-            quality: 'auto:good',
-            video_codec: 'h264',
-            audio_codec: 'aac',
-            format: 'mp4'
-          }
-        ],
-        
-        // **FIXED: Generate HLS variants properly**
-        eager: [
-          {
-            width: 1280,
-            height: 720,
-            crop: 'fill',
-            quality: 'auto:good',
-            video_codec: 'h264',
-            audio_codec: 'aac',
-            format: 'mp4'
-          },
           {
             width: 854,
             height: 480,
             crop: 'fill',
-            quality: 'auto:eco',
+            quality: 'auto:good',
             video_codec: 'h264',
             audio_codec: 'aac',
             format: 'mp4'
           }
         ],
+        
+        // **REMOVED: No eager variants - only single 480p version**
+        // eager: [] - Commented out to prevent multiple variants
         eager_async: false
       });
       
@@ -297,8 +278,8 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
       console.log('🎬 Upload: HLS Result:', {
         success: true,
         masterPlaylistUrl: hlsResult.secure_url,
-        variants: hlsResult.eager?.length || 0,
-        qualityRange: '720p/480p',
+        variants: 1, // Only single 480p variant
+        qualityRange: '480p only',
         publicId: hlsResult.public_id
       });
       
@@ -400,27 +381,18 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
     primaryHlsUrl = hlsResult.secure_url;
     isHLSEncoded = true; // We have processed video, so it's "encoded"
     
-    // **FIXED: Create HLS variants from eager transformations**
-    hlsVariants = hlsResult.eager?.map((variant, index) => ({
-      quality: index === 0 ? 'hd' : 'sd',
-      playlistUrl: variant.secure_url,
-      resolution: `${variant.width || 1280}x${variant.height || 720}`,
-      bitrate: index === 0 ? '3.5m' : '1.8m',
-      format: variant.format || 'mp4'
-    })) || [];
-    
-    // **FIXED: Add the main video as the primary variant**
-    hlsVariants.unshift({
-      quality: 'original',
+    // **SIMPLIFIED: Create only single 480p variant - no multiple qualities**
+    hlsVariants = [{
+      quality: '480p',
       playlistUrl: hlsResult.secure_url,
-      resolution: '1280x720',
-      bitrate: '3.5m',
+      resolution: '854x480',
+      bitrate: '800k',
       format: 'mp4'
-    });
+    }];
     
-    console.log('✅ Upload: Using Cloudinary result with', hlsVariants.length, 'variants');
+    console.log('✅ Upload: Using single 480p variant only');
     console.log('🎬 Upload: Primary URL:', primaryHlsUrl);
-    console.log('🎬 Upload: Variants:', hlsVariants.map(v => `${v.quality} (${v.resolution})`));
+    console.log('🎬 Upload: Single variant:', hlsVariants.map(v => `${v.quality} (${v.resolution})`));
     
     // CRITICAL: Ensure we have HLS URLs before saving
     if (!primaryHlsUrl) {
@@ -441,6 +413,8 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
       videoUrl: primaryHlsUrl, // ALWAYS use HLS URL - no MP4 fallback
       thumbnailUrl: thumbnailUrl,
       originalVideoUrl: originalResult.secure_url,
+      // **FIXED: Set 480p as lowQualityUrl (only quality available)**
+      lowQualityUrl: primaryHlsUrl, // 480p URL for quality indicator
       // HLS streaming URLs from encoding service or Cloudinary
       hlsMasterPlaylistUrl: primaryHlsUrl,
       hlsPlaylistUrl: primaryHlsUrl,
@@ -1075,6 +1049,86 @@ router.post('/:id/comments', async (req, res) => {
   }
 });
 
+// **NEW: Increment video view count (Instagram Reels style)**
+router.post('/:id/increment-view', async (req, res) => {
+  try {
+    const videoId = req.params.id;
+    const { userId, duration = 4 } = req.body;
+
+    console.log('🎯 View increment request:', {
+      videoId,
+      userId,
+      duration,
+      timestamp: new Date().toISOString()
+    });
+
+    // Validate video ID
+    if (!videoId || !mongoose.Types.ObjectId.isValid(videoId)) {
+      return res.status(400).json({ error: 'Invalid video ID' });
+    }
+
+    // Find user by googleId
+    const user = await User.findOne({ googleId: userId });
+    if (!user) {
+      console.log('❌ User not found with Google ID:', userId);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Find video
+    const video = await Video.findById(videoId);
+    if (!video) {
+      console.log('❌ Video not found:', videoId);
+      return res.status(404).json({ error: 'Video not found' });
+    }
+
+    // Check if user has already reached max views (10)
+    const existingView = video.viewDetails.find(view => 
+      view.user.toString() === user._id.toString()
+    );
+
+    if (existingView && existingView.viewCount >= 10) {
+      console.log('⚠️ User has reached maximum view count:', {
+        userId: user.googleId,
+        currentViewCount: existingView.viewCount
+      });
+      return res.status(200).json({
+        message: 'View limit reached',
+        viewCount: existingView.viewCount,
+        maxViewsReached: true,
+        totalViews: video.views
+      });
+    }
+
+    // Increment view using the model method
+    await video.incrementView(user._id, duration);
+
+    console.log('✅ View incremented successfully:', {
+      videoId,
+      userId: user.googleId,
+      newTotalViews: video.views,
+      userViewCount: existingView ? existingView.viewCount + 1 : 1
+    });
+
+    // Return updated view count
+    const updatedExistingView = video.viewDetails.find(view => 
+      view.user.toString() === user._id.toString()
+    );
+
+    res.json({
+      message: 'View incremented successfully',
+      totalViews: video.views,
+      userViewCount: updatedExistingView ? updatedExistingView.viewCount : 1,
+      maxViewsReached: updatedExistingView ? updatedExistingView.viewCount >= 10 : false
+    });
+
+  } catch (err) {
+    console.error('❌ Error incrementing view:', err);
+    res.status(500).json({ 
+      error: 'Failed to increment view', 
+      details: err.message 
+    });
+  }
+});
 
 // Delete video by ID
 router.delete('/:id', verifyToken, async (req, res) => {

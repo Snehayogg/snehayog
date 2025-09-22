@@ -31,33 +31,35 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Check required environment variables
-const requiredEnvVars = ['MONGO_URI'];
-const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
-
-if (missingEnvVars.length > 0) {
-  console.error('❌ Missing required environment variables:', missingEnvVars);
+// Check required environment variables (support both MONGO_URI and MONGODB_URI)
+const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
+if (!mongoUri) {
+  console.error('❌ Missing required environment variable: MONGO_URI or MONGODB_URI');
   process.exit(1);
 }
 
+// Set the environment variable for consistency
+process.env.MONGO_URI = mongoUri;
+
 // Port and Host configuration
 const PORT = process.env.PORT || 5001;
-const HOST = process.env.HOST || '192.168.0.190'; // Use your network IP
+const HOST = process.env.HOST || '0.0.0.0'; // Railway requires 0.0.0.0
 
 console.log('🔧 Server Configuration:');
 console.log(`   📍 Port: ${PORT}`);
 console.log(`   🌐 Host: ${HOST}`);
 console.log(`   🔗 URL: http://${HOST}:${PORT}`);
-console.log(`   📱 Flutter App should connect to: http://192.168.0.190:${PORT}`);
+console.log(`   🌍 Railway URL: https://snehayog-production.up.railway.app`);
 console.log('');
 
 // Middleware
 app.use(compression()); // Enable gzip compression
 
-// **ENHANCED: CORS Configuration for Flutter app**
+// **ENHANCED: CORS Configuration for Flutter app and Railway**
 app.use(cors({
   origin: [
-    'http://192.168.0.190:5001', // Backend URL
+    'https://snehayog-production.up.railway.app', // Railway production URL
+    'http://192.168.0.188:5001', // Local development
     'http://localhost:5001',      // Local development
     'http://10.0.2.2:5001',      // Android emulator
     'http://127.0.0.1:5001',     // Localhost alternative
@@ -75,7 +77,7 @@ app.use(cors({
     'Access-Control-Request-Headers'
   ],
   exposedHeaders: ['Content-Length', 'Content-Range', 'Accept-Ranges'],
-  maxAge: 86400 // 24 hours
+  maxAge: 86400
 }));
 
 app.use(express.json({ limit: '50mb' }));
@@ -92,7 +94,6 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Serve HLS files with proper MIME types and CORS
 app.use('/hls', (req, res, next) => {
-  // Set CORS headers for HLS streaming
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Range, Accept-Ranges, Content-Range');

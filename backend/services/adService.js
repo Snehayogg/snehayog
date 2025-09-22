@@ -30,10 +30,22 @@ class AdService {
       uploaderName,
       uploaderProfilePic,
       startDate,
-      endDate
+      endDate,
+      // **NEW: Advanced targeting fields**
+      minAge,
+      maxAge,
+      gender,
+      locations,
+      interests,
+      platforms,
+      deviceType,
+      optimizationGoal,
+      frequencyCap,
+      timeZone,
+      dayParting,
+      hourParting
     } = adData;
 
-    // **NEW: Log link field details for debugging**
     console.log('🔍 AdService: Link field value:', link);
     console.log('🔍 AdService: Link field type:', typeof link);
     console.log('🔍 AdService: Link field length:', link ? link.length : 'null');
@@ -57,7 +69,7 @@ class AdService {
     }
     console.log('✅ AdService: Found user:', user._id);
 
-    // **NEW: Create AdCampaign first**
+    // **NEW: Create AdCampaign with all targeting fields**
     const campaign = new AdCampaign({
       name: title,
       advertiserUserId: user._id, // Use the actual User ObjectId
@@ -69,14 +81,24 @@ class AdService {
       bidType: 'CPM',
       cpmINR: adType === 'banner' ? 10 : 30,
       target: {
-        age: { min: 18, max: 65 },
-        gender: 'all',
-        locations: [],
-        interests: [],
-        platforms: ['android', 'ios', 'web']
+        age: { 
+          min: minAge || 18, 
+          max: maxAge || 65 
+        },
+        gender: gender || 'all',
+        locations: locations || [],
+        interests: interests || [],
+        platforms: platforms && platforms.length > 0 ? platforms : ['android', 'ios', 'web'],
+        // **NEW: Additional targeting fields**
+        deviceType: deviceType || null
       },
+      // **NEW: Advanced campaign settings**
+      optimizationGoal: optimizationGoal || 'impressions',
+      timeZone: timeZone || 'Asia/Kolkata',
+      dayParting: dayParting || {},
+      hourParting: hourParting || {},
       pacing: 'smooth',
-      frequencyCap: 3
+      frequencyCap: frequencyCap || 3
     });
 
     try {

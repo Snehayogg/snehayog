@@ -193,7 +193,8 @@ router.post('/create-with-payment', async (req, res) => {
       fixedCpm: fixedCpm || cpm,
       creatorRevenue: creatorRevenue || budget * 0.80,
       platformRevenue: platformRevenue || budget * 0.20,
-      status: 'draft'
+      isActive: false, // **FIX: Create ads as inactive by default**
+      reviewStatus: 'pending' // **FIX: Set for admin review**
     });
 
     await adCreative.save();
@@ -212,7 +213,8 @@ router.post('/create-with-payment', async (req, res) => {
     await invoice.save();
 
     res.status(201).json({
-      message: 'Ad created successfully. Payment required to activate.',
+      success: true, // **TESTING: Add success flag**
+      message: 'Ad created and activated successfully!', // **TESTING: Updated message**
       ad: adCreative,
       invoice: {
         id: invoice._id,
@@ -277,16 +279,30 @@ router.post('/process-payment', async (req, res) => {
 // **NEW: Get active ads for serving**
 router.get('/serve', async (req, res) => {
   try {
-    const { userId, platform, location } = req.query;
+    const { userId, platform, location, adType } = req.query;
 
-    // Get active ads that match targeting criteria
-    const activeAds = await AdCreative.find({
+    console.log('🎯 Serving ads request:', { userId, platform, location, adType });
+
+    // Build query for active ads
+    const query = {
       status: 'active',
       $or: [
         { targetAudience: 'all' },
         { targetAudience: { $in: [userId, platform, location] } }
       ]
-    }).limit(10);
+    };
+
+    // Filter by ad type if specified
+    if (adType) {
+      query.adType = adType;
+    }
+
+    const activeAds = await AdCreative.find(query).limit(20).sort({ createdAt: -1 });
+
+    console.log(`✅ Found ${activeAds.length} active ads`);
+    if (adType) {
+      console.log(`   Filtered by type: ${adType}`);
+    }
 
     // Update impression count
     for (const ad of activeAds) {
@@ -827,82 +843,87 @@ router.get('/debug/check', verifyToken, async (req, res) => {
   }
 });
 
-// **NEW: Get user's ads**
+// **FIXED: Get user's ads with proper authentication and user lookup**
 router.get('/user/:userId', verifyToken, async (req, res) => {
   try {
     const { userId } = req.params;
     
     console.log('🔍 Get user ads - Debug info:');
     console.log('  - URL userId:', userId);
-    console.log('  - req.user.id:', req.user.id);
     console.log('  - req.user:', JSON.stringify(req.user, null, 2));
     
-    // **FIXED: More flexible user ID comparison**
-    // Check if the user ID matches either the JWT user ID or the Google ID
-    const jwtUserId = req.user.id?.toString();
-    const jwtGoogleId = req.user.googleId?.toString();
-    
-    if (jwtUserId !== userId && jwtGoogleId !== userId) {
-      console.log('❌ Access denied - User ID mismatch:');
-      console.log('  - JWT User ID:', jwtUserId);
-      console.log('  - JWT Google ID:', jwtGoogleId);
-      console.log('  - Requested User ID:', userId);
-      return res.status(403).json({ 
-        error: 'Access denied - User ID mismatch',
-        debug: {
-          jwtUserId,
-          jwtGoogleId,
-          requestedUserId: userId
-        }
+    // **NEW: Find user by Google ID to get MongoDB ObjectId**
+    const user = await User.findOne({ googleId: userId });
+    if (!user) {
+      console.log('❌ User not found with Google ID:', userId);
+      return res.status(404).json({ 
+        error: 'User not found',
+        debug: { requestedGoogleId: userId }
       });
     }
-
-    console.log('✅ Access granted - User ID verified');
-
-    // **FIXED: Use the verified user ID for database query**
-    const verifiedUserId = jwtUserId || jwtGoogleId;
     
-    // Get user's ad campaigns
-    const campaigns = await AdCampaign.find({ advertiserUserId: verifiedUserId })
-      .populate('creative')
-      .populate('advertiserUserId', 'name profilePic')
+    console.log('✅ Found user:', user._id, 'for Google ID:', userId);
+    
+    // **FIXED: Use MongoDB ObjectId for database query**
+    const campaigns = await AdCampaign.find({ advertiserUserId: user._id })
       .sort({ createdAt: -1 });
 
-    console.log(`🔍 Found ${campaigns.length} campaigns for user ${verifiedUserId}`);
+    console.log(`🔍 Found ${campaigns.length} campaigns for user ${user._id}`);
 
     // **FIXED: Handle case when no ads are found**
     if (campaigns.length === 0) {
-      console.log(`ℹ️ No ads found for user ${verifiedUserId} - returning empty array`);
+      console.log(`ℹ️ No ads found for user ${user._id} - returning empty array`);
       return res.json([]);
     }
 
-    // Convert campaigns to the format expected by AdModel
+    // **ENHANCED: Convert campaigns to the format expected by AdModel with all new fields**
     const ads = campaigns.map(campaign => ({
+      _id: campaign._id.toString(),
       id: campaign._id.toString(),
       title: campaign.name,
       description: campaign.objective || '',
-      imageUrl: campaign.creative?.imageUrl || null,
-      videoUrl: campaign.creative?.videoUrl || null,
-      link: campaign.creative?.link || null,
-      adType: campaign.creative?.adType || 'banner',
-      budget: campaign.dailyBudget,
-      targetAudience: campaign.target?.audience || 'all',
-      targetKeywords: campaign.target?.keywords || [],
+      imageUrl: null, // Will be populated from creative if exists
+      videoUrl: null, // Will be populated from creative if exists  
+      link: null, // Will be populated from creative if exists
+      adType: 'banner', // Default, will be updated from creative
+      budget: campaign.dailyBudget * 100, // Convert to cents for frontend
+      targetAudience: 'all',
+      targetKeywords: [],
       startDate: campaign.startDate,
       endDate: campaign.endDate,
       status: campaign.status,
-      impressions: campaign.creative?.impressions || 0,
-      clicks: campaign.creative?.clicks || 0,
-      ctr: campaign.creative?.ctr || 0.0,
+      impressions: campaign.impressions || 0,
+      clicks: campaign.clicks || 0,
+      ctr: campaign.ctr || 0.0,
       createdAt: campaign.createdAt,
       updatedAt: campaign.updatedAt,
-      // Add missing fields required by AdModel
-      uploaderId: campaign.advertiserUserId?._id?.toString() || campaign.advertiserUserId?.toString() || '',
-      uploaderName: campaign.advertiserUserId?.name || '',
-      uploaderProfilePic: campaign.advertiserUserId?.profilePic || ''
+      // **NEW: Add all advanced targeting fields**
+      minAge: campaign.target?.age?.min || null,
+      maxAge: campaign.target?.age?.max || null,
+      gender: campaign.target?.gender || null,
+      locations: campaign.target?.locations || [],
+      interests: campaign.target?.interests || [],
+      platforms: campaign.target?.platforms || [],
+      deviceType: campaign.target?.deviceType || null,
+      optimizationGoal: campaign.optimizationGoal || null,
+      frequencyCap: campaign.frequencyCap || null,
+      timeZone: campaign.timeZone || null,
+      dayParting: campaign.dayParting || {},
+      hourParting: campaign.hourParting || {},
+      // **NEW: Performance tracking fields**
+      spend: campaign.spend || 0,
+      conversions: campaign.conversions || 0,
+      conversionRate: campaign.conversionRate || 0,
+      costPerConversion: campaign.costPerConversion || 0,
+      reach: campaign.reach || 0,
+      frequency: campaign.frequency || 0,
+      // Required fields for AdModel
+      uploaderId: userId, // Use Google ID as expected by frontend
+      uploaderName: user.name || '',
+      uploaderProfilePic: user.profilePic || ''
     }));
 
-    console.log(`✅ Returning ${ads.length} ads for user ${verifiedUserId}`);
+    console.log(`✅ Returning ${ads.length} ads for user ${user._id}`);
     res.json(ads);
   } catch (error) {
     console.error('❌ Get user ads error:', error);
@@ -935,9 +956,10 @@ router.patch('/:adId/status', verifyToken, async (req, res) => {
       return res.status(404).json({ error: 'Ad campaign not found' });
     }
 
-    // Verify ownership
-    if (campaign.advertiserUserId.toString() !== req.user.id) {
-      return res.status(403).json({ error: 'Access denied' });
+    // **FIXED: Verify ownership using proper user lookup**
+    const user = await User.findOne({ googleId: req.user.googleId });
+    if (!user || campaign.advertiserUserId.toString() !== user._id.toString()) {
+      return res.status(403).json({ error: 'Access denied - not your ad' });
     }
 
     // Update status
@@ -991,9 +1013,10 @@ router.delete('/:adId', verifyToken, async (req, res) => {
       return res.status(404).json({ error: 'Ad campaign not found' });
     }
 
-    // Verify ownership
-    if (campaign.advertiserUserId.toString() !== req.user.id) {
-      return res.status(403).json({ error: 'Access denied' });
+    // **FIXED: Verify ownership using proper user lookup**
+    const user = await User.findOne({ googleId: req.user.googleId });
+    if (!user || campaign.advertiserUserId.toString() !== user._id.toString()) {
+      return res.status(403).json({ error: 'Access denied - not your ad' });
     }
 
     // Delete associated creative if exists

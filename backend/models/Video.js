@@ -35,6 +35,33 @@ const videoSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  // **NEW: Detailed view tracking for reels-style system**
+  viewDetails: [{
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    viewCount: {
+      type: Number,
+      default: 1,
+      max: 10 // Maximum 10 views per user
+    },
+    lastViewedAt: {
+      type: Date,
+      default: Date.now
+    },
+    viewDurations: [{
+      viewedAt: {
+        type: Date,
+        default: Date.now
+      },
+      duration: {
+        type: Number,
+        default: 4 // Duration in seconds before counting as view
+      }
+    }]
+  }],
   shares: {
     type: Number,
     default: 0
@@ -155,20 +182,9 @@ videoSchema.virtual('hasMultipleQualities').get(function() {
            this.mediumQualityUrl || this.highQualityUrl);
 });
 
-// **NEW: Method to get optimal quality URL based on network speed**
-videoSchema.methods.getOptimalQualityUrl = function(networkSpeedMbps) {
-  if (networkSpeedMbps > 10) {
-    return this.highQualityUrl || this.videoUrl; // 1080p for fast networks
-  } else if (networkSpeedMbps > 5) {
-    return this.mediumQualityUrl || this.videoUrl; // 720p for medium networks
-  } else {
-    return this.lowQualityUrl || this.videoUrl; // 480p for slow networks
-  }
-};
-
-// **NEW: Method to get preload quality URL for fast loading**
-videoSchema.methods.getPreloadQualityUrl = function() {
-  return this.preloadQualityUrl || this.lowQualityUrl || this.videoUrl;
+// Method to get 480p quality URL (standardized for all videos)
+videoSchema.methods.get480pUrl = function() {
+  return this.lowQualityUrl || this.videoUrl;
 };
 
 // **NEW: Method to update processing status**
@@ -196,6 +212,46 @@ videoSchema.methods.addQualityVersion = function(quality, url, metadata) {
     this[fieldName] = url;
   }
   
+  return this.save();
+};
+
+// **NEW: Method to increment view count (Instagram Reels style)**
+videoSchema.methods.incrementView = function(userId, duration = 4) {
+  // Find existing view record for this user
+  const existingView = this.viewDetails.find(view => 
+    view.user.toString() === userId.toString()
+  );
+
+  if (existingView) {
+    // User has viewed before - check if under limit (max 10 views)
+    if (existingView.viewCount < 10) {
+      existingView.viewCount += 1;
+      existingView.lastViewedAt = new Date();
+      existingView.viewDurations.push({
+        viewedAt: new Date(),
+        duration: duration
+      });
+      
+      // Increment total views count
+      this.views += 1;
+    }
+    // If already at 10 views, don't increment
+  } else {
+    // New viewer - add first view
+    this.viewDetails.push({
+      user: userId,
+      viewCount: 1,
+      lastViewedAt: new Date(),
+      viewDurations: [{
+        viewedAt: new Date(),
+        duration: duration
+      }]
+    });
+    
+    // Increment total views count
+    this.views += 1;
+  }
+
   return this.save();
 };
 

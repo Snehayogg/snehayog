@@ -1,13 +1,13 @@
+import path from 'path';
+
 export const hlsConfig = {
   // HLS encoding settings - optimized for INSTANT startup and efficient streaming
   encoding: {
-    segmentDuration: 1, // 1 second per segment for INSTANT startup (was 3 seconds)
-    maxBitrate: 2000000, // 2 Mbps max (optimized for mobile)
-    minBitrate: 300000,  // 300 Kbps min (240p quality)
+    segmentDuration: 1, // 1 second per segment for INSTANT startup
+    maxBitrate: 800000, // 800k for 480p only
+    minBitrate: 800000, // Same as max since we only use 480p
     qualityPresets: {
-      '720p': { width: 1280, height: 720, crf: 23, audioBitrate: '128k', targetBitrate: '1500k' },
-      '480p': { width: 854, height: 480, crf: 23, audioBitrate: '96k', targetBitrate: '800k' },
-      '240p': { width: 426, height: 240, crf: 23, audioBitrate: '64k', targetBitrate: '300k' }
+      '480p': { width: 854, height: 480, crf: 23, audioBitrate: '96k', targetBitrate: '800k' }
     },
     // H.264 encoding profile settings - optimized for fast startup
     h264Profile: 'baseline', // Maximum compatibility across devices
@@ -39,25 +39,17 @@ export const hlsConfig = {
     lastModified: true
   },
 
-  // Streaming settings - optimized for INSTANT adaptive bitrate
+  // Streaming settings - optimized for 480p streaming
   streaming: {
     enableRangeRequests: true,
-    chunkSize: 32 * 1024, // 32KB chunks for faster streaming (was 64KB)
     enableCompression: false, // Don't compress video files
     enableGzip: false,
-    // HLS specific optimizations for INSTANT startup
-    enableAdaptiveBitrate: true,
     enableFastStart: true,
-    enableIndependentSegments: true,
-    // NEW: Fast startup optimizations
-    enableLowLatency: true,
-    enablePartialSegmentSupport: true,
-    enableDeltaUpdate: true
+    enableIndependentSegments: true
   }
 };
 
 // Complete the getMimeType function
-
 export const getMimeType = (filename) => {
   const ext = path.extname(filename).toLowerCase();
   return hlsConfig.mimeTypes[ext] || 'application/octet-stream';

@@ -71,9 +71,31 @@ const AdCampaignSchema = new mongoose.Schema({
       type: String,
       enum: ['android', 'ios', 'web']
     }],
-    appVersion: {
-      type: String
+    // **NEW: Additional targeting fields**
+    deviceType: {
+      type: String,
+      enum: ['mobile', 'tablet', 'desktop']
     }
+  },
+  // **NEW: Advanced campaign settings**
+  optimizationGoal: {
+    type: String,
+    enum: ['clicks', 'impressions', 'conversions'],
+    default: 'impressions'
+  },
+  timeZone: {
+    type: String,
+    default: 'Asia/Kolkata'
+  },
+  dayParting: {
+    type: Map,
+    of: Boolean,
+    default: {}
+  },
+  hourParting: {
+    type: Map,
+    of: String,
+    default: {}
   },
   pacing: {
     type: String,
@@ -86,6 +108,7 @@ const AdCampaignSchema = new mongoose.Schema({
     min: 1,
     max: 10
   },
+  // **ENHANCED: Performance tracking fields**
   impressions: {
     type: Number,
     default: 0
@@ -103,6 +126,35 @@ const AdCampaignSchema = new mongoose.Schema({
     default: 0
   },
   cpm: {
+    type: Number,
+    default: 0
+  },
+  // **NEW: Additional performance metrics**
+  conversions: {
+    type: Number,
+    default: 0
+  },
+  conversionRate: {
+    type: Number,
+    default: 0
+  },
+  costPerConversion: {
+    type: Number,
+    default: 0
+  },
+  reach: {
+    type: Number,
+    default: 0
+  },
+  frequency: {
+    type: Number,
+    default: 0
+  },
+  engagementRate: {
+    type: Number,
+    default: 0
+  },
+  roas: { // Return on Ad Spend
     type: Number,
     default: 0
   }
