@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:snehayog/utils/banner_image_processor.dart';
 
 /// **MediaUploaderWidget - Handles media file uploads for ads**
 class MediaUploaderWidget extends StatefulWidget {
@@ -76,7 +77,8 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
                     icon: const Icon(Icons.video_library),
                     label: Text(_getVideoButtonLabel()),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _isVideoAllowed() ? Colors.green : Colors.grey,
+                      backgroundColor:
+                          _isVideoAllowed() ? Colors.green : Colors.grey,
                       foregroundColor: Colors.white,
                     ),
                   ),
@@ -102,7 +104,8 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
   }
 
   Widget _buildMediaPreview() {
-    if (widget.selectedAdType == 'carousel' && widget.selectedImages.isNotEmpty) {
+    if (widget.selectedAdType == 'carousel' &&
+        widget.selectedImages.isNotEmpty) {
       return ListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: widget.selectedImages.length,
@@ -170,14 +173,61 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
         },
       );
     } else if (widget.selectedImage != null) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Image.file(
-          widget.selectedImage!,
-          fit: BoxFit.cover,
-          width: double.infinity,
-        ),
-      );
+      // **NEW: Special preview for banner ads**
+      if (widget.selectedAdType == 'banner') {
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Banner preview with correct aspect ratio
+              Container(
+                width: 320,
+                height: 100,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.blue, width: 2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: Image.file(
+                    widget.selectedImage!,
+                    fit: BoxFit.cover,
+                    width: 320,
+                    height: 100,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                ),
+                child: const Text(
+                  'Banner Preview (320x100)',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.blue,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      } else {
+        // Regular preview for other ad types
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.file(
+            widget.selectedImage!,
+            fit: BoxFit.cover,
+            width: double.infinity,
+          ),
+        );
+      }
     } else if (widget.selectedVideo != null) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(8),
@@ -239,8 +289,7 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
       ),
       child: Row(
         children: [
-          Icon(Icons.video_library,
-              size: 16, color: Colors.green.shade700),
+          Icon(Icons.video_library, size: 16, color: Colors.green.shade700),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -268,8 +317,7 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
       ),
       child: Row(
         children: [
-          Icon(Icons.view_carousel,
-              size: 16, color: Colors.orange.shade700),
+          Icon(Icons.view_carousel, size: 16, color: Colors.orange.shade700),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -304,9 +352,7 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
       case 'banner':
         return 'Video Not Allowed';
       case 'carousel':
-        return widget.selectedVideo != null
-            ? 'Video Selected'
-            : 'Add Video';
+        return widget.selectedVideo != null ? 'Video Selected' : 'Add Video';
       default:
         return 'Select Video';
     }
@@ -315,7 +361,7 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
   String _getMediaHelpText() {
     switch (widget.selectedAdType) {
       case 'banner':
-        return 'Banner ads only support images';
+        return 'Banner ads only support images (will be cropped to 320x100 pixels)';
       case 'carousel':
         return 'Carousel ads: choose either up to 3 images OR 1 video (not both)';
       default:
@@ -375,7 +421,22 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
     if (image != null) {
       final file = File(image.path);
       if (await _validateImageFile(file)) {
-        widget.onImageSelected(file);
+        // **NEW: For banner ads, show cropping dialog**
+        if (widget.selectedAdType == 'banner') {
+          if (mounted) {
+            final croppedFile = await BannerImageProcessor.showBannerCropDialog(
+              context,
+              file,
+            );
+
+            if (croppedFile != null) {
+              widget.onImageSelected(croppedFile);
+            }
+          }
+        } else {
+          // For other ad types, use image directly
+          widget.onImageSelected(file);
+        }
       }
     }
   }
@@ -503,7 +564,7 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
       final List<File> validImages = [];
       for (final image in images) {
         if (widget.selectedImages.length + validImages.length >= 3) break;
-        
+
         final file = File(image.path);
         if (await _validateImageFile(file)) {
           validImages.add(file);
@@ -511,17 +572,20 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
       }
 
       if (validImages.isNotEmpty) {
-        final List<File> newImages = List.from(widget.selectedImages)..addAll(validImages);
+        final List<File> newImages = List.from(widget.selectedImages)
+          ..addAll(validImages);
         widget.onImagesSelected(newImages);
       } else {
-        widget.onError('No valid images selected. Please ensure files are valid image formats under 10MB.');
+        widget.onError(
+            'No valid images selected. Please ensure files are valid image formats under 10MB.');
       }
     }
   }
 
   Future<void> _pickVideo() async {
     if (widget.selectedAdType == 'banner') {
-      widget.onError('Banner ads only support images. Please select an image instead.');
+      widget.onError(
+          'Banner ads only support images. Please select an image instead.');
       return;
     }
 
@@ -539,7 +603,8 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
   }
 
   void _removeImageFromCarousel(int index) {
-    final List<File> newImages = List.from(widget.selectedImages)..removeAt(index);
+    final List<File> newImages = List.from(widget.selectedImages)
+      ..removeAt(index);
     widget.onImagesSelected(newImages);
   }
 
@@ -551,7 +616,8 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
           !fileName.endsWith('.png') &&
           !fileName.endsWith('.gif') &&
           !fileName.endsWith('.webp')) {
-        widget.onError('Please select a valid image file (JPG, PNG, GIF, or WebP)');
+        widget.onError(
+            'Please select a valid image file (JPG, PNG, GIF, or WebP)');
         return false;
       }
 
@@ -572,9 +638,10 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
     try {
       final fileName = file.path.split('/').last.toLowerCase();
       final supportedExtensions = ['.mp4', '.webm', '.avi', '.mov', '.mkv'];
-      
+
       if (!supportedExtensions.any((ext) => fileName.endsWith(ext))) {
-        widget.onError('Unsupported video format. Please select MP4, WebM, AVI, MOV, or MKV');
+        widget.onError(
+            'Unsupported video format. Please select MP4, WebM, AVI, MOV, or MKV');
         return false;
       }
 

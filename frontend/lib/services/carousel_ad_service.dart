@@ -1,23 +1,39 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:snehayog/model/carousel_ad_model.dart';
+import 'package:snehayog/config/app_config.dart';
 
 class CarouselAdService {
-  static const String _baseUrl = 'http://192.168.0.190:5001/api';
+  static String get _baseUrl => AppConfig.baseUrl;
 
-  /// Fetch carousel ads from the backend
+  /// Fetch carousel ads from the backend using /serve endpoint
   Future<List<CarouselAdModel>> fetchCarouselAds() async {
     try {
+      print(
+          '🎯 CarouselAdService: Fetching carousel ads from $_baseUrl/api/ads/serve');
+
       final response = await http.get(
-        Uri.parse('$_baseUrl/ads/carousel'),
+        Uri.parse('$_baseUrl/api/ads/serve?adType=carousel'),
         headers: {
           'Content-Type': 'application/json',
         },
       );
 
+      print('🔍 CarouselAdService: Response status: ${response.statusCode}');
+      print('🔍 CarouselAdService: Response body: ${response.body}');
+
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-        return data.map((json) => CarouselAdModel.fromJson(json)).toList();
+        final Map<String, dynamic> responseData = json.decode(response.body);
+        final List<dynamic> ads = responseData['ads'] ?? [];
+
+        // Filter only carousel ads and convert to CarouselAdModel
+        final carouselAds = ads
+            .where((ad) => ad['adType'] == 'carousel')
+            .map((adJson) => _convertToCarouselAdModel(adJson))
+            .toList();
+
+        print('✅ CarouselAdService: Found ${carouselAds.length} carousel ads');
+        return carouselAds;
       } else {
         print('❌ Error fetching carousel ads: ${response.statusCode}');
         print('Response body: ${response.body}');
@@ -27,6 +43,43 @@ class CarouselAdService {
       print('❌ Exception fetching carousel ads: $e');
       return [];
     }
+  }
+
+  /// Convert AdCreative to CarouselAdModel
+  CarouselAdModel _convertToCarouselAdModel(Map<String, dynamic> adJson) {
+    return CarouselAdModel(
+      id: adJson['_id'] ?? adJson['id'] ?? 'unknown',
+      campaignId: adJson['campaignId'] ?? 'unknown',
+      advertiserName: adJson['uploaderName'] ?? 'Unknown Advertiser',
+      advertiserProfilePic: adJson['uploaderProfilePic'] ?? '',
+      slides: [
+        // Create slides from the ad data
+        if (adJson['imageUrl'] != null)
+          CarouselSlide(
+            id: 'slide_1',
+            mediaUrl: adJson['imageUrl'],
+            mediaType: 'image',
+            aspectRatio: '9:16',
+            title: adJson['title'] ?? '',
+            description: adJson['description'] ?? '',
+          ),
+        if (adJson['videoUrl'] != null)
+          CarouselSlide(
+            id: 'slide_video',
+            mediaUrl: adJson['videoUrl'],
+            mediaType: 'video',
+            aspectRatio: '9:16',
+            title: adJson['title'] ?? '',
+            description: adJson['description'] ?? '',
+          ),
+      ],
+      callToActionLabel: 'Learn More',
+      callToActionUrl: adJson['link'] ?? '',
+      isActive: adJson['status'] == 'active',
+      impressions: adJson['impressions'] ?? 0,
+      clicks: adJson['clicks'] ?? 0,
+      createdAt: DateTime.tryParse(adJson['createdAt'] ?? '') ?? DateTime.now(),
+    );
   }
 
   /// Fetch a single carousel ad by ID

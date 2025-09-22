@@ -1,39 +1,47 @@
 import 'package:flutter/material.dart';
+import 'package:snehayog/model/video_model.dart';
+import 'package:snehayog/view/screens/video_feed_advanced.dart';
 
-class SnehaScreen extends StatelessWidget {
-  const SnehaScreen({super.key});
+class SnehaScreen extends StatefulWidget {
+  final int? initialIndex;
+  final List<VideoModel>? initialVideos;
+  final String? initialVideoId;
+
+  const SnehaScreen({
+    Key? key,
+    this.initialIndex,
+    this.initialVideos,
+    this.initialVideoId,
+  }) : super(key: key);
+
+  @override
+  State<SnehaScreen> createState() => _SnehaScreenState();
+}
+
+class _SnehaScreenState extends State<SnehaScreen> {
+  final GlobalKey _videoFeedKey = GlobalKey();
+
+  /// **PUBLIC: Refresh video list after upload**
+  Future<void> refreshVideos() async {
+    print('🔄 SnehaScreen: refreshVideos() called');
+    final videoFeedState = _videoFeedKey.currentState;
+    if (videoFeedState != null) {
+      // Cast to dynamic to access the refreshVideos method
+      await (videoFeedState as dynamic).refreshVideos();
+      print('✅ SnehaScreen: Video refresh completed');
+    } else {
+      print('❌ SnehaScreen: VideoFeedAdvanced state not found');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Colors.white,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.hourglass_empty, size: 64, color: Colors.grey),
-            SizedBox(height: 24),
-            Text(
-              'This Feature is Coming Soon',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: 12),
-            Text(
-              'We are working hard to bring you this experience.\nStay tuned for updates!',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
+    return VideoFeedAdvanced(
+      key: _videoFeedKey,
+      initialIndex: widget.initialIndex,
+      initialVideos: widget.initialVideos,
+      initialVideoId: widget.initialVideoId,
+      videoType: 'sneha',
     );
   }
 }

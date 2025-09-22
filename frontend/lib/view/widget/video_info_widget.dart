@@ -234,7 +234,8 @@ class _VisitNowButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: double.infinity,
+      // **UPDATED: Increased width significantly while keeping height same**
+      width: MediaQuery.of(context).size.width * 0.75, // 60% of screen width
       margin: const EdgeInsets.only(right: 8),
       child: ElevatedButton(
         onPressed: () async {
@@ -251,16 +252,19 @@ class _VisitNowButton extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF2196F3), // Blue color
           foregroundColor: Colors.white,
-          // **REDUCED padding for more compact look**
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+          // **KEEPING same height - only vertical padding unchanged**
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(6),
           ),
           elevation: 1,
+          // **NEW: Ensure button takes full width of container**
+          minimumSize: const Size(double.infinity, 0),
         ),
         child: const Row(
           mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
+          // **UPDATED: Use max to fill the button width**
+          mainAxisSize: MainAxisSize.max,
           children: [
             // **REDUCED icon size from 16 to 14**
             Icon(Icons.open_in_new, color: Colors.white, size: 14),

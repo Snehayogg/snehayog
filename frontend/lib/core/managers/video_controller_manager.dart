@@ -1,6 +1,6 @@
 import 'package:video_player/video_player.dart';
-import 'package:snehayog/core/managers/video_cache_manager.dart';
 import 'package:snehayog/core/managers/video_position_cache_manager.dart';
+import 'package:snehayog/core/managers/hot_ui_state_manager.dart';
 import 'package:snehayog/services/signed_url_service.dart';
 import 'package:snehayog/core/factories/video_controller_factory.dart';
 import 'package:snehayog/model/video_model.dart';
@@ -21,6 +21,7 @@ class VideoControllerManager {
   final Map<int, String> _controllerVideoIds = {};
 
   final VideoPositionCacheManager _positionCache = VideoPositionCacheManager();
+  final HotUIStateManager _hotUIManager = HotUIStateManager();
 
   final int maxPoolSize = 1;
 
@@ -166,22 +167,9 @@ class VideoControllerManager {
       print(
           '🚀 VideoControllerManager: Preloading controller $index for ${video.videoName}');
 
-      // **CACHING INTEGRATION: Use VideoCacheManager for progressive streaming**
-      if (video.videoUrl.contains('.m3u8')) {
-        print(
-            '🎬 VideoControllerManager: Using progressive HLS streaming for preload');
-        final cacheManager = VideoCacheManager();
-        await cacheManager.init(); // Ensure cache manager is initialized
-
-        // Start progressive streaming in background
-        cacheManager.getProgressiveStream(video.videoUrl).then((stream) {
-          print(
-              '✅ VideoControllerManager: Progressive HLS stream started for ${video.videoName}');
-        }).catchError((e) {
-          print(
-              '⚠️ VideoControllerManager: Progressive streaming failed, falling back to standard: $e');
-        });
-      }
+      // **SIMPLIFIED: Direct video controller creation for 480p videos**
+      print(
+          '🎬 VideoControllerManager: Preloading 480p video for ${video.videoName}');
 
       await getController(index, video);
       _warmNetwork(video.videoUrl);
@@ -368,9 +356,9 @@ class VideoControllerManager {
   }
 
   void _warmNetwork(String url) {
-    try {
-      VideoCacheManager().preloadFile(url);
-    } catch (_) {}
+    // Network warming removed since VideoCacheManager was deleted
+    // Videos now load directly through VideoPlayer for 480p content
+    print('🌐 VideoControllerManager: Network warming for 480p video: $url');
   }
 
   /// Get fallback URL for HLS streams
@@ -529,5 +517,46 @@ class VideoControllerManager {
         }
       }
     }
+  }
+
+  /// **HOT UI: Save state when app goes to background**
+  void saveUIStateForBackground(
+      int currentIndex, double scrollPosition, Map<int, VideoModel> videos) {
+    print('💾 VideoControllerManager: Saving UI state for background');
+
+    _hotUIManager.saveUIState(
+      currentIndex: currentIndex,
+      scrollPosition: scrollPosition,
+      controllers: _controllers,
+      videos: videos,
+    );
+  }
+
+  /// **HOT UI: Restore state when app comes to foreground**
+  Map<String, dynamic>? restoreUIStateFromBackground() {
+    print('🔄 VideoControllerManager: Restoring UI state from background');
+
+    if (_hotUIManager.isStateRestored) {
+      final restoredState = _hotUIManager.restoreUIState();
+
+      // Restore controllers from preserved state
+      final preservedControllers = restoredState['preservedControllers']
+          as Map<int, VideoPlayerController>?;
+      if (preservedControllers != null) {
+        _controllers.addAll(preservedControllers);
+      }
+
+      return restoredState;
+    }
+
+    return null;
+  }
+
+  /// **HOT UI: Check if we have preserved state**
+  bool get hasPreservedState => _hotUIManager.isStateRestored;
+
+  /// **HOT UI: Get state summary for debugging**
+  Map<String, dynamic> getHotUIStateSummary() {
+    return _hotUIManager.getStateSummary();
   }
 }

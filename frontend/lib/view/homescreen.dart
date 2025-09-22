@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:snehayog/controller/main_controller.dart';
 import 'package:snehayog/view/screens/profile_screen.dart';
@@ -14,44 +15,169 @@ class MainScreen extends StatefulWidget {
   State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
-  final _videoScreenKey = GlobalKey(); // Keep as generic key
+class _MainScreenState extends State<MainScreen>
+    with WidgetsBindingObserver, TickerProviderStateMixin {
+  final _videoScreenKey = GlobalKey();
   final _profileScreenKey = GlobalKey<State<ProfileScreen>>();
   final AuthService _authService = AuthService();
 
-  // Method to refresh video list and profile
-  void _refreshVideoList() {
+  // **NEW: Track refresh state for visual feedback**
+  bool _isRefreshing = false;
+
+  // **NEW: Animation controller for refresh icon**
+  late AnimationController _refreshAnimationController;
+
+  Future<void> _refreshVideoList() async {
     print('🔄 MainScreen: _refreshVideoList() called');
 
-    // Refresh the video screen
-    final videoScreenState = _videoScreenKey.currentState;
-    if (videoScreenState != null) {
-      print('🔄 MainScreen: VideoScreen state found, calling refreshVideos()');
-      // Cast to access the public method
-      (videoScreenState as dynamic).refreshVideos();
-    } else {
-      print('❌ MainScreen: VideoScreen state not found');
-    }
-
-    // Also refresh the profile screen videos
-    print('🔄 MainScreen: Refreshing ProfileScreen videos');
     try {
-      ProfileScreen.refreshVideos(_profileScreenKey);
-      print('✅ MainScreen: Profile videos refreshed successfully');
+      // Refresh the video screen
+      final videoScreenState = _videoScreenKey.currentState;
+      if (videoScreenState != null) {
+        print(
+            '🔄 MainScreen: VideoScreen state found, calling refreshVideos()');
+        // Cast to access the public method and await completion
+        await (videoScreenState as dynamic).refreshVideos();
+        print('✅ MainScreen: VideoScreen refresh completed');
+      } else {
+        print('❌ MainScreen: VideoScreen state not found');
+      }
+
+      // Also refresh the profile screen videos
+      print('🔄 MainScreen: Refreshing ProfileScreen videos');
+      try {
+        ProfileScreen.refreshVideos(_profileScreenKey);
+        print('✅ MainScreen: Profile videos refreshed successfully');
+      } catch (e) {
+        print('❌ MainScreen: Error refreshing profile videos: $e');
+      }
+
+      // Navigate to video tab to show the refreshed content
+      final mainController =
+          Provider.of<MainController>(context, listen: false);
+      if (mainController.currentIndex != 0) {
+        print('🔄 MainScreen: Navigating to video tab to show new upload');
+        mainController.changeIndex(0);
+      }
     } catch (e) {
-      print('❌ MainScreen: Error refreshing profile videos: $e');
+      print('❌ MainScreen: Error in _refreshVideoList: $e');
+    }
+  }
+
+  /// **NEW: Handle double-tap refresh with visual feedback and error handling**
+  Future<void> _handleYogTabDoubleTap() async {
+    if (_isRefreshing) {
+      print('🔄 MainScreen: Already refreshing, ignoring double-tap');
+      return;
     }
 
-    // Also navigate back to video tab to show the refreshed content
-    final mainController = Provider.of<MainController>(context, listen: false);
-    mainController.changeIndex(0);
-    print('🔄 MainScreen: Navigated back to video tab');
+    try {
+      // Haptic feedback to indicate action
+      HapticFeedback.mediumImpact();
+
+      // Set refreshing state and start animation
+      setState(() {
+        _isRefreshing = true;
+      });
+
+      // Start refresh animation
+      _refreshAnimationController.repeat();
+
+      print('🔄 MainScreen: Double-tap on Yog tab detected - starting refresh');
+
+      // Get the video screen state
+      final videoScreenState = _videoScreenKey.currentState;
+      if (videoScreenState != null) {
+        // Call refresh method with await
+        await (videoScreenState as dynamic).refreshVideos();
+        print('✅ MainScreen: Video refresh completed via Yog tab double-tap');
+
+        // Show success feedback
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(
+                children: [
+                  Icon(Icons.refresh, color: Colors.white, size: 20),
+                  SizedBox(width: 8),
+                  Text('Videos refreshed!'),
+                ],
+              ),
+              backgroundColor: Colors.green[600],
+              duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+        }
+      } else {
+        print('❌ MainScreen: VideoScreen state not found');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(
+                children: [
+                  Icon(Icons.error_outline, color: Colors.white, size: 20),
+                  SizedBox(width: 8),
+                  Text('Failed to refresh videos'),
+                ],
+              ),
+              backgroundColor: Colors.red[600],
+              duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('❌ MainScreen: Error in double-tap refresh: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.white, size: 20),
+                SizedBox(width: 8),
+                Text('Failed to refresh videos'),
+              ],
+            ),
+            backgroundColor: Colors.red[600],
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+    } finally {
+      // Reset refreshing state and stop animation
+      if (mounted) {
+        _refreshAnimationController.stop();
+        _refreshAnimationController.reset();
+        setState(() {
+          _isRefreshing = false;
+        });
+      }
+    }
   }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // **NEW: Initialize refresh animation controller**
+    _refreshAnimationController = AnimationController(
+      duration: const Duration(seconds: 1),
+      vsync: this,
+    );
+
     _checkTokenValidity();
   }
 
@@ -100,6 +226,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    // **NEW: Dispose animation controller**
+    _refreshAnimationController.dispose();
     super.dispose();
   }
 
@@ -252,21 +380,11 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     final isSelected = currentIndex == index;
     final isUpload = index == 2;
     final isYogTab = index == 0; // Yog tab is at index 0
+    final isRefreshingYog = isYogTab && _isRefreshing;
 
     return GestureDetector(
       onTap: onTap,
-      onDoubleTap: isYogTab
-          ? () {
-              // Double-tap on Yog tab refreshes the video screen
-              print('🔄 Homescreen: Double-tap on Yog tab detected');
-              if (_videoScreenKey.currentState != null) {
-                // Cast to access the refreshVideos method
-                (_videoScreenKey.currentState! as dynamic).refreshVideos();
-                print(
-                    '🔄 Homescreen: Video refresh triggered via Yog tab double-tap');
-              }
-            }
-          : null,
+      onDoubleTap: isYogTab ? _handleYogTabDoubleTap : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeInOut,
@@ -292,7 +410,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Icon with special handling for upload
+            // Icon with special handling for upload and refresh animation for Yog
             if (isUpload && isSpecial)
               Container(
                 padding: const EdgeInsets.all(8),
@@ -313,6 +431,19 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                   color: isSelected
                       ? const Color(0xFF424242)
                       : const Color(0xFF757575),
+                ),
+              )
+            else if (isRefreshingYog)
+              // **NEW: Show rotating refresh icon when Yog tab is refreshing**
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                child: RotationTransition(
+                  turns: _refreshAnimationController,
+                  child: Icon(
+                    Icons.refresh,
+                    size: isSelected ? 28 : 24,
+                    color: const Color(0xFF424242),
+                  ),
                 ),
               )
             else
@@ -340,7 +471,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                   color: Color(0xFF424242),
                   letterSpacing: 0.2,
                 ),
-                child: Text(label),
+                child: Text(isRefreshingYog ? 'Refreshing...' : label),
               ),
             ],
           ],

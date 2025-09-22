@@ -12,13 +12,12 @@ class VideoControllerFactory {
         video.videoUrl.contains('/hls/') ||
         video.isHLSEncoded == true;
 
-    String videoUrl = video.videoUrl;
+    // Always use 480p quality URL for consistent streaming
+    String videoUrl = video.get480pUrl();
 
     // **FIXED: Prefer MP4 URLs over HLS for better ExoPlayer compatibility**
-    if (video.videoUrl.isNotEmpty && !video.videoUrl.contains('.m3u8')) {
-      videoUrl = video.videoUrl;
-      print(
-          '🎬 VideoControllerFactory: Using MP4 URL for better compatibility: $videoUrl');
+    if (videoUrl.isNotEmpty && !videoUrl.contains('.m3u8')) {
+      print('🎬 VideoControllerFactory: Using 480p MP4 URL: $videoUrl');
     } else if (isHLS &&
         video.hlsPlaylistUrl != null &&
         video.hlsPlaylistUrl!.isNotEmpty) {
@@ -32,9 +31,9 @@ class VideoControllerFactory {
           '🎬 VideoControllerFactory: Using HLS master playlist URL: $videoUrl');
     }
 
-    // Get quality preset for reels feed (720p optimization)
+    // Get standardized 480p quality preset
     final qualityPreset =
-        VideoPlayerConfigService.getQualityPreset('reels_feed');
+        VideoPlayerConfigService.getQualityPreset('standard_480p');
 
     // **CACHING INTEGRATION: Use SmartCacheManager for URL optimization**
     final smartCache = SmartCacheManager();

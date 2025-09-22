@@ -749,6 +749,12 @@ class ProfileStateManager extends ChangeNotifier {
   // Getter for user data
   Map<String, dynamic>? getUserData() => _userData;
 
+  // Setter for user data (for cache loading)
+  void setUserData(Map<String, dynamic>? userData) {
+    _userData = userData;
+    notifyListeners();
+  }
+
   /// Refreshes user data and videos
   Future<void> refreshData() async {
     try {

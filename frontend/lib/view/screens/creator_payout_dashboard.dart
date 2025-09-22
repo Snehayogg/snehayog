@@ -32,11 +32,23 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
       });
 
       print('🔍 CreatorPayoutDashboard: Starting data load...');
+      print('🔍 Base URL: ${AppConfig.baseUrl}');
+
       final userData = await _authService.getUserData();
       print('🔍 CreatorPayoutDashboard: User data loaded: ${userData != null}');
 
+      if (userData != null) {
+        print('🔍 User data keys: ${userData.keys.toList()}');
+        print('🔍 User ID: ${userData['id']}');
+        print('🔍 User email: ${userData['email']}');
+      }
+
       final token = userData?['token'];
       print('🔍 CreatorPayoutDashboard: Token available: ${token != null}');
+      if (token != null) {
+        print('🔍 Token length: ${token.toString().length}');
+        print('🔍 Token starts with: ${token.toString().substring(0, 20)}...');
+      }
 
       if (token == null) {
         print('❌ CreatorPayoutDashboard: No token found');
@@ -65,14 +77,21 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
         onTimeout: () {
           throw Exception('Profile API request timed out');
         },
-      );
+      ).catchError((error) {
+        print('❌ HTTP Request Error: $error');
+        throw Exception('Network error: $error');
+      });
 
       print('🔍 Profile response status: ${profileResponse.statusCode}');
       print('🔍 Profile response body: ${profileResponse.body}');
 
       if (profileResponse.statusCode == 200) {
-        _profileData = json.decode(profileResponse.body);
+        setState(() {
+          _profileData = json.decode(profileResponse.body);
+        });
         print('✅ Profile data loaded successfully');
+        print('🔍 Profile data keys: ${_profileData?.keys.toList()}');
+        print('🔍 Creator info: ${_profileData?['creator']}');
       } else if (profileResponse.statusCode == 404) {
         // User doesn't have creator profile yet - show setup message
         print(
@@ -122,14 +141,18 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
 
       if (historyResponse.statusCode == 200) {
         final historyData = json.decode(historyResponse.body);
-        _payoutHistory =
-            List<Map<String, dynamic>>.from(historyData['payouts'] ?? []);
+        setState(() {
+          _payoutHistory =
+              List<Map<String, dynamic>>.from(historyData['payouts'] ?? []);
+        });
         print('✅ Payout history loaded: ${_payoutHistory.length} records');
       } else {
         // Don't fail completely if history fails, just log it
         print(
             '⚠️ Warning: Failed to load payout history (${historyResponse.statusCode}): ${historyResponse.body}');
-        _payoutHistory = []; // Initialize empty list
+        setState(() {
+          _payoutHistory = []; // Initialize empty list
+        });
       }
 
       setState(() {
@@ -164,12 +187,18 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
   Future<void> _testBackendConnection() async {
     try {
       print('🔍 Testing backend connection...');
+      print('🔍 Base URL: ${AppConfig.baseUrl}');
 
       // Test the health endpoint first (no auth required)
       final healthUrl = '${AppConfig.baseUrl}/api/creator-payouts/health';
       print('🔍 Testing health endpoint: $healthUrl');
 
-      final healthResponse = await http.get(Uri.parse(healthUrl));
+      final healthResponse = await http.get(Uri.parse(healthUrl)).timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          throw Exception('Health check timed out - backend may be down');
+        },
+      );
       print('🔍 Health response status: ${healthResponse.statusCode}');
       print('🔍 Health response body: ${healthResponse.body}');
 
@@ -222,6 +251,100 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('❌ Connection failed: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _testAuthentication() async {
+    try {
+      print('🔍 Testing authentication...');
+
+      final userData = await _authService.getUserData();
+      print('🔍 User data available: ${userData != null}');
+
+      if (userData == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('❌ No user data found - please login first'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
+
+      final token = userData['token'];
+      print('🔍 Token available: ${token != null}');
+
+      if (token == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content:
+                  Text('❌ No authentication token found - please re-login'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Test authenticated endpoint
+      final profileUrl = '${AppConfig.baseUrl}/api/creator-payouts/profile';
+      print('🔍 Testing authenticated endpoint: $profileUrl');
+
+      final response = await http.get(
+        Uri.parse(profileUrl),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 5));
+
+      print('🔍 Auth test response status: ${response.statusCode}');
+      print('🔍 Auth test response body: ${response.body}');
+
+      if (mounted) {
+        if (response.statusCode == 200) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Authentication working correctly!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        } else if (response.statusCode == 401) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('❌ Authentication failed - token may be expired'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  '⚠️ Auth test failed with status: ${response.statusCode}'),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('❌ Authentication test failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Auth test error: $e'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 3),
           ),
@@ -325,6 +448,16 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
                     foregroundColor: Colors.white,
                   ),
                 ),
+                const SizedBox(width: 16),
+                ElevatedButton.icon(
+                  onPressed: _testAuthentication,
+                  icon: const Icon(Icons.key),
+                  label: const Text('Test Auth'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.purple,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -381,6 +514,16 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
                     label: const Text('Test API'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  ElevatedButton.icon(
+                    onPressed: _testAuthentication,
+                    icon: const Icon(Icons.key),
+                    label: const Text('Test Auth'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.purple,
                       foregroundColor: Colors.white,
                     ),
                   ),

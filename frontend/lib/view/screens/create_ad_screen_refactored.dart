@@ -12,7 +12,6 @@ import 'package:snehayog/services/cloudinary_service.dart';
 import 'package:snehayog/model/ad_model.dart';
 import 'dart:io';
 
-/// **CreateAdScreenRefactored - Modular version of the create ad screen**
 class CreateAdScreenRefactored extends StatefulWidget {
   const CreateAdScreenRefactored({super.key});
 
@@ -47,7 +46,14 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
   final List<String> _selectedLocations = [];
   final List<String> _selectedInterests = [];
   final List<String> _selectedPlatforms = [];
-  String? _appVersion;
+
+  // **NEW: Additional targeting fields**
+  String? _deviceType;
+  String? _optimizationGoal;
+  int? _frequencyCap;
+  String? _timeZone;
+  final Map<String, bool> _dayParting = {};
+  final Map<String, String> _hourParting = {};
 
   // State management
   bool _isLoading = false;
@@ -64,7 +70,13 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
     super.initState();
     _budgetController.text = '100.00';
     _targetAudienceController.text = 'all';
-    PaymentHandlerWidget.initialize();
+
+    // **FIXED: Safe PaymentHandler initialization**
+    try {
+      PaymentHandlerWidget.initialize();
+    } catch (e) {
+      // Continue without payment handler - user can still create ads
+    }
   }
 
   @override
@@ -89,6 +101,39 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
       body: FutureBuilder<Map<String, dynamic>?>(
         future: _authService.getUserData(),
         builder: (context, snapshot) {
+          // Show loading state
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Loading...'),
+                ],
+              ),
+            );
+          }
+
+          // Show error state
+          if (snapshot.hasError) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error, color: Colors.red, size: 64),
+                  const SizedBox(height: 16),
+                  Text('Error: ${snapshot.error}'),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () => setState(() {}),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            );
+          }
+
           final isSignedIn = snapshot.hasData && snapshot.data != null;
 
           if (!isSignedIn) {
@@ -203,7 +248,14 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
                   selectedLocations: _selectedLocations,
                   selectedInterests: _selectedInterests,
                   selectedPlatforms: _selectedPlatforms,
-                  appVersion: _appVersion,
+                  // **NEW: Additional targeting parameters**
+                  deviceType: _deviceType,
+                  optimizationGoal: _optimizationGoal,
+                  frequencyCap: _frequencyCap,
+                  timeZone: _timeZone,
+                  dayParting: _dayParting,
+                  hourParting: _hourParting,
+
                   onMinAgeChanged: (age) {
                     setState(() => _minAge = age);
                   },
@@ -231,8 +283,30 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
                       _selectedPlatforms.addAll(platforms);
                     });
                   },
-                  onAppVersionChanged: (version) {
-                    setState(() => _appVersion = version);
+                  // **NEW: Additional targeting callbacks**
+                  onDeviceTypeChanged: (deviceType) {
+                    setState(() => _deviceType = deviceType);
+                  },
+                  onOptimizationGoalChanged: (goal) {
+                    setState(() => _optimizationGoal = goal);
+                  },
+                  onFrequencyCapChanged: (cap) {
+                    setState(() => _frequencyCap = cap);
+                  },
+                  onTimeZoneChanged: (timeZone) {
+                    setState(() => _timeZone = timeZone);
+                  },
+                  onDayPartingChanged: (dayParting) {
+                    setState(() {
+                      _dayParting.clear();
+                      _dayParting.addAll(dayParting);
+                    });
+                  },
+                  onHourPartingChanged: (hourParting) {
+                    setState(() {
+                      _hourParting.clear();
+                      _hourParting.addAll(hourParting);
+                    });
                   },
                 ),
               ),
@@ -458,7 +532,6 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
         locations: _selectedLocations.isNotEmpty ? _selectedLocations : null,
         interests: _selectedInterests.isNotEmpty ? _selectedInterests : null,
         platforms: _selectedPlatforms.isNotEmpty ? _selectedPlatforms : null,
-        appVersion: _appVersion,
       );
 
       if (result['success']) {
@@ -585,7 +658,15 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
     _selectedLocations.clear();
     _selectedInterests.clear();
     _selectedPlatforms.clear();
-    _appVersion = null;
+
+    // **NEW: Clear additional targeting fields**
+    _deviceType = null;
+    _optimizationGoal = null;
+    _frequencyCap = null;
+    _timeZone = null;
+    _dayParting.clear();
+    _hourParting.clear();
+
     setState(() {
       _errorMessage = null;
       _successMessage = null;

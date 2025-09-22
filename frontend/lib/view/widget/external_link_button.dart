@@ -24,6 +24,8 @@ class ExternalLinkButton extends StatelessWidget {
           }
         },
         child: Container(
+          // **UPDATED: Set minimum width for longer button while keeping height same**
+          width: 270, // Fixed width for longer button
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             gradient: LinearGradient(
@@ -35,9 +37,10 @@ class ExternalLinkButton extends StatelessWidget {
               end: Alignment.bottomCenter,
             ),
           ),
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
+            // **UPDATED: Use max to fill the container width**
+            mainAxisSize: MainAxisSize.max,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Icon(Icons.open_in_new, color: Colors.white, size: 20),

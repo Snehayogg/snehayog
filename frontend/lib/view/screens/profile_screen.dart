@@ -117,18 +117,36 @@ class _ProfileScreenState extends State<ProfileScreen>
         return;
       }
 
-      // Load basic profile data only
+      // **ENHANCED: Check SharedPreferences cache first for instant loading**
+      final cachedProfileData = await _loadCachedProfileData();
+      if (cachedProfileData != null) {
+        ProfileScreenLogger.logProfileLoadSuccess(userId: widget.userId);
+        setState(() {
+          _isProfileDataLoaded = true;
+          _isLoading = false;
+        });
+
+        // Load from cache instantly, then refresh in background if needed
+        _stateManager.setUserData(cachedProfileData);
+
+        // Schedule background refresh if cache is stale
+        _scheduleBackgroundProfileRefresh();
+        return;
+      }
+
+      // Load basic profile data only if no cache available
       await _stateManager.loadUserData(widget.userId);
 
       if (_stateManager.userData != null) {
+        // **ENHANCED: Cache the loaded profile data**
+        await _cacheProfileData(_stateManager.userData!);
+
         setState(() {
           _isProfileDataLoaded = true;
           _isLoading = false;
         });
 
         ProfileScreenLogger.logProfileLoadSuccess(userId: widget.userId);
-
-        // Profile loaded successfully
       }
     } catch (e) {
       ProfileScreenLogger.logProfileLoadError(e.toString());
@@ -143,12 +161,20 @@ class _ProfileScreenState extends State<ProfileScreen>
     if (_stateManager.userData == null) return;
 
     try {
-      final currentUserId =
-          _stateManager.userData!['_id'] ?? _stateManager.userData!['id'];
+      final currentUserId = _stateManager.userData!['googleId'] ??
+          _stateManager.userData!['_id'] ??
+          _stateManager.userData!['id'];
       if (currentUserId != null) {
         ProfileScreenLogger.logVideoLoad(userId: currentUserId);
 
-        // Load videos in background
+        if (_stateManager.userVideos.isNotEmpty) {
+          ProfileScreenLogger.logVideoLoadSuccess(
+              count: _stateManager.userVideos.length);
+          setState(() {
+            _isVideosLoaded = true;
+          });
+          return;
+        }
         await _stateManager.loadUserVideos(currentUserId);
 
         setState(() {
@@ -157,12 +183,12 @@ class _ProfileScreenState extends State<ProfileScreen>
 
         ProfileScreenLogger.logVideoLoadSuccess(
             count: _stateManager.userVideos.length);
-
-        // Videos loaded successfully
       }
     } catch (e) {
       ProfileScreenLogger.logVideoLoadError(e.toString());
-      // Don't block UI for video loading errors
+      setState(() {
+        _isVideosLoaded = true;
+      });
     }
   }
 
@@ -191,26 +217,41 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       bool loadedAny = false;
-      for (final candidateId in idsToTry) {
-        try {
-          ProfileScreenLogger.logDebugInfo(
-              'Loading followers for user: $candidateId');
-          await userProvider.getUserDataWithFollowers(candidateId);
 
-          final model = userProvider.getUserData(candidateId);
-          final followersCount = model?.followersCount ??
-              (_stateManager.userData != null
-                  ? (_stateManager.userData!['followers'] ??
-                      _stateManager.userData!['followersCount'] ??
-                      0)
-                  : 0);
-          if (model != null || followersCount > 0) {
-            loadedAny = true;
-            break;
+      // **ENHANCED: Check cache first before making API calls**
+      for (final candidateId in idsToTry) {
+        final cachedUserData = userProvider.getUserData(candidateId);
+        if (cachedUserData != null) {
+          ProfileScreenLogger.logDebugInfo(
+              'Using cached followers data for user: $candidateId');
+          loadedAny = true;
+          break;
+        }
+      }
+
+      // Only make API calls if no cached data is available
+      if (!loadedAny) {
+        for (final candidateId in idsToTry) {
+          try {
+            ProfileScreenLogger.logDebugInfo(
+                'Loading followers for user: $candidateId');
+            await userProvider.getUserDataWithFollowers(candidateId);
+
+            final model = userProvider.getUserData(candidateId);
+            final followersCount = model?.followersCount ??
+                (_stateManager.userData != null
+                    ? (_stateManager.userData!['followers'] ??
+                        _stateManager.userData!['followersCount'] ??
+                        0)
+                    : 0);
+            if (model != null || followersCount > 0) {
+              loadedAny = true;
+              break;
+            }
+          } catch (e) {
+            ProfileScreenLogger.logWarning(
+                'Followers load failed for $candidateId: $e');
           }
-        } catch (e) {
-          ProfileScreenLogger.logWarning(
-              'Followers load failed for $candidateId: $e');
         }
       }
 
@@ -272,7 +313,14 @@ class _ProfileScreenState extends State<ProfileScreen>
       await prefs.remove('jwt_token');
       await prefs.remove('fallback_user');
 
+      // **ENHANCED: Clear profile cache on logout**
+      await _clearProfileCache();
+
       await _stateManager.handleLogout();
+
+      // **ENHANCED: Clear UserProvider cache**
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      userProvider.clearAllCaches();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -347,6 +395,9 @@ class _ProfileScreenState extends State<ProfileScreen>
       _error = null;
       _currentLoadStep = 0;
     });
+
+    // **ENHANCED: Clear cache when force refreshing**
+    _clearProfileCache();
 
     // Cancel existing timer and restart
     _progressiveLoadTimer?.cancel();
@@ -437,33 +488,121 @@ class _ProfileScreenState extends State<ProfileScreen>
   Future<bool> _showDeleteConfirmationDialog() async {
     return await showDialog<bool>(
           context: context,
+          barrierDismissible: false,
           builder: (BuildContext context) {
-            return AlertDialog(
-              title: const Row(
-                children: [
-                  Icon(Icons.warning, color: Colors.orange),
-                  SizedBox(width: 8),
-                  Text('Confirm Deletion'),
-                ],
-              ),
-              content: Text(
-                'Are you sure you want to delete ${_stateManager.selectedVideoIds.length} video${_stateManager.selectedVideoIds.length == 1 ? '' : 's'}? This action cannot be undone.',
-                style: const TextStyle(fontSize: 16),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancel'),
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.3),
+                      blurRadius: 20,
+                      spreadRadius: 2,
+                    ),
+                  ],
                 ),
-                ElevatedButton(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('Delete'),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Icon with animated background
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.red.withOpacity(0.3),
+                          width: 2,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.delete_forever,
+                        color: Colors.red,
+                        size: 32,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Title
+                    const Text(
+                      'Delete Videos?',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Description
+                    Text(
+                      'You are about to delete ${_stateManager.selectedVideoIds.length} video${_stateManager.selectedVideoIds.length == 1 ? '' : 's'}. This action cannot be undone.',
+                      style: const TextStyle(
+                        color: Colors.grey,
+                        fontSize: 16,
+                        height: 1.4,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Action buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () => Navigator.of(context).pop(false),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                side: BorderSide(
+                                  color: Colors.grey.withOpacity(0.3),
+                                ),
+                              ),
+                            ),
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => Navigator.of(context).pop(true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: const Text(
+                              'Delete',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              ],
+              ),
             );
           },
         ) ??
@@ -879,18 +1018,18 @@ class _ProfileScreenState extends State<ProfileScreen>
       child: Consumer<ProfileStateManager>(
         builder: (context, stateManager, child) {
           return AppBar(
-            backgroundColor: Colors.black,
-            elevation: 0,
+            backgroundColor: Colors.grey[100],
+            elevation: 1,
             title: Text(
               stateManager.userData?['name'] ?? 'Profile',
               style: const TextStyle(
-                color: Colors.white,
+                color: Colors.black87,
                 fontSize: 20,
                 fontWeight: FontWeight.w600,
               ),
             ),
             leading: IconButton(
-              icon: const Icon(Icons.menu, color: Colors.white),
+              icon: const Icon(Icons.menu, color: Colors.black87),
               tooltip: 'Menu',
               onPressed: () {
                 _scaffoldKey.currentState?.openDrawer();
@@ -905,21 +1044,27 @@ class _ProfileScreenState extends State<ProfileScreen>
   Widget _buildSideMenu() {
     return Drawer(
       child: Container(
-        color: Colors.black,
+        color: Colors.white,
         child: SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
                 padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  border: Border(
+                    bottom: BorderSide(color: Colors.grey[300]!, width: 1),
+                  ),
+                ),
                 child: const Row(
                   children: [
-                    Icon(Icons.menu, color: Colors.white),
+                    Icon(Icons.menu, color: Colors.black87),
                     SizedBox(width: 12),
                     Text(
                       'Menu',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: Colors.black87,
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                       ),
@@ -927,8 +1072,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ],
                 ),
               ),
-              const Divider(
-                  color: Color(0xFF303030), height: 1, thickness: 0.5),
               Expanded(
                 child: Consumer<ProfileStateManager>(
                   builder: (context, stateManager, child) {
@@ -940,22 +1083,22 @@ class _ProfileScreenState extends State<ProfileScreen>
                             final enabled = snapshot.data ?? false;
                             return ListTile(
                               leading: const Icon(Icons.swap_vert_circle,
-                                  color: Colors.grey),
+                                  color: Colors.black54),
                               title: const Text('Auto Scroll',
-                                  style: TextStyle(color: Colors.white)),
+                                  style: TextStyle(color: Colors.black87)),
                               subtitle: Text(
                                 enabled
                                     ? 'Auto-scroll is ON'
                                     : 'Auto-scroll is OFF',
-                                style:
-                                    const TextStyle(color: Color(0xFF9E9E9E)),
+                                style: const TextStyle(color: Colors.black54),
                               ),
                               trailing: Switch(
                                 value: enabled,
-                                activeThumbColor: Colors.white,
-                                activeTrackColor: const Color(0xFF616161),
-                                inactiveThumbColor: const Color(0xFFBDBDBD),
-                                inactiveTrackColor: const Color(0xFF303030),
+                                activeThumbColor: Colors.blue,
+                                activeTrackColor: Colors.blue.withOpacity(0.3),
+                                inactiveThumbColor: Colors.grey,
+                                inactiveTrackColor:
+                                    Colors.grey.withOpacity(0.3),
                                 onChanged: (val) async {
                                   await AutoScrollSettings.setEnabled(val);
                                   if (context.mounted) {
@@ -987,35 +1130,35 @@ class _ProfileScreenState extends State<ProfileScreen>
                             );
                           },
                         ),
-                        const Divider(
-                            color: Color(0xFF303030),
-                            height: 1,
-                            thickness: 0.5),
+                        Divider(
+                            color: Colors.grey[300], height: 1, thickness: 0.5),
                         // Edit Profile / Save / Cancel
                         if (!stateManager.isEditing) ...[
                           ListTile(
-                            leading: const Icon(Icons.edit, color: Colors.grey),
+                            leading:
+                                const Icon(Icons.edit, color: Colors.black54),
                             title: const Text('Edit Profile',
-                                style: TextStyle(color: Colors.white)),
+                                style: TextStyle(color: Colors.black87)),
                             subtitle: const Text(
                                 'Update your profile information',
-                                style: TextStyle(color: Color(0xFF9E9E9E))),
+                                style: TextStyle(color: Colors.black54)),
                             onTap: () {
                               Navigator.pop(context);
                               _handleEditProfile();
                             },
                           ),
-                          const Divider(
-                              color: Color(0xFF303030),
+                          Divider(
+                              color: Colors.grey[300],
                               height: 1,
                               thickness: 0.5),
                         ] else ...[
                           ListTile(
-                            leading: const Icon(Icons.save, color: Colors.grey),
+                            leading:
+                                const Icon(Icons.save, color: Colors.black54),
                             title: const Text('Save Changes',
-                                style: TextStyle(color: Colors.white)),
+                                style: TextStyle(color: Colors.black87)),
                             subtitle: const Text('Apply your edits',
-                                style: TextStyle(color: Color(0xFF9E9E9E))),
+                                style: TextStyle(color: Colors.black54)),
                             onTap: () {
                               Navigator.pop(context);
                               _handleSaveProfile();
@@ -1023,28 +1166,28 @@ class _ProfileScreenState extends State<ProfileScreen>
                           ),
                           ListTile(
                             leading:
-                                const Icon(Icons.close, color: Colors.grey),
+                                const Icon(Icons.close, color: Colors.black54),
                             title: const Text('Cancel Edit',
-                                style: TextStyle(color: Colors.white)),
+                                style: TextStyle(color: Colors.black87)),
                             subtitle: const Text('Discard changes',
-                                style: TextStyle(color: Color(0xFF9E9E9E))),
+                                style: TextStyle(color: Colors.black54)),
                             onTap: () {
                               Navigator.pop(context);
                               _handleCancelEdit();
                             },
                           ),
-                          const Divider(
-                              color: Color(0xFF303030),
+                          Divider(
+                              color: Colors.grey[300],
                               height: 1,
                               thickness: 0.5),
                         ],
                         ListTile(
-                          leading:
-                              const Icon(Icons.dashboard, color: Colors.grey),
+                          leading: const Icon(Icons.dashboard,
+                              color: Colors.black54),
                           title: const Text('Creator Dashboard',
-                              style: TextStyle(color: Colors.white)),
+                              style: TextStyle(color: Colors.black87)),
                           subtitle: const Text('View earnings and analytics',
-                              style: TextStyle(color: Color(0xFF9E9E9E))),
+                              style: TextStyle(color: Colors.black54)),
                           onTap: () {
                             Navigator.pop(context);
                             Navigator.push(
@@ -1056,48 +1199,43 @@ class _ProfileScreenState extends State<ProfileScreen>
                             );
                           },
                         ),
-                        const Divider(
-                            color: Color(0xFF303030),
-                            height: 1,
-                            thickness: 0.5),
+                        Divider(
+                            color: Colors.grey[300], height: 1, thickness: 0.5),
                         ListTile(
                           leading: const Icon(Icons.delete_outline,
-                              color: Colors.grey),
+                              color: Colors.black54),
                           title: const Text('Delete Videos',
-                              style: TextStyle(color: Colors.white)),
+                              style: TextStyle(color: Colors.black87)),
                           subtitle: const Text('Select and delete your videos',
-                              style: TextStyle(color: Color(0xFF9E9E9E))),
+                              style: TextStyle(color: Colors.black54)),
                           onTap: () {
                             Navigator.pop(context);
                             stateManager.enterSelectionMode();
                           },
                         ),
-                        const Divider(
-                            color: Color(0xFF303030),
-                            height: 1,
-                            thickness: 0.5),
+                        Divider(
+                            color: Colors.grey[300], height: 1, thickness: 0.5),
                         ListTile(
                           leading:
-                              const Icon(Icons.settings, color: Colors.grey),
+                              const Icon(Icons.settings, color: Colors.black54),
                           title: const Text('Settings',
-                              style: TextStyle(color: Colors.white)),
+                              style: TextStyle(color: Colors.black87)),
                           subtitle: const Text('App settings and preferences',
-                              style: TextStyle(color: Color(0xFF9E9E9E))),
+                              style: TextStyle(color: Colors.black54)),
                           onTap: () {
                             Navigator.pop(context);
                             _showSettingsBottomSheet();
                           },
                         ),
-                        const Divider(
-                            color: Color(0xFF303030),
-                            height: 1,
-                            thickness: 0.5),
+                        Divider(
+                            color: Colors.grey[300], height: 1, thickness: 0.5),
                         ListTile(
-                          leading: const Icon(Icons.logout, color: Colors.grey),
+                          leading:
+                              const Icon(Icons.logout, color: Colors.black54),
                           title: const Text('Sign Out',
-                              style: TextStyle(color: Colors.white)),
+                              style: TextStyle(color: Colors.black87)),
                           subtitle: const Text('Sign out of your account',
-                              style: TextStyle(color: Color(0xFF9E9E9E))),
+                              style: TextStyle(color: Colors.black54)),
                           onTap: () {
                             Navigator.pop(context);
                             _handleLogout();
@@ -1120,7 +1258,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     print('🔧 ProfileScreen: Opening Settings Bottom Sheet');
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -1131,27 +1269,32 @@ class _ProfileScreenState extends State<ProfileScreen>
             // Header
             Container(
               padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(20)),
+              ),
               child: Row(
                 children: [
-                  const Icon(Icons.settings, color: Colors.white, size: 24),
+                  const Icon(Icons.settings, color: Colors.black87, size: 24),
                   const SizedBox(width: 12),
                   const Text(
                     'Settings',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: Colors.black87,
                     ),
                   ),
                   const Spacer(),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close, color: Colors.grey),
+                    icon: const Icon(Icons.close, color: Colors.black54),
                   ),
                 ],
               ),
             ),
-            const Divider(color: Colors.grey, height: 1),
+            Divider(color: Colors.grey[300], height: 1),
 
             // Settings options
             Consumer<ProfileStateManager>(
@@ -1308,7 +1451,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       title: Text(
         title,
         style: const TextStyle(
-          color: Colors.white,
+          color: Colors.black87,
           fontSize: 16,
           fontWeight: FontWeight.w500,
         ),
@@ -1316,7 +1459,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       subtitle: Text(
         subtitle,
         style: const TextStyle(
-          color: Colors.grey,
+          color: Colors.black54,
           fontSize: 14,
         ),
       ),
@@ -1330,14 +1473,14 @@ class _ProfileScreenState extends State<ProfileScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.black,
+        backgroundColor: Colors.white,
         title: const Row(
           children: [
-            Icon(Icons.help_outline, color: Colors.white),
+            Icon(Icons.help_outline, color: Colors.black87),
             SizedBox(width: 12),
             Text(
               'Help & Support',
-              style: TextStyle(color: Colors.white),
+              style: TextStyle(color: Colors.black87),
             ),
           ],
         ),
@@ -1347,31 +1490,31 @@ class _ProfileScreenState extends State<ProfileScreen>
           children: [
             Text(
               'Need help? Here are some common solutions:',
-              style: TextStyle(color: Colors.grey, fontSize: 16),
+              style: TextStyle(color: Colors.black54, fontSize: 16),
             ),
             SizedBox(height: 16),
             Text(
               '• Profile Issues: Try refreshing your profile',
-              style: TextStyle(color: Colors.white, fontSize: 14),
+              style: TextStyle(color: Colors.black87, fontSize: 14),
             ),
             Text(
               '• Video Problems: Check if videos need HLS conversion',
-              style: TextStyle(color: Colors.white, fontSize: 14),
+              style: TextStyle(color: Colors.black87, fontSize: 14),
             ),
             Text(
               '• Payment Setup: Complete payment setup for earnings',
-              style: TextStyle(color: Colors.white, fontSize: 14),
+              style: TextStyle(color: Colors.black87, fontSize: 14),
             ),
             Text(
               '• Account Issues: Try signing out and back in',
-              style: TextStyle(color: Colors.white, fontSize: 14),
+              style: TextStyle(color: Colors.black87, fontSize: 14),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close', style: TextStyle(color: Colors.grey)),
+            child: const Text('Close', style: TextStyle(color: Colors.black54)),
           ),
           ElevatedButton(
             onPressed: () {
@@ -1882,16 +2025,16 @@ class _ProfileScreenState extends State<ProfileScreen>
                                       decoration: BoxDecoration(
                                         border: isSelected
                                             ? Border.all(
-                                                color: Colors.blue, width: 3)
+                                                color: Colors.red, width: 3)
                                             : null,
                                         borderRadius: BorderRadius.circular(12),
                                         // Add shadow when selected
                                         boxShadow: isSelected
                                             ? [
                                                 BoxShadow(
-                                                  color: Colors.blue
-                                                      .withOpacity(0.3),
-                                                  blurRadius: 8,
+                                                  color: Colors.red
+                                                      .withOpacity(0.4),
+                                                  blurRadius: 12,
                                                   spreadRadius: 2,
                                                 )
                                               ]
@@ -1899,7 +2042,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                       ),
                                       child: Card(
                                         color: isSelected
-                                            ? Colors.blue.withOpacity(0.05)
+                                            ? Colors.red.withOpacity(0.05)
                                             : const Color(0xFFF5F5F5),
                                         child: Column(
                                           crossAxisAlignment:
@@ -1909,7 +2052,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                               child: Stack(
                                                 children: [
                                                   Image.network(
-                                                    video.videoUrl,
+                                                    video.thumbnailUrl,
                                                     fit: BoxFit.cover,
                                                     errorBuilder: (context,
                                                         error, stackTrace) {
@@ -1927,23 +2070,46 @@ class _ProfileScreenState extends State<ProfileScreen>
                                                       );
                                                     },
                                                   ),
-                                                  // Selection overlay
+                                                  // Professional selection overlay
                                                   if (isSelected)
                                                     Positioned.fill(
                                                       child: Container(
                                                         decoration:
                                                             BoxDecoration(
-                                                          color: Colors.blue
-                                                              .withOpacity(0.3),
+                                                          color: Colors.black
+                                                              .withOpacity(0.7),
                                                           borderRadius:
                                                               BorderRadius
                                                                   .circular(12),
                                                         ),
-                                                        child: const Center(
-                                                          child: Icon(
-                                                            Icons.check_circle,
-                                                            color: Colors.white,
-                                                            size: 48,
+                                                        child: Center(
+                                                          child: Container(
+                                                            width: 56,
+                                                            height: 56,
+                                                            decoration:
+                                                                BoxDecoration(
+                                                              color: Colors.red,
+                                                              shape: BoxShape
+                                                                  .circle,
+                                                              boxShadow: [
+                                                                BoxShadow(
+                                                                  color: Colors
+                                                                      .red
+                                                                      .withOpacity(
+                                                                          0.4),
+                                                                  blurRadius:
+                                                                      12,
+                                                                  spreadRadius:
+                                                                      2,
+                                                                ),
+                                                              ],
+                                                            ),
+                                                            child: const Icon(
+                                                              Icons.check,
+                                                              color:
+                                                                  Colors.white,
+                                                              size: 28,
+                                                            ),
                                                           ),
                                                         ),
                                                       ),
@@ -2018,21 +2184,44 @@ class _ProfileScreenState extends State<ProfileScreen>
                                         ),
                                       ),
                                     ),
+                                    // Professional selection indicator in corner
                                     if (stateManager.isSelecting &&
-                                        canSelectVideo) // Use proper logic for video selection
+                                        canSelectVideo)
                                       Positioned(
                                         top: 8,
                                         right: 8,
-                                        child: Checkbox(
-                                          value: isSelected,
-                                          activeColor: Colors.blue,
-                                          checkColor: Colors.white,
-                                          side: const BorderSide(
-                                              color: Colors.blue, width: 2),
-                                          onChanged: (checked) {
+                                        child: GestureDetector(
+                                          onTap: () {
                                             stateManager
                                                 .toggleVideoSelection(video.id);
                                           },
+                                          child: AnimatedContainer(
+                                            duration: const Duration(
+                                                milliseconds: 200),
+                                            width: 28,
+                                            height: 28,
+                                            decoration: BoxDecoration(
+                                              color: isSelected
+                                                  ? Colors.red
+                                                  : Colors.black
+                                                      .withOpacity(0.6),
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                color: isSelected
+                                                    ? Colors.red
+                                                    : Colors.white
+                                                        .withOpacity(0.7),
+                                                width: 2,
+                                              ),
+                                            ),
+                                            child: isSelected
+                                                ? const Icon(
+                                                    Icons.check,
+                                                    color: Colors.white,
+                                                    size: 16,
+                                                  )
+                                                : null,
+                                          ),
                                         ),
                                       ),
                                   ],
@@ -2045,55 +2234,129 @@ class _ProfileScreenState extends State<ProfileScreen>
                     },
                   ),
 
-                  // **NEW: Delete button when videos are selected**
+                  // **PROFESSIONAL: Modern delete action bar**
                   Consumer<ProfileStateManager>(
                     builder: (context, stateManager, child) {
                       if (stateManager.isSelecting &&
                           stateManager.selectedVideoIds.isNotEmpty) {
                         return RepaintBoundary(
                           child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(16),
+                            margin: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: Colors.black,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
                             child: Column(
                               children: [
-                                const Divider(height: 1),
-                                const SizedBox(height: 16),
+                                // Selection info with icon
                                 Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Text(
-                                      '${stateManager.selectedVideoIds.length} video${stateManager.selectedVideoIds.length == 1 ? '' : 's'} selected',
-                                      style: TextStyle(
-                                        color: Colors.blue[700],
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w500,
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.withOpacity(0.1),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.video_library,
+                                        color: Colors.red,
+                                        size: 20,
                                       ),
                                     ),
-                                    Row(
-                                      children: [
-                                        TextButton(
-                                          onPressed: () {
-                                            stateManager.exitSelectionMode();
-                                          },
-                                          child: const Text('Cancel'),
-                                        ),
-                                        const SizedBox(width: 16),
-                                        ElevatedButton.icon(
-                                          onPressed:
-                                              _handleDeleteSelectedVideos,
-                                          icon: const Icon(Icons.delete,
-                                              color: Colors.white),
-                                          label: Text(
-                                              'Delete ${stateManager.selectedVideoIds.length}'),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.red,
-                                            foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 24, vertical: 12),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            '${stateManager.selectedVideoIds.length} video${stateManager.selectedVideoIds.length == 1 ? '' : 's'} selected',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          Text(
+                                            'Ready for deletion',
+                                            style: TextStyle(
+                                              color: Colors.grey[400],
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 20),
+
+                                // Action buttons
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextButton(
+                                        onPressed: () {
+                                          stateManager.exitSelectionMode();
+                                        },
+                                        style: TextButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 14),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            side: BorderSide(
+                                              color:
+                                                  Colors.grey.withOpacity(0.3),
+                                            ),
                                           ),
                                         ),
-                                      ],
+                                        child: const Text(
+                                          'Cancel',
+                                          style: TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      flex: 2,
+                                      child: ElevatedButton.icon(
+                                        onPressed: _handleDeleteSelectedVideos,
+                                        icon: const Icon(
+                                          Icons.delete_forever,
+                                          size: 20,
+                                        ),
+                                        label: Text(
+                                          'Delete ${stateManager.selectedVideoIds.length == 1 ? 'Video' : 'Videos'}',
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.red,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 14),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                          ),
+                                          elevation: 0,
+                                        ),
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -2943,5 +3206,108 @@ class _ProfileScreenState extends State<ProfileScreen>
         ],
       ),
     );
+  }
+
+  // **NEW: Enhanced caching methods for profile data**
+
+  /// Load cached profile data from SharedPreferences
+  Future<Map<String, dynamic>?> _loadCachedProfileData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = _getProfileCacheKey();
+      final cachedDataJson = prefs.getString('profile_cache_$cacheKey');
+      final cacheTimestamp = prefs.getInt('profile_cache_timestamp_$cacheKey');
+
+      if (cachedDataJson != null && cacheTimestamp != null) {
+        final cacheAge = DateTime.now().millisecondsSinceEpoch - cacheTimestamp;
+        const maxCacheAge = 30 * 60 * 1000; // 30 minutes in milliseconds
+
+        if (cacheAge < maxCacheAge) {
+          ProfileScreenLogger.logDebugInfo(
+              'Loading profile from SharedPreferences cache');
+          return Map<String, dynamic>.from(json.decode(cachedDataJson));
+        } else {
+          ProfileScreenLogger.logDebugInfo(
+              'Profile cache expired, removing stale data');
+          await _clearProfileCache();
+        }
+      }
+    } catch (e) {
+      ProfileScreenLogger.logWarning('Error loading cached profile data: $e');
+    }
+    return null;
+  }
+
+  /// Cache profile data to SharedPreferences
+  Future<void> _cacheProfileData(Map<String, dynamic> profileData) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = _getProfileCacheKey();
+
+      await prefs.setString(
+          'profile_cache_$cacheKey', json.encode(profileData));
+      await prefs.setInt('profile_cache_timestamp_$cacheKey',
+          DateTime.now().millisecondsSinceEpoch);
+
+      ProfileScreenLogger.logDebugInfo(
+          'Profile data cached to SharedPreferences');
+    } catch (e) {
+      ProfileScreenLogger.logWarning('Error caching profile data: $e');
+    }
+  }
+
+  /// Get cache key for current profile
+  String _getProfileCacheKey() {
+    if (widget.userId != null) {
+      return widget.userId!;
+    }
+    // For own profile, use a consistent key
+    return 'own_profile';
+  }
+
+  /// Clear profile cache
+  Future<void> _clearProfileCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = _getProfileCacheKey();
+
+      await prefs.remove('profile_cache_$cacheKey');
+      await prefs.remove('profile_cache_timestamp_$cacheKey');
+
+      ProfileScreenLogger.logDebugInfo('Profile cache cleared');
+    } catch (e) {
+      ProfileScreenLogger.logWarning('Error clearing profile cache: $e');
+    }
+  }
+
+  /// Schedule background refresh if cache is getting stale
+  void _scheduleBackgroundProfileRefresh() {
+    // Only refresh if cache is older than 15 minutes
+    Timer(const Duration(seconds: 5), () async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final cacheKey = _getProfileCacheKey();
+        final cacheTimestamp =
+            prefs.getInt('profile_cache_timestamp_$cacheKey');
+
+        if (cacheTimestamp != null) {
+          final cacheAge =
+              DateTime.now().millisecondsSinceEpoch - cacheTimestamp;
+          const staleThreshold = 15 * 60 * 1000; // 15 minutes in milliseconds
+
+          if (cacheAge > staleThreshold) {
+            ProfileScreenLogger.logDebugInfo(
+                'Background refreshing stale profile data');
+            await _stateManager.loadUserData(widget.userId);
+
+            if (_stateManager.userData != null) {
+              await _cacheProfileData(_stateManager.userData!);
+            }
+          }
+        }
+      } catch (e) {
+        ProfileScreenLogger.logWarning('Background profile refresh failed: $e');
+      }
+    });
   }
 }

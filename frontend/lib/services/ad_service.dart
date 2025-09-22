@@ -101,14 +101,12 @@ class AdService {
     required List<String> targetKeywords,
     DateTime? startDate,
     DateTime? endDate,
-    // **NEW: Advanced targeting parameters**
     int? minAge,
     int? maxAge,
     String? gender,
     List<String>? locations,
     List<String>? interests,
     List<String>? platforms,
-    String? appVersion,
   }) async {
     try {
       final userData = await _authService.getUserData();
@@ -116,13 +114,11 @@ class AdService {
         throw Exception('User not authenticated');
       }
 
-      // Calculate impressions based on ad type CPM
       final cpm = adType == 'banner' ? AppConfig.bannerCpm : AppConfig.fixedCpm;
       final impressions = AppConfig.calculateImpressionsFromBudgetWithCpm(
         budget,
         cpm,
       );
-      // final revenueSplit = _razorpayService.calculateRevenueSplit(budget);  // Temporarily commented
 
       print('🔍 AdService: Creating ad with payment...');
       print(
@@ -178,35 +174,15 @@ class AdService {
           gender != null ||
           locations != null ||
           interests != null ||
-          platforms != null ||
-          appVersion != null) {
+          platforms != null) {
         requestData['target'] = {
           if (minAge != null) 'age': {'min': minAge, 'max': maxAge ?? 65},
           if (gender != null) 'gender': gender,
           if (locations != null && locations.isNotEmpty) 'locations': locations,
           if (interests != null && interests.isNotEmpty) 'interests': interests,
           if (platforms != null && platforms.isNotEmpty) 'platforms': platforms,
-          if (appVersion != null) 'appVersion': appVersion,
         };
       }
-
-      print('🔍 AdService: Request data being sent:');
-      print('   Title: $title');
-      print('   Description: $description');
-      print('   Image URL: $imageUrl');
-      print('   Video URL: $videoUrl');
-      print('   Link: $link');
-      print('   Ad Type: $adType');
-      print('   Budget: $budget');
-      print('   Target Audience: $targetAudience');
-      print('   Target Keywords: $targetKeywords');
-      print('   Start Date: ${startDate?.toIso8601String()}');
-      print('   End Date: ${endDate?.toIso8601String()}');
-      print('   Uploader ID: ${userData['googleId'] ?? userData['id']}');
-      print('   Uploader Name: ${userData['name']}');
-      print('   Uploader Profile Pic: ${userData['profilePic']}');
-      print('   Estimated Impressions: $impressions');
-      print('   Fixed CPM: $cpm');
 
       final response = await http.post(
         Uri.parse('$baseUrl/api/ads/create-with-payment'),
@@ -478,18 +454,33 @@ class AdService {
   // Delete ad
   Future<bool> deleteAd(String adId) async {
     try {
+      print('🗑️ AdService: Starting delete for ad ID: $adId');
+
       final userData = await _authService.getUserData();
       if (userData == null) {
         throw Exception('User not authenticated');
       }
+
+      print('🔍 AdService: User authenticated, making delete request...');
+      print('🔍 AdService: Delete URL: $baseUrl/api/ads/$adId');
 
       final response = await http.delete(
         Uri.parse('$baseUrl/api/ads/$adId'),
         headers: {'Authorization': 'Bearer ${userData['token']}'},
       );
 
-      return response.statusCode == 200 || response.statusCode == 204;
+      print('🔍 AdService: Delete response status: ${response.statusCode}');
+      print('🔍 AdService: Delete response body: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        print('✅ AdService: Ad deleted successfully');
+        return true;
+      } else {
+        print('❌ AdService: Delete failed with status ${response.statusCode}');
+        throw Exception('Delete failed: ${response.body}');
+      }
     } catch (e) {
+      print('❌ AdService: Delete error: $e');
       throw Exception('Error deleting ad: $e');
     }
   }

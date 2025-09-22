@@ -6,6 +6,7 @@ import 'package:snehayog/services/video_service.dart';
 import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/view/screens/create_ad_screen_refactored.dart';
 import 'package:snehayog/view/screens/ad_management_screen.dart';
+import 'package:snehayog/core/constants/interests.dart';
 
 class UploadScreen extends StatefulWidget {
   final VoidCallback? onVideoUploaded; // Add callback for video upload success
@@ -29,13 +30,147 @@ class _UploadScreenState extends State<UploadScreen> {
   String _uploadStatus = '';
 
   final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _linkController = TextEditingController();
   final VideoService _videoService = VideoService();
   final AuthService _authService = AuthService();
 
   // Timer for upload progress
   Timer? _uploadTimer;
+
+  // NEW: Category and Tags to align with ad targeting interests
+  String? _selectedCategory;
+  final List<String> _tags = [];
+  final TextEditingController _tagInputController = TextEditingController();
+
+  // Professional helper to render a notice bullet point
+  Widget _buildNoticePoint({required String title, required String body}) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            body,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.shade800,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Show Terms & Conditions (What to Upload?) in a professional bottom sheet
+  void _showWhatToUploadDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.85,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          builder: (context, scrollController) => Padding(
+            padding: const EdgeInsets.all(16),
+            child: SingleChildScrollView(
+              controller: scrollController,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade100,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.gavel, color: Colors.red.shade700),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'What to Upload? \nSnehayog Terms & Conditions (Copyright Policy)',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      )
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _buildNoticePoint(
+                    title: '1. User Responsibility',
+                    body:
+                        'By uploading, you confirm you are the original creator or have legal rights/permission to use this content. Do not upload media that infringes on others\' copyright, trademark, or intellectual property.',
+                  ),
+                  _buildNoticePoint(
+                    title: '2. Copyright Infringement',
+                    body:
+                        'If you upload content belonging to someone else without permission, you (the uploader) will be fully responsible for any legal consequences. Snehayog acts only as a platform and does not own or endorse user-uploaded content.',
+                  ),
+                  _buildNoticePoint(
+                    title: '3. Reporting Copyright Violation',
+                    body:
+                        'Copyright owners may submit a takedown request by emailing: copyright@snehayog.com with proof of ownership. Upon receiving a valid request, Snehayog will remove the infringing content within 48 hours.',
+                  ),
+                  _buildNoticePoint(
+                    title: '4. Payment & Revenue Sharing',
+                    body:
+                        'All creator payments are subject to a 30-day hold for copyright checks and disputes. If a video is found infringing during this period, the payout will be cancelled and may be withheld.',
+                  ),
+                  _buildNoticePoint(
+                    title: '5. Strike Policy',
+                    body:
+                        '1st Strike → Warning & content removal.  2nd Strike → Payment account on hold for 60 days.  3rd Strike → Permanent ban, with forfeiture of unpaid earnings.',
+                  ),
+                  _buildNoticePoint(
+                    title: '6. Limitation of Liability',
+                    body:
+                        'Snehayog, as an intermediary platform, is not liable for user-uploaded content under the IT Act 2000 (India) and DMCA (international). All responsibility for copyright compliance lies with the content uploader.',
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.check_circle_outline),
+                      label: const Text('I Understand'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        backgroundColor: Colors.red.shade600,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  )
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   @override
   void initState() {
@@ -82,7 +217,8 @@ class _UploadScreenState extends State<UploadScreen> {
 
         print('✅ Video selected: ${videoFile.path}');
         print(
-            '📏 File size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
+          '📏 File size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB',
+        );
       }
     } catch (e) {
       setState(() {
@@ -141,14 +277,25 @@ class _UploadScreenState extends State<UploadScreen> {
       _errorMessage = null;
     });
 
+    // Validate category selection before uploading
+    if (_selectedCategory == null || _selectedCategory!.isEmpty) {
+      setState(() {
+        _isUploading = false;
+        _errorMessage = 'Please select a video category';
+      });
+      return;
+    }
+
     try {
       print('🚀 Starting HLS video upload...');
       print('📁 Video path: ${_selectedVideo!.path}');
       print('📝 Title: ${_titleController.text}');
       print(
-          '🔗 Link: ${_linkController.text.isNotEmpty ? _linkController.text : 'None'}');
+        '🔗 Link: ${_linkController.text.isNotEmpty ? _linkController.text : 'None'}',
+      );
       print(
-          '🎬 Note: Video will be converted to HLS (.m3u8) format for optimal streaming');
+        '🎬 Note: Video will be converted to HLS (.m3u8) format for optimal streaming',
+      );
 
       // Start upload progress tracking
       _startUploadProgress();
@@ -161,7 +308,8 @@ class _UploadScreenState extends State<UploadScreen> {
       // Check file size
       final fileSize = await _selectedVideo!.length();
       print(
-          'File size: $fileSize bytes (${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB)');
+        'File size: $fileSize bytes (${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB)',
+      );
       if (fileSize > 100 * 1024 * 1024) {
         // 100MB limit
         throw Exception('Video file is too large. Maximum size is 100MB');
@@ -174,24 +322,31 @@ class _UploadScreenState extends State<UploadScreen> {
 
       if (!allowedExtensions.contains(fileExtension)) {
         throw Exception(
-            'Invalid video format. Supported formats: ${allowedExtensions.join(', ').toUpperCase()}');
+          'Invalid video format. Supported formats: ${allowedExtensions.join(', ').toUpperCase()}',
+        );
       }
 
-      final uploadedVideo = await _videoService
-          .uploadVideo(
-        _selectedVideo!,
-        _titleController.text,
-        _descriptionController.text.isNotEmpty
-            ? _descriptionController.text
-            : null, // Add description
-        _linkController.text.isNotEmpty ? _linkController.text : null,
-      )
-          .timeout(
+      final uploadedVideo = await runZoned(
+        () => _videoService.uploadVideo(
+          _selectedVideo!,
+          _titleController.text,
+          null,
+          _linkController.text.isNotEmpty ? _linkController.text : null,
+        ),
+        zoneValues: {
+          'upload_metadata': {
+            'category': _selectedCategory,
+            'tags': _tags,
+          }
+        },
+      ).timeout(
         const Duration(
-            minutes: 10), // Increased timeout for large video uploads
+          minutes: 10,
+        ), // Increased timeout for large video uploads
         onTimeout: () {
           throw TimeoutException(
-              'Upload timed out. Please check your internet connection and try again.');
+            'Upload timed out. Please check your internet connection and try again.',
+          );
         },
       );
 
@@ -201,37 +356,29 @@ class _UploadScreenState extends State<UploadScreen> {
       print('🖼️ Thumbnail URL: ${uploadedVideo['thumbnail']}');
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Video uploaded successfully! Converting to HLS format...',
-                    style: TextStyle(fontWeight: FontWeight.w500),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 4),
-          ),
-        );
+        // Call the callback to refresh video list first
+        print('🔄 UploadScreen: Calling onVideoUploaded callback');
+        if (widget.onVideoUploaded != null) {
+          widget.onVideoUploaded!();
+          print('✅ UploadScreen: onVideoUploaded callback called successfully');
+        } else {
+          print('❌ UploadScreen: onVideoUploaded callback is null');
+        }
 
-        // Call the callback to refresh video list
-        widget.onVideoUploaded?.call();
-
+        // Clear form
         setState(() {
           _selectedVideo = null;
           _titleController.clear();
-          _descriptionController.clear(); // Clear description controller
           _linkController.clear();
+          _selectedCategory = null;
+          _tags.clear();
         });
 
         // Stop progress tracking
         _stopUploadProgress();
+
+        // Show beautiful success dialog
+        await _showSuccessDialog();
       }
     } on TimeoutException catch (e) {
       print('Upload timeout error: $e');
@@ -258,9 +405,9 @@ class _UploadScreenState extends State<UploadScreen> {
       } else if (e.toString().contains('Server is not responding')) {
         userFriendlyError =
             'Server is not responding. Please check your connection and try again.';
-      } else if (e
-          .toString()
-          .contains('Failed to upload video to cloud service')) {
+      } else if (e.toString().contains(
+            'Failed to upload video to cloud service',
+          )) {
         userFriendlyError =
             'Video upload service is temporarily unavailable. Please try again later.';
       } else if (e.toString().contains('File too large')) {
@@ -365,6 +512,160 @@ class _UploadScreenState extends State<UploadScreen> {
     _uploadStatus = '';
   }
 
+  /// **Show beautiful success dialog**
+  Future<void> _showSuccessDialog() async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 20,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Success animation icon
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check_circle,
+                    color: Colors.green,
+                    size: 50,
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Success title
+                const Text(
+                  'Upload Successful! 🎉',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+
+                // Success message
+                const Text(
+                  'Your video has been uploaded successfully and is now being processed. It will appear in your feed shortly!',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.black54,
+                    height: 1.4,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+
+                // Processing info
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline,
+                          color: Colors.blue, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Converting to HLS format for better playback...',
+                          style: TextStyle(
+                            color: Colors.blue.shade700,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Action buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                        },
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(
+                              color: Colors.grey.withOpacity(0.3),
+                            ),
+                          ),
+                        ),
+                        child: const Text(
+                          'Upload Another',
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          // The callback already handles navigation to video tab
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          'View in Feed',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   /// Format time in MM:SS format
   String _formatTime(int seconds) {
     final minutes = seconds ~/ 60;
@@ -406,9 +707,9 @@ class _UploadScreenState extends State<UploadScreen> {
   @override
   void dispose() {
     _titleController.dispose();
-    _descriptionController.dispose(); // Dispose description controller
     _linkController.dispose();
     _stopUploadProgress();
+    _tagInputController.dispose();
     super.dispose();
   }
 
@@ -454,8 +755,10 @@ class _UploadScreenState extends State<UploadScreen> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.warning_amber_rounded,
-                              color: Colors.orange),
+                          const Icon(
+                            Icons.warning_amber_rounded,
+                            color: Colors.orange,
+                          ),
                           const SizedBox(width: 8),
                           const Expanded(
                             child: Text(
@@ -475,13 +778,12 @@ class _UploadScreenState extends State<UploadScreen> {
 
                   const SizedBox(height: 32),
 
+                  // T&C card moved into a modal; show entry point above in AppBar
+
                   // Main Options Section
                   const Text(
                     'Choose what you want to create',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),
 
@@ -622,8 +924,10 @@ class _UploadScreenState extends State<UploadScreen> {
                           children: [
                             Row(
                               children: [
-                                const Icon(Icons.video_library,
-                                    color: Colors.blue),
+                                const Icon(
+                                  Icons.video_library,
+                                  color: Colors.blue,
+                                ),
                                 const SizedBox(width: 8),
                                 const Text(
                                   'Upload Video',
@@ -723,15 +1027,91 @@ class _UploadScreenState extends State<UploadScreen> {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            // Description field removed - not needed for the app
-                            const SizedBox(height: 16),
-                            TextField(
-                              controller: _descriptionController,
+                            // NEW: Category selector
+                            DropdownButtonFormField<String>(
+                              initialValue: _selectedCategory,
                               decoration: const InputDecoration(
-                                labelText: 'Description (optional)',
-                                hintText: 'Add a description for your video',
+                                labelText: 'Video Category',
                                 border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.category),
+                                helperText:
+                                    'Choose a category to improve ad targeting',
                               ),
+                              items: kInterestOptions
+                                  .where((c) => c != 'Custom Interest')
+                                  .map((c) => DropdownMenuItem<String>(
+                                        value: c,
+                                        child: Text(c),
+                                      ))
+                                  .toList(),
+                              onChanged: (val) {
+                                setState(() => _selectedCategory = val);
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            // Description removed per request
+                            // NEW: Tags input
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Tags (optional)',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller: _tagInputController,
+                                  decoration: InputDecoration(
+                                    hintText: 'Type a tag and press Add',
+                                    border: const OutlineInputBorder(),
+                                    prefixIcon: const Icon(Icons.tag),
+                                    suffixIcon: IconButton(
+                                      icon: const Icon(Icons.add),
+                                      onPressed: () {
+                                        final text =
+                                            _tagInputController.text.trim();
+                                        if (text.isNotEmpty &&
+                                            !_tags.contains(text)) {
+                                          setState(() {
+                                            _tags.add(text);
+                                            _tagInputController.clear();
+                                          });
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                  onSubmitted: (_) {
+                                    final text =
+                                        _tagInputController.text.trim();
+                                    if (text.isNotEmpty &&
+                                        !_tags.contains(text)) {
+                                      setState(() {
+                                        _tags.add(text);
+                                        _tagInputController.clear();
+                                      });
+                                    }
+                                  },
+                                ),
+                                const SizedBox(height: 8),
+                                if (_tags.isNotEmpty)
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: _tags
+                                        .map((t) => Chip(
+                                              label: Text(t),
+                                              onDeleted: () {
+                                                setState(() {
+                                                  _tags.remove(t);
+                                                });
+                                              },
+                                            ))
+                                        .toList(),
+                                  ),
+                              ],
                             ),
                             const SizedBox(height: 16),
                             TextField(
@@ -743,6 +1123,23 @@ class _UploadScreenState extends State<UploadScreen> {
                               ),
                               keyboardType: TextInputType.url,
                             ),
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: _showWhatToUploadDialog,
+                                icon: const Icon(Icons.help_outline),
+                                label: const Text('What to Upload?'),
+                                style: OutlinedButton.styleFrom(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 14),
+                                  side: BorderSide(
+                                    color: Colors.blue.shade300,
+                                  ),
+                                  foregroundColor: Colors.blue.shade700,
+                                ),
+                              ),
+                            ),
                             const SizedBox(height: 24),
 
                             // Upload Progress Indicator
@@ -753,15 +1150,18 @@ class _UploadScreenState extends State<UploadScreen> {
                                   color: Colors.blue.withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
-                                      color: Colors.blue.withOpacity(0.3)),
+                                    color: Colors.blue.withOpacity(0.3),
+                                  ),
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Row(
                                       children: [
-                                        Icon(Icons.upload_file,
-                                            color: Colors.blue[600]),
+                                        Icon(
+                                          Icons.upload_file,
+                                          color: Colors.blue[600],
+                                        ),
                                         const SizedBox(width: 8),
                                         Expanded(
                                           child: Text(
@@ -783,14 +1183,17 @@ class _UploadScreenState extends State<UploadScreen> {
                                         padding: const EdgeInsets.all(8),
                                         decoration: BoxDecoration(
                                           color: Colors.blue.withOpacity(0.05),
-                                          borderRadius:
-                                              BorderRadius.circular(4),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
                                         ),
                                         child: Row(
                                           children: [
-                                            Icon(Icons.info_outline,
-                                                size: 16,
-                                                color: Colors.blue[600]),
+                                            Icon(
+                                              Icons.info_outline,
+                                              size: 16,
+                                              color: Colors.blue[600],
+                                            ),
                                             const SizedBox(width: 8),
                                             Expanded(
                                               child: Text(
@@ -810,11 +1213,13 @@ class _UploadScreenState extends State<UploadScreen> {
                                     // Progress Bar
                                     LinearProgressIndicator(
                                       value: _uploadProgress,
-                                      backgroundColor:
-                                          Colors.blue.withOpacity(0.2),
+                                      backgroundColor: Colors.blue.withOpacity(
+                                        0.2,
+                                      ),
                                       valueColor:
                                           const AlwaysStoppedAnimation<Color>(
-                                              Colors.blue),
+                                        Colors.blue,
+                                      ),
                                     ),
 
                                     const SizedBox(height: 8),
@@ -877,7 +1282,8 @@ class _UploadScreenState extends State<UploadScreen> {
                                     label: const Text('Select Video'),
                                     style: ElevatedButton.styleFrom(
                                       padding: const EdgeInsets.symmetric(
-                                          vertical: 16),
+                                        vertical: 16,
+                                      ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(8),
                                       ),
@@ -897,18 +1303,22 @@ class _UploadScreenState extends State<UploadScreen> {
                                               strokeWidth: 2,
                                               valueColor:
                                                   AlwaysStoppedAnimation<Color>(
-                                                      Colors.white),
+                                                Colors.white,
+                                              ),
                                             ),
                                           )
                                         : const Icon(Icons.cloud_upload),
-                                    label: Text(_isUploading
-                                        ? 'Uploading...'
-                                        : 'Upload Video'),
+                                    label: Text(
+                                      _isUploading
+                                          ? 'Uploading...'
+                                          : 'Upload Video',
+                                    ),
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.blue,
                                       foregroundColor: Colors.white,
                                       padding: const EdgeInsets.symmetric(
-                                          vertical: 16),
+                                        vertical: 16,
+                                      ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(8),
                                       ),
@@ -925,6 +1335,7 @@ class _UploadScreenState extends State<UploadScreen> {
               ),
             ),
           ),
+          bottomNavigationBar: null,
         );
       },
     );

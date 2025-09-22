@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:snehayog/model/video_model.dart';
 import 'package:snehayog/view/screens/video_feed_advanced.dart';
 
-class VideoScreen extends StatelessWidget {
+class VideoScreen extends StatefulWidget {
   final int? initialIndex;
   final List<VideoModel>? initialVideos;
   final String? initialVideoId;
@@ -15,11 +15,33 @@ class VideoScreen extends StatelessWidget {
   }) : super(key: key);
 
   @override
+  State<VideoScreen> createState() => _VideoScreenState();
+}
+
+class _VideoScreenState extends State<VideoScreen> {
+  final GlobalKey _videoFeedKey = GlobalKey();
+
+  /// **PUBLIC: Refresh video list after upload**
+  Future<void> refreshVideos() async {
+    print('🔄 VideoScreen: refreshVideos() called');
+    final videoFeedState = _videoFeedKey.currentState;
+    if (videoFeedState != null) {
+      // Cast to dynamic to access the refreshVideos method
+      await (videoFeedState as dynamic).refreshVideos();
+      print('✅ VideoScreen: Video refresh completed');
+    } else {
+      print('❌ VideoScreen: VideoFeedAdvanced state not found');
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return VideoFeedAdvanced(
-      initialIndex: initialIndex,
-      initialVideos: initialVideos,
-      initialVideoId: initialVideoId,
+      key: _videoFeedKey,
+      initialIndex: widget.initialIndex,
+      initialVideos: widget.initialVideos,
+      initialVideoId: widget.initialVideoId,
+      videoType: 'yog', // **FIX: Pass yog videoType for filtering**
     );
   }
 }

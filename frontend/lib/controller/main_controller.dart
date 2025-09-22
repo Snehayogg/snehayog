@@ -10,6 +10,18 @@ class MainController extends ChangeNotifier {
   VoidCallback? _pauseVideosCallback;
   VoidCallback? _resumeVideosCallback;
 
+  /// **NEW: Register video pause callback from VideoFeedAdvanced**
+  void registerVideoPauseCallback(VoidCallback callback) {
+    _pauseVideosCallback = callback;
+    print('📱 MainController: Video pause callback registered');
+  }
+
+  /// **NEW: Register video resume callback from VideoFeedAdvanced**
+  void registerVideoResumeCallback(VoidCallback callback) {
+    _resumeVideosCallback = callback;
+    print('📱 MainController: Video resume callback registered');
+  }
+
   int get currentIndex => _currentIndex;
   String get currentRoute => _routes[_currentIndex];
   bool get isAppInForeground => _isAppInForeground;
@@ -19,6 +31,8 @@ class MainController extends ChangeNotifier {
     if (_currentIndex == index) return; // No change needed
 
     print('🔄 MainController: Changing index from $_currentIndex to $index');
+    print(
+        '🔄 MainController: Callbacks registered - pause: ${_pauseVideosCallback != null}, resume: ${_resumeVideosCallback != null}');
 
     _handleIndexChangeFallback(index);
 
@@ -37,9 +51,12 @@ class MainController extends ChangeNotifier {
     if (_currentIndex == 0) {
       print(
           '⏸️ MainController: LEAVING VIDEO TAB - pausing videos immediately (fallback)');
+      print(
+          '⏸️ MainController: About to call pause callback - callback exists: ${_pauseVideosCallback != null}');
 
       // IMMEDIATE video pause
       _pauseVideosCallback?.call();
+      print('⏸️ MainController: Pause callback called!');
 
       // Multiple safety delays to ensure videos are paused
       Future.delayed(const Duration(milliseconds: 50), () {

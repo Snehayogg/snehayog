@@ -47,6 +47,9 @@ dependencies:
   flutter_screenutil: ^5.9.3 
   image_picker: ^1.0.4
   video_compress: ^3.1.4
+  # **NEW: Image processing and cropping**
+  image: ^4.1.7
+  crop_your_image: ^1.1.0
   url_launcher: ^6.2.5
   wakelock_plus: ^1.3.2
   # Video player dependencies - keep only essential ones

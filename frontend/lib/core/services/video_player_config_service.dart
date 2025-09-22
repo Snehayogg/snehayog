@@ -4,37 +4,21 @@ import 'package:flutter/material.dart';
 class VideoPlayerConfigService {
   static const String _tag = 'VideoPlayerConfigService';
 
-  // Quality presets for different use cases
+  // Standardized 480p quality preset for all videos
   static const Map<String, VideoQualityPreset> _qualityPresets = {
-    'reels_feed': VideoQualityPreset(
-      name: 'Reels Feed',
-      targetResolution: '720p',
-      maxBitrate: 2000000, // 2 Mbps
-      bufferSize: 10, // seconds
+    'standard_480p': VideoQualityPreset(
+      name: 'Standard 480p',
+      targetResolution: '480p',
+      maxBitrate: 800000, // 800 Kbps
+      bufferSize: 8, // seconds
       preloadDistance: 2, // videos
       compressionLevel: 0.8, // 80% quality
     ),
-    'high_quality': VideoQualityPreset(
-      name: 'High Quality',
-      targetResolution: '1080p',
-      maxBitrate: 5000000, // 5 Mbps
-      bufferSize: 15, // seconds
-      preloadDistance: 1, // videos
-      compressionLevel: 1.0, // 100% quality
-    ),
-    'data_saver': VideoQualityPreset(
-      name: 'Data Saver',
-      targetResolution: '480p',
-      maxBitrate: 800000, // 800 Kbps
-      bufferSize: 5, // seconds
-      preloadDistance: 1, // videos
-      compressionLevel: 0.6, // 60% quality
-    ),
   };
 
-  /// Get quality preset for specific use case
+  /// Get quality preset (always returns 480p standard)
   static VideoQualityPreset getQualityPreset(String useCase) {
-    return _qualityPresets[useCase] ?? _qualityPresets['reels_feed']!;
+    return _qualityPresets['standard_480p']!;
   }
 
   /// Get optimized video URL for specific quality preset
@@ -71,20 +55,8 @@ class VideoPlayerConfigService {
       // Base HLS transformation
       String transformation = 'f_hls,q_auto,fl_sanitize';
 
-      // Add quality-specific parameters
-      switch (preset.targetResolution) {
-        case '720p':
-          transformation += ',w_1280,h_720';
-          break;
-        case '1080p':
-          transformation += ',w_1920,h_1080';
-          break;
-        case '480p':
-          transformation += ',w_854,h_480';
-          break;
-        default:
-          transformation += ',w_1280,h_720'; // Default to 720p
-      }
+      // Always use 480p resolution
+      transformation += ',w_854,h_480';
 
       // Add bitrate optimization
       transformation += ',br_${(preset.maxBitrate / 1000).round()}k';
@@ -167,16 +139,10 @@ class VideoPlayerConfigService {
     }
   }
 
-  /// Get recommended quality preset based on device capabilities
+  /// Get recommended quality preset (always returns 480p standard)
   static VideoQualityPreset getRecommendedQualityPreset(BuildContext context) {
-    // Check device capabilities and network conditions
-    if (isQualitySupported(_qualityPresets['reels_feed']!, context)) {
-      return _qualityPresets['reels_feed']!;
-    } else if (isQualitySupported(_qualityPresets['data_saver']!, context)) {
-      return _qualityPresets['data_saver']!;
-    }
-
-    return _qualityPresets['data_saver']!;
+    // Always return 480p standard quality
+    return _qualityPresets['standard_480p']!;
   }
 }
 

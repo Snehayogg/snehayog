@@ -21,13 +21,9 @@ class VideoModel {
   final List<Map<String, dynamic>>? hlsVariants;
   final bool? isHLSEncoded;
 
-  // **NEW: Quality URLs for adaptive streaming**
-  final String? lowQualityUrl; // 480p for slow networks
-  final String? mediumQualityUrl; // 720p for medium networks
-  final String? highQualityUrl; // 1080p for fast networks
-
-  // **NEW: Preload quality URL (lowest quality for fast preloading)**
-  final String? preloadQualityUrl; // 360p or lower for instant preloading
+  // **SIMPLIFIED: Since all videos are 480p, we only need one quality URL**
+  // Keeping lowQualityUrl for backward compatibility (will contain 480p URL)
+  final String? lowQualityUrl; // 480p - the only quality we use
 
   VideoModel({
     required this.id,
@@ -37,7 +33,7 @@ class VideoModel {
     required this.likes,
     required this.views,
     required this.shares,
-    this.description, // Optional description field
+    this.description,
     required this.uploader,
     required this.uploadedAt,
     required this.likedBy,
@@ -50,10 +46,7 @@ class VideoModel {
     this.hlsPlaylistUrl,
     this.hlsVariants,
     this.isHLSEncoded,
-    this.lowQualityUrl,
-    this.mediumQualityUrl,
-    this.highQualityUrl,
-    this.preloadQualityUrl,
+    this.lowQualityUrl, // 480p URL for all videos
   }) : comments = comments; // **FIXED: Initialize the field**
 
   factory VideoModel.fromJson(Map<String, dynamic> json) {
@@ -248,10 +241,7 @@ class VideoModel {
           }
         }(),
         isHLSEncoded: json['isHLSEncoded'] == true,
-        lowQualityUrl: json['lowQualityUrl']?.toString(),
-        mediumQualityUrl: json['mediumQualityUrl']?.toString(),
-        highQualityUrl: json['highQualityUrl']?.toString(),
-        preloadQualityUrl: json['preloadQualityUrl']?.toString(),
+        lowQualityUrl: json['lowQualityUrl']?.toString(), // 480p URL
       );
     } catch (e, stackTrace) {
       print('❌ VideoModel.fromJson Error: $e');
@@ -287,10 +277,7 @@ class VideoModel {
       'hlsPlaylistUrl': hlsPlaylistUrl,
       'hlsVariants': hlsVariants,
       'isHLSEncoded': isHLSEncoded,
-      'lowQualityUrl': lowQualityUrl,
-      'mediumQualityUrl': mediumQualityUrl,
-      'highQualityUrl': highQualityUrl,
-      'preloadQualityUrl': preloadQualityUrl,
+      'lowQualityUrl': lowQualityUrl, // 480p URL
     };
   }
 
@@ -316,10 +303,7 @@ class VideoModel {
     String? hlsPlaylistUrl,
     List<Map<String, dynamic>>? hlsVariants,
     bool? isHLSEncoded,
-    String? lowQualityUrl,
-    String? mediumQualityUrl,
-    String? highQualityUrl,
-    String? preloadQualityUrl,
+    String? lowQualityUrl, // 480p URL
   }) {
     return VideoModel(
       id: id ?? this.id,
@@ -344,10 +328,7 @@ class VideoModel {
       hlsPlaylistUrl: hlsPlaylistUrl ?? this.hlsPlaylistUrl,
       hlsVariants: hlsVariants ?? this.hlsVariants,
       isHLSEncoded: isHLSEncoded ?? this.isHLSEncoded,
-      lowQualityUrl: lowQualityUrl ?? this.lowQualityUrl,
-      mediumQualityUrl: mediumQualityUrl ?? this.mediumQualityUrl,
-      highQualityUrl: highQualityUrl ?? this.highQualityUrl,
-      preloadQualityUrl: preloadQualityUrl ?? this.preloadQualityUrl,
+      lowQualityUrl: lowQualityUrl ?? this.lowQualityUrl, // 480p URL
     );
   }
 
@@ -371,47 +352,10 @@ class VideoModel {
     );
   }
 
-  /// **NEW: Get optimal quality URL based on network speed**
-  String getOptimalQualityUrl(double networkSpeedMbps) {
-    // **NEW: Use preload quality for fastest loading if available**
-    if (preloadQualityUrl != null && preloadQualityUrl!.isNotEmpty) {
-      return preloadQualityUrl!;
-    }
-
-    // **NEW: Select quality based on network speed**
-    if (networkSpeedMbps > 10) {
-      // 10+ Mbps
-      return highQualityUrl ?? videoUrl; // 1080p or fallback
-    } else if (networkSpeedMbps > 5) {
-      // 5+ Mbps
-      return mediumQualityUrl ?? videoUrl; // 720p or fallback
-    } else {
-      return lowQualityUrl ?? videoUrl; // 480p or fallback
-    }
-  }
-
-  /// **NEW: Get preload quality URL for fast loading**
-  String getPreloadQualityUrl() {
-    // **NEW: Prioritize preload quality for instant access**
-    if (preloadQualityUrl != null && preloadQualityUrl!.isNotEmpty) {
-      return preloadQualityUrl!;
-    }
-
-    // **NEW: Fallback to lowest available quality for fast preloading**
-    if (lowQualityUrl != null && lowQualityUrl!.isNotEmpty) {
-      return lowQualityUrl!;
-    }
-
-    // **NEW: If no quality URLs, use original but with range request for first 1MB**
-    return videoUrl;
-  }
-
-  /// **NEW: Check if video has multiple quality options**
-  bool get hasMultipleQualities {
-    return (lowQualityUrl != null && lowQualityUrl!.isNotEmpty) ||
-        (mediumQualityUrl != null && mediumQualityUrl!.isNotEmpty) ||
-        (highQualityUrl != null && highQualityUrl!.isNotEmpty) ||
-        (preloadQualityUrl != null && preloadQualityUrl!.isNotEmpty);
+  /// Get 480p quality URL (standardized for all videos)
+  String get480pUrl() {
+    // Always use 480p quality for consistent streaming
+    return lowQualityUrl ?? videoUrl;
   }
 }
 

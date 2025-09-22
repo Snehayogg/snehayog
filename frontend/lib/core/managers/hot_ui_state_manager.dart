@@ -122,6 +122,7 @@ class HotUIStateManager {
         if (controller.value.isInitialized && !controller.value.hasError) {
           // **WhatsApp-style: Just resume, no re-init needed**
           await controller.play();
+          controller.setVolume(1.0); // Restore audio
         }
       } catch (e) {
         print('⚠️ HotUIStateManager: Error resuming preserved controller: $e');

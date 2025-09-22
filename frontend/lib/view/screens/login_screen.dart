@@ -66,13 +66,51 @@ class LoginScreen extends StatelessWidget {
 
                   const SizedBox(height: 8),
 
-                  const Text(
-                    'Connect, Share, and Earn Together',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.white70,
-                    ),
-                    textAlign: TextAlign.center,
+                  Column(
+                    children: [
+                      const Text(
+                        'Create • Video • Earn',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.5,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: Colors.green.withOpacity(0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.verified,
+                              color: Colors.green[300],
+                              size: 16,
+                            ),
+                            const SizedBox(width: 6),
+                            const Text(
+                              'No Monetization Criteria',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
 
                   const SizedBox(height: 48),
@@ -100,7 +138,6 @@ class LoginScreen extends StatelessWidget {
                       if (authController.error != null) {
                         return Column(
                           children: [
-                            // **ENHANCED: Professional Error Card**
                             Container(
                               width: double.infinity,
                               padding: const EdgeInsets.all(20),

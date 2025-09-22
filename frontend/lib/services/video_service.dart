@@ -385,11 +385,28 @@ class VideoService {
 
       // **Add fields**
       request.fields['videoName'] = title;
-      request.fields['description'] = description ?? '';
+      // Description intentionally omitted from upload flow
       request.fields['videoType'] = isLong ? 'sneha' : 'yog';
       if (link != null && link.isNotEmpty) {
         request.fields['link'] = link;
       }
+
+      try {
+        // Using Zone to retrieve optional metadata injected by caller
+        final dynamic metadata = Zone.current['upload_metadata'];
+        if (metadata is Map<String, dynamic>) {
+          final String? category = metadata['category'] as String?;
+          final List<String>? tags = (metadata['tags'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList();
+          if (category != null && category.isNotEmpty) {
+            request.fields['category'] = category;
+          }
+          if (tags != null && tags.isNotEmpty) {
+            request.fields['tags'] = json.encode(tags);
+          }
+        }
+      } catch (_) {}
 
       // **Send request**
       final streamedResponse = await request.send().timeout(

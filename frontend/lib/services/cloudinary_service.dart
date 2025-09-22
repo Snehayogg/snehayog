@@ -126,7 +126,7 @@ class CloudinaryService {
 
       // **NEW: Verify the multipart file was created correctly**
       request.files.add(multipartFile);
-    
+
       // **NEW: Alternative fallback - try simple multipart file creation**
       try {
         if (request.files.isEmpty) {
@@ -167,8 +167,31 @@ class CloudinaryService {
         final errorData = json.decode(response.body);
         final errorMessage =
             errorData['error'] ?? errorData['details'] ?? response.body;
+
+        String userFriendlyError;
+        if (errorMessage.contains('configuration')) {
+          userFriendlyError =
+              'Server configuration issue. Please contact support.';
+        } else if (errorMessage.contains('timeout')) {
+          userFriendlyError =
+              'Upload timeout. Please check your internet connection and try a smaller image.';
+        } else if (errorMessage.contains('file size') ||
+            errorMessage.contains('too large')) {
+          userFriendlyError =
+              'Image is too large. Please use an image smaller than 10MB.';
+        } else if (errorMessage.contains('format') ||
+            errorMessage.contains('type')) {
+          userFriendlyError =
+              'Invalid image format. Please use JPG, PNG, or WebP.';
+        } else if (errorMessage.contains('authentication') ||
+            errorMessage.contains('token')) {
+          userFriendlyError = 'Authentication expired. Please sign in again.';
+        } else {
+          userFriendlyError = 'Failed to upload image. Please try again.';
+        }
+
         print('❌ CloudinaryService: Backend error: $errorMessage');
-        throw Exception('Failed to upload image: $errorMessage');
+        throw Exception(userFriendlyError);
       }
     } catch (e) {
       print('❌ CloudinaryService: Error uploading image: $e');

@@ -37,10 +37,10 @@ class AppEnvironmentConfig {
 
   /// Development environment configuration
   static const Map<String, dynamic> _developmentConfig = {
-    'apiBaseUrl': 'http://192.168.0.190:5001',
+    'apiBaseUrl': 'https://snehayog-production.up.railway.app',
     'enableLogging': true,
     'enableDebugMode': true,
-    'videoCacheSize': 100 * 1024 * 1024, // 100MB
+    'videoCacheSize': 100 * 1024 * 1024, 
     'maxVideoDuration': Duration(minutes: 10),
     'enableHLS': true,
     'enableAds': false,
@@ -61,7 +61,7 @@ class AppEnvironmentConfig {
 
   /// Production environment configuration
   static const Map<String, dynamic> _productionConfig = {
-    'apiBaseUrl': 'https://api.snehayog.com',
+    'apiBaseUrl': 'https://snehayog-production.up.railway.app',
     'enableLogging': false,
     'enableDebugMode': false,
     'videoCacheSize': 500 * 1024 * 1024, // 500MB

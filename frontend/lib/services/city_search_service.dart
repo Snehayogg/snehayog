@@ -4,7 +4,9 @@ import 'package:http/http.dart' as http;
 /// **CitySearchService - Handles dynamic city search using OpenStreetMap Nominatim API**
 class CitySearchService {
   static const String _baseUrl = 'https://nominatim.openstreetmap.org/search';
-  static const String _userAgent = 'SnehayogApp/1.0';
+  // Nominatim requires an identifiable User-Agent per usage policy
+  static const String _userAgent =
+      'SnehayogApp/1.0 (contact: factshorts1@gmail.com)';
 
   /// Search for cities in India using OpenStreetMap Nominatim API
   static Future<List<String>> searchCities(String query) async {
@@ -13,14 +15,15 @@ class CitySearchService {
     try {
       final response = await http.get(
         Uri.parse('$_baseUrl?'
-            'q=$query,India&'
-            'format=json&'
+            'q=$query, India&'
+            'format=jsonv2&'
             'addressdetails=1&'
             'limit=10&'
             'countrycodes=in&'
-            'featuretype=city'),
+            'dedupe=1'),
         headers: {
           'User-Agent': _userAgent,
+          'Accept-Language': 'en',
         },
       );
 
@@ -29,8 +32,12 @@ class CitySearchService {
         final List<String> cities = [];
 
         for (var place in data) {
-          final displayName = place['display_name'] as String;
-          final city = _extractCityName(displayName);
+          final displayName = place['display_name'] as String? ?? '';
+          final address = place['address'] as Map<String, dynamic>?;
+          final city = address?['city'] ??
+              address?['town'] ??
+              address?['village'] ??
+              _extractCityName(displayName);
           if (city.isNotEmpty && !cities.contains(city)) {
             cities.add(city);
           }
@@ -62,14 +69,15 @@ class CitySearchService {
     try {
       final response = await http.get(
         Uri.parse('$_baseUrl?'
-            'q=$query,India&'
-            'format=json&'
+            'q=$query, India&'
+            'format=jsonv2&'
             'addressdetails=1&'
             'limit=10&'
             'countrycodes=in&'
-            'featuretype=city'),
+            'dedupe=1'),
         headers: {
           'User-Agent': _userAgent,
+          'Accept-Language': 'en',
         },
       );
 
@@ -78,9 +86,13 @@ class CitySearchService {
         final List<Map<String, dynamic>> cities = [];
 
         for (var place in data) {
-          final displayName = place['display_name'] as String;
-          final city = _extractCityName(displayName);
-          final state = _extractState(displayName);
+          final displayName = place['display_name'] as String? ?? '';
+          final address = place['address'] as Map<String, dynamic>?;
+          final city = address?['city'] ??
+              address?['town'] ??
+              address?['village'] ??
+              _extractCityName(displayName);
+          final state = address?['state'] ?? _extractState(displayName);
 
           if (city.isNotEmpty && !cities.any((c) => c['name'] == city)) {
             cities.add({

@@ -13,6 +13,7 @@ import 'package:snehayog/view/screens/video_screen.dart';
 import 'package:snehayog/services/video_service.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:snehayog/core/services/error_logging_service.dart';
+import 'package:snehayog/core/managers/hot_ui_state_manager.dart';
 import 'package:snehayog/core/theme/app_theme.dart';
 import 'package:snehayog_monetization/services/razorpay_service.dart';
 import 'package:snehayog/config/app_config.dart';
@@ -102,21 +103,28 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final mainController = Provider.of<MainController>(context, listen: false);
+    final hotUIManager = HotUIStateManager();
 
     switch (state) {
       case AppLifecycleState.resumed:
         ErrorLoggingService.logAppLifecycle('Resumed');
         mainController.setAppInForeground(true);
+        // **HOT UI: Restore state when app resumes**
+        hotUIManager.handleAppLifecycleChange(state);
         break;
       case AppLifecycleState.inactive:
         ErrorLoggingService.logAppLifecycle('Inactive');
+        hotUIManager.handleAppLifecycleChange(state);
         break;
       case AppLifecycleState.paused:
         ErrorLoggingService.logAppLifecycle('Paused');
         mainController.setAppInForeground(false);
+        // **HOT UI: Preserve state when app goes to background**
+        hotUIManager.handleAppLifecycleChange(state);
         break;
       case AppLifecycleState.detached:
         ErrorLoggingService.logAppLifecycle('Detached');
+        hotUIManager.handleAppLifecycleChange(state);
         break;
       case AppLifecycleState.hidden:
         ErrorLoggingService.logAppLifecycle('Hidden');
