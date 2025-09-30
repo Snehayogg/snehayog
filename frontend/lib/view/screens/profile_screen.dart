@@ -386,7 +386,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   void _restartProgressiveLoading() {
-    // Reset all loading states
     setState(() {
       _isProfileDataLoaded = false;
       _isVideosLoaded = false;
@@ -396,10 +395,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       _currentLoadStep = 0;
     });
 
-    // **ENHANCED: Clear cache when force refreshing**
     _clearProfileCache();
 
-    // Cancel existing timer and restart
     _progressiveLoadTimer?.cancel();
     _startProgressiveLoading();
   }
