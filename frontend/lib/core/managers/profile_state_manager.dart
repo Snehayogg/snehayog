@@ -378,12 +378,13 @@ class ProfileStateManager extends ChangeNotifier {
             altId = _userData!['googleId'];
           }
         }
-        altId ??= (await _authService.getUserData())?['id'];
-        if (altId != null && altId.isNotEmpty && altId != userId) {
+        final fetchedId = (await _authService.getUserData())?['id'] as String?;
+        if (fetchedId != null && fetchedId.isNotEmpty && fetchedId != userId) {
+          altId = fetchedId;
           print(
               '🔄 ProfileStateManager: Trying alternate id for fetch: $altId');
           try {
-            videos = await _videoService.getUserVideos(altId);
+            videos = await _videoService.getUserVideos(fetchedId);
           } catch (e) {
             print('⚠️ ProfileStateManager: Alternate id fetch also failed: $e');
           }

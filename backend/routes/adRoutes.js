@@ -134,7 +134,18 @@ router.post('/create-with-payment', async (req, res) => {
       estimatedImpressions,
       fixedCpm,
       creatorRevenue,
-      platformRevenue
+      platformRevenue,
+      minAge,
+      maxAge,
+      gender,
+      locations,
+      interests,
+      platforms,
+      deviceType,
+      optimizationGoal,
+      frequencyCap,
+      timeZone,
+      dayParting
     } = req.body;
 
     // **NEW: Debug each field**

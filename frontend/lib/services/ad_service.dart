@@ -69,11 +69,8 @@ class AdService {
           'uploaderId': userData['googleId'] ?? userData['id'],
           'uploaderName': userData['name'],
           'uploaderProfilePic': userData['profilePic'],
-          // **NEW: Revenue and impression data**
           'estimatedImpressions': impressions,
           'fixedCpm': cpm,
-          // 'creatorRevenue': revenueSplit['creator'],  // Temporarily commented
-          // 'platformRevenue': revenueSplit['platform'],  // Temporarily commented
         }),
       );
 
@@ -107,6 +104,11 @@ class AdService {
     List<String>? locations,
     List<String>? interests,
     List<String>? platforms,
+    String? deviceType,
+    String? optimizationGoal,
+    int? frequencyCap,
+    String? timeZone,
+    Map<String, bool>? dayParting,
   }) async {
     try {
       final userData = await _authService.getUserData();
@@ -133,16 +135,13 @@ class AdService {
         'videoUrl': videoUrl,
         'link': link,
         'adType': adType,
-        'budget': budget is int
-            ? budget
-            : budget.toInt(), // **NEW: Ensure budget is integer**
+        'budget': budget is int ? budget : budget.toInt(),
         'targetAudience': targetAudience,
         'uploaderId': userData['googleId'] ?? userData['id'],
         'uploaderName': userData['name'],
         'uploaderProfilePic': userData['profilePic'],
         'estimatedImpressions': impressions,
         'fixedCpm': cpm,
-        // **FIXED: Add duration field that backend expects**
         'duration': startDate != null && endDate != null
             ? endDate.difference(startDate).inDays + 1
             : 1,
@@ -168,20 +167,34 @@ class AdService {
       requestData['startDate'] = startDate?.toIso8601String();
       requestData['endDate'] = endDate?.toIso8601String();
 
-      // **NEW: Add advanced targeting data**
-      if (minAge != null ||
-          maxAge != null ||
-          gender != null ||
-          locations != null ||
-          interests != null ||
-          platforms != null) {
-        requestData['target'] = {
-          if (minAge != null) 'age': {'min': minAge, 'max': maxAge ?? 65},
-          if (gender != null) 'gender': gender,
-          if (locations != null && locations.isNotEmpty) 'locations': locations,
-          if (interests != null && interests.isNotEmpty) 'interests': interests,
-          if (platforms != null && platforms.isNotEmpty) 'platforms': platforms,
-        };
+      // **NEW: Add advanced targeting data as individual parameters**
+      if (minAge != null) requestData['minAge'] = minAge;
+      if (maxAge != null) requestData['maxAge'] = maxAge;
+      if (gender != null) requestData['gender'] = gender;
+      if (locations != null && locations.isNotEmpty) {
+        requestData['locations'] = locations;
+      }
+      if (interests != null && interests.isNotEmpty) {
+        requestData['interests'] = interests;
+      }
+      if (platforms != null && platforms.isNotEmpty) {
+        requestData['platforms'] = platforms;
+      }
+      requestData['deviceType'] =
+          deviceType ?? 'all';
+
+      // **NEW: Add additional campaign settings**
+      if (optimizationGoal != null) {
+        requestData['optimizationGoal'] = optimizationGoal;
+      }
+      if (frequencyCap != null) {
+        requestData['frequencyCap'] = frequencyCap;
+      }
+      if (timeZone != null) {
+        requestData['timeZone'] = timeZone;
+      }
+      if (dayParting != null && dayParting.isNotEmpty) {
+        requestData['dayParting'] = dayParting;
       }
 
       final response = await http.post(

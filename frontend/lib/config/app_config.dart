@@ -5,15 +5,15 @@ class AppConfig {
   // Backend API configuration
   static String get baseUrl {
     if (_isDevelopment) {
-      return 'http://192.168.0.188:5001'; // Use correct network IP for development
+      return 'https://snehayog-production.up.railway.app';
     } else {
-      return 'http://192.168.0.188:5001';
+      return 'https://snehayog-production.up.railway.app';
     }
   }
 
   // **NEW: Fallback URLs for development**
   static const List<String> fallbackUrls = [
-    'http://192.168.0.188:5001',
+    'https://snehayog-production.up.railway.app',
     'http://localhost:5001',
     'http://10.0.2.2:5001',
   ];

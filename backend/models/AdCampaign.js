@@ -71,13 +71,14 @@ const AdCampaignSchema = new mongoose.Schema({
       type: String,
       enum: ['android', 'ios', 'web']
     }],
-    // **NEW: Additional targeting fields**
+
     deviceType: {
       type: String,
-      enum: ['mobile', 'tablet', 'desktop']
+      enum: ['mobile', 'tablet', 'desktop', 'all'],
+      default: 'all'
     }
   },
-  // **NEW: Advanced campaign settings**
+
   optimizationGoal: {
     type: String,
     enum: ['clicks', 'impressions', 'conversions'],

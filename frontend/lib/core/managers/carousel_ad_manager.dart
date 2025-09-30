@@ -61,9 +61,14 @@ class CarouselAdManager {
   CarouselAdModel? getCarouselAdForIndex(int index) {
     if (!_isCarouselAdsLoaded || _carouselAds.isEmpty) return null;
 
-    // Use modulo to cycle through available ads
-    final adIndex = ((index ~/ 3) - 1) % _carouselAds.length;
+    // **UPDATED: Use modulo to cycle through available ads for new 1:1 ratio**
+    final adIndex = index % _carouselAds.length;
     return _carouselAds[adIndex];
+  }
+
+  /// **Get total number of carousel ads available**
+  int getTotalCarouselAds() {
+    return _carouselAds.length;
   }
 
   /// **Calculate total item count including carousel ads**

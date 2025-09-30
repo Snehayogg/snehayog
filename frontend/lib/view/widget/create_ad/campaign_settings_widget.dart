@@ -7,6 +7,11 @@ class CampaignSettingsWidget extends StatelessWidget {
   final DateTime? endDate;
   final Function() onClearErrors;
   final Function() onSelectDateRange;
+  final Function(String)? onFieldChanged;
+  final bool? isBudgetValid;
+  final bool? isDateValid;
+  final String? budgetError;
+  final String? dateError;
 
   const CampaignSettingsWidget({
     Key? key,
@@ -15,6 +20,12 @@ class CampaignSettingsWidget extends StatelessWidget {
     required this.endDate,
     required this.onClearErrors,
     required this.onSelectDateRange,
+    this.onFieldChanged,
+    // **NEW: Optional validation parameters**
+    this.isBudgetValid,
+    this.isDateValid,
+    this.budgetError,
+    this.dateError,
   }) : super(key: key);
 
   @override
@@ -35,32 +46,50 @@ class CampaignSettingsWidget extends StatelessWidget {
             const SizedBox(height: 16),
             TextFormField(
               controller: budgetController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Daily Budget (₹) *',
                 hintText: '100',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.attach_money),
+                border: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color: (isBudgetValid == false) ? Colors.red : Colors.grey,
+                    width: (isBudgetValid == false) ? 2.0 : 1.0,
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color: (isBudgetValid == false) ? Colors.red : Colors.grey,
+                    width: (isBudgetValid == false) ? 2.0 : 1.0,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color: (isBudgetValid == false) ? Colors.red : Colors.blue,
+                    width: (isBudgetValid == false) ? 2.0 : 2.0,
+                  ),
+                ),
+                prefixIcon: const Icon(Icons.attach_money),
+                errorText: (isBudgetValid == false) ? budgetError : null,
+                errorStyle: const TextStyle(color: Colors.red, fontSize: 12),
               ),
               keyboardType: TextInputType.number,
-              onChanged: (_) => onClearErrors(),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter a budget';
-                }
-                final budget = double.tryParse(value.trim());
-                if (budget == null || budget <= 0) {
-                  return 'Please enter a valid budget';
-                }
-                if (budget < 100) {
-                  return 'Minimum budget is ₹100';
-                }
-                return null;
+              onChanged: (_) {
+                onClearErrors();
+                onFieldChanged?.call('budget');
               },
             ),
             const SizedBox(height: 16),
-            Row(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
+                Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: (isDateValid == false) ? Colors.red : Colors.grey,
+                      width: (isDateValid == false) ? 2.0 : 1.0,
+                    ),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
                   child: ElevatedButton.icon(
                     onPressed: onSelectDateRange,
                     icon: const Icon(Icons.calendar_today),
@@ -70,11 +99,26 @@ class CampaignSettingsWidget extends StatelessWidget {
                           : 'Select Date Range *',
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
+                      backgroundColor: (isDateValid == false)
+                          ? Colors.red.shade100
+                          : Colors.orange,
+                      foregroundColor:
+                          (isDateValid == false) ? Colors.red : Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4),
+                      ),
                     ),
                   ),
                 ),
+                if (isDateValid == false && dateError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      dateError!,
+                      style: const TextStyle(color: Colors.red, fontSize: 12),
+                    ),
+                  ),
               ],
             ),
             if (startDate != null && endDate != null)

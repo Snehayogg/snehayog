@@ -237,15 +237,13 @@ class _MainScreenState extends State<MainScreen>
 
     final mainController = Provider.of<MainController>(context, listen: false);
 
-    // Pause videos when app goes to background
+    // **FIXED: Use dedicated methods for better audio leak prevention**
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached) {
-      mainController.setAppInForeground(false);
-      // Force pause videos when app goes to background
-      mainController.forcePauseVideos();
+      mainController.handleAppBackgrounded();
     } else if (state == AppLifecycleState.resumed) {
-      mainController.setAppInForeground(true);
+      mainController.handleAppForegrounded();
     }
   }
 
@@ -285,80 +283,89 @@ class _MainScreenState extends State<MainScreen>
   Widget build(BuildContext context) {
     return Consumer<MainController>(
       builder: (context, mainController, child) {
-        return Scaffold(
-          backgroundColor: Colors.white,
-          body: IndexedStack(
-            index: mainController.currentIndex,
-            children: [
-              const VideoScreen(
-                key: PageStorageKey('videoScreen'),
-              ),
-              const SnehaScreen(key: PageStorageKey('snehaScreen')),
-              UploadScreen(
-                key: const PageStorageKey('uploadScreen'),
-                onVideoUploaded: _refreshVideoList,
-              ),
-              ProfileScreen(
-                key: _profileScreenKey,
-              ),
-            ],
-          ),
-          bottomNavigationBar: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
-                  blurRadius: 20,
-                  offset: const Offset(0, -2),
-                  spreadRadius: 0,
+        return PopScope(
+          onPopInvokedWithResult: (didPop, result) async {
+            // If not on Home (Yog) tab, go to Home instead of exiting
+            if (mainController.currentIndex != 0) {
+              mainController.changeIndex(0);
+            }
+            // Don't return anything - let the system handle the back press
+          },
+          child: Scaffold(
+            backgroundColor: Colors.white,
+            body: IndexedStack(
+              index: mainController.currentIndex,
+              children: [
+                const VideoScreen(
+                  key: PageStorageKey('videoScreen'),
                 ),
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 8,
-                  offset: const Offset(0, -1),
-                  spreadRadius: 0,
+                const SnehaScreen(key: PageStorageKey('snehaScreen')),
+                UploadScreen(
+                  key: const PageStorageKey('uploadScreen'),
+                  onVideoUploaded: _refreshVideoList,
+                ),
+                ProfileScreen(
+                  key: _profileScreenKey,
                 ),
               ],
             ),
-            child: SafeArea(
-              child: Container(
-                height: 70,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildNavItem(
-                      index: 0,
-                      currentIndex: mainController.currentIndex,
-                      icon: Icons.play_circle_filled,
-                      label: 'Yog',
-                      onTap: () => _handleNavTap(0, mainController),
-                    ),
-                    _buildNavItem(
-                      index: 1,
-                      currentIndex: mainController.currentIndex,
-                      icon: Icons.video_camera_front_rounded,
-                      label: 'Sneha',
-                      onTap: () => _handleNavTap(1, mainController),
-                    ),
-                    _buildNavItem(
-                      index: 2,
-                      currentIndex: mainController.currentIndex,
-                      icon: Icons.add_circle_outline,
-                      label: 'Upload',
-                      onTap: () => _handleNavTap(2, mainController),
-                      isSpecial: true,
-                    ),
-                    _buildNavItem(
-                      index: 3,
-                      currentIndex: mainController.currentIndex,
-                      icon: Icons.person_outline_rounded,
-                      label: 'Profile',
-                      onTap: () => _handleNavTap(3, mainController),
-                    ),
-                  ],
+            bottomNavigationBar: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 20,
+                    offset: const Offset(0, -2),
+                    spreadRadius: 0,
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 8,
+                    offset: const Offset(0, -1),
+                    spreadRadius: 0,
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                child: Container(
+                  height: 70,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildNavItem(
+                        index: 0,
+                        currentIndex: mainController.currentIndex,
+                        icon: Icons.play_circle_filled,
+                        label: 'Yog',
+                        onTap: () => _handleNavTap(0, mainController),
+                      ),
+                      _buildNavItem(
+                        index: 1,
+                        currentIndex: mainController.currentIndex,
+                        icon: Icons.video_camera_front_rounded,
+                        label: 'Sneha',
+                        onTap: () => _handleNavTap(1, mainController),
+                      ),
+                      _buildNavItem(
+                        index: 2,
+                        currentIndex: mainController.currentIndex,
+                        icon: Icons.add_circle_outline,
+                        label: 'Upload',
+                        onTap: () => _handleNavTap(2, mainController),
+                        isSpecial: true,
+                      ),
+                      _buildNavItem(
+                        index: 3,
+                        currentIndex: mainController.currentIndex,
+                        icon: Icons.person_outline_rounded,
+                        label: 'Profile',
+                        onTap: () => _handleNavTap(3, mainController),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

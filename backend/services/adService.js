@@ -10,11 +10,10 @@ import {
 import { AD_CONFIG, PAYMENT_CONFIG } from '../constants/index.js';
 
 class AdService {
-  /**
-   * Create a new ad with payment processing
-   */
   async createAdWithPayment(adData) {
     console.log('🔍 AdService: Received ad data:', JSON.stringify(adData, null, 2));
+    console.log('🔍 AdService: deviceType from request:', adData.deviceType);
+    console.log('🔍 AdService: deviceType type:', typeof adData.deviceType);
     
     const {
       title,
@@ -31,7 +30,6 @@ class AdService {
       uploaderProfilePic,
       startDate,
       endDate,
-      // **NEW: Advanced targeting fields**
       minAge,
       maxAge,
       gender,
@@ -42,10 +40,11 @@ class AdService {
       optimizationGoal,
       frequencyCap,
       timeZone,
-      dayParting,
-      hourParting
+      dayParting
     } = adData;
 
+    console.log('🔍 AdService: deviceType after destructuring:', deviceType);
+    console.log('🔍 AdService: deviceType type after destructuring:', typeof deviceType);
     console.log('🔍 AdService: Link field value:', link);
     console.log('🔍 AdService: Link field type:', typeof link);
     console.log('🔍 AdService: Link field length:', link ? link.length : 'null');
@@ -70,14 +69,17 @@ class AdService {
     console.log('✅ AdService: Found user:', user._id);
 
     // **NEW: Create AdCampaign with all targeting fields**
+    console.log('🔍 AdService: About to create campaign with deviceType:', deviceType);
+    console.log('🔍 AdService: deviceType condition check:', deviceType && { deviceType: deviceType });
+    
     const campaign = new AdCampaign({
       name: title,
-      advertiserUserId: user._id, // Use the actual User ObjectId
+      advertiserUserId: user._id, 
       objective: 'awareness',
       startDate: startDate ? new Date(startDate) : new Date(),
       endDate: endDate ? new Date(endDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      dailyBudget: Math.max(budget, 100), // Ensure minimum ₹100
-      totalBudget: Math.max(budget * 30, 1000), // Ensure minimum ₹1000
+      dailyBudget: Math.max(budget, 100),
+      totalBudget: Math.max(budget * 30, 1000), 
       bidType: 'CPM',
       cpmINR: adType === 'banner' ? 10 : 30,
       target: {
@@ -89,14 +91,11 @@ class AdService {
         locations: locations || [],
         interests: interests || [],
         platforms: platforms && platforms.length > 0 ? platforms : ['android', 'ios', 'web'],
-        // **NEW: Additional targeting fields**
-        deviceType: deviceType || null
+        deviceType: deviceType || 'all'
       },
-      // **NEW: Advanced campaign settings**
       optimizationGoal: optimizationGoal || 'impressions',
       timeZone: timeZone || 'Asia/Kolkata',
       dayParting: dayParting || {},
-      hourParting: hourParting || {},
       pacing: 'smooth',
       frequencyCap: frequencyCap || 3
     });
@@ -113,8 +112,7 @@ class AdService {
     const mediaType = videoUrl ? 'video' : 'image';
     const cloudinaryUrl = videoUrl || imageUrl;
     
-    // **NEW: Calculate aspect ratio (default to 16:9 for now)**
-    const aspectRatio = '16:9'; // This should be calculated from actual image/video dimensions
+    const aspectRatio = '9:16'; // This should be calculated from actual image/video dimensions
     
     // **NEW: Determine call to action label and URL**
     let callToActionLabel = 'Learn More';
@@ -194,9 +192,6 @@ class AdService {
     };
   }
 
-  /**
-   * Process payment and activate ad
-   */
   async processPayment(paymentData) {
     const { orderId, paymentId, signature, adId } = paymentData;
 

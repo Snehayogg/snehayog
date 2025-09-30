@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:snehayog/view/widget/create_ad/ad_type_selector_widget.dart';
 import 'package:snehayog/view/widget/create_ad/media_uploader_widget.dart';
 import 'package:snehayog/view/widget/create_ad/ad_details_form_widget.dart';
@@ -9,7 +10,9 @@ import 'package:snehayog/view/widget/create_ad/payment_handler_widget.dart';
 import 'package:snehayog/services/ad_service.dart';
 import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/services/cloudinary_service.dart';
+import 'package:snehayog/services/ad_refresh_notifier.dart';
 import 'package:snehayog/model/ad_model.dart';
+import 'package:snehayog/controller/main_controller.dart';
 import 'dart:io';
 
 class CreateAdScreenRefactored extends StatefulWidget {
@@ -20,7 +23,8 @@ class CreateAdScreenRefactored extends StatefulWidget {
       _CreateAdScreenRefactoredState();
 }
 
-class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
+class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
+    with WidgetsBindingObserver {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -48,30 +52,52 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
   final List<String> _selectedPlatforms = [];
 
   // **NEW: Additional targeting fields**
-  String? _deviceType;
-  String? _optimizationGoal;
-  int? _frequencyCap;
-  String? _timeZone;
+  String _deviceType = 'all';
+  String? _optimizationGoal = 'impressions';
+  int? _frequencyCap = 3;
+  String? _timeZone = 'Asia/Kolkata';
   final Map<String, bool> _dayParting = {};
-  final Map<String, String> _hourParting = {};
 
   // State management
   bool _isLoading = false;
   String? _errorMessage;
   String? _successMessage;
 
+  // **NEW: Field-specific validation states**
+  bool _isTitleValid = true;
+  bool _isDescriptionValid = true;
+  bool _isLinkValid = true;
+  bool _isBudgetValid = true;
+  bool _isDateValid = true;
+  bool _isMediaValid = true;
+  String? _titleError;
+  String? _descriptionError;
+  String? _linkError;
+  String? _budgetError;
+  String? _dateError;
+  String? _mediaError;
+
   // Services
   final AdService _adService = AdService();
   final AuthService _authService = AuthService();
   final CloudinaryService _cloudinaryService = CloudinaryService();
+  final ScrollController _scrollController = ScrollController();
+  // Cache user future to avoid rebuilding FutureBuilder on every setState
+  Future<Map<String, dynamic>?>? _userFuture;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _budgetController.text = '100.00';
     _targetAudienceController.text = 'all';
+    _userFuture = _authService.getUserData();
 
-    // **FIXED: Safe PaymentHandler initialization**
+    // **FIX: Pause videos when entering create ad screen**
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _pauseBackgroundVideos();
+    });
+
     try {
       PaymentHandlerWidget.initialize();
     } catch (e) {
@@ -81,13 +107,46 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _titleController.dispose();
     _descriptionController.dispose();
     _linkController.dispose();
     _budgetController.dispose();
     _targetAudienceController.dispose();
     _keywordsController.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    print('🔍 CreateAdScreen: App lifecycle changed to $state');
+
+    // **FIX: Pause videos when app goes to background from create ad screen**
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      print('🛑 CreateAdScreen: App backgrounded - pausing videos');
+      _pauseBackgroundVideos();
+    } else if (state == AppLifecycleState.resumed) {
+      print('▶️ CreateAdScreen: App resumed - videos should stay paused');
+      // Don't resume videos automatically - let user navigate back to video feed
+    }
+  }
+
+  /// **FIX: Pause videos in background when minimizing from create ad screen**
+  void _pauseBackgroundVideos() {
+    try {
+      // Import MainController to pause videos
+      final mainController =
+          Provider.of<MainController>(context, listen: false);
+      mainController.forcePauseVideos();
+      print('✅ CreateAdScreen: Background videos paused successfully');
+    } catch (e) {
+      print('❌ CreateAdScreen: Error pausing background videos: $e');
+    }
   }
 
   @override
@@ -99,7 +158,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
         elevation: 0,
       ),
       body: FutureBuilder<Map<String, dynamic>?>(
-        future: _authService.getUserData(),
+        future: _userFuture,
         builder: (context, snapshot) {
           // Show loading state
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -177,6 +236,9 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
 
   Widget _buildCreateAdForm() {
     return SingleChildScrollView(
+      key: const PageStorageKey('createAdScroll'),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      controller: _scrollController,
       padding: const EdgeInsets.all(16),
       child: Form(
         key: _formKey,
@@ -203,27 +265,87 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
               selectedVideo: _selectedVideo,
               selectedImages: _selectedImages,
               onImageSelected: (image) {
-                setState(() => _selectedImage = image);
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  setState(() => _selectedImage = image);
+                  _validateField('media');
+                });
               },
               onVideoSelected: (video) {
-                setState(() => _selectedVideo = video);
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  setState(() => _selectedVideo = video);
+                  _validateField('media');
+                });
               },
               onImagesSelected: (images) {
-                setState(() {
-                  _selectedImages.clear();
-                  _selectedImages.addAll(images);
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  setState(() {
+                    _selectedImages.clear();
+                    _selectedImages.addAll(images);
+                  });
+                  _validateField('media');
                 });
               },
               onError: (error) => setState(() => _errorMessage = error),
+              // **NEW: Pass validation states**
+              isMediaValid: _isMediaValid,
+              mediaError: _mediaError,
             ),
             const SizedBox(height: 16),
 
             // Ad Details Form
-            AdDetailsFormWidget(
-              titleController: _titleController,
-              descriptionController: _descriptionController,
-              linkController: _linkController,
-              onClearErrors: _clearErrorMessages,
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text(
+                          'Ad Details',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade100,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            'Required',
+                            style: TextStyle(
+                              color: Colors.red.shade700,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    AdDetailsFormWidget(
+                      titleController: _titleController,
+                      descriptionController: _descriptionController,
+                      linkController: _linkController,
+                      onClearErrors: _clearErrorMessages,
+                      onFieldChanged: _validateField,
+                      isTitleValid: _isTitleValid,
+                      isDescriptionValid: _isDescriptionValid,
+                      isLinkValid: _isLinkValid,
+                      titleError: _titleError,
+                      descriptionError: _descriptionError,
+                      linkError: _linkError,
+                    ),
+                  ],
+                ),
+              ),
             ),
             const SizedBox(height: 16),
 
@@ -234,6 +356,12 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
               endDate: _endDate,
               onClearErrors: _clearErrorMessages,
               onSelectDateRange: _selectDateRange,
+              onFieldChanged: _validateField,
+              // **NEW: Pass validation states**
+              isBudgetValid: _isBudgetValid,
+              isDateValid: _isDateValid,
+              budgetError: _budgetError,
+              dateError: _dateError,
             ),
             const SizedBox(height: 16),
 
@@ -254,58 +382,73 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
                   frequencyCap: _frequencyCap,
                   timeZone: _timeZone,
                   dayParting: _dayParting,
-                  hourParting: _hourParting,
 
                   onMinAgeChanged: (age) {
-                    setState(() => _minAge = age);
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      setState(() => _minAge = age);
+                    });
                   },
                   onMaxAgeChanged: (age) {
-                    setState(() => _maxAge = age);
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      setState(() => _maxAge = age);
+                    });
                   },
                   onGenderChanged: (gender) {
-                    setState(() => _selectedGender = gender);
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      setState(() => _selectedGender = gender);
+                    });
                   },
                   onLocationsChanged: (locations) {
-                    setState(() {
-                      _selectedLocations.clear();
-                      _selectedLocations.addAll(locations);
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      setState(() {
+                        _selectedLocations.clear();
+                        _selectedLocations.addAll(locations);
+                      });
                     });
                   },
                   onInterestsChanged: (interests) {
-                    setState(() {
-                      _selectedInterests.clear();
-                      _selectedInterests.addAll(interests);
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      setState(() {
+                        _selectedInterests.clear();
+                        _selectedInterests.addAll(interests);
+                      });
                     });
                   },
                   onPlatformsChanged: (platforms) {
-                    setState(() {
-                      _selectedPlatforms.clear();
-                      _selectedPlatforms.addAll(platforms);
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      setState(() {
+                        _selectedPlatforms.clear();
+                        _selectedPlatforms.addAll(platforms);
+                      });
                     });
                   },
                   // **NEW: Additional targeting callbacks**
                   onDeviceTypeChanged: (deviceType) {
-                    setState(() => _deviceType = deviceType);
-                  },
-                  onOptimizationGoalChanged: (goal) {
-                    setState(() => _optimizationGoal = goal);
-                  },
-                  onFrequencyCapChanged: (cap) {
-                    setState(() => _frequencyCap = cap);
-                  },
-                  onTimeZoneChanged: (timeZone) {
-                    setState(() => _timeZone = timeZone);
-                  },
-                  onDayPartingChanged: (dayParting) {
-                    setState(() {
-                      _dayParting.clear();
-                      _dayParting.addAll(dayParting);
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      setState(() => _deviceType = deviceType);
                     });
                   },
-                  onHourPartingChanged: (hourParting) {
-                    setState(() {
-                      _hourParting.clear();
-                      _hourParting.addAll(hourParting);
+                  onOptimizationGoalChanged: (goal) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      setState(() => _optimizationGoal = goal);
+                    });
+                  },
+                  onFrequencyCapChanged: (cap) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      setState(() => _frequencyCap = cap);
+                    });
+                  },
+                  onTimeZoneChanged: (timeZone) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      setState(() => _timeZone = timeZone);
+                    });
+                  },
+                  onDayPartingChanged: (dayParting) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      setState(() {
+                        _dayParting.clear();
+                        _dayParting.addAll(dayParting);
+                      });
                     });
                   },
                 ),
@@ -321,31 +464,56 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
               selectedAdType: _selectedAdType,
             ),
 
+            // Validation Summary
+            _buildValidationSummary(),
+
             // Submit Button
             const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _isLoading ? null : _submitAd,
-              icon: _isLoading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
-                  : const Icon(Icons.create),
-              label:
-                  Text(_isLoading ? 'Creating Ad...' : 'Create Advertisement'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _isLoading ? null : _submitAd,
+                icon: _isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Icon(Icons.create),
+                label: Text(
+                  _isLoading ? 'Creating Ad...' : 'Create Advertisement',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _isLoading ? Colors.grey : Colors.green,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: _isLoading ? 0 : 4,
+                  shadowColor: Colors.green.withOpacity(0.3),
                 ),
               ),
             ),
+
+            // Progress indicator
+            if (_isLoading && _errorMessage != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: LinearProgressIndicator(
+                  backgroundColor: Colors.grey.shade200,
+                  valueColor:
+                      AlwaysStoppedAnimation<Color>(Colors.green.shade400),
+                ),
+              ),
           ],
         ),
       ),
@@ -354,40 +522,117 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
 
   Widget _buildSuccessMessage() {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: Colors.green.shade100,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.green.shade300),
+        color: Colors.green.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green.shade300, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.green.shade100,
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      child: Text(
-        _successMessage!,
-        style: TextStyle(color: Colors.green.shade800),
+      child: Row(
+        children: [
+          Icon(
+            Icons.check_circle_outline,
+            color: Colors.green.shade600,
+            size: 24,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              _successMessage!,
+              style: TextStyle(
+                color: Colors.green.shade800,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                height: 1.4,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: () => setState(() => _successMessage = null),
+            icon: Icon(
+              Icons.close,
+              color: Colors.green.shade600,
+              size: 20,
+            ),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildErrorMessage() {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: Colors.red.shade100,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.red.shade300),
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.shade300, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.red.shade100,
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
+              Icon(
+                Icons.error_outline,
+                color: Colors.red.shade600,
+                size: 24,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Error',
+                  style: TextStyle(
+                    color: Colors.red.shade800,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: () => setState(() => _errorMessage = null),
+                icon: Icon(
+                  Icons.close,
+                  color: Colors.red.shade600,
+                  size: 20,
+                ),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
           Text(
             _errorMessage!,
-            style: TextStyle(color: Colors.red.shade800),
+            style: TextStyle(
+              color: Colors.red.shade700,
+              fontSize: 14,
+              height: 1.4,
+            ),
           ),
           if (_errorMessage!.contains('upload') ||
-              _errorMessage!.contains('media'))
+              _errorMessage!.contains('media') ||
+              _errorMessage!.contains('network'))
             Padding(
-              padding: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.only(top: 12),
               child: Row(
                 children: [
                   ElevatedButton.icon(
@@ -401,17 +646,27 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
                       backgroundColor: Colors.red.shade600,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      minimumSize: const Size(0, 32),
+                          horizontal: 16, vertical: 8),
+                      minimumSize: const Size(0, 36),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  TextButton(
+                  const SizedBox(width: 12),
+                  OutlinedButton(
                     onPressed: () => setState(() => _errorMessage = null),
-                    child: Text(
-                      'Dismiss',
-                      style: TextStyle(color: Colors.red.shade600),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red.shade600,
+                      side: BorderSide(color: Colors.red.shade300),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      minimumSize: const Size(0, 36),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
+                    child: const Text('Dismiss'),
                   ),
                 ],
               ),
@@ -422,40 +677,43 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
   }
 
   void _handleAdTypeChanged(String newAdType) {
-    setState(() {
-      _selectedAdType = newAdType;
+    // **FIXED: Use addPostFrameCallback to maintain scroll position**
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      setState(() {
+        _selectedAdType = newAdType;
 
-      // Clear inappropriate media when ad type changes
-      if (newAdType == 'banner') {
-        if (_selectedVideo != null) {
-          _selectedVideo = null;
-          _errorMessage =
-              'Banner ads only support images. Video has been removed.';
+        // Clear inappropriate media when ad type changes
+        if (newAdType == 'banner') {
+          if (_selectedVideo != null) {
+            _selectedVideo = null;
+            _errorMessage =
+                'Banner ads only support images. Video has been removed.';
+          }
+          if (_selectedImages.isNotEmpty) {
+            _selectedImages.clear();
+            _errorMessage =
+                'Banner ads only support single images. Multiple images have been removed.';
+          }
+        } else if (newAdType == 'carousel') {
+          if (_selectedImage != null ||
+              _selectedVideo != null ||
+              _selectedImages.isNotEmpty) {
+            _selectedImage = null;
+            _selectedVideo = null;
+            _selectedImages.clear();
+            _errorMessage =
+                'Carousel ads require exclusive selection. Please choose either images OR video.';
+          }
+        } else if (newAdType == 'video feed ad') {
+          if (_selectedImages.isNotEmpty) {
+            _selectedImages.clear();
+            _errorMessage =
+                'Video feed ads only support single images. Multiple images have been removed.';
+          }
         }
-        if (_selectedImages.isNotEmpty) {
-          _selectedImages.clear();
-          _errorMessage =
-              'Banner ads only support single images. Multiple images have been removed.';
-        }
-      } else if (newAdType == 'carousel') {
-        if (_selectedImage != null ||
-            _selectedVideo != null ||
-            _selectedImages.isNotEmpty) {
-          _selectedImage = null;
-          _selectedVideo = null;
-          _selectedImages.clear();
-          _errorMessage =
-              'Carousel ads require exclusive selection. Please choose either images OR video.';
-        }
-      } else if (newAdType == 'video feed ad') {
-        if (_selectedImages.isNotEmpty) {
-          _selectedImages.clear();
-          _errorMessage =
-              'Video feed ads only support single images. Multiple images have been removed.';
-        }
-      }
 
-      _clearErrorMessages();
+        _clearErrorMessages();
+      });
     });
   }
 
@@ -480,8 +738,229 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
 
   void _clearErrorMessages() {
     if (_errorMessage != null) {
-      setState(() => _errorMessage = null);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        setState(() => _errorMessage = null);
+      });
     }
+  }
+
+  void _clearFieldErrors() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      setState(() {
+        _isTitleValid = true;
+        _isDescriptionValid = true;
+        _isLinkValid = true;
+        _isBudgetValid = true;
+        _isDateValid = true;
+        _isMediaValid = true;
+        _titleError = null;
+        _descriptionError = null;
+        _linkError = null;
+        _budgetError = null;
+        _dateError = null;
+        _mediaError = null;
+      });
+    });
+  }
+
+  // **NEW: Real-time field validation**
+  void _validateField(String fieldName) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      switch (fieldName) {
+        case 'title':
+          if (_titleController.text.trim().isEmpty) {
+            setState(() {
+              _isTitleValid = false;
+              _titleError = 'Ad title is required';
+            });
+          } else {
+            setState(() {
+              _isTitleValid = true;
+              _titleError = null;
+            });
+          }
+          break;
+        case 'description':
+          if (_descriptionController.text.trim().isEmpty) {
+            setState(() {
+              _isDescriptionValid = false;
+              _descriptionError = 'Description is required';
+            });
+          } else {
+            setState(() {
+              _isDescriptionValid = true;
+              _descriptionError = null;
+            });
+          }
+          break;
+        case 'link':
+          if (_linkController.text.trim().isEmpty) {
+            setState(() {
+              _isLinkValid = false;
+              _linkError = 'Link URL is required';
+            });
+          } else {
+            setState(() {
+              _isLinkValid = true;
+              _linkError = null;
+            });
+          }
+          break;
+        case 'budget':
+          if (_budgetController.text.trim().isEmpty) {
+            setState(() {
+              _isBudgetValid = false;
+              _budgetError = 'Budget amount is required';
+            });
+          } else {
+            try {
+              final budget = double.parse(_budgetController.text.trim());
+              if (budget <= 0) {
+                setState(() {
+                  _isBudgetValid = false;
+                  _budgetError = 'Budget must be greater than ₹0';
+                });
+              } else if (budget < 100) {
+                setState(() {
+                  _isBudgetValid = false;
+                  _budgetError = 'Minimum budget is ₹100';
+                });
+              } else {
+                setState(() {
+                  _isBudgetValid = true;
+                  _budgetError = null;
+                });
+              }
+            } catch (e) {
+              setState(() {
+                _isBudgetValid = false;
+                _budgetError =
+                    'Please enter a valid budget amount (e.g., 100.00)';
+              });
+            }
+          }
+          break;
+        case 'media':
+          if (_selectedAdType == 'banner' && _selectedImage == null) {
+            setState(() {
+              _isMediaValid = false;
+              _mediaError =
+                  'Banner ads require an image. Please select an image.';
+            });
+          } else if (_selectedAdType == 'carousel' &&
+              _selectedImages.isEmpty &&
+              _selectedVideo == null) {
+            setState(() {
+              _isMediaValid = false;
+              _mediaError =
+                  'Carousel ads require either images or video. Please select media.';
+            });
+          } else if (_selectedAdType == 'video feed ad' &&
+              _selectedImage == null &&
+              _selectedVideo == null) {
+            setState(() {
+              _isMediaValid = false;
+              _mediaError =
+                  'Video feed ads require either an image or video. Please select media.';
+            });
+          } else {
+            setState(() {
+              _isMediaValid = true;
+              _mediaError = null;
+            });
+          }
+          break;
+      }
+    });
+  }
+
+  Widget _buildValidationSummary() {
+    final List<Map<String, dynamic>> validationItems = [
+      {
+        'label': 'Ad Title',
+        'isValid': _titleController.text.trim().isNotEmpty,
+        'icon': Icons.title,
+      },
+      {
+        'label': 'Description',
+        'isValid': _descriptionController.text.trim().isNotEmpty,
+        'icon': Icons.description,
+      },
+      {
+        'label': 'Link URL',
+        'isValid': _linkController.text.trim().isNotEmpty,
+        'icon': Icons.link,
+      },
+      {
+        'label': 'Budget (₹100+)',
+        'isValid': _budgetController.text.trim().isNotEmpty &&
+            (double.tryParse(_budgetController.text.trim()) ?? 0) >= 100,
+        'icon': Icons.attach_money,
+      },
+      {
+        'label': 'Campaign Dates',
+        'isValid': _startDate != null && _endDate != null,
+        'icon': Icons.calendar_today,
+      },
+      {
+        'label': 'Media File',
+        'isValid': _isMediaValid,
+        'icon': _selectedAdType == 'banner' ? Icons.image : Icons.video_library,
+      },
+    ];
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Required Fields Checklist',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...validationItems.map((item) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        item['isValid']
+                            ? Icons.check_circle
+                            : Icons.radio_button_unchecked,
+                        color: item['isValid'] ? Colors.green : Colors.grey,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        item['icon'] as IconData,
+                        color: item['isValid'] ? Colors.green : Colors.grey,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          item['label'] as String,
+                          style: TextStyle(
+                            color: item['isValid']
+                                ? Colors.green.shade700
+                                : Colors.grey.shade600,
+                            fontWeight: item['isValid']
+                                ? FontWeight.w500
+                                : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )),
+          ],
+        ),
+      ),
+    );
   }
 
   void _clearMediaSelection() {
@@ -490,6 +969,17 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
       _selectedVideo = null;
       _selectedImages.clear();
     });
+  }
+
+  /// **NEW: Notify video feed to refresh ads**
+  void _notifyVideoFeedRefresh() {
+    try {
+      print('🔄 CreateAdScreen: Notifying video feed to refresh ads');
+      AdRefreshNotifier().notifyRefresh();
+      print('✅ CreateAdScreen: Video feed notification sent');
+    } catch (e) {
+      print('❌ Error notifying video feed refresh: $e');
+    }
   }
 
   Future<void> _submitAd() async {
@@ -502,13 +992,22 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
     });
 
     try {
-      // Upload media files
+      // Step 1: Upload media files
+      setState(() {
+        _errorMessage = '📤 Uploading media files...';
+      });
+
       final mediaUrls = await _uploadMediaFiles();
       if (mediaUrls.isEmpty) {
-        throw Exception('Media upload failed - no URLs returned');
+        throw Exception(
+            '❌ Media upload failed - no URLs returned. Please try selecting different media files.');
       }
 
-      // Create ad with payment
+      // Step 2: Create ad with payment
+      setState(() {
+        _errorMessage = '💳 Creating advertisement...';
+      });
+
       final result = await _adService.createAdWithPayment(
         title: _titleController.text.trim(),
         description: _descriptionController.text.trim(),
@@ -532,9 +1031,19 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
         locations: _selectedLocations.isNotEmpty ? _selectedLocations : null,
         interests: _selectedInterests.isNotEmpty ? _selectedInterests : null,
         platforms: _selectedPlatforms.isNotEmpty ? _selectedPlatforms : null,
+        deviceType: _deviceType,
+        optimizationGoal: _optimizationGoal,
+        frequencyCap: _frequencyCap,
+        timeZone: _timeZone,
+        dayParting: _dayParting.isNotEmpty ? _dayParting : null,
       );
 
       if (result['success']) {
+        setState(() {
+          _successMessage = '✅ Advertisement created successfully!';
+          _errorMessage = null;
+        });
+
         PaymentHandlerWidget.showPaymentOptions(
           context,
           AdModel.fromJson(result['ad']),
@@ -542,15 +1051,48 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
           () {
             _clearForm();
             Navigator.pop(context);
+            // **NEW: Trigger video feed refresh to show new ads**
+            _notifyVideoFeedRefresh();
           },
         );
       } else {
         throw Exception(
-            'Failed to create ad: ${result['message'] ?? 'Unknown error'}');
+            '❌ Failed to create ad: ${result['message'] ?? 'Unknown error occurred. Please try again.'}');
       }
     } catch (e) {
+      String errorMessage = e.toString().replaceAll('Exception: ', '');
+
+      // Provide more specific error messages based on common issues
+      if (errorMessage.contains('network') ||
+          errorMessage.contains('connection')) {
+        errorMessage =
+            '❌ Network error: Please check your internet connection and try again.';
+      } else if (errorMessage.contains('upload') ||
+          errorMessage.contains('media')) {
+        errorMessage =
+            '❌ Media upload failed: Please try with different image/video files.';
+      } else if (errorMessage.contains('payment') ||
+          errorMessage.contains('billing')) {
+        errorMessage =
+            '❌ Payment error: Please check your payment details and try again.';
+      } else if (errorMessage.contains('validation') ||
+          errorMessage.contains('required')) {
+        errorMessage =
+            '❌ Validation error: Please check all required fields are filled correctly.';
+      } else if (errorMessage.contains('server') ||
+          errorMessage.contains('500')) {
+        errorMessage = '❌ Server error: Please try again in a few moments.';
+      } else if (errorMessage.contains('unauthorized') ||
+          errorMessage.contains('401')) {
+        errorMessage = '❌ Authentication error: Please sign in again.';
+      } else if (errorMessage.contains('forbidden') ||
+          errorMessage.contains('403')) {
+        errorMessage =
+            '❌ Access denied: You do not have permission to create ads.';
+      }
+
       setState(() {
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
+        _errorMessage = errorMessage;
       });
     } finally {
       setState(() {
@@ -560,38 +1102,164 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
   }
 
   bool _validateForm() {
+    // Clear previous errors
+    _clearErrorMessages();
+    _clearFieldErrors();
+
+    bool isValid = true;
+
+    // Check title
     if (_titleController.text.trim().isEmpty) {
-      setState(() => _errorMessage = 'Please enter an ad title');
-      return false;
+      setState(() {
+        _isTitleValid = false;
+        _titleError = 'Ad title is required';
+        isValid = false;
+      });
+    } else {
+      setState(() {
+        _isTitleValid = true;
+        _titleError = null;
+      });
     }
+
+    // Check description
     if (_descriptionController.text.trim().isEmpty) {
-      setState(() => _errorMessage = 'Please enter a description');
-      return false;
+      setState(() {
+        _isDescriptionValid = false;
+        _descriptionError = 'Description is required';
+        isValid = false;
+      });
+    } else {
+      setState(() {
+        _isDescriptionValid = true;
+        _descriptionError = null;
+      });
     }
+
+    // Check link
+    if (_linkController.text.trim().isEmpty) {
+      setState(() {
+        _isLinkValid = false;
+        _linkError = 'Link URL is required';
+        isValid = false;
+      });
+    } else {
+      setState(() {
+        _isLinkValid = true;
+        _linkError = null;
+      });
+    }
+
+    // Check budget
+    if (_budgetController.text.trim().isEmpty) {
+      setState(() {
+        _isBudgetValid = false;
+        _budgetError = 'Budget amount is required';
+        isValid = false;
+      });
+    } else {
+      // Validate budget format
+      try {
+        final budget = double.parse(_budgetController.text.trim());
+        if (budget <= 0) {
+          setState(() {
+            _isBudgetValid = false;
+            _budgetError = 'Budget must be greater than ₹0';
+            isValid = false;
+          });
+        } else if (budget < 100) {
+          setState(() {
+            _isBudgetValid = false;
+            _budgetError = 'Minimum budget is ₹100';
+            isValid = false;
+          });
+        } else {
+          setState(() {
+            _isBudgetValid = true;
+            _budgetError = null;
+          });
+        }
+      } catch (e) {
+        setState(() {
+          _isBudgetValid = false;
+          _budgetError = 'Please enter a valid budget amount (e.g., 100.00)';
+          isValid = false;
+        });
+      }
+    }
+
+    // Check date range
     if (_startDate == null || _endDate == null) {
-      setState(
-          () => _errorMessage = 'Please select campaign start and end dates');
-      return false;
+      setState(() {
+        _isDateValid = false;
+        _dateError = 'Please select campaign start and end dates';
+        isValid = false;
+      });
+    } else {
+      // Check if end date is after start date
+      if (_endDate!.isBefore(_startDate!)) {
+        setState(() {
+          _isDateValid = false;
+          _dateError = 'End date must be after start date';
+          isValid = false;
+        });
+      } else if (_startDate!
+          .isBefore(DateTime.now().subtract(const Duration(days: 1)))) {
+        setState(() {
+          _isDateValid = false;
+          _dateError = 'Start date cannot be in the past';
+          isValid = false;
+        });
+      } else {
+        setState(() {
+          _isDateValid = true;
+          _dateError = null;
+        });
+      }
     }
+
+    // Check media requirements based on ad type
     if (_selectedAdType == 'banner' && _selectedImage == null) {
-      setState(() => _errorMessage = 'Banner ads require an image');
-      return false;
-    }
-    if (_selectedAdType == 'carousel' &&
+      setState(() {
+        _isMediaValid = false;
+        _mediaError = 'Banner ads require an image. Please select an image.';
+        isValid = false;
+      });
+    } else if (_selectedAdType == 'carousel' &&
         _selectedImages.isEmpty &&
         _selectedVideo == null) {
-      setState(() => _errorMessage =
-          'Please select either images or video for your carousel ad');
-      return false;
-    }
-    if (_selectedAdType == 'video feed ad' &&
+      setState(() {
+        _isMediaValid = false;
+        _mediaError =
+            'Carousel ads require either images or video. Please select media.';
+        isValid = false;
+      });
+    } else if (_selectedAdType == 'video feed ad' &&
         _selectedImage == null &&
         _selectedVideo == null) {
-      setState(
-          () => _errorMessage = 'Please select an image or video for your ad');
-      return false;
+      setState(() {
+        _isMediaValid = false;
+        _mediaError =
+            'Video feed ads require either an image or video. Please select media.';
+        isValid = false;
+      });
+    } else {
+      setState(() {
+        _isMediaValid = true;
+        _mediaError = null;
+      });
     }
-    return true;
+
+    // Check age range if specified
+    if (_minAge != null && _maxAge != null && _minAge! > _maxAge!) {
+      setState(() {
+        _isDateValid = false;
+        _dateError = 'Minimum age cannot be greater than maximum age';
+        isValid = false;
+      });
+    }
+
+    return isValid;
   }
 
   Future<List<String>> _uploadMediaFiles() async {
@@ -660,16 +1328,28 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored> {
     _selectedPlatforms.clear();
 
     // **NEW: Clear additional targeting fields**
-    _deviceType = null;
-    _optimizationGoal = null;
-    _frequencyCap = null;
-    _timeZone = null;
+    _deviceType = 'all';
+    _optimizationGoal = 'impressions';
+    _frequencyCap = 3;
+    _timeZone = 'Asia/Kolkata';
     _dayParting.clear();
-    _hourParting.clear();
 
     setState(() {
       _errorMessage = null;
       _successMessage = null;
+      // **NEW: Clear validation states**
+      _isTitleValid = true;
+      _isDescriptionValid = true;
+      _isLinkValid = true;
+      _isBudgetValid = true;
+      _isDateValid = true;
+      _isMediaValid = true;
+      _titleError = null;
+      _descriptionError = null;
+      _linkError = null;
+      _budgetError = null;
+      _dateError = null;
+      _mediaError = null;
     });
   }
 }

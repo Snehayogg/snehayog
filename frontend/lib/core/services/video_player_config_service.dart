@@ -9,10 +9,10 @@ class VideoPlayerConfigService {
     'standard_480p': VideoQualityPreset(
       name: 'Standard 480p',
       targetResolution: '480p',
-      maxBitrate: 800000, // 800 Kbps
-      bufferSize: 8, // seconds
-      preloadDistance: 2, // videos
-      compressionLevel: 0.8, // 80% quality
+      maxBitrate: 800000,
+      bufferSize: 1, // seconds
+      preloadDistance: 3,
+      compressionLevel: 0.8, 
     ),
   };
 
@@ -98,13 +98,12 @@ class VideoPlayerConfigService {
     return headers;
   }
 
-  /// Get buffering configuration for smooth playback
   static BufferingConfig getBufferingConfig(VideoQualityPreset preset) {
     return BufferingConfig(
       initialBufferSize: preset.bufferSize,
       maxBufferSize: preset.bufferSize * 2,
-      bufferForPlaybackMs: 1000, // 1 second
-      bufferForPlaybackAfterRebufferMs: 2000, // 2 seconds
+      bufferForPlaybackMs: 500,
+      bufferForPlaybackAfterRebufferMs: 2000,
     );
   }
 
@@ -135,18 +134,15 @@ class VideoPlayerConfigService {
       return true; // Default to supported
     } catch (e) {
       print('$_tag: Error checking quality support: $e');
-      return true; // Default to supported
+      return true;
     }
   }
 
-  /// Get recommended quality preset (always returns 480p standard)
   static VideoQualityPreset getRecommendedQualityPreset(BuildContext context) {
-    // Always return 480p standard quality
     return _qualityPresets['standard_480p']!;
   }
 }
 
-/// Video quality preset configuration
 class VideoQualityPreset {
   final String name;
   final String targetResolution;
@@ -170,7 +166,6 @@ class VideoQualityPreset {
   }
 }
 
-/// Buffering configuration for smooth playback
 class BufferingConfig {
   final int initialBufferSize;
   final int maxBufferSize;
@@ -184,8 +179,7 @@ class BufferingConfig {
     required this.bufferForPlaybackAfterRebufferMs,
   });
 }
-
-/// Preloading configuration for better UX
+  
 class PreloadingConfig {
   final int preloadDistance;
   final int maxPreloadSize;

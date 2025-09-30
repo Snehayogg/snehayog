@@ -95,8 +95,13 @@ class HybridVideoService {
         folder: `temp-processing/${userId}`, // Temporary folder
         public_id: `${videoName}_480p_${Date.now()}`,
         transformation: [
+          {
+            // Normalize orientation based on source metadata (prevents unintended landscape)
+            angle: 'auto_right'
+          },
           { 
             height: 480, 
+            crop: 'scale', // Use scale to maintain aspect ratio
             quality: 'auto:good', 
             fetch_format: 'mp4',
             flags: 'progressive' // Enable progressive loading

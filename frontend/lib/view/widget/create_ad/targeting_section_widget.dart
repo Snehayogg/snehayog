@@ -17,7 +17,6 @@ class TargetingSectionWidget extends StatefulWidget {
   final int? frequencyCap;
   final String? timeZone;
   final Map<String, bool> dayParting;
-  final Map<String, String> hourParting;
 
   final Function(int?) onMinAgeChanged;
   final Function(int?) onMaxAgeChanged;
@@ -26,12 +25,11 @@ class TargetingSectionWidget extends StatefulWidget {
   final Function(List<String>) onInterestsChanged;
   final Function(List<String>) onPlatformsChanged;
   // **NEW: Additional targeting callbacks**
-  final Function(String?) onDeviceTypeChanged;
+  final Function(String) onDeviceTypeChanged;
   final Function(String?) onOptimizationGoalChanged;
   final Function(int?) onFrequencyCapChanged;
   final Function(String?) onTimeZoneChanged;
   final Function(Map<String, bool>) onDayPartingChanged;
-  final Function(Map<String, String>) onHourPartingChanged;
 
   const TargetingSectionWidget({
     Key? key,
@@ -47,7 +45,6 @@ class TargetingSectionWidget extends StatefulWidget {
     this.frequencyCap,
     this.timeZone,
     this.dayParting = const {},
-    this.hourParting = const {},
     required this.onMinAgeChanged,
     required this.onMaxAgeChanged,
     required this.onGenderChanged,
@@ -60,7 +57,6 @@ class TargetingSectionWidget extends StatefulWidget {
     required this.onFrequencyCapChanged,
     required this.onTimeZoneChanged,
     required this.onDayPartingChanged,
-    required this.onHourPartingChanged,
   }) : super(key: key);
 
   @override
@@ -110,90 +106,20 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
       TextEditingController();
   final List<String> _customInterests = [];
 
-  // **NEW: Popular quick-select locations for convenience**
+  // **UPDATED: Only specific Indian cities as requested**
   final List<String> _popularLocations = [
     'All India',
-    'Delhi',
     'Mumbai',
+    'Delhi',
     'Bangalore',
     'Chennai',
-    'Kolkata',
     'Hyderabad',
-    'Pune',
     'Ahmedabad',
-    'Jaipur',
-    'Surat',
     'Lucknow',
-    'Kanpur',
-    'Nagpur',
-    'Indore',
-    'Thane',
-    'Bhopal',
-    'Visakhapatnam',
-    'Patna',
-    'Vadodara',
-    'Ghaziabad',
-    'Ludhiana',
-    'Agra',
-    'Nashik',
-    'Faridabad',
-    'Meerut',
-    'Rajkot',
-    'Varanasi',
-    'Srinagar',
-    'Aurangabad',
-    'Navi Mumbai',
-    'Solapur',
-    'Vijayawada',
-    'Kolhapur',
-    'Amritsar',
     'Noida',
-    'Ranchi',
-    'Howrah',
-    'Coimbatore',
-    'Raipur',
-    'Jabalpur',
-    'Gwalior',
-    'Chandigarh',
-    'Tiruchirappalli',
-    'Mysore',
-    'Bhubaneswar',
-    'Kochi',
-    'Bhavnagar',
-    'Salem',
-    'Warangal',
-    'Guntur',
-    'Bhiwandi',
-    'Amravati',
-    'Nanded',
-    'Sangli',
-    'Malegaon',
-    'Ulhasnagar',
-    'Jalgaon',
-    'Latur',
-    'Ahmadnagar',
-    'Dhule',
-    'Ichalkaranji',
-    'Parbhani',
-    'Jalna',
-    'Bhusawal',
-    'Panvel',
-    'Satara',
-    'Beed',
-    'Yavatmal',
-    'Kamptee',
-    'Gondia',
-    'Barshi',
-    'Achalpur',
-    'Osmanabad',
-    'Nandurbar',
-    'Wardha',
-    'Udgir',
-    'Hinganghat'
+    'Indore'
   ];
 
-  // All available locations (major cities + searched cities)
-  final List<String> _locationOptions = [];
   final List<String> _interestOptions = kInterestOptions;
 
   @override
@@ -214,10 +140,13 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
   void _onLocationSearchChanged() {
     final query = _locationSearchController.text.trim();
 
+    print('🔍 TargetingSectionWidget: Search input changed to "$query"');
+
     // Cancel previous search
     _searchDebouncer?.cancel();
 
     if (query.isEmpty) {
+      print('🔍 TargetingSectionWidget: Query is empty, clearing suggestions');
       setState(() {
         _locationSuggestions = [];
         _isSearchingLocations = false;
@@ -226,6 +155,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
     }
 
     if (query.length < 3) {
+      print(
+          '🔍 TargetingSectionWidget: Query too short (${query.length} chars), clearing suggestions');
       setState(() {
         _locationSuggestions = [];
         _isSearchingLocations = false;
@@ -233,6 +164,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
       return;
     }
 
+    print('🔍 TargetingSectionWidget: Starting debounced search for "$query"');
     // Debounce search to avoid too many API calls
     _searchDebouncer = Timer(const Duration(milliseconds: 500), () {
       _searchLocationsWithAPI(query);
@@ -241,6 +173,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
 
   /// **NEW: Search locations using professional API**
   Future<void> _searchLocationsWithAPI(String query) async {
+    print('🔍 TargetingSectionWidget: Starting location search for "$query"');
+
     setState(() {
       _isSearchingLocations = true;
     });
@@ -248,21 +182,53 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
     try {
       final results = await CitySearchService.searchCitiesDetailed(query);
 
+      print(
+          '🔍 TargetingSectionWidget: Received ${results.length} results from API');
+
       if (mounted) {
         setState(() {
           _locationSuggestions = results;
           _isSearchingLocations = false;
         });
+
+        print(
+            '🔍 TargetingSectionWidget: Updated UI with ${_locationSuggestions.length} suggestions');
       }
     } catch (e) {
-      print('❌ Error searching locations: $e');
+      print('❌ TargetingSectionWidget: Error searching locations: $e');
+
+      // **FALLBACK: If API fails, show popular cities that match the query**
+      final fallbackResults = _getFallbackSuggestions(query);
+      print(
+          '🔍 TargetingSectionWidget: Using fallback suggestions: ${fallbackResults.length} results');
+
       if (mounted) {
         setState(() {
-          _locationSuggestions = [];
+          _locationSuggestions = fallbackResults;
           _isSearchingLocations = false;
         });
       }
     }
+  }
+
+  /// **FALLBACK: Get suggestions from popular cities if API fails**
+  List<Map<String, dynamic>> _getFallbackSuggestions(String query) {
+    final queryLower = query.toLowerCase();
+    final suggestions = <Map<String, dynamic>>[];
+
+    for (final city in _popularLocations) {
+      if (city.toLowerCase().contains(queryLower)) {
+        suggestions.add({
+          'name': city,
+          'state': city == 'All India' ? 'India' : 'Various States',
+          'displayName': city,
+          'lat': '0',
+          'lon': '0',
+        });
+      }
+    }
+
+    return suggestions;
   }
 
   /// **NEW: Add location from API suggestions**
@@ -429,7 +395,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
 
         // **NEW: Device Type**
         DropdownButtonFormField<String>(
-          initialValue: widget.deviceType,
+          initialValue: widget.deviceType ?? 'all',
           decoration: const InputDecoration(
             labelText: 'Device Type',
             border: OutlineInputBorder(),
@@ -437,13 +403,13 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
             helperText: 'Target specific device types',
           ),
           items: [
-            const DropdownMenuItem(value: null, child: Text('All Devices')),
+            const DropdownMenuItem(value: 'all', child: Text('All Devices')),
             ..._deviceTypeOptions.map((type) => DropdownMenuItem(
                   value: type,
                   child: Text(type.toUpperCase()),
                 )),
           ],
-          onChanged: widget.onDeviceTypeChanged,
+          onChanged: (value) => widget.onDeviceTypeChanged(value ?? 'all'),
         ),
         const SizedBox(height: 16),
 
@@ -535,10 +501,6 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
 
         // **NEW: Day Parting (Days of Week)**
         _buildDayPartingSection(),
-        const SizedBox(height: 16),
-
-        // **NEW: Hour Parting**
-        _buildHourPartingSection(),
       ],
     );
   }
@@ -745,7 +707,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
             Icon(Icons.location_on, color: Colors.blue.shade600, size: 20),
             const SizedBox(width: 8),
             const Text(
-              'Target Locations',
+              'Target Locations (India)',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
@@ -809,7 +771,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
             TextField(
               controller: _locationSearchController,
               decoration: InputDecoration(
-                hintText: 'Type city name (e.g., Mumbai, Delhi, Bangalore)...',
+                hintText:
+                    'Type Indian city name (e.g., Mumbai, Delhi, Bangalore)...',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _isSearchingLocations
                     ? const Padding(
@@ -910,10 +873,10 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
           ],
         ),
 
-        // **NEW: Popular locations for quick selection**
+        // **NEW: Popular Indian locations for quick selection**
         const SizedBox(height: 12),
         const Text(
-          'Popular Locations:',
+          'Popular Indian Cities:',
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w500,
@@ -1161,195 +1124,6 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                   label: const Text('Clear'),
                 ),
               ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // **NEW: Hour Parting Section**
-  Widget _buildHourPartingSection() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.access_time, color: Colors.indigo.shade600),
-                const SizedBox(width: 8),
-                const Text(
-                  'Hour Targeting',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Set time ranges when ads should be shown:',
-              style: TextStyle(fontSize: 14, color: Colors.grey),
-            ),
-            const SizedBox(height: 12),
-
-            // Show current time ranges
-            if (widget.hourParting.isNotEmpty) ...[
-              ...widget.hourParting.entries.map((entry) {
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.indigo.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.indigo.shade200),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.schedule,
-                          color: Colors.indigo.shade700, size: 16),
-                      const SizedBox(width: 8),
-                      Text(
-                        '${entry.key}: ${entry.value}',
-                        style: TextStyle(color: Colors.indigo.shade700),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        onPressed: () {
-                          final newHourParting =
-                              Map<String, String>.from(widget.hourParting);
-                          newHourParting.remove(entry.key);
-                          widget.onHourPartingChanged(newHourParting);
-                        },
-                        icon: Icon(Icons.close,
-                            color: Colors.indigo.shade700, size: 16),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-              const SizedBox(height: 8),
-            ],
-
-            // Add new time range button
-            ElevatedButton.icon(
-              onPressed: () => _showHourPartingDialog(),
-              icon: const Icon(Icons.add_alarm, size: 16),
-              label: Text(widget.hourParting.isEmpty
-                  ? 'Add Time Range'
-                  : 'Add Another Range'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.indigo.shade50,
-                foregroundColor: Colors.indigo.shade700,
-                elevation: 0,
-              ),
-            ),
-
-            if (widget.hourParting.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: TextButton.icon(
-                  onPressed: () => widget.onHourPartingChanged({}),
-                  icon: const Icon(Icons.clear, size: 16),
-                  label: const Text('Clear All Time Ranges'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.red.shade600,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // **NEW: Show Hour Parting Dialog**
-  void _showHourPartingDialog() {
-    String selectedDay = _daysOfWeek.first;
-    String startTime = '09:00';
-    String endTime = '18:00';
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Add Time Range'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Day selection
-              DropdownButtonFormField<String>(
-                initialValue: selectedDay,
-                decoration: const InputDecoration(
-                  labelText: 'Day',
-                  border: OutlineInputBorder(),
-                ),
-                items: _daysOfWeek
-                    .map((day) => DropdownMenuItem(
-                          value: day,
-                          child: Text(day),
-                        ))
-                    .toList(),
-                onChanged: (value) {
-                  setDialogState(() {
-                    selectedDay = value!;
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Time range
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      initialValue: startTime,
-                      decoration: const InputDecoration(
-                        labelText: 'Start Time',
-                        border: OutlineInputBorder(),
-                        hintText: '09:00',
-                      ),
-                      onChanged: (value) => startTime = value,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: TextFormField(
-                      initialValue: endTime,
-                      decoration: const InputDecoration(
-                        labelText: 'End Time',
-                        border: OutlineInputBorder(),
-                        hintText: '18:00',
-                      ),
-                      onChanged: (value) => endTime = value,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Use 24-hour format (e.g., 09:00, 18:30)',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final newHourParting =
-                    Map<String, String>.from(widget.hourParting);
-                newHourParting[selectedDay] = '$startTime - $endTime';
-                widget.onHourPartingChanged(newHourParting);
-                Navigator.pop(context);
-              },
-              child: const Text('Add'),
             ),
           ],
         ),

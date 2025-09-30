@@ -87,14 +87,20 @@ class VideoControllerFactory {
     print(
         '🎬 VideoControllerFactory: Cache Strategy: ${isHLS ? "HLS-Adaptive" : "Standard"}');
 
-    return VideoPlayerController.networkUrl(
-      Uri.parse(optimizedUrl),
-      videoPlayerOptions: VideoPlayerOptions(
-        mixWithOthers: true,
-        allowBackgroundPlayback: false,
-      ),
-      httpHeaders: headers,
-    );
+return VideoPlayerController.networkUrl(
+  Uri.parse(optimizedUrl),
+  videoPlayerOptions: VideoPlayerOptions(
+    mixWithOthers: true,
+    allowBackgroundPlayback: false,
+  ),
+  httpHeaders: {
+    ...headers,
+    // ADD THESE FOR FASTER LOADING:
+    'Connection': 'keep-alive',
+    'Cache-Control': 'public, max-age=3600',
+    'Accept-Encoding': 'gzip, deflate',
+  },
+);
   }
 
   /// Creates a VideoPlayerController with custom quality preset (ENHANCED HLS SUPPORT)

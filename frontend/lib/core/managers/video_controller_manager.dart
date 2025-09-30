@@ -33,15 +33,13 @@ class VideoControllerManager {
       print('🔐 VideoControllerManager: Getting signed URL for HLS stream');
       try {
         final signedUrlService = SignedUrlService();
-        final signedUrl =
-            await signedUrlService.getBestSignedUrl(video.videoUrl).timeout(
-          const Duration(seconds: 3), // Short timeout for signed URL
-          onTimeout: () {
-            print(
-                '⏰ VideoControllerManager: Signed URL timeout, using original URL');
-            return video.videoUrl;
-          },
-        );
+ final signedUrl = await signedUrlService.getBestSignedUrl(video.videoUrl).timeout(
+  const Duration(seconds: 1), // REDUCED: 1 second timeout
+  onTimeout: () {
+    print('⏰ VideoControllerManager: Signed URL timeout, using original URL');
+    return video.videoUrl;
+  },
+);
 
         if (signedUrl != null && signedUrl != video.videoUrl) {
           finalUrl = signedUrl;

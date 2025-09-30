@@ -12,6 +12,11 @@ class GoogleSignInController extends ChangeNotifier {
   bool get isSignedIn => _userData != null;
   Map<String, dynamic>? get userData => _userData;
 
+  /// Manually check and refresh authentication status
+  Future<void> checkAuthStatus() async {
+    await _initInBackground();
+  }
+
   GoogleSignInController() {
     // **OPTIMIZED: Don't block UI during initialization**
     _initInBackground();
@@ -22,10 +27,22 @@ class GoogleSignInController extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      _userData = await _authService.getUserData();
+      // Check if user is already logged in
+      final isLoggedIn = await _authService.isLoggedIn();
+      if (isLoggedIn) {
+        print(
+            '✅ GoogleSignInController: User is already logged in, getting user data...');
+        _userData = await _authService.getUserData();
+        print(
+            '✅ GoogleSignInController: User data loaded: ${_userData?['email']}');
+      } else {
+        print('ℹ️ GoogleSignInController: User is not logged in');
+        _userData = null;
+      }
     } catch (e) {
       print('⚠️ GoogleSignInController: Error during background init: $e');
       _error = e.toString();
+      _userData = null; // Ensure userData is null on error
     } finally {
       _isLoading = false;
       notifyListeners();

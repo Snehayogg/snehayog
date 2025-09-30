@@ -33,9 +33,6 @@ class AdModel {
   final int? frequencyCap; // Max times shown to same user
   final String? timeZone; // Campaign timezone
   final Map<String, bool> dayParting; // Days of week targeting
-  final Map<String, String> hourParting; // Hour range targeting
-
-  // **NEW: Performance tracking fields**
   final double spend; // Total amount spent
   final int conversions; // Number of conversions
   final double conversionRate; // Conversion rate
@@ -76,7 +73,6 @@ class AdModel {
     this.frequencyCap,
     this.timeZone,
     this.dayParting = const {},
-    this.hourParting = const {},
     // **NEW: Performance tracking parameters**
     this.spend = 0.0,
     this.conversions = 0,
@@ -123,7 +119,6 @@ class AdModel {
       frequencyCap: json['frequencyCap'],
       timeZone: json['timeZone'],
       dayParting: Map<String, bool>.from(json['dayParting'] ?? {}),
-      hourParting: Map<String, String>.from(json['hourParting'] ?? {}),
       // **NEW: Performance tracking fields**
       spend: (json['spend'] ?? 0.0).toDouble(),
       conversions: json['conversions'] ?? 0,
@@ -168,7 +163,6 @@ class AdModel {
       'frequencyCap': frequencyCap,
       'timeZone': timeZone,
       'dayParting': dayParting,
-      'hourParting': hourParting,
       // **NEW: Performance tracking fields**
       'spend': spend,
       'conversions': conversions,
@@ -212,7 +206,6 @@ class AdModel {
     int? frequencyCap,
     String? timeZone,
     Map<String, bool>? dayParting,
-    Map<String, String>? hourParting,
     // **NEW: Performance tracking parameters**
     double? spend,
     int? conversions,
@@ -254,7 +247,6 @@ class AdModel {
       frequencyCap: frequencyCap ?? this.frequencyCap,
       timeZone: timeZone ?? this.timeZone,
       dayParting: dayParting ?? this.dayParting,
-      hourParting: hourParting ?? this.hourParting,
       // **NEW: Performance tracking fields**
       spend: spend ?? this.spend,
       conversions: conversions ?? this.conversions,

@@ -6,6 +6,15 @@ class AdDetailsFormWidget extends StatelessWidget {
   final TextEditingController descriptionController;
   final TextEditingController linkController;
   final Function() onClearErrors;
+  final Function(String)? onFieldChanged;
+
+  // **NEW: Validation states**
+  final bool? isTitleValid;
+  final bool? isDescriptionValid;
+  final bool? isLinkValid;
+  final String? titleError;
+  final String? descriptionError;
+  final String? linkError;
 
   const AdDetailsFormWidget({
     Key? key,
@@ -13,6 +22,14 @@ class AdDetailsFormWidget extends StatelessWidget {
     required this.descriptionController,
     required this.linkController,
     required this.onClearErrors,
+    this.onFieldChanged,
+    // **NEW: Optional validation parameters**
+    this.isTitleValid,
+    this.isDescriptionValid,
+    this.isLinkValid,
+    this.titleError,
+    this.descriptionError,
+    this.linkError,
   }) : super(key: key);
 
   @override
@@ -33,74 +50,109 @@ class AdDetailsFormWidget extends StatelessWidget {
             const SizedBox(height: 16),
             TextFormField(
               controller: titleController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Ad Title *',
                 hintText: 'Enter a compelling title for your ad',
-                border: OutlineInputBorder(),
+                border: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color: (isTitleValid == false) ? Colors.red : Colors.grey,
+                    width: (isTitleValid == false) ? 2.0 : 1.0,
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color: (isTitleValid == false) ? Colors.red : Colors.grey,
+                    width: (isTitleValid == false) ? 2.0 : 1.0,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color: (isTitleValid == false) ? Colors.red : Colors.blue,
+                    width: (isTitleValid == false) ? 2.0 : 2.0,
+                  ),
+                ),
+                errorText: (isTitleValid == false) ? titleError : null,
+                errorStyle: const TextStyle(color: Colors.red, fontSize: 12),
               ),
-              onChanged: (_) => onClearErrors(),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter an ad title';
-                }
-                if (value.trim().length < 5) {
-                  return 'Title must be at least 5 characters';
-                }
-                if (value.trim().length > 100) {
-                  return 'Title must be less than 100 characters';
-                }
-                return null;
+              onChanged: (_) {
+                onClearErrors();
+                onFieldChanged?.call('title');
               },
             ),
             const SizedBox(height: 16),
             TextFormField(
               controller: descriptionController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Description *',
                 hintText: 'Describe your ad content and call to action',
-                border: OutlineInputBorder(),
+                border: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color: (isDescriptionValid == false)
+                        ? Colors.red
+                        : Colors.grey,
+                    width: (isDescriptionValid == false) ? 2.0 : 1.0,
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color: (isDescriptionValid == false)
+                        ? Colors.red
+                        : Colors.grey,
+                    width: (isDescriptionValid == false) ? 2.0 : 1.0,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color: (isDescriptionValid == false)
+                        ? Colors.red
+                        : Colors.blue,
+                    width: (isDescriptionValid == false) ? 2.0 : 2.0,
+                  ),
+                ),
+                errorText:
+                    (isDescriptionValid == false) ? descriptionError : null,
+                errorStyle: const TextStyle(color: Colors.red, fontSize: 12),
               ),
               maxLines: 3,
-              onChanged: (_) => onClearErrors(),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter a description';
-                }
-                if (value.trim().length < 10) {
-                  return 'Description must be at least 10 characters';
-                }
-                if (value.trim().length > 500) {
-                  return 'Description must be less than 500 characters';
-                }
-                return null;
+              onChanged: (_) {
+                onClearErrors();
+                onFieldChanged?.call('description');
               },
             ),
             const SizedBox(height: 16),
             TextFormField(
               controller: linkController,
-              decoration: const InputDecoration(
-                labelText: 'Landing Page URL (Optional)',
+              decoration: InputDecoration(
+                labelText: 'Landing Page URL *',
                 hintText: 'https://your-website.com',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.link),
+                border: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color: (isLinkValid == false) ? Colors.red : Colors.grey,
+                    width: (isLinkValid == false) ? 2.0 : 1.0,
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color: (isLinkValid == false) ? Colors.red : Colors.grey,
+                    width: (isLinkValid == false) ? 2.0 : 1.0,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color: (isLinkValid == false) ? Colors.red : Colors.blue,
+                    width: (isLinkValid == false) ? 2.0 : 2.0,
+                  ),
+                ),
+                prefixIcon: const Icon(Icons.link),
                 helperText:
                     'Enter your website URL where users will land after clicking the ad',
+                errorText: (isLinkValid == false) ? linkError : null,
+                errorStyle: const TextStyle(color: Colors.red, fontSize: 12),
               ),
               keyboardType: TextInputType.url,
-              onChanged: (_) => onClearErrors(),
-              validator: (value) {
-                if (value != null && value.trim().isNotEmpty) {
-                  if (!value.trim().startsWith('http://') &&
-                      !value.trim().startsWith('https://')) {
-                    return 'Please enter a valid URL starting with http:// or https://';
-                  }
-                  try {
-                    Uri.parse(value.trim());
-                  } catch (e) {
-                    return 'Please enter a valid URL';
-                  }
-                }
-                return null;
+              onChanged: (_) {
+                onClearErrors();
+                onFieldChanged?.call('link');
               },
             ),
             const SizedBox(height: 8),

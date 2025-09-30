@@ -148,6 +148,14 @@ class MainController extends ChangeNotifier {
     _pauseVideosCallback?.call();
   }
 
+  /// Resume videos (called when app comes back to foreground)
+  void resumeVideos() {
+    print('▶️ MainController: Resuming videos');
+
+    // **SIMPLIFIED: Use callback since VideoManager was removed**
+    _resumeVideosCallback?.call();
+  }
+
   /// Check if videos should be paused based on current state
   bool get shouldPauseVideos => !isVideoScreen || !isAppInForeground;
 
@@ -166,6 +174,30 @@ class MainController extends ChangeNotifier {
     Future.delayed(const Duration(milliseconds: 150), () {
       _pauseVideosCallback?.call();
     });
+  }
+
+  /// **NEW: Handle app backgrounding with immediate pause**
+  void handleAppBackgrounded() {
+    print('📱 MainController: App backgrounded - immediate video pause');
+    _isAppInForeground = false;
+    forcePauseVideos();
+    notifyListeners();
+  }
+
+  /// **NEW: Handle app foregrounding with delayed resume**
+  void handleAppForegrounded() {
+    print('📱 MainController: App foregrounded - checking if should resume');
+    _isAppInForeground = true;
+    notifyListeners();
+
+    // Only resume if on video tab
+    if (isVideoScreen) {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (_isAppInForeground && isVideoScreen) {
+          resumeVideos();
+        }
+      });
+    }
   }
 
   /// **SIMPLIFIED: Update current video index (VideoManager removed)**

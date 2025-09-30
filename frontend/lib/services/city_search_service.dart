@@ -13,9 +13,10 @@ class CitySearchService {
     if (query.length < 3) return [];
 
     try {
+      final encodedQuery = Uri.encodeComponent('$query, India');
       final response = await http.get(
         Uri.parse('$_baseUrl?'
-            'q=$query, India&'
+            'q=$encodedQuery&'
             'format=jsonv2&'
             'addressdetails=1&'
             'limit=10&'
@@ -66,24 +67,36 @@ class CitySearchService {
       String query) async {
     if (query.length < 3) return [];
 
+    print('🔍 CitySearchService: Searching for "$query"');
+
     try {
+      final encodedQuery = Uri.encodeComponent('$query, India');
+      final url = '$_baseUrl?'
+          'q=$encodedQuery&'
+          'format=jsonv2&'
+          'addressdetails=1&'
+          'limit=10&'
+          'countrycodes=in&'
+          'dedupe=1';
+
+      print('🔍 CitySearchService: API URL: $url');
+
       final response = await http.get(
-        Uri.parse('$_baseUrl?'
-            'q=$query, India&'
-            'format=jsonv2&'
-            'addressdetails=1&'
-            'limit=10&'
-            'countrycodes=in&'
-            'dedupe=1'),
+        Uri.parse(url),
         headers: {
           'User-Agent': _userAgent,
           'Accept-Language': 'en',
         },
       );
 
+      print('🔍 CitySearchService: Response status: ${response.statusCode}');
+      print('🔍 CitySearchService: Response body: ${response.body}');
+
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         final List<Map<String, dynamic>> cities = [];
+
+        print('🔍 CitySearchService: Found ${data.length} results');
 
         for (var place in data) {
           final displayName = place['display_name'] as String? ?? '';
@@ -93,6 +106,8 @@ class CitySearchService {
               address?['village'] ??
               _extractCityName(displayName);
           final state = address?['state'] ?? _extractState(displayName);
+
+          print('🔍 CitySearchService: Processing: $city, $state');
 
           if (city.isNotEmpty && !cities.any((c) => c['name'] == city)) {
             cities.add({
@@ -105,10 +120,14 @@ class CitySearchService {
           }
         }
 
+        print('🔍 CitySearchService: Returning ${cities.length} cities');
         return cities;
+      } else {
+        print(
+            '❌ CitySearchService: API error - Status: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error searching cities: $e');
+      print('❌ CitySearchService: Error searching cities: $e');
     }
 
     return [];

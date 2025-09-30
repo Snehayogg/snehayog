@@ -261,17 +261,53 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 }
 
-class AuthWrapper extends StatelessWidget {
+class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  @override
+  void initState() {
+    super.initState();
+    // Force a check of authentication status when the widget initializes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authController =
+          Provider.of<GoogleSignInController>(context, listen: false);
+      authController.checkAuthStatus();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<GoogleSignInController>(
       builder: (context, authController, _) {
+        // Show loading screen while checking authentication status
+        if (authController.isLoading) {
+          return const Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Checking authentication...'),
+                ],
+              ),
+            ),
+          );
+        }
+
+        // If user is signed in, go directly to MainScreen
         if (authController.isSignedIn) {
+          print('✅ AuthWrapper: User is signed in, navigating to MainScreen');
           return const MainScreen();
         }
 
+        // Show login screen if not signed in
+        print('ℹ️ AuthWrapper: User is not signed in, showing LoginScreen');
         return const LoginScreen();
       },
     );

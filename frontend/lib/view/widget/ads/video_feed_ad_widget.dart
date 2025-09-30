@@ -270,11 +270,16 @@ class _VideoFeedAdWidgetState extends State<VideoFeedAdWidget> {
         videoUrl.isNotEmpty &&
         _videoController != null &&
         _isVideoInitialized) {
-      return VideoPlayer(_videoController!);
+      return Center(
+        child: AspectRatio(
+          aspectRatio: _videoController!.value.aspectRatio,
+          child: VideoPlayer(_videoController!),
+        ),
+      );
     } else if (imageUrl != null && imageUrl.isNotEmpty) {
       return Image.network(
         imageUrl,
-        fit: BoxFit.cover,
+        fit: BoxFit.contain,
         width: double.infinity,
         height: double.infinity,
         errorBuilder: (context, error, stackTrace) {

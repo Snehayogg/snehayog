@@ -403,8 +403,8 @@ class AuthService {
         } else {
           print('⚠️ Backend returned status: ${response.statusCode}');
           // If backend returns error, still try to use fallback if available
+          print('🔄 Backend error, using fallback user data');
           if (fallbackUser != null) {
-            print('🔄 Backend error, using fallback user data');
             final userData = jsonDecode(fallbackUser);
             return {
               'id': userData['id'],
@@ -421,8 +421,8 @@ class AuthService {
       } catch (e) {
         print('⚠️ Error fetching user profile from backend: $e');
         // If backend is unreachable, use fallback data if available
+        print('🔄 Backend unreachable, using fallback user data');
         if (fallbackUser != null) {
-          print('🔄 Backend unreachable, using fallback user data');
           final userData = jsonDecode(fallbackUser);
           return {
             'id': userData['id'],
@@ -534,14 +534,6 @@ class AuthService {
       }
 
       print('🔄 Token expired or invalid, attempting to refresh...');
-
-      // Check if we have fallback user data to avoid infinite loop
-      String? fallbackUser = prefs.getString('fallback_user');
-      print('🔄 Using fallback user data for token refresh');
-      if (fallbackUser == null) {
-        return null;
-      }
-
       // Try to get a new token by re-authenticating with Google
       try {
         final newToken = await _reauthenticateWithGoogle();

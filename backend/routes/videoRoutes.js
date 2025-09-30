@@ -9,6 +9,24 @@ import { isCloudinaryConfigured } from '../config.js';
 const router = express.Router();
 
 
+
+const videoCachingMiddleware = (req, res, next) => {
+  // Set aggressive caching headers for video data
+  res.setHeader('Cache-Control', 'public, max-age=3600'); // 1 hour cache
+  res.setHeader('Accept-Ranges', 'bytes'); // Enable range requests
+  res.setHeader('Connection', 'keep-alive'); // Keep connection alive
+  res.setHeader('X-Content-Type-Options', 'nosniff'); // Security
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN'); // Security
+  
+  // Add ETag for better caching
+  res.setHeader('ETag', `"${Date.now()}"`);
+  
+  next();
+};
+
+// Apply caching middleware to all video routes
+router.use(videoCachingMiddleware);
+
 // **NEW: Data validation middleware to ensure consistent types**
 const validateVideoData = (req, res, next) => {
   try {
@@ -189,18 +207,12 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
         
         // Enhanced video validation
         validate: true,
-        invalidate: true,
-        
-        // Video format optimization - Cost optimized (720p max)
+        invalidate: true,   
         video_codec: 'h264', // Ensure ExoPlayer compatibility
         audio_codec: 'aac',  // Ensure audio compatibility
         
-        // Quality settings - Limited to 720p for cost optimization
         quality: 'auto:good',
         fetch_format: 'auto',
-        width: 1280,
-        height: 720,
-        crop: 'fill'
       });
       
       // Validate Cloudinary response
@@ -211,6 +223,25 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
       console.log('✅ Upload: Original video uploaded to Cloudinary');
       console.log('🎬 Upload: Cloudinary URL:', originalResult.secure_url);
       console.log('🎬 Upload: Public ID:', originalResult.public_id);
+
+      // Generate a thumbnail URL from the uploaded video (server-side)
+      try {
+        const thumbnailUrl = cloudinaryV2.url(originalResult.public_id, {
+          resource_type: 'video',
+          format: 'jpg',
+          secure: true,
+          transformation: [
+            {
+              quality: 'auto:good',
+              fetch_format: 'auto',
+            }
+          ]
+        });
+        originalResult.thumbnail_url = thumbnailUrl;
+        console.log('🖼️ Upload: Generated thumbnail URL:', thumbnailUrl);
+      } catch (thumbErr) {
+        console.warn('⚠️ Upload: Failed to generate thumbnail URL:', thumbErr);
+      }
       
     } catch (cloudinaryError) {
       console.error('❌ Upload: Cloudinary upload failed:', cloudinaryError);
@@ -256,21 +287,20 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
         // **FIXED: Only create 480p variant - no multiple qualities**
         streaming_profile: 'sd', // Use SD profile for 480p only
         
-        // **SIMPLIFIED: Only 480p transformation**
+        // **FIXED: Preserve original aspect ratio - no forced dimensions**
         transformation: [
           {
-            width: 854,
-            height: 480,
-            crop: 'fill',
+            // Remove fixed width/height and crop to preserve aspect ratio
+            // width: 854,
+            // height: 480,
+            // crop: 'fill',
             quality: 'auto:good',
             video_codec: 'h264',
             audio_codec: 'aac',
             format: 'mp4'
           }
         ],
-        
-        // **REMOVED: No eager variants - only single 480p version**
-        // eager: [] - Commented out to prevent multiple variants
+
         eager_async: false
       });
       
@@ -278,7 +308,7 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
       console.log('🎬 Upload: HLS Result:', {
         success: true,
         masterPlaylistUrl: hlsResult.secure_url,
-        variants: 1, // Only single 480p variant
+        variants: 1,
         qualityRange: '480p only',
         publicId: hlsResult.public_id
       });
@@ -363,13 +393,13 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
       });
     }
 
-    // 8. Generate thumbnail URL
-    const thumbnailUrl = originalResult.secure_url.replace(
-      '/upload/',
-      '/upload/w_300,h_400,c_fill/'
-    );
+    const thumbnailUrl =
+      (originalResult && originalResult.thumbnail_url) ? originalResult.thumbnail_url :
+      originalResult.secure_url.replace(
+        '/upload/',
+        '/upload/ar_auto,c_fill,g_auto,w_600/'
+      );
 
-    // 9. Save video in MongoDB with HLS URLs
     console.log('🎬 Upload: Saving video to database with HLS URLs...');
     
     // **FIXED: Generate proper HLS URLs from Cloudinary result**

@@ -15,6 +15,10 @@ class MediaUploaderWidget extends StatefulWidget {
   final Function(List<File>) onImagesSelected;
   final Function(String) onError;
 
+  // **NEW: Validation states**
+  final bool? isMediaValid;
+  final String? mediaError;
+
   const MediaUploaderWidget({
     Key? key,
     required this.selectedAdType,
@@ -25,6 +29,9 @@ class MediaUploaderWidget extends StatefulWidget {
     required this.onVideoSelected,
     required this.onImagesSelected,
     required this.onError,
+    // **NEW: Optional validation parameters**
+    this.isMediaValid,
+    this.mediaError,
   }) : super(key: key);
 
   @override
@@ -48,13 +55,31 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
               ),
             ),
             const SizedBox(height: 12),
-            Container(
-              height: 200,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade300),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: _buildMediaPreview(),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  height: 200,
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: (widget.isMediaValid == false)
+                          ? Colors.red
+                          : Colors.grey.shade300,
+                      width: (widget.isMediaValid == false) ? 2.0 : 1.0,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: _buildMediaPreview(),
+                ),
+                if (widget.isMediaValid == false && widget.mediaError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      widget.mediaError!,
+                      style: const TextStyle(color: Colors.red, fontSize: 12),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 12),
             Row(

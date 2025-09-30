@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
@@ -11,6 +12,7 @@ import 'package:snehayog/core/managers/carousel_ad_manager.dart';
 import 'package:snehayog/view/widget/comments_sheet_widget.dart';
 import 'package:snehayog/services/active_ads_service.dart';
 import 'package:snehayog/services/video_view_tracker.dart';
+import 'package:snehayog/services/ad_refresh_notifier.dart';
 import 'package:snehayog/view/widget/ads/banner_ad_widget.dart';
 import 'package:snehayog/view/widget/ads/video_feed_ad_widget.dart';
 import 'package:share_plus/share_plus.dart';
@@ -48,6 +50,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   String? _currentUserId;
   int _currentIndex = 0;
   final Set<String> _followingUsers = {}; // Track followed users
+  String? _errorMessage; // Track error messages
 
   // **SERVICES**
   late VideoService _videoService;
@@ -57,6 +60,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       VideoControllerManager();
   final ActiveAdsService _activeAdsService = ActiveAdsService();
   final VideoViewTracker _viewTracker = VideoViewTracker();
+  final AdRefreshNotifier _adRefreshNotifier = AdRefreshNotifier();
+  StreamSubscription? _adRefreshSubscription;
 
   // **AD STATE**
   List<Map<String, dynamic>> _bannerAds = [];
@@ -266,6 +271,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       }
     });
 
+    // **NEW: Listen for ad refresh notifications**
+    _adRefreshSubscription = _adRefreshNotifier.refreshStream.listen((_) {
+      print('🔄 VideoFeedAdvanced: Received ad refresh notification');
+      refreshAds();
+    });
+
     // React instantly to changes
     AutoScrollSettings.notifier.addListener(() {
       if (!mounted) return;
@@ -362,6 +373,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       print('   Banner ads: ${_bannerAds.length}');
       print('   Video feed ads: ${_videoFeedAds.length}');
 
+      // **NEW: Debug ad details**
+      for (int i = 0; i < _videoFeedAds.length; i++) {
+        final ad = _videoFeedAds[i];
+        print('   Video Feed Ad $i: ${ad['title']} (${ad['adType']})');
+      }
+
       // Also update carousel ad manager
       await _carouselAdManager.loadCarouselAds();
     } catch (e) {
@@ -440,11 +457,20 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   /// **PUBLIC: Refresh video list after upload**
   Future<void> refreshVideos() async {
     print('🔄 VideoFeedAdvanced: refreshVideos() called');
+
+    // Prevent multiple simultaneous refresh calls
+    if (_isLoading) {
+      print(
+          '⚠️ VideoFeedAdvanced: Already refreshing, ignoring duplicate call');
+      return;
+    }
+
     try {
       // Show loading state
       if (mounted) {
         setState(() {
           _isLoading = true;
+          _errorMessage = null; // Clear any previous errors
         });
       }
 
@@ -459,6 +485,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       if (mounted) {
         setState(() {
           _isLoading = false;
+          _errorMessage = null;
         });
       }
 
@@ -466,12 +493,53 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     } catch (e) {
       print('❌ VideoFeedAdvanced: Error refreshing videos: $e');
 
-      // Hide loading state on error
+      // Set error state
       if (mounted) {
         setState(() {
           _isLoading = false;
+          _errorMessage = e.toString();
         });
       }
+
+      // Show user-friendly error message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                      'Failed to refresh: ${_getUserFriendlyErrorMessage(e)}'),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: () {
+                // Retry refresh
+                refreshVideos();
+              },
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  /// **NEW: Refresh only ads (for when new ads are created)**
+  Future<void> refreshAds() async {
+    print('🔄 VideoFeedAdvanced: refreshAds() called');
+
+    try {
+      await _loadActiveAds();
+      print('✅ VideoFeedAdvanced: Ads refreshed successfully');
+    } catch (e) {
+      print('❌ Error refreshing ads: $e');
     }
   }
 
@@ -721,14 +789,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                   ? const Center(
                       child: CircularProgressIndicator(color: Colors.white),
                     )
-                  : _videos.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'No videos available',
-                            style: TextStyle(color: Colors.white, fontSize: 18),
-                          ),
-                        )
-                      : _buildVideoFeed(),
+                  : _errorMessage != null
+                      ? _buildErrorState()
+                      : _videos.isEmpty
+                          ? _buildEmptyState()
+                          : _buildVideoFeed(),
             ],
           ),
         );
@@ -737,54 +802,135 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   }
 
   Widget _buildVideoFeed() {
-    return Column(
-      children: [
-        // **NEW: Banner ads at the top**
-        if (_adsLoaded && _bannerAds.isNotEmpty)
-          SizedBox(
-            height: 70,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: _bannerAds.length,
-              itemBuilder: (context, index) {
-                return BannerAdWidget(
-                  adData: _bannerAds[index],
-                  onAdClick: () {
-                    print(
-                        '🖱️ Banner ad clicked: ${_bannerAds[index]['title']}');
-                  },
-                );
-              },
-            ),
-          ),
-
-        // Video feed with integrated ads
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: refreshVideos,
-            child: PageView.builder(
-              controller: _pageController,
-              scrollDirection: Axis.vertical,
-              onPageChanged: _onPageChanged,
-              itemCount: _getTotalItemCount(),
-              itemBuilder: (context, index) {
-                return _buildFeedItem(index);
-              },
-            ),
-          ),
-        ),
-      ],
+    return RefreshIndicator(
+      onRefresh: refreshVideos,
+      child: PageView.builder(
+        controller: _pageController,
+        scrollDirection: Axis.vertical,
+        onPageChanged: _onPageChanged,
+        itemCount: _getTotalItemCount(),
+        itemBuilder: (context, index) {
+          return _buildFeedItem(index);
+        },
+      ),
     );
   }
 
-  /// **NEW: Get total item count including videos and video feed ads**
+  /// **BUILD ERROR STATE: Show error with retry button**
+  Widget _buildErrorState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.error_outline,
+            size: 64,
+            color: Colors.red,
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Failed to load videos',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          if (_errorMessage != null) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                _getUserFriendlyErrorMessage(_errorMessage!),
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: refreshVideos,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+          ),
+          const SizedBox(height: 12),
+          ElevatedButton.icon(
+            onPressed: _testApiConnection,
+            icon: const Icon(Icons.wifi_find),
+            label: const Text('Test Connection'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// **BUILD EMPTY STATE: Show when no videos are available**
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.video_library_outlined,
+            size: 64,
+            color: Colors.white54,
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'No videos available',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Try refreshing or check back later',
+            style: TextStyle(
+              color: Colors.white54,
+              fontSize: 14,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: refreshVideos,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Refresh'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// **NEW: Get total item count including videos and ads**
   int _getTotalItemCount() {
     if (!_adsLoaded) {
       return _videos.length + (_isLoadingMore ? 1 : 0);
     }
 
-    // Calculate mixed content: videos + video feed ads + loading indicator
-    const videoFeedAdInterval = 3; // Show video feed ad every 3 videos
+    // **FIXED: Ads are integrated with video content, not separate items**
+    // Only video feed ads are separate items, banner and carousel are integrated
+    const videoFeedAdInterval = 1; // Show video feed ad after every video
     final totalVideos = _videos.length;
     final estimatedVideoFeedAds = (totalVideos / videoFeedAdInterval).floor();
     final actualVideoFeedAds = _videoFeedAds.length;
@@ -798,17 +944,19 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   Widget _buildFeedItem(int index) {
     final totalVideos = _videos.length;
 
-    // Check if this should be a video feed ad
+    // **FIXED: Check if this should be a video feed ad (separate item)**
     if (_adsLoaded && _videoFeedAds.isNotEmpty) {
-      const videoFeedAdInterval = 3; // Show ad every 3 videos
+      const videoFeedAdInterval = 1; // Show video feed ad after every video
 
-      // Calculate if this index should show an ad
+      // Calculate if this index should show a video feed ad
       if ((index + 1) % (videoFeedAdInterval + 1) == 0) {
-        // This should be an ad position
+        // This should be a video feed ad position
         final adIndex = ((index + 1) ~/ (videoFeedAdInterval + 1)) - 1;
 
         if (adIndex < _videoFeedAds.length) {
           print('🎯 Showing video feed ad at index $index (ad $adIndex)');
+          print('   Ad title: ${_videoFeedAds[adIndex]['title']}');
+          print('   Ad type: ${_videoFeedAds[adIndex]['adType']}');
           return VideoFeedAdWidget(
             adData: _videoFeedAds[adIndex],
             onAdClick: () {
@@ -816,21 +964,22 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                   '🖱️ Video feed ad clicked: ${_videoFeedAds[adIndex]['title']}');
             },
           );
+        } else {
+          print('⚠️ No video feed ad available at index $index (ad $adIndex)');
         }
       }
     }
 
-    // Calculate actual video index accounting for ads
+    // Calculate actual video index accounting for video feed ads
     int videoIndex = index;
     if (_adsLoaded && _videoFeedAds.isNotEmpty) {
-      const videoFeedAdInterval = 3;
+      const videoFeedAdInterval = 1;
       final adsBeforeThisIndex = (index / (videoFeedAdInterval + 1)).floor();
       videoIndex = index - adsBeforeThisIndex;
     }
 
     // Show loading indicator at the end
     if (videoIndex >= totalVideos) {
-      // **FIXED: Show end of content message instead of infinite loading**
       return Container(
         width: double.infinity,
         height: double.infinity,
@@ -893,20 +1042,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       color: Colors.black,
       child: Stack(
         children: [
-          // **FIXED: Remove PageView completely, use simple conditional display**
+          // **UPDATED: Show video or carousel ad based on horizontal index**
           _horizontalIndices[index] == 0
               ? _buildVideoPage(video, controller, isActive, index)
-              : _carouselAdManager.getCarouselAdForIndex(index) != null
-                  ? _buildCarouselAdPage(index)
-                  : Container(
-                      color: Colors.black,
-                      child: const Center(
-                        child: Text(
-                          'No ads available',
-                          style: TextStyle(color: Colors.white54, fontSize: 16),
-                        ),
-                      ),
-                    ),
+              : _buildCarouselAdPage(index),
 
           // Loading indicator
           if (_loadingVideos.contains(index))
@@ -945,6 +1084,23 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               child: const SizedBox.expand(),
             ),
           ),
+
+          // **NEW: Banner ad at top of video (if available)**
+          if (_adsLoaded && _bannerAds.isNotEmpty)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SizedBox(
+                height: 60,
+                child: BannerAdWidget(
+                  adData: _bannerAds[index % _bannerAds.length],
+                  onAdClick: () {
+                    print('🖱️ Banner ad clicked on video $index');
+                  },
+                ),
+              ),
+            ),
 
           // Center play indicator (only when user paused)
           Positioned.fill(
@@ -1004,6 +1160,27 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           // **NEW: Swipe indicator for carousel ads**
           if (_carouselAdManager.getCarouselAdForIndex(index) != null)
             _buildSwipeIndicator(index),
+
+          // **NEW: Debug info for ads (only in debug mode)**
+          if (kDebugMode && _videoFeedAds.isNotEmpty)
+            Positioned(
+              top: 100,
+              left: 16,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.7),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Ads: ${_videoFeedAds.length}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -1363,7 +1540,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             )
           else
             // Empty container for consistent spacing when no next arrow
-            SizedBox(
+            const SizedBox(
               width: 44,
               height: 44,
             ),
@@ -1390,12 +1567,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             height: double.infinity,
             color: Colors.black,
             child: FittedBox(
-              fit: BoxFit.cover, // Cover the entire screen
+              fit: BoxFit.contain, // Changed to contain to preserve aspect ratio
               child: Image.network(
                 slide.mediaUrl,
                 width: double.infinity,
                 height: double.infinity,
-                fit: BoxFit.cover,
+                fit: BoxFit.contain, // Changed to contain to preserve aspect ratio
                 errorBuilder: (context, error, stackTrace) {
                   return Container(
                     color: Colors.black,
@@ -1518,14 +1695,35 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   Widget _buildVideoPlayer(
       VideoPlayerController controller, bool isActive, int index) {
+    // Preserve original video size without cropping (no zoom-to-fill)
+    // Compute effective dimensions considering rotation metadata
+    final Size rawSize = controller.value.size;
+    final int rotationDegrees = controller.value.rotationCorrection;
+    final bool swapSides = rotationDegrees == 90 || rotationDegrees == 270;
+
+    final double sourceWidth = (rawSize.width > 0 && rawSize.height > 0)
+        ? (swapSides ? rawSize.height : rawSize.width)
+        : 9.0;
+    final double sourceHeight = (rawSize.width > 0 && rawSize.height > 0)
+        ? (swapSides ? rawSize.width : rawSize.height)
+        : 16.0;
+
+    // Calculate aspect ratio to determine if this is a portrait (9:16) or landscape (16:9) video
+    final double aspectRatio = sourceWidth / sourceHeight;
+    final bool isPortraitVideo = aspectRatio < 1.0; // Portrait videos have width < height
+
     return Container(
       width: double.infinity,
       height: double.infinity,
       color: Colors.black,
       child: Center(
-        child: AspectRatio(
-          aspectRatio: controller.value.aspectRatio,
-          child: VideoPlayer(controller),
+        child: FittedBox(
+          fit: BoxFit.contain, // Always use contain to preserve aspect ratio
+          child: SizedBox(
+            width: sourceWidth,
+            height: sourceHeight,
+            child: VideoPlayer(controller),
+          ),
         ),
       ),
     );
@@ -1591,12 +1789,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     return Container(
       width: double.infinity,
       height: double.infinity,
-      color: Colors.black, // Ensure black background
+      color: Colors.black,
       child: video.thumbnailUrl.isNotEmpty
           ? Center(
               child: Image.network(
                 video.thumbnailUrl,
-                fit: BoxFit.contain, // Use contain to maintain aspect ratio
+                fit: BoxFit.contain,
                 errorBuilder: (context, error, stackTrace) {
                   return _buildFallbackThumbnail();
                 },
@@ -1870,6 +2068,26 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
   }
 
+  /// **GET USER-FRIENDLY ERROR MESSAGE: Convert technical errors to user-friendly messages**
+  String _getUserFriendlyErrorMessage(dynamic error) {
+    final errorString = error.toString().toLowerCase();
+
+    if (errorString.contains('network') || errorString.contains('connection')) {
+      return 'Network connection issue';
+    } else if (errorString.contains('timeout')) {
+      return 'Request timed out';
+    } else if (errorString.contains('404')) {
+      return 'Videos not found';
+    } else if (errorString.contains('500')) {
+      return 'Server error';
+    } else if (errorString.contains('unauthorized') ||
+        errorString.contains('401')) {
+      return 'Authentication required';
+    } else {
+      return 'Unable to load videos';
+    }
+  }
+
   /// **HANDLE LIKE: With API integration**
   Future<void> _handleLike(VideoModel video, int index) async {
     if (_currentUserId == null) {
@@ -1985,6 +2203,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     );
   }
 
+  /// **NAVIGATE TO CAROUSEL AD: Switch to carousel ad view**
+  void _navigateToCarouselAd(int index) {
+    setState(() {
+      _horizontalIndices[index] = 1; // Switch to carousel ad page
+    });
+    print('🎯 Navigated to carousel ad for video $index');
+  }
+
   /// **BUILD FOLLOW TEXT BUTTON: Professional follow/unfollow button**
   Widget _buildFollowTextButton(VideoModel video) {
     // Don't show follow button for own videos
@@ -2081,13 +2307,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     return _currentUserId != null && video.likedBy.contains(_currentUserId);
   }
 
-  /// **NAVIGATE TO CAROUSEL AD: Simple state change**
-  void _navigateToCarouselAd(int videoIndex) {
-    setState(() {
-      _horizontalIndices[videoIndex] = 1; // Show carousel ad
-    });
-  }
-
   /// **NAVIGATE BACK TO VIDEO: Simple state change**
   void _navigateBackToVideo(int videoIndex) {
     setState(() {
@@ -2155,6 +2374,82 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
   }
 
+  /// **TEST API CONNECTION: Test if the API is reachable**
+  Future<void> _testApiConnection() async {
+    try {
+      print('🔍 VideoFeedAdvanced: Testing API connection...');
+
+      // Show loading state
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                ),
+                SizedBox(width: 12),
+                Text('Testing connection...'),
+              ],
+            ),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+
+      // Try to make a simple API call
+      await _videoService.getVideos(page: 1, limit: 1);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 8),
+                Text('Connection successful!'),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+
+        // Clear error and try to refresh
+        setState(() {
+          _errorMessage = null;
+        });
+        await refreshVideos();
+      }
+    } catch (e) {
+      print('❌ VideoFeedAdvanced: API connection test failed: $e');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                      'Connection failed: ${_getUserFriendlyErrorMessage(e)}'),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   void dispose() {
     // **CRITICAL: Unregister callbacks from MainController**
@@ -2187,6 +2482,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     // Cancel timers
     _preloadTimer?.cancel();
+
+    // **NEW: Cancel ad refresh subscription**
+    _adRefreshSubscription?.cancel();
 
     // Remove observer
     WidgetsBinding.instance.removeObserver(this);

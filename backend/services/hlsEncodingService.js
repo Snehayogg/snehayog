@@ -61,9 +61,7 @@ class HLSEncodingService {
 
       // Resolution presets - focused on mobile and web streaming
       const resolutionPresets = {
-        '720p': { width: 1280, height: 720, bitrate: '1500k' },
         '480p': { width: 854, height: 480, bitrate: '800k' },
-        '240p': { width: 426, height: 240, bitrate: '300k' }
       };
 
       // Auto-detect best resolution based on input video
@@ -120,8 +118,8 @@ class HLSEncodingService {
       // Add resolution if specified
       if (selectedResolution) {
         command = command
-          .size(`${selectedResolution.width}x${selectedResolution.height}`)
-          .aspect('16:9');
+          .videoFilters(`scale='min(${selectedResolution.width},iw)':-2:force_original_aspect_ratio=decrease,pad=${selectedResolution.width}:${selectedResolution.height}:(ow-iw)/2:(oh-ih)/2:black`)
+          .size(`${selectedResolution.width}x${selectedResolution.height}`);
       }
 
       // Add output
@@ -331,6 +329,8 @@ async checkFFmpegInstallation() {
           // Basic optimizations
           '-pix_fmt', 'yuv420p'
         ])
+        // Respect original aspect; pad if required to target dimensions
+        .videoFilters(`scale='min(${variant.width},iw)':-2:force_original_aspect_ratio=decrease,pad=${variant.width}:${variant.height}:(ow-iw)/2:(oh-ih)/2:black`)
         .size(`${variant.width}x${variant.height}`)
         .output(playlistPath)
         .on('start', (commandLine) => {
