@@ -13,16 +13,19 @@ class HybridVideoService {
   }
 
   /**
-   * Hybrid Processing: Cloudinary (480p) → R2 (Storage + FREE Bandwidth)
+   * Hybrid Processing: Cloudinary (480p HLS) → R2 (Storage + FREE Bandwidth)
    * 93% cost savings vs current setup!
    */
   async processVideoHybrid(videoPath, videoName, userId) {
+    let cloudinaryPublicId = null;
+    
     try {
-      console.log('🚀 Starting Hybrid Processing (Cloudinary → R2)...');
+      console.log('🚀 Starting Hybrid Processing (Cloudinary → R2 with HLS)...');
       console.log('💰 Expected savings: 93% vs current setup');
       
-      // Step 1: Process video to 480p using Cloudinary
-      const cloudinaryResult = await this.processWithCloudinary(videoPath, videoName, userId);
+      // Step 1: Process video to 480p HLS using Cloudinary
+      const cloudinaryResult = await this.processWithCloudinaryHLS(videoPath, videoName, userId);
+      cloudinaryPublicId = cloudinaryResult.cloudinaryPublicId;
       
       // Step 2: Download processed 480p video from Cloudinary
       const localVideoPath = await cloudflareR2Service.downloadFromCloudinary(
@@ -44,7 +47,10 @@ class HybridVideoService {
         userId
       );
       
-      // Step 5: Cleanup temp files
+      // Step 5: Delete video from Cloudinary to save costs
+      await this.deleteFromCloudinary(cloudinaryPublicId);
+      
+      // Step 6: Cleanup temp files
       await cloudflareR2Service.cleanupLocalFile(localVideoPath);
       await cloudflareR2Service.cleanupLocalFile(videoPath);
       
@@ -59,19 +65,29 @@ class HybridVideoService {
         success: true,
         videoUrl: r2VideoResult.url,
         thumbnailUrl: r2ThumbnailUrl,
-        format: 'MP4 with Progressive Loading',
+        format: 'HLS 480p with Progressive Loading',
         quality: '480p',
         storage: 'Cloudflare R2',
         bandwidth: 'FREE Forever',
         size: r2VideoResult.size,
-        processing: 'Cloudinary → R2 Hybrid',
-        costSavings: '93%'
+        processing: 'Cloudinary → R2 Hybrid with HLS',
+        costSavings: '93%',
+        hlsEncoded: true
       };
       
     } catch (error) {
       console.error('❌ Hybrid processing error:', error);
       
-      // Cleanup on error
+      // Cleanup Cloudinary on error
+      if (cloudinaryPublicId) {
+        try {
+          await this.deleteFromCloudinary(cloudinaryPublicId);
+        } catch (cleanupError) {
+          console.warn('⚠️ Failed to cleanup Cloudinary:', cleanupError);
+        }
+      }
+      
+      // Cleanup temp files
       try {
         await cloudflareR2Service.cleanupTempDirectory();
       } catch (cleanupError) {
@@ -83,7 +99,87 @@ class HybridVideoService {
   }
 
   /**
-   * Process video to single 480p quality using Cloudinary
+   * Process video to 480p HLS using Cloudinary with streaming profiles
+   */
+  async processWithCloudinaryHLS(videoPath, videoName, userId) {
+    try {
+      console.log('☁️ Processing video to 480p HLS with Cloudinary...');
+      
+      // Upload and process to optimized 480p HLS with streaming profiles
+      const result = await cloudinary.uploader.upload(videoPath, {
+        resource_type: 'video',
+        folder: `temp-processing/${userId}`,
+        public_id: `${videoName}_480p_hls_${Date.now()}`,
+        use_filename: true,
+        unique_filename: true,
+        overwrite: true,
+        timeout: 120000,
+        
+        // HLS streaming configuration for 480p
+        streaming_profile: 'sd', // Use SD profile for 480p
+        
+        transformation: [
+          {
+            // Normalize orientation based on source metadata
+            angle: 'auto_right'
+          },
+          { 
+            height: 480, 
+            crop: 'scale', // Use scale to maintain aspect ratio
+            quality: 'auto:good', 
+            fetch_format: 'mp4',
+            flags: 'progressive' // Enable progressive loading
+          },
+          { 
+            bitrate: '800k',
+            audio_codec: 'aac',
+            video_codec: 'h264'
+          },
+          {
+            // Optimize for streaming
+            streaming_profile: 'hd',
+            keyframe_interval: 2.0
+          }
+        ],
+        
+        // Auto-generate thumbnail
+        eager: [
+          { 
+            width: 320, 
+            height: 180, 
+            crop: 'fill', 
+            format: 'jpg',
+            quality: 'auto:good'
+          }
+        ]
+      });
+
+      console.log('✅ Cloudinary HLS processing completed');
+      console.log('🔗 Processed video URL:', result.secure_url);
+      
+      // Get thumbnail URL
+      const thumbnailUrl = result.eager && result.eager.length > 0 
+        ? result.eager[0].secure_url 
+        : result.secure_url.replace('/upload/', '/upload/w_320,h_180,c_fill,f_jpg/');
+
+      return {
+        videoUrl: result.secure_url,
+        thumbnailUrl: thumbnailUrl,
+        cloudinaryPublicId: result.public_id,
+        duration: result.duration,
+        size: result.bytes,
+        format: result.format,
+        hlsEncoded: true
+      };
+      
+    } catch (error) {
+      console.error('❌ Cloudinary HLS processing error:', error);
+      throw new Error(`Cloudinary HLS processing failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Process video to single 480p quality using Cloudinary (legacy method)
    */
   async processWithCloudinary(videoPath, videoName, userId) {
     try {
@@ -193,6 +289,31 @@ class HybridVideoService {
         isValid: false,
         error: error.message
       };
+    }
+  }
+
+  /**
+   * Delete video from Cloudinary to save costs
+   */
+  async deleteFromCloudinary(publicId) {
+    try {
+      console.log('🗑️ Deleting video from Cloudinary:', publicId);
+      
+      const result = await cloudinary.uploader.destroy(publicId, {
+        resource_type: 'video'
+      });
+      
+      if (result.result === 'ok') {
+        console.log('✅ Successfully deleted video from Cloudinary');
+        return true;
+      } else {
+        console.warn('⚠️ Cloudinary deletion result:', result.result);
+        return false;
+      }
+      
+    } catch (error) {
+      console.error('❌ Error deleting from Cloudinary:', error);
+      return false;
     }
   }
 

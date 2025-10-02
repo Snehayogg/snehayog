@@ -275,6 +275,24 @@ router.post('/process-payment', async (req, res) => {
     adCreative.activatedAt = new Date();
     await adCreative.save();
 
+    // **NEW: Broadcast ad activation to all connected clients**
+    const campaign = await AdCampaign.findById(adCreative.campaignId);
+    if (campaign) {
+      const adData = {
+        _id: adCreative._id.toString(),
+        id: adCreative._id.toString(),
+        title: campaign.name || 'Advertisement',
+        description: campaign.objective || '',
+        imageUrl: adCreative.cloudinaryUrl,
+        link: adCreative.callToAction?.url || '',
+        adType: adCreative.adType,
+        status: 'active',
+        createdAt: adCreative.createdAt
+      };
+      broadcastAdUpdate('activated', adData);
+      console.log('📡 Broadcasted ad activation to clients');
+    }
+
     res.json({
       message: 'Payment processed successfully. Ad is now active!',
       ad: adCreative,
@@ -287,6 +305,63 @@ router.post('/process-payment', async (req, res) => {
   }
 });
 
+// **NEW: WebSocket connection for real-time ad updates**
+let adUpdateClients = new Set();
+
+// **NEW: Broadcast ad updates to all connected clients**
+function broadcastAdUpdate(updateType, adData) {
+  const message = JSON.stringify({
+    type: 'ad_update',
+    updateType: updateType, // 'created', 'updated', 'deleted', 'activated'
+    adData: adData,
+    timestamp: new Date().toISOString()
+  });
+  
+  adUpdateClients.forEach(client => {
+    try {
+      client.send(message);
+    } catch (error) {
+      console.error('Error sending ad update to client:', error);
+      adUpdateClients.delete(client);
+    }
+  });
+}
+
+// **NEW: WebSocket endpoint for real-time ad updates**
+router.get('/ws', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Cache-Control'
+  });
+
+  const clientId = Date.now() + Math.random();
+  const client = {
+    id: clientId,
+    send: (data) => {
+      res.write(`data: ${data}\n\n`);
+    }
+  };
+
+  adUpdateClients.add(client);
+  console.log(`📡 Ad update client connected: ${clientId} (${adUpdateClients.size} total)`);
+
+  // Send initial connection message
+  client.send(JSON.stringify({
+    type: 'connected',
+    clientId: clientId,
+    timestamp: new Date().toISOString()
+  }));
+
+  // Handle client disconnect
+  req.on('close', () => {
+    adUpdateClients.delete(client);
+    console.log(`📡 Ad update client disconnected: ${clientId} (${adUpdateClients.size} total)`);
+  });
+});
+
 // **NEW: Get active ads for serving**
 router.get('/serve', async (req, res) => {
   try {
@@ -296,11 +371,7 @@ router.get('/serve', async (req, res) => {
 
     // Build query for active ads
     const query = {
-      status: 'active',
-      $or: [
-        { targetAudience: 'all' },
-        { targetAudience: { $in: [userId, platform, location] } }
-      ]
+      isActive: true
     };
 
     // Filter by ad type if specified
@@ -308,22 +379,57 @@ router.get('/serve', async (req, res) => {
       query.adType = adType;
     }
 
-    const activeAds = await AdCreative.find(query).limit(20).sort({ createdAt: -1 });
+    const activeAds = await AdCreative.find(query)
+      .populate({
+        path: 'campaignId',
+        select: 'name objective status target',
+        match: { status: 'active' } // Only get ads from active campaigns
+      })
+      .limit(20)
+      .sort({ createdAt: -1 });
 
-    console.log(`✅ Found ${activeAds.length} active ads`);
+    // Filter out ads where campaign is null (due to match condition)
+    const validAds = activeAds.filter(ad => ad.campaignId !== null);
+    
+    console.log(`✅ Found ${validAds.length} active ads (${activeAds.length} total, ${activeAds.length - validAds.length} filtered out)`);
     if (adType) {
       console.log(`   Filtered by type: ${adType}`);
     }
 
+    // Transform ads to frontend format
+    const transformedAds = validAds.map(ad => {
+      const campaign = ad.campaignId;
+      return {
+        _id: ad._id.toString(),
+        id: ad._id.toString(),
+        title: campaign?.name || 'Advertisement',
+        description: campaign?.objective || '',
+        imageUrl: ad.cloudinaryUrl,
+        videoUrl: ad.type === 'video' ? ad.cloudinaryUrl : null,
+        link: ad.callToAction?.url || '',
+        adType: ad.adType,
+        status: ad.isActive ? 'active' : 'inactive',
+        impressions: ad.impressions || 0,
+        clicks: ad.clicks || 0,
+        ctr: ad.ctr || 0,
+        createdAt: ad.createdAt,
+        updatedAt: ad.updatedAt,
+        // Additional fields for banner ads
+        callToActionLabel: ad.callToAction?.label || 'Learn More',
+        aspectRatio: ad.aspectRatio,
+        type: ad.type,
+      };
+    });
+
     // Update impression count
-    for (const ad of activeAds) {
+    for (const ad of validAds) {
       ad.impressions = (ad.impressions || 0) + 1;
       await ad.save();
     }
 
     res.json({
-      ads: activeAds,
-      count: activeAds.length
+      ads: transformedAds,
+      count: transformedAds.length
     });
 
   } catch (error) {

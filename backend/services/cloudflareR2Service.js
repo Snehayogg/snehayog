@@ -2,7 +2,7 @@ class CloudflareR2Service {
     constructor() {
       this.accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
       this.bucketName = process.env.CLOUDFLARE_R2_BUCKET_NAME;
-      // No public domain needed for local development - using direct R2 URLs
+      this.publicDomain = process.env.CLOUDFLARE_R2_PUBLIC_DOMAIN || 'cdn.snehayog.site';
       
       // S3-compatible client for Cloudflare R2
       this.s3Client = new S3Client({
@@ -78,7 +78,7 @@ class CloudflareR2Service {
   
       await this.s3Client.send(command);
       
-      const publicUrl = `https://${this.bucketName}.${this.accountId}.r2.cloudflarestorage.com/${key}`;
+      const publicUrl = `https://${this.publicDomain}/${key}`;
       console.log('✅ Video uploaded to R2:', publicUrl);
       
       return {
@@ -123,9 +123,9 @@ class CloudflareR2Service {
       });
 
       if (uploadResponse.status === 200) {
-        // Use direct R2 URL for local development (no custom domain needed)
-        const publicUrl = `https://${this.bucketName}.${this.accountId}.r2.cloudflarestorage.com/${key}`;
-        console.log('✅ Thumbnail uploaded to R2 (Direct URL):', publicUrl);
+        // Use custom domain for better performance and branding
+        const publicUrl = `https://${this.publicDomain}/${key}`;
+        console.log('✅ Thumbnail uploaded to R2 (Custom Domain):', publicUrl);
         return publicUrl;
       } else {
         throw new Error(`Thumbnail upload failed with status: ${uploadResponse.status}`);
