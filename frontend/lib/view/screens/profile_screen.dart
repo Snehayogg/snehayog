@@ -17,6 +17,7 @@ import 'package:snehayog/model/usermodel.dart';
 import 'package:snehayog/services/video_service.dart';
 import 'package:snehayog/core/services/profile_screen_logger.dart';
 import 'package:snehayog/core/services/auto_scroll_settings.dart';
+import 'package:snehayog/services/background_profile_preloader.dart';
 import 'dart:async';
 
 class ProfileScreen extends StatefulWidget {
@@ -117,9 +118,30 @@ class _ProfileScreenState extends State<ProfileScreen>
         return;
       }
 
+      // **NEW: Check background preloaded data first (HIGHEST PRIORITY)**
+      final preloader = BackgroundProfilePreloader();
+      final preloadedProfileData = await preloader.getPreloadedProfileData();
+
+      if (preloadedProfileData != null) {
+        print('⚡ ProfileScreen: Using PRELOADED profile data (instant load!)');
+        ProfileScreenLogger.logProfileLoadSuccess(userId: widget.userId);
+        setState(() {
+          _isProfileDataLoaded = true;
+          _isLoading = false;
+        });
+
+        // Load from preloaded data instantly
+        _stateManager.setUserData(preloadedProfileData);
+
+        // Schedule background refresh if needed
+        _scheduleBackgroundProfileRefresh();
+        return;
+      }
+
       // **ENHANCED: Check SharedPreferences cache first for instant loading**
       final cachedProfileData = await _loadCachedProfileData();
       if (cachedProfileData != null) {
+        print('⚡ ProfileScreen: Using cached profile data');
         ProfileScreenLogger.logProfileLoadSuccess(userId: widget.userId);
         setState(() {
           _isProfileDataLoaded = true;
@@ -135,6 +157,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
 
       // Load basic profile data only if no cache available
+      print('📡 ProfileScreen: Loading profile data from server...');
       await _stateManager.loadUserData(widget.userId);
 
       if (_stateManager.userData != null) {
@@ -167,6 +190,24 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (currentUserId != null) {
         ProfileScreenLogger.logVideoLoad(userId: currentUserId);
 
+        // **NEW: Check background preloaded videos first (HIGHEST PRIORITY)**
+        final preloader = BackgroundProfilePreloader();
+        final preloadedVideos = await preloader.getPreloadedUserVideos();
+
+        if (preloadedVideos != null && preloadedVideos.isNotEmpty) {
+          print(
+              '⚡ ProfileScreen: Using PRELOADED videos (instant load!) - ${preloadedVideos.length} videos');
+          _stateManager.setVideos(preloadedVideos);
+
+          setState(() {
+            _isVideosLoaded = true;
+          });
+
+          ProfileScreenLogger.logVideoLoadSuccess(
+              count: preloadedVideos.length);
+          return;
+        }
+
         if (_stateManager.userVideos.isNotEmpty) {
           ProfileScreenLogger.logVideoLoadSuccess(
               count: _stateManager.userVideos.length);
@@ -175,6 +216,8 @@ class _ProfileScreenState extends State<ProfileScreen>
           });
           return;
         }
+
+        print('📡 ProfileScreen: Loading videos from server...');
         await _stateManager.loadUserVideos(currentUserId);
 
         setState(() {
@@ -2048,24 +2091,40 @@ class _ProfileScreenState extends State<ProfileScreen>
                                             Expanded(
                                               child: Stack(
                                                 children: [
-                                                  Image.network(
-                                                    video.thumbnailUrl,
-                                                    fit: BoxFit.cover,
-                                                    errorBuilder: (context,
-                                                        error, stackTrace) {
-                                                      ProfileScreenLogger.logError(
-                                                          'Error loading thumbnail: $error');
-                                                      return Center(
-                                                        child: Icon(
-                                                          Icons.video_library,
-                                                          color: const Color(
-                                                              0xFF424242),
-                                                          size: ResponsiveHelper
-                                                              .getAdaptiveIconSize(
-                                                                  context),
-                                                        ),
-                                                      );
-                                                    },
+                                                  ClipRRect(
+                                                    borderRadius:
+                                                        const BorderRadius
+                                                            .vertical(
+                                                            top:
+                                                                Radius.circular(
+                                                                    12)),
+                                                    child: SizedBox(
+                                                      width: double.infinity,
+                                                      height: double.infinity,
+                                                      child: Image.network(
+                                                        video.thumbnailUrl,
+                                                        fit: BoxFit.cover,
+                                                        width: double.infinity,
+                                                        height: double.infinity,
+                                                        errorBuilder: (context,
+                                                            error, stackTrace) {
+                                                          ProfileScreenLogger
+                                                              .logError(
+                                                                  'Error loading thumbnail: $error');
+                                                          return Center(
+                                                            child: Icon(
+                                                              Icons
+                                                                  .video_library,
+                                                              color: const Color(
+                                                                  0xFF424242),
+                                                              size: ResponsiveHelper
+                                                                  .getAdaptiveIconSize(
+                                                                      context),
+                                                            ),
+                                                          );
+                                                        },
+                                                      ),
+                                                    ),
                                                   ),
                                                   // Professional selection overlay
                                                   if (isSelected)

@@ -756,6 +756,14 @@ class ProfileStateManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// **NEW: Setter for user videos (for background preloading)**
+  void setVideos(List<VideoModel> videos) {
+    _userVideos = videos;
+    notifyListeners();
+    print(
+        '✅ ProfileStateManager: Set ${videos.length} videos from external source');
+  }
+
   /// Refreshes user data and videos
   Future<void> refreshData() async {
     try {

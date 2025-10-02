@@ -13,6 +13,7 @@ import 'package:snehayog/view/widget/comments_sheet_widget.dart';
 import 'package:snehayog/services/active_ads_service.dart';
 import 'package:snehayog/services/video_view_tracker.dart';
 import 'package:snehayog/services/ad_refresh_notifier.dart';
+import 'package:snehayog/services/background_profile_preloader.dart';
 import 'package:snehayog/view/widget/ads/banner_ad_widget.dart';
 import 'package:snehayog/view/widget/ads/video_feed_ad_widget.dart';
 import 'package:share_plus/share_plus.dart';
@@ -25,7 +26,7 @@ class VideoFeedAdvanced extends StatefulWidget {
   final int? initialIndex;
   final List<VideoModel>? initialVideos;
   final String? initialVideoId;
-  final String? videoType; // **NEW: Add videoType parameter**
+  final String? videoType;
 
   const VideoFeedAdvanced({
     Key? key,
@@ -61,6 +62,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   final ActiveAdsService _activeAdsService = ActiveAdsService();
   final VideoViewTracker _viewTracker = VideoViewTracker();
   final AdRefreshNotifier _adRefreshNotifier = AdRefreshNotifier();
+  final BackgroundProfilePreloader _profilePreloader =
+      BackgroundProfilePreloader();
   StreamSubscription? _adRefreshSubscription;
 
   // **AD STATE**
@@ -106,6 +109,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     super.didChangeDependencies();
     // Ensure autoplay when screen becomes visible (e.g., switching tabs)
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      print(
+          '🔍 VideoFeedAdvanced: didChangeDependencies - triggering autoplay');
       _tryAutoplayCurrent();
     });
   }
@@ -125,11 +130,19 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         print(
             '▶️ VideoFeedAdvanced: Screen became visible, trying to resume video');
         _tryAutoplayCurrent();
+
+        // **NEW: Start background profile preloading**
+        print('🚀 VideoFeedAdvanced: Starting background profile preloading');
+        _profilePreloader.startBackgroundPreloading();
       } else {
         // Screen became hidden - pause current video
         print(
             '⏸️ VideoFeedAdvanced: Screen became hidden, pausing current video');
         _pauseCurrentVideo();
+
+        // **NEW: Stop background profile preloading**
+        print('⏸️ VideoFeedAdvanced: Stopping background profile preloading');
+        _profilePreloader.stopBackgroundPreloading();
       }
     } else {
       print('🔄 VideoFeedAdvanced: No visibility change needed');
@@ -202,6 +215,25 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // Update screen visibility when resuming
     _isScreenVisible = true;
 
+    print('🔍 VideoFeedAdvanced: _tryAutoplayCurrent called');
+    print('🔍 VideoFeedAdvanced: Current index: $_currentIndex');
+    print('🔍 VideoFeedAdvanced: Videos length: ${_videos.length}');
+    print(
+        '🔍 VideoFeedAdvanced: Controller pool keys: ${_controllerPool.keys.toList()}');
+
+    // **NEW: If no controller exists, preload the current video first**
+    if (!_controllerPool.containsKey(_currentIndex) && _videos.isNotEmpty) {
+      print(
+          '🚀 VideoFeedAdvanced: No controller for current index, preloading...');
+      _preloadVideo(_currentIndex).then((_) {
+        // Try autoplay again after preloading
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _tryAutoplayCurrent();
+        });
+      });
+      return;
+    }
+
     final ctrl = _controllerPool[_currentIndex];
     if (ctrl != null &&
         ctrl.value.isInitialized &&
@@ -221,7 +253,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           print(
               '▶️ Started view tracking for resumed video: ${currentVideo.id}');
         }
+      } else {
+        print(
+            '▶️ VideoFeedAdvanced: Video already playing at index $_currentIndex');
       }
+    } else {
+      print(
+          '⚠️ VideoFeedAdvanced: Cannot autoplay - controller: ${ctrl != null}, initialized: ${ctrl?.value.isInitialized}, userPaused: ${_userPaused[_currentIndex]}');
     }
 
     // Also resume VideoControllerManager videos
@@ -332,6 +370,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
       if (mounted) {
         setState(() => _isLoading = false);
+
+        // **NEW: Trigger autoplay after initial data is loaded**
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          print(
+              '🚀 VideoFeedAdvanced: Triggering initial autoplay after data load');
+          _tryAutoplayCurrent();
+        });
       }
     } catch (e) {
       print('❌ Error loading initial data: $e');
@@ -954,18 +999,20 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         final adIndex = ((index + 1) ~/ (videoFeedAdInterval + 1)) - 1;
 
         if (adIndex < _videoFeedAds.length) {
-          print('🎯 Showing video feed ad at index $index (ad $adIndex)');
-          print('   Ad title: ${_videoFeedAds[adIndex]['title']}');
-          print('   Ad type: ${_videoFeedAds[adIndex]['adType']}');
+          print(
+              '🎯 Showing video feed recommendation at index $index (recommendation $adIndex)');
+          print('   Recommendation title: ${_videoFeedAds[adIndex]['title']}');
+          print('   Recommendation type: ${_videoFeedAds[adIndex]['adType']}');
           return VideoFeedAdWidget(
             adData: _videoFeedAds[adIndex],
             onAdClick: () {
               print(
-                  '🖱️ Video feed ad clicked: ${_videoFeedAds[adIndex]['title']}');
+                  '🖱️ Video feed recommendation clicked: ${_videoFeedAds[adIndex]['title']}');
             },
           );
         } else {
-          print('⚠️ No video feed ad available at index $index (ad $adIndex)');
+          print(
+              '⚠️ No video feed recommendation available at index $index (recommendation $adIndex)');
         }
       }
     }
@@ -1096,7 +1143,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                 child: BannerAdWidget(
                   adData: _bannerAds[index % _bannerAds.length],
                   onAdClick: () {
-                    print('🖱️ Banner ad clicked on video $index');
+                    print('🖱️ Banner recommendation clicked on video $index');
                   },
                 ),
               ),
@@ -1173,7 +1220,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  'Ads: ${_videoFeedAds.length}',
+                  'Recommendations: ${_videoFeedAds.length}',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 12,
@@ -1431,7 +1478,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         color: Colors.black,
         child: const Center(
           child: Text(
-            'No ad available',
+            'No recommendations available',
             style: TextStyle(color: Colors.white, fontSize: 16),
           ),
         ),
@@ -1567,12 +1614,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             height: double.infinity,
             color: Colors.black,
             child: FittedBox(
-              fit: BoxFit.contain, // Changed to contain to preserve aspect ratio
+              fit:
+                  BoxFit.contain, // Changed to contain to preserve aspect ratio
               child: Image.network(
                 slide.mediaUrl,
                 width: double.infinity,
                 height: double.infinity,
-                fit: BoxFit.contain, // Changed to contain to preserve aspect ratio
+                fit: BoxFit
+                    .contain, // Changed to contain to preserve aspect ratio
                 errorBuilder: (context, error, stackTrace) {
                   return Container(
                     color: Colors.black,
@@ -1642,9 +1691,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                 ),
                 const SizedBox(height: 16),
 
-                // Ad title
+                // Recommendation title
                 Text(
-                  slide.title ?? 'Ad Title',
+                  slide.title ?? 'Recommendation',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 20,
@@ -1653,9 +1702,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                 ),
                 const SizedBox(height: 8),
 
-                // Ad description
+                // Recommendation description
                 Text(
-                  slide.description ?? 'Ad Description',
+                  slide.description ?? 'Recommended for you',
                   style: const TextStyle(color: Colors.white, fontSize: 14),
                 ),
                 const SizedBox(height: 16),
@@ -1663,7 +1712,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                 // Call to action button
                 GestureDetector(
                   onTap: () {
-                    print('🔗 Carousel ad CTA tapped: ${ad.callToActionUrl}');
+                    print(
+                        '🔗 Carousel recommendation CTA tapped: ${ad.callToActionUrl}');
                     _carouselAdManager.onCarouselAdClicked(ad);
                   },
                   child: Container(
@@ -1695,38 +1745,159 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   Widget _buildVideoPlayer(
       VideoPlayerController controller, bool isActive, int index) {
-    // Preserve original video size without cropping (no zoom-to-fill)
-    // Compute effective dimensions considering rotation metadata
-    final Size rawSize = controller.value.size;
-    final int rotationDegrees = controller.value.rotationCorrection;
-    final bool swapSides = rotationDegrees == 90 || rotationDegrees == 270;
-
-    final double sourceWidth = (rawSize.width > 0 && rawSize.height > 0)
-        ? (swapSides ? rawSize.height : rawSize.width)
-        : 9.0;
-    final double sourceHeight = (rawSize.width > 0 && rawSize.height > 0)
-        ? (swapSides ? rawSize.width : rawSize.height)
-        : 16.0;
-
-    // Calculate aspect ratio to determine if this is a portrait (9:16) or landscape (16:9) video
-    final double aspectRatio = sourceWidth / sourceHeight;
-    final bool isPortraitVideo = aspectRatio < 1.0; // Portrait videos have width < height
-
     return Container(
       width: double.infinity,
       height: double.infinity,
       color: Colors.black,
       child: Center(
-        child: FittedBox(
-          fit: BoxFit.contain, // Always use contain to preserve aspect ratio
-          child: SizedBox(
-            width: sourceWidth,
-            height: sourceHeight,
-            child: VideoPlayer(controller),
-          ),
-        ),
+        child: _buildVideoWithCorrectAspectRatio(controller),
       ),
     );
+  }
+
+  /// **NEW: Build video with correct aspect ratio handling**
+  Widget _buildVideoWithCorrectAspectRatio(VideoPlayerController controller) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final screenWidth = constraints.maxWidth;
+        final screenHeight = constraints.maxHeight;
+
+        // **FIXED: Use aspect ratio from VideoModel instead of detecting from video metadata**
+        final currentVideo = _videos[_currentIndex];
+        final double modelAspectRatio = currentVideo.aspectRatio;
+
+        // Get video dimensions for debugging
+        final Size videoSize = controller.value.size;
+        final int rotation = controller.value.rotationCorrection;
+
+        print('🎬 MODEL aspect ratio: $modelAspectRatio');
+        print('🎬 Video dimensions: ${videoSize.width}x${videoSize.height}');
+        print('🎬 Rotation: $rotation degrees');
+        print('🎬 Using MODEL aspect ratio instead of detected ratio');
+
+        // **DEBUG: Call debug method to get detailed aspect ratio info**
+        _debugAspectRatio(controller);
+
+        // **USE MODEL ASPECT RATIO: Trust the backend aspect ratio from VideoModel**
+        if (modelAspectRatio < 1.0) {
+          // This is a portrait video (9:16) according to model
+          return _buildPortraitVideoFromModel(
+              controller, screenWidth, screenHeight, modelAspectRatio);
+        } else {
+          // This is a landscape video (16:9) according to model
+          return _buildLandscapeVideoFromModel(
+              controller, screenWidth, screenHeight, modelAspectRatio);
+        }
+      },
+    );
+  }
+
+  /// **NEW: Check if video is portrait based on aspect ratio**
+  bool _isPortraitVideo(double aspectRatio) {
+    const double portraitThreshold =
+        0.7; // Anything below 0.7 is considered portrait
+    return aspectRatio < portraitThreshold;
+  }
+
+  /// **NEW: Build portrait video using MODEL aspect ratio (prevent stretching)**
+  Widget _buildPortraitVideoFromModel(VideoPlayerController controller,
+      double screenWidth, double screenHeight, double modelAspectRatio) {
+    // Get actual video dimensions from controller
+    final Size videoSize = controller.value.size;
+    final int rotation = controller.value.rotationCorrection;
+
+    // Calculate actual video dimensions considering rotation
+    double videoWidth = videoSize.width;
+    double videoHeight = videoSize.height;
+
+    if (rotation == 90 || rotation == 270) {
+      videoWidth = videoSize.height;
+      videoHeight = videoSize.width;
+    }
+
+    print(
+        '🎬 MODEL Portrait video - Original video size: ${videoWidth}x$videoHeight');
+    print('🎬 MODEL Portrait video - Model aspect ratio: $modelAspectRatio');
+    print(
+        '🎬 MODEL Portrait video - Screen size: ${screenWidth}x$screenHeight');
+
+    // Use FittedBox to prevent stretching while maintaining aspect ratio
+    return FittedBox(
+      fit: BoxFit.contain,
+      child: SizedBox(
+        width: videoWidth,
+        height: videoHeight,
+        child: VideoPlayer(controller),
+      ),
+    );
+  }
+
+  /// **NEW: Build landscape video using MODEL aspect ratio (prevent stretching)**
+  Widget _buildLandscapeVideoFromModel(VideoPlayerController controller,
+      double screenWidth, double screenHeight, double modelAspectRatio) {
+    // Get actual video dimensions from controller
+    final Size videoSize = controller.value.size;
+    final int rotation = controller.value.rotationCorrection;
+
+    // Calculate actual video dimensions considering rotation
+    double videoWidth = videoSize.width;
+    double videoHeight = videoSize.height;
+
+    if (rotation == 90 || rotation == 270) {
+      videoWidth = videoSize.height;
+      videoHeight = videoSize.width;
+    }
+
+    print(
+        '🎬 MODEL Landscape video - Original video size: ${videoWidth}x$videoHeight');
+    print('🎬 MODEL Landscape video - Model aspect ratio: $modelAspectRatio');
+    print(
+        '🎬 MODEL Landscape video - Screen size: ${screenWidth}x$screenHeight');
+
+    // Use FittedBox to prevent stretching while maintaining aspect ratio
+    return FittedBox(
+      fit: BoxFit.contain,
+      child: SizedBox(
+        width: videoWidth,
+        height: videoHeight,
+        child: VideoPlayer(controller),
+      ),
+    );
+  }
+
+  /// **NEW: Debug method to test aspect ratio detection**
+  void _debugAspectRatio(VideoPlayerController controller) {
+    final Size videoSize = controller.value.size;
+    final int rotation = controller.value.rotationCorrection;
+
+    double videoWidth = videoSize.width;
+    double videoHeight = videoSize.height;
+
+    if (rotation == 90 || rotation == 270) {
+      videoWidth = videoSize.height;
+      videoHeight = videoSize.width;
+    }
+
+    final double aspectRatio = videoWidth / videoHeight;
+    final bool isPortrait = aspectRatio < 1.0 || _isPortraitVideo(aspectRatio);
+
+    // Get model aspect ratio
+    final currentVideo = _videos[_currentIndex];
+    final double modelAspectRatio = currentVideo.aspectRatio;
+
+    print('🔍 ASPECT RATIO DEBUG:');
+    print('🔍 MODEL aspect ratio: $modelAspectRatio');
+    print('🔍 Raw size: ${videoSize.width}x${videoSize.height}');
+    print('🔍 Rotation: $rotation degrees');
+    print('🔍 Corrected size: ${videoWidth}x$videoHeight');
+    print('🔍 DETECTED aspect ratio: $aspectRatio');
+    print('🔍 Is portrait (detected): $isPortrait');
+    print('🔍 Expected 9:16 ratio: ${9.0 / 16.0}');
+    print(
+        '🔍 Difference from 9:16 (detected): ${(aspectRatio - (9.0 / 16.0)).abs()}');
+    print(
+        '🔍 Difference from 9:16 (model): ${(modelAspectRatio - (9.0 / 16.0)).abs()}');
+    print('🔍 Using MODEL aspect ratio for display');
   }
 
   void _attachEndListenerIfNeeded(VideoPlayerController controller, int index) {
@@ -1781,7 +1952,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   final Map<int, VoidCallback> _videoEndListeners = {};
 
   void _applyLoopingBehavior(VideoPlayerController controller) {
-    // Loop when auto-scroll is OFF; do not loop when auto-scroll is ON
     controller.setLooping(!_autoScrollEnabled);
   }
 
@@ -1844,16 +2014,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           right: 80, // Leave space for vertical action buttons
           child: Container(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  Colors.black.withOpacity(0.7),
-                ],
-              ),
-            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -2208,7 +2368,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     setState(() {
       _horizontalIndices[index] = 1; // Switch to carousel ad page
     });
-    print('🎯 Navigated to carousel ad for video $index');
+    print('🎯 Navigated to carousel recommendation for video $index');
   }
 
   /// **BUILD FOLLOW TEXT BUTTON: Professional follow/unfollow button**
@@ -2465,6 +2625,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // **NEW: Clean up views service**
     _viewTracker.dispose();
     print('🎯 VideoFeedAdvanced: Disposed ViewsService');
+
+    // **NEW: Clean up background profile preloader**
+    _profilePreloader.dispose();
+    print('🚀 VideoFeedAdvanced: Disposed BackgroundProfilePreloader');
 
     // Clean up all video controllers
     _controllerPool.forEach((index, controller) {

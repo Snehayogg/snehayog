@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:snehayog/model/video_model.dart';
 import 'package:snehayog/view/screens/video_feed_advanced.dart';
 
-class SnehaScreen extends StatefulWidget {
+class VayuScreen extends StatefulWidget {
   final int? initialIndex;
   final List<VideoModel>? initialVideos;
   final String? initialVideoId;
 
-  const SnehaScreen({
+  const VayuScreen({
     Key? key,
     this.initialIndex,
     this.initialVideos,
@@ -15,22 +15,22 @@ class SnehaScreen extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<SnehaScreen> createState() => _SnehaScreenState();
+  State<VayuScreen> createState() => _VayuScreenState();
 }
 
-class _SnehaScreenState extends State<SnehaScreen> {
+class _VayuScreenState extends State<VayuScreen> {
   final GlobalKey _videoFeedKey = GlobalKey();
 
   /// **PUBLIC: Refresh video list after upload**
   Future<void> refreshVideos() async {
-    print('🔄 SnehaScreen: refreshVideos() called');
+    print('🔄 VayuScreen: refreshVideos() called');
     final videoFeedState = _videoFeedKey.currentState;
     if (videoFeedState != null) {
       // Cast to dynamic to access the refreshVideos method
       await (videoFeedState as dynamic).refreshVideos();
-      print('✅ SnehaScreen: Video refresh completed');
+      print('✅ VayuScreen: Video refresh completed');
     } else {
-      print('❌ SnehaScreen: VideoFeedAdvanced state not found');
+      print('❌ VayuScreen: VideoFeedAdvanced state not found');
     }
   }
 

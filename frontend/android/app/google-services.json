@@ -14,24 +14,16 @@
       },
       "oauth_client": [
         {
-          "client_id": "406195883653-1j2f5ilp46376ndqs8gd0trkto8n727d.apps.googleusercontent.com",
+          "client_id": "406195883653-jk53v7inpjikpp9sf6f7r0e2jkp2f89b.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.example.snehayog",
-            "certificate_hash": "e96ce8e66162e4d1e19905a8bcf7dec0ddbe154c"
+            "certificate_hash": "f32e2097779941a6d6413fafdd821d39bc39ec43"
           }
         },
         {
           "client_id": "406195883653-qp49f9nauq4t428ndscuu3nr9jb10g4h.apps.googleusercontent.com",
           "client_type": 3
-        },
-        {
-          "client_id": "406195883653-1j2f5ilp46376ndqs8gd0trkto8n727d.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.example.snehayog",
-            "certificate_hash": "9455a734285a0a550e7c195e275b75df5b396272"
-          }
         }
       ],
       "api_key": [

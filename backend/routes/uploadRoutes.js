@@ -3,7 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs/promises';
 import Video from '../models/Video.js';
-// REMOVED: import VideoProcessingService - now using hybridVideoService
+import hybridVideoService from '../services/hybridVideoService.js';
 import { verifyToken } from '../utils/verifytoken.js';
 import cloudinary from '../config/cloudinary.js';
 

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 class MainController extends ChangeNotifier {
   int _currentIndex = 0;
-  final List<String> _routes = ['/yog', '/sneha', '/upload', '/profile'];
+  final List<String> _routes = ['/yog', '/vayu', '/upload', '/profile'];
   bool _isAppInForeground = true;
 
   // Add a callback function to pause videos

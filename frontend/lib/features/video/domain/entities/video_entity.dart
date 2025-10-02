@@ -13,7 +13,7 @@ class VideoEntity {
   final int likes;
   final int shares;
   final List<CommentEntity> comments;
-  final String videoType; // 'sneha' or 'yog'
+  final String videoType;
   final String? link;
   final bool isLongVideo;
 

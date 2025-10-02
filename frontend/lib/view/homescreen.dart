@@ -299,7 +299,7 @@ class _MainScreenState extends State<MainScreen>
                 const VideoScreen(
                   key: PageStorageKey('videoScreen'),
                 ),
-                const SnehaScreen(key: PageStorageKey('snehaScreen')),
+                const VayuScreen(key: PageStorageKey('vayuScreen')),
                 UploadScreen(
                   key: const PageStorageKey('uploadScreen'),
                   onVideoUploaded: _refreshVideoList,
@@ -346,7 +346,7 @@ class _MainScreenState extends State<MainScreen>
                         index: 1,
                         currentIndex: mainController.currentIndex,
                         icon: Icons.video_camera_front_rounded,
-                        label: 'Sneha',
+                        label: 'Vayu',
                         onTap: () => _handleNavTap(1, mainController),
                       ),
                       _buildNavItem(

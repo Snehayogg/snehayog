@@ -41,19 +41,9 @@ class _LoadingState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text(
-            'Loading videos...',
-            style: TextStyle(color: Colors.white),
-          ),
-        ],
-      ),
+      child: CircularProgressIndicator(color: Colors.white),
     );
-  }
+  } 
 }
 
 // Lightweight error state widget
