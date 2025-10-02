@@ -37,8 +37,25 @@ class ActiveAdsService {
           final adType = ad['adType'] as String? ?? 'unknown';
           final adMap = ad as Map<String, dynamic>;
 
-          if (categorizedAds.containsKey(adType)) {
-            categorizedAds[adType]!.add(adMap);
+          // Map backend ad types to frontend ad types
+          String frontendAdType;
+          switch (adType) {
+            case 'banner':
+              frontendAdType = 'banner';
+              break;
+            case 'carousel ads':
+              frontendAdType = 'carousel';
+              break;
+            case 'video feeds':
+              frontendAdType = 'video feed ad';
+              break;
+            default:
+              print('⚠️ Unknown ad type: $adType');
+              continue;
+          }
+
+          if (categorizedAds.containsKey(frontendAdType)) {
+            categorizedAds[frontendAdType]!.add(adMap);
           }
         }
 

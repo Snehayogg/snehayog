@@ -20,6 +20,10 @@ class VideoModel {
   final String? hlsPlaylistUrl;
   final List<Map<String, dynamic>>? hlsVariants;
   final bool? isHLSEncoded;
+  final String? encodingMethod;
+  final String? costSavings;
+  final String? storage;
+  final String? bandwidth;
 
   // **SIMPLIFIED: Since all videos are 480p, we only need one quality URL**
   // Keeping lowQualityUrl for backward compatibility (will contain 480p URL)
@@ -46,6 +50,10 @@ class VideoModel {
     this.hlsPlaylistUrl,
     this.hlsVariants,
     this.isHLSEncoded,
+    this.encodingMethod,
+    this.costSavings,
+    this.storage,
+    this.bandwidth,
     this.lowQualityUrl, // 480p URL for all videos
   }) : comments = comments; // **FIXED: Initialize the field**
 
@@ -241,6 +249,10 @@ class VideoModel {
           }
         }(),
         isHLSEncoded: json['isHLSEncoded'] == true,
+        encodingMethod: json['encodingMethod']?.toString(),
+        costSavings: json['costSavings']?.toString(),
+        storage: json['storage']?.toString(),
+        bandwidth: json['bandwidth']?.toString(),
         lowQualityUrl: json['lowQualityUrl']?.toString(), // 480p URL
       );
     } catch (e, stackTrace) {
@@ -277,6 +289,10 @@ class VideoModel {
       'hlsPlaylistUrl': hlsPlaylistUrl,
       'hlsVariants': hlsVariants,
       'isHLSEncoded': isHLSEncoded,
+      'encodingMethod': encodingMethod,
+      'costSavings': costSavings,
+      'storage': storage,
+      'bandwidth': bandwidth,
       'lowQualityUrl': lowQualityUrl, // 480p URL
     };
   }
@@ -303,6 +319,10 @@ class VideoModel {
     String? hlsPlaylistUrl,
     List<Map<String, dynamic>>? hlsVariants,
     bool? isHLSEncoded,
+    String? encodingMethod,
+    String? costSavings,
+    String? storage,
+    String? bandwidth,
     String? lowQualityUrl, // 480p URL
   }) {
     return VideoModel(
@@ -328,6 +348,10 @@ class VideoModel {
       hlsPlaylistUrl: hlsPlaylistUrl ?? this.hlsPlaylistUrl,
       hlsVariants: hlsVariants ?? this.hlsVariants,
       isHLSEncoded: isHLSEncoded ?? this.isHLSEncoded,
+      encodingMethod: encodingMethod ?? this.encodingMethod,
+      costSavings: costSavings ?? this.costSavings,
+      storage: storage ?? this.storage,
+      bandwidth: bandwidth ?? this.bandwidth,
       lowQualityUrl: lowQualityUrl ?? this.lowQualityUrl, // 480p URL
     );
   }

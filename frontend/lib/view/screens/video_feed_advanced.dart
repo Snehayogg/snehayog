@@ -13,6 +13,7 @@ import 'package:snehayog/view/widget/comments_sheet_widget.dart';
 import 'package:snehayog/services/active_ads_service.dart';
 import 'package:snehayog/services/video_view_tracker.dart';
 import 'package:snehayog/services/ad_refresh_notifier.dart';
+import 'package:snehayog/services/realtime_ad_service.dart';
 import 'package:snehayog/view/widget/ads/banner_ad_widget.dart';
 import 'package:snehayog/view/widget/ads/video_feed_ad_widget.dart';
 import 'package:share_plus/share_plus.dart';
@@ -61,7 +62,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   final ActiveAdsService _activeAdsService = ActiveAdsService();
   final VideoViewTracker _viewTracker = VideoViewTracker();
   final AdRefreshNotifier _adRefreshNotifier = AdRefreshNotifier();
+  final RealtimeAdService _realtimeAdService = RealtimeAdService();
   StreamSubscription? _adRefreshSubscription;
+  StreamSubscription? _realtimeAdSubscription;
+  Timer? _adPollingTimer;
 
   // **AD STATE**
   List<Map<String, dynamic>> _bannerAds = [];
@@ -202,6 +206,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // Update screen visibility when resuming
     _isScreenVisible = true;
 
+    print(
+        '🔍 VideoFeedAdvanced: _tryAutoplayCurrent called for index $_currentIndex');
+
     final ctrl = _controllerPool[_currentIndex];
     if (ctrl != null &&
         ctrl.value.isInitialized &&
@@ -277,6 +284,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       refreshAds();
     });
 
+    // **NEW: Connect to real-time ad updates**
+    _connectToRealtimeAds();
+
+    // **NEW: Start polling as fallback (every 30 seconds)**
+    _startAdPolling();
+
     // React instantly to changes
     AutoScrollSettings.notifier.addListener(() {
       if (!mounted) return;
@@ -307,7 +320,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     try {
       setState(() => _isLoading = true);
 
-      // Load initial videos
       await _loadVideos(page: 1);
 
       // Load current user
@@ -332,6 +344,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
       if (mounted) {
         setState(() => _isLoading = false);
+
+        // **NEW: Trigger autoplay after initial data is loaded**
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          print(
+              '🚀 VideoFeedAdvanced: Triggering initial autoplay after data load');
+          _tryAutoplayCurrent();
+        });
       }
     } catch (e) {
       print('❌ Error loading initial data: $e');
@@ -363,6 +382,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
       final allAds = await _activeAdsService.fetchActiveAds();
 
+      print('🔍 VideoFeedAdvanced: Raw ads response: $allAds');
+
       setState(() {
         _bannerAds = allAds['banner'] ?? [];
         _videoFeedAds = allAds['video feed ad'] ?? [];
@@ -374,6 +395,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       print('   Video feed ads: ${_videoFeedAds.length}');
 
       // **NEW: Debug ad details**
+      for (int i = 0; i < _bannerAds.length; i++) {
+        final ad = _bannerAds[i];
+        print(
+            '   Banner Ad $i: ${ad['title']} (${ad['adType']}) - Image: ${ad['imageUrl']}');
+      }
+
       for (int i = 0; i < _videoFeedAds.length; i++) {
         final ad = _videoFeedAds[i];
         print('   Video Feed Ad $i: ${ad['title']} (${ad['adType']})');
@@ -529,6 +556,53 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         );
       }
     }
+  }
+
+  /// **NEW: Connect to real-time ad updates**
+  void _connectToRealtimeAds() {
+    print('📡 VideoFeedAdvanced: Connecting to real-time ad updates...');
+
+    _realtimeAdService.connect();
+
+    _realtimeAdSubscription = _realtimeAdService.adUpdates.listen((update) {
+      print(
+          '📡 VideoFeedAdvanced: Received real-time ad update: ${update['updateType']}');
+
+      if (update['updateType'] == 'activated') {
+        // New ad was activated, refresh ads immediately
+        print('🔄 VideoFeedAdvanced: New ad activated, refreshing ads...');
+        refreshAds();
+
+        // Show success message to user
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.white),
+                  const SizedBox(width: 8),
+                  const Text('New ad is now live!'),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    });
+  }
+
+  /// **NEW: Start polling for ad updates as fallback**
+  void _startAdPolling() {
+    print('🔄 VideoFeedAdvanced: Starting ad polling (30s interval)...');
+
+    _adPollingTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (mounted && !_realtimeAdService.isConnected) {
+        print('🔄 VideoFeedAdvanced: Polling for ad updates...');
+        refreshAds();
+      }
+    });
   }
 
   /// **NEW: Refresh only ads (for when new ads are created)**
@@ -1086,7 +1160,21 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           ),
 
           // **NEW: Banner ad at top of video (if available)**
-          if (_adsLoaded && _bannerAds.isNotEmpty)
+          if (_adsLoaded && _bannerAds.isNotEmpty) ...[
+            // Debug: Log when banner ad is being displayed
+            if (kDebugMode)
+              Positioned(
+                top: 0,
+                left: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  color: Colors.red.withOpacity(0.8),
+                  child: Text(
+                    'Banner Ad ${index % _bannerAds.length}',
+                    style: const TextStyle(color: Colors.white, fontSize: 10),
+                  ),
+                ),
+              ),
             Positioned(
               top: 0,
               left: 0,
@@ -1096,12 +1184,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                 child: BannerAdWidget(
                   adData: _bannerAds[index % _bannerAds.length],
                   onAdClick: () {
-                    print('🖱️ Banner ad clicked on video $index');
+                    if (kDebugMode) {
+                      print('🖱️ Banner ad clicked on video $index');
+                    }
                   },
                 ),
               ),
             ),
-
+          ],
           // Center play indicator (only when user paused)
           Positioned.fill(
             child: IgnorePointer(
@@ -1162,23 +1252,45 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             _buildSwipeIndicator(index),
 
           // **NEW: Debug info for ads (only in debug mode)**
-          if (kDebugMode && _videoFeedAds.isNotEmpty)
+          if (kDebugMode)
             Positioned(
               top: 100,
               left: 16,
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.7),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'Ads: ${_videoFeedAds.length}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Banner: ${_bannerAds.length}, Video: ${_videoFeedAds.length}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: refreshAds,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.7),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'Refresh Ads',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
         ],
@@ -1567,12 +1679,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             height: double.infinity,
             color: Colors.black,
             child: FittedBox(
-              fit: BoxFit.contain, // Changed to contain to preserve aspect ratio
+              fit:
+                  BoxFit.contain, // Changed to contain to preserve aspect ratio
               child: Image.network(
                 slide.mediaUrl,
                 width: double.infinity,
                 height: double.infinity,
-                fit: BoxFit.contain, // Changed to contain to preserve aspect ratio
+                fit: BoxFit
+                    .contain, // Changed to contain to preserve aspect ratio
                 errorBuilder: (context, error, stackTrace) {
                   return Container(
                     color: Colors.black,
@@ -1710,7 +1824,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     // Calculate aspect ratio to determine if this is a portrait (9:16) or landscape (16:9) video
     final double aspectRatio = sourceWidth / sourceHeight;
-    final bool isPortraitVideo = aspectRatio < 1.0; // Portrait videos have width < height
+    final bool isPortraitVideo =
+        aspectRatio < 1.0; // Portrait videos have width < height
 
     return Container(
       width: double.infinity,
@@ -1844,16 +1959,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           right: 80, // Leave space for vertical action buttons
           child: Container(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  Colors.black.withOpacity(0.7),
-                ],
-              ),
-            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -2485,6 +2590,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     // **NEW: Cancel ad refresh subscription**
     _adRefreshSubscription?.cancel();
+
+    // **NEW: Disconnect from real-time ad updates**
+    _realtimeAdSubscription?.cancel();
+    _realtimeAdService.disconnect();
+
+    // **NEW: Cancel ad polling timer**
+    _adPollingTimer?.cancel();
 
     // Remove observer
     WidgetsBinding.instance.removeObserver(this);

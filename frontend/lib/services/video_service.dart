@@ -150,7 +150,8 @@ class VideoService {
             } else {
               json['videoUrl'] = json['hlsPlaylistUrl'];
             }
-            print('🔗 VideoService: Using HLS URL: ${json['videoUrl']}');
+            print(
+                '🔗 VideoService: Using HLS Playlist URL: ${json['videoUrl']}');
           } else if (json['hlsMasterPlaylistUrl'] != null &&
               json['hlsMasterPlaylistUrl'].toString().isNotEmpty) {
             if (!json['hlsMasterPlaylistUrl'].toString().startsWith('http')) {
@@ -159,6 +160,9 @@ class VideoService {
               json['videoUrl'] = json['hlsMasterPlaylistUrl'];
             }
             print('🔗 VideoService: Using HLS Master URL: ${json['videoUrl']}');
+          } else if (json['isHLSEncoded'] == true && json['videoUrl'] != null) {
+            // **NEW: R2 HLS URLs - already complete URLs from cdn.snehayog.site**
+            print('🔗 VideoService: Using R2 HLS URL: ${json['videoUrl']}');
           } else {
             // **Fallback**: Ensure relative URLs are complete
             if (json['videoUrl'] != null &&
@@ -354,15 +358,15 @@ class VideoService {
             'User not authenticated. Please sign in to upload videos.');
       }
 
-      // **Compress video if needed**
+      // **Compress ALL videos for optimization (maintains quality)**
       File? finalVideoFile = videoFile;
-      if (fileSize > 50 * 1024 * 1024) {
-        // Compress if > 50MB
-        print('🔄 VideoService: Compressing large video...');
-        final compressedFile = await compressVideo(videoFile);
-        if (compressedFile != null) {
-          finalVideoFile = compressedFile;
-        }
+      print('🔄 VideoService: Compressing video for optimization...');
+      final compressedFile = await compressVideo(videoFile);
+      if (compressedFile != null) {
+        finalVideoFile = compressedFile;
+        print('✅ VideoService: Video compressed successfully');
+      } else {
+        print('⚠️ VideoService: Compression failed, using original file');
       }
 
       // **Create multipart request**
@@ -573,20 +577,27 @@ class VideoService {
     }
   }
 
-  /// **Compress video**
+  /// **Compress video with quality optimization**
   Future<File?> compressVideo(File videoFile) async {
     try {
-      print('🔄 VideoService: Compressing video...');
+      print('🔄 VideoService: Compressing video with quality optimization...');
 
       final MediaInfo? mediaInfo = await VideoCompress.compressVideo(
         videoFile.path,
-        quality: VideoQuality.MediumQuality,
+        quality:
+            VideoQuality.HighestQuality, // High quality to maintain video quality
         deleteOrigin: false,
+        includeAudio: true, // Ensure audio is included
+        frameRate: 30, // Maintain 30fps for smooth playback
       );
 
       if (mediaInfo?.file != null) {
         print('✅ VideoService: Video compressed successfully');
-        return mediaInfo!.file;
+        print(
+            '📊 VideoService: Original size: ${videoFile.lengthSync()} bytes');
+        print(
+            '📊 VideoService: Compressed size: ${mediaInfo!.file!.lengthSync()} bytes');
+        return mediaInfo.file;
       } else {
         print('❌ VideoService: Video compression failed');
         return null;
@@ -727,7 +738,7 @@ class VideoService {
       'views': 0,
       'shares': 0,
       'uploader': {
-        'id': ad.uploaderId ?? 'advertiser',
+        'id': ad.uploaderId,
         'name': 'Sponsored',
         'profilePic': ad.uploaderProfilePic ?? '',
       },
