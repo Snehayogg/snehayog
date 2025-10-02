@@ -304,6 +304,25 @@ class LoginScreen extends StatelessWidget {
 
                   const SizedBox(height: 24),
 
+                  // Skip Button
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pushReplacementNamed(context, '/home');
+                    },
+                    child: const Text(
+                      'Skip for now',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w500,
+                        decoration: TextDecoration.underline,
+                        decorationColor: Colors.white70,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
                   // Help Text
                   const Text(
                     'By signing in, you agree to our Terms of Service and Privacy Policy',

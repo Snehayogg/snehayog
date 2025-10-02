@@ -1824,8 +1824,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     // Calculate aspect ratio to determine if this is a portrait (9:16) or landscape (16:9) video
     final double aspectRatio = sourceWidth / sourceHeight;
-    final bool isPortraitVideo =
-        aspectRatio < 1.0; // Portrait videos have width < height
+    // final bool isPortraitVideo = aspectRatio < 1.0; // Portrait videos have width < height
 
     return Container(
       width: double.infinity,
@@ -2196,7 +2195,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   /// **HANDLE LIKE: With API integration**
   Future<void> _handleLike(VideoModel video, int index) async {
     if (_currentUserId == null) {
-      _showSnackBar('Please sign in to like videos', isError: true);
+      _showSignInPrompt(
+          'To like videos, please sign in with your Google account.');
       return;
     }
 
@@ -2238,6 +2238,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   /// **HANDLE COMMENT: Open comment sheet**
   void _handleComment(VideoModel video) {
+    if (_currentUserId == null) {
+      _showSignInPrompt(
+          'To view and add comments, please sign in with your Google account.');
+      return;
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -2308,6 +2314,109 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     );
   }
 
+  /// **SHOW SIGN IN PROMPT: Better UX for guest users**
+  void _showSignInPrompt(String message) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.login,
+                color: Colors.blue[600],
+                size: 28,
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Sign In Required',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                message,
+                style: const TextStyle(
+                  fontSize: 16,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue[200]!),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      color: Colors.blue[600],
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Sign in to enjoy all features like liking, commenting, and following creators!',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.blue[700],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text(
+                'Maybe Later',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.pushReplacementNamed(context, '/login');
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue[600],
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'Sign In',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   /// **NAVIGATE TO CAROUSEL AD: Switch to carousel ad view**
   void _navigateToCarouselAd(int index) {
     setState(() {
@@ -2353,7 +2462,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   /// **HANDLE FOLLOW/UNFOLLOW: With API integration**
   Future<void> _handleFollow(VideoModel video) async {
     if (_currentUserId == null) {
-      _showSnackBar('Please sign in to follow users', isError: true);
+      _showSignInPrompt(
+          'To follow users, please sign in with your Google account.');
       return;
     }
 
