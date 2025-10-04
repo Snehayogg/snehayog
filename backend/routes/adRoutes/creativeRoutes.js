@@ -5,6 +5,7 @@ import AdCreative from '../../models/AdCreative.js';
 import AdCampaign from '../../models/AdCampaign.js';
 import User from '../../models/User.js';
 import cloudinary from '../../config/cloudinary.js';
+import { verifyToken } from '../../utils/verifytoken.js';
 
 const router = express.Router();
 
@@ -350,6 +351,140 @@ router.post('/carousel/:id/click', asyncHandler(async (req, res) => {
     console.error('❌ Error tracking click:', error);
     res.status(500).json({ 
       error: 'Failed to track click',
+      message: error.message 
+    });
+  }
+}));
+
+// **NEW: Get active ads for serving**
+router.get('/serve', asyncHandler(async (req, res) => {
+  try {
+    const { userId, platform, location, adType } = req.query;
+
+    console.log('🎯 Serving ads request:', { userId, platform, location, adType });
+
+    // Build query for active ads
+    const query = {
+      isActive: true
+    };
+
+    // Filter by ad type if specified
+    if (adType) {
+      query.adType = adType;
+    }
+
+    const activeAds = await AdCreative.find(query)
+      .populate({
+        path: 'campaignId',
+        select: 'name objective status target',
+        match: { status: 'active' } // Only get ads from active campaigns
+      })
+      .limit(20)
+      .sort({ createdAt: -1 });
+
+    // Filter out ads where campaign is null (due to match condition)
+    const validAds = activeAds.filter(ad => ad.campaignId !== null);
+    
+    console.log(`✅ Found ${validAds.length} active ads (${activeAds.length} total, ${activeAds.length - validAds.length} filtered out)`);
+    if (adType) {
+      console.log(`   Filtered by type: ${adType}`);
+    }
+
+    // Transform ads to frontend format
+    const transformedAds = validAds.map(ad => {
+      const campaign = ad.campaignId;
+      return {
+        _id: ad._id.toString(),
+        id: ad._id.toString(),
+        title: campaign.name || 'Ad',
+        description: campaign.objective || '',
+        imageUrl: ad.mediaUrl || '',
+        adType: ad.adType,
+        campaignId: campaign._id.toString(),
+        advertiserName: campaign.name || 'Advertiser',
+        advertiserProfilePic: '',
+        callToActionLabel: ad.callToActionLabel || 'Learn More',
+        callToActionUrl: ad.callToActionUrl || '#',
+        target: campaign.target || {},
+        createdAt: ad.createdAt,
+        updatedAt: ad.updatedAt
+      };
+    });
+
+    res.json({
+      success: true,
+      ads: transformedAds,
+      count: transformedAds.length
+    });
+
+  } catch (error) {
+    console.error('Error serving ads:', error);
+    res.status(500).json({ error: 'Failed to serve ads' });
+  }
+}));
+
+// **NEW: Update ad status**
+router.patch('/:adId/status', verifyToken, asyncHandler(async (req, res) => {
+  try {
+    const { adId } = req.params;
+    const { status } = req.body;
+
+    console.log(`🎯 Updating ad status: ${adId} -> ${status}`);
+
+    if (!status) {
+      return res.status(400).json({ error: 'Status is required' });
+    }
+
+    // Validate status
+    const validStatuses = ['draft', 'pending_review', 'active', 'paused', 'completed', 'rejected'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
+    // Find the campaign
+    const campaign = await AdCampaign.findById(adId);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Ad campaign not found' });
+    }
+
+    // **FIXED: Verify ownership using proper user lookup**
+    const user = await User.findOne({ googleId: req.user.googleId });
+    if (!user || campaign.advertiserUserId.toString() !== user._id.toString()) {
+      return res.status(403).json({ error: 'Access denied - not your ad' });
+    }
+
+    // Update campaign status
+    campaign.status = status;
+    campaign.updatedAt = new Date();
+
+    // If activating, set isActive to true and set start date
+    if (status === 'active') {
+      campaign.isActive = true;
+      campaign.startDate = new Date();
+    } else {
+      campaign.isActive = false;
+    }
+
+    await campaign.save();
+
+    console.log(`✅ Successfully updated ad ${adId} status to ${status}`);
+
+    res.json({
+      success: true,
+      message: 'Ad status updated successfully',
+      ad: {
+        id: campaign._id,
+        name: campaign.name,
+        status: campaign.status,
+        isActive: campaign.isActive,
+        startDate: campaign.startDate,
+        updatedAt: campaign.updatedAt
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error updating ad status:', error);
+    res.status(500).json({ 
+      error: 'Failed to update ad status',
       message: error.message 
     });
   }

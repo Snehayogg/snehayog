@@ -5,8 +5,8 @@ import { config } from '../config.js';
 
 dotenv.config();
 
-// Ensure we're using the correct Google Client ID
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '406195883653-qp49f9nauq4t428ndscuu3nr9jb10g4h.apps.googleusercontent.com';
+// Ensure we're using the correct Google Client ID - NEW PACKAGE NAME
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 console.log('🔍 Using Google Client ID:', GOOGLE_CLIENT_ID.substring(0, 20) + '...');
 const client = new OAuth2Client(GOOGLE_CLIENT_ID);
 
