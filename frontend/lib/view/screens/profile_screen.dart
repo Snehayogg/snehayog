@@ -19,6 +19,8 @@ import 'package:snehayog/core/services/profile_screen_logger.dart';
 import 'package:snehayog/core/services/auto_scroll_settings.dart';
 import 'package:snehayog/services/background_profile_preloader.dart';
 import 'dart:async';
+import 'package:snehayog/view/widget/report/report_dialog_widget.dart';
+import 'package:snehayog/view/widget/feedback/feedback_dialog_widget.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -135,6 +137,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
         // Schedule background refresh if needed
         _scheduleBackgroundProfileRefresh();
+        // Ensure payment setup flag is synced from backend/cache
+        unawaited(_ensurePaymentSetupFlag());
         return;
       }
 
@@ -153,6 +157,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
         // Schedule background refresh if cache is stale
         _scheduleBackgroundProfileRefresh();
+        // Ensure payment setup flag is synced from backend/cache
+        unawaited(_ensurePaymentSetupFlag());
         return;
       }
 
@@ -170,6 +176,8 @@ class _ProfileScreenState extends State<ProfileScreen>
         });
 
         ProfileScreenLogger.logProfileLoadSuccess(userId: widget.userId);
+        // Ensure payment setup flag is synced from backend
+        unawaited(_ensurePaymentSetupFlag());
       }
     } catch (e) {
       ProfileScreenLogger.logProfileLoadError(e.toString());
@@ -1241,6 +1249,49 @@ class _ProfileScreenState extends State<ProfileScreen>
                         ),
                         Divider(
                             color: Colors.grey[300], height: 1, thickness: 0.5),
+                        // Conditionally show Report User when viewing someone else's profile
+                        if (widget.userId != null &&
+                            ((_stateManager.userData?['_id'] ??
+                                    _stateManager.userData?['id'] ??
+                                    _stateManager.userData?['googleId']) !=
+                                widget.userId)) ...[
+                          ListTile(
+                            leading: const Icon(Icons.flag_outlined,
+                                color: Colors.black54),
+                            title: const Text('Report User',
+                                style: TextStyle(color: Colors.black87)),
+                            subtitle: const Text(
+                                'Report inappropriate behavior',
+                                style: TextStyle(color: Colors.black54)),
+                            onTap: () {
+                              Navigator.pop(context);
+                              final targetId = widget.userId!;
+                              _openReportDialog(
+                                targetType: 'user',
+                                targetId: targetId,
+                              );
+                            },
+                          ),
+                          Divider(
+                              color: Colors.grey[300],
+                              height: 1,
+                              thickness: 0.5),
+                        ],
+                        // Feedback
+                        ListTile(
+                          leading: const Icon(Icons.feedback_outlined,
+                              color: Colors.black54),
+                          title: const Text('Feedback',
+                              style: TextStyle(color: Colors.black87)),
+                          subtitle: const Text('Tell us what you think',
+                              style: TextStyle(color: Colors.black54)),
+                          onTap: () {
+                            Navigator.pop(context);
+                            _showFeedbackDialog();
+                          },
+                        ),
+                        Divider(
+                            color: Colors.grey[300], height: 1, thickness: 0.5),
                         ListTile(
                           leading: const Icon(Icons.delete_outline,
                               color: Colors.black54),
@@ -1432,6 +1483,15 @@ class _ProfileScreenState extends State<ProfileScreen>
                           _showHelpDialog();
                         },
                       ),
+                      _buildSettingsTile(
+                        icon: Icons.feedback_outlined,
+                        title: 'Feedback',
+                        subtitle: 'Share ideas or report a problem',
+                        onTap: () {
+                          Navigator.pop(context);
+                          _showFeedbackDialog();
+                        },
+                      ),
                     ],
                   );
                 } else {
@@ -1568,6 +1628,28 @@ class _ProfileScreenState extends State<ProfileScreen>
             child: const Text('Debug Info'),
           ),
         ],
+      ),
+    );
+  }
+
+  /// **NEW: Feedback Dialog**
+  void _showFeedbackDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => const FeedbackDialogWidget(),
+    );
+  }
+
+  /// **NEW: Open Report Dialog**
+  void _openReportDialog(
+      {required String targetType, required String targetId}) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => ReportDialogWidget(
+        targetType: targetType,
+        targetId: targetId,
       ),
     );
   }
@@ -2126,6 +2208,53 @@ class _ProfileScreenState extends State<ProfileScreen>
                                                       ),
                                                     ),
                                                   ),
+                                                  // Views overlay on thumbnail
+                                                  Positioned(
+                                                    bottom: 8,
+                                                    left: 8,
+                                                    child: Container(
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                          horizontal: 8,
+                                                          vertical: 4),
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.black
+                                                            .withOpacity(0.6),
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(12),
+                                                      ),
+                                                      child: Row(
+                                                        children: [
+                                                          Icon(
+                                                            Icons.visibility,
+                                                            color: Colors.white,
+                                                            size: ResponsiveHelper
+                                                                    .getAdaptiveIconSize(
+                                                                        context) *
+                                                                0.6,
+                                                          ),
+                                                          const SizedBox(
+                                                              width: 6),
+                                                          Text(
+                                                            '${video.views}',
+                                                            style: TextStyle(
+                                                              color:
+                                                                  Colors.white,
+                                                              fontSize: ResponsiveHelper
+                                                                  .getAdaptiveFontSize(
+                                                                      context,
+                                                                      12),
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w600,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  // Report flag removed on own videos
                                                   // Professional selection overlay
                                                   if (isSelected)
                                                     Positioned.fill(
@@ -2173,69 +2302,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                                 ],
                                               ),
                                             ),
-                                            Padding(
-                                              padding: EdgeInsets.all(
-                                                ResponsiveHelper.isMobile(
-                                                        context)
-                                                    ? 8.0
-                                                    : 12.0,
-                                              ),
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    video.videoName,
-                                                    style: TextStyle(
-                                                      color: const Color(
-                                                          0xFF424242),
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      fontSize: ResponsiveHelper
-                                                          .getAdaptiveFontSize(
-                                                              context, 14),
-                                                    ),
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                  SizedBox(
-                                                      height: ResponsiveHelper
-                                                              .isMobile(context)
-                                                          ? 4
-                                                          : 8),
-                                                  Row(
-                                                    children: [
-                                                      Icon(
-                                                        Icons.visibility,
-                                                        color: const Color(
-                                                            0xFF757575),
-                                                        size: ResponsiveHelper
-                                                                .getAdaptiveIconSize(
-                                                                    context) *
-                                                            0.6,
-                                                      ),
-                                                      SizedBox(
-                                                          width: ResponsiveHelper
-                                                                  .isMobile(
-                                                                      context)
-                                                              ? 4
-                                                              : 8),
-                                                      Text(
-                                                        '${video.views}',
-                                                        style: TextStyle(
-                                                          color: const Color(
-                                                              0xFF757575),
-                                                          fontSize: ResponsiveHelper
-                                                              .getAdaptiveFontSize(
-                                                                  context, 12),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
+                                            // Removed bottom title/details for a cleaner, thumbnail-only card
                                           ],
                                         ),
                                       ),
@@ -2525,6 +2592,26 @@ class _ProfileScreenState extends State<ProfileScreen>
     } catch (e) {
       ProfileScreenLogger.logPaymentSetupCheckError(e.toString());
       return false;
+    }
+  }
+
+  /// Sync local 'has_payment_setup' flag from backend once user data exists
+  Future<void> _ensurePaymentSetupFlag() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final already = prefs.getBool('has_payment_setup') ?? false;
+      if (already) return;
+
+      if (_stateManager.userData != null &&
+          _stateManager.userData!['_id'] != null) {
+        final backendHas = await _checkBackendPaymentSetup();
+        if (backendHas) {
+          await prefs.setBool('has_payment_setup', true);
+          ProfileScreenLogger.logPaymentSetupFound();
+        }
+      }
+    } catch (e) {
+      ProfileScreenLogger.logWarning('ensurePaymentSetupFlag failed: $e');
     }
   }
 

@@ -246,6 +246,10 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
           ),
         );
 
+        // Persist a local flag so user won't be prompted again
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('has_payment_setup', true);
+
         // Show success dialog
         _showSuccessDialog();
       } else {

@@ -21,6 +21,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:snehayog/core/services/auto_scroll_settings.dart';
 import 'package:snehayog/controller/main_controller.dart';
 import 'package:snehayog/core/managers/video_controller_manager.dart';
+import 'package:snehayog/view/widget/report/report_dialog_widget.dart';
 
 class VideoFeedAdvanced extends StatefulWidget {
   final int? initialIndex;
@@ -831,8 +832,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           body: Stack(
             children: [
               _isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(color: Colors.white),
+                  ? Center(
+                      child: _buildGreenSpinner(size: 40),
                     )
                   : _errorMessage != null
                       ? _buildErrorState()
@@ -1096,9 +1097,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
           // Loading indicator
           if (_loadingVideos.contains(index))
-            const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            ),
+            Center(child: _buildGreenSpinner(size: 28)),
         ],
       ),
     );
@@ -1204,9 +1203,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           if (controller != null && controller.value.isInitialized)
             _buildQualityIndicator(controller, video),
 
-          // **NEW: Swipe indicator for carousel ads**
-          if (_carouselAdManager.getCarouselAdForIndex(index) != null)
-            _buildSwipeIndicator(index),
+          // Report indicator on side (keeps original styling)
+          _buildReportIndicator(index),
 
           // **NEW: Debug info for ads (only in debug mode)**
           if (kDebugMode && _videoFeedAds.isNotEmpty)
@@ -1233,40 +1231,57 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     );
   }
 
-  /// **BUILD SWIPE INDICATOR: Shows users they can swipe for ads**
-  Widget _buildSwipeIndicator(int index) {
+  /// **BUILD REPORT INDICATOR: Same styling as old swipe, tap to report**
+  Widget _buildReportIndicator(int index) {
+    final String videoId =
+        (index >= 0 && index < _videos.length) ? _videos[index].id : '';
     return Positioned(
       right: 16,
       top: MediaQuery.of(context).size.height * 0.5 - 20,
       child: AnimatedOpacity(
         opacity: _horizontalIndices[index] == 0 ? 0.7 : 0.0,
         duration: const Duration(milliseconds: 300),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.6),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Swipe',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
+        child: GestureDetector(
+          onTap: () => _openReportDialog(videoId),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.6),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Report',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-              ),
-              SizedBox(width: 4),
-              Icon(
-                Icons.arrow_forward_ios,
-                color: Colors.white,
-                size: 12,
-              ),
-            ],
+                SizedBox(width: 4),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  color: Colors.white,
+                  size: 12,
+                ),
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  void _openReportDialog(String videoId) {
+    if (videoId.isEmpty) return;
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => ReportDialogWidget(
+        targetType: 'video',
+        targetId: videoId,
       ),
     );
   }
@@ -1325,6 +1340,18 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           ),
         );
       },
+    );
+  }
+
+  /// Green spinner used across the yog tab
+  Widget _buildGreenSpinner({double size = 24}) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: const CircularProgressIndicator(
+        strokeWidth: 3,
+        color: Colors.green,
+      ),
     );
   }
 

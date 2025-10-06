@@ -27,7 +27,7 @@ class GoogleSignInConfig {
       print('🌐 Web browser detected, using Web client ID for 1-click sign-in');
       return webClientId;
     }
-    return webClientId; // Default to Web client ID
+    return webClientId; 
   }
 
   static const List<String> scopes = ['email', 'profile'];

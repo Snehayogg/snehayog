@@ -7,17 +7,25 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:406195883653:android:c5d7dafdb8d97e770363ec",
+        "mobilesdk_app_id": "1:406195883653:android:ff2cd03c822257780363ec",
         "android_client_info": {
-          "package_name": "com.example.snehayog"
+          "package_name": "com.snehayog.app"
         }
       },
       "oauth_client": [
         {
-          "client_id": "406195883653-jk53v7inpjikpp9sf6f7r0e2jkp2f89b.apps.googleusercontent.com",
+          "client_id": "406195883653-99alc06oe0okp30jjfhpj0r64edhevtd.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.example.snehayog",
+            "package_name": "com.snehayog.app",
+            "certificate_hash": "e96ce8e66162e4d1e19905a8bcf7dec0ddbe154c"
+          }
+        },
+        {
+          "client_id": "406195883653-c3l6apj3e6ruffil98pq6idirfvknrru.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.snehayog.app",
             "certificate_hash": "f32e2097779941a6d6413fafdd821d39bc39ec43"
           }
         },
