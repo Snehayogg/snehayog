@@ -61,11 +61,8 @@ class _FeedbackFormWidgetState extends State<FeedbackFormWidget> {
       final appVersion = '${packageInfo.version} (${packageInfo.buildNumber})';
 
       final success = await _feedbackService.submitFeedback(
-        feedbackType: _selectedType,
-        message: _messageController.text,
         rating: _rating,
-        deviceInfo: deviceInfoString,
-        appVersion: appVersion,
+        comments: _messageController.text,
       );
 
       if (success) {

@@ -76,6 +76,7 @@ class AdService {
       name: title,
       advertiserUserId: user._id, 
       objective: 'awareness',
+      status: 'active', // **FIX: Set campaign as active immediately after payment**
       startDate: startDate ? new Date(startDate) : new Date(),
       endDate: endDate ? new Date(endDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       dailyBudget: Math.max(budget, 100),
@@ -147,8 +148,8 @@ class AdService {
         label: callToActionLabel,
         url: callToActionUrl
       },
-      reviewStatus: 'pending',
-      isActive: false
+      reviewStatus: 'approved', // **FIX: Auto-approve ads with payment**
+      isActive: true // **FIX: Activate ads immediately after payment**
     });
 
     try {

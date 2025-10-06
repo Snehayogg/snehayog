@@ -18,6 +18,8 @@ import adRoutes from './routes/adRoutes/index.js';
 import billingRoutes from './routes/billingRoutes.js';
 import creatorPayoutRoutes from './routes/creatorPayoutRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
+import feedbackRoutes from './routes/feedbackRoutes.js';
 
 // Import services
 import automatedPayoutService from './services/automatedPayoutService.js';
@@ -137,7 +139,9 @@ app.use('/api/ads', adRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/creator-payouts', creatorPayoutRoutes);
 app.use('/api/videos', videoRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/feedback', feedbackRoutes);
 
 // Health check endpoints (both /health and /api/health)
 app.get('/health', (req, res) => {

@@ -10,35 +10,32 @@ class FeedbackService {
 
   /// Submit feedback to the server
   Future<bool> submitFeedback({
-    required String feedbackType,
-    required String message,
     required int rating,
-    String? deviceInfo,
-    String? appVersion,
+    String? comments,
   }) async {
     try {
-      final token = await _authService.refreshTokenIfNeeded();
-      if (token == null) {
+      // Get user data to extract email and ID
+      final userData = await _authService.getUserData();
+      if (userData == null) {
         throw Exception('User not authenticated');
       }
 
       final response = await http.post(
-        Uri.parse('$baseUrl/api/feedback'),
+        Uri.parse('$baseUrl/api/feedback/submit'),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
         },
         body: jsonEncode({
-          'feedbackType': feedbackType,
-          'message': message,
           'rating': rating,
-          'deviceInfo': deviceInfo,
-          'appVersion': appVersion,
+          'comments': comments ?? '',
+          'userEmail': userData['email'] ?? 'anonymous@example.com',
+          'userId': userData['googleId'] ?? userData['id'],
         }),
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        return true;
+        final responseData = jsonDecode(response.body);
+        return responseData['success'] == true;
       } else {
         print(
             'Error submitting feedback: ${response.statusCode} - ${response.body}');

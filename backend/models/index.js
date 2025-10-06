@@ -8,5 +8,6 @@ import './Invoice.js';
 import './AdCampaign.js';
 import './AdCreative.js';
 import './CreatorPayout.js';
+import './Feedback.js';
 
 console.log('✅ All models imported and registered successfully');

@@ -189,23 +189,19 @@ router.post('/create-with-payment', async (req, res) => {
 
     // Create ad creative
     const adCreative = new AdCreative({
-      title,
-      description,
-      imageUrl,
-      videoUrl,
-      link,
-      adType,
-      uploaderId,
-      uploaderName,
-      uploaderProfilePic,
-      targetAudience: targetAudience || 'all',
-      targetKeywords: targetKeywords || [],
-      estimatedImpressions: calculatedImpressions,
-      fixedCpm: fixedCpm || cpm,
-      creatorRevenue: creatorRevenue || budget * 0.80,
-      platformRevenue: platformRevenue || budget * 0.20,
-      isActive: false, // **FIX: Create ads as inactive by default**
-      reviewStatus: 'pending' // **FIX: Set for admin review**
+      campaignId: null, // This is the old endpoint, no campaign
+      adType: adType === 'banner' ? 'banner' : adType === 'carousel' ? 'carousel ads' : 'video feeds',
+      type: videoUrl ? 'video' : 'image',
+      cloudinaryUrl: videoUrl || imageUrl,
+      thumbnail: imageUrl,
+      aspectRatio: '9:16', // Default aspect ratio
+      durationSec: videoUrl ? 15 : undefined,
+      callToAction: {
+        label: 'Learn More',
+        url: link || 'https://example.com'
+      },
+      reviewStatus: 'approved', // **FIX: Auto-approve ads with payment**
+      isActive: true // **FIX: Activate ads immediately after payment**
     });
 
     await adCreative.save();
@@ -294,9 +290,10 @@ router.get('/serve', async (req, res) => {
 
     console.log('🎯 Serving ads request:', { userId, platform, location, adType });
 
-    // Build query for active ads
+    // Build query for active ads - FIXED: Look for isActive: true instead of status: 'active'
     const query = {
-      status: 'active',
+      isActive: true,
+      reviewStatus: 'approved', // Only serve approved ads
       $or: [
         { targetAudience: 'all' },
         { targetAudience: { $in: [userId, platform, location] } }
@@ -308,22 +305,31 @@ router.get('/serve', async (req, res) => {
       query.adType = adType;
     }
 
-    const activeAds = await AdCreative.find(query).limit(20).sort({ createdAt: -1 });
+    // Also check if the campaign is active (or no campaign for old ads)
+    const activeAds = await AdCreative.find(query)
+      .populate('campaignId', 'status')
+      .limit(20)
+      .sort({ createdAt: -1 });
 
-    console.log(`✅ Found ${activeAds.length} active ads`);
+    // Filter out ads where campaign is not active (or no campaign for old ads)
+    const filteredAds = activeAds.filter(ad => 
+      !ad.campaignId || ad.campaignId.status === 'active'
+    );
+
+    console.log(`✅ Found ${filteredAds.length} active ads (${activeAds.length} total found)`);
     if (adType) {
       console.log(`   Filtered by type: ${adType}`);
     }
 
     // Update impression count
-    for (const ad of activeAds) {
+    for (const ad of filteredAds) {
       ad.impressions = (ad.impressions || 0) + 1;
       await ad.save();
     }
 
     res.json({
-      ads: activeAds,
-      count: activeAds.length
+      ads: filteredAds,
+      count: filteredAds.length
     });
 
   } catch (error) {

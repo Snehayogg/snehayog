@@ -37,6 +37,20 @@ class AuthService {
       // **NEW: Print configuration for debugging**
       GoogleSignInConfig.printConfig();
 
+      // Ensure previous account session is fully cleared so account chooser appears
+      try {
+        await _googleSignIn.signOut();
+        await _googleSignIn.disconnect();
+      } catch (e) {
+        print('ℹ️ Pre sign-in disconnect/signOut ignored: $e');
+      }
+
+      // Also clear any locally cached fallback to avoid auto-restoring prior account
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('fallback_user');
+      } catch (_) {}
+
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
         print('❌ User cancelled Google Sign-In');
@@ -248,6 +262,12 @@ class AuthService {
 
       // **FIXED: Sign out from Google first**
       await _googleSignIn.signOut();
+      // Also revoke granted permissions so the next sign-in prompts account chooser
+      try {
+        await _googleSignIn.disconnect();
+      } catch (e) {
+        print('ℹ️ Google disconnect failed (non-fatal): $e');
+      }
 
       // **FIXED: Clear ALL stored authentication data**
       SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -265,11 +285,16 @@ class AuthService {
         if (key.startsWith('user_') ||
             key.startsWith('video_') ||
             key.startsWith('profile_') ||
+            key.startsWith('profile_cache_') ||
+            key.startsWith('profile_cache_timestamp_') ||
             key.startsWith('auth_')) {
           await prefs.remove(key);
           print('🗑️ Cleared cached data: $key');
         }
       }
+
+      // Explicit flags
+      await prefs.remove('has_payment_setup');
 
       print('✅ Sign out successful - All user data cleared');
     } catch (e) {

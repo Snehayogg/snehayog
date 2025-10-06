@@ -137,6 +137,78 @@
         .status-paid { background: #d4edda; color: #155724; }
         .status-failed { background: #f8d7da; color: #721c24; }
 
+        .feedback-card {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 15px 0;
+            transition: all 0.3s ease;
+        }
+
+        .feedback-card:hover {
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+
+        .feedback-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .feedback-rating {
+            display: flex;
+            gap: 5px;
+        }
+
+        .star {
+            color: #ffc107;
+            font-size: 1.2rem;
+        }
+
+        .star.empty {
+            color: #dee2e6;
+        }
+
+        .feedback-meta {
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+
+        .feedback-content {
+            margin-top: 10px;
+            line-height: 1.6;
+        }
+
+        .feedback-actions {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 0.8rem;
+        }
+
+        .filter-controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .filter-controls select,
+        .filter-controls input {
+            padding: 8px 12px;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            font-size: 0.9rem;
+        }
+
         .action-buttons {
             display: flex;
             gap: 10px;
@@ -291,6 +363,21 @@
         </div>
 
         <div class="dashboard-section">
+            <h2 class="section-title">💬 User Feedback</h2>
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="loadFeedback()">
+                    📥 Load Feedback
+                </button>
+                <button class="btn btn-success" onclick="exportFeedback()">
+                    📊 Export Feedback
+                </button>
+            </div>
+            <div id="feedbackList">
+                <p>Click "Load Feedback" to view user feedback</p>
+            </div>
+        </div>
+
+        <div class="dashboard-section">
             <h2 class="section-title">⚙️ System Controls</h2>
             <div class="action-buttons">
                 <button class="btn btn-primary" onclick="refreshData()">
@@ -317,6 +404,219 @@
         document.addEventListener('DOMContentLoaded', function() {
             refreshData();
         });
+
+        // Feedback management functions
+        async function loadFeedback() {
+            try {
+                setLoading(true);
+                const response = await fetch(`${API_BASE}/admin/feedback`);
+                if (response.ok) {
+                    const data = await response.json();
+                    displayFeedback(data.feedback || []);
+                } else {
+                    showError('Failed to load feedback');
+                }
+            } catch (error) {
+                console.error('Error loading feedback:', error);
+                showError('Error loading feedback: ' + error.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function displayFeedback(feedbackList) {
+            const container = document.getElementById('feedbackList');
+            
+            if (feedbackList.length === 0) {
+                container.innerHTML = '<p>No feedback found</p>';
+                return;
+            }
+
+            // Add filter controls
+            const filterHtml = `
+                <div class="filter-controls">
+                    <select id="ratingFilter" onchange="filterFeedback()">
+                        <option value="">All Ratings</option>
+                        <option value="5">5 Stars</option>
+                        <option value="4">4 Stars</option>
+                        <option value="3">3 Stars</option>
+                        <option value="2">2 Stars</option>
+                        <option value="1">1 Star</option>
+                    </select>
+                    <input type="text" id="searchFilter" placeholder="Search feedback..." onkeyup="filterFeedback()">
+                    <select id="sortFilter" onchange="filterFeedback()">
+                        <option value="newest">Newest First</option>
+                        <option value="oldest">Oldest First</option>
+                        <option value="rating-high">Highest Rating</option>
+                        <option value="rating-low">Lowest Rating</option>
+                    </select>
+                </div>
+            `;
+
+            // Generate feedback cards
+            const feedbackHtml = feedbackList.map(feedback => `
+                <div class="feedback-card" data-rating="${feedback.rating || 0}" data-date="${feedback.createdAt}">
+                    <div class="feedback-header">
+                        <div class="feedback-rating">
+                            ${generateStars(feedback.rating || 0)}
+                        </div>
+                        <div class="feedback-meta">
+                            ${new Date(feedback.createdAt).toLocaleDateString()} at ${new Date(feedback.createdAt).toLocaleTimeString()}
+                        </div>
+                    </div>
+                    <div class="feedback-content">
+                        <strong>User:</strong> ${feedback.userEmail || 'Anonymous'}<br>
+                        <strong>Comments:</strong> ${feedback.comments || 'No additional comments'}
+                    </div>
+                    <div class="feedback-actions">
+                        <button class="btn btn-primary btn-sm" onclick="viewFeedbackDetails('${feedback._id}')">
+                            👁️ View Details
+                        </button>
+                        <button class="btn btn-success btn-sm" onclick="markAsRead('${feedback._id}')">
+                            ✅ Mark as Read
+                        </button>
+                        <button class="btn btn-warning btn-sm" onclick="replyToFeedback('${feedback._id}')">
+                            💬 Reply
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+            container.innerHTML = filterHtml + feedbackHtml;
+        }
+
+        function generateStars(rating) {
+            let stars = '';
+            for (let i = 1; i <= 5; i++) {
+                if (i <= rating) {
+                    stars += '<span class="star">★</span>';
+                } else {
+                    stars += '<span class="star empty">★</span>';
+                }
+            }
+            return stars;
+        }
+
+        function filterFeedback() {
+            const ratingFilter = document.getElementById('ratingFilter').value;
+            const searchFilter = document.getElementById('searchFilter').value.toLowerCase();
+            const sortFilter = document.getElementById('sortFilter').value;
+            
+            const cards = document.querySelectorAll('.feedback-card');
+            
+            cards.forEach(card => {
+                const rating = card.dataset.rating;
+                const content = card.textContent.toLowerCase();
+                
+                let show = true;
+                
+                // Filter by rating
+                if (ratingFilter && rating !== ratingFilter) {
+                    show = false;
+                }
+                
+                // Filter by search
+                if (searchFilter && !content.includes(searchFilter)) {
+                    show = false;
+                }
+                
+                card.style.display = show ? 'block' : 'none';
+            });
+            
+            // Sort cards
+            const visibleCards = Array.from(cards).filter(card => card.style.display !== 'none');
+            const container = document.getElementById('feedbackList');
+            
+            visibleCards.sort((a, b) => {
+                switch (sortFilter) {
+                    case 'newest':
+                        return new Date(b.dataset.date) - new Date(a.dataset.date);
+                    case 'oldest':
+                        return new Date(a.dataset.date) - new Date(b.dataset.date);
+                    case 'rating-high':
+                        return parseInt(b.dataset.rating) - parseInt(a.dataset.rating);
+                    case 'rating-low':
+                        return parseInt(a.dataset.rating) - parseInt(b.dataset.rating);
+                    default:
+                        return 0;
+                }
+            });
+            
+            // Reorder in DOM
+            visibleCards.forEach(card => {
+                container.appendChild(card);
+            });
+        }
+
+        async function viewFeedbackDetails(feedbackId) {
+            try {
+                const response = await fetch(`${API_BASE}/admin/feedback/${feedbackId}`);
+                if (response.ok) {
+                    const feedback = await response.json();
+                    alert(`Feedback Details:\n\nRating: ${feedback.rating}/5\nUser: ${feedback.userEmail || 'Anonymous'}\nComments: ${feedback.comments || 'None'}\nDate: ${new Date(feedback.createdAt).toLocaleString()}`);
+                } else {
+                    showError('Failed to load feedback details');
+                }
+            } catch (error) {
+                showError('Error loading feedback details: ' + error.message);
+            }
+        }
+
+        async function markAsRead(feedbackId) {
+            try {
+                const response = await fetch(`${API_BASE}/admin/feedback/${feedbackId}/read`, { method: 'PUT' });
+                if (response.ok) {
+                    showSuccess('Feedback marked as read');
+                    loadFeedback(); // Refresh the list
+                } else {
+                    showError('Failed to mark feedback as read');
+                }
+            } catch (error) {
+                showError('Error marking feedback as read: ' + error.message);
+            }
+        }
+
+        async function replyToFeedback(feedbackId) {
+            const reply = prompt('Enter your reply to this feedback:');
+            if (reply && reply.trim()) {
+                try {
+                    const response = await fetch(`${API_BASE}/admin/feedback/${feedbackId}/reply`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ reply: reply.trim() })
+                    });
+                    if (response.ok) {
+                        showSuccess('Reply sent successfully');
+                    } else {
+                        showError('Failed to send reply');
+                    }
+                } catch (error) {
+                    showError('Error sending reply: ' + error.message);
+                }
+            }
+        }
+
+        async function exportFeedback() {
+            try {
+                const response = await fetch(`${API_BASE}/admin/feedback/export`);
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `feedback-export-${new Date().toISOString().split('T')[0]}.csv`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                    showSuccess('Feedback exported successfully');
+                } else {
+                    showError('Failed to export feedback');
+                }
+            } catch (error) {
+                showError('Error exporting feedback: ' + error.message);
+            }
+        }
 
         async function refreshData() {
             try {
