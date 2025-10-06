@@ -159,6 +159,25 @@ class MainController extends ChangeNotifier {
   /// Check if videos should be paused based on current state
   bool get shouldPauseVideos => !isVideoScreen || !isAppInForeground;
 
+  /// **NEW: Handle back button press with proper navigation lifecycle**
+  /// Returns true if app should exit, false if navigation should continue
+  bool handleBackPress() {
+    // If we're not on the home tab (index 0), navigate back to home tab
+    if (_currentIndex != 0) {
+      print('🔙 MainController: Back button pressed, navigating to home tab');
+      changeIndex(0);
+      return false; // Don't exit the app
+    }
+
+    // If we're on home tab (index 0), app should exit
+    print(
+        '🔙 MainController: Back button pressed on home tab, app should exit');
+    return true; // Exit the app
+  }
+
+  /// **NEW: Check if we're on the home tab (where app can exit)**
+  bool get isOnHomeTab => _currentIndex == 0;
+
   /// Emergency stop all videos (for critical situations)
   void emergencyStopVideos() {
     print('🚨 MainController: EMERGENCY STOP - pausing all videos immediately');

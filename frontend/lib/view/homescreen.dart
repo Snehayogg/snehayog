@@ -247,6 +247,18 @@ class _MainScreenState extends State<MainScreen>
     }
   }
 
+  /// Handle back button press with proper navigation lifecycle
+  Future<void> _handleBackPress(MainController mainController) async {
+    // Use MainController's back button handling logic
+    final shouldExit = mainController.handleBackPress();
+
+    if (shouldExit) {
+      // If we're on home tab, directly exit the app
+      print('🔙 MainScreen: Back button pressed on home tab, closing app');
+      SystemNavigator.pop();
+    }
+  }
+
   // Method to handle navigation taps
   void _handleNavTap(int index, MainController mainController) {
     if (index != mainController.currentIndex) {
@@ -284,12 +296,9 @@ class _MainScreenState extends State<MainScreen>
     return Consumer<MainController>(
       builder: (context, mainController, child) {
         return PopScope(
+          canPop: false, // Prevent default back behavior
           onPopInvokedWithResult: (didPop, result) async {
-            // If not on Home (Yog) tab, go to Home instead of exiting
-            if (mainController.currentIndex != 0) {
-              mainController.changeIndex(0);
-            }
-            // Don't return anything - let the system handle the back press
+            await _handleBackPress(mainController);
           },
           child: Scaffold(
             backgroundColor: Colors.white,

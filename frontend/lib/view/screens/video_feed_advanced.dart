@@ -816,37 +816,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     _preloadNearbyVideos();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    super.build(context); // Required for AutomaticKeepAliveClientMixin
-
-    return Consumer<MainController>(
-      builder: (context, mainController, child) {
-        final isVideoTabActive = mainController.currentIndex == 0;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _handleVisibilityChange(isVideoTabActive);
-        });
-
-        return Scaffold(
-          backgroundColor: Colors.black,
-          body: Stack(
-            children: [
-              _isLoading
-                  ? Center(
-                      child: _buildGreenSpinner(size: 40),
-                    )
-                  : _errorMessage != null
-                      ? _buildErrorState()
-                      : _videos.isEmpty
-                          ? _buildEmptyState()
-                          : _buildVideoFeed(),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   Widget _buildVideoFeed() {
     return RefreshIndicator(
       onRefresh: refreshVideos,
@@ -2635,6 +2604,37 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         );
       }
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
+
+    return Consumer<MainController>(
+      builder: (context, mainController, child) {
+        final isVideoTabActive = mainController.currentIndex == 0;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _handleVisibilityChange(isVideoTabActive);
+        });
+
+        return Scaffold(
+          backgroundColor: Colors.black,
+          body: Stack(
+            children: [
+              _isLoading
+                  ? Center(
+                      child: _buildGreenSpinner(size: 40),
+                    )
+                  : _errorMessage != null
+                      ? _buildErrorState()
+                      : _videos.isEmpty
+                          ? _buildEmptyState()
+                          : _buildVideoFeed(),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override

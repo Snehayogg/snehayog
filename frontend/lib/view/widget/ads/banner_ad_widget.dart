@@ -21,7 +21,7 @@ class BannerAdWidget extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      height: 70, // Slightly taller than banner to include padding
+      height: 80, // Increased height to accommodate larger image
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -48,9 +48,8 @@ class BannerAdWidget extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                  width: 64, // Scaled down for mobile display
-                  height:
-                      20, // Updated to maintain 3.2:1 aspect ratio (64/20 = 3.2)
+                  width: 120, // Increased size for better visibility
+                  height: 38, // Maintain 3.2:1 aspect ratio (120/38 ≈ 3.16)
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(4),
                     border: Border.all(color: Colors.grey.withOpacity(0.3)),
@@ -165,36 +164,86 @@ class BannerAdWidget extends StatelessWidget {
   void _handleAdClick(BuildContext context) async {
     try {
       final adId = adData['_id'] ?? adData['id'];
-
-      // Track click
-      if (adId != null) {
-        final activeAdsService = ActiveAdsService();
-        await activeAdsService.trackClick(adId);
-        print('✅ Banner ad click tracked: $adId');
-      }
-
-      // Execute callback
-      onAdClick?.call();
-
-      // Open link if available
       final link = adData['link'] as String?;
-      if (link != null && link.isNotEmpty) {
-        final uri = Uri.parse(link);
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-          print('✅ Opened banner ad link: $link');
-        } else {
-          print('❌ Cannot launch URL: $link');
 
-          // Show error to user
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Unable to open link'),
-                backgroundColor: Colors.red,
-                duration: Duration(seconds: 2),
+      // Show confirmation dialog if link is available
+      if (link != null && link.isNotEmpty) {
+        final shouldOpen = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Open Link'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('This will open an external link:'),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    link,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontFamily: 'monospace',
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text('Do you want to continue?'),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
               ),
-            );
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Open Link'),
+              ),
+            ],
+          ),
+        );
+
+        if (shouldOpen == true) {
+          // Track click
+          if (adId != null) {
+            final activeAdsService = ActiveAdsService();
+            await activeAdsService.trackClick(adId);
+            print('✅ Banner ad click tracked: $adId');
+          }
+
+          // Execute callback
+          onAdClick?.call();
+
+          // Open link
+          final uri = Uri.parse(link);
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+            print('✅ Opened banner ad link: $link');
+          } else {
+            print('❌ Cannot launch URL: $link');
+
+            // Show error to user
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Unable to open link'),
+                  backgroundColor: Colors.red,
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
           }
         }
       } else {
@@ -204,14 +253,25 @@ class BannerAdWidget extends StatelessWidget {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Ad clicked - no link provided'),
-              duration: Duration(seconds: 1),
+              content: Text('This ad has no link to open'),
+              duration: Duration(seconds: 2),
             ),
           );
         }
       }
     } catch (e) {
       print('❌ Error handling banner ad click: $e');
+
+      // Show error to user
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error opening link'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     }
   }
 }

@@ -320,7 +320,6 @@ router.get('/serve', async (req, res) => {
       .limit(20)
       .sort({ createdAt: -1 });
 
-    // TEMPORARY: For testing, show all ads regardless of campaign status
     const filteredAds = activeAds; // Show all ads for testing
     // const filteredAds = activeAds.filter(ad => 
     //   !ad.campaignId || ad.campaignId.status === 'active'
