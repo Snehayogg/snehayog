@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:snehayog/view/screens/video_screen.dart';
 import 'package:snehayog/view/screens/creator_payment_setup_screen.dart';
 import 'package:snehayog/view/screens/creator_revenue_screen.dart';
+import 'package:snehayog/view/screens/feedback_screen.dart';
 import 'package:snehayog/view/screens/creator_payout_dashboard.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -1212,6 +1213,28 @@ class _ProfileScreenState extends State<ProfileScreen>
                         ),
                         Divider(
                             color: Colors.grey[300], height: 1, thickness: 0.5),
+                        // Feedback
+                        ListTile(
+                          leading: const Icon(Icons.feedback_outlined,
+                              color: Colors.black54),
+                          title: const Text('Feedback',
+                              style: TextStyle(color: Colors.black87)),
+                          subtitle: const Text('Share your feedback',
+                              style: TextStyle(color: Colors.black54)),
+                          onTap: () {
+                            Navigator.pop(context);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const FeedbackScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        Divider(
+                            color: Colors.grey[300], height: 1, thickness: 0.5),
+                        Divider(
+                            color: Colors.grey[300], height: 1, thickness: 0.5),
                         ListTile(
                           leading:
                               const Icon(Icons.settings, color: Colors.black54),
@@ -1380,6 +1403,21 @@ class _ProfileScreenState extends State<ProfileScreen>
                           }
                         },
                       ),
+                      _buildSettingsTile(
+                        icon: Icons.feedback_outlined,
+                        title: 'Feedback',
+                        subtitle: 'Share your feedback with us',
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const FeedbackScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      // Removed Reports tile from settings
                       _buildSettingsTile(
                         icon: Icons.help_outline,
                         title: 'Help & Support',

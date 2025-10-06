@@ -16,9 +16,22 @@ export const createFeedback = async (req, res) => {
       });
     }
 
+    // Apply sensible defaults so frontend can send only rating + description
     const feedbackData = {
-      ...req.body,
-      user: req.user.id // Get user ID from JWT token
+      user: req.user.id, // from JWT
+      type: req.body.type || 'general_feedback',
+      category: req.body.category || 'other',
+      title:
+        req.body.title && req.body.title.trim().length > 0
+          ? req.body.title.trim()
+          : (req.body.description || '').trim().split('\n')[0].slice(0, 60),
+      description: (req.body.description || '').trim(),
+      rating: req.body.rating,
+      priority: req.body.priority, // optional
+      relatedVideo: req.body.relatedVideo,
+      relatedUser: req.body.relatedUser,
+      deviceInfo: req.body.deviceInfo,
+      tags: Array.isArray(req.body.tags) ? req.body.tags : []
     };
 
     const feedback = await feedbackService.createFeedback(feedbackData);

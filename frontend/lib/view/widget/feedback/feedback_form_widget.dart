@@ -10,6 +10,7 @@ class FeedbackFormWidget extends StatefulWidget {
   final String? relatedUserId;
   final String? relatedUserName;
   final VoidCallback? onSuccess;
+  final bool asSheet;
 
   const FeedbackFormWidget({
     super.key,
@@ -18,6 +19,7 @@ class FeedbackFormWidget extends StatefulWidget {
     this.relatedUserId,
     this.relatedUserName,
     this.onSuccess,
+    this.asSheet = false,
   });
 
   @override
@@ -26,7 +28,6 @@ class FeedbackFormWidget extends StatefulWidget {
 
 class _FeedbackFormWidgetState extends State<FeedbackFormWidget> {
   final _formKey = GlobalKey<FormState>();
-  final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _feedbackService = FeedbackService();
 
@@ -73,13 +74,145 @@ class _FeedbackFormWidgetState extends State<FeedbackFormWidget> {
 
   @override
   void dispose() {
-    _titleController.dispose();
     _descriptionController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final content = Form(
+      key: _formKey,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Related content info
+            if (widget.relatedVideoTitle != null ||
+                widget.relatedUserName != null)
+              _buildRelatedContentCard(),
+
+            const SizedBox(height: 16),
+
+            // Feedback type selection
+            _buildSectionTitle('Feedback Type'),
+            _buildTypeSelector(),
+
+            const SizedBox(height: 16),
+
+            // Category selection
+            _buildSectionTitle('Category'),
+            _buildCategorySelector(),
+
+            const SizedBox(height: 16),
+
+            // Rating
+            _buildSectionTitle('Rating ($_selectedRating/5)'),
+            _buildRatingSelector(),
+
+            const SizedBox(height: 16),
+
+            // Removed title field
+
+            // Description field
+            _buildSectionTitle('Description'),
+            TextFormField(
+              controller: _descriptionController,
+              decoration: const InputDecoration(
+                hintText:
+                    'Please provide detailed information about your feedback',
+                border: OutlineInputBorder(),
+                alignLabelWithHint: true,
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Please enter a description';
+                }
+                if (value.trim().length < 10) {
+                  return 'Description must be at least 10 characters';
+                }
+                return null;
+              },
+              maxLines: 5,
+              maxLength: 2000,
+            ),
+
+            const SizedBox(height: 16),
+
+            // Tags
+            _buildSectionTitle('Tags (Optional)'),
+            _buildTagsSelector(),
+
+            const SizedBox(height: 32),
+
+            // Submit button
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _isSubmitting ? null : _submitFeedback,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).primaryColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: _isSubmitting
+                    ? const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          ),
+                          SizedBox(width: 12),
+                          Text('Submitting...'),
+                        ],
+                      )
+                    : const Text('Submit Feedback'),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Privacy note
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.grey[600], size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Your feedback is anonymous and helps us improve the app.',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (widget.asSheet) {
+      return SafeArea(child: content);
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Submit Feedback'),
@@ -87,154 +220,7 @@ class _FeedbackFormWidgetState extends State<FeedbackFormWidget> {
         foregroundColor: Colors.black,
         elevation: 0,
       ),
-      body: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Related content info
-              if (widget.relatedVideoTitle != null ||
-                  widget.relatedUserName != null)
-                _buildRelatedContentCard(),
-
-              const SizedBox(height: 16),
-
-              // Feedback type selection
-              _buildSectionTitle('Feedback Type'),
-              _buildTypeSelector(),
-
-              const SizedBox(height: 16),
-
-              // Category selection
-              _buildSectionTitle('Category'),
-              _buildCategorySelector(),
-
-              const SizedBox(height: 16),
-
-              // Rating
-              _buildSectionTitle('Rating ($_selectedRating/5)'),
-              _buildRatingSelector(),
-
-              const SizedBox(height: 16),
-
-              // Title field
-              _buildSectionTitle('Title'),
-              TextFormField(
-                controller: _titleController,
-                decoration: const InputDecoration(
-                  hintText: 'Brief description of your feedback',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter a title';
-                  }
-                  if (value.trim().length < 5) {
-                    return 'Title must be at least 5 characters';
-                  }
-                  return null;
-                },
-                maxLength: 200,
-              ),
-
-              const SizedBox(height: 16),
-
-              // Description field
-              _buildSectionTitle('Description'),
-              TextFormField(
-                controller: _descriptionController,
-                decoration: const InputDecoration(
-                  hintText:
-                      'Please provide detailed information about your feedback',
-                  border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter a description';
-                  }
-                  if (value.trim().length < 10) {
-                    return 'Description must be at least 10 characters';
-                  }
-                  return null;
-                },
-                maxLines: 5,
-                maxLength: 2000,
-              ),
-
-              const SizedBox(height: 16),
-
-              // Tags
-              _buildSectionTitle('Tags (Optional)'),
-              _buildTagsSelector(),
-
-              const SizedBox(height: 32),
-
-              // Submit button
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _isSubmitting ? null : _submitFeedback,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).primaryColor,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: _isSubmitting
-                      ? const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor:
-                                    AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            ),
-                            SizedBox(width: 12),
-                            Text('Submitting...'),
-                          ],
-                        )
-                      : const Text('Submit Feedback'),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Privacy note
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline, color: Colors.grey[600], size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Your feedback is anonymous and helps us improve the app.',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+      body: content,
     );
   }
 
@@ -396,7 +382,16 @@ class _FeedbackFormWidgetState extends State<FeedbackFormWidget> {
       final request = FeedbackCreationRequest(
         type: _selectedType,
         category: _selectedCategory,
-        title: _titleController.text.trim(),
+        title: _descriptionController.text
+            .trim()
+            .split('\n')
+            .first
+            .trim()
+            .substring(
+                0,
+                _descriptionController.text.trim().length > 60
+                    ? 60
+                    : _descriptionController.text.trim().length),
         description: _descriptionController.text.trim(),
         rating: _selectedRating,
         relatedVideoId: widget.relatedVideoId,

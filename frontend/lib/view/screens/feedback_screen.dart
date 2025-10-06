@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/model/feedback_model.dart';
 import 'package:snehayog/services/feedback_service.dart';
-import 'package:snehayog/view/widget/feedback/feedback_form_widget.dart';
+import 'package:snehayog/model/feedback_model.dart';
+// Removed complex form import; using a lightweight bottom sheet instead
 
 class FeedbackScreen extends StatefulWidget {
   const FeedbackScreen({super.key});
@@ -12,39 +12,13 @@ class FeedbackScreen extends StatefulWidget {
 
 class _FeedbackScreenState extends State<FeedbackScreen> {
   final _feedbackService = FeedbackService();
-  List<FeedbackModel> _feedbackList = [];
-  bool _isLoading = false;
-  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _loadUserFeedback();
-  }
-
-  Future<void> _loadUserFeedback() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _openQuickFeedbackSheet();
     });
-
-    try {
-      // For now, we'll use a placeholder user ID
-      // In a real app, you'd get this from your user provider/state
-      final feedback =
-          await _feedbackService.getUserFeedback('current_user_id');
-      setState(() {
-        _feedbackList = feedback;
-      });
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-      });
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
   }
 
   @override
@@ -58,15 +32,15 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
-            onPressed: () => _navigateToFeedbackForm(),
+            onPressed: _openQuickFeedbackSheet,
           ),
         ],
       ),
       body: _buildBody(),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _navigateToFeedbackForm(),
+        onPressed: _openQuickFeedbackSheet,
         icon: const Icon(Icons.feedback),
-        label: const Text('Submit Feedback'),
+        label: const Text('Send Feedback'),
         backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
       ),
@@ -74,264 +48,177 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   }
 
   Widget _buildBody() {
-    if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
-    }
-
-    if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 64,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Error loading feedback',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _error!,
-              style: TextStyle(color: Colors.grey[600]),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _loadUserFeedback,
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_feedbackList.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.feedback_outlined,
-              size: 64,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No feedback submitted yet',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Help us improve by sharing your thoughts and experiences',
-              style: TextStyle(color: Colors.grey[600]),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () => _navigateToFeedbackForm(),
-              icon: const Icon(Icons.add),
-              label: const Text('Submit Your First Feedback'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).primaryColor,
-                foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _loadUserFeedback,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _feedbackList.length,
-        itemBuilder: (context, index) {
-          final feedback = _feedbackList[index];
-          return _buildFeedbackCard(feedback);
-        },
-      ),
-    );
+    return const SizedBox.shrink();
   }
 
-  Widget _buildFeedbackCard(FeedbackModel feedback) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header row
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    feedback.title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
+  // Removed legacy list UI helpers
+
+  void _openQuickFeedbackSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        int rating = 5;
+        bool isSubmitting = false;
+        final TextEditingController descCtrl = TextEditingController();
+
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 16,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+          ),
+          child: StatefulBuilder(
+            builder: (context, setLocalState) {
+              Future<void> submit() async {
+                final desc = descCtrl.text.trim();
+                if (desc.length < 10) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter at least 10 characters'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
+                try {
+                  setLocalState(() => isSubmitting = true);
+                  final req = FeedbackCreationRequest(
+                    type: 'general_feedback',
+                    category: 'other',
+                    title: desc.split('\n').first.substring(
+                        0,
+                        desc.split('\n').first.length > 60
+                            ? 60
+                            : desc.split('\n').first.length),
+                    description: desc,
+                    rating: rating,
+                    tags: const [],
+                  );
+
+                  await _feedbackService.createFeedback(req);
+                  if (mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Feedback submitted successfully!'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                    // No list refresh needed
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content:
+                            Text(e.toString().replaceFirst('Exception: ', '')),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                } finally {
+                  if (mounted) setLocalState(() => isSubmitting = false);
+                }
+              }
+
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.feedback, color: Colors.black87),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Quick Feedback',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Rating',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: List.generate(5, (index) {
+                      final filled = index < rating;
+                      return GestureDetector(
+                        onTap: () => setLocalState(() => rating = index + 1),
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Icon(
+                            filled ? Icons.star : Icons.star_border,
+                            color: Colors.amber,
+                            size: 28,
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Description',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: descCtrl,
+                    maxLines: 5,
+                    decoration: const InputDecoration(
+                      hintText: 'Share your feedback (min 10 characters)',
+                      border: OutlineInputBorder(),
                     ),
                   ),
-                ),
-                _buildStatusChip(feedback.status),
-              ],
-            ),
-
-            const SizedBox(height: 8),
-
-            // Type and category
-            Row(
-              children: [
-                _buildInfoChip(feedback.typeDisplayName, Colors.blue),
-                const SizedBox(width: 8),
-                _buildInfoChip(feedback.categoryDisplayName, Colors.green),
-                const SizedBox(width: 8),
-                _buildRatingChip(feedback.rating),
-              ],
-            ),
-
-            const SizedBox(height: 12),
-
-            // Description (truncated)
-            Text(
-              feedback.description,
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 14,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-
-            const SizedBox(height: 12),
-
-            // Footer row
-            Row(
-              children: [
-                Icon(Icons.access_time, size: 16, color: Colors.grey[500]),
-                const SizedBox(width: 4),
-                Text(
-                  feedback.formattedCreatedAt,
-                  style: TextStyle(
-                    color: Colors.grey[500],
-                    fontSize: 12,
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: submit,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).primaryColor,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: isSubmitting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Text('Submit'),
+                    ),
                   ),
-                ),
-                const Spacer(),
-                if (feedback.adminNotes != null)
-                  Icon(Icons.note, size: 16, color: Colors.orange[600]),
-                if (feedback.resolvedAt != null) ...[
-                  const SizedBox(width: 8),
-                  Icon(Icons.check_circle, size: 16, color: Colors.green[600]),
                 ],
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatusChip(String status) {
-    Color color;
-    switch (status.toLowerCase()) {
-      case 'open':
-        color = Colors.blue;
-        break;
-      case 'in_progress':
-        color = Colors.orange;
-        break;
-      case 'resolved':
-        color = Colors.green;
-        break;
-      case 'closed':
-        color = Colors.grey;
-        break;
-      default:
-        color = Colors.grey;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Text(
-        status,
-        style: TextStyle(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoChip(String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRatingChip(int rating) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.amber.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.star, size: 12, color: Colors.amber[600]),
-          const SizedBox(width: 2),
-          Text(
-            rating.toString(),
-            style: TextStyle(
-              color: Colors.amber[700],
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-            ),
+              );
+            },
           ),
-        ],
-      ),
+        );
+      },
     );
-  }
-
-  void _navigateToFeedbackForm() {
-    Navigator.of(context)
-        .push(
-      MaterialPageRoute(
-        builder: (context) => const FeedbackFormWidget(),
-      ),
-    )
-        .then((_) {
-      // Refresh the list when returning from the form
-      _loadUserFeedback();
-    });
   }
 }

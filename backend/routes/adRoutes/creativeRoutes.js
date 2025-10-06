@@ -6,6 +6,7 @@ import AdCampaign from '../../models/AdCampaign.js';
 import User from '../../models/User.js';
 import cloudinary from '../../config/cloudinary.js';
 import { verifyToken } from '../../utils/verifytoken.js';
+import { broadcastAdUpdate } from './realtimeRoutes.js';
 
 const router = express.Router();
 
@@ -97,6 +98,13 @@ router.post('/campaigns/:id/creatives', adUpload.single('creative'), asyncHandle
       message: 'Ad creative uploaded successfully',
       creative
     });
+
+    // Broadcast new ad to realtime clients (non-blocking)
+    try {
+      broadcastAdUpdate({ updateType: 'created', adData: { id: creative._id.toString(), adType, type } });
+    } catch (e) {
+      console.error('Realtime broadcast error:', e);
+    }
 
   } catch (error) {
     console.error('Creative upload error:', error);

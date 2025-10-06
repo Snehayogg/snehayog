@@ -2,19 +2,23 @@ import { body, param, query } from 'express-validator';
 
 // Feedback validation rules
 export const validateFeedbackCreation = [
+  // Keep minimal: only description and rating required
   body('type')
+    .optional()
     .isIn(['bug_report', 'feature_request', 'general_feedback', 'user_experience', 'content_issue'])
     .withMessage('Invalid feedback type'),
-  
+
   body('category')
+    .optional()
     .isIn(['video_playback', 'upload_issues', 'ui_ux', 'performance', 'monetization', 'social_features', 'other'])
     .withMessage('Invalid feedback category'),
-  
+
   body('title')
+    .optional()
     .trim()
-    .isLength({ min: 5, max: 200 })
-    .withMessage('Title must be between 5 and 200 characters'),
-  
+    .isLength({ min: 1, max: 200 })
+    .withMessage('Title must be between 1 and 200 characters'),
+
   body('description')
     .trim()
     .isLength({ min: 10, max: 2000 })

@@ -248,6 +248,13 @@
         <div class="header">
             <h1>💰 Snehayog Admin Dashboard</h1>
             <p>Monitor and manage automated creator payouts</p>
+            <div style="margin-top:16px; display:flex; gap:10px; justify-content:center; align-items:center; flex-wrap:wrap;">
+                <label style="color:#555; font-weight:600;">API Base</label>
+                <input id="apiBaseInput" style="min-width:340px; padding:10px 12px; border-radius:8px; border:1px solid #ddd;" value="http://192.168.0.190:3000/api" />
+                <label style="color:#555; font-weight:600;">Admin JWT</label>
+                <input id="jwtInput" style="min-width:360px; padding:10px 12px; border-radius:8px; border:1px solid #ddd;" placeholder="Paste admin JWT here" />
+                <button class="btn btn-primary" onclick="saveAdminConfig()">Save</button>
+            </div>
         </div>
 
         <div class="stats-grid">
@@ -291,6 +298,66 @@
         </div>
 
         <div class="dashboard-section">
+            <h2 class="section-title">📝 Feedback Management</h2>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+                <input id="fbSearchInput" placeholder="Search text..." style="padding:10px 12px; border-radius:8px; border:1px solid #ddd; min-width:240px;" />
+                <select id="fbStatus" style="padding:10px 12px; border-radius:8px; border:1px solid #ddd;">
+                    <option value="">All status</option>
+                    <option value="open">Open</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="resolved">Resolved</option>
+                    <option value="closed">Closed</option>
+                </select>
+                <button class="btn btn-primary" onclick="refreshFeedback()">Search</button>
+            </div>
+            <div id="feedbackList">
+                <p>Loading feedback...</p>
+            </div>
+            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:10px;">
+                <button class="btn" onclick="prevFeedbackPage()">◀ Prev</button>
+                <div id="fbPageInfo" style="align-self:center; color:#555; font-weight:600;">Page 1</div>
+                <button class="btn" onclick="nextFeedbackPage()">Next ▶</button>
+            </div>
+        </div>
+
+        <div class="dashboard-section">
+            <h2 class="section-title">🚩 Report Management</h2>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+                <select id="rpStatus" style="padding:10px 12px; border-radius:8px; border:1px solid #ddd;">
+                    <option value="">All status</option>
+                    <option value="pending">Pending</option>
+                    <option value="under_review">Under Review</option>
+                    <option value="resolved">Resolved</option>
+                    <option value="dismissed">Dismissed</option>
+                    <option value="escalated">Escalated</option>
+                </select>
+                <select id="rpType" style="padding:10px 12px; border-radius:8px; border:1px solid #ddd;">
+                    <option value="">All types</option>
+                    <option value="spam">Spam</option>
+                    <option value="harassment">Harassment</option>
+                    <option value="hate_speech">Hate Speech</option>
+                    <option value="inappropriate_content">Inappropriate Content</option>
+                    <option value="violence">Violence</option>
+                    <option value="nudity">Nudity</option>
+                    <option value="copyright_violation">Copyright Violation</option>
+                    <option value="fake_account">Fake Account</option>
+                    <option value="scam">Scam</option>
+                    <option value="underage_user">Underage User</option>
+                    <option value="other">Other</option>
+                </select>
+                <button class="btn btn-primary" onclick="refreshReports()">Apply</button>
+            </div>
+            <div id="reportList">
+                <p>Loading reports...</p>
+            </div>
+            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:10px;">
+                <button class="btn" onclick="prevReportPage()">◀ Prev</button>
+                <div id="rpPageInfo" style="align-self:center; color:#555; font-weight:600;">Page 1</div>
+                <button class="btn" onclick="nextReportPage()">Next ▶</button>
+            </div>
+        </div>
+
+        <div class="dashboard-section">
             <h2 class="section-title">⚙️ System Controls</h2>
             <div class="action-buttons">
                 <button class="btn btn-primary" onclick="refreshData()">
@@ -311,12 +378,25 @@
     </button>
 
     <script>
-        const API_BASE = 'http://192.168.0.190:3000/api';
+        let API_BASE = localStorage.getItem('admin_api_base') || 'http://192.168.0.190:3000/api';
+        let ADMIN_JWT = localStorage.getItem('admin_jwt') || '';
         
         // Load data on page load
         document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('apiBaseInput').value = API_BASE;
+            document.getElementById('jwtInput').value = ADMIN_JWT;
             refreshData();
+            refreshFeedback();
+            refreshReports();
         });
+
+        function saveAdminConfig() {
+            API_BASE = document.getElementById('apiBaseInput').value.trim() || API_BASE;
+            ADMIN_JWT = document.getElementById('jwtInput').value.trim();
+            localStorage.setItem('admin_api_base', API_BASE);
+            localStorage.setItem('admin_jwt', ADMIN_JWT);
+            showSuccess('Admin config saved');
+        }
 
         async function refreshData() {
             try {
@@ -439,6 +519,174 @@
                 console.error('Error loading recent payouts:', error);
                 document.getElementById('recentPayouts').innerHTML = '<p>Failed to load recent payouts</p>';
             }
+        }
+
+        // === Feedback Management ===
+        let fbPage = 1;
+        const fbLimit = 10;
+
+        async function refreshFeedback() {
+            try {
+                setLoading(true);
+                await loadFeedbackList();
+                setLoading(false);
+            } catch (e) {
+                console.error('Error loading feedback:', e);
+                showError('Failed to load feedback: ' + (e.message || e));
+                setLoading(false);
+            }
+        }
+
+        function prevFeedbackPage() {
+            if (fbPage > 1) {
+                fbPage -= 1;
+                refreshFeedback();
+            }
+        }
+
+        function nextFeedbackPage() {
+            fbPage += 1;
+            refreshFeedback();
+        }
+
+        async function loadFeedbackList() {
+            const q = document.getElementById('fbSearchInput').value.trim();
+            const status = document.getElementById('fbStatus').value;
+
+            const params = new URLSearchParams({ page: fbPage, limit: fbLimit });
+            if (status) params.append('status', status);
+
+            const url = q.length >= 2
+                ? `${API_BASE}/feedback/search?q=${encodeURIComponent(q)}${status ? `&status=${status}` : ''}`
+                : `${API_BASE}/feedback?${params.toString()}`;
+
+            const headers = ADMIN_JWT ? { 'Authorization': `Bearer ${ADMIN_JWT}` } : {};
+            const resp = await fetch(url, { headers });
+            if (!resp.ok) {
+                const text = await resp.text();
+                throw new Error(`HTTP ${resp.status} - ${text}`);
+            }
+
+            const data = await resp.json();
+            const list = Array.isArray(data.data) ? data.data : data;
+            const pagination = data.pagination || { page: fbPage };
+            document.getElementById('fbPageInfo').textContent = `Page ${pagination.page || fbPage}`;
+
+            if (!list || list.length === 0) {
+                document.getElementById('feedbackList').innerHTML = '<p>No feedback found</p>';
+                return;
+            }
+
+            const rows = list.map(fb => `
+                <tr>
+                    <td>${(fb.user && fb.user.name) || 'Unknown'}</td>
+                    <td>${fb.rating || '-'}</td>
+                    <td>${fb.type || '-'}</td>
+                    <td>${fb.status || '-'}</td>
+                    <td>${(fb.description || '').substring(0, 80)}${(fb.description||'').length>80?'…':''}</td>
+                    <td>${new Date(fb.createdAt).toLocaleString()}</td>
+                </tr>
+            `).join('');
+
+            const table = `
+                <table class="payout-table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Rating</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th>Description</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+            document.getElementById('feedbackList').innerHTML = table;
+        }
+
+        // === Reports Management ===
+        let rpPage = 1;
+        const rpLimit = 10;
+
+        async function refreshReports() {
+            try {
+                setLoading(true);
+                await loadReportList();
+                setLoading(false);
+            } catch (e) {
+                console.error('Error loading reports:', e);
+                showError('Failed to load reports: ' + (e.message || e));
+                setLoading(false);
+            }
+        }
+
+        function prevReportPage() {
+            if (rpPage > 1) {
+                rpPage -= 1;
+                refreshReports();
+            }
+        }
+
+        function nextReportPage() {
+            rpPage += 1;
+            refreshReports();
+        }
+
+        async function loadReportList() {
+            const status = document.getElementById('rpStatus').value;
+            const type = document.getElementById('rpType').value;
+
+            const params = new URLSearchParams({ page: rpPage, limit: rpLimit });
+            if (status) params.append('status', status);
+            if (type) params.append('type', type);
+
+            const url = `${API_BASE}/reports?${params.toString()}`;
+            const headers = ADMIN_JWT ? { 'Authorization': `Bearer ${ADMIN_JWT}` } : {};
+            const resp = await fetch(url, { headers });
+            if (!resp.ok) {
+                const text = await resp.text();
+                throw new Error(`HTTP ${resp.status} - ${text}`);
+            }
+
+            const data = await resp.json();
+            const list = Array.isArray(data.data) ? data.data : data;
+            const pagination = data.pagination || { page: rpPage };
+            document.getElementById('rpPageInfo').textContent = `Page ${pagination.page || rpPage}`;
+
+            if (!list || list.length === 0) {
+                document.getElementById('reportList').innerHTML = '<p>No reports found</p>';
+                return;
+            }
+
+            const rows = list.map(rp => `
+                <tr>
+                    <td>${(rp.reporter && rp.reporter.name) || 'Unknown'}</td>
+                    <td>${rp.type || '-'}</td>
+                    <td>${rp.status || '-'}</td>
+                    <td>${(rp.reason || '').substring(0, 50)}${(rp.reason||'').length>50?'…':''}</td>
+                    <td>${(rp.description || '').substring(0, 80)}${(rp.description||'').length>80?'…':''}</td>
+                    <td>${new Date(rp.createdAt).toLocaleString()}</td>
+                </tr>
+            `).join('');
+
+            const table = `
+                <table class="payout-table">
+                    <thead>
+                        <tr>
+                            <th>Reporter</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th>Reason</th>
+                            <th>Description</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+            document.getElementById('reportList').innerHTML = table;
         }
 
         async function startScheduler() {

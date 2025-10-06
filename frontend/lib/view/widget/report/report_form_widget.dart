@@ -33,7 +33,6 @@ class _ReportFormWidgetState extends State<ReportFormWidget> {
   final _reportService = ReportService();
 
   String _selectedType = 'other';
-  final List<Evidence> _evidence = [];
 
   bool _isSubmitting = false;
 
@@ -132,9 +131,7 @@ class _ReportFormWidgetState extends State<ReportFormWidget> {
 
               const SizedBox(height: 16),
 
-              // Evidence section
-              _buildSectionTitle('Evidence (Optional)'),
-              _buildEvidenceSection(),
+              // Removed Evidence section (video/user/comment context is already known)
 
               const SizedBox(height: 32),
 
@@ -300,70 +297,7 @@ class _ReportFormWidgetState extends State<ReportFormWidget> {
     );
   }
 
-  Widget _buildEvidenceSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Add screenshots or other evidence to support your report',
-          style: TextStyle(
-            color: Colors.grey[600],
-            fontSize: 12,
-          ),
-        ),
-        const SizedBox(height: 8),
-
-        // Add evidence button
-        OutlinedButton.icon(
-          onPressed: _addEvidence,
-          icon: const Icon(Icons.add_photo_alternate),
-          label: const Text('Add Evidence'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: Theme.of(context).primaryColor,
-          ),
-        ),
-
-        const SizedBox(height: 8),
-
-        // Evidence list
-        if (_evidence.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          ...(_evidence.asMap().entries.map((entry) {
-            final index = entry.key;
-            final evidence = entry.value;
-            return Card(
-              child: ListTile(
-                leading: const Icon(Icons.attachment),
-                title: Text(evidence.description ?? 'Evidence ${index + 1}'),
-                subtitle: Text(evidence.url),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red),
-                  onPressed: () {
-                    setState(() {
-                      _evidence.removeAt(index);
-                    });
-                  },
-                ),
-              ),
-            );
-          })),
-        ],
-      ],
-    );
-  }
-
-  void _addEvidence() {
-    showDialog(
-      context: context,
-      builder: (context) => _EvidenceDialog(
-        onAdd: (evidence) {
-          setState(() {
-            _evidence.add(evidence);
-          });
-        },
-      ),
-    );
-  }
+  // Evidence section removed
 
   Future<void> _submitReport() async {
     if (!_formKey.currentState!.validate()) {
@@ -382,7 +316,7 @@ class _ReportFormWidgetState extends State<ReportFormWidget> {
         reportedUserId: widget.reportedUserId,
         reportedVideoId: widget.reportedVideoId,
         reportedCommentId: widget.reportedCommentId,
-        evidence: _evidence,
+        evidence: const [],
       );
 
       await _reportService.createReport(request);

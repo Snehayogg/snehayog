@@ -46,7 +46,13 @@ class FeedbackService {
         }
       } else {
         final errorData = jsonDecode(response.body);
-        throw Exception(errorData['message'] ?? 'Failed to create feedback');
+        final errorMsg = errorData['message'] ??
+            errorData['error'] ??
+            'Failed to create feedback';
+        if (response.statusCode == 401) {
+          throw Exception('Authentication required. Please sign in again.');
+        }
+        throw Exception(errorMsg);
       }
     } catch (e) {
       print('❌ Error creating feedback: $e');
