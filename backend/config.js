@@ -21,7 +21,7 @@ export const config = {
   // Authentication Configuration
   auth: {
     jwtSecret: process.env.JWT_SECRET || 'snehayog_jwt_secret_key_2024_change_in_production',
-    googleClientId: process.env.GOOGLE_CLIENT_ID || '406195883653-1j2f5ilp46376ndqs8gd0trkto8n727d.apps.googleusercontent.com'
+    googleClientId: process.env.GOOGLE_CLIENT_ID || '406195883653-c3l6apj3e6ruffil98pq6idirfvknrru.apps.googleusercontent.com'
   },
 
   // File Upload Configuration

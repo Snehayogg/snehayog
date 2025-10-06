@@ -4,6 +4,7 @@ import 'package:snehayog/core/managers/hot_ui_state_manager.dart';
 import 'package:snehayog/services/signed_url_service.dart';
 import 'package:snehayog/core/factories/video_controller_factory.dart';
 import 'package:snehayog/model/video_model.dart';
+import 'package:snehayog/services/video_cache_service.dart';
 import 'dart:collection';
 import 'dart:async';
 
@@ -22,24 +23,40 @@ class VideoControllerManager {
 
   final VideoPositionCacheManager _positionCache = VideoPositionCacheManager();
   final HotUIStateManager _hotUIManager = HotUIStateManager();
+  final VideoCacheService _videoCacheService = VideoCacheService.instance;
 
   final int maxPoolSize = 1;
 
   Future<VideoPlayerController> getController(
       int index, VideoModel video) async {
+    // **VIDEO CACHING: For first video (index 0), check cache first**
+    if (index == 0) {
+      print(
+          '🎬 VideoControllerManager: First video detected, checking cache...');
+      final cachedUrl = await _videoCacheService.getVideoUrlForPlayer(
+          video.videoUrl, video.id);
+      if (cachedUrl != video.videoUrl) {
+        print(
+            '✅ VideoControllerManager: Using cached first video for instant playback');
+        video = video.copyWith(videoUrl: cachedUrl);
+      }
+    }
+
     // Resolve the intended final URL (with HLS signing if needed) before deciding reuse
     String finalUrl = video.videoUrl;
     if (video.videoUrl.contains('.m3u8')) {
       print('🔐 VideoControllerManager: Getting signed URL for HLS stream');
       try {
         final signedUrlService = SignedUrlService();
- final signedUrl = await signedUrlService.getBestSignedUrl(video.videoUrl).timeout(
-  const Duration(seconds: 1), // REDUCED: 1 second timeout
-  onTimeout: () {
-    print('⏰ VideoControllerManager: Signed URL timeout, using original URL');
-    return video.videoUrl;
-  },
-);
+        final signedUrl =
+            await signedUrlService.getBestSignedUrl(video.videoUrl).timeout(
+          const Duration(seconds: 1), // REDUCED: 1 second timeout
+          onTimeout: () {
+            print(
+                '⏰ VideoControllerManager: Signed URL timeout, using original URL');
+            return video.videoUrl;
+          },
+        );
 
         if (signedUrl != null && signedUrl != video.videoUrl) {
           finalUrl = signedUrl;

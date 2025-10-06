@@ -371,7 +371,8 @@ router.get('/serve', async (req, res) => {
 
     // Build query for active ads
     const query = {
-      isActive: true
+      isActive: true,
+      reviewStatus: 'approved' // **FIX: Only serve approved ads**
     };
 
     // Filter by ad type if specified

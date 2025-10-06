@@ -21,12 +21,13 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:snehayog/core/services/auto_scroll_settings.dart';
 import 'package:snehayog/controller/main_controller.dart';
 import 'package:snehayog/core/managers/video_controller_manager.dart';
+import 'package:snehayog/services/video_cache_service.dart';
 
 class VideoFeedAdvanced extends StatefulWidget {
   final int? initialIndex;
   final List<VideoModel>? initialVideos;
   final String? initialVideoId;
-  final String? videoType; // **NEW: Add videoType parameter**
+  final String? videoType;
 
   const VideoFeedAdvanced({
     Key? key,
@@ -319,13 +320,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   Future<void> _loadInitialData() async {
     try {
       setState(() => _isLoading = true);
-
       await _loadVideos(page: 1);
-
-      // Load current user
       await _loadCurrentUserId();
-
-      // **NEW: Load active ads**
       await _loadActiveAds();
 
       // Navigate to specific video if provided
@@ -345,10 +341,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       if (mounted) {
         setState(() => _isLoading = false);
 
-        // **NEW: Trigger autoplay after initial data is loaded**
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          print(
-              '🚀 VideoFeedAdvanced: Triggering initial autoplay after data load');
+          print('🚀 VideoFeedAdvanced: Triggering autoplay after normal load');
           _tryAutoplayCurrent();
         });
       }
@@ -393,6 +387,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       print('✅ VideoFeedAdvanced: Loaded ads:');
       print('   Banner ads: ${_bannerAds.length}');
       print('   Video feed ads: ${_videoFeedAds.length}');
+      print('   All ad types available: ${allAds.keys.toList()}');
 
       // **NEW: Debug ad details**
       for (int i = 0; i < _bannerAds.length; i++) {
@@ -404,6 +399,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       for (int i = 0; i < _videoFeedAds.length; i++) {
         final ad = _videoFeedAds[i];
         print('   Video Feed Ad $i: ${ad['title']} (${ad['adType']})');
+      }
+
+      // **NEW: Show user-friendly message if no banner ads**
+      if (_bannerAds.isEmpty) {
+        print('⚠️ VideoFeedAdvanced: No banner ads found. Check if:');
+        print('   1. Banner ads are created in ad management');
+        print('   2. Banner ads are activated (status = active)');
+        print('   3. Banner ads have isActive = true');
+        print('   4. Backend is running on correct URL');
       }
 
       // Also update carousel ad manager
@@ -472,6 +476,17 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           }
           _currentPage = page;
         });
+
+        // **VIDEO CACHING: Cache first video for instant loading**
+        if (!append && newVideos.isNotEmpty) {
+          final firstVideo = newVideos.first;
+          print(
+              '🎬 VideoFeedAdvanced: Starting background cache for first video: ${firstVideo.id}');
+
+          // Cache first video in background (non-blocking)
+          VideoCacheService.instance
+              .preCacheFirstVideo(firstVideo.videoUrl, firstVideo.id);
+        }
 
         // Load following users after videos are loaded
         await _loadFollowingUsers();
@@ -576,16 +591,16 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         // Show success message to user
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
+            const SnackBar(
               content: Row(
                 children: [
-                  const Icon(Icons.check_circle, color: Colors.white),
-                  const SizedBox(width: 8),
-                  const Text('New ad is now live!'),
+                  Icon(Icons.check_circle, color: Colors.white),
+                  SizedBox(width: 8),
+                  Text('New ad is now live!'),
                 ],
               ),
               backgroundColor: Colors.green,
-              duration: const Duration(seconds: 3),
+              duration: Duration(seconds: 3),
             ),
           );
         }
@@ -679,15 +694,17 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         return;
       }
 
-      print('🎬 Preloading video $index with URL: $videoUrl');
+      print('🌐 Preloading video $index: $videoUrl');
 
       final controller = VideoPlayerController.networkUrl(
         Uri.parse(videoUrl),
       );
 
-      // **FIXED: Add timeout and better error handling**
+      // **VIDEO LOADING: Standard timeout for video initialization**
+      const timeoutDuration = Duration(seconds: 10);
+
       await controller.initialize().timeout(
-        const Duration(seconds: 10),
+        timeoutDuration,
         onTimeout: () {
           throw Exception('Video initialization timeout');
         },
@@ -1160,27 +1177,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           ),
 
           // **NEW: Banner ad at top of video (if available)**
-          if (_adsLoaded && _bannerAds.isNotEmpty) ...[
-            // Debug: Log when banner ad is being displayed
-            if (kDebugMode)
-              Positioned(
-                top: 0,
-                left: 0,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  color: Colors.red.withOpacity(0.8),
-                  child: Text(
-                    'Banner Ad ${index % _bannerAds.length}',
-                    style: const TextStyle(color: Colors.white, fontSize: 10),
-                  ),
-                ),
-              ),
+          if (_adsLoaded && _bannerAds.isNotEmpty)
             Positioned(
               top: 0,
               left: 0,
               right: 0,
               child: SizedBox(
-                height: 60,
+                height: 70, // **FIX: Match BannerAdWidget height (70px)**
                 child: BannerAdWidget(
                   adData: _bannerAds[index % _bannerAds.length],
                   onAdClick: () {
@@ -1191,7 +1194,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                 ),
               ),
             ),
-          ],
           // Center play indicator (only when user paused)
           Positioned.fill(
             child: IgnorePointer(
@@ -1243,56 +1245,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           // Video info overlay
           _buildVideoOverlay(video, index),
 
-          // Quality indicator - Green for 480p, Red for others
-          if (controller != null && controller.value.isInitialized)
-            _buildQualityIndicator(controller, video),
+          // Removed quality indicator label from top of the screen
 
           // **NEW: Swipe indicator for carousel ads**
           if (_carouselAdManager.getCarouselAdForIndex(index) != null)
             _buildSwipeIndicator(index),
 
-          // **NEW: Debug info for ads (only in debug mode)**
-          if (kDebugMode)
-            Positioned(
-              top: 100,
-              left: 16,
-              child: Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.7),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      'Banner: ${_bannerAds.length}, Video: ${_videoFeedAds.length}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  GestureDetector(
-                    onTap: refreshAds,
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.7),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        'Refresh Ads',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          // **REMOVED: Debug info containers that could overlap banner ads**
         ],
       ),
     );
@@ -1823,7 +1782,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         : 16.0;
 
     // Calculate aspect ratio to determine if this is a portrait (9:16) or landscape (16:9) video
-    final double aspectRatio = sourceWidth / sourceHeight;
+    // final double aspectRatio = sourceWidth / sourceHeight;
     // final bool isPortraitVideo = aspectRatio < 1.0; // Portrait videos have width < height
 
     return Container(

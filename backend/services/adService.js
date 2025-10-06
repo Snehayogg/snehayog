@@ -214,6 +214,8 @@ class AdService {
     }
 
     adCreative.status = 'active';
+    adCreative.isActive = true; // **FIX: Set isActive to true for ad serving**
+    adCreative.reviewStatus = 'approved'; // **FIX: Set reviewStatus to approved**
     adCreative.activatedAt = new Date();
     await adCreative.save();
 

@@ -18,6 +18,8 @@ import adRoutes from './routes/adRoutes/index.js';
 import billingRoutes from './routes/billingRoutes.js';
 import creatorPayoutRoutes from './routes/creatorPayoutRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
+import feedbackRoutes from './routes/feedbackRoutes.js';
+import reportRoutes from './routes/reportRoutes.js';
 
 // Import services
 import automatedPayoutService from './services/automatedPayoutService.js';
@@ -138,6 +140,8 @@ app.use('/api/billing', billingRoutes);
 app.use('/api/creator-payouts', creatorPayoutRoutes);
 app.use('/api/videos', videoRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/feedback', feedbackRoutes);
+app.use('/api/reports', reportRoutes);
 
 // Health check endpoints (both /health and /api/health)
 app.get('/health', (req, res) => {
@@ -174,7 +178,9 @@ app.get('/api/health', (req, res) => {
       videos: '/api/videos',
       ads: '/api/ads',
       billing: '/api/billing',
-      upload: '/api/upload'
+      upload: '/api/upload',
+      feedback: '/api/feedback',
+      reports: '/api/reports'
     }
   });
 });

@@ -1,14 +1,13 @@
 import 'dart:io';
 
 class GoogleSignInConfig {
-  // ✅ ANDROID OAuth 2.0 Client ID (from google-services.json)
+  // ✅ ANDROID OAuth 2.0 Client ID (from google-services.json) - DEBUG SHA-1 MATCH
   static const String clientId =
-      '406195883653-qp49f9nauq4t428ndscuu3nr9jb10g4h.apps.googleusercontent.com';
+      '406195883653-c3l6apj3e6ruffil98pq6idirfvknrru.apps.googleusercontent.com';
 
-  // ✅ iOS Client ID (from GoogleService-Info.plist)
+  // ✅ iOS Client ID (from GoogleService-Info.plist) - NEW PACKAGE NAME
   static const String iosClientId =
-      '406195883653-f4ejmoq2e0v9tnquvout06uu305bb4eh.apps.googleusercontent.com';
-
+      '406195883653-j5ek21oa130o1bga6hnhu2r1os624hho.apps.googleusercontent.com';
 
   static const String webClientId =
       '406195883653-qp49f9nauq4t428ndscuu3nr9jb10g4h.apps.googleusercontent.com';
@@ -52,7 +51,7 @@ class GoogleSignInConfig {
     print('   📱 Android Client ID: $clientId');
     print('   🍎 iOS Client ID: $iosClientId');
     print('   🌐 Web Client ID: $webClientId');
-    print('   📦 Package Name: com.example.snehayog');
+    print('   📦 Package Name: com.snehayog.app');
     print('   🎯 Scopes: ${scopes.join(', ')}');
 
     // Safe platform detection
@@ -82,13 +81,17 @@ class GoogleSignInConfig {
     // Additional OAuth 2.0 validation
     print('   🔐 OAuth 2.0 Validation:');
     print(
-        '      - Android: ${clientId.contains('apps.googleusercontent.com') ? '✅' : '❌'}');
+      '      - Android: ${clientId.contains('apps.googleusercontent.com') ? '✅' : '❌'}',
+    );
     print(
-        '      - iOS: ${iosClientId.contains('apps.googleusercontent.com') ? '✅' : '❌'}');
+      '      - iOS: ${iosClientId.contains('apps.googleusercontent.com') ? '✅' : '❌'}',
+    );
     print(
-        '      - Web: ${webClientId.contains('apps.googleusercontent.com') ? '✅' : '❌'}');
+      '      - Web: ${webClientId.contains('apps.googleusercontent.com') ? '✅' : '❌'}',
+    );
     print(
-        '      - Project ID Match: ${clientId.contains('406195883653') ? '✅' : '❌'}');
+      '      - Project ID Match: ${clientId.contains('406195883653') ? '✅' : '❌'}',
+    );
   }
 
   // ✅ Get detailed error information

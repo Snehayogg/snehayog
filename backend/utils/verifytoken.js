@@ -5,10 +5,22 @@ import { config } from '../config.js';
 
 dotenv.config();
 
-// Ensure we're using the correct Google Client ID - NEW PACKAGE NAME
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-console.log('🔍 Using Google Client ID:', GOOGLE_CLIENT_ID.substring(0, 20) + '...');
-const client = new OAuth2Client(GOOGLE_CLIENT_ID);
+// Accept multiple OAuth 2.0 Client IDs (Android, iOS, Web)
+const parseEnvList = (value) =>
+  (value || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
+const ANDROID_CLIENT_IDS = parseEnvList(process.env.GOOGLE_CLIENT_ID_ANDROID) || ['406195883653-c3l6apj3e6ruffil98pq6idirfvknrru.apps.googleusercontent.com'];
+const IOS_CLIENT_IDS = parseEnvList(process.env.GOOGLE_CLIENT_ID_IOS) || ['406195883653-j5ek21oa130o1bga6hnhu2r1os624hho.apps.googleusercontent.com'];
+const WEB_CLIENT_IDS = parseEnvList(process.env.GOOGLE_CLIENT_ID_WEB) || ['406195883653-qp49f9nauq4t428ndscuu3nr9jb10g4h.apps.googleusercontent.com'];
+
+const ALLOWED_AUDIENCES = [...ANDROID_CLIENT_IDS, ...IOS_CLIENT_IDS, ...WEB_CLIENT_IDS];
+
+console.log('🔍 Allowed Google Client IDs:', ALLOWED_AUDIENCES.map(id => id.substring(0, 20) + '...'));
+
+const client = new OAuth2Client();
 
 export const verifyGoogleToken = async (idToken) => {
     console.log('🔍 verifyGoogleToken Debug:');
@@ -17,7 +29,7 @@ export const verifyGoogleToken = async (idToken) => {
     
     const ticket = await client.verifyIdToken({
         idToken,
-        audience: GOOGLE_CLIENT_ID,
+        audience: ALLOWED_AUDIENCES,
     });
     const payload = ticket.getPayload();
     
@@ -91,7 +103,7 @@ export const verifyToken = async (req, res, next) => {
                 console.log('🔍 Trying Google ID token verification...');
                 const ticket = await client.verifyIdToken({
                     idToken: token,
-                    audience: GOOGLE_CLIENT_ID,
+                    audience: ALLOWED_AUDIENCES,
                 });
                 
                 const payload = ticket.getPayload();

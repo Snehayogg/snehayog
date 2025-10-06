@@ -18,6 +18,7 @@ import 'package:snehayog/core/theme/app_theme.dart';
 import 'package:snehayog_monetization/services/razorpay_service.dart';
 import 'package:snehayog/config/app_config.dart';
 import 'package:app_links/app_links.dart';
+import 'package:snehayog/services/cache_manager.dart';
 
 final RazorpayService razorpayService = RazorpayService();
 
@@ -67,6 +68,10 @@ void _initializeServicesInBackground() async {
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
+
+    // Initialize cache manager in background
+    await CacheManager.instance.initialize();
+    ErrorLoggingService.logServiceInitialization('CacheManager');
 
     print('✅ Background services initialized successfully');
   } catch (e) {

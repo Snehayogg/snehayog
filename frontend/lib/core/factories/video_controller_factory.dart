@@ -2,6 +2,7 @@ import 'package:video_player/video_player.dart';
 import 'package:snehayog/model/video_model.dart';
 import 'package:snehayog/core/services/video_player_config_service.dart';
 import 'package:snehayog/core/managers/smart_cache_manager.dart';
+import 'package:snehayog/services/video_cache_service.dart';
 
 /// Factory for creating VideoPlayerController instances with optimized configuration
 class VideoControllerFactory {
@@ -35,6 +36,23 @@ class VideoControllerFactory {
     final qualityPreset =
         VideoPlayerConfigService.getQualityPreset('standard_480p');
 
+    // **VIDEO CACHING: Check for cached first video**
+    final videoCacheService = VideoCacheService.instance;
+    String finalVideoUrl = videoUrl;
+
+    // For first video (index 0), try to use cached version
+    if (video.id == 'first_video' || video.id.contains('first')) {
+      print(
+          '🎬 VideoControllerFactory: First video detected, checking cache...');
+      final cachedUrl =
+          await videoCacheService.getVideoUrlForPlayer(videoUrl, video.id);
+      if (cachedUrl != videoUrl) {
+        print(
+            '✅ VideoControllerFactory: Using cached first video for instant playback');
+        finalVideoUrl = cachedUrl;
+      }
+    }
+
     // **CACHING INTEGRATION: Use SmartCacheManager for URL optimization**
     final smartCache = SmartCacheManager();
 
@@ -43,7 +61,7 @@ class VideoControllerFactory {
       await smartCache.initialize();
     }
 
-    final cacheKey = 'video_url_${video.id}_${videoUrl.hashCode}';
+    final cacheKey = 'video_url_${video.id}_${finalVideoUrl.hashCode}';
 
     // Get optimized video URL with caching
     final optimizedUrl = await smartCache.get<String>(
@@ -51,12 +69,13 @@ class VideoControllerFactory {
           fetchFn: () async {
             print('🔄 VideoControllerFactory: Generating fresh optimized URL');
             return VideoPlayerConfigService.getOptimizedVideoUrl(
-                videoUrl, qualityPreset);
+                finalVideoUrl, qualityPreset);
           },
           cacheType: 'videos',
           maxAge: const Duration(minutes: 30),
         ) ??
-        VideoPlayerConfigService.getOptimizedVideoUrl(videoUrl, qualityPreset);
+        VideoPlayerConfigService.getOptimizedVideoUrl(
+            finalVideoUrl, qualityPreset);
 
     // Get optimized HTTP headers with caching support
     final headers = VideoPlayerConfigService.getOptimizedHeaders(optimizedUrl);
@@ -87,20 +106,20 @@ class VideoControllerFactory {
     print(
         '🎬 VideoControllerFactory: Cache Strategy: ${isHLS ? "HLS-Adaptive" : "Standard"}');
 
-return VideoPlayerController.networkUrl(
-  Uri.parse(optimizedUrl),
-  videoPlayerOptions: VideoPlayerOptions(
-    mixWithOthers: true,
-    allowBackgroundPlayback: false,
-  ),
-  httpHeaders: {
-    ...headers,
-    // ADD THESE FOR FASTER LOADING:
-    'Connection': 'keep-alive',
-    'Cache-Control': 'public, max-age=3600',
-    'Accept-Encoding': 'gzip, deflate',
-  },
-);
+    return VideoPlayerController.networkUrl(
+      Uri.parse(optimizedUrl),
+      videoPlayerOptions: VideoPlayerOptions(
+        mixWithOthers: true,
+        allowBackgroundPlayback: false,
+      ),
+      httpHeaders: {
+        ...headers,
+        // ADD THESE FOR FASTER LOADING:
+        'Connection': 'keep-alive',
+        'Cache-Control': 'public, max-age=3600',
+        'Accept-Encoding': 'gzip, deflate',
+      },
+    );
   }
 
   /// Creates a VideoPlayerController with custom quality preset (ENHANCED HLS SUPPORT)

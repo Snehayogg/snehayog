@@ -1,0 +1,135 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: snehayog-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-password}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-snehayog}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - snehayog-network
+
+  # Backend API Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: snehayog-backend
+    restart: unless-stopped
+    environment:
+      # Database
+      MONGO_URI: mongodb://${MONGO_ROOT_USERNAME:-admin}:${MONGO_ROOT_PASSWORD:-password}@mongodb:27017/${MONGO_DATABASE:-snehayog}?authSource=admin
+      
+      # Server
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 5001
+      HOST: 0.0.0.0
+      
+      # JWT
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      
+      # Razorpay
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET}
+      
+      # Google Auth
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      
+      # Cloudinary
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+      
+      # Cloudflare R2
+      CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID}
+      CLOUDFLARE_R2_BUCKET_NAME: ${CLOUDFLARE_R2_BUCKET_NAME}
+      CLOUDFLARE_R2_ACCESS_KEY_ID: ${CLOUDFLARE_R2_ACCESS_KEY_ID}
+      CLOUDFLARE_R2_SECRET_ACCESS_KEY: ${CLOUDFLARE_R2_SECRET_ACCESS_KEY}
+      CLOUDFLARE_R2_PUBLIC_DOMAIN: ${CLOUDFLARE_R2_PUBLIC_DOMAIN:-cdn.snehayog.com}
+      
+      # Feature Flags
+      ENABLE_PAYMENTS: ${ENABLE_PAYMENTS:-true}
+      ENABLE_ANALYTICS: ${ENABLE_ANALYTICS:-true}
+      ENABLE_NOTIFICATIONS: ${ENABLE_NOTIFICATIONS:-true}
+      ENABLE_UPI_PAYMENTS: ${ENABLE_UPI_PAYMENTS:-true}
+      
+      # Security
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-900000}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS:-100}
+      SESSION_TIMEOUT_MS: ${SESSION_TIMEOUT_MS:-3600000}
+      
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DEBUG: ${DEBUG:-false}
+      ENABLE_TEST_ENDPOINTS: ${ENABLE_TEST_ENDPOINTS:-false}
+    ports:
+      - "5001:5001"
+    volumes:
+      - backend_uploads:/app/uploads
+    depends_on:
+      - mongodb
+    networks:
+      - snehayog-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend Web Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: snehayog-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - snehayog-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Redis for caching (optional)
+  redis:
+    image: redis:7.2-alpine
+    container_name: snehayog-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - snehayog-network
+    command: redis-server --appendonly yes
+
+volumes:
+  mongodb_data:
+    driver: local
+  backend_uploads:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  snehayog-network:
+    driver: bridge

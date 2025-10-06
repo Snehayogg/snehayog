@@ -39,7 +39,7 @@ if (flutterVersionName == null) {
 // apply plugin: 'kotlin-android'
 
 android {
-    namespace "com.example.snehayog"
+    namespace "com.snehayog.app"
     compileSdkVersion 36 // Updated to match plugin requirements
     ndkVersion "27.0.12077973"
 
@@ -57,7 +57,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.example.snehayog"
+        applicationId "com.snehayog.app"
         minSdkVersion flutter.minSdkVersion  
         targetSdkVersion 36
         versionCode flutterVersionCode.toInteger()

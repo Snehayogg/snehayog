@@ -1,4 +1,6 @@
 import 'package:google_sign_in/google_sign_in.dart';
+import 'dart:io' show Platform; // For platform checks
+import 'package:flutter/foundation.dart' show kIsWeb; // For web check
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
@@ -8,10 +10,14 @@ import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:snehayog/config/google_sign_in_config.dart';
 
 class AuthService {
-  // ✅ Use platform-specific client ID
+  // ✅ Initialize GoogleSignIn
+  // IMPORTANT: Do NOT pass clientId on Android (causes ApiException 10)
+  // Only set clientId for iOS and Web/Desktop where it is required
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: GoogleSignInConfig.scopes,
-    clientId: GoogleSignInConfig.platformClientId,
+    clientId: (kIsWeb
+        ? GoogleSignInConfig.webClientId
+        : (Platform.isIOS ? GoogleSignInConfig.iosClientId : null)),
   );
 
   Future<Map<String, dynamic>?> signInWithGoogle() async {
