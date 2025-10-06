@@ -290,14 +290,22 @@ router.get('/serve', async (req, res) => {
 
     console.log('🎯 Serving ads request:', { userId, platform, location, adType });
 
-    // Build query for active ads - TEMPORARY: For testing, show all ads regardless of payment
+    // Build query for active ads - Show ads that are created (for testing) or properly activated
     const query = {
-      // TEMPORARY: Comment out payment requirements for testing
-      // isActive: true,
-      // reviewStatus: 'approved', // Only serve approved ads
       $or: [
-        { targetAudience: 'all' },
-        { targetAudience: { $in: [userId, platform, location] } }
+        // Show ads that are properly activated and approved
+        { isActive: true, reviewStatus: 'approved' },
+        // TEMPORARY: Also show newly created ads for testing (even without payment)
+        { isActive: { $exists: false } }, // Ads without isActive field (newly created)
+        { reviewStatus: { $exists: false } } // Ads without reviewStatus field (newly created)
+      ],
+      $and: [
+        {
+          $or: [
+            { targetAudience: 'all' },
+            { targetAudience: { $in: [userId, platform, location] } }
+          ]
+        }
       ]
     };
 
