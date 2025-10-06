@@ -290,10 +290,11 @@ router.get('/serve', async (req, res) => {
 
     console.log('🎯 Serving ads request:', { userId, platform, location, adType });
 
-    // Build query for active ads - FIXED: Look for isActive: true instead of status: 'active'
+    // Build query for active ads - TEMPORARY: For testing, show all ads regardless of payment
     const query = {
-      isActive: true,
-      reviewStatus: 'approved', // Only serve approved ads
+      // TEMPORARY: Comment out payment requirements for testing
+      // isActive: true,
+      // reviewStatus: 'approved', // Only serve approved ads
       $or: [
         { targetAudience: 'all' },
         { targetAudience: { $in: [userId, platform, location] } }
@@ -311,10 +312,11 @@ router.get('/serve', async (req, res) => {
       .limit(20)
       .sort({ createdAt: -1 });
 
-    // Filter out ads where campaign is not active (or no campaign for old ads)
-    const filteredAds = activeAds.filter(ad => 
-      !ad.campaignId || ad.campaignId.status === 'active'
-    );
+    // TEMPORARY: For testing, show all ads regardless of campaign status
+    const filteredAds = activeAds; // Show all ads for testing
+    // const filteredAds = activeAds.filter(ad => 
+    //   !ad.campaignId || ad.campaignId.status === 'active'
+    // );
 
     console.log(`✅ Found ${filteredAds.length} active ads (${activeAds.length} total found)`);
     if (adType) {
