@@ -214,7 +214,10 @@ class AdService {
       throw new Error('Ad not found');
     }
 
+    // Ensure all activation fields are consistent
     adCreative.status = 'active';
+    adCreative.isActive = true;
+    adCreative.reviewStatus = 'approved';
     adCreative.activatedAt = new Date();
     await adCreative.save();
 
@@ -230,15 +233,33 @@ class AdService {
   async getActiveAds(targetingCriteria) {
     const { userId, platform, location } = targetingCriteria;
 
+    console.log('🎯 AdService: getActiveAds called with:', { userId, platform, location });
+
+    // **FIXED: More flexible query to show all active ads**
     const query = {
-      status: 'active',
       $or: [
-        { targetAudience: 'all' },
-        { targetAudience: { $in: [userId, platform, location] } }
-      ]
+        // Show ads that are properly activated and approved
+        { isActive: true, reviewStatus: 'approved' },
+        // Show ads with active status (legacy support)
+        { status: 'active' },
+        // TEMPORARY: Also show newly created ads for testing (even without payment)
+        { isActive: { $exists: false } }, // Ads without isActive field (newly created)
+        { reviewStatus: { $exists: false } } // Ads without reviewStatus field (newly created)
+      ],
+      // **FIXED: Remove restrictive targeting for now - show all ads to all users**
+      // This allows your ads to be seen by everyone for testing
     };
 
+    console.log('🔍 AdService: Query:', JSON.stringify(query, null, 2));
+
     const activeAds = await AdCreative.find(query).limit(10);
+
+    console.log(`✅ AdService: Found ${activeAds.length} active ads`);
+
+    // Log details of found ads
+    for (const ad of activeAds) {
+      console.log(`   - Ad: ${ad.title} (${ad.adType}) - Status: ${ad.status}, isActive: ${ad.isActive}, reviewStatus: ${ad.reviewStatus}`);
+    }
 
     // Update impression count
     for (const ad of activeAds) {

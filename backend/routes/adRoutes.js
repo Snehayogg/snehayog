@@ -267,7 +267,10 @@ router.post('/process-payment', async (req, res) => {
       return res.status(404).json({ error: 'Ad not found' });
     }
 
+    // Ensure all activation fields are consistent
     adCreative.status = 'active';
+    adCreative.isActive = true;
+    adCreative.reviewStatus = 'approved';
     adCreative.activatedAt = new Date();
     await adCreative.save();
 
@@ -283,58 +286,27 @@ router.post('/process-payment', async (req, res) => {
   }
 });
 
-// **NEW: Get active ads for serving**
+// **FIXED: Get active ads for serving using service method**
 router.get('/serve', async (req, res) => {
   try {
     const { userId, platform, location, adType } = req.query;
 
     console.log('🎯 Serving ads request:', { userId, platform, location, adType });
 
-    // Build query for active ads - Show ads that are created (for testing) or properly activated
-    const query = {
-      $or: [
-        // Show ads that are properly activated and approved
-        { isActive: true, reviewStatus: 'approved' },
-        // TEMPORARY: Also show newly created ads for testing (even without payment)
-        { isActive: { $exists: false } }, // Ads without isActive field (newly created)
-        { reviewStatus: { $exists: false } } // Ads without reviewStatus field (newly created)
-      ],
-      $and: [
-        {
-          $or: [
-            { targetAudience: 'all' },
-            { targetAudience: { $in: [userId, platform, location] } }
-          ]
-        }
-      ]
-    };
+    // Use the service method for consistent logic
+    const targetingCriteria = { userId, platform, location };
+    const activeAds = await adService.getActiveAds(targetingCriteria);
 
     // Filter by ad type if specified
+    let filteredAds = activeAds;
     if (adType) {
-      query.adType = adType;
+      filteredAds = activeAds.filter(ad => 
+        ad.adType && ad.adType.toLowerCase().includes(adType.toLowerCase())
+      );
+      console.log(`   Filtered by type: ${adType} -> ${filteredAds.length} ads`);
     }
-
-    // Also check if the campaign is active (or no campaign for old ads)
-    const activeAds = await AdCreative.find(query)
-      .populate('campaignId', 'status')
-      .limit(20)
-      .sort({ createdAt: -1 });
-
-    const filteredAds = activeAds; // Show all ads for testing
-    // const filteredAds = activeAds.filter(ad => 
-    //   !ad.campaignId || ad.campaignId.status === 'active'
-    // );
 
     console.log(`✅ Found ${filteredAds.length} active ads (${activeAds.length} total found)`);
-    if (adType) {
-      console.log(`   Filtered by type: ${adType}`);
-    }
-
-    // Update impression count
-    for (const ad of filteredAds) {
-      ad.impressions = (ad.impressions || 0) + 1;
-      await ad.save();
-    }
 
     res.json({
       ads: filteredAds,
@@ -547,10 +519,10 @@ router.post('/campaigns/:id/activate', async (req, res) => {
     campaign.status = 'active';
     await campaign.save();
 
-    // Activate creative
+    // Activate creative consistently
     await AdCreative.findOneAndUpdate(
       { campaignId },
-      { isActive: true }
+      { $set: { isActive: true, reviewStatus: 'approved' } }
     );
 
     res.json({
