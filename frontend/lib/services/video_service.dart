@@ -22,6 +22,9 @@ class VideoService {
   final AuthService _authService = AuthService();
   final AdService _adService = AdService();
 
+  // Reusable HTTP client to avoid new TLS handshakes per request
+  final http.Client _client = http.Client();
+
   // **VIDEO TRACKING: State management for video playback**
   int _currentVisibleVideoIndex = 0;
   bool _isVideoScreenActive = true;
@@ -125,7 +128,7 @@ class VideoService {
         print('🔍 VideoService: Filtering by videoType: $videoType');
       }
       final response = await _makeRequest(
-        () => http.get(Uri.parse(url)),
+        () => _client.get(Uri.parse(url)),
         timeout: const Duration(seconds: 15),
       );
 

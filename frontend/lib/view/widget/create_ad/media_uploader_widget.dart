@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:snehayog/utils/banner_image_processor.dart';
 
@@ -614,13 +613,15 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
       return;
     }
 
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.video,
-      allowMultiple: false,
+    // Restrict to gallery videos only
+    final ImagePicker picker = ImagePicker();
+    final XFile? picked = await picker.pickVideo(
+      source: ImageSource.gallery,
+      maxDuration: const Duration(minutes: 5),
     );
 
-    if (result != null) {
-      final file = File(result.files.single.path!);
+    if (picked != null) {
+      final file = File(picked.path);
       if (await _validateVideoFile(file)) {
         widget.onVideoSelected(file);
       }

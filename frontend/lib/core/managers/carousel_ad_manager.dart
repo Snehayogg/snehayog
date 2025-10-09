@@ -33,28 +33,25 @@ class CarouselAdManager {
         print(
             '✅ CarouselAdManager: Loaded ${ads.length} carousel ads from backend');
       } else {
-        // Fallback to dummy ad for testing
-        final dummyAd = _carouselAdService.getDummyCarouselAd();
-        _carouselAds = [dummyAd];
+        // No fallback: keep empty to avoid showing dummy ads
+        _carouselAds = [];
         _isCarouselAdsLoaded = true;
-        print('✅ CarouselAdManager: Using dummy carousel ad for testing');
+        print('⚠️ CarouselAdManager: No carousel ads available from backend');
       }
     } catch (error) {
       print('❌ CarouselAdManager: Error loading carousel ads: $error');
-      // Fallback to dummy ad
-      final dummyAd = _carouselAdService.getDummyCarouselAd();
-      _carouselAds = [dummyAd];
+      // On error, do not use dummy; keep list empty
+      _carouselAds = [];
       _isCarouselAdsLoaded = true;
-      print('✅ CarouselAdManager: Using dummy carousel ad due to error');
+      print('⚠️ CarouselAdManager: No carousel ads due to error');
     }
   }
 
   /// **Check if index should show carousel ad**
   bool shouldShowCarouselAd(int index) {
     if (!_isCarouselAdsLoaded || _carouselAds.isEmpty) return false;
-
-    // Show carousel ad every 3 videos for better visibility
-    return (index + 1) % 3 == 0;
+    // Show carousel ad on every video
+    return true;
   }
 
   /// **Get carousel ad for specific index**

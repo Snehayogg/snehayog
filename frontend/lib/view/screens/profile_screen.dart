@@ -807,7 +807,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       value: _stateManager,
       child: Scaffold(
         key: _scaffoldKey,
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFFF8F9FA),
         appBar: _buildAppBar(),
         drawer: _buildSideMenu(),
         body: Consumer<UserProvider>(
@@ -834,7 +834,6 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     // Show error state
     if (_error != null) {
-      // If it's an authentication error, show sign-in view
       if (_error == 'No authentication data found') {
         return _buildSignInView();
       }
@@ -1062,26 +1061,36 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   PreferredSizeWidget _buildAppBar() {
     return PreferredSize(
-      preferredSize: const Size.fromHeight(kToolbarHeight),
+      preferredSize: const Size.fromHeight(kToolbarHeight + 10),
       child: Consumer<ProfileStateManager>(
         builder: (context, stateManager, child) {
           return AppBar(
-            backgroundColor: Colors.grey[100],
-            elevation: 1,
+            backgroundColor: Colors.white,
+            elevation: 0,
+            shadowColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
             title: Text(
               stateManager.userData?['name'] ?? 'Profile',
               style: const TextStyle(
-                color: Colors.black87,
+                color: Color(0xFF1A1A1A),
                 fontSize: 20,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.5,
               ),
             ),
             leading: IconButton(
-              icon: const Icon(Icons.menu, color: Colors.black87),
+              icon: const Icon(Icons.menu, color: Color(0xFF1A1A1A), size: 24),
               tooltip: 'Menu',
               onPressed: () {
                 _scaffoldKey.currentState?.openDrawer();
               },
+            ),
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(1),
+              child: Container(
+                height: 1,
+                color: const Color(0xFFE5E7EB),
+              ),
             ),
           );
         },
@@ -1657,31 +1666,48 @@ class _ProfileScreenState extends State<ProfileScreen>
   Widget _buildProfileHeader(UserProvider userProvider, UserModel? userModel) {
     return RepaintBoundary(
       child: Container(
-        padding: ResponsiveHelper.getAdaptivePadding(context),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
         child: Column(
           children: [
+            // Profile Picture Section
             RepaintBoundary(
               child: Stack(
                 children: [
                   Consumer<ProfileStateManager>(
                     builder: (context, stateManager, child) {
-                      return CircleAvatar(
-                        radius: ResponsiveHelper.isMobile(context) ? 50 : 75,
-                        backgroundColor: const Color(0xFFF5F5F5),
-                        // **FIXED: Use ProfileStateManager data first, then fall back to UserProvider data**
-                        backgroundImage: _getProfileImage(),
-                        onBackgroundImageError: (exception, stackTrace) {
-                          ProfileScreenLogger.logError(
-                              'Error loading profile image: $exception');
-                        },
-                        child: _getProfileImage() == null
-                            ? Icon(
-                                Icons.person,
-                                size: ResponsiveHelper.getAdaptiveIconSize(
-                                    context),
-                                color: const Color(0xFF757575),
-                              )
-                            : null,
+                      return Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: const Color(0xFFE5E7EB),
+                            width: 3,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 20,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: CircleAvatar(
+                          radius: 57,
+                          backgroundColor: const Color(0xFFF3F4F6),
+                          backgroundImage: _getProfileImage(),
+                          onBackgroundImageError: (exception, stackTrace) {
+                            ProfileScreenLogger.logError(
+                                'Error loading profile image: $exception');
+                          },
+                          child: _getProfileImage() == null
+                              ? const Icon(
+                                  Icons.person,
+                                  size: 48,
+                                  color: Color(0xFF9CA3AF),
+                                )
+                              : null,
+                        ),
                       );
                     },
                   ),
@@ -1691,12 +1717,32 @@ class _ProfileScreenState extends State<ProfileScreen>
                         return Positioned(
                           bottom: 0,
                           right: 0,
-                          child: IconButton(
-                            icon: const Icon(Icons.camera_alt),
-                            onPressed: _handleProfilePhotoChange,
-                            color: Colors.white,
-                            style: IconButton.styleFrom(
-                              backgroundColor: Colors.blue,
+                          child: Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF3B82F6),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white,
+                                width: 3,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.camera_alt,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                              onPressed: _handleProfilePhotoChange,
+                              padding: EdgeInsets.zero,
                             ),
                           ),
                         );
@@ -1707,20 +1753,43 @@ class _ProfileScreenState extends State<ProfileScreen>
                 ],
               ),
             ),
-            SizedBox(height: ResponsiveHelper.isMobile(context) ? 16 : 24),
-            SizedBox(height: ResponsiveHelper.isMobile(context) ? 16 : 24),
+            const SizedBox(height: 24),
+
+            // Username Section
             Consumer<ProfileStateManager>(
               builder: (context, stateManager, child) {
                 if (stateManager.isEditing) {
                   return RepaintBoundary(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 20),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
                       child: TextField(
                         controller: stateManager.nameController,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1A1A1A),
+                        ),
                         decoration: const InputDecoration(
-                          border: OutlineInputBorder(),
-                          labelText: 'Name',
-                          hintText: 'Enter a unique name',
+                          border: InputBorder.none,
+                          hintText: 'Enter your name',
+                          hintStyle: TextStyle(
+                            color: Color(0xFF9CA3AF),
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ),
@@ -1729,34 +1798,68 @@ class _ProfileScreenState extends State<ProfileScreen>
                   return RepaintBoundary(
                     child: Text(
                       _getUserName(),
-                      style: TextStyle(
-                        color: const Color(0xFF424242),
-                        fontSize:
-                            ResponsiveHelper.getAdaptiveFontSize(context, 24),
-                        fontWeight: FontWeight.bold,
+                      style: const TextStyle(
+                        color: Color(0xFF1A1A1A),
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.5,
                       ),
                     ),
                   );
                 }
               },
             ),
+
+            // Edit Action Buttons
             Consumer<ProfileStateManager>(
               builder: (context, stateManager, child) {
                 if (stateManager.isEditing) {
                   return RepaintBoundary(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 24),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           ElevatedButton(
                             onPressed: _handleCancelEdit,
-                            child: const Text('Cancel'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFF3F4F6),
+                              foregroundColor: const Color(0xFF6B7280),
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 24, vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                side: BorderSide.none,
+                              ),
+                            ),
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
                           const SizedBox(width: 16),
                           ElevatedButton(
                             onPressed: _handleSaveProfile,
-                            child: const Text('Save'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF3B82F6),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 24, vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                side: BorderSide.none,
+                              ),
+                            ),
+                            child: const Text(
+                              'Save',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -1850,16 +1953,21 @@ class _ProfileScreenState extends State<ProfileScreen>
     return RepaintBoundary(
       child: Column(
         children: [
+          // Stats Section
           RepaintBoundary(
             child: Container(
-              padding: EdgeInsets.symmetric(
-                vertical: ResponsiveHelper.isMobile(context) ? 20 : 30,
-              ),
-              decoration: const BoxDecoration(
-                border: Border(
-                  top: BorderSide(color: Color(0xFFE0E0E0)),
-                  bottom: BorderSide(color: Color(0xFFE0E0E0)),
-                ),
+              margin: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
               child: Consumer<ProfileStateManager>(
                 builder: (context, stateManager, child) {
@@ -1872,6 +1980,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                             ? stateManager.userVideos.length
                             : '...',
                         isLoading: !_isVideosLoaded,
+                      ),
+                      Container(
+                        width: 1,
+                        height: 40,
+                        color: const Color(0xFFE5E7EB),
                       ),
                       _buildStatColumn(
                         'Followers',
@@ -1940,6 +2053,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                           }
                         },
                       ),
+                      Container(
+                        width: 1,
+                        height: 40,
+                        color: const Color(0xFFE5E7EB),
+                      ),
                       _buildStatColumn(
                         'Earnings',
                         _getCurrentMonthRevenue(), // Current month's revenue
@@ -1976,25 +2094,75 @@ class _ProfileScreenState extends State<ProfileScreen>
               ),
             ),
           ),
+
+          const SizedBox(height: 24),
+
+          // Action Buttons Section
+          RepaintBoundary(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 24),
+              child: Container(
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border:
+                      Border.all(color: const Color(0xFF10B981), width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    // Refer Friends functionality
+                  },
+                  icon: const Icon(
+                    Icons.share,
+                    color: Color(0xFF10B981),
+                    size: 20,
+                  ),
+                  label: const Text(
+                    'Refer Friends',
+                    style: TextStyle(
+                      color: Color(0xFF10B981),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Videos Section
           RepaintBoundary(
             child: Padding(
-              padding: ResponsiveHelper.getAdaptivePadding(context),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     'Your Videos',
                     style: TextStyle(
-                      color: const Color(0xFF424242),
-                      fontSize:
-                          ResponsiveHelper.getAdaptiveFontSize(context, 20),
-                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1A1A1A),
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.5,
                     ),
                   ),
-                  SizedBox(height: ResponsiveHelper.isMobile(context) ? 8 : 12),
-
-                  SizedBox(
-                      height: ResponsiveHelper.isMobile(context) ? 16 : 24),
+                  const SizedBox(height: 16),
                   Consumer<ProfileStateManager>(
                     builder: (context, stateManager, child) {
                       if (!_isVideosLoaded) {
@@ -2025,29 +2193,37 @@ class _ProfileScreenState extends State<ProfileScreen>
                       if (stateManager.userVideos.isEmpty) {
                         return RepaintBoundary(
                           child: Container(
-                            padding: const EdgeInsets.all(32),
+                            padding: const EdgeInsets.all(48),
                             child: Column(
                               children: [
-                                Icon(
-                                  Icons.video_library_outlined,
-                                  size: 64,
-                                  color: Colors.grey[400],
+                                Container(
+                                  width: 80,
+                                  height: 80,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF3F4F6),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: const Icon(
+                                    Icons.video_library_outlined,
+                                    size: 40,
+                                    color: Color(0xFF9CA3AF),
+                                  ),
                                 ),
-                                const SizedBox(height: 16),
-                                Text(
+                                const SizedBox(height: 24),
+                                const Text(
                                   'No videos yet',
                                   style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w500,
+                                    color: Color(0xFF374151),
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
-                                Text(
+                                const Text(
                                   'Upload your first video to get started!',
                                   style: TextStyle(
-                                    color: Colors.grey[500],
-                                    fontSize: 14,
+                                    color: Color(0xFF9CA3AF),
+                                    fontSize: 16,
                                   ),
                                   textAlign: TextAlign.center,
                                 ),
@@ -2062,15 +2238,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount:
-                                ResponsiveHelper.isMobile(context) ? 2 : 3,
-                            crossAxisSpacing:
-                                ResponsiveHelper.isMobile(context) ? 16 : 24,
-                            mainAxisSpacing:
-                                ResponsiveHelper.isMobile(context) ? 16 : 24,
-                            childAspectRatio:
-                                ResponsiveHelper.isMobile(context) ? 0.75 : 0.8,
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                            childAspectRatio: 0.75,
                           ),
                           itemCount: stateManager.userVideos.length,
                           itemBuilder: (context, index) {
@@ -2139,215 +2311,166 @@ class _ProfileScreenState extends State<ProfileScreen>
                                         'Cannot enter selection mode via long press');
                                   }
                                 },
-                                child: Stack(
-                                  children: [
-                                    AnimatedContainer(
-                                      duration:
-                                          const Duration(milliseconds: 200),
-                                      decoration: BoxDecoration(
-                                        border: isSelected
-                                            ? Border.all(
-                                                color: Colors.red, width: 3)
-                                            : null,
-                                        borderRadius: BorderRadius.circular(12),
-                                        // Add shadow when selected
-                                        boxShadow: isSelected
-                                            ? [
-                                                BoxShadow(
-                                                  color: Colors.red
-                                                      .withOpacity(0.4),
-                                                  blurRadius: 12,
-                                                  spreadRadius: 2,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(16),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.08),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: Stack(
+                                      children: [
+                                        // Video Thumbnail
+                                        Container(
+                                          width: double.infinity,
+                                          height: double.infinity,
+                                          color: const Color(0xFFF3F4F6),
+                                          child: video.thumbnailUrl.isNotEmpty
+                                              ? Image.network(
+                                                  video.thumbnailUrl,
+                                                  fit: BoxFit.cover,
+                                                  width: double.infinity,
+                                                  height: double.infinity,
+                                                  errorBuilder: (context, error,
+                                                      stackTrace) {
+                                                    ProfileScreenLogger.logError(
+                                                        'Error loading thumbnail: $error');
+                                                    return const Center(
+                                                      child: Icon(
+                                                        Icons.video_library,
+                                                        color:
+                                                            Color(0xFF9CA3AF),
+                                                        size: 32,
+                                                      ),
+                                                    );
+                                                  },
                                                 )
-                                              ]
-                                            : null,
-                                      ),
-                                      child: Card(
-                                        color: isSelected
-                                            ? Colors.red.withOpacity(0.05)
-                                            : const Color(0xFFF5F5F5),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.stretch,
-                                          children: [
-                                            Expanded(
-                                              child: Stack(
-                                                children: [
-                                                  ClipRRect(
-                                                    borderRadius:
-                                                        const BorderRadius
-                                                            .vertical(
-                                                            top:
-                                                                Radius.circular(
-                                                                    12)),
-                                                    child: SizedBox(
-                                                      width: double.infinity,
-                                                      height: double.infinity,
-                                                      child: Image.network(
-                                                        video.thumbnailUrl,
-                                                        fit: BoxFit.cover,
-                                                        width: double.infinity,
-                                                        height: double.infinity,
-                                                        errorBuilder: (context,
-                                                            error, stackTrace) {
-                                                          ProfileScreenLogger
-                                                              .logError(
-                                                                  'Error loading thumbnail: $error');
-                                                          return Center(
-                                                            child: Icon(
-                                                              Icons
-                                                                  .video_library,
-                                                              color: const Color(
-                                                                  0xFF424242),
-                                                              size: ResponsiveHelper
-                                                                  .getAdaptiveIconSize(
-                                                                      context),
-                                                            ),
-                                                          );
-                                                        },
-                                                      ),
-                                                    ),
+                                              : const Center(
+                                                  child: Icon(
+                                                    Icons.video_library,
+                                                    color: Color(0xFF9CA3AF),
+                                                    size: 32,
                                                   ),
-                                                  // Views overlay on thumbnail
-                                                  Positioned(
-                                                    bottom: 8,
-                                                    left: 8,
-                                                    child: Container(
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                          horizontal: 8,
-                                                          vertical: 4),
-                                                      decoration: BoxDecoration(
-                                                        color: Colors.black
-                                                            .withOpacity(0.6),
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(12),
-                                                      ),
-                                                      child: Row(
-                                                        children: [
-                                                          Icon(
-                                                            Icons.visibility,
-                                                            color: Colors.white,
-                                                            size: ResponsiveHelper
-                                                                    .getAdaptiveIconSize(
-                                                                        context) *
-                                                                0.6,
-                                                          ),
-                                                          const SizedBox(
-                                                              width: 6),
-                                                          Text(
-                                                            '${video.views}',
-                                                            style: TextStyle(
-                                                              color:
-                                                                  Colors.white,
-                                                              fontSize: ResponsiveHelper
-                                                                  .getAdaptiveFontSize(
-                                                                      context,
-                                                                      12),
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .w600,
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  // Report flag removed on own videos
-                                                  // Professional selection overlay
-                                                  if (isSelected)
-                                                    Positioned.fill(
-                                                      child: Container(
-                                                        decoration:
-                                                            BoxDecoration(
-                                                          color: Colors.black
-                                                              .withOpacity(0.7),
-                                                          borderRadius:
-                                                              BorderRadius
-                                                                  .circular(12),
-                                                        ),
-                                                        child: Center(
-                                                          child: Container(
-                                                            width: 56,
-                                                            height: 56,
-                                                            decoration:
-                                                                BoxDecoration(
-                                                              color: Colors.red,
-                                                              shape: BoxShape
-                                                                  .circle,
-                                                              boxShadow: [
-                                                                BoxShadow(
-                                                                  color: Colors
-                                                                      .red
-                                                                      .withOpacity(
-                                                                          0.4),
-                                                                  blurRadius:
-                                                                      12,
-                                                                  spreadRadius:
-                                                                      2,
-                                                                ),
-                                                              ],
-                                                            ),
-                                                            child: const Icon(
-                                                              Icons.check,
-                                                              color:
-                                                                  Colors.white,
-                                                              size: 28,
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                ],
-                                              ),
-                                            ),
-                                            // Removed bottom title/details for a cleaner, thumbnail-only card
-                                          ],
+                                                ),
                                         ),
-                                      ),
-                                    ),
-                                    // Professional selection indicator in corner
-                                    if (stateManager.isSelecting &&
-                                        canSelectVideo)
-                                      Positioned(
-                                        top: 8,
-                                        right: 8,
-                                        child: GestureDetector(
-                                          onTap: () {
-                                            stateManager
-                                                .toggleVideoSelection(video.id);
-                                          },
-                                          child: AnimatedContainer(
-                                            duration: const Duration(
-                                                milliseconds: 200),
-                                            width: 28,
-                                            height: 28,
+
+                                        // Views Overlay
+                                        Positioned(
+                                          bottom: 12,
+                                          left: 12,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8, vertical: 4),
                                             decoration: BoxDecoration(
-                                              color: isSelected
-                                                  ? Colors.red
-                                                  : Colors.black
-                                                      .withOpacity(0.6),
-                                              shape: BoxShape.circle,
-                                              border: Border.all(
-                                                color: isSelected
-                                                    ? Colors.red
-                                                    : Colors.white
-                                                        .withOpacity(0.7),
-                                                width: 2,
-                                              ),
+                                              color:
+                                                  Colors.black.withOpacity(0.7),
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
                                             ),
-                                            child: isSelected
-                                                ? const Icon(
-                                                    Icons.check,
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                  Icons.visibility,
+                                                  color: Colors.white,
+                                                  size: 14,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  '${video.views}',
+                                                  style: const TextStyle(
                                                     color: Colors.white,
-                                                    size: 16,
-                                                  )
-                                                : null,
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                  ],
+
+                                        // Selection Overlay
+                                        if (isSelected)
+                                          Positioned.fill(
+                                            child: Container(
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFEF4444)
+                                                    .withOpacity(0.2),
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
+                                                border: Border.all(
+                                                  color:
+                                                      const Color(0xFFEF4444),
+                                                  width: 3,
+                                                ),
+                                              ),
+                                              child: Center(
+                                                child: Container(
+                                                  width: 48,
+                                                  height: 48,
+                                                  decoration:
+                                                      const BoxDecoration(
+                                                    color: Color(0xFFEF4444),
+                                                    shape: BoxShape.circle,
+                                                  ),
+                                                  child: const Icon(
+                                                    Icons.check,
+                                                    color: Colors.white,
+                                                    size: 24,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+
+                                        // Selection Checkbox
+                                        if (stateManager.isSelecting &&
+                                            canSelectVideo)
+                                          Positioned(
+                                            top: 12,
+                                            right: 12,
+                                            child: GestureDetector(
+                                              onTap: () {
+                                                stateManager
+                                                    .toggleVideoSelection(
+                                                        video.id);
+                                              },
+                                              child: Container(
+                                                width: 24,
+                                                height: 24,
+                                                decoration: BoxDecoration(
+                                                  color: isSelected
+                                                      ? const Color(0xFFEF4444)
+                                                      : Colors.white
+                                                          .withOpacity(0.8),
+                                                  shape: BoxShape.circle,
+                                                  border: Border.all(
+                                                    color: isSelected
+                                                        ? const Color(
+                                                            0xFFEF4444)
+                                                        : Colors.white,
+                                                    width: 2,
+                                                  ),
+                                                ),
+                                                child: isSelected
+                                                    ? const Icon(
+                                                        Icons.check,
+                                                        color: Colors.white,
+                                                        size: 16,
+                                                      )
+                                                    : null,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               ),
                             );
@@ -2705,21 +2828,22 @@ class _ProfileScreenState extends State<ProfileScreen>
                       : (isEarnings
                           ? '₹${value.toStringAsFixed(2)}'
                           : value.toString()),
-                  style: TextStyle(
-                    color: const Color(0xFF424242),
-                    fontSize: ResponsiveHelper.getAdaptiveFontSize(context, 24),
-                    fontWeight: FontWeight.bold,
+                  style: const TextStyle(
+                    color: Color(0xFF1A1A1A),
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.5,
                   ),
                 ),
               ),
             ),
-            SizedBox(height: ResponsiveHelper.isMobile(context) ? 4 : 8),
-            SizedBox(height: ResponsiveHelper.isMobile(context) ? 4 : 8),
+            const SizedBox(height: 8),
             Text(
               label,
-              style: TextStyle(
-                color: const Color(0xFF757575),
-                fontSize: ResponsiveHelper.getAdaptiveFontSize(context, 14),
+              style: const TextStyle(
+                color: Color(0xFF6B7280),
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],

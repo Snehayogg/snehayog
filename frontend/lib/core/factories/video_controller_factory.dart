@@ -2,6 +2,7 @@ import 'package:video_player/video_player.dart';
 import 'package:snehayog/model/video_model.dart';
 import 'package:snehayog/core/services/video_player_config_service.dart';
 import 'package:snehayog/core/managers/smart_cache_manager.dart';
+import 'package:snehayog/core/services/hls_warmup_service.dart';
 
 /// Factory for creating VideoPlayerController instances with optimized configuration
 class VideoControllerFactory {
@@ -12,8 +13,8 @@ class VideoControllerFactory {
         video.videoUrl.contains('/hls/') ||
         video.isHLSEncoded == true;
 
-    // Always use 480p quality URL for consistent streaming
-    String videoUrl = video.get480pUrl();
+    // Use the best available URL for streaming
+    String videoUrl = video.videoUrl;
 
     // **FIXED: Prefer MP4 URLs over HLS for better ExoPlayer compatibility**
     if (videoUrl.isNotEmpty && !videoUrl.contains('.m3u8')) {
@@ -87,20 +88,26 @@ class VideoControllerFactory {
     print(
         '🎬 VideoControllerFactory: Cache Strategy: ${isHLS ? "HLS-Adaptive" : "Standard"}');
 
-return VideoPlayerController.networkUrl(
-  Uri.parse(optimizedUrl),
-  videoPlayerOptions: VideoPlayerOptions(
-    mixWithOthers: true,
-    allowBackgroundPlayback: false,
-  ),
-  httpHeaders: {
-    ...headers,
-    // ADD THESE FOR FASTER LOADING:
-    'Connection': 'keep-alive',
-    'Cache-Control': 'public, max-age=3600',
-    'Accept-Encoding': 'gzip, deflate',
-  },
-);
+    // Best-effort warm-up for HLS (manifest + first segments)
+    if (optimizedUrl.contains('.m3u8')) {
+      // Fire-and-forget warm-up to avoid blocking UI
+      HlsWarmupService().warmUp(optimizedUrl);
+    }
+
+    return VideoPlayerController.networkUrl(
+      Uri.parse(optimizedUrl),
+      videoPlayerOptions: VideoPlayerOptions(
+        mixWithOthers: true,
+        allowBackgroundPlayback: false,
+      ),
+      httpHeaders: {
+        ...headers,
+        // ADD THESE FOR FASTER LOADING:
+        'Connection': 'keep-alive',
+        'Cache-Control': 'public, max-age=3600',
+        'Accept-Encoding': 'gzip, deflate',
+      },
+    );
   }
 
   /// Creates a VideoPlayerController with custom quality preset (ENHANCED HLS SUPPORT)

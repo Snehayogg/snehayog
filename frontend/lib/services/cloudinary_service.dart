@@ -364,19 +364,49 @@ class CloudinaryService {
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
 
+      print(
+          '🔍 CloudinaryService: Video upload response status: ${response.statusCode}');
+      print(
+          '🔍 CloudinaryService: Video upload response body: ${response.body}');
+
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
+          print('✅ CloudinaryService: Video uploaded successfully for ad');
           return data;
         } else {
-          throw Exception('Upload failed: ${data['error'] ?? 'Unknown error'}');
+          final errorMsg = data['error'] ?? 'Unknown error';
+          print('❌ CloudinaryService: Video upload failed: $errorMsg');
+          throw Exception('Video upload failed: $errorMsg');
         }
       } else {
         final errorData = json.decode(response.body);
-        throw Exception(
-            'Failed to upload video: ${errorData['error'] ?? response.body}');
+        final errorMsg = errorData['error'] ?? response.body;
+        print('❌ CloudinaryService: Video upload HTTP error: $errorMsg');
+
+        // Provide user-friendly error messages
+        String userFriendlyError;
+        if (errorMsg.contains('file size') || errorMsg.contains('too large')) {
+          userFriendlyError =
+              'Video file is too large. Please use a video smaller than 100MB.';
+        } else if (errorMsg.contains('format') || errorMsg.contains('type')) {
+          userFriendlyError =
+              'Unsupported video format. Please use MP4, WebM, AVI, MOV, or MKV.';
+        } else if (errorMsg.contains('timeout')) {
+          userFriendlyError =
+              'Upload timeout. Please check your internet connection and try again.';
+        } else if (errorMsg.contains('authentication') ||
+            errorMsg.contains('token')) {
+          userFriendlyError = 'Authentication expired. Please sign in again.';
+        } else {
+          userFriendlyError =
+              'Failed to upload video. Please try with a different video file.';
+        }
+
+        throw Exception(userFriendlyError);
       }
     } catch (e) {
+      print('❌ CloudinaryService: Error uploading video for ad: $e');
       throw Exception('Error uploading video for ad: $e');
     }
   }

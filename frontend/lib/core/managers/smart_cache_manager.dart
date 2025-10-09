@@ -271,6 +271,8 @@ class SmartCacheManager {
           _updateAccessInfo(key);
           _cacheHits++;
           print('⚡ SmartCacheManager: Instant cache hit for $key');
+          print(
+              '📊 Cache Stats - Hits: $_cacheHits, Misses: $_cacheMisses, Stale: $_staleResponses');
 
           // Start background refresh if stale
           if (entry.shouldRefresh &&
@@ -296,6 +298,8 @@ class SmartCacheManager {
           _addToMemoryCache(key, diskEntry);
           _cacheHits++;
           print('💾 SmartCacheManager: Fresh disk cache hit for $key');
+          print(
+              '📊 Cache Stats - Hits: $_cacheHits, Misses: $_cacheMisses, Stale: $_staleResponses');
 
           if (diskEntry.shouldRefresh &&
               _shouldUseStaleWhileRevalidate(cacheType)) {
@@ -316,6 +320,8 @@ class SmartCacheManager {
       // Cache miss - fetch fresh data
       _cacheMisses++;
       print('❌ SmartCacheManager: Cache miss for $key, fetching fresh data');
+      print(
+          '📊 Cache Stats - Hits: $_cacheHits, Misses: $_cacheMisses, Stale: $_staleResponses');
 
       final freshData = await fetchFn();
       if (freshData != null) {

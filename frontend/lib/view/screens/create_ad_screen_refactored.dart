@@ -1265,35 +1265,74 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
   Future<List<String>> _uploadMediaFiles() async {
     final List<String> mediaUrls = [];
 
-    if (_selectedAdType == 'banner' && _selectedImage != null) {
-      final imageUrl = await _cloudinaryService.uploadImage(_selectedImage!);
-      mediaUrls.add(imageUrl);
-    } else if (_selectedAdType == 'carousel') {
-      if (_selectedImages.isNotEmpty) {
-        for (final image in _selectedImages) {
-          final imageUrl = await _cloudinaryService.uploadImage(image);
-          mediaUrls.add(imageUrl);
-        }
-      }
-      if (_selectedVideo != null) {
-        final result = await _cloudinaryService.uploadVideo(_selectedVideo!);
-        final videoUrl =
-            result['url'] ?? result['hls_urls']?['hls_stream'] ?? '';
-        mediaUrls.add(videoUrl);
-      }
-    } else if (_selectedAdType == 'video feed ad') {
-      if (_selectedImage != null) {
+    try {
+      if (_selectedAdType == 'banner' && _selectedImage != null) {
+        print('🔄 CreateAdScreen: Uploading banner image...');
         final imageUrl = await _cloudinaryService.uploadImage(_selectedImage!);
         mediaUrls.add(imageUrl);
-      } else if (_selectedVideo != null) {
-        final result = await _cloudinaryService.uploadVideo(_selectedVideo!);
-        final videoUrl =
-            result['url'] ?? result['hls_urls']?['hls_stream'] ?? '';
-        mediaUrls.add(videoUrl);
-      }
-    }
+        print('✅ CreateAdScreen: Banner image uploaded: $imageUrl');
+      } else if (_selectedAdType == 'carousel') {
+        if (_selectedImages.isNotEmpty) {
+          print(
+              '🔄 CreateAdScreen: Uploading ${_selectedImages.length} carousel images...');
+          for (int i = 0; i < _selectedImages.length; i++) {
+            final image = _selectedImages[i];
+            print(
+                '🔄 CreateAdScreen: Uploading carousel image ${i + 1}/${_selectedImages.length}...');
+            final imageUrl = await _cloudinaryService.uploadImage(image);
+            mediaUrls.add(imageUrl);
+            print(
+                '✅ CreateAdScreen: Carousel image ${i + 1} uploaded: $imageUrl');
+          }
+        }
+        if (_selectedVideo != null) {
+          print('🔄 CreateAdScreen: Uploading carousel video...');
+          print('🔄 CreateAdScreen: Video file path: ${_selectedVideo!.path}');
+          print(
+              '🔄 CreateAdScreen: Video file size: ${await _selectedVideo!.length()} bytes');
 
-    return mediaUrls;
+          final result =
+              await _cloudinaryService.uploadVideoForAd(_selectedVideo!);
+          print('🔄 CreateAdScreen: Video upload result: $result');
+
+          final videoUrl =
+              result['url'] ?? result['hls_urls']?['hls_stream'] ?? '';
+          if (videoUrl.isEmpty) {
+            throw Exception(
+                'Video upload succeeded but no URL returned. Result: $result');
+          }
+          mediaUrls.add(videoUrl);
+          print('✅ CreateAdScreen: Carousel video uploaded: $videoUrl');
+        }
+      } else if (_selectedAdType == 'video feed ad') {
+        if (_selectedImage != null) {
+          print('🔄 CreateAdScreen: Uploading video feed ad image...');
+          final imageUrl =
+              await _cloudinaryService.uploadImage(_selectedImage!);
+          mediaUrls.add(imageUrl);
+          print('✅ CreateAdScreen: Video feed ad image uploaded: $imageUrl');
+        } else if (_selectedVideo != null) {
+          print('🔄 CreateAdScreen: Uploading video feed ad video...');
+          final result =
+              await _cloudinaryService.uploadVideoForAd(_selectedVideo!);
+          final videoUrl =
+              result['url'] ?? result['hls_urls']?['hls_stream'] ?? '';
+          if (videoUrl.isEmpty) {
+            throw Exception(
+                'Video upload succeeded but no URL returned. Result: $result');
+          }
+          mediaUrls.add(videoUrl);
+          print('✅ CreateAdScreen: Video feed ad video uploaded: $videoUrl');
+        }
+      }
+
+      print(
+          '✅ CreateAdScreen: All media files uploaded successfully. Total URLs: ${mediaUrls.length}');
+      return mediaUrls;
+    } catch (e) {
+      print('❌ CreateAdScreen: Error uploading media files: $e');
+      rethrow;
+    }
   }
 
   String? _getImageUrl(List<String> mediaUrls) {

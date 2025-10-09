@@ -437,8 +437,8 @@ async function _handlePaymentCaptured(payload) {
     await invoice.save();
     console.log('✅ Billing: Invoice updated successfully');
 
-    // **NEW: Activate ad campaign**
-    await _activateAdCampaign(invoice.campaignId);
+  // **NEW: Activate ad campaign**
+  await _activateAdCampaign(invoice.campaignId);
 
   } catch (error) {
     console.error('❌ Billing: Error handling payment captured:', error);
@@ -553,6 +553,13 @@ async function _activateAdCampaign(campaignId) {
       campaign.activatedAt = new Date();
       await campaign.save();
       console.log('✅ Billing: Campaign activated successfully');
+
+      // Also activate associated creative consistently
+      const { default: AdCreative } = await import('../models/AdCreative.js');
+      await AdCreative.findOneAndUpdate(
+        { campaignId },
+        { $set: { isActive: true, reviewStatus: 'approved' } }
+      );
 
       // **NEW: Send notification to user (implement as needed)**
       // await sendCampaignActivatedNotification(campaign.advertiserUserId);

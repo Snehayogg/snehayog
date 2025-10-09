@@ -15,140 +15,121 @@ class BannerAdWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = adData['title'] ?? 'Advertisement';
-    final description = adData['description'] ?? '';
     final imageUrl = adData['imageUrl'] ?? '';
+
+    // Debug logging for banner ad data
+    print('🎯 BannerAdWidget: Building banner ad with data:');
+    print('   Image URL: $imageUrl');
+    print('   Ad ID: ${adData['_id'] ?? adData['id']}');
+    print('   Title: ${adData['title']}');
+    print('   Link: ${adData['link']}');
 
     return Container(
       width: double.infinity,
-      height: 80, // Increased height to accommodate larger image
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      height: 60, // Compact professional height
+      margin: EdgeInsets.zero, // No margin - flush to screen edges
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.zero, // No rounded corners for full-width
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
-        border: Border.all(
-          color: Colors.blue.withOpacity(0.3),
-          width: 1,
-        ),
       ),
       child: Material(
         color: Colors.transparent,
+        borderRadius: BorderRadius.zero, // No rounded corners
         child: InkWell(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.zero, // No rounded corners
           onTap: () => _handleAdClick(context),
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
+          child: ClipRRect(
+            borderRadius: BorderRadius.zero, // Full-width, no rounding
+            child: Stack(
               children: [
-                Container(
-                  width: 120, // Increased size for better visibility
-                  height: 38, // Maintain 3.2:1 aspect ratio (120/38 ≈ 3.16)
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.grey.withOpacity(0.3)),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: imageUrl.isNotEmpty
-                        ? Image.network(
-                            imageUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                color: Colors.grey[200],
-                                child: const Icon(
-                                  Icons.image,
+                // Full-width ad image
+                Positioned.fill(
+                  child: imageUrl.isNotEmpty
+                      ? Image.network(
+                          imageUrl,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Container(
+                              color: Colors.grey[300],
+                              child: const Center(
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
                                   color: Colors.grey,
-                                  size: 20,
                                 ),
-                              );
-                            },
-                          )
-                        : Container(
-                            color: Colors.grey[200],
-                            child: const Icon(
-                              Icons.image,
+                              ),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) {
+                            print(
+                                '❌ BannerAdWidget: Failed to load image: $imageUrl, Error: $error');
+                            return Container(
+                              color: Colors.grey[300],
+                              child: const Center(
+                                child: Icon(
+                                  Icons.image_not_supported,
+                                  color: Colors.grey,
+                                  size: 32,
+                                ),
+                              ),
+                            );
+                          },
+                        )
+                      : Container(
+                          color: Colors.grey[300],
+                          child: const Center(
+                            child: Icon(
+                              Icons.image_not_supported,
                               color: Colors.grey,
-                              size: 20,
+                              size: 32,
                             ),
                           ),
-                  ),
+                        ),
                 ),
-                const SizedBox(width: 12),
 
-                // Ad content
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Ad label
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text(
-                          'Ad',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.blue,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                // Subtle gradient overlay for text readability
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withOpacity(0.3),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-
-                      // Ad title
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-
-                      // Ad description (if space allows)
-                      if (description.isNotEmpty)
-                        Text(
-                          description,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                    ],
+                    ),
                   ),
                 ),
 
-                // CTA button
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.blue,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Text(
-                    'Learn More',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                // Small "Recommended Ad" label at bottom-right
+                Positioned(
+                  bottom: 4,
+                  right: 4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.6),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'Sponsored',
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.3,
+                      ),
                     ),
                   ),
                 ),

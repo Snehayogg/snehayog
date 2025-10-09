@@ -224,6 +224,98 @@ class CloudflareR2Service {
       console.warn('⚠️ Failed to cleanup temp directory:', error);
     }
   }
+
+  /**
+   * Upload generic file to R2 (for HLS segments, playlists, etc.)
+   * Returns custom domain URL (cdn.snehayog.com) if configured
+   */
+  async uploadFileToR2(filePath, key, contentType = 'application/octet-stream') {
+    try {
+      console.log(`📤 Uploading file to R2: ${key}`);
+      
+      const fileContent = fs.readFileSync(filePath);
+      
+      const command = new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+        Body: fileContent,
+        ContentType: contentType,
+        CacheControl: 'public, max-age=31536000', // 1 year cache
+      });
+  
+      await this.s3Client.send(command);
+      
+      // **USE CUSTOM DOMAIN** (cdn.snehayog.com) for public URL
+      const publicUrl = this.getPublicUrl(key);
+      console.log(`✅ File uploaded to R2: ${key}`);
+      
+      return {
+        url: publicUrl,
+        key: key,
+        size: fileContent.length,
+      };
+      
+    } catch (error) {
+      console.error('❌ Error uploading file to R2:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Upload entire HLS directory to R2 (playlist + segments)
+   * Returns the master playlist URL
+   */
+  async uploadHLSDirectoryToR2(hlsDir, videoName, userId) {
+    try {
+      console.log('📤 Uploading HLS directory to R2...');
+      console.log('   Directory:', hlsDir);
+      console.log('   Video:', videoName);
+      
+      const files = fs.readdirSync(hlsDir);
+      const uploadPromises = [];
+      let playlistKey = null;
+      
+      for (const file of files) {
+        const filePath = path.join(hlsDir, file);
+        const key = `hls/${userId}/${videoName}/${file}`;
+        
+        if (file.endsWith('.m3u8')) {
+          // Upload playlist file
+          console.log(`   📝 Uploading playlist: ${file}`);
+          uploadPromises.push(
+            this.uploadFileToR2(filePath, key, 'application/x-mpegURL')
+          );
+          playlistKey = key;
+        } else if (file.endsWith('.ts')) {
+          // Upload segment file
+          console.log(`   🎬 Uploading segment: ${file}`);
+          uploadPromises.push(
+            this.uploadFileToR2(filePath, key, 'video/mp2t')
+          );
+        }
+      }
+      
+      await Promise.all(uploadPromises);
+      
+      console.log(`✅ Uploaded ${files.length} HLS files to R2`);
+      console.log('   🎉 FREE bandwidth delivery via Cloudflare R2!');
+      
+      if (!playlistKey) {
+        throw new Error('No playlist file found in HLS directory');
+      }
+      
+      return {
+        playlistUrl: this.getPublicUrl(playlistKey),
+        playlistKey: playlistKey,
+        totalFiles: files.length,
+        segments: files.filter(f => f.endsWith('.ts')).length,
+      };
+      
+    } catch (error) {
+      console.error('❌ Error uploading HLS directory to R2:', error);
+      throw error;
+    }
+  }
 }
 
 export default new CloudflareR2Service();

@@ -1685,7 +1685,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
   Map<String, Map<String, double>> _getAdTypePerformance() {
     final performance = <String, Map<String, double>>{};
 
-    for (final adType in ['banner', 'carousel', 'video feed']) {
+    for (final adType in ['banner', 'carousel', 'video feed ad']) {
       final adsOfType = _ads.where((ad) => ad.adType == adType).toList();
       if (adsOfType.isNotEmpty) {
         final avgCtr =

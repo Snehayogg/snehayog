@@ -28,17 +28,20 @@ class HLSEncodingService {
   }
 
   /**
-   * Convert video to HLS format
+   * Convert video to HLS format (SINGLE 480p quality only)
    * @param {string} inputPath - Path to input video file
    * @param {string} videoId - Unique video identifier
    * @param {Object} options - Encoding options
+   * @param {number} options.segmentDuration - Segment duration in seconds (default: 3)
+   * @param {string} options.quality - Quality preset: low, medium, high (default: medium)
+   * @param {string} options.resolution - Resolution (only 480p supported, default: 480p)
    * @returns {Promise<Object>} - HLS encoding result
    */
   async convertToHLS(inputPath, videoId, options = {}) {
     const {
-      segmentDuration = 3, // Optimized segment duration: 2-4 seconds for fast startup
-      quality = 'medium', // low, medium, high
-      resolution = 'auto' // auto, 720p, 480p, 240p
+      segmentDuration = 3, // Optimized segment duration: 3 seconds for fast startup
+      quality = 'medium', // low, medium, high (medium = 480p optimal)
+      resolution = '480p' // Fixed to 480p for cost optimization (single quality only)
     } = options;
 
     return new Promise((resolve, reject) => {
@@ -52,28 +55,28 @@ class HLSEncodingService {
         fs.mkdirSync(outputDir, { recursive: true });
       }
 
-      // Quality presets optimized for HLS streaming
+      // Quality presets optimized for HLS streaming (480p only)
       const qualityPresets = {
         low: { crf: 25, audioBitrate: '64k' },    // Lower quality, smaller file
-        medium: { crf: 23, audioBitrate: '96k' }, // Balanced quality (recommended)
+        medium: { crf: 23, audioBitrate: '96k' }, // Balanced quality (recommended for 480p)
         high: { crf: 20, audioBitrate: '128k' }   // Higher quality, larger file
       };
 
-      // Resolution presets - focused on mobile and web streaming
+      // **SINGLE QUALITY MODE: Only 480p resolution supported**
+      // This ensures cost optimization and consistent quality across all videos
       const resolutionPresets = {
         '480p': { width: 854, height: 480, bitrate: '800k' },
       };
 
-      // Auto-detect best resolution based on input video
-      let selectedResolution = null;
-      if (resolution === 'auto') {
-        // Get input video dimensions and select appropriate resolution
-        selectedResolution = this.getOptimalResolutionSync(inputPath, resolutionPresets);
-      } else if (resolutionPresets[resolution]) {
-        selectedResolution = resolutionPresets[resolution];
-      }
-
+      // Always use 480p resolution (single quality mode)
+      const selectedResolution = resolutionPresets['480p'];
       const selectedQuality = qualityPresets[quality] || qualityPresets.medium;
+      
+      console.log('🎬 HLS Encoding Configuration:');
+      console.log(`   Quality: ${quality} (CRF: ${selectedQuality.crf})`);
+      console.log(`   Resolution: 480p (${selectedResolution.width}x${selectedResolution.height})`);
+      console.log(`   Bitrate: ${selectedResolution.bitrate}`);
+      console.log(`   Segment Duration: ${segmentDuration}s`);
 
       let command = ffmpeg(inputPath)
         .inputOptions([
@@ -115,12 +118,11 @@ class HLSEncodingService {
           '-pix_fmt', 'yuv420p'       // Pixel format for maximum compatibility
         ]);
 
-      // Add resolution if specified
-      if (selectedResolution) {
-        command = command
-          .videoFilters(`scale='min(${selectedResolution.width},iw)':-2:force_original_aspect_ratio=decrease,pad=${selectedResolution.width}:${selectedResolution.height}:(ow-iw)/2:(oh-ih)/2:black`)
-          .size(`${selectedResolution.width}x${selectedResolution.height}`);
-      }
+      // Add 480p resolution scaling (preserves aspect ratio, no black bars)
+      // Scale to fit within 480p while maintaining original aspect ratio
+      command = command
+        .videoFilters(`scale='min(${selectedResolution.width},iw)':'min(${selectedResolution.height},ih)':force_original_aspect_ratio=decrease`)
+        .size(`${selectedResolution.width}x${selectedResolution.height}`);
 
       // Add output
       command = command.output(playlistPath);

@@ -1,6 +1,9 @@
 import cloudinary from 'cloudinary';
 import cloudflareR2Service from './cloudflareR2Service.js';
+import hlsEncodingService from './hlsEncodingService.js';
 import path from 'path';
+import fs from 'fs';
+import { spawn } from 'child_process';
 
 class HybridVideoService {
   constructor() {
@@ -314,6 +317,215 @@ class HybridVideoService {
       savingsVsCurrent: '93%',
       currency: 'USD'
     };
+  }
+
+  /**
+   * **NEW: Pure HLS Processing - 100% FREE!**
+   * Upload → FFmpeg (Local, FREE) → HLS (.m3u8 + .ts) → R2 (FREE bandwidth)
+   * Single 480p quality only for cost optimization
+   */
+  async processVideoToHLS(videoPath, videoName, userId) {
+    try {
+      console.log('🚀 Starting Pure HLS Processing (FFmpeg → R2)...');
+      console.log('💰 Cost: $0 processing + $0.015/GB storage + $0 bandwidth = 100% FREE!');
+      console.log('📹 Quality: Single 480p (no multiple qualities)');
+      
+      // Step 1: Validate video
+      const validation = await this.validateVideo(videoPath);
+      if (!validation.isValid) {
+        throw new Error(`Video validation failed: ${validation.error}`);
+      }
+      
+      // Step 2: Use LOCAL FFmpeg to create HLS segments (480p only)
+      console.log('🎬 Converting to HLS with FFmpeg (480p only)...');
+      const videoId = `${videoName}_${Date.now()}`;
+      const hlsResult = await hlsEncodingService.convertToHLS(
+        videoPath,
+        videoId,
+        {
+          quality: 'medium',    // 480p quality preset
+          resolution: '480p',   // Fixed 480p resolution
+          segmentDuration: 3    // 3-second segments for fast startup
+        }
+      );
+      
+      console.log('✅ HLS conversion completed:');
+      console.log(`   Segments: ${hlsResult.segments}`);
+      console.log(`   Playlist: ${hlsResult.playlistPath}`);
+      console.log(`   Output Dir: ${hlsResult.outputDir}`);
+      
+      // Step 3: Upload ALL HLS files to R2 (playlist + segments)
+      console.log('📤 Uploading HLS files to R2...');
+      const r2HLSResult = await cloudflareR2Service.uploadHLSDirectoryToR2(
+        hlsResult.outputDir,
+        videoId,
+        userId
+      );
+      
+      console.log(`✅ Uploaded ${r2HLSResult.totalFiles} HLS files to R2`);
+      console.log(`   Playlist URL: ${r2HLSResult.playlistUrl}`);
+      console.log(`   Segments: ${r2HLSResult.segments}`);
+      
+      // Step 4: Generate thumbnail using FFmpeg
+      console.log('📸 Generating thumbnail...');
+      const thumbnailPath = await this.generateThumbnailWithFFmpeg(videoPath, videoName, userId);
+      
+      // Step 5: Upload thumbnail to R2
+      const thumbnailUrl = await this.uploadThumbnailImageToR2(
+        thumbnailPath,
+        videoName,
+        userId
+      );
+      
+      console.log(`✅ Thumbnail uploaded: ${thumbnailUrl}`);
+      
+      // Step 6: Cleanup local files
+      console.log('🧹 Cleaning up local files...');
+      await this.cleanupLocalFiles(videoPath, hlsResult.outputDir, thumbnailPath);
+      
+      console.log('🎉 Pure HLS processing completed successfully!');
+      console.log('📊 Cost breakdown:');
+      console.log('   - FFmpeg processing: $0 (local, FREE!)');
+      console.log('   - R2 storage: ~$0.015/GB/month');
+      console.log('   - R2 bandwidth: $0 (FREE forever!)');
+      console.log('   - Total savings: 100% vs Cloudinary processing!');
+      
+      return {
+        success: true,
+        videoUrl: r2HLSResult.playlistUrl,
+        thumbnailUrl: thumbnailUrl,
+        format: 'HLS (HTTP Live Streaming)',
+        quality: '480p (single quality)',
+        segments: r2HLSResult.segments,
+        totalFiles: r2HLSResult.totalFiles,
+        storage: 'Cloudflare R2',
+        bandwidth: 'FREE Forever',
+        processing: 'Local FFmpeg (FREE)',
+        costSavings: '100% vs any cloud processing',
+        hlsPlaylistUrl: r2HLSResult.playlistUrl,
+        isHLSEncoded: true,
+      };
+      
+    } catch (error) {
+      console.error('❌ Pure HLS processing error:', error);
+      
+      // Cleanup on error
+      try {
+        await cloudflareR2Service.cleanupTempDirectory();
+      } catch (cleanupError) {
+        console.warn('⚠️ Cleanup error:', cleanupError);
+      }
+      
+      throw new Error(`Pure HLS processing failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Generate thumbnail using FFmpeg (FREE, local processing)
+   */
+  async generateThumbnailWithFFmpeg(videoPath, videoName, userId) {
+    return new Promise((resolve, reject) => {
+      try {
+        const tempDir = path.join(process.cwd(), 'temp');
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true });
+        }
+        
+        const thumbnailPath = path.join(tempDir, `${videoName}_thumb_${Date.now()}.jpg`);
+        
+        console.log('📸 Generating thumbnail with FFmpeg...');
+        console.log(`   Input: ${videoPath}`);
+        console.log(`   Output: ${thumbnailPath}`);
+        
+        // FFmpeg command to extract frame at 1 second
+        const ffmpeg = spawn('ffmpeg', [
+          '-i', videoPath,
+          '-ss', '00:00:01.000',  // Capture at 1 second
+          '-vframes', '1',         // Extract 1 frame
+          '-vf', 'scale=320:180',  // Resize to 320x180
+          '-q:v', '2',             // High quality
+          '-y',                    // Overwrite output
+          thumbnailPath
+        ]);
+        
+        let errorOutput = '';
+        
+        ffmpeg.stderr.on('data', (data) => {
+          errorOutput += data.toString();
+        });
+        
+        ffmpeg.on('close', (code) => {
+          if (code === 0) {
+            console.log('✅ Thumbnail generated successfully');
+            resolve(thumbnailPath);
+          } else {
+            console.error('❌ FFmpeg thumbnail generation failed:', errorOutput);
+            reject(new Error(`FFmpeg thumbnail generation failed with code ${code}`));
+          }
+        });
+        
+        ffmpeg.on('error', (error) => {
+          console.error('❌ FFmpeg spawn error:', error);
+          reject(new Error(`Failed to spawn FFmpeg: ${error.message}`));
+        });
+        
+      } catch (error) {
+        console.error('❌ Thumbnail generation error:', error);
+        reject(error);
+      }
+    });
+  }
+
+  /**
+   * Upload thumbnail image file to R2
+   */
+  async uploadThumbnailImageToR2(thumbnailPath, videoName, userId) {
+    try {
+      const key = `thumbnails/${userId}/${videoName}_thumb_${Date.now()}.jpg`;
+      
+      const result = await cloudflareR2Service.uploadFileToR2(
+        thumbnailPath,
+        key,
+        'image/jpeg'
+      );
+      
+      return result.url;
+      
+    } catch (error) {
+      console.error('❌ Error uploading thumbnail to R2:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Clean up local files after processing
+   */
+  async cleanupLocalFiles(videoPath, hlsOutputDir, thumbnailPath) {
+    try {
+      // Delete original video file
+      if (fs.existsSync(videoPath)) {
+        fs.unlinkSync(videoPath);
+        console.log('🧹 Cleaned up original video:', videoPath);
+      }
+      
+      // Delete HLS output directory
+      if (fs.existsSync(hlsOutputDir)) {
+        fs.rmSync(hlsOutputDir, { recursive: true, force: true });
+        console.log('🧹 Cleaned up HLS directory:', hlsOutputDir);
+      }
+      
+      // Delete thumbnail file
+      if (thumbnailPath && fs.existsSync(thumbnailPath)) {
+        fs.unlinkSync(thumbnailPath);
+        console.log('🧹 Cleaned up thumbnail:', thumbnailPath);
+      }
+      
+      console.log('✅ Local cleanup completed');
+      
+    } catch (error) {
+      console.warn('⚠️ Error during local cleanup:', error);
+      // Don't throw error - cleanup is not critical
+    }
   }
 }
 

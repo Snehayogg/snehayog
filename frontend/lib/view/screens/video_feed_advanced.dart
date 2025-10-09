@@ -22,6 +22,8 @@ import 'package:snehayog/core/services/auto_scroll_settings.dart';
 import 'package:snehayog/controller/main_controller.dart';
 import 'package:snehayog/core/managers/video_controller_manager.dart';
 import 'package:snehayog/view/widget/report/report_dialog_widget.dart';
+import 'package:snehayog/core/managers/smart_cache_manager.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class VideoFeedAdvanced extends StatefulWidget {
   final int? initialIndex;
@@ -67,6 +69,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       BackgroundProfilePreloader();
   StreamSubscription? _adRefreshSubscription;
 
+  // Cache manager for instant loading
+  final SmartCacheManager _cacheManager = SmartCacheManager();
+
   // **AD STATE**
   List<Map<String, dynamic>> _bannerAds = [];
   List<Map<String, dynamic>> _videoFeedAds = [];
@@ -103,6 +108,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   final Map<int, int> _currentCarouselSlideIndex =
       {}; // Track current slide index for each carousel
 
+  // **USER STATE**
   bool _isScreenVisible = true;
 
   @override
@@ -275,6 +281,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     _carouselAdManager = CarouselAdManager();
     _pageController = PageController(initialPage: widget.initialIndex ?? 0);
 
+    // Initialize cache manager
+    _cacheManager.initialize();
+
+    // Initialize current user ID
+    _initializeCurrentUserId();
+
     _loadInitialData();
     _startPreloading();
     WidgetsBinding.instance.addObserver(this);
@@ -341,19 +353,30 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     });
   }
 
-  /// **INITIAL DATA LOADING**
+  /// **OPTIMIZED: Load initial data with parallel ad loading**
   Future<void> _loadInitialData() async {
     try {
       setState(() => _isLoading = true);
 
-      // Load initial videos
+      // Load videos and user ID first (critical path for instant video display)
       await _loadVideos(page: 1);
-
-      // Load current user
       await _loadCurrentUserId();
 
-      // **NEW: Load active ads**
-      await _loadActiveAds();
+      // **OPTIMIZED: Show videos immediately without waiting for ads**
+      if (mounted) {
+        setState(() => _isLoading = false);
+
+        // **NEW: Trigger autoplay immediately after videos load**
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          print(
+              '🚀 VideoFeedAdvanced: Triggering instant autoplay after video load');
+          _tryAutoplayCurrent();
+        });
+      }
+
+      // **OPTIMIZED: Load ads in background (non-blocking)**
+      // Ads will appear when ready, but won't delay video display
+      _loadActiveAds(); // No 'await' - runs in background
 
       // Navigate to specific video if provided
       if (widget.initialVideoId != null) {
@@ -367,17 +390,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             curve: Curves.easeInOut,
           );
         }
-      }
-
-      if (mounted) {
-        setState(() => _isLoading = false);
-
-        // **NEW: Trigger autoplay after initial data is loaded**
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          print(
-              '🚀 VideoFeedAdvanced: Triggering initial autoplay after data load');
-          _tryAutoplayCurrent();
-        });
       }
     } catch (e) {
       print('❌ Error loading initial data: $e');
@@ -402,37 +414,48 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
   }
 
-  /// **NEW: Load active ads for display**
+  /// **OPTIMIZED: Load active ads in background without blocking videos**
   Future<void> _loadActiveAds() async {
     try {
-      print('🎯 VideoFeedAdvanced: Loading active ads...');
+      print('🎯 VideoFeedAdvanced: Loading active ads in background...');
 
       final allAds = await _activeAdsService.fetchActiveAds();
 
-      setState(() {
-        _bannerAds = allAds['banner'] ?? [];
-        _videoFeedAds = allAds['video feed ad'] ?? [];
-        _adsLoaded = true;
-      });
+      if (mounted) {
+        setState(() {
+          _bannerAds = allAds['banner'] ?? [];
+          _videoFeedAds = allAds['video feed ad'] ?? [];
+          _adsLoaded = true;
+        });
 
-      print('✅ VideoFeedAdvanced: Loaded ads:');
-      print('   Banner ads: ${_bannerAds.length}');
-      print('   Video feed ads: ${_videoFeedAds.length}');
+        print('✅ VideoFeedAdvanced: Ads loaded and displayed:');
+        print('   Banner ads: ${_bannerAds.length}');
+        print('   Video feed ads: ${_videoFeedAds.length}');
 
-      // **NEW: Debug ad details**
-      for (int i = 0; i < _videoFeedAds.length; i++) {
-        final ad = _videoFeedAds[i];
-        print('   Video Feed Ad $i: ${ad['title']} (${ad['adType']})');
+        // **NEW: Debug banner ad details**
+        for (int i = 0; i < _bannerAds.length; i++) {
+          final ad = _bannerAds[i];
+          print(
+              '   Banner Ad $i: ${ad['title']} (${ad['adType']}) - Active: ${ad['isActive']}');
+        }
+
+        // **NEW: Debug ad details**
+        for (int i = 0; i < _videoFeedAds.length; i++) {
+          final ad = _videoFeedAds[i];
+          print('   Video Feed Ad $i: ${ad['title']} (${ad['adType']})');
+        }
       }
 
-      // Also update carousel ad manager
+      // Also update carousel ad manager (in background)
       await _carouselAdManager.loadCarouselAds();
     } catch (e) {
       print('❌ Error loading active ads: $e');
-      setState(() {
-        _adsLoaded =
-            true; // Mark as loaded even on error to prevent infinite loading
-      });
+      if (mounted) {
+        setState(() {
+          _adsLoaded =
+              true; // Mark as loaded even on error to prevent infinite loading
+        });
+      }
     }
   }
 
@@ -472,35 +495,57 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
   }
 
-  /// **LOAD VIDEOS WITH PAGINATION**
+  /// **LOAD VIDEOS WITH PAGINATION AND CACHING**
   Future<void> _loadVideos({int page = 1, bool append = false}) async {
     try {
-      final response = await _videoService.getVideos(
-        page: page,
-        limit: _videosPerPage,
-        videoType: widget.videoType, // **FIX: Pass videoType for filtering**
+      final cacheKey = 'videos_page_${page}_${widget.videoType ?? 'all'}';
+
+      // Use cache manager for instant loading
+      print('🔍 VideoFeedAdvanced: Loading videos with cache key: $cacheKey');
+      final response = await _cacheManager.get<Map<String, dynamic>>(
+        cacheKey,
+        fetchFn: () async {
+          print('🔄 VideoFeedAdvanced: Fetching fresh videos from API');
+          return await _videoService.getVideos(
+            page: page,
+            limit: _videosPerPage,
+            videoType: widget.videoType,
+          );
+        },
+        cacheType: 'videos',
+        maxAge: const Duration(minutes: 10), // Cache for 10 minutes
       );
-      final newVideos = response['videos'] as List<VideoModel>;
 
-      if (mounted) {
-        setState(() {
-          if (append) {
-            _videos.addAll(newVideos);
-          } else {
-            _videos = newVideos;
-          }
-          _currentPage = page;
-        });
+      if (response != null) {
+        print(
+            '✅ VideoFeedAdvanced: Successfully loaded videos (cached or fresh)');
+      } else {
+        print('❌ VideoFeedAdvanced: Failed to load videos');
+      }
 
-        // Load following users after videos are loaded
-        await _loadFollowingUsers();
+      if (response != null) {
+        final newVideos = response['videos'] as List<VideoModel>;
+
+        if (mounted) {
+          setState(() {
+            if (append) {
+              _videos.addAll(newVideos);
+            } else {
+              _videos = newVideos;
+            }
+            _currentPage = page;
+          });
+
+          // Load following users after videos are loaded
+          await _loadFollowingUsers();
+        }
       }
     } catch (e) {
       print('❌ Error loading videos: $e');
     }
   }
 
-  /// **PUBLIC: Refresh video list after upload**
+  /// **OPTIMIZED: Refresh video list with background ad loading**
   Future<void> refreshVideos() async {
     print('🔄 VideoFeedAdvanced: refreshVideos() called');
 
@@ -520,14 +565,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         });
       }
 
-      // Reset to page 1 and reload
+      // Reset to page 1 and reload videos
       _currentPage = 1;
       await _loadVideos(page: 1, append: false);
 
-      // **NEW: Also reload ads**
-      await _loadActiveAds();
-
-      // Hide loading state
+      // **OPTIMIZED: Hide loading and show videos immediately**
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -536,6 +578,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       }
 
       print('✅ VideoFeedAdvanced: Videos refreshed successfully');
+
+      // **OPTIMIZED: Reload ads in background (non-blocking)**
+      _loadActiveAds(); // No 'await' - runs in background
     } catch (e) {
       print('❌ VideoFeedAdvanced: Error refreshing videos: $e');
 
@@ -687,6 +732,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         }
 
         print('✅ Successfully preloaded video $index');
+        // Trigger UI update so isInitialized switch reflects immediately
+        if (mounted) {
+          setState(() {});
+        }
         // Clean up old controllers to prevent memory leaks
         _cleanupOldControllers();
       } else {
@@ -1087,8 +1136,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       child: Stack(
         children: [
           Positioned.fill(
-            child: controller != null && controller.value.isInitialized
-                ? _buildVideoPlayer(controller, isActive, index)
+            child: controller != null
+                ? AnimatedBuilder(
+                    animation: controller,
+                    builder: (context, _) {
+                      return controller.value.isInitialized
+                          ? _buildVideoPlayer(controller, isActive, index)
+                          : _buildVideoThumbnail(video);
+                    },
+                  )
                 : _buildVideoThumbnail(video),
           ),
           Positioned.fill(
@@ -1100,18 +1156,18 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             ),
           ),
 
-          // **NEW: Banner ad at top of video (if available)**
+          // **Banner ads - Full-width at top of screen**
           if (_adsLoaded && _bannerAds.isNotEmpty)
             Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: SizedBox(
-                height: 60,
+              top: 0, // Flush to top of screen
+              left: 0, // No horizontal margin
+              right: 0, // No horizontal margin
+              child: Material(
+                elevation: 10, // Higher elevation for upper layer
                 child: BannerAdWidget(
                   adData: _bannerAds[index % _bannerAds.length],
                   onAdClick: () {
-                    print('🖱️ Banner recommendation clicked on video $index');
+                    print('🖱️ Banner ad clicked on video $index');
                   },
                 ),
               ),
@@ -1168,9 +1224,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           // Video info overlay
           _buildVideoOverlay(video, index),
 
-          // Quality indicator - Green for 480p, Red for others
-          if (controller != null && controller.value.isInitialized)
-            _buildQualityIndicator(controller, video),
+          // Quality indicator removed per requirement
 
           // Report indicator on side (keeps original styling)
           _buildReportIndicator(index),
@@ -1339,94 +1393,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     controller.seekTo(newPosition);
   }
 
-  /// **BUILD QUALITY INDICATOR: Green for 480p, Red for others**
-  Widget _buildQualityIndicator(
-      VideoPlayerController controller, VideoModel video) {
-    return Positioned(
-      top: 16,
-      right: 16,
-      child: AnimatedBuilder(
-        animation: controller,
-        builder: (context, child) {
-          // Determine if video is 480p
-          final is480p = _isVideo480p(controller, video);
-          final qualityText = _getQualityText(controller, video);
-
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.7),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: is480p ? Colors.green : Colors.red,
-                width: 2,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Quality indicator dot
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: is480p ? Colors.green : Colors.red,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                // Quality text
-                Text(
-                  qualityText,
-                  style: TextStyle(
-                    color: is480p ? Colors.green : Colors.red,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  /// **CHECK IF VIDEO IS 480P**
-  bool _isVideo480p(VideoPlayerController controller, VideoModel video) {
-    // Check if using 480p URL from video model
-    if (video.lowQualityUrl != null && video.lowQualityUrl!.isNotEmpty) {
-      return true; // App is configured to use 480p URLs
-    }
-
-    // Check actual video resolution from controller
-    final videoValue = controller.value;
-    if (videoValue.size.width > 0 && videoValue.size.height > 0) {
-      final height = videoValue.size.height.toInt();
-      return height <= 480;
-    }
-
-    // Default assumption based on app configuration (all videos are 480p)
-    return true;
-  }
-
-  /// **GET QUALITY TEXT**
-  String _getQualityText(VideoPlayerController controller, VideoModel video) {
-    // Check if video is HLS
-    final isHLS =
-        video.videoUrl.contains('.m3u8') || video.isHLSEncoded == true;
-
-    // Get actual resolution from controller if available
-    final videoValue = controller.value;
-    if (videoValue.size.width > 0 && videoValue.size.height > 0) {
-      final height = videoValue.size.height.toInt();
-      final suffix = isHLS ? ' HLS' : '';
-      return '${height}p$suffix';
-    }
-
-    // Default to 480p as per app configuration
-    return isHLS ? '480p HLS' : '480p';
-  }
+  // Quality indicator methods removed per requirement
 
   void _togglePlayPause(int index) {
     final controller = _controllerPool[index];
@@ -1472,11 +1439,35 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         width: double.infinity,
         height: double.infinity,
         color: Colors.black,
-        child: const Center(
-          child: Text(
-            'No recommendations available',
-            style: TextStyle(color: Colors.white, fontSize: 16),
-          ),
+        child: Stack(
+          children: [
+            const Center(
+              child: Text(
+                'No recommendations available',
+                style: TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ),
+            // Back control at the same position as right-side actions
+            Positioned(
+              right: 16,
+              bottom: 20,
+              child: GestureDetector(
+                onTap: () => _navigateBackToVideo(videoIndex),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.arrow_back_ios,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -1503,7 +1494,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           if (carouselAd.slides.length > 1)
             _buildCarouselDotIndicator(videoIndex, carouselAd.slides.length),
 
-          // **NEW: Arrow navigation buttons**
+          // **NEW: Arrow navigation buttons** (right-side, same area as video actions)
           _buildCarouselArrowButtons(videoIndex, carouselAd),
         ],
       ),
@@ -1553,12 +1544,20 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.6),
+                color: Colors.white,
                 shape: BoxShape.circle,
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black38,
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+                border: Border.all(color: Colors.black87, width: 1),
               ),
               child: const Icon(
                 Icons.arrow_back_ios,
-                color: Colors.white,
+                color: Colors.black,
                 size: 20,
               ),
             ),
@@ -1571,12 +1570,20 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               child: Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.6),
+                  color: Colors.white,
                   shape: BoxShape.circle,
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black38,
+                      blurRadius: 8,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                  border: Border.all(color: Colors.black87, width: 1),
                 ),
                 child: const Icon(
                   Icons.arrow_forward_ios,
-                  color: Colors.white,
+                  color: Colors.black,
                   size: 20,
                 ),
               ),
@@ -1958,12 +1965,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       color: Colors.black,
       child: video.thumbnailUrl.isNotEmpty
           ? Center(
-              child: Image.network(
-                video.thumbnailUrl,
+              child: CachedNetworkImage(
+                imageUrl: video.thumbnailUrl,
                 fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) {
-                  return _buildFallbackThumbnail();
-                },
+                placeholder: (context, url) => _buildFallbackThumbnail(),
+                errorWidget: (context, url, error) => _buildFallbackThumbnail(),
+                memCacheWidth: 854, // 480p width for memory efficiency
+                memCacheHeight: 480, // 480p height
               ),
             )
           : _buildFallbackThumbnail(),
@@ -2312,14 +2320,56 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   /// **HANDLE SHARE: With proper share functionality**
   Future<void> _handleShare(VideoModel video) async {
     try {
-      final shareText = 'Check out this video: ${video.videoName}\n\n'
-          'By: ${video.uploader.name}\n\n'
-          'Watch it on Snehayog!';
+      // Get the proper URL for sharing
+      String shareUrl = video.videoUrl;
+
+      // If it's a custom scheme URL, convert it to web URL
+      if (video.videoUrl.startsWith('snehayog://')) {
+        shareUrl = 'https://snehayog.app/video/${video.id}';
+      }
+
+      // If it's an HLS URL, use it directly
+      if (video.videoUrl.contains('.m3u8')) {
+        shareUrl = video.videoUrl;
+      }
+
+      // If it's a Cloudinary MP4 URL, use it directly for sharing
+      if (video.videoUrl.contains('cloudinary.com') &&
+          video.videoUrl.contains('.mp4')) {
+        shareUrl = video.videoUrl;
+      }
+
+      // If we have HLS URLs, prefer them
+      if (video.hlsPlaylistUrl != null && video.hlsPlaylistUrl!.isNotEmpty) {
+        shareUrl = video.hlsPlaylistUrl!;
+      } else if (video.hlsMasterPlaylistUrl != null &&
+          video.hlsMasterPlaylistUrl!.isNotEmpty) {
+        shareUrl = video.hlsMasterPlaylistUrl!;
+      }
+
+      // Create professional share message
+      final shareText = '''🎬 Check out this amazing video on Snehayog!
+
+📹 ${video.videoName}
+👤 by ${video.uploader.name}
+
+🔗 Watch on Snehayog: $shareUrl
+🌐 Web version: https://snehayog.app/video/${video.id}
+
+#Snehayog #Video #${video.uploader.name.replaceAll(' ', '')}''';
 
       await Share.share(
         shareText,
-        subject: video.videoName,
+        subject: 'Snehayog Video - ${video.videoName}',
       );
+
+      // Update share count on server
+      try {
+        await _videoService.shareVideo(video.id, shareUrl, video.videoName);
+      } catch (e) {
+        print('⚠️ VideoFeedAdvanced: Failed to update share count: $e');
+        // Don't show error to user as sharing still worked
+      }
     } catch (e) {
       print('❌ Error sharing video: $e');
       _showSnackBar('Failed to share video', isError: true);
@@ -2635,6 +2685,20 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         );
       },
     );
+  }
+
+  /// **Initialize current user ID for likes and shares**
+  Future<void> _initializeCurrentUserId() async {
+    try {
+      final userData = await _authService.getUserData();
+      if (userData != null) {
+        _currentUserId = userData['id'] ?? userData['googleId'];
+        print(
+            '✅ VideoFeedAdvanced: Current user ID initialized: $_currentUserId');
+      }
+    } catch (e) {
+      print('⚠️ VideoFeedAdvanced: Failed to initialize user ID: $e');
+    }
   }
 
   @override

@@ -18,6 +18,10 @@ import 'package:snehayog/core/theme/app_theme.dart';
 import 'package:snehayog_monetization/services/razorpay_service.dart';
 import 'package:snehayog/config/app_config.dart';
 import 'package:app_links/app_links.dart';
+import 'package:snehayog/services/video_service.dart' as vsvc;
+import 'package:snehayog/core/services/hls_warmup_service.dart';
+import 'package:snehayog/core/managers/smart_cache_manager.dart';
+import 'package:snehayog/model/video_model.dart';
 
 final RazorpayService razorpayService = RazorpayService();
 
@@ -69,8 +73,54 @@ void _initializeServicesInBackground() async {
     ]);
 
     print('✅ Background services initialized successfully');
+
+    // Splash-time prefetch: fetch first page and warm up first few videos
+    unawaited(_splashPrefetch());
   } catch (e) {
     print('⚠️ Error initializing background services: $e');
+  }
+}
+
+/// Prefetch first page of videos and warm HLS while splash/logo is visible
+Future<void> _splashPrefetch() async {
+  try {
+    final videoService = vsvc.VideoService();
+    final cacheManager = SmartCacheManager();
+    await cacheManager.initialize();
+
+    // Cache the first page in SmartCacheManager for instant loading
+    const cacheKey = 'videos_page_1_yog';
+    final result = await cacheManager.get<Map<String, dynamic>>(
+      cacheKey,
+      fetchFn: () async {
+        print('🚀 SplashPrefetch: Fetching first page for cache');
+        return await videoService.getVideos(
+            page: 1, limit: 6, videoType: 'yog');
+      },
+      cacheType: 'videos',
+      maxAge: const Duration(minutes: 15), // Cache for 15 minutes
+    );
+
+    if (result != null) {
+      final List<VideoModel> videos =
+          (result['videos'] as List<dynamic>).cast<VideoModel>();
+      print('✅ SplashPrefetch: Cached ${videos.length} videos');
+
+      // Warm-up manifests for first few HLS URLs
+      for (final video in videos.take(3)) {
+        final url = video.hlsPlaylistUrl?.isNotEmpty == true
+            ? video.hlsPlaylistUrl!
+            : (video.hlsMasterPlaylistUrl?.isNotEmpty == true
+                ? video.hlsMasterPlaylistUrl!
+                : video.videoUrl);
+        if (url.contains('.m3u8')) {
+          unawaited(HlsWarmupService().warmUp(url));
+        }
+      }
+    }
+  } catch (e) {
+    print('⚠️ SplashPrefetch failed: $e');
+    // Best-effort prefetch; ignore failures
   }
 }
 

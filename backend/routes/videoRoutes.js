@@ -187,9 +187,10 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
     
     console.log('✅ Upload: Cloudinary configuration verified');
 
-    // **NEW: Use Hybrid Service (Cloudinary → R2) for cost-optimized processing**
-    console.log('🚀 Starting Hybrid Video Processing (Cloudinary → R2)...');
-    console.log('💰 Expected cost: $0.001 processing + $0.015/GB/month storage + $0 bandwidth (FREE!)');
+    // **NEW: Use Pure HLS Processing (FFmpeg → R2) for 100% FREE processing**
+    console.log('🚀 Starting Pure HLS Video Processing (FFmpeg → R2)...');
+    console.log('💰 Expected cost: $0 processing (FREE!) + $0.015/GB/month storage + $0 bandwidth (FREE!)');
+    console.log('📹 Format: HLS (HTTP Live Streaming) - Single 480p quality');
     
     // **NEW: Validate video with hybrid service**
     const videoValidation = await hybridVideoService.validateVideo(req.file.path);
@@ -214,7 +215,7 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
       duration: videoValidation.duration || 0,
       processingStatus: 'pending',
       processingProgress: 0,
-      isHLSEncoded: false, // Using MP4 with R2 instead
+      isHLSEncoded: false, // Will be updated to true after HLS processing
       likes: 0, views: 0, shares: 0, likedBy: [], comments: [],
       uploadedAt: new Date()
     });
@@ -225,24 +226,26 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
     
     console.log('✅ Video record created with ID:', video._id);
     
-    // **NEW: Start hybrid processing in background (non-blocking)**
-    processVideoHybrid(video._id, req.file.path, videoName, user._id.toString());
+    // **NEW: Start HLS processing in background (non-blocking)**
+    processVideoToHLS(video._id, req.file.path, videoName, user._id.toString());
     
     // **NEW: Return immediate response**
     return res.status(201).json({
       success: true,
-      message: 'Video upload started. Processing via Cloudinary → R2 hybrid approach.',
+      message: 'Video upload started. Processing via FFmpeg → R2 HLS (100% FREE!).',
       video: {
         id: video._id,
         videoName: video.videoName,
         processingStatus: video.processingStatus,
         processingProgress: video.processingProgress,
         estimatedTime: '2-5 minutes',
+        format: 'HLS (HTTP Live Streaming)',
+        quality: '480p (single quality)',
         costBreakdown: {
-          processing: '$0.001',
+          processing: '$0 (FREE! FFmpeg local)',
           storage: '$0.015/GB/month',
           bandwidth: '$0 (FREE forever!)',
-          savings: '93% vs pure Cloudinary'
+          savings: '100% vs cloud processing'
         }
       }
     });
@@ -259,10 +262,10 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
   }
 });
 
-// **NEW: Hybrid video processing function (same as uploadRoutes.js)**
-async function processVideoHybrid(videoId, videoPath, videoName, userId) {
+// **NEW: Pure HLS video processing function (FFmpeg → R2)**
+async function processVideoToHLS(videoId, videoPath, videoName, userId) {
   try {
-    console.log('🚀 Starting hybrid video processing (Cloudinary → R2) for:', videoId);
+    console.log('🚀 Starting Pure HLS processing (FFmpeg → R2) for:', videoId);
     
     const video = await Video.findById(videoId);
     if (!video) {
@@ -273,27 +276,33 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
     video.processingProgress = 10;
     await video.save();
     
-    // Process video using hybrid service
-    const hybridResult = await hybridVideoService.processVideoHybrid(
+    // Process video using Pure HLS service (FFmpeg → R2)
+    const hlsResult = await hybridVideoService.processVideoToHLS(
       videoPath, 
       videoName, 
       userId
     );
 
-    // Update video with R2 URLs (using custom domain cdn.snehayog.com)
-    video.videoUrl = hybridResult.videoUrl;
-    video.thumbnailUrl = hybridResult.thumbnailUrl;
-    video.lowQualityUrl = hybridResult.videoUrl; // Same URL for 480p
+    // Update video with R2 HLS URLs (using custom domain cdn.snehayog.com)
+    video.videoUrl = hlsResult.videoUrl; // HLS playlist URL (.m3u8)
+    video.hlsPlaylistUrl = hlsResult.hlsPlaylistUrl; // Same as videoUrl
+    video.thumbnailUrl = hlsResult.thumbnailUrl;
     video.processingStatus = 'completed';
     video.processingProgress = 100;
-    video.isHLSEncoded = false; // Not using HLS, using MP4 on R2
+    video.isHLSEncoded = true; // Using HLS format
+    video.lowQualityUrl = hlsResult.videoUrl; // Single quality (480p)
     
     await video.save();
-    console.log('🎉 Hybrid video processing completed for:', videoId);
-    console.log('💰 Cost: ~$0.001 + $0.015/GB/month storage + $0 bandwidth');
+    console.log('🎉 Pure HLS processing completed for:', videoId);
+    console.log('📊 Result:');
+    console.log(`   Format: ${hlsResult.format}`);
+    console.log(`   Quality: ${hlsResult.quality}`);
+    console.log(`   Segments: ${hlsResult.segments}`);
+    console.log(`   Total Files: ${hlsResult.totalFiles}`);
+    console.log('💰 Cost: $0 processing + $0.015/GB/month storage + $0 bandwidth');
     
   } catch (error) {
-    console.error('❌ Error in hybrid video processing:', error);
+    console.error('❌ Error in Pure HLS processing:', error);
     
     try {
       const video = await Video.findById(videoId);
@@ -308,9 +317,10 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
   }
 }
 
-// **NOTE: Old Cloudinary HLS upload logic has been replaced**
-// Now using Cloudinary → R2 hybrid approach for 93% cost savings
-// All uploads through /api/videos/upload now use the optimized hybrid service
+// **NOTE: Now using Pure HLS Processing (FFmpeg → R2)**
+// Upload → FFmpeg (Local, FREE) → HLS (.m3u8 + .ts) → R2 (FREE bandwidth)
+// Single 480p quality for cost optimization
+// 100% FREE processing + FREE bandwidth = Maximum savings!
 
 // Get videos by user ID (consistently use googleId)
 router.get('/user/:googleId', verifyToken, async (req, res) => {
@@ -412,19 +422,19 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
 
 
 
-// Get all videos (optimized for performance) - MODIFIED FOR HLS ONLY
+// Get all videos (optimized for performance) - SUPPORTS MP4 AND HLS
 router.get('/', async (req, res) => {
   try {
     const { videoType, page = 1, limit = 10 } = req.query;
-    console.log('📹 Fetching HLS videos...', { videoType, page, limit });
+    console.log('📹 Fetching videos...', { videoType, page, limit });
     
     // Get query parameters for pagination
     const pageNum = parseInt(page) || 1;
     const limitNum = parseInt(limit) || 10;
     const skip = (pageNum - 1) * limitNum;
     
-    // Build query filter
-    const queryFilter = { isHLSEncoded: true }; // Only HLS videos
+    // Build query filter - Allow both HLS and MP4 videos
+    const queryFilter = {}; // Allow all processed videos
     
     // Add videoType filter if specified
     if (videoType && (videoType === 'yog' || videoType === 'sneha')) {
@@ -459,7 +469,7 @@ router.get('/', async (req, res) => {
       }))
     }));
     
-    console.log(`✅ Found ${videos.length} HLS videos (page ${page}, total: ${totalVideos})`);
+    console.log(`✅ Found ${videos.length} videos (page ${page}, total: ${totalVideos})`);
     
     res.json({
       videos: transformedVideos,
@@ -469,14 +479,14 @@ router.get('/', async (req, res) => {
       totalPages: Math.ceil(totalVideos / limitNum),
       filters: {
         videoType: videoType || 'all',
-        hlsOnly: true
+        format: 'mp4_and_hls'
       },
-      message: `✅ Fetched ${videos.length} HLS videos successfully${videoType ? ` (${videoType} type)` : ''}`
+      message: `✅ Fetched ${videos.length} videos successfully${videoType ? ` (${videoType} type)` : ''}`
     });
   } catch (error) {
-    console.error('❌ Error fetching HLS videos:', error);
+    console.error('❌ Error fetching videos:', error);
     res.status(500).json({ 
-      error: 'Failed to fetch HLS videos',
+      error: 'Failed to fetch videos',
       message: error.message 
     });
   }

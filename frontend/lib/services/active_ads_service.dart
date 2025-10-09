@@ -12,33 +12,54 @@ class ActiveAdsService {
       print(
           '🎯 ActiveAdsService: Fetching all active ads from $_baseUrl/api/ads/serve');
 
-      final response = await http.get(
-        Uri.parse('$_baseUrl/api/ads/serve'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      );
+      // Include optional targeting params to match backend filters
+      final uri =
+          Uri.parse('$_baseUrl/api/ads/serve').replace(queryParameters: {
+        // platform helps backend $in filter match
+        'platform': 'mobile',
+        // Leave userId empty if unknown; backend should ignore if missing
+      });
+
+      final response = await http.get(uri, headers: {
+        'Content-Type': 'application/json',
+      });
 
       print('🔍 ActiveAdsService: Response status: ${response.statusCode}');
       print('🔍 ActiveAdsService: Response body: ${response.body}');
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> responseData = json.decode(response.body);
-        final List<dynamic> ads = responseData['ads'] ?? [];
+        final dynamic decoded = json.decode(response.body);
+        final List<dynamic> ads = decoded is List
+            ? decoded
+            : (decoded is Map<String, dynamic>
+                ? (decoded['ads'] as List<dynamic>? ?? [])
+                : []);
 
-        // Separate ads by type
+        // Separate ads by normalized type (case/format tolerant)
         final Map<String, List<Map<String, dynamic>>> categorizedAds = {
           'banner': [],
           'carousel': [],
           'video feed ad': [],
         };
 
-        for (final ad in ads) {
-          final adType = ad['adType'] as String? ?? 'unknown';
-          final adMap = ad as Map<String, dynamic>;
+        String normalizeType(String? t) {
+          final s = (t ?? '').toString().trim().toLowerCase();
+          if (s.isEmpty) return 'unknown';
+          if (s.contains('carousel')) return 'carousel';
+          if (s.replaceAll(RegExp(r'[-_ ]'), '') == 'videofeedad' ||
+              s.contains('video') && s.contains('feed')) {
+            return 'video feed ad';
+          }
+          if (s.contains('banner')) return 'banner';
+          return s;
+        }
 
-          if (categorizedAds.containsKey(adType)) {
-            categorizedAds[adType]!.add(adMap);
+        for (final ad in ads) {
+          if (ad is Map<String, dynamic>) {
+            final adType = normalizeType(ad['adType']);
+            if (categorizedAds.containsKey(adType)) {
+              categorizedAds[adType]!.add(ad);
+            }
           }
         }
 

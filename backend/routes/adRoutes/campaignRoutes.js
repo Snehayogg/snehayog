@@ -161,10 +161,10 @@ router.post('/:id/activate', asyncHandler(async (req, res) => {
   campaign.status = 'active';
   await campaign.save();
 
-  // Activate creative
+  // Activate creative consistently
   await AdCreative.findOneAndUpdate(
     { campaignId },
-    { isActive: true }
+    { $set: { isActive: true, reviewStatus: 'approved' } }
   );
 
   res.json({
