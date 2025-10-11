@@ -54,11 +54,63 @@ class ActiveAdsService {
           return s;
         }
 
+        String _pick(Map<String, dynamic> m, List<String> keys) {
+          for (final k in keys) {
+            final v = m[k];
+            if (v is String && v.trim().isNotEmpty) return v.trim();
+          }
+          return '';
+        }
+
+        String _ensureAbsoluteUrl(String url) {
+          if (url.isEmpty) return url;
+          final u = url.trim();
+          if (u.startsWith('http://') || u.startsWith('https://')) return u;
+          if (u.startsWith('//')) return 'https:$u';
+          if (u.startsWith('/')) return '${AppConfig.baseUrl}$u';
+          // Fallback: assume https scheme
+          return 'https://$u';
+        }
+
+        Map<String, dynamic> _normalizeAd(Map<String, dynamic> ad) {
+          final imageUrl = _pick(ad, [
+            'imageUrl',
+            'imageURL',
+            'image',
+            'bannerImageUrl',
+            'mediaUrl',
+            'cloudinaryUrl',
+            'thumbnail',
+          ]);
+          String link = _pick(ad, [
+            'link',
+            'url',
+            'ctaUrl',
+            'callToActionUrl',
+            'targetUrl',
+          ]);
+
+          // Also check nested callToAction.url shape
+          if (link.isEmpty && ad['callToAction'] is Map) {
+            final nested = (ad['callToAction'] as Map);
+            final candidate = nested['url'] ?? nested['link'];
+            if (candidate is String && candidate.trim().isNotEmpty) {
+              link = candidate.trim();
+            }
+          }
+
+          return {
+            ...ad,
+            'imageUrl': _ensureAbsoluteUrl(imageUrl),
+            'link': _ensureAbsoluteUrl(link),
+          };
+        }
+
         for (final ad in ads) {
           if (ad is Map<String, dynamic>) {
             final adType = normalizeType(ad['adType']);
             if (categorizedAds.containsKey(adType)) {
-              categorizedAds[adType]!.add(ad);
+              categorizedAds[adType]!.add(_normalizeAd(ad));
             }
           }
         }
