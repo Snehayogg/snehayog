@@ -116,26 +116,26 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     super.didChangeDependencies();
     // Ensure autoplay when screen becomes visible (e.g., switching tabs)
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      print(
-          '🔍 VideoFeedAdvanced: didChangeDependencies - triggering autoplay');
+        print(
+            '🔍 VideoFeedAdvanced: didChangeDependencies - triggering autoplay');
       _tryAutoplayCurrent();
     });
   }
 
   /// **HANDLE VISIBILITY CHANGES: Pause/resume videos based on tab visibility**
   void _handleVisibilityChange(bool isVisible) {
-    print(
-        '🔍 VideoFeedAdvanced: _handleVisibilityChange called - isVisible: $isVisible, _isScreenVisible: $_isScreenVisible');
+      print(
+          '🔍 VideoFeedAdvanced: _handleVisibilityChange called - isVisible: $isVisible, _isScreenVisible: $_isScreenVisible');
 
     if (_isScreenVisible != isVisible) {
       _isScreenVisible = isVisible;
-      print(
-          '🔄 VideoFeedAdvanced: Screen visibility changed to ${isVisible ? "VISIBLE" : "HIDDEN"}');
+        print(
+            '🔄 VideoFeedAdvanced: Screen visibility changed to ${isVisible ? "VISIBLE" : "HIDDEN"}');
 
       if (isVisible) {
         // Screen became visible - resume current video
-        print(
-            '▶️ VideoFeedAdvanced: Screen became visible, trying to resume video');
+          print(
+              '▶️ VideoFeedAdvanced: Screen became visible, trying to resume video');
         _tryAutoplayCurrent();
 
         // **NEW: Start background profile preloading**
@@ -143,14 +143,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         _profilePreloader.startBackgroundPreloading();
       } else {
         // Screen became hidden - pause current video
-        print(
-            '⏸️ VideoFeedAdvanced: Screen became hidden, pausing current video');
+          print(
+              '⏸️ VideoFeedAdvanced: Screen became hidden, pausing current video');
         _pauseCurrentVideo();
 
         // **NEW: Stop background profile preloading**
         print('⏸️ VideoFeedAdvanced: Stopping background profile preloading');
-        _profilePreloader.stopBackgroundPreloading();
-      }
+          _profilePreloader.stopBackgroundPreloading();
+          }
     } else {
       print('🔄 VideoFeedAdvanced: No visibility change needed');
     }
@@ -158,8 +158,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   /// **PAUSE CURRENT VIDEO: When screen becomes hidden**
   void _pauseCurrentVideo() {
-    print(
-        '🔍 VideoFeedAdvanced: _pauseCurrentVideo called - current index: $_currentIndex');
+      print(
+          '🔍 VideoFeedAdvanced: _pauseCurrentVideo called - current index: $_currentIndex');
     print(
         '🔍 VideoFeedAdvanced: Controller pool keys: ${_controllerPool.keys.toList()}');
 
@@ -174,9 +174,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     if (_controllerPool.containsKey(_currentIndex)) {
       final controller = _controllerPool[_currentIndex];
       print('🔍 VideoFeedAdvanced: Controller found for index $_currentIndex');
-      print(
+        print(
           '🔍 VideoFeedAdvanced: Controller initialized: ${controller?.value.isInitialized}');
-      print(
+        print(
           '🔍 VideoFeedAdvanced: Controller playing: ${controller?.value.isPlaying}');
 
       if (controller != null &&
@@ -184,8 +184,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           controller.value.isPlaying) {
         controller.pause();
         _controllerStates[_currentIndex] = false;
-        print(
-            '⏸️ VideoFeedAdvanced: Successfully paused video at index $_currentIndex');
+          print(
+              '⏸️ VideoFeedAdvanced: Successfully paused video at index $_currentIndex');
       } else {
         print('⏸️ VideoFeedAdvanced: Video not playing or not initialized');
       }
@@ -196,11 +196,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     // Also pause VideoControllerManager videos
     _videoControllerManager.pauseAllVideosOnTabChange();
-    print('⏸️ VideoFeedAdvanced: Called VideoControllerManager pause');
+      print('⏸️ VideoFeedAdvanced: Called VideoControllerManager pause');
   }
 
   void _pauseAllVideosOnTabSwitch() {
-    print('⏸️ VideoFeedAdvanced: Pausing all videos due to tab switch');
+      print('⏸️ VideoFeedAdvanced: Pausing all videos due to tab switch');
 
     // Pause all active controllers in the pool
     _controllerPool.forEach((index, controller) {
@@ -222,16 +222,16 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // Update screen visibility when resuming
     _isScreenVisible = true;
 
-    print('🔍 VideoFeedAdvanced: _tryAutoplayCurrent called');
-    print('🔍 VideoFeedAdvanced: Current index: $_currentIndex');
-    print('🔍 VideoFeedAdvanced: Videos length: ${_videos.length}');
+      print('🔍 VideoFeedAdvanced: _tryAutoplayCurrent called');
+      print('🔍 VideoFeedAdvanced: Current index: $_currentIndex');
+      print('🔍 VideoFeedAdvanced: Videos length: ${_videos.length}');
     print(
         '🔍 VideoFeedAdvanced: Controller pool keys: ${_controllerPool.keys.toList()}');
 
     // **NEW: If no controller exists, preload the current video first**
     if (!_controllerPool.containsKey(_currentIndex) && _videos.isNotEmpty) {
-      print(
-          '🚀 VideoFeedAdvanced: No controller for current index, preloading...');
+        print(
+            '🚀 VideoFeedAdvanced: No controller for current index, preloading...');
       _preloadVideo(_currentIndex).then((_) {
         // Try autoplay again after preloading
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -251,7 +251,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         _attachBufferingListenerIfNeeded(ctrl, _currentIndex);
         ctrl.play();
         _controllerStates[_currentIndex] = true;
-        print('▶️ VideoFeedAdvanced: Resumed video at index $_currentIndex');
+          print('▶️ VideoFeedAdvanced: Resumed video at index $_currentIndex');
 
         // **NEW: Start view tracking when video resumes**
         if (_currentIndex < _videos.length) {
@@ -304,7 +304,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           print('🔥 CALLBACK TRIGGERED: Resume callback called!');
           _tryAutoplayCurrent();
         });
-        print(
+          print(
             '📱 VideoFeedAdvanced: Registered pause/resume callbacks with MainController - SUCCESS');
       } catch (e) {
         print('❌ VideoFeedAdvanced: Failed to register callbacks: $e');
@@ -407,17 +407,17 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         setState(() {
           _currentUserId = userData['id'];
         });
-        print('✅ Loaded current user ID: $_currentUserId');
+          print('✅ Loaded current user ID: $_currentUserId');
       }
     } catch (e) {
-      print('❌ Error loading current user ID: $e');
+        print('❌ Error loading current user ID: $e');
     }
   }
 
   /// **OPTIMIZED: Load active ads in background without blocking videos**
   Future<void> _loadActiveAds() async {
     try {
-      print('🎯 VideoFeedAdvanced: Loading active ads in background...');
+        print('🎯 VideoFeedAdvanced: Loading active ads in background...');
 
       final allAds = await _activeAdsService.fetchActiveAds();
 
@@ -428,28 +428,28 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           _adsLoaded = true;
         });
 
-        print('✅ VideoFeedAdvanced: Ads loaded and displayed:');
-        print('   Banner ads: ${_bannerAds.length}');
-        print('   Video feed ads: ${_videoFeedAds.length}');
+          print('✅ VideoFeedAdvanced: Ads loaded and displayed:');
+          print('   Banner ads: ${_bannerAds.length}');
+          print('   Video feed ads: ${_videoFeedAds.length}');
 
-        // **NEW: Debug banner ad details**
-        for (int i = 0; i < _bannerAds.length; i++) {
-          final ad = _bannerAds[i];
-          print(
-              '   Banner Ad $i: ${ad['title']} (${ad['adType']}) - Active: ${ad['isActive']}');
-        }
+          // **NEW: Debug banner ad details**
+          for (int i = 0; i < _bannerAds.length; i++) {
+            final ad = _bannerAds[i];
+            print(
+                '   Banner Ad $i: ${ad['title']} (${ad['adType']}) - Active: ${ad['isActive']}');
+          }
 
-        // **NEW: Debug ad details**
-        for (int i = 0; i < _videoFeedAds.length; i++) {
-          final ad = _videoFeedAds[i];
-          print('   Video Feed Ad $i: ${ad['title']} (${ad['adType']})');
+          // **NEW: Debug ad details**
+          for (int i = 0; i < _videoFeedAds.length; i++) {
+            final ad = _videoFeedAds[i];
+            print('   Video Feed Ad $i: ${ad['title']} (${ad['adType']})');
         }
       }
 
       // Also update carousel ad manager (in background)
       await _carouselAdManager.loadCarouselAds();
     } catch (e) {
-      print('❌ Error loading active ads: $e');
+        print('❌ Error loading active ads: $e');
       if (mounted) {
         setState(() {
           _adsLoaded =
@@ -473,8 +473,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           .where((id) => id != _currentUserId) // Don't check self
           .toList();
 
-      print(
-          '🔍 Checking follow status for ${uniqueUploaders.length} unique uploaders');
+        print(
+            '🔍 Checking follow status for ${uniqueUploaders.length} unique uploaders');
 
       for (final uploaderId in uniqueUploaders) {
         try {
@@ -485,13 +485,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             });
           }
         } catch (e) {
-          print('❌ Error checking follow status for $uploaderId: $e');
+            print('❌ Error checking follow status for $uploaderId: $e');
         }
       }
 
-      print('✅ Loaded follow status for ${_followingUsers.length} users');
+        print('✅ Loaded follow status for ${_followingUsers.length} users');
     } catch (e) {
-      print('❌ Error loading following users: $e');
+        print('❌ Error loading following users: $e');
     }
   }
 
@@ -501,11 +501,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       final cacheKey = 'videos_page_${page}_${widget.videoType ?? 'all'}';
 
       // Use cache manager for instant loading
-      print('🔍 VideoFeedAdvanced: Loading videos with cache key: $cacheKey');
+        print('🔍 VideoFeedAdvanced: Loading videos with cache key: $cacheKey');
       final response = await _cacheManager.get<Map<String, dynamic>>(
         cacheKey,
         fetchFn: () async {
-          print('🔄 VideoFeedAdvanced: Fetching fresh videos from API');
+            print('🔄 VideoFeedAdvanced: Fetching fresh videos from API');
           return await _videoService.getVideos(
             page: page,
             limit: _videosPerPage,
@@ -516,11 +516,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         maxAge: const Duration(minutes: 10), // Cache for 10 minutes
       );
 
-      if (response != null) {
-        print(
-            '✅ VideoFeedAdvanced: Successfully loaded videos (cached or fresh)');
-      } else {
-        print('❌ VideoFeedAdvanced: Failed to load videos');
+        if (response != null) {
+          print(
+              '✅ VideoFeedAdvanced: Successfully loaded videos (cached or fresh)');
+        } else {
+          print('❌ VideoFeedAdvanced: Failed to load videos');
       }
 
       if (response != null) {
@@ -541,18 +541,18 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         }
       }
     } catch (e) {
-      print('❌ Error loading videos: $e');
+        print('❌ Error loading videos: $e');
     }
   }
 
   /// **OPTIMIZED: Refresh video list with background ad loading**
   Future<void> refreshVideos() async {
-    print('🔄 VideoFeedAdvanced: refreshVideos() called');
+      print('🔄 VideoFeedAdvanced: refreshVideos() called');
 
     // Prevent multiple simultaneous refresh calls
     if (_isLoading) {
-      print(
-          '⚠️ VideoFeedAdvanced: Already refreshing, ignoring duplicate call');
+        print(
+            '⚠️ VideoFeedAdvanced: Already refreshing, ignoring duplicate call');
       return;
     }
 
@@ -577,12 +577,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         });
       }
 
-      print('✅ VideoFeedAdvanced: Videos refreshed successfully');
+        print('✅ VideoFeedAdvanced: Videos refreshed successfully');
 
       // **OPTIMIZED: Reload ads in background (non-blocking)**
       _loadActiveAds(); // No 'await' - runs in background
     } catch (e) {
-      print('❌ VideoFeedAdvanced: Error refreshing videos: $e');
+        print('❌ VideoFeedAdvanced: Error refreshing videos: $e');
 
       // Set error state
       if (mounted) {
@@ -643,7 +643,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     try {
       await _loadVideos(page: _currentPage + 1, append: true);
     } catch (e) {
-      print('❌ Error loading more videos: $e');
+        print('❌ Error loading more videos: $e');
     } finally {
       if (mounted) {
         setState(() => _isLoadingMore = false);
@@ -727,11 +727,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         if (index == _currentIndex && index < _videos.length) {
           final video = _videos[index];
           _viewTracker.startViewTracking(video.id);
-          print(
-              '▶️ Started view tracking for preloaded current video: ${video.id}');
+            print(
+                '▶️ Started view tracking for preloaded current video: ${video.id}');
         }
 
-        print('✅ Successfully preloaded video $index');
+          print('✅ Successfully preloaded video $index');
         // Trigger UI update so isInitialized switch reflects immediately
         if (mounted) {
           setState(() {});
@@ -742,12 +742,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         controller.dispose();
       }
     } catch (e) {
-      print('❌ Error preloading video $index: $e');
+        print('❌ Error preloading video $index: $e');
       _loadingVideos.remove(index);
 
       // **FIXED: Add retry logic for failed preloads**
       if (e.toString().contains('400') || e.toString().contains('404')) {
-        print('🔄 Retrying video $index in 5 seconds...');
+          print('🔄 Retrying video $index in 5 seconds...');
         Future.delayed(const Duration(seconds: 5), () {
           if (mounted && !_preloadedVideos.contains(index)) {
             _preloadVideo(index);
@@ -839,7 +839,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // Pause previous video
     if (_controllerPool.containsKey(_currentIndex)) {
       _controllerPool[_currentIndex]?.pause();
-      _controllerStates[_currentIndex] = false;
+    _controllerStates[_currentIndex] = false;
     }
 
     _currentIndex = index;
@@ -847,17 +847,17 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // Play current video if preloaded
     if (_controllerPool.containsKey(index)) {
       _controllerPool[index]?.play();
-      _controllerStates[index] = true;
-      _userPaused[index] = false;
+        _controllerStates[index] = true;
+        _userPaused[index] = false;
       final ctrl = _controllerPool[index]!;
-      _applyLoopingBehavior(ctrl);
-      _attachEndListenerIfNeeded(ctrl, index);
-      _attachBufferingListenerIfNeeded(ctrl, index);
+        _applyLoopingBehavior(ctrl);
+        _attachEndListenerIfNeeded(ctrl, index);
+        _attachBufferingListenerIfNeeded(ctrl, index);
 
-      // **NEW: Start view tracking for current video**
-      if (index < _videos.length) {
-        final currentVideo = _videos[index];
-        _viewTracker.startViewTracking(currentVideo.id);
+        // **NEW: Start view tracking for current video**
+        if (index < _videos.length) {
+          final currentVideo = _videos[index];
+          _viewTracker.startViewTracking(currentVideo.id);
         print('▶️ Started view tracking for current video: ${currentVideo.id}');
       }
     }
@@ -1017,21 +1017,21 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         // This should be a video feed ad position
         final adIndex = ((index + 1) ~/ (videoFeedAdInterval + 1)) - 1;
 
-        if (adIndex < _videoFeedAds.length) {
+      if (adIndex < _videoFeedAds.length) {
           print(
               '🎯 Showing video feed recommendation at index $index (recommendation $adIndex)');
           print('   Recommendation title: ${_videoFeedAds[adIndex]['title']}');
           print('   Recommendation type: ${_videoFeedAds[adIndex]['adType']}');
-          return VideoFeedAdWidget(
-            adData: _videoFeedAds[adIndex],
-            onAdClick: () {
+        return VideoFeedAdWidget(
+          adData: _videoFeedAds[adIndex],
+          onAdClick: () {
               print(
                   '🖱️ Video feed recommendation clicked: ${_videoFeedAds[adIndex]['title']}');
-            },
-          );
+          },
+        );
         } else {
-          print(
-              '⚠️ No video feed recommendation available at index $index (recommendation $adIndex)');
+        print(
+            '⚠️ No video feed recommendation available at index $index (recommendation $adIndex)');
         }
       }
     }
@@ -1198,19 +1198,19 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           ),
 
           // Buffering indicator during playback (mid-stream stalls)
-          Positioned.fill(
-            child: IgnorePointer(
-              child: Opacity(
+            Positioned.fill(
+              child: IgnorePointer(
+                        child: Opacity(
                 opacity:
                     (_isBuffering[index] == true && _userPaused[index] != true)
                         ? 1.0
                         : 0.0,
                 child: const Center(
                   child: CircularProgressIndicator(color: Colors.white),
+                  ),
                 ),
               ),
             ),
-          ),
 
           // Bottom progress bar (fixed at very bottom)
           if (controller != null && controller.value.isInitialized)
@@ -1630,9 +1630,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                     color: Colors.black,
                     child: const Center(
                       child: Icon(
-                        Icons.image_not_supported,
+                            Icons.image_not_supported,
                         size: 64,
-                        color: Colors.white54,
+                            color: Colors.white54,
                       ),
                     ),
                   );
@@ -1646,9 +1646,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             bottom: 100,
             left: 16,
             right: 16,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                 // Advertiser info with follow button
                 Row(
                   children: [
@@ -1679,19 +1679,19 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                     Expanded(
                       child: GestureDetector(
                         onTap: () => _navigateToCreatorProfile(ad.campaignId),
-                        child: Text(
+                      child: Text(
                           ad.advertiserName,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  ],
-                ),
+                            ),
+                          ],
+                        ),
                 const SizedBox(height: 16),
 
                 // Recommendation title
@@ -1710,23 +1710,23 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                   slide.description ?? 'Recommended for you',
                   style: const TextStyle(color: Colors.white, fontSize: 14),
                 ),
-                const SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
-                // Call to action button
-                GestureDetector(
-                  onTap: () {
-                    print(
-                        '🔗 Carousel recommendation CTA tapped: ${ad.callToActionUrl}');
-                    _carouselAdManager.onCarouselAdClicked(ad);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
+                  // Call to action button
+                  GestureDetector(
+                    onTap: () {
+                      print(
+                          '🔗 Carousel recommendation CTA tapped: ${ad.callToActionUrl}');
+                      _carouselAdManager.onCarouselAdClicked(ad);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
                       color: Colors.blue,
-                      borderRadius: BorderRadius.circular(25),
+                        borderRadius: BorderRadius.circular(25),
                     ),
                     child: Text(
                       ad.callToActionLabel,
@@ -1739,10 +1739,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                   ),
                 ),
               ],
-            ),
-          ),
-        ],
-      ),
+                    ),
+                  ),
+                ],
+              ),
     );
   }
 
@@ -2565,14 +2565,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         // Pause current video
         if (_controllerPool.containsKey(_currentIndex)) {
           _controllerPool[_currentIndex]?.pause();
-          _controllerStates[_currentIndex] = false;
+        _controllerStates[_currentIndex] = false;
         }
         break;
       case AppLifecycleState.resumed:
         // Resume current video
         if (_controllerPool.containsKey(_currentIndex)) {
-          _userPaused[_currentIndex] = false;
-          _tryAutoplayCurrent();
+        _userPaused[_currentIndex] = false;
+        _tryAutoplayCurrent();
         }
         break;
       default:
@@ -2661,11 +2661,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     super.build(context); // Required for AutomaticKeepAliveClientMixin
 
     return Consumer<MainController>(
-      builder: (context, mainController, child) {
-        final isVideoTabActive = mainController.currentIndex == 0;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _handleVisibilityChange(isVideoTabActive);
-        });
+            builder: (context, mainController, child) {
+              final isVideoTabActive = mainController.currentIndex == 0;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _handleVisibilityChange(isVideoTabActive);
+              });
 
         return Scaffold(
           backgroundColor: Colors.black,
@@ -2715,11 +2715,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     // **NEW: Clean up views service**
     _viewTracker.dispose();
-    print('🎯 VideoFeedAdvanced: Disposed ViewsService');
+      print('🎯 VideoFeedAdvanced: Disposed ViewsService');
 
     // **NEW: Clean up background profile preloader**
     _profilePreloader.dispose();
-    print('🚀 VideoFeedAdvanced: Disposed BackgroundProfilePreloader');
+      print('🚀 VideoFeedAdvanced: Disposed BackgroundProfilePreloader');
 
     // Clean up all video controllers
     _controllerPool.forEach((index, controller) {

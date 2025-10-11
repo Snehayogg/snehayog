@@ -7,7 +7,6 @@ import 'package:snehayog/view/screens/video_screen.dart';
 import 'package:snehayog/view/screens/creator_payment_setup_screen.dart';
 import 'package:snehayog/view/screens/creator_revenue_screen.dart';
 import 'package:snehayog/view/screens/creator_payout_dashboard.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:snehayog/config/app_config.dart';
 import 'package:snehayog/core/managers/profile_state_manager.dart';
@@ -21,6 +20,8 @@ import 'package:snehayog/services/background_profile_preloader.dart';
 import 'dart:async';
 import 'package:snehayog/view/widget/report/report_dialog_widget.dart';
 import 'package:snehayog/view/widget/feedback/feedback_dialog_widget.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:http/http.dart' as http;
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -49,6 +50,12 @@ class _ProfileScreenState extends State<ProfileScreen>
   bool _isFollowersLoaded = false;
   bool _isLoading = true;
   String? _error;
+  int _authRetryAttempts = 0;
+
+  // Referral tracking
+  int _invitedCount = 0;
+  int _verifiedInstalled = 0;
+  int _verifiedSignedUp = 0;
 
   // Progressive loading timers
   Timer? _progressiveLoadTimer;
@@ -60,8 +67,17 @@ class _ProfileScreenState extends State<ProfileScreen>
     ProfileScreenLogger.logProfileScreenInit();
     _stateManager = ProfileStateManager();
 
+    // Ensure context is set early for providers that may be used during loads
+    // It will be set again in didChangeDependencies
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _stateManager.setContext(context);
+    });
+
     // Start progressive loading immediately
     _startProgressiveLoading();
+    // Load referral stats
+    _loadReferralStats();
+    _fetchVerifiedReferralStats();
   }
 
   void _startProgressiveLoading() {
@@ -113,11 +129,20 @@ class _ProfileScreenState extends State<ProfileScreen>
       final hasFallbackUser = prefs.getString('fallback_user') != null;
 
       if (!hasJwtToken && !hasFallbackUser) {
-        setState(() {
-          _error = 'No authentication data found';
-          _isLoading = false;
-        });
-        return;
+        // Retry a few times on first entry; auth may still be restoring
+        if (_authRetryAttempts < 5) {
+          _authRetryAttempts++;
+          Future.delayed(const Duration(seconds: 1), () {
+            if (mounted) _loadBasicProfileData();
+          });
+          return; // keep showing loading spinner
+        } else {
+          setState(() {
+            _error = 'No authentication data found';
+            _isLoading = false;
+          });
+          return;
+        }
       }
 
       // **NEW: Check background preloaded data first (HIGHEST PRIORITY)**
@@ -450,6 +475,77 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     _progressiveLoadTimer?.cancel();
     _startProgressiveLoading();
+  }
+
+  /// Share app referral message
+  Future<void> _handleReferFriends() async {
+    try {
+      // Build a referral link with user code if available
+      String base = 'https://snehayog.app';
+      String referralCode = '';
+      final userData = _stateManager.getUserData();
+      final token = userData?['token'];
+      if (token != null) {
+        try {
+          final uri = Uri.parse('${AppConfig.baseUrl}/api/referrals/code');
+          final resp = await http.get(uri, headers: {
+            'Authorization': 'Bearer $token',
+          }).timeout(const Duration(seconds: 6));
+          if (resp.statusCode == 200) {
+            final data = json.decode(resp.body);
+            referralCode = data['code'] ?? '';
+          }
+        } catch (_) {}
+      }
+      final String referralLink =
+          referralCode.isNotEmpty ? '$base/?ref=$referralCode' : base;
+      final String message =
+          'I am using Snehayog! Refer 2 friends and get full access. Join now: $referralLink';
+      await Share.share(
+        message,
+        subject: 'Snehayog – Refer 2 friends and get full access',
+      );
+
+      // Optimistically increment invite counter
+      final prefs = await SharedPreferences.getInstance();
+      _invitedCount = (prefs.getInt('referral_invite_count') ?? 0) + 1;
+      await prefs.setInt('referral_invite_count', _invitedCount);
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unable to share right now. Please try again.'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _loadReferralStats() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _invitedCount = prefs.getInt('referral_invite_count') ?? 0;
+      if (mounted) setState(() {});
+    } catch (_) {}
+  }
+
+  Future<void> _fetchVerifiedReferralStats() async {
+    try {
+      final userData = _stateManager.getUserData();
+      final token = userData?['token'];
+      if (token == null) return;
+      final uri = Uri.parse('${AppConfig.baseUrl}/api/referrals/stats');
+      final resp = await http.get(uri, headers: {
+        'Authorization': 'Bearer $token',
+      }).timeout(const Duration(seconds: 6));
+      if (resp.statusCode == 200) {
+        final data = json.decode(resp.body);
+        _verifiedInstalled = data['installed'] ?? 0;
+        _verifiedSignedUp = data['signedUp'] ?? 0;
+        if (mounted) setState(() {});
+      }
+    } catch (_) {}
   }
 
   Future<void> _handleEditProfile() async {
@@ -2099,50 +2195,62 @@ class _ProfileScreenState extends State<ProfileScreen>
 
           // Action Buttons Section
           RepaintBoundary(
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 24),
-              child: Container(
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border:
-                      Border.all(color: const Color(0xFF10B981), width: 1.5),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    // Refer Friends functionality
-                  },
-                  icon: const Icon(
-                    Icons.share,
-                    color: Color(0xFF10B981),
-                    size: 20,
-                  ),
-                  label: const Text(
-                    'Refer Friends',
-                    style: TextStyle(
-                      color: Color(0xFF10B981),
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
+            child: Column(
+              children: [
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Container(
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
-                      side: BorderSide.none,
+                      border: Border.all(
+                          color: const Color(0xFF10B981), width: 1.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: ElevatedButton.icon(
+                      onPressed: _handleReferFriends,
+                      icon: const Icon(
+                        Icons.share,
+                        color: Color(0xFF10B981),
+                        size: 20,
+                      ),
+                      label: const Text(
+                        'Refer 2 friends and get full access',
+                        style: TextStyle(
+                          color: Color(0xFF10B981),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide.none,
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
+                if (_invitedCount > 0 ||
+                    _verifiedInstalled > 0 ||
+                    _verifiedSignedUp > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Invited: $_invitedCount • Installed: $_verifiedInstalled • Signed up: $_verifiedSignedUp',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                  ),
+              ],
             ),
           ),
 

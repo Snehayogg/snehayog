@@ -20,6 +20,7 @@ import creatorPayoutRoutes from './routes/creatorPayoutRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import feedbackRoutes from './routes/feedbackRoutes.js';
+import referralRoutes from './routes/referralRoutes.js';
 
 // Import services
 import automatedPayoutService from './services/automatedPayoutService.js';
@@ -142,6 +143,7 @@ app.use('/api/videos', videoRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/feedback', feedbackRoutes);
+app.use('/api/referrals', referralRoutes);
 
 // Health check endpoints (both /health and /api/health)
 app.get('/health', (req, res) => {
