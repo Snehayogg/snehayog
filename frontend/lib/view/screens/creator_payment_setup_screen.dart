@@ -75,7 +75,48 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
   @override
   void initState() {
     super.initState();
+    _loadCachedPaymentProfile();
     _loadExistingProfile();
+  }
+
+  Future<void> _loadCachedPaymentProfile() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cachedJson = prefs.getString('payment_profile_cache');
+      if (cachedJson == null) return;
+      final data = json.decode(cachedJson) as Map<String, dynamic>;
+
+      setState(() {
+        _selectedCountry = data['country'] ?? _selectedCountry;
+        _selectedCurrency = data['currency'] ?? _selectedCurrency;
+        _selectedPaymentMethod =
+            data['paymentMethod'] ?? _selectedPaymentMethod;
+
+        final payment = data['paymentDetails'] as Map<String, dynamic>?;
+        if (payment != null) {
+          _upiIdController.text = payment['upiId'] ?? '';
+          _accountNumberController.text =
+              payment['bankAccount']?['accountNumber'] ?? '';
+          _ifscCodeController.text = payment['bankAccount']?['ifscCode'] ?? '';
+          _bankNameController.text = payment['bankAccount']?['bankName'] ?? '';
+          _accountHolderNameController.text =
+              payment['bankAccount']?['accountHolderName'] ?? '';
+          _paypalEmailController.text = payment['paypalEmail'] ?? '';
+          _stripeAccountIdController.text = payment['stripeAccountId'] ?? '';
+          _wiseEmailController.text = payment['wiseEmail'] ?? '';
+          _swiftCodeController.text =
+              payment['internationalBank']?['swiftCode'] ?? '';
+          _routingNumberController.text =
+              payment['internationalBank']?['routingNumber'] ?? '';
+        }
+
+        final tax = data['taxInfo'] as Map<String, dynamic>?;
+        if (tax != null) {
+          _panNumberController.text = tax['panNumber'] ?? '';
+          _gstNumberController.text = tax['gstNumber'] ?? '';
+        }
+      });
+    } catch (_) {}
   }
 
   Future<void> _loadExistingProfile() async {
@@ -128,6 +169,21 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
             _gstNumberController.text = data['taxInfo']?['gstNumber'] ?? '';
           }
         });
+
+        // Cache for instant prefill next time
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(
+              'payment_profile_cache',
+              json.encode({
+                'country': _selectedCountry,
+                'currency': _selectedCurrency,
+                'paymentMethod': _selectedPaymentMethod,
+                'paymentDetails': data['paymentDetails'] ?? {},
+                'taxInfo': data['taxInfo'] ?? {},
+              }));
+          await prefs.setBool('has_payment_setup', true);
+        } catch (_) {}
       }
     } catch (e) {
       print('Error loading profile: $e');
@@ -249,6 +305,26 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
         // Persist a local flag so user won't be prompted again
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('has_payment_setup', true);
+
+        // Cache sanitized profile (never store CVV)
+        final sanitized = {
+          'country': _selectedCountry,
+          'currency': _selectedCurrency,
+          'paymentMethod': _selectedPaymentMethod,
+          'paymentDetails': {
+            ...paymentDetails,
+            if (paymentDetails['cardDetails'] != null)
+              'cardDetails': {
+                ...paymentDetails['cardDetails'],
+                'cvv': null,
+              }
+          },
+          'taxInfo': {
+            'panNumber': _panNumberController.text.trim(),
+            'gstNumber': _gstNumberController.text.trim(),
+          }
+        };
+        await prefs.setString('payment_profile_cache', json.encode(sanitized));
 
         // Show success dialog
         _showSuccessDialog();

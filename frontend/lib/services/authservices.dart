@@ -318,12 +318,28 @@ class AuthService {
     try {
       print('🔍 AuthService: Getting user data...');
 
-      // **OPTIMIZED: Add overall timeout to prevent hanging**
-      return await Future.any([
-        _getUserDataInternal(skipTokenRefresh: skipTokenRefresh),
-        Future.delayed(
-            const Duration(seconds: 5), () => null), // 5 second timeout
-      ]);
+      // Wait for internal retrieval with a sensible timeout; on timeout, fallback to cached user
+      return await _getUserDataInternal(skipTokenRefresh: skipTokenRefresh)
+          .timeout(const Duration(seconds: 12), onTimeout: () async {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final token = prefs.getString('jwt_token');
+          final fallbackUser = prefs.getString('fallback_user');
+          if (fallbackUser != null) {
+            final data = jsonDecode(fallbackUser);
+            return {
+              'id': data['id'],
+              'googleId': data['googleId'] ?? data['id'],
+              'name': data['name'],
+              'email': data['email'],
+              'profilePic': data['profilePic'],
+              'token': token,
+              'isFallback': true,
+            };
+          }
+        } catch (_) {}
+        return null;
+      });
     } catch (e) {
       print('❌ AuthService: Error getting user data: $e');
       return null;
