@@ -13,9 +13,27 @@ class BannerAdWidget extends StatelessWidget {
     this.onAdClick,
   }) : super(key: key);
 
+  // Ensure absolute URL (adds scheme or base URL if needed)
+  String _ensureAbsoluteUrl(String url) {
+    final u = url.trim();
+    if (u.isEmpty) return u;
+    if (u.startsWith('http://') || u.startsWith('https://')) return u;
+    if (u.startsWith('//')) return 'https:$u';
+    if (u.startsWith('/'))
+      return 'https://snehayog-production.up.railway.app$u';
+    return 'https://$u';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final imageUrl = adData['imageUrl'] ?? '';
+    // Resolve image URL from multiple possible keys and ensure absolute URL
+    final dynamic rawImage = adData['imageUrl'] ??
+        adData['image'] ??
+        adData['bannerImageUrl'] ??
+        adData['mediaUrl'] ??
+        '';
+    final String imageUrl = _ensureAbsoluteUrl(
+        rawImage is String ? rawImage : rawImage?.toString() ?? '');
 
     // Debug logging for banner ad data
     print('🎯 BannerAdWidget: Building banner ad with data:');
@@ -145,10 +163,19 @@ class BannerAdWidget extends StatelessWidget {
   void _handleAdClick(BuildContext context) async {
     try {
       final adId = adData['_id'] ?? adData['id'];
-      final link = adData['link'] as String?;
+      // Resolve link from multiple keys and ensure absolute URL
+      final String link = _ensureAbsoluteUrl(
+        (adData['link'] ??
+                adData['url'] ??
+                adData['ctaUrl'] ??
+                adData['callToActionUrl'] ??
+                adData['targetUrl'] ??
+                '')
+            .toString(),
+      );
 
       // Show confirmation dialog if link is available
-      if (link != null && link.isNotEmpty) {
+      if (link.isNotEmpty) {
         final shouldOpen = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
