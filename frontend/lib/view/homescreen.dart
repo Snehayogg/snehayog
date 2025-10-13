@@ -7,6 +7,7 @@ import 'package:snehayog/view/screens/long_video.dart';
 import 'package:snehayog/view/screens/upload_screen.dart';
 import 'package:snehayog/view/screens/video_screen.dart';
 import 'package:snehayog/services/authservices.dart';
+import 'package:snehayog/services/background_profile_preloader.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -26,6 +27,10 @@ class _MainScreenState extends State<MainScreen>
 
   // **NEW: Animation controller for refresh icon**
   late AnimationController _refreshAnimationController;
+
+  // **BACKGROUND PRELOADING: Preload profile data when user is on video feed**
+  final BackgroundProfilePreloader _profilePreloader =
+      BackgroundProfilePreloader();
 
   Future<void> _refreshVideoList() async {
     print('🔄 MainScreen: _refreshVideoList() called');
@@ -179,6 +184,13 @@ class _MainScreenState extends State<MainScreen>
     );
 
     _checkTokenValidity();
+
+    // **BACKGROUND PRELOADING: Start preloading profile data when app opens (user starts on Yog tab)**
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      print(
+          '🚀 MainScreen: Starting background profile preloading on app start');
+      _profilePreloader.startBackgroundPreloading();
+    });
   }
 
   /// Check if JWT token is valid and handle expired tokens
@@ -228,6 +240,8 @@ class _MainScreenState extends State<MainScreen>
     WidgetsBinding.instance.removeObserver(this);
     // **NEW: Dispose animation controller**
     _refreshAnimationController.dispose();
+    // **BACKGROUND PRELOADING: Dispose preloader**
+    _profilePreloader.dispose();
     super.dispose();
   }
 
@@ -269,21 +283,38 @@ class _MainScreenState extends State<MainScreen>
       if (mainController.currentIndex == 0) {
         print('Homescreen: Leaving video tab, pausing videos immediately');
         mainController.forcePauseVideos();
+
+        // **BACKGROUND PRELOADING: Stop preloading when leaving Yog tab**
+        print(
+            '⏸️ MainScreen: Stopping background profile preloading (leaving Yog tab)');
+        _profilePreloader.stopBackgroundPreloading();
+      }
+
+      // **BACKGROUND PRELOADING: Start preloading when switching TO Yog tab**
+      if (index == 0) {
+        print(
+            '🚀 MainScreen: Starting background profile preloading (switching to Yog tab)');
+        _profilePreloader.startBackgroundPreloading();
       }
 
       // If switching to profile tab, ensure profile data is loaded
       if (index == 3) {
         print(
             '🔄 Homescreen: Switching to profile tab - ensuring profile data is loaded');
-        final profileScreenState = _profileScreenKey.currentState;
-        if (profileScreenState != null) {
-          // Call the profile loading method if it exists
-          try {
-            (profileScreenState as dynamic).onProfileTabSelected();
-          } catch (e) {
-            print('⚠️ Homescreen: Could not call onProfileTabSelected: $e');
+
+        // Force immediate data load when profile tab is selected
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final profileScreenState = _profileScreenKey.currentState;
+          if (profileScreenState != null && mounted) {
+            try {
+              // Call the public method through dynamic to avoid type casting issues
+              (profileScreenState as dynamic).onProfileTabSelected();
+              print('✅ Homescreen: Successfully triggered profile data load');
+            } catch (e) {
+              print('⚠️ Homescreen: Error calling onProfileTabSelected: $e');
+            }
           }
-        }
+        });
       }
 
       // Change index - MainController will handle additional video control

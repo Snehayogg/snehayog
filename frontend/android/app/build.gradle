@@ -40,7 +40,7 @@ if (flutterVersionName == null) {
 
 android {
     namespace "com.snehayog.app"
-    compileSdkVersion 36 // Updated to match plugin requirements
+    compileSdk 36 // Updated to SDK 36 to match plugin requirements
     ndkVersion "27.0.12077973"
 
     compileOptions {
@@ -59,7 +59,7 @@ android {
     defaultConfig {
         applicationId "com.snehayog.app"
         minSdkVersion flutter.minSdkVersion  
-        targetSdkVersion 36
+        targetSdkVersion 36 // Updated to SDK 36 to match plugin requirements
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
         multiDexEnabled true
@@ -89,7 +89,7 @@ android {
         }
     }
     
-    lintOptions {
+    lint {
         disable 'InvalidPackage'
         checkReleaseBuilds false
     }

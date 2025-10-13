@@ -80,6 +80,77 @@ class _ProfileScreenState extends State<ProfileScreen>
     _fetchVerifiedReferralStats();
   }
 
+  /// **PUBLIC METHOD: Called when Profile tab is selected**
+  /// Forces immediate data load if not already loaded
+  void onProfileTabSelected() {
+    print('🔄 ProfileScreen: Profile tab selected, ensuring data is loaded');
+
+    // If data is not loaded yet, force immediate load
+    if (!_isProfileDataLoaded || _stateManager.userData == null) {
+      print('📡 ProfileScreen: Data not loaded, forcing immediate load');
+      _forceImmediateLoad();
+    } else {
+      print('✅ ProfileScreen: Data already loaded, no action needed');
+
+      // **OPTIMIZATION: Trigger background refresh if data might be stale**
+      final preloader = BackgroundProfilePreloader();
+      preloader.startBackgroundPreloading();
+    }
+  }
+
+  /// **FORCE IMMEDIATE LOAD: Load data immediately without progressive loading**
+  Future<void> _forceImmediateLoad() async {
+    try {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+
+      // Try to load from background preloader first
+      final preloader = BackgroundProfilePreloader();
+      final preloadedData = await preloader.getPreloadedProfileData();
+
+      if (preloadedData != null) {
+        print('⚡ ProfileScreen: Using preloaded data for immediate load');
+        _stateManager.setUserData(preloadedData);
+
+        setState(() {
+          _isProfileDataLoaded = true;
+          _isLoading = false;
+        });
+
+        // Load videos and followers in background
+        _loadVideosProgressive();
+        _loadFollowersProgressive();
+        return;
+      }
+
+      // If no preloaded data, force load from server
+      print('📡 ProfileScreen: Force loading from server');
+      await _stateManager.loadUserData(widget.userId);
+
+      if (_stateManager.userData != null) {
+        setState(() {
+          _isProfileDataLoaded = true;
+          _isLoading = false;
+        });
+
+        // Cache the loaded data
+        await _cacheProfileData(_stateManager.userData!);
+
+        // Load videos and followers
+        _loadVideosProgressive();
+        _loadFollowersProgressive();
+      }
+    } catch (e) {
+      print('❌ ProfileScreen: Error in force immediate load: $e');
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
   void _startProgressiveLoading() {
     // Step 1: Load basic profile data first (fastest)
     _loadBasicProfileData();
@@ -385,9 +456,14 @@ class _ProfileScreenState extends State<ProfileScreen>
     try {
       ProfileScreenLogger.logLogout();
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('has_payment_setup');
+
+      // **FIX: Only remove session tokens, NOT payment data**
       await prefs.remove('jwt_token');
       await prefs.remove('fallback_user');
+
+      // **DO NOT REMOVE payment data - it should persist across sessions**
+      // await prefs.remove('has_payment_setup'); // REMOVED - keep this flag
+      // await prefs.remove('payment_profile_cache'); // REMOVED - keep payment data
 
       // **ENHANCED: Clear profile cache on logout**
       await _clearProfileCache();
@@ -401,9 +477,10 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Logged out successfully'),
+            content: Text(
+                'Logged out successfully. Your payment details are saved.'),
             backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
+            duration: Duration(seconds: 3),
           ),
         );
       }
@@ -462,6 +539,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   void _restartProgressiveLoading() {
+    print('🔄 ProfileScreen: Restarting progressive loading (manual refresh)');
+
     setState(() {
       _isProfileDataLoaded = false;
       _isVideosLoaded = false;
@@ -471,7 +550,13 @@ class _ProfileScreenState extends State<ProfileScreen>
       _currentLoadStep = 0;
     });
 
+    // Clear all caches to force fresh data load
     _clearProfileCache();
+
+    // **ENHANCED: Also trigger background preloading to refresh cache**
+    final preloader = BackgroundProfilePreloader();
+    preloader.clearCache(); // Clear old cache
+    preloader.forcePreload(); // Trigger fresh preload
 
     _progressiveLoadTimer?.cancel();
     _startProgressiveLoading();
@@ -2794,13 +2879,30 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Future<bool> _checkPaymentSetupStatus() async {
     try {
-      // **FIXED: Prioritize SharedPreferences flag first**
+      // **FIX: Check user-specific flag first**
       ProfileScreenLogger.logPaymentSetupCheck();
       final prefs = await SharedPreferences.getInstance();
-      final hasPaymentSetup = prefs.getBool('has_payment_setup') ?? false;
 
+      // **FIX: Get user ID for user-specific check**
+      final userData = _stateManager.getUserData();
+      final userId = userData?['googleId'] ?? userData?['id'];
+
+      // **FIX: Check user-specific flag first**
+      if (userId != null) {
+        final hasUserSpecificSetup =
+            prefs.getBool('has_payment_setup_$userId') ?? false;
+        if (hasUserSpecificSetup) {
+          ProfileScreenLogger.logPaymentSetupFound();
+          print('✅ User-specific payment setup found for user: $userId');
+          return true;
+        }
+      }
+
+      // **FALLBACK: Check global flag for backward compatibility**
+      final hasPaymentSetup = prefs.getBool('has_payment_setup') ?? false;
       if (hasPaymentSetup) {
         ProfileScreenLogger.logPaymentSetupFound();
+        print('✅ Global payment setup flag found');
         return true;
       }
 
@@ -2811,7 +2913,11 @@ class _ProfileScreenState extends State<ProfileScreen>
             'No payment setup flag found, checking backend data...');
         final hasBackendSetup = await _checkBackendPaymentSetup();
         if (hasBackendSetup) {
-          // Set the flag for future use
+          // **FIX: Set both user-specific and global flags**
+          if (userId != null) {
+            await prefs.setBool('has_payment_setup_$userId', true);
+            print('✅ Set user-specific payment setup flag for user: $userId');
+          }
           await prefs.setBool('has_payment_setup', true);
           ProfileScreenLogger.logPaymentSetupFound();
           return true;
@@ -2819,6 +2925,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
 
       ProfileScreenLogger.logPaymentSetupNotFound();
+      print('ℹ️ No payment setup found for user');
       return false;
     } catch (e) {
       ProfileScreenLogger.logPaymentSetupCheckError(e.toString());
@@ -2826,17 +2933,32 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  /// Sync local 'has_payment_setup' flag from backend once user data exists
+  /// **FIX: Sync user-specific payment setup flag from backend**
   Future<void> _ensurePaymentSetupFlag() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final already = prefs.getBool('has_payment_setup') ?? false;
-      if (already) return;
+      final userData = _stateManager.getUserData();
+      final userId = userData?['googleId'] ?? userData?['id'];
+
+      // **FIX: Check user-specific flag**
+      if (userId != null) {
+        final already = prefs.getBool('has_payment_setup_$userId') ?? false;
+        if (already) {
+          print(
+              '✅ User-specific payment setup flag already exists for user: $userId');
+          return;
+        }
+      }
 
       if (_stateManager.userData != null &&
           _stateManager.userData!['_id'] != null) {
         final backendHas = await _checkBackendPaymentSetup();
         if (backendHas) {
+          // **FIX: Set both user-specific and global flags**
+          if (userId != null) {
+            await prefs.setBool('has_payment_setup_$userId', true);
+            print('✅ Set user-specific payment setup flag for user: $userId');
+          }
           await prefs.setBool('has_payment_setup', true);
           ProfileScreenLogger.logPaymentSetupFound();
         }

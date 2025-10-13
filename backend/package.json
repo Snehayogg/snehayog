@@ -13,7 +13,9 @@
     "migrate:cloudinary": "node scripts/migrate-cloudinary.js",
     "migrate:cloudinary:dry": "node scripts/migrate-cloudinary.js --dry-run",
     "fix:urls": "node scripts/fix-malformed-urls.js",
-    "fix:urls:dry": "node scripts/fix-malformed-urls.js --dry-run"
+    "fix:urls:dry": "node scripts/fix-malformed-urls.js --dry-run",
+    "analyze:videos": "node scripts/migrateCloudinaryToR2.js",
+    "cleanup:failed": "node scripts/migrateCloudinaryToR2.js --delete-failed"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.891.0",

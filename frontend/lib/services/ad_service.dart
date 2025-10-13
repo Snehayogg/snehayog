@@ -4,8 +4,10 @@ import 'package:http/http.dart' as http;
 import 'package:snehayog/model/ad_model.dart';
 import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/services/cloudinary_service.dart';
-// import 'package:snehayog/services/razorpay_service.dart';  // Temporarily commented
 import 'package:snehayog/config/app_config.dart';
+import 'package:snehayog/core/managers/smart_cache_manager.dart';
+import 'package:snehayog/services/active_ads_service.dart';
+import 'package:snehayog/services/ad_refresh_notifier.dart';
 
 class AdService {
   static final AdService _instance = AdService._internal();
@@ -16,6 +18,9 @@ class AdService {
   final AuthService _authService = AuthService();
   final CloudinaryService _cloudinaryService = CloudinaryService();
   // final RazorpayService _razorpayService = RazorpayService();  // Temporarily commented
+  final SmartCacheManager _cacheManager = SmartCacheManager();
+  final ActiveAdsService _activeAdsService = ActiveAdsService();
+  final AdRefreshNotifier _adRefreshNotifier = AdRefreshNotifier();
 
   // Create a new ad
   Future<AdModel> createAd({
@@ -60,7 +65,11 @@ class AdService {
           'imageUrl': imageUrl,
           'videoUrl': videoUrl,
           'link': link,
-          'adType': adType,
+          'adType': adType == 'carousel'
+              ? 'carousel ads'
+              : adType == 'video feed'
+                  ? 'video feeds'
+                  : adType, // **FIX: Correct adType format**
           'budget': budget,
           'targetAudience': targetAudience,
           'targetKeywords': targetKeywords,
@@ -127,14 +136,21 @@ class AdService {
         '🔍 AdService: Budget: ₹$budget, Ad Type: $adType, CPM: ₹$cpm, Estimated impressions: $impressions',
       );
 
-      // **NEW: Debug the data being sent**
+      String backendAdType = adType;
+      if (adType == 'carousel') {
+        backendAdType =
+            'carousel ads'; 
+      } else if (adType == 'video feed') {
+        backendAdType = 'video feeds';
+      }
+
       final requestData = {
         'title': title,
         'description': description,
         'imageUrl': imageUrl,
         'videoUrl': videoUrl,
         'link': link,
-        'adType': adType,
+        'adType': backendAdType, // **FIX: Use corrected adType**
         'budget': budget is int ? budget : budget.toInt(),
         'targetAudience': targetAudience,
         'uploaderId': userData['googleId'] ?? userData['id'],
@@ -180,8 +196,7 @@ class AdService {
       if (platforms != null && platforms.isNotEmpty) {
         requestData['platforms'] = platforms;
       }
-      requestData['deviceType'] =
-          deviceType ?? 'all';
+      requestData['deviceType'] = deviceType ?? 'all';
 
       // **NEW: Add additional campaign settings**
       if (optimizationGoal != null) {
@@ -487,6 +502,19 @@ class AdService {
 
       if (response.statusCode == 200 || response.statusCode == 204) {
         print('✅ AdService: Ad deleted successfully');
+
+        // **NEW: Clear ad cache after successful deletion**
+        await _clearAdCache();
+        print('🧹 AdService: Cleared ad cache after deletion');
+
+        // **NEW: Clear ActiveAdsService cache**
+        await _activeAdsService.clearAdsCache();
+        print('🧹 AdService: Cleared ActiveAdsService cache');
+
+        // **NEW: Notify video feed to refresh ads**
+        await _notifyVideoFeedRefresh();
+        print('📢 AdService: Notified video feed to refresh ads');
+
         return true;
       } else {
         print('❌ AdService: Delete failed with status ${response.statusCode}');
@@ -668,6 +696,95 @@ class AdService {
       }
     } catch (e) {
       throw Exception('Error fetching creator revenue: $e');
+    }
+  }
+
+  /// **NEW: Clear ad cache to ensure deleted ads are removed from video feed**
+  Future<void> _clearAdCache() async {
+    try {
+      print('🧹 AdService: Clearing ad cache...');
+
+      // Clear active ads cache
+      await _clearCacheForKey('active_ads');
+      await _clearCacheForKey('user_ads');
+
+      // Clear any ad-related cache entries
+      final cacheKeys = [
+        'active_ads',
+        'user_ads',
+        'banner_ads',
+        'video_feed_ads',
+        'ads_page_1',
+        'ads_page_2',
+        'ads_page_3',
+      ];
+
+      for (final key in cacheKeys) {
+        await _clearCacheForKey(key);
+      }
+
+      print('✅ AdService: Ad cache cleared successfully');
+    } catch (e) {
+      print('⚠️ AdService: Error clearing ad cache: $e');
+      // Don't throw error - cache clearing failure shouldn't break ad deletion
+    }
+  }
+
+  /// **NEW: Clear specific cache key**
+  Future<void> _clearCacheForKey(String key) async {
+    try {
+      print('🧹 AdService: Clearing cache for key: $key');
+
+      // Clear from SmartCacheManager by forcing refresh with null data
+      // This will effectively clear the cache entry
+      await _cacheManager.get(
+        key,
+        fetchFn: () async => null as dynamic,
+        cacheType: 'ads',
+        maxAge: Duration.zero, // Force immediate expiration
+        forceRefresh: true,
+      );
+      print('✅ AdService: Cleared cache for key: $key');
+    } catch (e) {
+      print('⚠️ AdService: Error clearing cache for key $key: $e');
+    }
+  }
+
+  /// **NEW: Notify video feed to refresh ads**
+  Future<void> _notifyVideoFeedRefresh() async {
+    try {
+      print('📢 AdService: Notifying video feed to refresh ads...');
+
+      // Clear video feed specific cache keys
+      final videoFeedCacheKeys = [
+        'video_feed_ads',
+        'active_ads_video_feed',
+        'banner_ads_video_feed',
+        'ads_serve_response',
+      ];
+
+      for (final key in videoFeedCacheKeys) {
+        await _clearCacheForKey(key);
+      }
+
+      // Also clear any cached video feed data that includes ads
+      await _clearCacheForKey('video_feed_page_1');
+      await _clearCacheForKey('video_feed_page_2');
+      await _clearCacheForKey('video_feed_page_3');
+
+      // **NEW: Notify video feed listeners to refresh ads**
+      try {
+        _adRefreshNotifier.notifyRefresh();
+        print(
+            '📢 AdService: Sent refresh notification to video feed listeners');
+      } catch (e) {
+        print('⚠️ AdService: Could not send refresh notification: $e');
+      }
+
+      print(
+          '✅ AdService: Video feed cache cleared, ads will refresh on next load');
+    } catch (e) {
+      print('⚠️ AdService: Error notifying video feed refresh: $e');
     }
   }
 }

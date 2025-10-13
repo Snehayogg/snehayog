@@ -74,6 +74,23 @@ const videoSchema = new mongoose.Schema({
     type: String,
     default: 'yog'
   },
+  // **NEW: Category and tags for ad targeting**
+  category: {
+    type: String,
+    trim: true,
+    lowercase: true,
+    index: true // For faster ad targeting queries
+  },
+  tags: [{
+    type: String,
+    trim: true,
+    lowercase: true
+  }],
+  keywords: [{
+    type: String,
+    trim: true,
+    lowercase: true
+  }],
   aspectRatio: {
     type: Number,
     default: 9/16

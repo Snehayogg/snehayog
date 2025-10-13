@@ -8,6 +8,7 @@ import {
   generateOrderId 
 } from '../utils/common.js';
 import { AD_CONFIG, PAYMENT_CONFIG } from '../constants/index.js';
+import { calculateCategoryRelevance } from '../config/categoryMap.js';
 
 class AdService {
   async createAdWithPayment(adData) {
@@ -228,46 +229,141 @@ class AdService {
   }
 
   /**
-   * Get active ads for serving
+   * Get active ads for serving with proper targeting
    */
   async getActiveAds(targetingCriteria) {
-    const { userId, platform, location } = targetingCriteria;
+    const { userId, platform, location, videoCategory, videoTags, videoKeywords } = targetingCriteria;
 
-    console.log('🎯 AdService: getActiveAds called with:', { userId, platform, location });
+    console.log('🎯 AdService: getActiveAds called with:', { 
+      userId, platform, location, videoCategory, videoTags, videoKeywords 
+    });
 
-    // **FIXED: More flexible query to show all active ads**
-    const query = {
-      $or: [
-        // Show ads that are properly activated and approved
-        { isActive: true, reviewStatus: 'approved' },
-        // Show ads with active status (legacy support)
-        { status: 'active' },
-        // TEMPORARY: Also show newly created ads for testing (even without payment)
-        { isActive: { $exists: false } }, // Ads without isActive field (newly created)
-        { reviewStatus: { $exists: false } } // Ads without reviewStatus field (newly created)
-      ],
-      // **FIXED: Remove restrictive targeting for now - show all ads to all users**
-      // This allows your ads to be seen by everyone for testing
-    };
+    // **STEP 1: Get all active ads with their campaigns**
+    const activeCreatives = await AdCreative.find({
+      isActive: true,
+      reviewStatus: 'approved'
+    }).populate('campaignId').limit(50); // Get more ads for filtering
 
-    console.log('🔍 AdService: Query:', JSON.stringify(query, null, 2));
+    console.log(`🔍 AdService: Found ${activeCreatives.length} active ad creatives`);
 
-    const activeAds = await AdCreative.find(query).limit(10);
+    // **STEP 2: Filter ads based on targeting**
+    const targetedAds = [];
+    
+    for (const creative of activeCreatives) {
+      // Skip if campaign is deleted
+      if (!creative.campaignId) {
+        console.log(`⚠️ Skipping creative ${creative._id} - no campaign`);
+        continue;
+      }
 
-    console.log(`✅ AdService: Found ${activeAds.length} active ads`);
+      const campaign = creative.campaignId;
+      let relevanceScore = 0;
+      let matchReasons = [];
 
-    // Log details of found ads
-    for (const ad of activeAds) {
-      console.log(`   - Ad: ${ad.title} (${ad.adType}) - Status: ${ad.status}, isActive: ${ad.isActive}, reviewStatus: ${ad.reviewStatus}`);
+      // **TARGETING LOGIC: Match ad interests with video context**
+      
+      // 1. Check if campaign has interests defined
+      const campaignInterests = campaign.target?.interests || [];
+      
+      if (campaignInterests.length === 0) {
+        // If no interests specified, show to all (universal ad)
+        relevanceScore = 50;
+        matchReasons.push('universal_ad');
+        console.log(`   📢 Ad ${creative._id}: Universal ad (no targeting)`);
+      } else {
+        // Check interest matching with video category using smart category map
+        if (videoCategory) {
+          for (const interest of campaignInterests) {
+            const relevance = calculateCategoryRelevance(interest, videoCategory);
+            
+            if (relevance.score > 0) {
+              relevanceScore += relevance.score;
+              
+              let matchType = '';
+              switch (relevance.level) {
+                case 'exact':
+                  matchType = 'EXACT';
+                  break;
+                case 'primary':
+                  matchType = 'PRIMARY';
+                  break;
+                case 'related':
+                  matchType = 'RELATED';
+                  break;
+                case 'fallback':
+                  matchType = 'FALLBACK';
+                  break;
+                case 'partial':
+                  matchType = 'PARTIAL';
+                  break;
+              }
+              
+              matchReasons.push(`category_${relevance.level}:${interest}(${relevance.score})`);
+              console.log(`   ✅ Ad ${creative._id}: ${matchType} category match - ${interest} → ${videoCategory} (Score: +${relevance.score})`);
+            }
+          }
+        }
+
+        // Check interest matching with video tags
+        if (videoTags && videoTags.length > 0) {
+          for (const interest of campaignInterests) {
+            const interestLower = interest.toLowerCase();
+            for (const tag of videoTags) {
+              const tagLower = tag.toLowerCase();
+              
+              if (tagLower === interestLower || tagLower.includes(interestLower) || interestLower.includes(tagLower)) {
+                relevanceScore += 60;
+                matchReasons.push(`tag_match:${tag}`);
+                console.log(`   ✅ Ad ${creative._id}: Tag match - ${tag} ~ ${interest}`);
+              }
+            }
+          }
+        }
+
+        // Check interest matching with video keywords
+        if (videoKeywords && videoKeywords.length > 0) {
+          for (const interest of campaignInterests) {
+            const interestLower = interest.toLowerCase();
+            for (const keyword of videoKeywords) {
+              const keywordLower = keyword.toLowerCase();
+              
+              if (keywordLower === interestLower || keywordLower.includes(interestLower) || interestLower.includes(keywordLower)) {
+                relevanceScore += 40;
+                matchReasons.push(`keyword_match:${keyword}`);
+                console.log(`   ✅ Ad ${creative._id}: Keyword match - ${keyword} ~ ${interest}`);
+              }
+            }
+          }
+        }
+      }
+
+      // **DECISION: Only show ads with relevance score > 0**
+      if (relevanceScore > 0) {
+        targetedAds.push({
+          creative,
+          relevanceScore,
+          matchReasons: matchReasons.join(', ')
+        });
+        console.log(`   ✅ Ad ${creative._id} SELECTED - Score: ${relevanceScore}, Reasons: ${matchReasons.join(', ')}`);
+      } else {
+        console.log(`   ❌ Ad ${creative._id} REJECTED - No relevance (interests: ${campaignInterests.join(', ')})`);
+      }
     }
 
-    // Update impression count
-    for (const ad of activeAds) {
+    // **STEP 3: Sort by relevance score (highest first)**
+    targetedAds.sort((a, b) => b.relevanceScore - a.relevanceScore);
+
+    console.log(`✅ AdService: ${targetedAds.length} ads matched targeting criteria`);
+
+    // **STEP 4: Return top ads and update impression count**
+    const finalAds = targetedAds.slice(0, 10).map(item => item.creative);
+    
+    for (const ad of finalAds) {
       ad.impressions = (ad.impressions || 0) + 1;
       await ad.save();
     }
 
-    return activeAds;
+    return finalAds;
   }
 
   /**

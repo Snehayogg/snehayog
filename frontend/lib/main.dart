@@ -10,7 +10,6 @@ import 'package:snehayog/core/providers/video_provider.dart';
 import 'package:snehayog/core/providers/user_provider.dart';
 import 'package:snehayog/view/screens/login_screen.dart';
 import 'package:snehayog/view/screens/video_screen.dart';
-import 'package:snehayog/services/video_service.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:snehayog/core/services/error_logging_service.dart';
 import 'package:snehayog/core/managers/hot_ui_state_manager.dart';
@@ -22,6 +21,8 @@ import 'package:snehayog/services/video_service.dart' as vsvc;
 import 'package:snehayog/core/services/hls_warmup_service.dart';
 import 'package:snehayog/core/managers/smart_cache_manager.dart';
 import 'package:snehayog/model/video_model.dart';
+import 'package:snehayog/services/authservices.dart';
+import 'package:snehayog/services/background_profile_preloader.dart';
 
 final RazorpayService razorpayService = RazorpayService();
 
@@ -286,7 +287,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      navigatorKey: VideoService.navigatorKey,
+      navigatorKey: AuthService.navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'Snehayog',
       theme: AppTheme.lightTheme,
@@ -327,7 +328,30 @@ class _AuthWrapperState extends State<AuthWrapper> {
       final authController =
           Provider.of<GoogleSignInController>(context, listen: false);
       authController.checkAuthStatus();
+
+      // **BACKGROUND PRELOADING: Preload profile data after authentication check**
+      _startBackgroundPreloadingIfAuthenticated();
     });
+  }
+
+  /// **Start background preloading if user is authenticated**
+  Future<void> _startBackgroundPreloadingIfAuthenticated() async {
+    try {
+      final authService = AuthService();
+      final userData = await authService.getUserData();
+
+      if (userData != null) {
+        print(
+            '✅ AuthWrapper: User is authenticated, starting background profile preloading');
+        final preloader = BackgroundProfilePreloader();
+        await preloader.forcePreload();
+      } else {
+        print(
+            'ℹ️ AuthWrapper: User not authenticated, skipping background preloading');
+      }
+    } catch (e) {
+      print('⚠️ AuthWrapper: Error starting background preloading: $e');
+    }
   }
 
   @override

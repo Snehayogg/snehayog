@@ -2,10 +2,12 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:snehayog/config/app_config.dart';
 // **NEW: Import JWT decoder**
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:snehayog/config/google_sign_in_config.dart';
+import 'package:snehayog/services/location_onboarding_service.dart';
 
 class AuthService {
   // ✅ Use platform-specific client ID
@@ -13,6 +15,9 @@ class AuthService {
     scopes: GoogleSignInConfig.scopes,
     clientId: GoogleSignInConfig.platformClientId,
   );
+
+  // Global navigator key for accessing context
+  static GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
   Future<Map<String, dynamic>?> signInWithGoogle() async {
     try {
@@ -115,6 +120,9 @@ class AuthService {
             if (registerResponse.statusCode == 200 ||
                 registerResponse.statusCode == 201) {
               print('✅ User registration successful');
+
+              // Show location onboarding for new users
+              await _showLocationOnboardingAfterSignIn();
             } else {
               print('⚠️ User registration failed: ${registerResponse.body}');
             }
@@ -682,6 +690,55 @@ class AuthService {
     } catch (e) {
       print('❌ Error checking re-login status: $e');
       return true;
+    }
+  }
+
+  /// Show location onboarding for new users after sign-in
+  Future<void> _showLocationOnboardingAfterSignIn() async {
+    try {
+      print('📍 Showing location onboarding for new user...');
+      final context = navigatorKey.currentContext;
+      if (context == null) {
+        print('❌ No context available for location onboarding');
+        return;
+      }
+
+      await LocationOnboardingService.showLocationOnboardingIfNeeded(
+        context,
+        appName: 'Snehayog',
+        onPermissionGranted: () {
+          print('✅ New user granted location permission');
+        },
+        onPermissionDenied: () {
+          print('❌ New user denied location permission');
+        },
+        onSkip: () {
+          print('👤 User skipped location benefits dialog');
+        },
+      );
+      print('✅ Location onboarding completed');
+    } catch (e) {
+      print('❌ Error showing location onboarding: $e');
+    }
+  }
+
+  /// Alternative method to show location onboarding with explicit context
+  static Future<void> showLocationOnboarding(BuildContext context) async {
+    try {
+      print('📍 Showing location onboarding...');
+
+      await LocationOnboardingService.showLocationOnboardingIfNeeded(
+        context,
+        appName: 'Snehayog',
+        onPermissionGranted: () {
+          print('✅ User granted location permission');
+        },
+        onPermissionDenied: () {
+          print('❌ User denied location permission');
+        },
+      );
+    } catch (e) {
+      print('❌ Error showing location onboarding: $e');
     }
   }
 }

@@ -79,11 +79,28 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
     _loadExistingProfile();
   }
 
+  /// **FIX: Load cached payment profile with user-specific cache key**
   Future<void> _loadCachedPaymentProfile() async {
     try {
+      final userData = await _authService.getUserData();
+      final userId = userData?['googleId'] ?? userData?['id'];
+
+      if (userId == null) {
+        print('⚠️ No user ID available for cache lookup');
+        return;
+      }
+
       final prefs = await SharedPreferences.getInstance();
-      final cachedJson = prefs.getString('payment_profile_cache');
-      if (cachedJson == null) return;
+      // **FIX: Use user-specific cache key**
+      final cacheKey = 'payment_profile_cache_$userId';
+      final cachedJson = prefs.getString(cacheKey);
+
+      if (cachedJson == null) {
+        print('ℹ️ No cached payment profile found for user: $userId');
+        return;
+      }
+
+      print('✅ Loading cached payment profile for user: $userId');
       final data = json.decode(cachedJson) as Map<String, dynamic>;
 
       setState(() {
@@ -116,7 +133,11 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
           _gstNumberController.text = tax['gstNumber'] ?? '';
         }
       });
-    } catch (_) {}
+
+      print('✅ Payment profile loaded from cache successfully');
+    } catch (e) {
+      print('❌ Error loading cached payment profile: $e');
+    }
   }
 
   Future<void> _loadExistingProfile() async {
@@ -170,20 +191,33 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
           }
         });
 
-        // Cache for instant prefill next time
+        // **FIX: Cache for instant prefill next time with user-specific key**
         try {
           final prefs = await SharedPreferences.getInstance();
-          await prefs.setString(
-              'payment_profile_cache',
-              json.encode({
-                'country': _selectedCountry,
-                'currency': _selectedCurrency,
-                'paymentMethod': _selectedPaymentMethod,
-                'paymentDetails': data['paymentDetails'] ?? {},
-                'taxInfo': data['taxInfo'] ?? {},
-              }));
-          await prefs.setBool('has_payment_setup', true);
-        } catch (_) {}
+          final userData = await _authService.getUserData();
+          final userId = userData?['googleId'] ?? userData?['id'];
+
+          if (userId != null) {
+            // **FIX: Use user-specific cache key**
+            final cacheKey = 'payment_profile_cache_$userId';
+            await prefs.setString(
+                cacheKey,
+                json.encode({
+                  'country': _selectedCountry,
+                  'currency': _selectedCurrency,
+                  'paymentMethod': _selectedPaymentMethod,
+                  'paymentDetails': data['paymentDetails'] ?? {},
+                  'taxInfo': data['taxInfo'] ?? {},
+                }));
+            // **FIX: Also set user-specific flag**
+            await prefs.setBool('has_payment_setup_$userId', true);
+            // Keep global flag for backward compatibility
+            await prefs.setBool('has_payment_setup', true);
+            print('✅ Payment profile cached for user: $userId');
+          }
+        } catch (e) {
+          print('❌ Error caching payment profile: $e');
+        }
       }
     } catch (e) {
       print('Error loading profile: $e');
@@ -302,29 +336,39 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
           ),
         );
 
-        // Persist a local flag so user won't be prompted again
+        // **FIX: Persist user-specific payment setup flag and cache**
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool('has_payment_setup', true);
+        final userId = userData?['googleId'] ?? userData?['id'];
 
-        // Cache sanitized profile (never store CVV)
-        final sanitized = {
-          'country': _selectedCountry,
-          'currency': _selectedCurrency,
-          'paymentMethod': _selectedPaymentMethod,
-          'paymentDetails': {
-            ...paymentDetails,
-            if (paymentDetails['cardDetails'] != null)
-              'cardDetails': {
-                ...paymentDetails['cardDetails'],
-                'cvv': null,
-              }
-          },
-          'taxInfo': {
-            'panNumber': _panNumberController.text.trim(),
-            'gstNumber': _gstNumberController.text.trim(),
-          }
-        };
-        await prefs.setString('payment_profile_cache', json.encode(sanitized));
+        if (userId != null) {
+          // **FIX: Set user-specific flag**
+          await prefs.setBool('has_payment_setup_$userId', true);
+          // Keep global flag for backward compatibility
+          await prefs.setBool('has_payment_setup', true);
+
+          // **FIX: Cache sanitized profile with user-specific key (never store CVV)**
+          final sanitized = {
+            'country': _selectedCountry,
+            'currency': _selectedCurrency,
+            'paymentMethod': _selectedPaymentMethod,
+            'paymentDetails': {
+              ...paymentDetails,
+              if (paymentDetails['cardDetails'] != null)
+                'cardDetails': {
+                  ...paymentDetails['cardDetails'],
+                  'cvv': null, // Never store CVV locally
+                }
+            },
+            'taxInfo': {
+              'panNumber': _panNumberController.text.trim(),
+              'gstNumber': _gstNumberController.text.trim(),
+            }
+          };
+
+          final cacheKey = 'payment_profile_cache_$userId';
+          await prefs.setString(cacheKey, json.encode(sanitized));
+          print('✅ Payment profile cached for user: $userId');
+        }
 
         // Show success dialog
         _showSuccessDialog();

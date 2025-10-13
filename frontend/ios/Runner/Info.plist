@@ -58,5 +58,13 @@
 			<string>cstr6suwn9.skadnetwork</string>
 		</dict>
 	</array>
+	
+	<!-- Location permissions -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>We need your location to show you relevant local content and personalized experiences.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>We need your location to provide you with location-based features and services.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>We need your location to provide you with continuous location-based features.</string>
 </dict>
 </plist>

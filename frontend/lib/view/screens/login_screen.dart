@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:snehayog/controller/google_sign_in_controller.dart';
+import 'package:snehayog/services/location_onboarding_service.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
@@ -136,9 +137,8 @@ class LoginScreen extends StatelessWidget {
                       }
 
                       if (authController.error != null) {
-                        return Column(
-                          children: [
-                            Container(
+                        return Column(children: [
+                          Container(
                               width: double.infinity,
                               padding: const EdgeInsets.all(20),
                               decoration: BoxDecoration(
@@ -205,45 +205,114 @@ class LoginScreen extends StatelessWidget {
 
                                   const SizedBox(height: 20),
 
-                                  // **Professional Retry Button**
-                                  SizedBox(
-                                    width: double.infinity,
-                                    height: 50,
-                                    child: ElevatedButton.icon(
-                                      onPressed: () async {
-                                        // Clear error and retry
-                                        authController.clearError();
-                                        final user =
-                                            await authController.signIn();
-                                        if (user != null && context.mounted) {
-                                          Navigator.pushReplacementNamed(
-                                              context, '/home');
-                                        }
-                                      },
-                                      icon: const Icon(
-                                        Icons.refresh_rounded,
-                                        color: Colors.white,
-                                        size: 20,
-                                      ),
-                                      label: const Text(
-                                        'Retry Connection',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.white,
+                                  // **Horizontal Button Layout**
+                                  Row(
+                                    children: [
+                                      // Skip Button
+                                      Expanded(
+                                        flex: 2,
+                                        child: SizedBox(
+                                          height: 50,
+                                          child: TextButton.icon(
+                                            onPressed: () {
+                                              // Skip sign-in and go to home even during error
+                                              Navigator.pushReplacementNamed(
+                                                  context, '/home');
+                                            },
+                                            icon: const Icon(
+                                              Icons.arrow_forward_ios,
+                                              color: Colors.white,
+                                              size: 16,
+                                            ),
+                                            label: const Text(
+                                              'Skip',
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w600,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                            style: TextButton.styleFrom(
+                                              foregroundColor: Colors.white,
+                                              side: BorderSide(
+                                                color: Colors.white
+                                                    .withOpacity(0.3),
+                                                width: 1.5,
+                                              ),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
+                                            ),
+                                          ),
                                         ),
                                       ),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.red[600],
-                                        foregroundColor: Colors.white,
-                                        elevation: 0,
-                                        shadowColor: Colors.transparent,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(12),
+
+                                      const SizedBox(width: 12),
+
+                                      // Retry Button
+                                      Expanded(
+                                        flex: 3,
+                                        child: SizedBox(
+                                          height: 50,
+                                          child: ElevatedButton.icon(
+                                            onPressed: () async {
+                                              // Clear error and retry
+                                              authController.clearError();
+                                              final user =
+                                                  await authController.signIn();
+                                              if (user != null &&
+                                                  context.mounted) {
+                                                // Show location permission dialog for new user
+                                                await LocationOnboardingService
+                                                    .showLocationOnboardingIfNeeded(
+                                                  context,
+                                                  appName: 'Snehayog',
+                                                  onPermissionGranted: () {
+                                                    print(
+                                                        '✅ User granted location permission');
+                                                  },
+                                                  onPermissionDenied: () {
+                                                    print(
+                                                        '❌ User denied location permission');
+                                                  },
+                                                  onSkip: () {
+                                                    print(
+                                                        '⏭️ User skipped location permission');
+                                                  },
+                                                );
+
+                                                Navigator.pushReplacementNamed(
+                                                    context, '/home');
+                                              }
+                                            },
+                                            icon: const Icon(
+                                              Icons.refresh_rounded,
+                                              color: Colors.white,
+                                              size: 18,
+                                            ),
+                                            label: const Text(
+                                              'Retry Connection',
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w600,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.red[600],
+                                              foregroundColor: Colors.white,
+                                              elevation: 0,
+                                              shadowColor: Colors.transparent,
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
+                                            ),
+                                          ),
                                         ),
                                       ),
-                                    ),
+                                    ],
                                   ),
 
                                   const SizedBox(height: 12),
@@ -258,46 +327,110 @@ class LoginScreen extends StatelessWidget {
                                     textAlign: TextAlign.center,
                                   ),
                                 ],
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                          ],
-                        );
+                              ))
+                        ]);
                       }
 
-                      return SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: ElevatedButton.icon(
-                          onPressed: () async {
-                            final user = await authController.signIn();
-                            if (user != null && context.mounted) {
-                              Navigator.pushReplacementNamed(context, '/home');
-                            }
-                          },
-                          icon: const Icon(
-                            Icons.login_rounded,
-                            color: Colors.white,
-                            size: 24,
-                          ),
-                          label: const Text(
-                            'Sign in with Google',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
+                      return Row(
+                        children: [
+                          // Skip Button
+                          Expanded(
+                            flex: 2,
+                            child: SizedBox(
+                              height: 56,
+                              child: TextButton.icon(
+                                onPressed: () {
+                                  // Skip sign-in and go to home
+                                  Navigator.pushReplacementNamed(
+                                      context, '/home');
+                                },
+                                icon: const Icon(
+                                  Icons.arrow_forward_ios,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                                label: const Text(
+                                  'Skip',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                  side: BorderSide(
+                                    color: Colors.white.withOpacity(0.3),
+                                    width: 1.5,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.grey[600],
-                            foregroundColor: Colors.white,
-                            elevation: 6,
-                            shadowColor: Colors.grey.withOpacity(0.3),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+
+                          const SizedBox(width: 12),
+
+                          // Google Sign-In Button
+                          Expanded(
+                            flex: 3,
+                            child: SizedBox(
+                              height: 56,
+                              child: ElevatedButton.icon(
+                                onPressed: () async {
+                                  final user = await authController.signIn();
+                                  if (user != null && context.mounted) {
+                                    // Show location permission dialog for new user
+                                    await LocationOnboardingService
+                                        .showLocationOnboardingIfNeeded(
+                                      context,
+                                      appName: 'Snehayog',
+                                      onPermissionGranted: () {
+                                        print(
+                                            '✅ User granted location permission');
+                                      },
+                                      onPermissionDenied: () {
+                                        print(
+                                            '❌ User denied location permission');
+                                      },
+                                      onSkip: () {
+                                        print(
+                                            '⏭️ User skipped location permission');
+                                      },
+                                    );
+
+                                    Navigator.pushReplacementNamed(
+                                        context, '/home');
+                                  }
+                                },
+                                icon: const Icon(
+                                  Icons.login_rounded,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                                label: const Text(
+                                  'Sign in with Google',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green[600],
+                                  foregroundColor: Colors.white,
+                                  elevation: 6,
+                                  shadowColor: Colors.green.withOpacity(0.3),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       );
                     },
                   ),

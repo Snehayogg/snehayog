@@ -182,6 +182,21 @@ router.get('/carousel', asyncHandler(async (req, res) => {
   try {
     console.log('🎯 Fetching carousel ads...');
     
+    // **DEBUG: Check ALL carousel ads regardless of status**
+    const allCarouselCreatives = await AdCreative.find({
+      adType: 'carousel ads'
+    }).populate('campaignId', 'name advertiserUserId status');
+    
+    console.log(`🔍 Total carousel ads in database: ${allCarouselCreatives.length}`);
+    if (allCarouselCreatives.length > 0) {
+      allCarouselCreatives.forEach(ad => {
+        console.log(`   📍 Carousel Ad ID: ${ad._id}`);
+        console.log(`      - isActive: ${ad.isActive}`);
+        console.log(`      - reviewStatus: ${ad.reviewStatus}`);
+        console.log(`      - campaign: ${ad.campaignId ? ad.campaignId.name : 'NO CAMPAIGN'}`);
+      });
+    }
+    
     // Find all active carousel ads
     const carouselCreatives = await AdCreative.find({
       adType: 'carousel ads',
@@ -189,22 +204,37 @@ router.get('/carousel', asyncHandler(async (req, res) => {
       reviewStatus: 'approved'
     }).populate('campaignId', 'name advertiserUserId status');
     
-    console.log(`🎯 Found ${carouselCreatives.length} active carousel ads`);
+    console.log(`🎯 Found ${carouselCreatives.length} ACTIVE & APPROVED carousel ads`);
+    
+    if (carouselCreatives.length === 0) {
+      console.log('⚠️ No carousel ads available yet');
+      console.log('💡 Create a carousel ad in the app - it will be auto-approved and visible immediately!');
+    }
     
     // Transform to carousel ad format
     const carouselAds = [];
     
     for (const creative of carouselCreatives) {
       try {
+        // **FIX: Skip if campaign was deleted (campaignId is null)**
+        if (!creative.campaignId) {
+          console.log(`⚠️ Skipping creative ${creative._id} - campaign was deleted`);
+          continue;
+        }
+
         // Get advertiser info
         const advertiser = await User.findById(creative.campaignId.advertiserUserId);
+        
+        // **FIX: Use default values if advertiser not found**
+        const advertiserName = advertiser?.name || 'Unknown Advertiser';
+        const advertiserProfilePic = advertiser?.profilePic || '';
         
         // Create carousel ad object
         const carouselAd = {
           id: creative._id,
           campaignId: creative.campaignId._id,
-          advertiserName: advertiser?.name || 'Unknown Advertiser',
-          advertiserProfilePic: advertiser?.profilePic || '',
+          advertiserName: advertiserName,
+          advertiserProfilePic: advertiserProfilePic,
           slides: [{
             id: creative._id,
             mediaUrl: creative.cloudinaryUrl,
@@ -222,6 +252,7 @@ router.get('/carousel', asyncHandler(async (req, res) => {
         };
         
         carouselAds.push(carouselAd);
+        console.log(`✅ Processed carousel ad: ${creative._id}`);
       } catch (error) {
         console.error(`❌ Error processing carousel ad ${creative._id}:`, error);
         continue;

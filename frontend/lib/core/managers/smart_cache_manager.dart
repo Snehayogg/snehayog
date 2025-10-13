@@ -70,7 +70,9 @@ class InstagramCacheEntry<T> {
   }
 
   factory InstagramCacheEntry.fromJson(
-      Map<String, dynamic> json, T Function(dynamic) fromJson) {
+    Map<String, dynamic> json,
+    T Function(dynamic) fromJson,
+  ) {
     return InstagramCacheEntry<T>(
       data: fromJson(json['data']),
       etag: json['etag'],
@@ -199,7 +201,8 @@ class SmartCacheManager {
 
     try {
       print(
-          '🚀 SmartCacheManager: Initializing consolidated cache & preload system...');
+        '🚀 SmartCacheManager: Initializing consolidated cache & preload system...',
+      );
 
       // Initialize cache directory
       await _initializeCacheDirectory();
@@ -272,7 +275,8 @@ class SmartCacheManager {
           _cacheHits++;
           print('⚡ SmartCacheManager: Instant cache hit for $key');
           print(
-              '📊 Cache Stats - Hits: $_cacheHits, Misses: $_cacheMisses, Stale: $_staleResponses');
+            '📊 Cache Stats - Hits: $_cacheHits, Misses: $_cacheMisses, Stale: $_staleResponses',
+          );
 
           // Start background refresh if stale
           if (entry.shouldRefresh &&
@@ -285,7 +289,8 @@ class SmartCacheManager {
             _shouldUseStaleWhileRevalidate(cacheType)) {
           _staleResponses++;
           print(
-              '🔄 SmartCacheManager: Stale cache hit for $key, refreshing in background');
+            '🔄 SmartCacheManager: Stale cache hit for $key, refreshing in background',
+          );
           _scheduleBackgroundRefresh(key, fetchFn, cacheType, currentEtag);
           return entry.data;
         }
@@ -299,7 +304,8 @@ class SmartCacheManager {
           _cacheHits++;
           print('💾 SmartCacheManager: Fresh disk cache hit for $key');
           print(
-              '📊 Cache Stats - Hits: $_cacheHits, Misses: $_cacheMisses, Stale: $_staleResponses');
+            '📊 Cache Stats - Hits: $_cacheHits, Misses: $_cacheMisses, Stale: $_staleResponses',
+          );
 
           if (diskEntry.shouldRefresh &&
               _shouldUseStaleWhileRevalidate(cacheType)) {
@@ -311,7 +317,8 @@ class SmartCacheManager {
             _shouldUseStaleWhileRevalidate(cacheType)) {
           _staleResponses++;
           print(
-              '🔄 SmartCacheManager: Stale disk cache hit for $key, refreshing in background');
+            '🔄 SmartCacheManager: Stale disk cache hit for $key, refreshing in background',
+          );
           _scheduleBackgroundRefresh(key, fetchFn, cacheType, currentEtag);
           return diskEntry.data;
         }
@@ -321,7 +328,8 @@ class SmartCacheManager {
       _cacheMisses++;
       print('❌ SmartCacheManager: Cache miss for $key, fetching fresh data');
       print(
-          '📊 Cache Stats - Hits: $_cacheHits, Misses: $_cacheMisses, Stale: $_staleResponses');
+        '📊 Cache Stats - Hits: $_cacheHits, Misses: $_cacheMisses, Stale: $_staleResponses',
+      );
 
       final freshData = await fetchFn();
       if (freshData != null) {
@@ -395,9 +403,11 @@ class SmartCacheManager {
 
         _currentlyPreloading.add(predictedScreen);
 
-        unawaited(_preloadScreenData(predictedScreen, userContext).then((_) {
-          _currentlyPreloading.remove(predictedScreen);
-        }));
+        unawaited(
+          _preloadScreenData(predictedScreen, userContext).then((_) {
+            _currentlyPreloading.remove(predictedScreen);
+          }),
+        );
       }
     } catch (e) {
       print('❌ SmartCacheManager: Error in smart preload: $e');
@@ -444,13 +454,15 @@ class SmartCacheManager {
             }
           } catch (e) {
             print(
-                '⚠️ SmartCacheManager: Skipping corrupted cache file: ${file.path}');
+              '⚠️ SmartCacheManager: Skipping corrupted cache file: ${file.path}',
+            );
           }
         }
       }
 
       print(
-          '📁 SmartCacheManager: Loaded $loadedCount entries from disk cache');
+        '📁 SmartCacheManager: Loaded $loadedCount entries from disk cache',
+      );
     } catch (e) {
       print('❌ SmartCacheManager: Error loading persisted cache: $e');
     }
@@ -473,7 +485,8 @@ class SmartCacheManager {
 
       if (keysToRemove.isNotEmpty) {
         print(
-            '🧹 SmartCacheManager: Cleaned up ${keysToRemove.length} expired entries');
+          '🧹 SmartCacheManager: Cleaned up ${keysToRemove.length} expired entries',
+        );
       }
     } catch (e) {
       print('❌ SmartCacheManager: Error cleaning up expired entries: $e');
@@ -500,7 +513,8 @@ class SmartCacheManager {
 
       if (keysToRemove.isNotEmpty) {
         print(
-            '🧹 SmartCacheManager: Cleaned up ${keysToRemove.length} old prediction entries');
+          '🧹 SmartCacheManager: Cleaned up ${keysToRemove.length} old prediction entries',
+        );
       }
     } catch (e) {
       print('❌ SmartCacheManager: Error cleaning up old prediction data: $e');
@@ -514,10 +528,12 @@ class SmartCacheManager {
 
       if (accuracy < 30.0) {
         print(
-            '⚠️ SmartCacheManager: Low prediction accuracy ($accuracy%), reducing preload items');
+          '⚠️ SmartCacheManager: Low prediction accuracy ($accuracy%), reducing preload items',
+        );
       } else if (accuracy > 70.0) {
         print(
-            '✅ SmartCacheManager: High prediction accuracy ($accuracy%), maintaining preload strategy');
+          '✅ SmartCacheManager: High prediction accuracy ($accuracy%), maintaining preload strategy',
+        );
       }
     } catch (e) {
       print('❌ SmartCacheManager: Error optimizing predictions: $e');
@@ -756,7 +772,9 @@ class SmartCacheManager {
 
   /// Persist cache entry to disk
   Future<void> _persistToDiskCache<T>(
-      String key, InstagramCacheEntry<T> entry) async {
+    String key,
+    InstagramCacheEntry<T> entry,
+  ) async {
     try {
       final file = File('${_cacheDir.path}/$key.json');
       await file.writeAsString(jsonEncode(entry.toJson()));
@@ -855,7 +873,9 @@ class SmartCacheManager {
 
   /// Preload data for a specific screen
   Future<void> _preloadScreenData(
-      String screenName, Map<String, dynamic>? userContext) async {
+    String screenName,
+    Map<String, dynamic>? userContext,
+  ) async {
     try {
       print('📥 SmartCacheManager: Preloading data for $screenName');
 
@@ -880,7 +900,8 @@ class SmartCacheManager {
           break;
         default:
           print(
-              '⚠️ SmartCacheManager: Unknown screen for preload: $screenName');
+            '⚠️ SmartCacheManager: Unknown screen for preload: $screenName',
+          );
       }
 
       print('✅ SmartCacheManager: Preloaded data for $screenName');
@@ -893,11 +914,16 @@ class SmartCacheManager {
   Future<void> _preloadProfileData(Map<String, dynamic>? userContext) async {
     try {
       final userId = userContext?['userId'] ?? 'current';
-      await get('user_profile_$userId',
-          fetchFn: () async => {'status': 'preloaded'},
-          cacheType: 'user_profile');
-      await get('user_videos_$userId',
-          fetchFn: () async => {'status': 'preloaded'}, cacheType: 'videos');
+      await get(
+        'user_profile_$userId',
+        fetchFn: () async => {'status': 'preloaded'},
+        cacheType: 'user_profile',
+      );
+      await get(
+        'user_videos_$userId',
+        fetchFn: () async => {'status': 'preloaded'},
+        cacheType: 'videos',
+      );
       print('👤 SmartCacheManager: Profile data preloaded for user $userId');
     } catch (e) {
       print('❌ SmartCacheManager: Error preloading profile: $e');
@@ -907,8 +933,11 @@ class SmartCacheManager {
   Future<void> _preloadFeedData(Map<String, dynamic>? userContext) async {
     try {
       for (int page = 1; page <= 3; page++) {
-        await get('feed_page_$page',
-            fetchFn: () async => {'status': 'preloaded'}, cacheType: 'videos');
+        await get(
+          'feed_page_$page',
+          fetchFn: () async => {'status': 'preloaded'},
+          cacheType: 'videos',
+        );
       }
       print('📱 SmartCacheManager: Feed data preloaded');
     } catch (e) {
@@ -918,10 +947,16 @@ class SmartCacheManager {
 
   Future<void> _preloadExploreData(Map<String, dynamic>? userContext) async {
     try {
-      await get('explore_trending',
-          fetchFn: () async => {'status': 'preloaded'}, cacheType: 'videos');
-      await get('explore_categories',
-          fetchFn: () async => {'status': 'preloaded'}, cacheType: 'metadata');
+      await get(
+        'explore_trending',
+        fetchFn: () async => {'status': 'preloaded'},
+        cacheType: 'videos',
+      );
+      await get(
+        'explore_categories',
+        fetchFn: () async => {'status': 'preloaded'},
+        cacheType: 'metadata',
+      );
       print('🔍 SmartCacheManager: Explore data preloaded');
     } catch (e) {
       print('❌ SmartCacheManager: Error preloading explore: $e');
@@ -929,11 +964,14 @@ class SmartCacheManager {
   }
 
   Future<void> _preloadNotificationsData(
-      Map<String, dynamic>? userContext) async {
+    Map<String, dynamic>? userContext,
+  ) async {
     try {
-      await get('notifications_recent',
-          fetchFn: () async => {'status': 'preloaded'},
-          cacheType: 'notifications');
+      await get(
+        'notifications_recent',
+        fetchFn: () async => {'status': 'preloaded'},
+        cacheType: 'notifications',
+      );
       print('🔔 SmartCacheManager: Notifications preloaded');
     } catch (e) {
       print('❌ SmartCacheManager: Error preloading notifications: $e');
@@ -942,8 +980,11 @@ class SmartCacheManager {
 
   Future<void> _preloadMessagesData(Map<String, dynamic>? userContext) async {
     try {
-      await get('messages_conversations',
-          fetchFn: () async => {'status': 'preloaded'}, cacheType: 'messages');
+      await get(
+        'messages_conversations',
+        fetchFn: () async => {'status': 'preloaded'},
+        cacheType: 'messages',
+      );
       print('💬 SmartCacheManager: Messages preloaded');
     } catch (e) {
       print('❌ SmartCacheManager: Error preloading messages: $e');
@@ -952,8 +993,11 @@ class SmartCacheManager {
 
   Future<void> _preloadStoriesData(Map<String, dynamic>? userContext) async {
     try {
-      await get('stories_recent',
-          fetchFn: () async => {'status': 'preloaded'}, cacheType: 'stories');
+      await get(
+        'stories_recent',
+        fetchFn: () async => {'status': 'preloaded'},
+        cacheType: 'stories',
+      );
       print('📖 SmartCacheManager: Stories preloaded');
     } catch (e) {
       print('❌ SmartCacheManager: Error preloading stories: $e');

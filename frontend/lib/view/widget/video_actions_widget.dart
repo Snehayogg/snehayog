@@ -111,31 +111,27 @@ class VideoActionsWidget extends StatelessWidget {
 
   void _handleShare() async {
     try {
-      // Get the proper URL for sharing
-      String shareUrl = video.videoUrl;
+      // **IMPROVED: Always use app deep link for sharing instead of direct video URLs**
+      // This ensures consistent sharing experience regardless of storage backend
+      final videoId = video.id;
+      final appDeepLink = 'https://snehayog.app/video/$videoId';
 
-      // If it's a custom scheme URL, convert it to web URL
-      if (video.videoUrl.startsWith('snehayog://')) {
-        final videoId = video.id;
-        shareUrl = 'https://snehayog.app/video/$videoId';
+      // Track share
+      try {
+        await videoService.incrementShares(videoId);
+        video.shares++;
+      } catch (e) {
+        print('Failed to track share: $e');
       }
 
-      // If it's an HLS URL, use it directly
-      if (video.videoUrl.contains('.m3u8')) {
-        shareUrl = video.videoUrl;
-      }
-
-      // If we have HLS URLs, prefer them
-      if (video.hlsPlaylistUrl != null && video.hlsPlaylistUrl!.isNotEmpty) {
-        shareUrl = video.hlsPlaylistUrl!;
-      } else if (video.hlsMasterPlaylistUrl != null &&
-          video.hlsMasterPlaylistUrl!.isNotEmpty) {
-        shareUrl = video.hlsMasterPlaylistUrl!;
-      }
-
+      // **NEW: Create a clean, professional share message**
       await Share.share(
-        '🎬 Check out this video on Snehayog!\n\n📹 ${video.videoName}\n👤 by ${video.uploader.name}\n\n🔗 Watch on Snehayog: $shareUrl\n🌐 Web version: https://snehayog.app/video/${video.id}\n\n#Snehayog #Video #${video.uploader.name}',
-        subject: 'Snehayog Video',
+        '🎬 Watch "${video.videoName}" on Snehayog!\n\n'
+        '👤 Created by: ${video.uploader.name}\n'
+        '👁️ ${video.views} views · ❤️ ${video.likes} likes\n\n'
+        '📱 Open in Snehayog App:\n$appDeepLink\n\n'
+        '#Snehayog #${video.videoType == 'yog' ? 'Yoga' : 'Meditation'} #Wellness',
+        subject: '${video.videoName} - Snehayog',
       );
     } catch (e) {
       print('Failed to share video: $e');

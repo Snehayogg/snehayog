@@ -19,8 +19,9 @@ class BannerAdWidget extends StatelessWidget {
     if (u.isEmpty) return u;
     if (u.startsWith('http://') || u.startsWith('https://')) return u;
     if (u.startsWith('//')) return 'https:$u';
-    if (u.startsWith('/'))
+    if (u.startsWith('/')) {
       return 'https://snehayog-production.up.railway.app$u';
+    }
     return 'https://$u';
   }
 

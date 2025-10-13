@@ -66,7 +66,8 @@ class VideoService {
     if (_isVideoScreenActive != isActive) {
       _isVideoScreenActive = isActive;
       print(
-          '🔄 VideoService: Video screen state changed to ${isActive ? "ACTIVE" : "INACTIVE"}');
+        '🔄 VideoService: Video screen state changed to ${isActive ? "ACTIVE" : "INACTIVE"}',
+      );
 
       for (final listener in _videoScreenStateListeners) {
         try {
@@ -82,7 +83,8 @@ class VideoService {
     if (_isAppInForeground != inForeground) {
       _isAppInForeground = inForeground;
       print(
-          '📱 VideoService: App foreground state changed to ${inForeground ? "FOREGROUND" : "BACKGROUND"}');
+        '📱 VideoService: App foreground state changed to ${inForeground ? "FOREGROUND" : "BACKGROUND"}',
+      );
     }
   }
 
@@ -119,8 +121,11 @@ class VideoService {
   // **CORE VIDEO METHODS - Merged from all services**
 
   /// **Get videos with pagination and HLS support**
-  Future<Map<String, dynamic>> getVideos(
-      {int page = 1, int limit = 10, String? videoType}) async {
+  Future<Map<String, dynamic>> getVideos({
+    int page = 1,
+    int limit = 10,
+    String? videoType,
+  }) async {
     try {
       String url = '$baseUrl/api/videos?page=$page&limit=$limit';
       if (videoType != null && (videoType == 'yog' || videoType == 'sneha')) {
@@ -169,7 +174,8 @@ class VideoService {
               json['videoUrl'] = '$baseUrl${json['videoUrl']}';
             }
             print(
-                '🔗 VideoService: Using original video URL: ${json['videoUrl']}');
+              '🔗 VideoService: Using original video URL: ${json['videoUrl']}',
+            );
           }
 
           return VideoModel.fromJson(json);
@@ -249,7 +255,10 @@ class VideoService {
 
   /// **Add comment to a video**
   Future<List<Comment>> addComment(
-      String videoId, String text, String userId) async {
+    String videoId,
+    String text,
+    String userId,
+  ) async {
     try {
       final headers = await _getAuthHeaders();
       final res = await http
@@ -317,7 +326,8 @@ class VideoService {
     } catch (e) {
       if (e is TimeoutException) {
         throw Exception(
-            'Request timed out. Please check your internet connection and try again.');
+          'Request timed out. Please check your internet connection and try again.',
+        );
       }
       rethrow;
     }
@@ -338,7 +348,8 @@ class VideoService {
       final isHealthy = await checkServerHealth();
       if (!isHealthy) {
         throw Exception(
-            'Server is not responding. Please check your connection and try again.');
+          'Server is not responding. Please check your connection and try again.',
+        );
       }
 
       // **Check file size**
@@ -354,7 +365,8 @@ class VideoService {
       final userData = await _authService.getUserData();
       if (userData == null) {
         throw Exception(
-            'User not authenticated. Please sign in to upload videos.');
+          'User not authenticated. Please sign in to upload videos.',
+        );
       }
 
       // **Compress video if needed**
@@ -416,7 +428,8 @@ class VideoService {
         const Duration(minutes: 10),
         onTimeout: () {
           throw TimeoutException(
-              'Upload timed out. Please check your internet connection and try again.');
+            'Upload timed out. Please check your internet connection and try again.',
+          );
         },
       );
 
@@ -424,7 +437,8 @@ class VideoService {
       final responseData = json.decode(responseBody);
 
       print(
-          '📡 VideoService: Upload response status: ${streamedResponse.statusCode}');
+        '📡 VideoService: Upload response status: ${streamedResponse.statusCode}',
+      );
       print('📄 VideoService: Upload response body: $responseBody');
 
       if (streamedResponse.statusCode == 201) {
@@ -444,7 +458,8 @@ class VideoService {
         };
       } else {
         print(
-            '❌ VideoService: Upload failed with status ${streamedResponse.statusCode}');
+          '❌ VideoService: Upload failed with status ${streamedResponse.statusCode}',
+        );
         print('❌ VideoService: Error details: ${responseData.toString()}');
 
         final errorMessage = responseData['error']?.toString() ??
@@ -456,10 +471,12 @@ class VideoService {
       print('❌ VideoService: Error uploading video: $e');
       if (e is TimeoutException) {
         throw Exception(
-            'Upload timed out. Please check your internet connection and try again.');
+          'Upload timed out. Please check your internet connection and try again.',
+        );
       } else if (e is SocketException) {
         throw Exception(
-            'Could not connect to server. Please check if the server is running.');
+          'Could not connect to server. Please check if the server is running.',
+        );
       }
       rethrow;
     }
@@ -477,10 +494,7 @@ class VideoService {
 
       final headers = await _getAuthHeaders();
       final res = await http
-          .delete(
-            Uri.parse('$baseUrl/api/videos/$videoId'),
-            headers: headers,
-          )
+          .delete(Uri.parse('$baseUrl/api/videos/$videoId'), headers: headers)
           .timeout(const Duration(seconds: 10));
 
       if (res.statusCode == 200 || res.statusCode == 204) {
@@ -505,9 +519,30 @@ class VideoService {
     }
   }
 
+  /// **Increment share count** (without showing share dialog)
+  Future<void> incrementShares(String videoId) async {
+    try {
+      final headers = await _getAuthHeaders();
+      final res = await http.post(
+        Uri.parse('$baseUrl/api/videos/$videoId/share'),
+        headers: headers,
+      );
+
+      if (res.statusCode != 200) {
+        print('⚠️ Failed to increment share count: ${res.statusCode}');
+      }
+    } catch (e) {
+      print('⚠️ Error incrementing shares: $e');
+      // Don't throw - sharing should work even if server tracking fails
+    }
+  }
+
   /// **Share video**
   Future<VideoModel> shareVideo(
-      String videoId, String videoUrl, String description) async {
+    String videoId,
+    String videoUrl,
+    String description,
+  ) async {
     try {
       // Get the proper URL for sharing
       String shareUrl = videoUrl;
@@ -670,12 +705,16 @@ class VideoService {
       List<dynamic> integratedFeed = videos;
       try {
         if (ads.isNotEmpty) {
-          integratedFeed =
-              _integrateAdsIntoFeed(videos, ads, adInsertionFrequency);
+          integratedFeed = _integrateAdsIntoFeed(
+            videos,
+            ads,
+            adInsertionFrequency,
+          );
         }
       } catch (integrationError) {
         print(
-            '⚠️ VideoService: Failed to integrate ads, using videos only: $integrationError');
+          '⚠️ VideoService: Failed to integrate ads, using videos only: $integrationError',
+        );
         integratedFeed = videos;
       }
 
@@ -696,7 +735,10 @@ class VideoService {
 
   /// **Integrate ads into video feed**
   List<dynamic> _integrateAdsIntoFeed(
-      List<VideoModel> videos, List<AdModel> ads, int frequency) {
+    List<VideoModel> videos,
+    List<AdModel> ads,
+    int frequency,
+  ) {
     if (ads.isEmpty) return videos;
 
     final integratedFeed = <dynamic>[];

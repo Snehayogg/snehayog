@@ -53,6 +53,17 @@ class SignedUrlService {
   Future<String?> generateSignedUrl(String videoUrl,
       {String quality = 'hd'}) async {
     try {
+      // Skip signing for Cloudflare/R2 or already-public HLS served by our CDN/backend
+      final lower = videoUrl.toLowerCase();
+      final isR2 = lower.contains('r2.cloudflarestorage.com');
+      final isCdn = lower.contains('cdn.snehayog.com');
+      final isBackendHls = lower.contains('/hls/');
+      if (isR2 || isCdn || isBackendHls) {
+        print(
+            '⚡ SignedUrlService: Skipping signing for Cloudflare/R2/backend HLS URL');
+        return videoUrl;
+      }
+
       final normalizedUrl = _normalizeCloudinaryUrl(videoUrl);
       print('🔐 SignedUrlService: Generating signed URL for $normalizedUrl');
       print('📊 Quality: $quality');

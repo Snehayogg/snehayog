@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:snehayog/config/app_config.dart';
+import 'package:snehayog/core/managers/smart_cache_manager.dart';
 
 /// Service to fetch all types of active ads (banner, carousel, video feed)
 class ActiveAdsService {
   static String get _baseUrl => AppConfig.baseUrl;
+  final SmartCacheManager _cacheManager = SmartCacheManager();
 
   /// Fetch all active ads from backend
   Future<Map<String, List<Map<String, dynamic>>>> fetchActiveAds() async {
@@ -54,7 +56,7 @@ class ActiveAdsService {
           return s;
         }
 
-        String _pick(Map<String, dynamic> m, List<String> keys) {
+        String pick(Map<String, dynamic> m, List<String> keys) {
           for (final k in keys) {
             final v = m[k];
             if (v is String && v.trim().isNotEmpty) return v.trim();
@@ -62,7 +64,7 @@ class ActiveAdsService {
           return '';
         }
 
-        String _ensureAbsoluteUrl(String url) {
+        String ensureAbsoluteUrl(String url) {
           if (url.isEmpty) return url;
           final u = url.trim();
           if (u.startsWith('http://') || u.startsWith('https://')) return u;
@@ -72,8 +74,8 @@ class ActiveAdsService {
           return 'https://$u';
         }
 
-        Map<String, dynamic> _normalizeAd(Map<String, dynamic> ad) {
-          final imageUrl = _pick(ad, [
+        Map<String, dynamic> normalizeAd(Map<String, dynamic> ad) {
+          final imageUrl = pick(ad, [
             'imageUrl',
             'imageURL',
             'image',
@@ -82,7 +84,7 @@ class ActiveAdsService {
             'cloudinaryUrl',
             'thumbnail',
           ]);
-          String link = _pick(ad, [
+          String link = pick(ad, [
             'link',
             'url',
             'ctaUrl',
@@ -101,8 +103,8 @@ class ActiveAdsService {
 
           return {
             ...ad,
-            'imageUrl': _ensureAbsoluteUrl(imageUrl),
-            'link': _ensureAbsoluteUrl(link),
+            'imageUrl': ensureAbsoluteUrl(imageUrl),
+            'link': ensureAbsoluteUrl(link),
           };
         }
 
@@ -110,7 +112,7 @@ class ActiveAdsService {
           if (ad is Map<String, dynamic>) {
             final adType = normalizeType(ad['adType']);
             if (categorizedAds.containsKey(adType)) {
-              categorizedAds[adType]!.add(_normalizeAd(ad));
+              categorizedAds[adType]!.add(normalizeAd(ad));
             }
           }
         }
@@ -199,6 +201,38 @@ class ActiveAdsService {
     } catch (e) {
       print('❌ Exception tracking click: $e');
       return false;
+    }
+  }
+
+  /// **NEW: Clear ads cache when ads are deleted**
+  Future<void> clearAdsCache() async {
+    try {
+      print('🧹 ActiveAdsService: Clearing ads cache...');
+
+      // Clear all ad-related cache keys
+      final cacheKeys = [
+        'active_ads_serve',
+        'banner_ads',
+        'carousel_ads',
+        'video_feed_ads',
+        'ads_serve_response',
+      ];
+
+      for (final key in cacheKeys) {
+        // Clear cache by forcing refresh with null data
+        await _cacheManager.get(
+          key,
+          fetchFn: () async => null as dynamic,
+          cacheType: 'ads',
+          maxAge: Duration.zero, // Force immediate expiration
+          forceRefresh: true,
+        );
+        print('✅ ActiveAdsService: Cleared cache for key: $key');
+      }
+
+      print('✅ ActiveAdsService: All ads cache cleared successfully');
+    } catch (e) {
+      print('⚠️ ActiveAdsService: Error clearing ads cache: $e');
     }
   }
 }

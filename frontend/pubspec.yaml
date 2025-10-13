@@ -75,6 +75,8 @@ dependencies:
   connectivity_plus: ^6.0.5
   device_info_plus: ^10.1.2
   package_info_plus: ^8.0.2
+  geolocator: ^13.0.2
+  geocoding: ^3.0.0
 
 
 dev_dependencies:

@@ -1,7 +1,6 @@
 import 'package:video_player/video_player.dart';
 import 'package:snehayog/core/managers/video_position_cache_manager.dart';
 import 'package:snehayog/core/managers/hot_ui_state_manager.dart';
-import 'package:snehayog/services/signed_url_service.dart';
 import 'package:snehayog/core/factories/video_controller_factory.dart';
 import 'package:snehayog/model/video_model.dart';
 import 'dart:collection';
@@ -25,34 +24,105 @@ class VideoControllerManager {
 
   final int maxPoolSize = 1;
 
-  Future<VideoPlayerController> getController(
-      int index, VideoModel video) async {
-    // Resolve the intended final URL (with HLS signing if needed) before deciding reuse
-    String finalUrl = video.videoUrl;
-    if (video.videoUrl.contains('.m3u8')) {
-      print('🔐 VideoControllerManager: Getting signed URL for HLS stream');
-      try {
-        final signedUrlService = SignedUrlService();
- final signedUrl = await signedUrlService.getBestSignedUrl(video.videoUrl).timeout(
-  const Duration(seconds: 1), // REDUCED: 1 second timeout
-  onTimeout: () {
-    print('⏰ VideoControllerManager: Signed URL timeout, using original URL');
-    return video.videoUrl;
-  },
-);
+  /// Choose a playback URL preferring Cloudflare/R2 or backend HLS over Cloudinary
+  String _selectPlaybackUrl(VideoModel video) {
+    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    print('🎬 VIDEO URL SELECTION for: ${video.videoName}');
+    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-        if (signedUrl != null && signedUrl != video.videoUrl) {
-          finalUrl = signedUrl;
-          print('✅ VideoControllerManager: Using signed URL: $finalUrl');
-        } else {
-          print('⚠️ VideoControllerManager: Using original URL: $finalUrl');
-        }
-      } catch (e) {
-        print(
-            '❌ VideoControllerManager: Signed URL service error: $e, using original URL');
-        finalUrl = video.videoUrl;
+    // Prefer explicit HLS URLs if present (served by backend/CDN)
+    if (video.hlsMasterPlaylistUrl != null &&
+        video.hlsMasterPlaylistUrl!.isNotEmpty) {
+      print('✅ SELECTED: HLS Master Playlist');
+      print('   URL: ${video.hlsMasterPlaylistUrl}');
+      print('   Source: ${_getUrlSource(video.hlsMasterPlaylistUrl!)}');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      return video.hlsMasterPlaylistUrl!;
+    }
+    if (video.hlsPlaylistUrl != null && video.hlsPlaylistUrl!.isNotEmpty) {
+      print('✅ SELECTED: HLS Playlist');
+      print('   URL: ${video.hlsPlaylistUrl}');
+      print('   Source: ${_getUrlSource(video.hlsPlaylistUrl!)}');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      return video.hlsPlaylistUrl!;
+    }
+
+    // Prefer lowQualityUrl if it's Cloudflare/CDN
+    if (video.lowQualityUrl != null && video.lowQualityUrl!.isNotEmpty) {
+      final lower = video.lowQualityUrl!.toLowerCase();
+      if (lower.contains('cdn.snehayog.com') ||
+          lower.contains('r2.cloudflarestorage.com')) {
+        print('✅ SELECTED: Low Quality URL (CDN/R2)');
+        print('   URL: ${video.lowQualityUrl}');
+        print('   Source: ${_getUrlSource(video.lowQualityUrl!)}');
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+        return video.lowQualityUrl!;
       }
     }
+
+    // Avoid Cloudinary for playback when possible; if original is Cloudflare/CDN use it
+    final origLower = video.videoUrl.toLowerCase();
+    final isCdn = origLower.contains('cdn.snehayog.com') ||
+        origLower.contains('r2.cloudflarestorage.com') ||
+        origLower.contains('/hls/');
+    if (isCdn) {
+      print('✅ SELECTED: Original Video URL (CDN/R2/HLS)');
+      print('   URL: ${video.videoUrl}');
+      print('   Source: ${_getUrlSource(video.videoUrl)}');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      return video.videoUrl;
+    }
+
+    // Fallback: use lowQualityUrl even if not CDN, else original
+    if (video.lowQualityUrl != null && video.lowQualityUrl!.isNotEmpty) {
+      print('⚠️ FALLBACK: Low Quality URL');
+      print('   URL: ${video.lowQualityUrl}');
+      print('   Source: ${_getUrlSource(video.lowQualityUrl!)}');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      return video.lowQualityUrl!;
+    }
+
+    print('⚠️ FALLBACK: Original Video URL');
+    print('   URL: ${video.videoUrl}');
+    print('   Source: ${_getUrlSource(video.videoUrl)}');
+    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    return video.videoUrl;
+  }
+
+  /// Get URL source type for debugging
+  String _getUrlSource(String url) {
+    final lower = url.toLowerCase();
+
+    if (lower.contains('r2.cloudflarestorage.com') ||
+        lower.contains('r2.dev')) {
+      return '🟢 CLOUDFLARE R2 (Best - Fast CDN)';
+    }
+    if (lower.contains('cdn.snehayog.com')) {
+      return '🟢 CUSTOM CDN (Good)';
+    }
+    if (lower.contains('/hls/')) {
+      return '🟡 BACKEND HLS (Local Server)';
+    }
+    if (lower.contains('cloudinary.com')) {
+      return '🔴 CLOUDINARY (Slow - Avoid)';
+    }
+    if (lower.contains('.m3u8')) {
+      return '🟡 HLS STREAMING';
+    }
+    if (lower.contains('localhost') ||
+        lower.contains('127.0.0.1') ||
+        lower.contains('10.0.2.2')) {
+      return '🟡 LOCALHOST (Development)';
+    }
+
+    return '⚪ UNKNOWN SOURCE';
+  }
+
+  Future<VideoPlayerController> getController(
+      int index, VideoModel video) async {
+    // Decide final URL without Cloudinary signing (prefer Cloudflare/CDN)
+    String finalUrl = _selectPlaybackUrl(video);
+    print('🎯 VideoControllerManager: Selected playback URL: $finalUrl');
 
     // **OPTIMIZED: Reuse existing controller if available and valid**
     if (_controllers.containsKey(index)) {
@@ -517,7 +587,6 @@ class VideoControllerManager {
     }
   }
 
-  /// **HOT UI: Save state when app goes to background**
   void saveUIStateForBackground(
       int currentIndex, double scrollPosition, Map<int, VideoModel> videos) {
     print('💾 VideoControllerManager: Saving UI state for background');

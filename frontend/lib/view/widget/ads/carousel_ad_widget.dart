@@ -121,6 +121,9 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
             // **Top Bar with Yog Title**
             _buildTopBar(),
 
+            // **Sponsored Text at Top Corner**
+            _buildSponsoredText(),
+
             // **Main Content Area - Dynamic Ad Section**
             Positioned.fill(
               child: _buildMainContentArea(),
@@ -357,6 +360,29 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
     );
   }
 
+  /// **BUILD SPONSORED TEXT: Top-right corner sponsored label**
+  Widget _buildSponsoredText() {
+    return Positioned(
+      top: 60,
+      right: 16,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.6),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Text(
+          'Sponsored',
+          style: TextStyle(
+            color: Colors.white70,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+
   /// **BUILD MAIN CONTENT AREA: Full screen ad creatives (not clickable)**
   Widget _buildMainContentArea() {
     return Container(
@@ -449,14 +475,6 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
                           color: Colors.white,
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      const Text(
-                        'Sponsored',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
                         ),
                       ),
                     ],

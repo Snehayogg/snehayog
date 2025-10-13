@@ -32,14 +32,22 @@ class CarouselAdManager {
         _isCarouselAdsLoaded = true;
         print(
             '✅ CarouselAdManager: Loaded ${ads.length} carousel ads from backend');
+        // Print details of each carousel ad for debugging
+        for (var ad in ads) {
+          print(
+              '   📍 Carousel Ad: ${ad.advertiserName} - ${ad.slides.length} slides');
+        }
       } else {
         // No fallback: keep empty to avoid showing dummy ads
         _carouselAds = [];
         _isCarouselAdsLoaded = true;
         print('⚠️ CarouselAdManager: No carousel ads available from backend');
+        print(
+            '   💡 TIP: Check if carousel ads are created, approved, and active');
       }
     } catch (error) {
       print('❌ CarouselAdManager: Error loading carousel ads: $error');
+      print('   Stack trace: ${StackTrace.current}');
       // On error, do not use dummy; keep list empty
       _carouselAds = [];
       _isCarouselAdsLoaded = true;
