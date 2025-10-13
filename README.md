@@ -29,8 +29,59 @@ Inspired by platforms like YouTube Shorts and Instagram Reels, Snehayog focuses 
 
 ## 🚀 Getting Started
 
+### Prerequisites
+- Flutter SDK ≥ 3.4.3
+- Node.js ≥ 18.x
+- MongoDB (local or Atlas)
+
 ### Clone the repo
 
 ```bash
 git clone https://github.com/Snehayogg/snehayog.git
 cd snehayog
+```
+
+### Verify Setup (Windows)
+```bash
+cd frontend\scripts
+verify_setup.bat
+```
+
+### Verify Setup (Linux/Mac)
+```bash
+cd frontend/scripts
+./verify_setup.sh
+```
+
+### Setup Backend
+```bash
+cd backend
+npm install
+cp .env.example .env  # Configure your environment variables
+npm start
+```
+
+### Setup Frontend
+```bash
+cd frontend
+flutter pub get
+flutter run
+```
+
+📖 **For detailed setup instructions**, see [SETUP_GUIDE.md](../SETUP_GUIDE.md)
+
+---
+
+## 📁 Project Structure
+
+```
+snehayog/
+├── backend/                # Node.js + Express API
+├── frontend/               # Flutter mobile app
+├── packages/               # Local packages
+│   └── snehayog_monetization/  # Payment & monetization package
+├── LICENSE
+└── README.md
+```
+
+⚠️ **Important**: The `packages/snehayog_monetization` folder is required for the Flutter app to build!

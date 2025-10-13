@@ -105,8 +105,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   // **CAROUSEL AD STATE**
   List<CarouselAdModel> _carouselAds = []; // Store loaded carousel ads
-  final Map<int, ValueNotifier<int>> _currentHorizontalPage =
-      {};
+  final Map<int, ValueNotifier<int>> _currentHorizontalPage = {};
 
   // **USER STATE**
   bool _isScreenVisible = true;
@@ -1946,7 +1945,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
               // **NEW: Carousel ad navigation - swipe indicator**
               if (_carouselAds.isNotEmpty &&
-                  (_currentHorizontalPage[index] ?? 0) == 0)
+                  (_currentHorizontalPage[index]?.value ?? 0) == 0)
                 GestureDetector(
                   onTap: () => _navigateToCarouselAd(index),
                   child: Column(

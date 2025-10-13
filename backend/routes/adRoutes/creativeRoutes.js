@@ -28,10 +28,10 @@ router.post('/campaigns/:id/creatives', adUpload.single('creative'), asyncHandle
   }
 
   // Validate adType
-  if (!adType || !['banner', 'carousel ads', 'video feeds'].includes(adType)) {
+  if (!adType || !['banner', 'carousel', 'video feed ad'].includes(adType)) {
     cleanupTempFile(req.file?.path);
     return res.status(400).json({ 
-      error: 'Invalid adType. Must be one of: banner, carousel ads, video feeds' 
+      error: 'Invalid adType. Must be one of: banner, carousel, video feed ad' 
     });
   }
 
@@ -56,7 +56,7 @@ router.post('/campaigns/:id/creatives', adUpload.single('creative'), asyncHandle
     });
   }
 
-  // Validate duration for video ads
+  // Validate duration for video ads (non-carousel)
   if (type === 'video' && (!durationSec || durationSec < 1 || durationSec > 60)) {
     cleanupTempFile(req.file?.path);
     return res.status(400).json({ 
@@ -106,6 +106,119 @@ router.post('/campaigns/:id/creatives', adUpload.single('creative'), asyncHandle
   }
 }));
 
+// POST /ads/campaigns/:id/creatives/carousel - Upload carousel ad with multiple images
+router.post('/campaigns/:id/creatives/carousel', adUpload.array('creatives', 10), asyncHandler(async (req, res) => {
+  const campaignId = req.params.id;
+  const {
+    type,
+    aspectRatio,
+    callToActionLabel,
+    callToActionUrl,
+    slideTitles, // Optional: JSON string array of titles for each slide
+    slideDescriptions // Optional: JSON string array of descriptions
+  } = req.body;
+
+  // Validate campaign exists
+  const campaign = await AdCampaign.findById(campaignId);
+  if (!campaign) {
+    req.files?.forEach(file => cleanupTempFile(file.path));
+    return res.status(404).json({ error: 'Campaign not found' });
+  }
+
+  // Validate file upload
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ error: 'No creative files uploaded' });
+  }
+
+  if (req.files.length > 10) {
+    req.files?.forEach(file => cleanupTempFile(file.path));
+    return res.status(400).json({ 
+      error: 'Carousel ads can have maximum 10 slides' 
+    });
+  }
+
+  // Validate media type
+  if (!type || !['image', 'video'].includes(type)) {
+    req.files?.forEach(file => cleanupTempFile(file.path));
+    return res.status(400).json({ 
+      error: 'Invalid media type. Must be image or video' 
+    });
+  }
+
+  try {
+    // Parse optional slide metadata
+    let titles = [];
+    let descriptions = [];
+    try {
+      titles = slideTitles ? JSON.parse(slideTitles) : [];
+      descriptions = slideDescriptions ? JSON.parse(slideDescriptions) : [];
+    } catch (e) {
+      console.log('⚠️ Could not parse slide metadata, using defaults');
+    }
+
+    // Upload all files and create slides array
+    const slides = [];
+    
+    for (let i = 0; i < req.files.length; i++) {
+      const file = req.files[i];
+      
+      console.log(`📤 Uploading slide ${i + 1}/${req.files.length} to Cloudinary...`);
+      
+      // Upload to Cloudinary
+      const result = await cloudinary.uploader.upload(file.path, {
+        resource_type: type === 'video' ? 'video' : 'image',
+        folder: 'snehayog-ads/carousel',
+        transformation: [
+          { quality: 'auto:good' },
+          { fetch_format: 'auto' }
+        ]
+      });
+
+      slides.push({
+        mediaUrl: result.secure_url,
+        thumbnail: type === 'video' ? result.thumbnail_url : result.secure_url,
+        mediaType: type,
+        aspectRatio: aspectRatio || '9:16',
+        title: titles[i] || undefined,
+        description: descriptions[i] || undefined
+      });
+      
+      console.log(`✅ Slide ${i + 1} uploaded: ${result.secure_url}`);
+    }
+
+    // Create carousel ad creative with slides
+    const creative = new AdCreative({
+      campaignId,
+      adType: 'carousel',
+      type,
+      slides,
+      callToAction: {
+        label: callToActionLabel || 'Learn More',
+        url: callToActionUrl
+      },
+      reviewStatus: 'approved', // Auto-approve carousel ads
+      isActive: false // Will be activated after payment
+    });
+
+    await creative.save();
+
+    console.log(`✅ Carousel ad created with ${slides.length} slides`);
+
+    res.status(201).json({
+      message: `Carousel ad created successfully with ${slides.length} slides`,
+      creative,
+      slidesCount: slides.length
+    });
+
+  } catch (error) {
+    console.error('Carousel creative upload error:', error);
+    throw error;
+  } finally {
+    // Clean up temp files
+    req.files?.forEach(file => cleanupTempFile(file.path));
+  }
+}));
+
 // GET /ads/creatives - Get ad creatives with optional filtering
 router.get('/', asyncHandler(async (req, res) => {
   const { adType, type, campaignId, status } = req.query;
@@ -152,7 +265,7 @@ router.get('/types', asyncHandler(async (req, res) => {
       useCase: 'Brand awareness, promotions, announcements'
     },
     {
-      type: 'carousel ads',
+      type: 'carousel',
       name: 'Carousel Ads',
       description: 'Multiple images or videos that users can swipe through',
       allowedMediaTypes: ['image', 'video'],
@@ -160,7 +273,7 @@ router.get('/types', asyncHandler(async (req, res) => {
       useCase: 'Product showcases, story-based content, multiple offerings'
     },
     {
-      type: 'video feeds',
+      type: 'video feed ad',
       name: 'Video Feed Ads',
       description: 'Video ads that appear between video content (like Instagram reels)',
       allowedMediaTypes: ['image', 'video'],
@@ -184,7 +297,7 @@ router.get('/carousel', asyncHandler(async (req, res) => {
     
     // **DEBUG: Check ALL carousel ads regardless of status**
     const allCarouselCreatives = await AdCreative.find({
-      adType: 'carousel ads'
+      adType: 'carousel'
     }).populate('campaignId', 'name advertiserUserId status');
     
     console.log(`🔍 Total carousel ads in database: ${allCarouselCreatives.length}`);
@@ -199,7 +312,7 @@ router.get('/carousel', asyncHandler(async (req, res) => {
     
     // Find all active carousel ads
     const carouselCreatives = await AdCreative.find({
-      adType: 'carousel ads',
+      adType: 'carousel',
       isActive: true,
       reviewStatus: 'approved'
     }).populate('campaignId', 'name advertiserUserId status');
@@ -229,20 +342,32 @@ router.get('/carousel', asyncHandler(async (req, res) => {
         const advertiserName = advertiser?.name || 'Unknown Advertiser';
         const advertiserProfilePic = advertiser?.profilePic || '';
         
-        // Create carousel ad object
+        // Create carousel ad object with all slides
         const carouselAd = {
           id: creative._id,
           campaignId: creative.campaignId._id,
           advertiserName: advertiserName,
           advertiserProfilePic: advertiserProfilePic,
-          slides: [{
-            id: creative._id,
-            mediaUrl: creative.cloudinaryUrl,
-            thumbnailUrl: creative.thumbnail,
-            mediaType: creative.type,
-            durationSec: creative.durationSec,
-            aspectRatio: creative.aspectRatio,
-          }],
+          slides: creative.slides && creative.slides.length > 0 
+            ? creative.slides.map(slide => ({
+                id: slide._id || creative._id,
+                mediaUrl: slide.mediaUrl,
+                thumbnailUrl: slide.thumbnail,
+                mediaType: slide.mediaType || 'image',
+                aspectRatio: slide.aspectRatio || '9:16',
+                durationSec: slide.durationSec,
+                title: slide.title,
+                description: slide.description
+              }))
+            : [{
+                // Fallback for old carousel ads without slides array
+                id: creative._id,
+                mediaUrl: creative.cloudinaryUrl,
+                thumbnailUrl: creative.thumbnail,
+                mediaType: creative.type,
+                aspectRatio: creative.aspectRatio,
+                durationSec: creative.durationSec
+              }],
           callToActionLabel: creative.callToAction?.label || 'Learn More',
           callToActionUrl: creative.callToAction?.url || '',
           isActive: creative.isActive,
@@ -252,7 +377,7 @@ router.get('/carousel', asyncHandler(async (req, res) => {
         };
         
         carouselAds.push(carouselAd);
-        console.log(`✅ Processed carousel ad: ${creative._id}`);
+        console.log(`✅ Processed carousel ad: ${creative._id} with ${carouselAd.slides.length} slides`);
       } catch (error) {
         console.error(`❌ Error processing carousel ad ${creative._id}:`, error);
         continue;
@@ -297,14 +422,26 @@ router.get('/carousel/:id', asyncHandler(async (req, res) => {
       campaignId: creative.campaignId._id,
       advertiserName: advertiser?.name || 'Unknown Advertiser',
       advertiserProfilePic: advertiser?.profilePic || '',
-      slides: [{
-        id: creative._id,
-        mediaUrl: creative.cloudinaryUrl,
-        thumbnailUrl: creative.thumbnail,
-        mediaType: creative.type,
-        durationSec: creative.durationSec,
-        aspectRatio: creative.aspectRatio,
-      }],
+      slides: creative.slides && creative.slides.length > 0 
+        ? creative.slides.map(slide => ({
+            id: slide._id || creative._id,
+            mediaUrl: slide.mediaUrl,
+            thumbnailUrl: slide.thumbnail,
+            mediaType: slide.mediaType || 'image',
+            aspectRatio: slide.aspectRatio || '9:16',
+            durationSec: slide.durationSec,
+            title: slide.title,
+            description: slide.description
+          }))
+        : [{
+            // Fallback for old carousel ads without slides array
+            id: creative._id,
+            mediaUrl: creative.cloudinaryUrl,
+            thumbnailUrl: creative.thumbnail,
+            mediaType: creative.type,
+            aspectRatio: creative.aspectRatio,
+            durationSec: creative.durationSec
+          }],
       callToActionLabel: creative.callToAction?.label || 'Learn More',
       callToActionUrl: creative.callToAction?.url || '',
       isActive: creative.isActive,
@@ -313,6 +450,7 @@ router.get('/carousel/:id', asyncHandler(async (req, res) => {
       clicks: creative.clicks,
     };
     
+    console.log(`✅ Fetched carousel ad with ${carouselAd.slides.length} slides`);
     res.json(carouselAd);
     
   } catch (error) {

@@ -904,7 +904,7 @@ packages:
   snehayog_monetization:
     dependency: "direct main"
     description:
-      path: "../../snehayog_monetization"
+      path: "../packages/snehayog_monetization"
       relative: true
     source: path
     version: "0.0.1"

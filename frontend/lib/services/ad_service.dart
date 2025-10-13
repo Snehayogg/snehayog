@@ -118,6 +118,8 @@ class AdService {
     int? frequencyCap,
     String? timeZone,
     Map<String, bool>? dayParting,
+    // **NEW: Support multiple image URLs for carousel ads**
+    List<String>? imageUrls,
   }) async {
     try {
       final userData = await _authService.getUserData();
@@ -138,8 +140,7 @@ class AdService {
 
       String backendAdType = adType;
       if (adType == 'carousel') {
-        backendAdType =
-            'carousel ads'; 
+        backendAdType = 'carousel ads';
       } else if (adType == 'video feed') {
         backendAdType = 'video feeds';
       }
@@ -162,6 +163,12 @@ class AdService {
             ? endDate.difference(startDate).inDays + 1
             : 1,
       };
+
+      // **NEW: Add imageUrls for carousel ads**
+      if (imageUrls != null && imageUrls.isNotEmpty && adType == 'carousel') {
+        requestData['imageUrls'] = imageUrls;
+        print('🔍 AdService: Sending ${imageUrls.length} carousel image URLs');
+      }
 
       // **NEW: Validate required fields before sending**
       if (title.isEmpty ||

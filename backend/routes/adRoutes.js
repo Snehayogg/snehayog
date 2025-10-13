@@ -7,6 +7,7 @@ import cloudinary from '../config/cloudinary.js';
 import fs from 'fs';
 import User from '../models/User.js';
 import { verifyToken } from '../utils/verifytoken.js';
+import adService from '../services/adService.js';
 
 const router = express.Router();
 
@@ -862,66 +863,65 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
     
     console.log('✅ Found user:', user._id, 'for Google ID:', userId);
     
-    // **FIXED: Use MongoDB ObjectId for database query**
+    // **NEW: Return one row per creative so multiple creatives under a campaign are visible**
     const campaigns = await AdCampaign.find({ advertiserUserId: user._id })
       .sort({ createdAt: -1 });
 
-    console.log(`🔍 Found ${campaigns.length} campaigns for user ${user._id}`);
+    const campaignIds = campaigns.map(c => c._id);
+    const creatives = await AdCreative.find({ campaignId: { $in: campaignIds } })
+      .sort({ createdAt: -1 });
 
-    // **FIXED: Handle case when no ads are found**
-    if (campaigns.length === 0) {
-      console.log(`ℹ️ No ads found for user ${user._id} - returning empty array`);
+    console.log(`🔍 Found ${campaigns.length} campaigns and ${creatives.length} creatives for user ${user._id}`);
+
+    if (creatives.length === 0) {
+      console.log(`ℹ️ No creatives found for user ${user._id} - returning empty array`);
       return res.json([]);
     }
 
-    // **ENHANCED: Convert campaigns to the format expected by AdModel with all new fields**
-    const ads = campaigns.map(campaign => ({
-      _id: campaign._id.toString(),
-      id: campaign._id.toString(),
-      title: campaign.name,
-      description: campaign.objective || '',
-      imageUrl: null, // Will be populated from creative if exists
-      videoUrl: null, // Will be populated from creative if exists  
-      link: null, // Will be populated from creative if exists
-      adType: 'banner', // Default, will be updated from creative
-      budget: campaign.dailyBudget * 100, // Convert to cents for frontend
-      targetAudience: 'all',
-      targetKeywords: [],
-      startDate: campaign.startDate,
-      endDate: campaign.endDate,
-      status: campaign.status,
-      impressions: campaign.impressions || 0,
-      clicks: campaign.clicks || 0,
-      ctr: campaign.ctr || 0.0,
-      createdAt: campaign.createdAt,
-      updatedAt: campaign.updatedAt,
-      // **NEW: Add all advanced targeting fields**
-      minAge: campaign.target?.age?.min || null,
-      maxAge: campaign.target?.age?.max || null,
-      gender: campaign.target?.gender || null,
-      locations: campaign.target?.locations || [],
-      interests: campaign.target?.interests || [],
-      platforms: campaign.target?.platforms || [],
-      deviceType: campaign.target?.deviceType || null,
-      optimizationGoal: campaign.optimizationGoal || null,
-      frequencyCap: campaign.frequencyCap || null,
-      timeZone: campaign.timeZone || null,
-      dayParting: campaign.dayParting || {},
-      hourParting: campaign.hourParting || {},
-      // **NEW: Performance tracking fields**
-      spend: campaign.spend || 0,
-      conversions: campaign.conversions || 0,
-      conversionRate: campaign.conversionRate || 0,
-      costPerConversion: campaign.costPerConversion || 0,
-      reach: campaign.reach || 0,
-      frequency: campaign.frequency || 0,
-      // Required fields for AdModel
-      uploaderId: userId, // Use Google ID as expected by frontend
-      uploaderName: user.name || '',
-      uploaderProfilePic: user.profilePic || ''
-    }));
+    // Build AdModel-shaped entries from creatives (banner, carousel, video feeds)
+    const ads = creatives.map(creative => {
+      const parentCampaign = campaigns.find(c => c._id.toString() === creative.campaignId.toString());
+      return {
+        _id: creative._id.toString(),
+        id: creative._id.toString(),
+        title: parentCampaign?.name || 'Untitled Ad',
+        description: parentCampaign?.objective || '',
+        imageUrl: creative.adType === 'carousel ads' ? (creative.slides?.[0]?.thumbnail || creative.slides?.[0]?.mediaUrl || null) : (creative.thumbnail || creative.cloudinaryUrl || null),
+        videoUrl: creative.type === 'video' ? creative.cloudinaryUrl : null,
+        link: (creative.callToAction && creative.callToAction.url) ? creative.callToAction.url : null,
+        adType: creative.adType,
+        budget: (parentCampaign?.dailyBudget || 0) * 100, // cents for frontend
+        targetAudience: 'all',
+        targetKeywords: [],
+        startDate: parentCampaign?.startDate,
+        endDate: parentCampaign?.endDate,
+        status: parentCampaign?.status || (creative.isActive ? 'active' : 'draft'),
+        impressions: creative.impressions || 0,
+        clicks: creative.clicks || 0,
+        ctr: creative.ctr || 0.0,
+        createdAt: creative.createdAt,
+        updatedAt: creative.updatedAt,
+        // Targeting copied from campaign if exists
+        minAge: parentCampaign?.target?.age?.min || null,
+        maxAge: parentCampaign?.target?.age?.max || null,
+        gender: parentCampaign?.target?.gender || null,
+        locations: parentCampaign?.target?.locations || [],
+        interests: parentCampaign?.target?.interests || [],
+        platforms: parentCampaign?.target?.platforms || [],
+        deviceType: parentCampaign?.target?.deviceType || null,
+        optimizationGoal: parentCampaign?.optimizationGoal || null,
+        frequencyCap: parentCampaign?.frequencyCap || null,
+        timeZone: parentCampaign?.timeZone || null,
+        dayParting: parentCampaign?.dayParting || {},
+        hourParting: parentCampaign?.hourParting || {},
+        // Required fields for AdModel
+        uploaderId: userId,
+        uploaderName: user.name || '',
+        uploaderProfilePic: user.profilePic || ''
+      };
+    });
 
-    console.log(`✅ Returning ${ads.length} ads for user ${user._id}`);
+    console.log(`✅ Returning ${ads.length} ads (creatives) for user ${user._id}`);
     res.json(ads);
   } catch (error) {
     console.error('❌ Get user ads error:', error);

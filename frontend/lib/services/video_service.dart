@@ -1,4 +1,5 @@
 import 'dart:convert';
+// import 'dart:typed_data';
 import 'dart:async';
 import 'dart:io';
 import 'package:http/http.dart' as http;
@@ -387,7 +388,11 @@ class VideoService {
       );
 
       final headers = await _getAuthHeaders();
-      request.headers.addAll(headers);
+      // Only forward Authorization; let MultipartRequest set its own Content-Type
+      final authHeader = headers['Authorization'];
+      if (authHeader != null) {
+        request.headers['Authorization'] = authHeader;
+      }
 
       // **Add video file**
       request.files.add(
@@ -397,6 +402,8 @@ class VideoService {
           contentType: MediaType('video', 'mp4'),
         ),
       );
+
+      // Do not attach a separate thumbnail file. Backend generates thumbnails after processing.
 
       // **Add fields**
       request.fields['videoName'] = title;

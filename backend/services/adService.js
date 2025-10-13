@@ -41,7 +41,8 @@ class AdService {
       optimizationGoal,
       frequencyCap,
       timeZone,
-      dayParting
+      dayParting,
+      imageUrls // **NEW: Support multiple image URLs for carousel ads**
     } = adData;
 
     console.log('🔍 AdService: deviceType after destructuring:', deviceType);
@@ -137,21 +138,38 @@ class AdService {
     }
 
     // **NEW: Create AdCreative with correct field mapping**
-    const adCreative = new AdCreative({
+    const creativeData = {
       campaignId: campaign._id,
       adType: adType === 'banner' ? 'banner' : adType === 'carousel' ? 'carousel ads' : 'video feeds',
       type: mediaType,
-      cloudinaryUrl: cloudinaryUrl,
-      thumbnail: imageUrl, // Use image as thumbnail for videos
-      aspectRatio: aspectRatio,
-      durationSec: mediaType === 'video' ? 15 : undefined, // Default 15 seconds for videos
       callToAction: {
         label: callToActionLabel,
         url: callToActionUrl
       },
       reviewStatus: 'approved', // **FIX: Auto-approve ads with payment**
       isActive: true // **FIX: Activate ads immediately after payment**
-    });
+    };
+
+    // **NEW: Handle carousel ads with multiple images**
+    if (adType === 'carousel' && imageUrls && imageUrls.length > 0) {
+      console.log(`🔍 AdService: Creating carousel ad with ${imageUrls.length} images`);
+      creativeData.slides = imageUrls.map(url => ({
+        mediaUrl: url,
+        thumbnail: url,
+        mediaType: 'image',
+        aspectRatio: '9:16',
+        title: title,
+        description: description
+      }));
+    } else {
+      // **Traditional single media creative**
+      creativeData.cloudinaryUrl = cloudinaryUrl;
+      creativeData.thumbnail = imageUrl; // Use image as thumbnail for videos
+      creativeData.aspectRatio = aspectRatio;
+      creativeData.durationSec = mediaType === 'video' ? 15 : undefined; // Default 15 seconds for videos
+    }
+
+    const adCreative = new AdCreative(creativeData);
 
     try {
       await adCreative.save();
@@ -245,6 +263,21 @@ class AdService {
     }).populate('campaignId').limit(50); // Get more ads for filtering
 
     console.log(`🔍 AdService: Found ${activeCreatives.length} active ad creatives`);
+
+    // **FAST PATH: If no contextual signals were provided, show generic active ads**
+    const hasContext = Boolean(videoCategory) ||
+      (Array.isArray(videoTags) && videoTags.length > 0) ||
+      (Array.isArray(videoKeywords) && videoKeywords.length > 0);
+
+    if (!hasContext) {
+      console.log('ℹ️ AdService: No video context provided; returning generic active ads');
+      const finalAds = activeCreatives.slice(0, 10);
+      for (const ad of finalAds) {
+        ad.impressions = (ad.impressions || 0) + 1;
+        await ad.save();
+      }
+      return finalAds;
+    }
 
     // **STEP 2: Filter ads based on targeting**
     const targetedAds = [];
@@ -348,6 +381,17 @@ class AdService {
       } else {
         console.log(`   ❌ Ad ${creative._id} REJECTED - No relevance (interests: ${campaignInterests.join(', ')})`);
       }
+    }
+
+    // **FALLBACK: If nothing matched, return generic active ads**
+    if (targetedAds.length === 0) {
+      console.log('⚠️ AdService: No targeted ads matched; falling back to generic active ads');
+      const fallbackAds = activeCreatives.slice(0, 10);
+      for (const ad of fallbackAds) {
+        ad.impressions = (ad.impressions || 0) + 1;
+        await ad.save();
+      }
+      return fallbackAds;
     }
 
     // **STEP 3: Sort by relevance score (highest first)**

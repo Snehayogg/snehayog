@@ -301,9 +301,11 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                   children: [
                     Row(
                       children: [
-                        const Text(
-                          'Ad Details',
-                          style: TextStyle(
+                        Text(
+                          _selectedAdType == 'banner'
+                              ? 'Banner Details'
+                              : 'Ad Details',
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
@@ -334,6 +336,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                       titleController: _titleController,
                       descriptionController: _descriptionController,
                       linkController: _linkController,
+                      adType: _selectedAdType,
                       onClearErrors: _clearErrorMessages,
                       onFieldChanged: _validateField,
                       isTitleValid: _isTitleValid,
@@ -768,7 +771,13 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       switch (fieldName) {
         case 'title':
-          if (_titleController.text.trim().isEmpty) {
+          // Skip title validation for banner ads
+          if (_selectedAdType == 'banner') {
+            setState(() {
+              _isTitleValid = true;
+              _titleError = null;
+            });
+          } else if (_titleController.text.trim().isEmpty) {
             setState(() {
               _isTitleValid = false;
               _titleError = 'Ad title is required';
@@ -781,7 +790,13 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
           }
           break;
         case 'description':
-          if (_descriptionController.text.trim().isEmpty) {
+          // Skip description validation for banner ads
+          if (_selectedAdType == 'banner') {
+            setState(() {
+              _isDescriptionValid = true;
+              _descriptionError = null;
+            });
+          } else if (_descriptionController.text.trim().isEmpty) {
             setState(() {
               _isDescriptionValid = false;
               _descriptionError = 'Description is required';
@@ -875,22 +890,33 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
   }
 
   Widget _buildValidationSummary() {
-    final List<Map<String, dynamic>> validationItems = [
-      {
-        'label': 'Ad Title',
-        'isValid': _titleController.text.trim().isNotEmpty,
-        'icon': Icons.title,
-      },
-      {
-        'label': 'Description',
-        'isValid': _descriptionController.text.trim().isNotEmpty,
-        'icon': Icons.description,
-      },
-      {
-        'label': 'Link URL',
-        'isValid': _linkController.text.trim().isNotEmpty,
-        'icon': Icons.link,
-      },
+    final List<Map<String, dynamic>> validationItems = [];
+
+    // Only show title and description for non-banner ads
+    if (_selectedAdType != 'banner') {
+      validationItems.addAll([
+        {
+          'label': 'Ad Title',
+          'isValid': _titleController.text.trim().isNotEmpty,
+          'icon': Icons.title,
+        },
+        {
+          'label': 'Description',
+          'isValid': _descriptionController.text.trim().isNotEmpty,
+          'icon': Icons.description,
+        },
+      ]);
+    }
+
+    // Link URL is required for all ad types
+    validationItems.add({
+      'label': _selectedAdType == 'banner' ? 'Destination URL' : 'Link URL',
+      'isValid': _linkController.text.trim().isNotEmpty,
+      'icon': Icons.link,
+    });
+
+    // Budget, dates, and media are required for all ad types
+    validationItems.addAll([
       {
         'label': 'Budget (₹100+)',
         'isValid': _budgetController.text.trim().isNotEmpty &&
@@ -907,7 +933,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
         'isValid': _isMediaValid,
         'icon': _selectedAdType == 'banner' ? Icons.image : Icons.video_library,
       },
-    ];
+    ]);
 
     return Card(
       child: Padding(
@@ -1009,8 +1035,17 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
       });
 
       final result = await _adService.createAdWithPayment(
-        title: _titleController.text.trim(),
-        description: _descriptionController.text.trim(),
+        // For banner ads, title and description are optional (use defaults)
+        title: _selectedAdType == 'banner'
+            ? (_titleController.text.trim().isEmpty
+                ? 'Banner Ad'
+                : _titleController.text.trim())
+            : _titleController.text.trim(),
+        description: _selectedAdType == 'banner'
+            ? (_descriptionController.text.trim().isEmpty
+                ? 'Click to learn more'
+                : _descriptionController.text.trim())
+            : _descriptionController.text.trim(),
         imageUrl: _getImageUrl(mediaUrls),
         videoUrl: _selectedVideo != null ? mediaUrls.first : null,
         link: _linkController.text.trim(),
@@ -1036,6 +1071,10 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
         frequencyCap: _frequencyCap,
         timeZone: _timeZone,
         dayParting: _dayParting.isNotEmpty ? _dayParting : null,
+        // **NEW: Pass all carousel image URLs**
+        imageUrls: _selectedAdType == 'carousel' && _selectedImages.isNotEmpty
+            ? mediaUrls
+            : null,
       );
 
       if (result['success']) {
@@ -1108,13 +1147,20 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
 
     bool isValid = true;
 
-    // Check title
-    if (_titleController.text.trim().isEmpty) {
-      setState(() {
-        _isTitleValid = false;
-        _titleError = 'Ad title is required';
-        isValid = false;
-      });
+    // Check title (skip for banner ads)
+    if (_selectedAdType != 'banner') {
+      if (_titleController.text.trim().isEmpty) {
+        setState(() {
+          _isTitleValid = false;
+          _titleError = 'Ad title is required';
+          isValid = false;
+        });
+      } else {
+        setState(() {
+          _isTitleValid = true;
+          _titleError = null;
+        });
+      }
     } else {
       setState(() {
         _isTitleValid = true;
@@ -1122,13 +1168,20 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
       });
     }
 
-    // Check description
-    if (_descriptionController.text.trim().isEmpty) {
-      setState(() {
-        _isDescriptionValid = false;
-        _descriptionError = 'Description is required';
-        isValid = false;
-      });
+    // Check description (skip for banner ads)
+    if (_selectedAdType != 'banner') {
+      if (_descriptionController.text.trim().isEmpty) {
+        setState(() {
+          _isDescriptionValid = false;
+          _descriptionError = 'Description is required';
+          isValid = false;
+        });
+      } else {
+        setState(() {
+          _isDescriptionValid = true;
+          _descriptionError = null;
+        });
+      }
     } else {
       setState(() {
         _isDescriptionValid = true;
