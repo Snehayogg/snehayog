@@ -16,6 +16,7 @@ import 'package:snehayog/services/ad_refresh_notifier.dart';
 import 'package:snehayog/services/background_profile_preloader.dart';
 import 'package:snehayog/view/widget/ads/banner_ad_widget.dart';
 import 'package:snehayog/view/widget/ads/video_feed_ad_widget.dart';
+import 'package:snehayog/view/widget/ads/carousel_ad_widget.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:snehayog/core/services/auto_scroll_settings.dart';
@@ -72,7 +73,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   // Cache manager for instant loading
   final SmartCacheManager _cacheManager = SmartCacheManager();
 
-  // **AD STATE**
+  // **AD STATE - DISABLED**
   List<Map<String, dynamic>> _bannerAds = [];
   List<Map<String, dynamic>> _videoFeedAds = [];
   bool _adsLoaded = false;
@@ -103,10 +104,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   static const int _videosPerPage = 10;
 
   // **CAROUSEL AD STATE**
-  final Map<int, int> _horizontalIndices =
-      {}; // Track horizontal page for each video (0=video, 1=ad)
-  final Map<int, int> _currentCarouselSlideIndex =
-      {}; // Track current slide index for each carousel
+  List<CarouselAdModel> _carouselAds = []; // Store loaded carousel ads
+  final Map<int, ValueNotifier<int>> _currentHorizontalPage =
+      {};
 
   // **USER STATE**
   bool _isScreenVisible = true;
@@ -114,28 +114,31 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Ensure autoplay when screen becomes visible (e.g., switching tabs)
     WidgetsBinding.instance.addPostFrameCallback((_) {
-        print(
-            '🔍 VideoFeedAdvanced: didChangeDependencies - triggering autoplay');
+      print(
+        '🔍 VideoFeedAdvanced: didChangeDependencies - triggering autoplay',
+      );
       _tryAutoplayCurrent();
     });
   }
 
   /// **HANDLE VISIBILITY CHANGES: Pause/resume videos based on tab visibility**
   void _handleVisibilityChange(bool isVisible) {
-      print(
-          '🔍 VideoFeedAdvanced: _handleVisibilityChange called - isVisible: $isVisible, _isScreenVisible: $_isScreenVisible');
+    print(
+      '🔍 VideoFeedAdvanced: _handleVisibilityChange called - isVisible: $isVisible, _isScreenVisible: $_isScreenVisible',
+    );
 
     if (_isScreenVisible != isVisible) {
       _isScreenVisible = isVisible;
-        print(
-            '🔄 VideoFeedAdvanced: Screen visibility changed to ${isVisible ? "VISIBLE" : "HIDDEN"}');
+      print(
+        '🔄 VideoFeedAdvanced: Screen visibility changed to ${isVisible ? "VISIBLE" : "HIDDEN"}',
+      );
 
       if (isVisible) {
         // Screen became visible - resume current video
-          print(
-              '▶️ VideoFeedAdvanced: Screen became visible, trying to resume video');
+        print(
+          '▶️ VideoFeedAdvanced: Screen became visible, trying to resume video',
+        );
         _tryAutoplayCurrent();
 
         // **NEW: Start background profile preloading**
@@ -143,14 +146,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         _profilePreloader.startBackgroundPreloading();
       } else {
         // Screen became hidden - pause current video
-          print(
-              '⏸️ VideoFeedAdvanced: Screen became hidden, pausing current video');
+        print(
+          '⏸️ VideoFeedAdvanced: Screen became hidden, pausing current video',
+        );
         _pauseCurrentVideo();
 
         // **NEW: Stop background profile preloading**
         print('⏸️ VideoFeedAdvanced: Stopping background profile preloading');
-          _profilePreloader.stopBackgroundPreloading();
-          }
+        _profilePreloader.stopBackgroundPreloading();
+      }
     } else {
       print('🔄 VideoFeedAdvanced: No visibility change needed');
     }
@@ -158,10 +162,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   /// **PAUSE CURRENT VIDEO: When screen becomes hidden**
   void _pauseCurrentVideo() {
-      print(
-          '🔍 VideoFeedAdvanced: _pauseCurrentVideo called - current index: $_currentIndex');
     print(
-        '🔍 VideoFeedAdvanced: Controller pool keys: ${_controllerPool.keys.toList()}');
+      '🔍 VideoFeedAdvanced: _pauseCurrentVideo called - current index: $_currentIndex',
+    );
+    print(
+      '🔍 VideoFeedAdvanced: Controller pool keys: ${_controllerPool.keys.toList()}',
+    );
 
     // **NEW: Stop view tracking when pausing**
     if (_currentIndex < _videos.length) {
@@ -174,33 +180,37 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     if (_controllerPool.containsKey(_currentIndex)) {
       final controller = _controllerPool[_currentIndex];
       print('🔍 VideoFeedAdvanced: Controller found for index $_currentIndex');
-        print(
-          '🔍 VideoFeedAdvanced: Controller initialized: ${controller?.value.isInitialized}');
-        print(
-          '🔍 VideoFeedAdvanced: Controller playing: ${controller?.value.isPlaying}');
+      print(
+        '🔍 VideoFeedAdvanced: Controller initialized: ${controller?.value.isInitialized}',
+      );
+      print(
+        '🔍 VideoFeedAdvanced: Controller playing: ${controller?.value.isPlaying}',
+      );
 
       if (controller != null &&
           controller.value.isInitialized &&
           controller.value.isPlaying) {
         controller.pause();
         _controllerStates[_currentIndex] = false;
-          print(
-              '⏸️ VideoFeedAdvanced: Successfully paused video at index $_currentIndex');
+        print(
+          '⏸️ VideoFeedAdvanced: Successfully paused video at index $_currentIndex',
+        );
       } else {
         print('⏸️ VideoFeedAdvanced: Video not playing or not initialized');
       }
     } else {
       print(
-          '❌ VideoFeedAdvanced: No controller found for index $_currentIndex');
+        '❌ VideoFeedAdvanced: No controller found for index $_currentIndex',
+      );
     }
 
     // Also pause VideoControllerManager videos
     _videoControllerManager.pauseAllVideosOnTabChange();
-      print('⏸️ VideoFeedAdvanced: Called VideoControllerManager pause');
+    print('⏸️ VideoFeedAdvanced: Called VideoControllerManager pause');
   }
 
   void _pauseAllVideosOnTabSwitch() {
-      print('⏸️ VideoFeedAdvanced: Pausing all videos due to tab switch');
+    print('⏸️ VideoFeedAdvanced: Pausing all videos due to tab switch');
 
     // Pause all active controllers in the pool
     _controllerPool.forEach((index, controller) {
@@ -222,16 +232,18 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // Update screen visibility when resuming
     _isScreenVisible = true;
 
-      print('🔍 VideoFeedAdvanced: _tryAutoplayCurrent called');
-      print('🔍 VideoFeedAdvanced: Current index: $_currentIndex');
-      print('🔍 VideoFeedAdvanced: Videos length: ${_videos.length}');
+    print('🔍 VideoFeedAdvanced: _tryAutoplayCurrent called');
+    print('🔍 VideoFeedAdvanced: Current index: $_currentIndex');
+    print('🔍 VideoFeedAdvanced: Videos length: ${_videos.length}');
     print(
-        '🔍 VideoFeedAdvanced: Controller pool keys: ${_controllerPool.keys.toList()}');
+      '🔍 VideoFeedAdvanced: Controller pool keys: ${_controllerPool.keys.toList()}',
+    );
 
     // **NEW: If no controller exists, preload the current video first**
     if (!_controllerPool.containsKey(_currentIndex) && _videos.isNotEmpty) {
-        print(
-            '🚀 VideoFeedAdvanced: No controller for current index, preloading...');
+      print(
+        '🚀 VideoFeedAdvanced: No controller for current index, preloading...',
+      );
       _preloadVideo(_currentIndex).then((_) {
         // Try autoplay again after preloading
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -251,22 +263,25 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         _attachBufferingListenerIfNeeded(ctrl, _currentIndex);
         ctrl.play();
         _controllerStates[_currentIndex] = true;
-          print('▶️ VideoFeedAdvanced: Resumed video at index $_currentIndex');
+        print('▶️ VideoFeedAdvanced: Resumed video at index $_currentIndex');
 
         // **NEW: Start view tracking when video resumes**
         if (_currentIndex < _videos.length) {
           final currentVideo = _videos[_currentIndex];
           _viewTracker.startViewTracking(currentVideo.id);
           print(
-              '▶️ Started view tracking for resumed video: ${currentVideo.id}');
+            '▶️ Started view tracking for resumed video: ${currentVideo.id}',
+          );
         }
       } else {
         print(
-            '▶️ VideoFeedAdvanced: Video already playing at index $_currentIndex');
+          '▶️ VideoFeedAdvanced: Video already playing at index $_currentIndex',
+        );
       }
     } else {
       print(
-          '⚠️ VideoFeedAdvanced: Cannot autoplay - controller: ${ctrl != null}, initialized: ${ctrl?.value.isInitialized}, userPaused: ${_userPaused[_currentIndex]}');
+        '⚠️ VideoFeedAdvanced: Cannot autoplay - controller: ${ctrl != null}, initialized: ${ctrl?.value.isInitialized}, userPaused: ${_userPaused[_currentIndex]}',
+      );
     }
 
     // Also resume VideoControllerManager videos
@@ -294,8 +309,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // **CRITICAL: Register video pause/resume callbacks with MainController**
     WidgetsBinding.instance.addPostFrameCallback((_) {
       try {
-        final mainController =
-            Provider.of<MainController>(context, listen: false);
+        final mainController = Provider.of<MainController>(
+          context,
+          listen: false,
+        );
         mainController.registerVideoPauseCallback(() {
           print('🔥 CALLBACK TRIGGERED: Pause callback called!');
           _pauseAllVideosOnTabSwitch();
@@ -304,8 +321,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           print('🔥 CALLBACK TRIGGERED: Resume callback called!');
           _tryAutoplayCurrent();
         });
-          print(
-            '📱 VideoFeedAdvanced: Registered pause/resume callbacks with MainController - SUCCESS');
+        print(
+          '📱 VideoFeedAdvanced: Registered pause/resume callbacks with MainController - SUCCESS',
+        );
       } catch (e) {
         print('❌ VideoFeedAdvanced: Failed to register callbacks: $e');
       }
@@ -340,8 +358,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     // **TAB CHANGE DETECTION: Register callbacks with MainController**
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final mainController =
-          Provider.of<MainController>(context, listen: false);
+      final mainController = Provider.of<MainController>(
+        context,
+        listen: false,
+      );
       mainController.registerPauseVideosCallback(() {
         print('🔥 OLD CALLBACK: Pause callback triggered');
         _videoControllerManager.pauseAllVideosOnTabChange();
@@ -369,7 +389,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         // **NEW: Trigger autoplay immediately after videos load**
         WidgetsBinding.instance.addPostFrameCallback((_) {
           print(
-              '🚀 VideoFeedAdvanced: Triggering instant autoplay after video load');
+            '🚀 VideoFeedAdvanced: Triggering instant autoplay after video load',
+          );
           _tryAutoplayCurrent();
         });
       }
@@ -380,8 +401,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
       // Navigate to specific video if provided
       if (widget.initialVideoId != null) {
-        final videoIndex =
-            _videos.indexWhere((v) => v.id == widget.initialVideoId);
+        final videoIndex = _videos.indexWhere(
+          (v) => v.id == widget.initialVideoId,
+        );
         if (videoIndex != -1) {
           _currentIndex = videoIndex;
           _pageController.animateToPage(
@@ -407,17 +429,17 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         setState(() {
           _currentUserId = userData['id'];
         });
-          print('✅ Loaded current user ID: $_currentUserId');
+        print('✅ Loaded current user ID: $_currentUserId');
       }
     } catch (e) {
-        print('❌ Error loading current user ID: $e');
+      print('❌ Error loading current user ID: $e');
     }
   }
 
   /// **OPTIMIZED: Load active ads in background without blocking videos**
   Future<void> _loadActiveAds() async {
     try {
-        print('🎯 VideoFeedAdvanced: Loading active ads in background...');
+      print('🎯 VideoFeedAdvanced: Loading active ads in background...');
 
       final allAds = await _activeAdsService.fetchActiveAds();
 
@@ -428,28 +450,34 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           _adsLoaded = true;
         });
 
-          print('✅ VideoFeedAdvanced: Ads loaded and displayed:');
-          print('   Banner ads: ${_bannerAds.length}');
-          print('   Video feed ads: ${_videoFeedAds.length}');
+        print('✅ VideoFeedAdvanced: Ads loaded and displayed:');
+        print('   Banner ads: ${_bannerAds.length}');
+        print('   Video feed ads: ${_videoFeedAds.length}');
 
-          // **NEW: Debug banner ad details**
-          for (int i = 0; i < _bannerAds.length; i++) {
-            final ad = _bannerAds[i];
-            print(
-                '   Banner Ad $i: ${ad['title']} (${ad['adType']}) - Active: ${ad['isActive']}');
-          }
+        // **NEW: Debug banner ad details**
+        for (int i = 0; i < _bannerAds.length; i++) {
+          final ad = _bannerAds[i];
+          print(
+            '   Banner Ad $i: ${ad['title']} (${ad['adType']}) - Active: ${ad['isActive']}',
+          );
+        }
 
-          // **NEW: Debug ad details**
-          for (int i = 0; i < _videoFeedAds.length; i++) {
-            final ad = _videoFeedAds[i];
-            print('   Video Feed Ad $i: ${ad['title']} (${ad['adType']})');
+        // **NEW: Debug ad details**
+        for (int i = 0; i < _videoFeedAds.length; i++) {
+          final ad = _videoFeedAds[i];
+          print('   Video Feed Ad $i: ${ad['title']} (${ad['adType']})');
         }
       }
 
       // Also update carousel ad manager (in background)
       await _carouselAdManager.loadCarouselAds();
+
+      // **NEW: Load carousel ads for Yog tab**
+      if (widget.videoType == 'yog') {
+        await _loadCarouselAds();
+      }
     } catch (e) {
-        print('❌ Error loading active ads: $e');
+      print('❌ Error loading active ads: $e');
       if (mounted) {
         setState(() {
           _adsLoaded =
@@ -473,8 +501,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           .where((id) => id != _currentUserId) // Don't check self
           .toList();
 
-        print(
-            '🔍 Checking follow status for ${uniqueUploaders.length} unique uploaders');
+      print(
+        '🔍 Checking follow status for ${uniqueUploaders.length} unique uploaders',
+      );
 
       for (final uploaderId in uniqueUploaders) {
         try {
@@ -485,13 +514,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             });
           }
         } catch (e) {
-            print('❌ Error checking follow status for $uploaderId: $e');
+          print('❌ Error checking follow status for $uploaderId: $e');
         }
       }
 
-        print('✅ Loaded follow status for ${_followingUsers.length} users');
+      print('✅ Loaded follow status for ${_followingUsers.length} users');
     } catch (e) {
-        print('❌ Error loading following users: $e');
+      print('❌ Error loading following users: $e');
     }
   }
 
@@ -501,11 +530,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       final cacheKey = 'videos_page_${page}_${widget.videoType ?? 'all'}';
 
       // Use cache manager for instant loading
-        print('🔍 VideoFeedAdvanced: Loading videos with cache key: $cacheKey');
+      print('🔍 VideoFeedAdvanced: Loading videos with cache key: $cacheKey');
       final response = await _cacheManager.get<Map<String, dynamic>>(
         cacheKey,
         fetchFn: () async {
-            print('🔄 VideoFeedAdvanced: Fetching fresh videos from API');
+          print('🔄 VideoFeedAdvanced: Fetching fresh videos from API');
           return await _videoService.getVideos(
             page: page,
             limit: _videosPerPage,
@@ -516,11 +545,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         maxAge: const Duration(minutes: 10), // Cache for 10 minutes
       );
 
-        if (response != null) {
-          print(
-              '✅ VideoFeedAdvanced: Successfully loaded videos (cached or fresh)');
-        } else {
-          print('❌ VideoFeedAdvanced: Failed to load videos');
+      if (response != null) {
+        print(
+          '✅ VideoFeedAdvanced: Successfully loaded videos (cached or fresh)',
+        );
+      } else {
+        print('❌ VideoFeedAdvanced: Failed to load videos');
       }
 
       if (response != null) {
@@ -541,18 +571,19 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         }
       }
     } catch (e) {
-        print('❌ Error loading videos: $e');
+      print('❌ Error loading videos: $e');
     }
   }
 
   /// **OPTIMIZED: Refresh video list with background ad loading**
   Future<void> refreshVideos() async {
-      print('🔄 VideoFeedAdvanced: refreshVideos() called');
+    print('🔄 VideoFeedAdvanced: refreshVideos() called');
 
     // Prevent multiple simultaneous refresh calls
     if (_isLoading) {
-        print(
-            '⚠️ VideoFeedAdvanced: Already refreshing, ignoring duplicate call');
+      print(
+        '⚠️ VideoFeedAdvanced: Already refreshing, ignoring duplicate call',
+      );
       return;
     }
 
@@ -577,12 +608,17 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         });
       }
 
-        print('✅ VideoFeedAdvanced: Videos refreshed successfully');
+      print('✅ VideoFeedAdvanced: Videos refreshed successfully');
 
       // **OPTIMIZED: Reload ads in background (non-blocking)**
       _loadActiveAds(); // No 'await' - runs in background
+
+      // **MANUAL REFRESH: Reload carousel ads when user refreshes**
+      print(
+          '🔄 VideoFeedAdvanced: Reloading carousel ads after manual refresh...');
+      _carouselAdManager.loadCarouselAds();
     } catch (e) {
-        print('❌ VideoFeedAdvanced: Error refreshing videos: $e');
+      print('❌ VideoFeedAdvanced: Error refreshing videos: $e');
 
       // Set error state
       if (mounted) {
@@ -602,7 +638,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                      'Failed to refresh: ${_getUserFriendlyErrorMessage(e)}'),
+                    'Failed to refresh: ${_getUserFriendlyErrorMessage(e)}',
+                  ),
                 ),
               ],
             ),
@@ -628,9 +665,34 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     try {
       await _loadActiveAds();
+
+      // **NEW: Also refresh carousel ads for Yog tab**
+      if (widget.videoType == 'yog') {
+        await _loadCarouselAds();
+      }
+
       print('✅ VideoFeedAdvanced: Ads refreshed successfully');
     } catch (e) {
       print('❌ Error refreshing ads: $e');
+    }
+  }
+
+  /// **NEW: Load carousel ads for Yog tab**
+  Future<void> _loadCarouselAds() async {
+    try {
+      print('🎯 VideoFeedAdvanced: Loading carousel ads for Yog tab...');
+
+      final carouselAds = await _carouselAdManager.carouselAds;
+
+      if (mounted) {
+        setState(() {
+          _carouselAds = carouselAds;
+        });
+        print(
+            '✅ VideoFeedAdvanced: Loaded ${_carouselAds.length} carousel ads');
+      }
+    } catch (e) {
+      print('❌ Error loading carousel ads: $e');
     }
   }
 
@@ -643,7 +705,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     try {
       await _loadVideos(page: _currentPage + 1, append: true);
     } catch (e) {
-        print('❌ Error loading more videos: $e');
+      print('❌ Error loading more videos: $e');
     } finally {
       if (mounted) {
         setState(() => _isLoadingMore = false);
@@ -698,9 +760,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
       print('🎬 Preloading video $index with URL: $videoUrl');
 
-      final controller = VideoPlayerController.networkUrl(
-        Uri.parse(videoUrl),
-      );
+      final controller = VideoPlayerController.networkUrl(Uri.parse(videoUrl));
 
       // **FIXED: Add timeout and better error handling**
       await controller.initialize().timeout(
@@ -727,11 +787,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         if (index == _currentIndex && index < _videos.length) {
           final video = _videos[index];
           _viewTracker.startViewTracking(video.id);
-            print(
-                '▶️ Started view tracking for preloaded current video: ${video.id}');
+          print(
+            '▶️ Started view tracking for preloaded current video: ${video.id}',
+          );
         }
 
-          print('✅ Successfully preloaded video $index');
+        print('✅ Successfully preloaded video $index');
         // Trigger UI update so isInitialized switch reflects immediately
         if (mounted) {
           setState(() {});
@@ -742,12 +803,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         controller.dispose();
       }
     } catch (e) {
-        print('❌ Error preloading video $index: $e');
+      print('❌ Error preloading video $index: $e');
       _loadingVideos.remove(index);
 
       // **FIXED: Add retry logic for failed preloads**
       if (e.toString().contains('400') || e.toString().contains('404')) {
-          print('🔄 Retrying video $index in 5 seconds...');
+        print('🔄 Retrying video $index in 5 seconds...');
         Future.delayed(const Duration(seconds: 5), () {
           if (mounted && !_preloadedVideos.contains(index)) {
             _preloadVideo(index);
@@ -839,7 +900,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // Pause previous video
     if (_controllerPool.containsKey(_currentIndex)) {
       _controllerPool[_currentIndex]?.pause();
-    _controllerStates[_currentIndex] = false;
+      _controllerStates[_currentIndex] = false;
     }
 
     _currentIndex = index;
@@ -847,17 +908,17 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // Play current video if preloaded
     if (_controllerPool.containsKey(index)) {
       _controllerPool[index]?.play();
-        _controllerStates[index] = true;
-        _userPaused[index] = false;
+      _controllerStates[index] = true;
+      _userPaused[index] = false;
       final ctrl = _controllerPool[index]!;
-        _applyLoopingBehavior(ctrl);
-        _attachEndListenerIfNeeded(ctrl, index);
-        _attachBufferingListenerIfNeeded(ctrl, index);
+      _applyLoopingBehavior(ctrl);
+      _attachEndListenerIfNeeded(ctrl, index);
+      _attachBufferingListenerIfNeeded(ctrl, index);
 
-        // **NEW: Start view tracking for current video**
-        if (index < _videos.length) {
-          final currentVideo = _videos[index];
-          _viewTracker.startViewTracking(currentVideo.id);
+      // **NEW: Start view tracking for current video**
+      if (index < _videos.length) {
+        final currentVideo = _videos[index];
+        _viewTracker.startViewTracking(currentVideo.id);
         print('▶️ Started view tracking for current video: ${currentVideo.id}');
       }
     }
@@ -886,11 +947,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
-            Icons.error_outline,
-            size: 64,
-            color: Colors.red,
-          ),
+          const Icon(Icons.error_outline, size: 64, color: Colors.red),
           const SizedBox(height: 16),
           const Text(
             'Failed to load videos',
@@ -906,10 +963,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Text(
                 _getUserFriendlyErrorMessage(_errorMessage!),
-                style: const TextStyle(
-                  color: Colors.white54,
-                  fontSize: 14,
-                ),
+                style: const TextStyle(color: Colors.white54, fontSize: 14),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -964,10 +1018,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           const SizedBox(height: 8),
           const Text(
             'Try refreshing or check back later',
-            style: TextStyle(
-              color: Colors.white54,
-              fontSize: 14,
-            ),
+            style: TextStyle(color: Colors.white54, fontSize: 14),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
@@ -998,8 +1049,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     final totalVideos = _videos.length;
     final estimatedVideoFeedAds = (totalVideos / videoFeedAdInterval).floor();
     final actualVideoFeedAds = _videoFeedAds.length;
-    final videoFeedAdsToShow =
-        actualVideoFeedAds.clamp(0, estimatedVideoFeedAds);
+    final videoFeedAdsToShow = actualVideoFeedAds.clamp(
+      0,
+      estimatedVideoFeedAds,
+    );
 
     return totalVideos + videoFeedAdsToShow + (_isLoadingMore ? 1 : 0);
   }
@@ -1017,21 +1070,24 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         // This should be a video feed ad position
         final adIndex = ((index + 1) ~/ (videoFeedAdInterval + 1)) - 1;
 
-      if (adIndex < _videoFeedAds.length) {
+        if (adIndex < _videoFeedAds.length) {
           print(
-              '🎯 Showing video feed recommendation at index $index (recommendation $adIndex)');
+            '🎯 Showing video feed recommendation at index $index (recommendation $adIndex)',
+          );
           print('   Recommendation title: ${_videoFeedAds[adIndex]['title']}');
           print('   Recommendation type: ${_videoFeedAds[adIndex]['adType']}');
-        return VideoFeedAdWidget(
-          adData: _videoFeedAds[adIndex],
-          onAdClick: () {
+          return VideoFeedAdWidget(
+            adData: _videoFeedAds[adIndex],
+            onAdClick: () {
               print(
-                  '🖱️ Video feed recommendation clicked: ${_videoFeedAds[adIndex]['title']}');
-          },
-        );
+                '🖱️ Video feed recommendation clicked: ${_videoFeedAds[adIndex]['title']}',
+              );
+            },
+          );
         } else {
-        print(
-            '⚠️ No video feed recommendation available at index $index (recommendation $adIndex)');
+          print(
+            '⚠️ No video feed recommendation available at index $index (recommendation $adIndex)',
+          );
         }
       }
     }
@@ -1071,10 +1127,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               SizedBox(height: 8),
               Text(
                 'You\'ve reached the end!',
-                style: TextStyle(
-                  color: Colors.white54,
-                  fontSize: 14,
-                ),
+                style: TextStyle(color: Colors.white54, fontSize: 14),
               ),
             ],
           ),
@@ -1090,16 +1143,16 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     return _buildVideoItem(video, controller, isActive, videoIndex);
   }
 
-  /// **BUILD SINGLE VIDEO ITEM: Instagram-style with simple conditional display**
+  /// **BUILD SINGLE VIDEO ITEM: Video with horizontal carousel navigation**
   Widget _buildVideoItem(
     VideoModel video,
     VideoPlayerController? controller,
     bool isActive,
     int index,
   ) {
-    // Initialize horizontal index for this video if not exists
-    if (!_horizontalIndices.containsKey(index)) {
-      _horizontalIndices[index] = 0; // Start with video (index 0)
+    // Initialize horizontal page notifier for this index if not exists
+    if (!_currentHorizontalPage.containsKey(index)) {
+      _currentHorizontalPage[index] = ValueNotifier<int>(0);
     }
 
     return Container(
@@ -1108,10 +1161,25 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       color: Colors.black,
       child: Stack(
         children: [
-          // **UPDATED: Show video or carousel ad based on horizontal index**
-          _horizontalIndices[index] == 0
-              ? _buildVideoPage(video, controller, isActive, index)
-              : _buildCarouselAdPage(index),
+          // **Show only current page - optimized with ValueListenableBuilder**
+          ValueListenableBuilder<int>(
+            valueListenable: _currentHorizontalPage[index]!,
+            builder: (context, currentPage, child) {
+              return IndexedStack(
+                index: currentPage,
+                children: [
+                  // Page 0: Video
+                  _buildVideoPage(video, controller, isActive, index),
+
+                  // Page 1: Carousel Ad (if available)
+                  if (_carouselAds.isNotEmpty)
+                    _buildCarouselAdPage(index)
+                  else
+                    Container(), // Empty container if no ads
+                ],
+              );
+            },
+          ),
 
           // Loading indicator
           if (_loadingVideos.contains(index))
@@ -1120,8 +1188,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       ),
     );
   }
-
-  // Removed: _buildOverlayNavArrows method - using only vertical action buttons for navigation
 
   Widget _buildVideoPage(
     VideoModel video,
@@ -1198,19 +1264,19 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           ),
 
           // Buffering indicator during playback (mid-stream stalls)
-            Positioned.fill(
-              child: IgnorePointer(
-                        child: Opacity(
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Opacity(
                 opacity:
                     (_isBuffering[index] == true && _userPaused[index] != true)
                         ? 1.0
                         : 0.0,
                 child: const Center(
                   child: CircularProgressIndicator(color: Colors.white),
-                  ),
                 ),
               ),
             ),
+          ),
 
           // Bottom progress bar (fixed at very bottom)
           if (controller != null && controller.value.isInitialized)
@@ -1242,10 +1308,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                 ),
                 child: Text(
                   'Recommendations: ${_videoFeedAds.length}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
                 ),
               ),
             ),
@@ -1262,7 +1325,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       right: 16,
       top: MediaQuery.of(context).size.height * 0.5 - 20,
       child: AnimatedOpacity(
-        opacity: _horizontalIndices[index] == 0 ? 0.7 : 0.0,
+        opacity: 0.7,
         duration: const Duration(milliseconds: 300),
         child: GestureDetector(
           onTap: () => _openReportDialog(videoId),
@@ -1284,11 +1347,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                   ),
                 ),
                 SizedBox(width: 4),
-                Icon(
-                  Icons.arrow_forward_ios,
-                  color: Colors.white,
-                  size: 12,
-                ),
+                Icon(Icons.arrow_forward_ios, color: Colors.white, size: 12),
               ],
             ),
           ),
@@ -1302,10 +1361,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     showDialog(
       context: context,
       barrierDismissible: true,
-      builder: (context) => ReportDialogWidget(
-        targetType: 'video',
-        targetId: videoId,
-      ),
+      builder: (context) =>
+          ReportDialogWidget(targetType: 'video', targetId: videoId),
     );
   }
 
@@ -1330,8 +1387,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                 // Progress bar background
                 Container(
                   height: 4,
-                  margin:
-                      const EdgeInsets.only(top: 2), // Center the progress bar
+                  margin: const EdgeInsets.only(
+                    top: 2,
+                  ), // Center the progress bar
                   color: Colors.grey.withOpacity(0.3),
                 ),
                 // Progress bar filled portion
@@ -1430,331 +1488,46 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
   }
 
-  /// **BUILD CAROUSEL AD PAGE: Simple carousel ads with button navigation**
+  /// **BUILD CAROUSEL AD PAGE: Full-screen carousel ad within horizontal PageView**
   Widget _buildCarouselAdPage(int videoIndex) {
-    final carouselAd = _carouselAdManager.getCarouselAdForIndex(videoIndex);
-
-    if (carouselAd == null || carouselAd.slides.isEmpty) {
+    if (_carouselAds.isEmpty) {
       return Container(
         width: double.infinity,
         height: double.infinity,
         color: Colors.black,
-        child: Stack(
-          children: [
-            const Center(
-              child: Text(
-                'No recommendations available',
-                style: TextStyle(color: Colors.white, fontSize: 16),
-              ),
-            ),
-            // Back control at the same position as right-side actions
-            Positioned(
-              right: 16,
-              bottom: 20,
-              child: GestureDetector(
-                onTap: () => _navigateBackToVideo(videoIndex),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.arrow_back_ios,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
-              ),
-            ),
-          ],
+        child: const Center(
+          child: Text(
+            'No carousel ads available',
+            style: TextStyle(color: Colors.white),
+          ),
         ),
       );
     }
 
-    // Initialize carousel slide index if not exists
-    if (!_currentCarouselSlideIndex.containsKey(videoIndex)) {
-      _currentCarouselSlideIndex[videoIndex] = 0;
-    }
+    // Use the first carousel ad (you can implement rotation logic later)
+    final carouselAd = _carouselAds[0];
 
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: Colors.black,
-      child: Stack(
-        children: [
-          // **FIXED: Remove PageView from carousel, use simple index-based display**
-          _buildCarouselAdSlide(
-            carouselAd.slides[_currentCarouselSlideIndex[videoIndex] ?? 0],
-            carouselAd,
-            videoIndex,
-          ),
-
-          // **NEW: Carousel dot indicator**
-          if (carouselAd.slides.length > 1)
-            _buildCarouselDotIndicator(videoIndex, carouselAd.slides.length),
-
-          // **NEW: Arrow navigation buttons** (right-side, same area as video actions)
-          _buildCarouselArrowButtons(videoIndex, carouselAd),
-        ],
-      ),
+    return CarouselAdWidget(
+      carouselAd: carouselAd,
+      onAdClosed: () {
+        if (_currentHorizontalPage.containsKey(videoIndex)) {
+          _currentHorizontalPage[videoIndex]!.value = 0;
+        }
+      },
+      autoPlay: true,
     );
   }
 
-  /// **BUILD CAROUSEL DOT INDICATOR: Shows current slide position**
-  Widget _buildCarouselDotIndicator(int videoIndex, int slideCount) {
-    final currentSlide = _currentCarouselSlideIndex[videoIndex] ?? 0;
-
-    return Positioned(
-      bottom: 20,
-      left: 0,
-      right: 0,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: List.generate(slideCount, (index) {
-          return Container(
-            margin: const EdgeInsets.symmetric(horizontal: 4),
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: index == currentSlide
-                  ? Colors.white
-                  : Colors.white.withOpacity(0.4),
-            ),
-          );
-        }),
-      ),
-    );
-  }
-
-  /// **BUILD CAROUSEL ARROW BUTTONS: Navigation arrows placed horizontally**
-  Widget _buildCarouselArrowButtons(
-      int videoIndex, CarouselAdModel carouselAd) {
-    return Positioned(
-      left: 16,
-      right: 16,
-      bottom: 20,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // Back to video arrow (always visible)
-          GestureDetector(
-            onTap: () => _navigateBackToVideo(videoIndex),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black38,
-                    blurRadius: 8,
-                    offset: Offset(0, 2),
-                  ),
-                ],
-                border: Border.all(color: Colors.black87, width: 1),
-              ),
-              child: const Icon(
-                Icons.arrow_back_ios,
-                color: Colors.black,
-                size: 20,
-              ),
-            ),
-          ),
-
-          // Next slide arrow (only if multiple slides)
-          if (carouselAd.slides.length > 1)
-            GestureDetector(
-              onTap: () => _navigateToNextCarouselSlide(videoIndex, carouselAd),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black38,
-                      blurRadius: 8,
-                      offset: Offset(0, 2),
-                    ),
-                  ],
-                  border: Border.all(color: Colors.black87, width: 1),
-                ),
-                child: const Icon(
-                  Icons.arrow_forward_ios,
-                  color: Colors.black,
-                  size: 20,
-                ),
-              ),
-            )
-          else
-            // Empty container for consistent spacing when no next arrow
-            const SizedBox(
-              width: 44,
-              height: 44,
-            ),
-        ],
-      ),
-    );
-  }
-
-  /// **BUILD CAROUSEL AD SLIDE: Individual ad slide**
-  Widget _buildCarouselAdSlide(
-    CarouselSlide slide,
-    CarouselAdModel ad,
-    int videoIndex,
+  Widget _buildVideoPlayer(
+    VideoPlayerController controller,
+    bool isActive,
+    int index,
   ) {
     return Container(
       width: double.infinity,
       height: double.infinity,
       color: Colors.black,
-      child: Stack(
-        children: [
-          // Ad media - Full screen like Instagram Reels
-          Container(
-            width: double.infinity,
-            height: double.infinity,
-            color: Colors.black,
-            child: FittedBox(
-              fit:
-                  BoxFit.contain, // Changed to contain to preserve aspect ratio
-              child: Image.network(
-                slide.mediaUrl,
-                width: double.infinity,
-                height: double.infinity,
-                fit: BoxFit
-                    .contain, // Changed to contain to preserve aspect ratio
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    color: Colors.black,
-                    child: const Center(
-                      child: Icon(
-                            Icons.image_not_supported,
-                        size: 64,
-                            color: Colors.white54,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-
-          // Ad content overlay
-          Positioned(
-            bottom: 100,
-            left: 16,
-            right: 16,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                // Advertiser info with follow button
-                Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () => _navigateToCreatorProfile(ad.campaignId),
-                      child: CircleAvatar(
-                        radius: 20,
-                        backgroundImage: NetworkImage(ad.advertiserProfilePic),
-                        onBackgroundImageError: (exception, stackTrace) {
-                          print(
-                              'Error loading advertiser profile pic: $exception');
-                        },
-                        child: ad.advertiserProfilePic.isEmpty
-                            ? Text(
-                                ad.advertiserName.isNotEmpty
-                                    ? ad.advertiserName[0].toUpperCase()
-                                    : 'A',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                ),
-                              )
-                            : null,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => _navigateToCreatorProfile(ad.campaignId),
-                      child: Text(
-                          ad.advertiserName,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                            ),
-                          ],
-                        ),
-                const SizedBox(height: 16),
-
-                // Recommendation title
-                Text(
-                  slide.title ?? 'Recommendation',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                // Recommendation description
-                Text(
-                  slide.description ?? 'Recommended for you',
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
-                ),
-                  const SizedBox(height: 16),
-
-                  // Call to action button
-                  GestureDetector(
-                    onTap: () {
-                      print(
-                          '🔗 Carousel recommendation CTA tapped: ${ad.callToActionUrl}');
-                      _carouselAdManager.onCarouselAdClicked(ad);
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                      color: Colors.blue,
-                        borderRadius: BorderRadius.circular(25),
-                    ),
-                    child: Text(
-                      ad.callToActionLabel,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-                    ),
-                  ),
-                ],
-              ),
-    );
-  }
-
-  Widget _buildVideoPlayer(
-      VideoPlayerController controller, bool isActive, int index) {
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: Colors.black,
-      child: Center(
-        child: _buildVideoWithCorrectAspectRatio(controller),
-      ),
+      child: Center(child: _buildVideoWithCorrectAspectRatio(controller)),
     );
   }
 
@@ -1785,11 +1558,19 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         if (modelAspectRatio < 1.0) {
           // This is a portrait video (9:16) according to model
           return _buildPortraitVideoFromModel(
-              controller, screenWidth, screenHeight, modelAspectRatio);
+            controller,
+            screenWidth,
+            screenHeight,
+            modelAspectRatio,
+          );
         } else {
           // This is a landscape video (16:9) according to model
           return _buildLandscapeVideoFromModel(
-              controller, screenWidth, screenHeight, modelAspectRatio);
+            controller,
+            screenWidth,
+            screenHeight,
+            modelAspectRatio,
+          );
         }
       },
     );
@@ -1803,8 +1584,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   }
 
   /// **NEW: Build portrait video using MODEL aspect ratio (prevent stretching)**
-  Widget _buildPortraitVideoFromModel(VideoPlayerController controller,
-      double screenWidth, double screenHeight, double modelAspectRatio) {
+  Widget _buildPortraitVideoFromModel(
+    VideoPlayerController controller,
+    double screenWidth,
+    double screenHeight,
+    double modelAspectRatio,
+  ) {
     // Get actual video dimensions from controller
     final Size videoSize = controller.value.size;
     final int rotation = controller.value.rotationCorrection;
@@ -1819,10 +1604,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
 
     print(
-        '🎬 MODEL Portrait video - Original video size: ${videoWidth}x$videoHeight');
+      '🎬 MODEL Portrait video - Original video size: ${videoWidth}x$videoHeight',
+    );
     print('🎬 MODEL Portrait video - Model aspect ratio: $modelAspectRatio');
     print(
-        '🎬 MODEL Portrait video - Screen size: ${screenWidth}x$screenHeight');
+      '🎬 MODEL Portrait video - Screen size: ${screenWidth}x$screenHeight',
+    );
 
     // Use FittedBox to prevent stretching while maintaining aspect ratio
     return FittedBox(
@@ -1836,8 +1623,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   }
 
   /// **NEW: Build landscape video using MODEL aspect ratio (prevent stretching)**
-  Widget _buildLandscapeVideoFromModel(VideoPlayerController controller,
-      double screenWidth, double screenHeight, double modelAspectRatio) {
+  Widget _buildLandscapeVideoFromModel(
+    VideoPlayerController controller,
+    double screenWidth,
+    double screenHeight,
+    double modelAspectRatio,
+  ) {
     // Get actual video dimensions from controller
     final Size videoSize = controller.value.size;
     final int rotation = controller.value.rotationCorrection;
@@ -1852,10 +1643,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
 
     print(
-        '🎬 MODEL Landscape video - Original video size: ${videoWidth}x$videoHeight');
+      '🎬 MODEL Landscape video - Original video size: ${videoWidth}x$videoHeight',
+    );
     print('🎬 MODEL Landscape video - Model aspect ratio: $modelAspectRatio');
     print(
-        '🎬 MODEL Landscape video - Screen size: ${screenWidth}x$screenHeight');
+      '🎬 MODEL Landscape video - Screen size: ${screenWidth}x$screenHeight',
+    );
 
     // Use FittedBox to prevent stretching while maintaining aspect ratio
     return FittedBox(
@@ -1897,9 +1690,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     print('🔍 Is portrait (detected): $isPortrait');
     print('🔍 Expected 9:16 ratio: ${9.0 / 16.0}');
     print(
-        '🔍 Difference from 9:16 (detected): ${(aspectRatio - (9.0 / 16.0)).abs()}');
+      '🔍 Difference from 9:16 (detected): ${(aspectRatio - (9.0 / 16.0)).abs()}',
+    );
     print(
-        '🔍 Difference from 9:16 (model): ${(modelAspectRatio - (9.0 / 16.0)).abs()}');
+      '🔍 Difference from 9:16 (model): ${(modelAspectRatio - (9.0 / 16.0)).abs()}',
+    );
     print('🔍 Using MODEL aspect ratio for display');
   }
 
@@ -1934,7 +1729,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   }
 
   void _attachBufferingListenerIfNeeded(
-      VideoPlayerController controller, int index) {
+    VideoPlayerController controller,
+    int index,
+  ) {
     controller.removeListener(_bufferingListeners[index] ?? () {});
     void listener() {
       if (!mounted) return;
@@ -1988,11 +1785,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.play_circle_outline,
-              size: 80,
-              color: Colors.white54,
-            ),
+            Icon(Icons.play_circle_outline, size: 80, color: Colors.white54),
             SizedBox(height: 16),
             Text(
               'Tap to play video',
@@ -2151,27 +1944,37 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               ),
               const SizedBox(height: 12),
 
-              // Carousel ad navigation with consistent size
-              GestureDetector(
-                onTap: () => _navigateToCarouselAd(index),
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.6),
-                        shape: BoxShape.circle,
+              // **NEW: Carousel ad navigation - swipe indicator**
+              if (_carouselAds.isNotEmpty &&
+                  (_currentHorizontalPage[index] ?? 0) == 0)
+                GestureDetector(
+                  onTap: () => _navigateToCarouselAd(index),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.6),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.arrow_forward_ios,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                       ),
-                      child: const Icon(
-                        Icons.arrow_forward_ios,
-                        color: Colors.white,
-                        size:
-                            20, // **REDUCED: From 24 to 20 to match other buttons visually**
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Swipe',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -2179,7 +1982,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     );
   }
 
-  /// **BUILD VERTICAL ACTION BUTTON: Instagram-style with count**
   Widget _buildVerticalActionButton({
     required IconData icon,
     required VoidCallback onTap,
@@ -2317,44 +2119,20 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     );
   }
 
-  /// **HANDLE SHARE: With proper share functionality**
+  /// **HANDLE SHARE: Only share app deep link (no direct video URLs)**
   Future<void> _handleShare(VideoModel video) async {
     try {
-      // Get the proper URL for sharing
-      String shareUrl = video.videoUrl;
+      // **FIX: Always use app deep link - never share direct video URLs**
+      // This ensures users open the app instead of browser showing raw video
+      final appDeepLink = 'https://snehayog.app/video/${video.id}';
 
-      // If it's a custom scheme URL, convert it to web URL
-      if (video.videoUrl.startsWith('snehayog://')) {
-        shareUrl = 'https://snehayog.app/video/${video.id}';
-      }
-
-      // If it's an HLS URL, use it directly
-      if (video.videoUrl.contains('.m3u8')) {
-        shareUrl = video.videoUrl;
-      }
-
-      // If it's a Cloudinary MP4 URL, use it directly for sharing
-      if (video.videoUrl.contains('cloudinary.com') &&
-          video.videoUrl.contains('.mp4')) {
-        shareUrl = video.videoUrl;
-      }
-
-      // If we have HLS URLs, prefer them
-      if (video.hlsPlaylistUrl != null && video.hlsPlaylistUrl!.isNotEmpty) {
-        shareUrl = video.hlsPlaylistUrl!;
-      } else if (video.hlsMasterPlaylistUrl != null &&
-          video.hlsMasterPlaylistUrl!.isNotEmpty) {
-        shareUrl = video.hlsMasterPlaylistUrl!;
-      }
-
-      // Create professional share message
+      // Create professional share message with only app deep link
       final shareText = '''🎬 Check out this amazing video on Snehayog!
 
 📹 ${video.videoName}
 👤 by ${video.uploader.name}
 
-🔗 Watch on Snehayog: $shareUrl
-🌐 Web version: https://snehayog.app/video/${video.id}
+🔗 Watch now: $appDeepLink
 
 #Snehayog #Video #${video.uploader.name.replaceAll(' ', '')}''';
 
@@ -2365,7 +2143,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
       // Update share count on server
       try {
-        await _videoService.shareVideo(video.id, shareUrl, video.videoName);
+        await _videoService.shareVideo(video.id, appDeepLink, video.videoName);
       } catch (e) {
         print('⚠️ VideoFeedAdvanced: Failed to update share count: $e');
         // Don't show error to user as sharing still worked
@@ -2409,12 +2187,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     );
   }
 
-  /// **NAVIGATE TO CAROUSEL AD: Switch to carousel ad view**
+  /// **NAVIGATE TO CAROUSEL AD: Switch to carousel ad page (no rebuild)**
   void _navigateToCarouselAd(int index) {
-    setState(() {
-      _horizontalIndices[index] = 1; // Switch to carousel ad page
-    });
-    print('🎯 Navigated to carousel recommendation for video $index');
+    if (_carouselAds.isNotEmpty && _currentHorizontalPage.containsKey(index)) {
+      _currentHorizontalPage[index]!.value =
+          1; // Switch to carousel ad page - no setState needed!
+      print('🎯 Navigated to carousel ad for video $index');
+    }
   }
 
   /// **BUILD FOLLOW TEXT BUTTON: Professional follow/unfollow button**
@@ -2498,8 +2277,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       });
 
       _showSnackBar(
-          'Failed to ${_isFollowing(video.uploader.id) ? 'unfollow' : 'follow'} user',
-          isError: true);
+        'Failed to ${_isFollowing(video.uploader.id) ? 'unfollow' : 'follow'} user',
+        isError: true,
+      );
     }
   }
 
@@ -2511,26 +2291,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   /// **CHECK IF VIDEO IS LIKED**
   bool _isLiked(VideoModel video) {
     return _currentUserId != null && video.likedBy.contains(_currentUserId);
-  }
-
-  /// **NAVIGATE BACK TO VIDEO: Simple state change**
-  void _navigateBackToVideo(int videoIndex) {
-    setState(() {
-      _horizontalIndices[videoIndex] = 0; // Show video
-    });
-  }
-
-  /// **NAVIGATE TO NEXT CAROUSEL SLIDE: Simple state change**
-  void _navigateToNextCarouselSlide(
-      int videoIndex, CarouselAdModel carouselAd) {
-    if (carouselAd.slides.length > 1) {
-      final currentSlide = _currentCarouselSlideIndex[videoIndex] ?? 0;
-      final nextSlide = (currentSlide + 1) % carouselAd.slides.length;
-
-      setState(() {
-        _currentCarouselSlideIndex[videoIndex] = nextSlide;
-      });
-    }
   }
 
   /// **NAVIGATE TO CREATOR PROFILE: Navigate to user profile screen**
@@ -2565,14 +2325,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         // Pause current video
         if (_controllerPool.containsKey(_currentIndex)) {
           _controllerPool[_currentIndex]?.pause();
-        _controllerStates[_currentIndex] = false;
+          _controllerStates[_currentIndex] = false;
         }
         break;
       case AppLifecycleState.resumed:
         // Resume current video
         if (_controllerPool.containsKey(_currentIndex)) {
-        _userPaused[_currentIndex] = false;
-        _tryAutoplayCurrent();
+          _userPaused[_currentIndex] = false;
+          _tryAutoplayCurrent();
         }
         break;
       default:
@@ -2644,7 +2404,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                      'Connection failed: ${_getUserFriendlyErrorMessage(e)}'),
+                    'Connection failed: ${_getUserFriendlyErrorMessage(e)}',
+                  ),
                 ),
               ],
             ),
@@ -2661,20 +2422,18 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     super.build(context); // Required for AutomaticKeepAliveClientMixin
 
     return Consumer<MainController>(
-            builder: (context, mainController, child) {
-              final isVideoTabActive = mainController.currentIndex == 0;
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                _handleVisibilityChange(isVideoTabActive);
-              });
+      builder: (context, mainController, child) {
+        final isVideoTabActive = mainController.currentIndex == 0;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _handleVisibilityChange(isVideoTabActive);
+        });
 
         return Scaffold(
           backgroundColor: Colors.black,
           body: Stack(
             children: [
               _isLoading
-                  ? Center(
-                      child: _buildGreenSpinner(size: 40),
-                    )
+                  ? Center(child: _buildGreenSpinner(size: 40))
                   : _errorMessage != null
                       ? _buildErrorState()
                       : _videos.isEmpty
@@ -2694,7 +2453,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       if (userData != null) {
         _currentUserId = userData['id'] ?? userData['googleId'];
         print(
-            '✅ VideoFeedAdvanced: Current user ID initialized: $_currentUserId');
+          '✅ VideoFeedAdvanced: Current user ID initialized: $_currentUserId',
+        );
       }
     } catch (e) {
       print('⚠️ VideoFeedAdvanced: Failed to initialize user ID: $e');
@@ -2705,8 +2465,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   void dispose() {
     // **CRITICAL: Unregister callbacks from MainController**
     try {
-      final mainController =
-          Provider.of<MainController>(context, listen: false);
+      final mainController = Provider.of<MainController>(
+        context,
+        listen: false,
+      );
       mainController.unregisterCallbacks();
       print('📱 VideoFeedAdvanced: Unregistered callbacks from MainController');
     } catch (e) {
@@ -2715,11 +2477,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     // **NEW: Clean up views service**
     _viewTracker.dispose();
-      print('🎯 VideoFeedAdvanced: Disposed ViewsService');
+    print('🎯 VideoFeedAdvanced: Disposed ViewsService');
 
     // **NEW: Clean up background profile preloader**
     _profilePreloader.dispose();
-      print('🚀 VideoFeedAdvanced: Disposed BackgroundProfilePreloader');
+    print('🚀 VideoFeedAdvanced: Disposed BackgroundProfilePreloader');
 
     // Clean up all video controllers
     _controllerPool.forEach((index, controller) {
@@ -2746,8 +2508,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     // **TAB CHANGE DETECTION: Unregister callbacks**
     try {
-      final mainController =
-          Provider.of<MainController>(context, listen: false);
+      final mainController = Provider.of<MainController>(
+        context,
+        listen: false,
+      );
       mainController.unregisterCallbacks();
     } catch (e) {
       print('⚠️ VideoFeedAdvanced: Error unregistering callbacks: $e');
