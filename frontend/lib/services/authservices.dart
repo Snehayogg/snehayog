@@ -122,7 +122,10 @@ class AuthService {
               print('✅ User registration successful');
 
               // Show location onboarding for new users
-              await _showLocationOnboardingAfterSignIn();
+              // Add small delay to ensure context is available
+              Future.delayed(const Duration(milliseconds: 500), () {
+                _showLocationOnboardingAfterSignIn();
+              });
             } else {
               print('⚠️ User registration failed: ${registerResponse.body}');
             }
@@ -218,6 +221,11 @@ class AuthService {
 
       print('✅ Fallback session created successfully');
 
+      // Show location onboarding for fallback users too
+      Future.delayed(const Duration(milliseconds: 500), () {
+        _showLocationOnboardingAfterSignIn();
+      });
+
       return {
         'id': googleUser.id,
         'googleId': googleUser.id, // Add explicit googleId field
@@ -302,7 +310,7 @@ class AuthService {
       }
 
       // Explicit flags
-      await prefs.remove('has_payment_setup');
+      // NOTE: Do not remove payment setup flags so user payment profile persists across sessions
 
       print('✅ Sign out successful - All user data cleared');
     } catch (e) {
@@ -740,5 +748,25 @@ class AuthService {
     } catch (e) {
       print('❌ Error showing location onboarding: $e');
     }
+  }
+
+  /// **TESTING: Force show location dialog (ignores SharedPreferences check)**
+  static Future<void> forceShowLocationDialog(BuildContext context) async {
+    try {
+      print('🧪 TESTING: Force showing location permission dialog...');
+
+      // Reset onboarding state first
+      await LocationOnboardingService.resetOnboarding();
+
+      // Then show the dialog
+      await showLocationOnboarding(context);
+    } catch (e) {
+      print('❌ Error force showing location dialog: $e');
+    }
+  }
+
+  /// **TESTING: Check if location permission is granted**
+  static Future<bool> checkLocationPermission() async {
+    return await LocationOnboardingService.hasLocationPermission();
   }
 }

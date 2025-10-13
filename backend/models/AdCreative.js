@@ -9,7 +9,7 @@ const AdCreativeSchema = new mongoose.Schema({
   adType: {
     type: String,
     required: true,
-    enum: ['banner', 'carousel ads', 'video feeds'],
+    enum: ['banner', 'carousel', 'video feed ad'],
     default: 'banner'
   },
   type: {
@@ -30,14 +30,22 @@ const AdCreativeSchema = new mongoose.Schema({
   },
   cloudinaryUrl: {
     type: String,
-    required: true
+    required: function() {
+      // Only required for banner and video feed ads
+      // Carousel ads use slides array instead
+      return this.adType !== 'carousel';
+    }
   },
   thumbnail: {
     type: String
   },
   aspectRatio: {
     type: String,
-    required: true,
+    required: function() {
+      // Only required for banner and video feed ads
+      // Carousel ads have aspect ratio per slide
+      return this.adType !== 'carousel';
+    },
     enum: ['16:9', '9:16', '1:1', '4:3', '3:4']
   },
   durationSec: {
@@ -45,9 +53,40 @@ const AdCreativeSchema = new mongoose.Schema({
     min: 1,
     max: 60,
     required: function() {
-      return this.type === 'video';
+      return this.type === 'video' && this.adType !== 'carousel';
     }
   },
+  // **NEW: Slides array for carousel ads**
+  slides: [{
+    mediaUrl: {
+      type: String,
+      required: true
+    },
+    thumbnail: {
+      type: String
+    },
+    mediaType: {
+      type: String,
+      enum: ['image', 'video'],
+      default: 'image'
+    },
+    aspectRatio: {
+      type: String,
+      enum: ['16:9', '9:16', '1:1', '4:3', '3:4'],
+      default: '9:16'
+    },
+    durationSec: {
+      type: Number,
+      min: 1,
+      max: 60
+    },
+    title: {
+      type: String
+    },
+    description: {
+      type: String
+    }
+  }],
   callToAction: {
     label: {
       type: String,

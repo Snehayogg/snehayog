@@ -12,7 +12,8 @@ const videoSchema = new mongoose.Schema({
   },
   thumbnailUrl: {
     type: String,
-    required: true
+    required: false,
+    default: ''
   },
   description: {
     type: String,

@@ -68,7 +68,7 @@ dependencies:
 
   # **NEW: Snehayog Monetization Package**
   snehayog_monetization:
-    path: ../../snehayog_monetization
+    path: ../packages/snehayog_monetization
 
   jwt_decoder: ^2.0.1
   flutter_cache_manager: ^3.3.1
