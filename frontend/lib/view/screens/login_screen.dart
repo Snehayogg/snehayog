@@ -282,6 +282,9 @@ class LoginScreen extends StatelessWidget {
                                                   },
                                                 );
 
+                                                await LocationOnboardingService
+                                                    .debugOnboardingStatus();
+
                                                 Navigator.pushReplacementNamed(
                                                     context, '/home');
                                               }
@@ -401,17 +404,35 @@ class LoginScreen extends StatelessWidget {
                                       },
                                     );
 
+                                    // **DEBUG: Check onboarding status**
+                                    await LocationOnboardingService
+                                        .debugOnboardingStatus();
+
+                                    // **DEBUG: If dialog didn't show, force show it**
+                                    // Uncomment the line below to force show location dialog
+                                    // await LocationOnboardingService.forceShowLocationOnboarding(context);
+
                                     Navigator.pushReplacementNamed(
                                         context, '/home');
                                   }
                                 },
-                                icon: const Icon(
-                                  Icons.login_rounded,
-                                  color: Colors.white,
-                                  size: 20,
+                                icon: Image.asset(
+                                  'assets/icons/google_logo.png',
+                                  width: 20,
+                                  height: 20,
+                                  // Fallback to an icon if the asset is missing
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      const Icon(
+                                    Icons.g_translate,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
                                 ),
                                 label: const Text(
                                   'Sign in with Google',
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
@@ -445,42 +466,6 @@ class LoginScreen extends StatelessWidget {
                       color: Colors.white60,
                     ),
                     textAlign: TextAlign.center,
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Creator Credit
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.2),
-                        width: 0.5,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.code,
-                          size: 14,
-                          color: Colors.white.withOpacity(0.7),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Created by Sanju Yadav',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.8),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
                 ],
               ),

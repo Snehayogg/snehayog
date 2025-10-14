@@ -923,6 +923,136 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
+  /// Show How to Earn guidance (same style as UploadScreen's What to Upload)
+  void _showHowToEarnDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.8,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          builder: (context, scrollController) => Padding(
+            padding: const EdgeInsets.all(16),
+            child: SingleChildScrollView(
+              controller: scrollController,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade100,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.workspace_premium,
+                            color: Colors.blue.shade700),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'How to earn on Snehayog',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      )
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Points
+                  _buildHowToEarnPoint(
+                    title: '1. Upload quality videos',
+                    body:
+                        'Create engaging Yog or Sneha content. Use clear titles and relevant categories/tags for better reach.',
+                  ),
+                  _buildHowToEarnPoint(
+                    title: '2. Earn from ad revenue',
+                    body:
+                        'You earn a share when ads are shown with your videos. Higher engagement increases your earnings.',
+                  ),
+                  _buildHowToEarnPoint(
+                    title: '3. Payout schedule',
+                    body:
+                        'Balances are credited on the 1st of every month to your preferred payment method after verification.',
+                  ),
+                  _buildHowToEarnPoint(
+                    title: '4. Complete payment setup',
+                    body:
+                        'Set up your payout details in Creator Dashboard to receive monthly payments without delays.',
+                  ),
+                  _buildHowToEarnPoint(
+                    title: '5. Follow content guidelines',
+                    body:
+                        'Avoid copyrighted or restricted content. Repeated violations may impact earnings and account status.',
+                  ),
+
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.check_circle_outline),
+                      label: const Text('Got it'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        backgroundColor: Colors.blue.shade600,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  )
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildHowToEarnPoint({required String title, required String body}) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            body,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.shade800,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSignInView() {
     return RepaintBoundary(
       child: Center(
@@ -1850,148 +1980,178 @@ class _ProfileScreenState extends State<ProfileScreen>
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
         child: Column(
           children: [
-            // Profile Picture Section
-            RepaintBoundary(
-              child: Stack(
-                children: [
-                  Consumer<ProfileStateManager>(
-                    builder: (context, stateManager, child) {
-                      return Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: const Color(0xFFE5E7EB),
-                            width: 3,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 20,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: CircleAvatar(
-                          radius: 57,
-                          backgroundColor: const Color(0xFFF3F4F6),
-                          backgroundImage: _getProfileImage(),
-                          onBackgroundImageError: (exception, stackTrace) {
-                            ProfileScreenLogger.logError(
-                                'Error loading profile image: $exception');
-                          },
-                          child: _getProfileImage() == null
-                              ? const Icon(
-                                  Icons.person,
-                                  size: 48,
-                                  color: Color(0xFF9CA3AF),
-                                )
-                              : null,
-                        ),
-                      );
-                    },
-                  ),
-                  Consumer<ProfileStateManager>(
-                    builder: (context, stateManager, child) {
-                      if (stateManager.isEditing) {
-                        return Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: Container(
-                            width: 36,
-                            height: 36,
+            // Row: Profile photo left, username and CTA on right
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Avatar stack
+                RepaintBoundary(
+                  child: Stack(
+                    children: [
+                      Consumer<ProfileStateManager>(
+                        builder: (context, stateManager, child) {
+                          return Container(
+                            width: 96,
+                            height: 96,
                             decoration: BoxDecoration(
-                              color: const Color(0xFF3B82F6),
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: Colors.white,
+                                color: const Color(0xFFE5E7EB),
                                 width: 3,
                               ),
                               boxShadow: [
                                 BoxShadow(
                                   color: Colors.black.withOpacity(0.1),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 4),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 6),
                                 ),
                               ],
                             ),
-                            child: IconButton(
-                              icon: const Icon(
-                                Icons.camera_alt,
-                                color: Colors.white,
-                                size: 18,
+                            child: CircleAvatar(
+                              radius: 45,
+                              backgroundColor: const Color(0xFFF3F4F6),
+                              backgroundImage: _getProfileImage(),
+                              onBackgroundImageError: (exception, stackTrace) {
+                                ProfileScreenLogger.logError(
+                                    'Error loading profile image: $exception');
+                              },
+                              child: _getProfileImage() == null
+                                  ? const Icon(
+                                      Icons.person,
+                                      size: 40,
+                                      color: Color(0xFF9CA3AF),
+                                    )
+                                  : null,
+                            ),
+                          );
+                        },
+                      ),
+                      Consumer<ProfileStateManager>(
+                        builder: (context, stateManager, child) {
+                          if (stateManager.isEditing) {
+                            return Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child: Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF3B82F6),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 2,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.1),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 3),
+                                    ),
+                                  ],
+                                ),
+                                child: IconButton(
+                                  icon: const Icon(
+                                    Icons.camera_alt,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
+                                  onPressed: _handleProfilePhotoChange,
+                                  padding: EdgeInsets.zero,
+                                ),
                               ),
-                              onPressed: _handleProfilePhotoChange,
-                              padding: EdgeInsets.zero,
+                            );
+                          }
+                          return const SizedBox.shrink();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                // Username and How to earn
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Consumer<ProfileStateManager>(
+                        builder: (context, stateManager, child) {
+                          if (stateManager.isEditing) {
+                            return RepaintBoundary(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                      color: const Color(0xFFE5E7EB)),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.04),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: TextField(
+                                  controller: stateManager.nameController,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF1A1A1A),
+                                  ),
+                                  decoration: const InputDecoration(
+                                    border: InputBorder.none,
+                                    hintText: 'Enter your name',
+                                    hintStyle: TextStyle(
+                                      color: Color(0xFF9CA3AF),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          } else {
+                            return RepaintBoundary(
+                              child: Text(
+                                _getUserName(),
+                                style: const TextStyle(
+                                  color: Color(0xFF1A1A1A),
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.4,
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 36,
+                        child: OutlinedButton.icon(
+                          onPressed: _showHowToEarnDialog,
+                          icon: const Icon(Icons.info_outline, size: 18),
+                          label: const Text('How to earn'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            side: const BorderSide(color: Color(0xFF3B82F6)),
+                            foregroundColor: const Color(0xFF3B82F6),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
                             ),
                           ),
-                        );
-                      }
-                      return const SizedBox.shrink();
-                    },
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Username Section
-            Consumer<ProfileStateManager>(
-              builder: (context, stateManager, child) {
-                if (stateManager.isEditing) {
-                  return RepaintBoundary(
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 20),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFE5E7EB)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: TextField(
-                        controller: stateManager.nameController,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF1A1A1A),
-                        ),
-                        decoration: const InputDecoration(
-                          border: InputBorder.none,
-                          hintText: 'Enter your name',
-                          hintStyle: TextStyle(
-                            color: Color(0xFF9CA3AF),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                } else {
-                  return RepaintBoundary(
-                    child: Text(
-                      _getUserName(),
-                      style: const TextStyle(
-                        color: Color(0xFF1A1A1A),
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                  );
-                }
-              },
+                ),
+              ],
             ),
 
-            // Edit Action Buttons
+            // Edit Action Buttons (unchanged)
             Consumer<ProfileStateManager>(
               builder: (context, stateManager, child) {
                 if (stateManager.isEditing) {

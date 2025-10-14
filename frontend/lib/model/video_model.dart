@@ -25,6 +25,11 @@ class VideoModel {
   // Keeping lowQualityUrl for backward compatibility (will contain 480p URL)
   final String? lowQualityUrl; // 480p - the only quality we use
 
+  // **NEW: Video processing status**
+  final String processingStatus;
+  final int processingProgress;
+  final String? processingError;
+
   VideoModel({
     required this.id,
     required this.videoName,
@@ -47,6 +52,10 @@ class VideoModel {
     this.hlsVariants,
     this.isHLSEncoded,
     this.lowQualityUrl, // 480p URL for all videos
+    this.processingStatus =
+        'completed', // Default to completed for backward compatibility
+    this.processingProgress = 100,
+    this.processingError,
   }) : comments = comments; // **FIXED: Initialize the field**
 
   factory VideoModel.fromJson(Map<String, dynamic> json) {
@@ -242,6 +251,13 @@ class VideoModel {
         }(),
         isHLSEncoded: json['isHLSEncoded'] == true,
         lowQualityUrl: json['lowQualityUrl']?.toString(), // 480p URL
+        // Parse processing status fields
+        processingStatus: json['processingStatus']?.toString() ?? 'completed',
+        processingProgress: (json['processingProgress'] is int)
+            ? json['processingProgress']
+            : int.tryParse(json['processingProgress']?.toString() ?? '100') ??
+                100,
+        processingError: json['processingError']?.toString(),
       );
     } catch (e, stackTrace) {
       print('❌ VideoModel.fromJson Error: $e');

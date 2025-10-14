@@ -66,9 +66,9 @@ class AdService {
           'videoUrl': videoUrl,
           'link': link,
           'adType': adType == 'carousel'
-              ? 'carousel ads'
+              ? 'carousel'
               : adType == 'video feed'
-                  ? 'video feeds'
+                  ? 'video feed ad'
                   : adType, // **FIX: Correct adType format**
           'budget': budget,
           'targetAudience': targetAudience,
@@ -140,9 +140,9 @@ class AdService {
 
       String backendAdType = adType;
       if (adType == 'carousel') {
-        backendAdType = 'carousel ads';
+        backendAdType = 'carousel';
       } else if (adType == 'video feed') {
-        backendAdType = 'video feeds';
+        backendAdType = 'video feed ad';
       }
 
       final requestData = {

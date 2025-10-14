@@ -9,18 +9,37 @@ class ActiveAdsService {
   final SmartCacheManager _cacheManager = SmartCacheManager();
 
   /// Fetch all active ads from backend
-  Future<Map<String, List<Map<String, dynamic>>>> fetchActiveAds() async {
+  /// Optionally pass contextual signals to improve targeting
+  Future<Map<String, List<Map<String, dynamic>>>> fetchActiveAds({
+    String? videoCategory,
+    List<String>? videoTags,
+    List<String>? videoKeywords,
+    String? userId,
+  }) async {
     try {
       print(
           '🎯 ActiveAdsService: Fetching all active ads from $_baseUrl/api/ads/serve');
 
       // Include optional targeting params to match backend filters
-      final uri =
-          Uri.parse('$_baseUrl/api/ads/serve').replace(queryParameters: {
-        // platform helps backend $in filter match
+      final Map<String, String> queryParams = {
         'platform': 'mobile',
-        // Leave userId empty if unknown; backend should ignore if missing
-      });
+      };
+
+      if (userId != null && userId.isNotEmpty) {
+        queryParams['userId'] = userId;
+      }
+      if (videoCategory != null && videoCategory.isNotEmpty) {
+        queryParams['videoCategory'] = videoCategory;
+      }
+      if (videoTags != null && videoTags.isNotEmpty) {
+        queryParams['videoTags'] = videoTags.join(',');
+      }
+      if (videoKeywords != null && videoKeywords.isNotEmpty) {
+        queryParams['videoKeywords'] = videoKeywords.join(',');
+      }
+
+      final uri = Uri.parse('$_baseUrl/api/ads/serve')
+          .replace(queryParameters: queryParams);
 
       final response = await http.get(uri, headers: {
         'Content-Type': 'application/json',
@@ -92,7 +111,7 @@ class ActiveAdsService {
             'targetUrl',
           ]);
 
-          // Also check nested callToAction.url shape
+          // Also check nested callToAction.url shape (backend structure)
           if (link.isEmpty && ad['callToAction'] is Map) {
             final nested = (ad['callToAction'] as Map);
             final candidate = nested['url'] ?? nested['link'];
@@ -100,6 +119,14 @@ class ActiveAdsService {
               link = candidate.trim();
             }
           }
+
+          // Debug logging for ad normalization
+          print('🔍 Normalizing ad: ${ad['_id'] ?? ad['id']}');
+          print(
+              '   Original imageUrl: ${ad['imageUrl'] ?? ad['cloudinaryUrl'] ?? ad['thumbnail']}');
+          print('   Normalized imageUrl: ${ensureAbsoluteUrl(imageUrl)}');
+          print('   Original link: ${ad['link'] ?? ad['callToAction']}');
+          print('   Normalized link: ${ensureAbsoluteUrl(link)}');
 
           return {
             ...ad,
