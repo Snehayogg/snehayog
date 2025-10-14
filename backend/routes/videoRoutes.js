@@ -1148,4 +1148,59 @@ router.get('/cloudinary-config', verifyToken, async (req, res) => {
 
 
 
+// DEBUG: Fix pending videos to completed for current user
+router.get('/debug-fix-my-videos', verifyToken, async (req, res) => {
+  try {
+    console.log('🔧 DEBUG: Fixing pending videos for current user...');
+    
+    const currentUserGoogleId = req.user.googleId;
+    console.log('🔧 DEBUG: Current user Google ID:', currentUserGoogleId);
+    
+    // Find user by Google ID
+    const user = await User.findOne({ googleId: currentUserGoogleId });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    console.log('🔧 DEBUG: Found user:', user.name);
+    
+    // Update all pending videos for this user to completed
+    const result = await Video.updateMany(
+      { 
+        uploader: user._id,
+        processingStatus: 'pending' 
+      },
+      { 
+        $set: { 
+          processingStatus: 'completed',
+          processingProgress: 100,
+          isHLSEncoded: true
+        } 
+      }
+    );
+    
+    console.log('✅ DEBUG: Updated videos for user:', result);
+    
+    // Get updated counts
+    const userVideosCount = await Video.countDocuments({ uploader: user._id });
+    const completedVideosCount = await Video.countDocuments({ 
+      uploader: user._id, 
+      processingStatus: 'completed' 
+    });
+    
+    res.json({
+      message: 'User videos updated successfully',
+      userGoogleId: currentUserGoogleId,
+      userName: user.name,
+      updatedCount: result.modifiedCount,
+      totalUserVideos: userVideosCount,
+      completedUserVideos: completedVideosCount,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ DEBUG: Fix user videos failed:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router
