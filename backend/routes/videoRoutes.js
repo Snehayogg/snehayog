@@ -342,8 +342,11 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
       videosArrayLength: user.videos?.length || 0
     });
 
-    // **IMPROVED: Get videos directly from Video collection using uploader field**
-    const videos = await Video.find({ uploader: user._id })
+    // **IMPROVED: Get videos directly from Video collection using uploader field - only completed videos**
+    const videos = await Video.find({ 
+      uploader: user._id,
+      processingStatus: 'completed' // Only show completed videos
+    })
       .populate('uploader', 'name profilePic googleId')
       .sort({ createdAt: -1 }); // Latest videos first
 
@@ -433,8 +436,10 @@ router.get('/', async (req, res) => {
     const limitNum = parseInt(limit) || 10;
     const skip = (pageNum - 1) * limitNum;
     
-    // Build query filter - Allow both HLS and MP4 videos
-    const queryFilter = {}; // Allow all processed videos
+    // Build query filter - Only return completed videos
+    const queryFilter = { 
+      processingStatus: 'completed' // Only show videos that are ready to play
+    };
     
     // Add videoType filter if specified
     if (videoType && (videoType === 'yog' || videoType === 'sneha')) {

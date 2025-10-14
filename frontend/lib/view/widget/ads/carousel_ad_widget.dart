@@ -183,7 +183,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
   }
 
   Widget _buildImageContent(CarouselSlide slide) {
-    return Container(
+    return SizedBox(
       width: double.infinity,
       height: double.infinity,
       child: CachedNetworkImage(
@@ -385,7 +385,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
 
   /// **BUILD MAIN CONTENT AREA: Full screen ad creatives (not clickable)**
   Widget _buildMainContentArea() {
-    return Container(
+    return SizedBox(
       width: double.infinity,
       height: double.infinity,
       child:

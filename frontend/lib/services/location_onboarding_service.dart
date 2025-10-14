@@ -134,11 +134,60 @@ class LocationOnboardingService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_userHasSeenLocationPromptKey);
     await prefs.remove(_hasRequestedLocationKey);
+    print('✅ Location onboarding reset - dialog will show on next sign-in');
+  }
+
+  /// Force show location onboarding (bypasses the "seen" check)
+  static Future<void> forceShowLocationOnboarding(
+    BuildContext context, {
+    String? appName,
+    VoidCallback? onPermissionGranted,
+    VoidCallback? onPermissionDenied,
+    VoidCallback? onSkip,
+  }) async {
+    print('🔧 Force showing location onboarding dialog');
+
+    // Show the permission dialog directly
+    bool granted = await LocationPermissionHelper.requestLocationPermission(
+      context,
+      appName: appName ?? 'Snehayog',
+      onGranted: () {
+        print('✅ User granted location permission');
+        onPermissionGranted?.call();
+      },
+      onDenied: () {
+        print('❌ User denied location permission');
+        onPermissionDenied?.call();
+      },
+    );
+
+    // If user denied, show benefits dialog
+    if (!granted) {
+      _showLocationBenefitsDialog(context, onSkip: onSkip);
+    }
   }
 
   /// Check if user has location permission
   static Future<bool> hasLocationPermission() async {
     final locationService = LocationService();
     return await locationService.isLocationPermissionGranted();
+  }
+
+  /// Debug method to check onboarding status
+  static Future<void> debugOnboardingStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    bool hasSeenPrompt = prefs.getBool(_userHasSeenLocationPromptKey) ?? false;
+    bool hasRequestedPermission =
+        prefs.getBool(_hasRequestedLocationKey) ?? false;
+
+    print('🔍 Location Onboarding Debug Status:');
+    print('   Has seen prompt: $hasSeenPrompt');
+    print('   Has requested permission: $hasRequestedPermission');
+    print('   Should show onboarding: ${!hasSeenPrompt}');
+
+    // Check actual permission status
+    final locationService = LocationService();
+    bool hasPermission = await locationService.isLocationPermissionGranted();
+    print('   Has location permission: $hasPermission');
   }
 }

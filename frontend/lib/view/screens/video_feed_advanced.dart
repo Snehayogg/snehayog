@@ -25,6 +25,7 @@ import 'package:snehayog/core/managers/video_controller_manager.dart';
 import 'package:snehayog/view/widget/report/report_dialog_widget.dart';
 import 'package:snehayog/core/managers/smart_cache_manager.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:http/http.dart' as http;
 
 class VideoFeedAdvanced extends StatefulWidget {
   final int? initialIndex;
@@ -459,6 +460,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           print(
             '   Banner Ad $i: ${ad['title']} (${ad['adType']}) - Active: ${ad['isActive']}',
           );
+          print('     Keys: ${ad.keys.toList()}');
+          print('     ImageUrl: ${ad['imageUrl']}');
+          print('     CloudinaryUrl: ${ad['cloudinaryUrl']}');
+          print('     Thumbnail: ${ad['thumbnail']}');
+          print('     Link: ${ad['link']}');
+          print('     CallToAction: ${ad['callToAction']}');
         }
 
         // **NEW: Debug ad details**
@@ -468,10 +475,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         }
       }
 
-      // Also update carousel ad manager (in background)
       await _carouselAdManager.loadCarouselAds();
-
-      // **NEW: Load carousel ads for Yog tab**
+      // Load carousel ads only for Yog tab
       if (widget.videoType == 'yog') {
         await _loadCarouselAds();
       }
@@ -608,14 +613,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       }
 
       print('✅ VideoFeedAdvanced: Videos refreshed successfully');
-
-      // **OPTIMIZED: Reload ads in background (non-blocking)**
-      _loadActiveAds(); // No 'await' - runs in background
+      _loadActiveAds();
 
       // **MANUAL REFRESH: Reload carousel ads when user refreshes**
       print(
           '🔄 VideoFeedAdvanced: Reloading carousel ads after manual refresh...');
-      _carouselAdManager.loadCarouselAds();
+      await _carouselAdManager.loadCarouselAds();
     } catch (e) {
       print('❌ VideoFeedAdvanced: Error refreshing videos: $e');
 
@@ -665,7 +668,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     try {
       await _loadActiveAds();
 
-      // **NEW: Also refresh carousel ads for Yog tab**
+      // Also refresh carousel ads only for Yog tab
       if (widget.videoType == 'yog') {
         await _loadCarouselAds();
       }
@@ -681,7 +684,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     try {
       print('🎯 VideoFeedAdvanced: Loading carousel ads for Yog tab...');
 
-      final carouselAds = await _carouselAdManager.carouselAds;
+      // **FIXED: Wait for carousel ads to load before accessing them**
+      await _carouselAdManager.loadCarouselAds();
+      final carouselAds = _carouselAdManager.carouselAds;
 
       if (mounted) {
         setState(() {
@@ -748,6 +753,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     try {
       final video = _videos[index];
+
+      // **REMOVED: Processing status check - backend now only returns completed videos**
 
       // **FIXED: Validate and fix video URL before creating controller**
       final videoUrl = _validateAndFixVideoUrl(video.videoUrl);
@@ -1222,21 +1229,32 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           ),
 
           // **Banner ads - Full-width at top of screen**
-          if (_adsLoaded && _bannerAds.isNotEmpty)
-            Positioned(
-              top: 0, // Flush to top of screen
-              left: 0, // No horizontal margin
-              right: 0, // No horizontal margin
+          // Always try to show when loaded; rotate using modulo
+          Positioned(
+            top: 0, // Flush to top of screen
+            left: 0, // No horizontal margin
+            right: 0, // No horizontal margin
+            child: SafeArea(
+              top: true,
+              bottom: false,
               child: Material(
-                elevation: 10, // Higher elevation for upper layer
+                elevation: 12, // Ensure on top
+                color: Colors.transparent,
                 child: BannerAdWidget(
-                  adData: _bannerAds[index % _bannerAds.length],
+                  adData: (_adsLoaded && _bannerAds.isNotEmpty)
+                      ? _bannerAds[index % _bannerAds.length]
+                      : {
+                          // graceful fallback (no crash if empty)
+                          'imageUrl': '',
+                          'title': 'Sponsored',
+                        },
                   onAdClick: () {
                     print('🖱️ Banner ad clicked on video $index');
                   },
                 ),
               ),
             ),
+          ),
 
           // Center play indicator (only when user paused)
           Positioned.fill(
@@ -1800,6 +1818,215 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     );
   }
 
+  Widget _buildProcessingIndicator(VideoModel video, int index) {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: Colors.black,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 80,
+              height: 80,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox(
+                    width: 80,
+                    height: 80,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 3,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Colors.green.withOpacity(0.3),
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 60,
+                    height: 60,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 4,
+                      value: video.processingProgress / 100,
+                      valueColor:
+                          const AlwaysStoppedAnimation<Color>(Colors.green),
+                    ),
+                  ),
+                  // Center icon
+                  Icon(
+                    video.processingStatus == 'failed'
+                        ? Icons.error_outline
+                        : Icons.video_library_outlined,
+                    size: 32,
+                    color: video.processingStatus == 'failed'
+                        ? Colors.red
+                        : Colors.white54,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            Text(
+              _getProcessingStatusText(video.processingStatus),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+
+            const SizedBox(height: 8),
+
+            // Progress percentage
+            if (video.processingStatus == 'processing')
+              Text(
+                '${video.processingProgress}% complete',
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 14,
+                ),
+              ),
+
+            // Error message if failed
+            if (video.processingStatus == 'failed' &&
+                video.processingError != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Text(
+                  video.processingError!,
+                  style: const TextStyle(
+                    color: Colors.red,
+                    fontSize: 12,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+
+            const SizedBox(height: 16),
+
+            // Retry button for failed videos
+            if (video.processingStatus == 'failed')
+              ElevatedButton.icon(
+                onPressed: () => _retryVideoProcessing(video.id),
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Retry'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// **GET PROCESSING STATUS TEXT**
+  String _getProcessingStatusText(String status) {
+    switch (status) {
+      case 'pending':
+        return 'Video Uploaded\nProcessing will start soon...';
+      case 'processing':
+        return 'Processing Video\nPlease wait...';
+      case 'failed':
+        return 'Processing Failed\nPlease try again';
+      default:
+        return 'Video Processing\nPlease wait...';
+    }
+  }
+
+  /// **GET USER TOKEN: Helper method for authentication**
+  Future<String?> _getUserToken() async {
+    try {
+      final userData = await _authService.getUserData();
+      return userData?['token']?.toString();
+    } catch (e) {
+      print('❌ Error getting user token: $e');
+      return null;
+    }
+  }
+
+  /// **RETRY VIDEO PROCESSING**
+  Future<void> _retryVideoProcessing(String videoId) async {
+    try {
+      print('🔄 Retrying video processing for: $videoId');
+
+      // Show loading state
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 12),
+              Text('Retrying video processing...'),
+            ],
+          ),
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      // Call backend to retry processing
+      final response = await http.post(
+        Uri.parse(
+            '${VideoService.baseUrl}/api/videos/$videoId/retry-processing'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${await _getUserToken()}',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 8),
+                Text('Processing restarted successfully!'),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+
+        // Refresh videos to get updated status
+        await refreshVideos();
+      } else {
+        throw Exception('Failed to retry processing');
+      }
+    } catch (e) {
+      print('❌ Error retrying video processing: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Failed to retry processing: ${e.toString()}'),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
   Widget _buildVideoOverlay(VideoModel video, int index) {
     return Stack(
       children: [
@@ -1944,36 +2171,35 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               const SizedBox(height: 12),
 
               // **NEW: Carousel ad navigation - swipe indicator**
-              if (_carouselAds.isNotEmpty &&
-                  (_currentHorizontalPage[index]?.value ?? 0) == 0)
-                GestureDetector(
-                  onTap: () => _navigateToCarouselAd(index),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.6),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.arrow_forward_ios,
-                          color: Colors.white,
-                          size: 20,
-                        ),
+              // Always show the arrow indicator (per requirement)
+              GestureDetector(
+                onTap: () => _navigateToCarouselAd(index),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.6),
+                        shape: BoxShape.circle,
                       ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Swipe',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      child: const Icon(
+                        Icons.arrow_forward_ios,
+                        color: Colors.white,
+                        size: 20,
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Swipe',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
+              ),
             ],
           ),
         ),

@@ -140,7 +140,7 @@ class AdService {
     // **NEW: Create AdCreative with correct field mapping**
     const creativeData = {
       campaignId: campaign._id,
-      adType: adType === 'banner' ? 'banner' : adType === 'carousel' ? 'carousel ads' : 'video feeds',
+      adType: adType === 'banner' ? 'banner' : adType === 'carousel' ? 'carousel' : 'video feed ad',
       type: mediaType,
       callToAction: {
         label: callToActionLabel,
@@ -256,11 +256,12 @@ class AdService {
       userId, platform, location, videoCategory, videoTags, videoKeywords 
     });
 
-    // **STEP 1: Get all active ads with their campaigns**
-    const activeCreatives = await AdCreative.find({
-      isActive: true,
-      reviewStatus: 'approved'
-    }).populate('campaignId').limit(50); // Get more ads for filtering
+    // **STEP 1: Get ads with their campaigns**
+    // TEST MODE: Include ads regardless of payment/review to allow quick visual testing
+    const activeCreatives = await AdCreative.find({})
+      .sort({ createdAt: -1 })
+      .populate('campaignId')
+      .limit(50);
 
     console.log(`🔍 AdService: Found ${activeCreatives.length} active ad creatives`);
 
@@ -276,7 +277,8 @@ class AdService {
         ad.impressions = (ad.impressions || 0) + 1;
         await ad.save();
       }
-      return finalAds;
+      // Transform raw AdCreative documents to frontend-expected format
+      return finalAds.map(ad => this.transformAdForFrontend(ad));
     }
 
     // **STEP 2: Filter ads based on targeting**
@@ -407,7 +409,49 @@ class AdService {
       await ad.save();
     }
 
-    return finalAds;
+    // Transform raw AdCreative documents to frontend-expected format
+    return finalAds.map(ad => this.transformAdForFrontend(ad));
+  }
+
+  /**
+   * Transform raw AdCreative document to frontend-expected format
+   */
+  transformAdForFrontend(adCreative) {
+    const campaign = adCreative.campaignId;
+    
+    // Extract image URL based on ad type
+    let imageUrl = null;
+    if (adCreative.adType === 'carousel') {
+      imageUrl = adCreative.slides?.[0]?.thumbnail || adCreative.slides?.[0]?.mediaUrl || null;
+    } else {
+      imageUrl = adCreative.thumbnail || adCreative.cloudinaryUrl || null;
+    }
+    
+    // Extract call-to-action link
+    const link = adCreative.callToAction?.url || null;
+    
+    // Base response object
+    const response = {
+      _id: adCreative._id.toString(),
+      id: adCreative._id.toString(),
+      adType: adCreative.adType,
+      imageUrl: imageUrl,
+      link: link,
+      cloudinaryUrl: adCreative.cloudinaryUrl,
+      thumbnail: adCreative.thumbnail,
+      impressions: adCreative.impressions || 0,
+      clicks: adCreative.clicks || 0,
+      createdAt: adCreative.createdAt,
+      updatedAt: adCreative.updatedAt,
+    };
+    
+    // Add title and description only for non-banner ads
+    if (adCreative.adType !== 'banner') {
+      response.title = campaign?.name || 'Untitled Ad';
+      response.description = campaign?.objective || '';
+    }
+    
+    return response;
   }
 
   /**

@@ -351,27 +351,48 @@ class _MainScreenState extends State<MainScreen>
             ),
             bottomNavigationBar: Container(
               decoration: BoxDecoration(
-                color: Colors.white,
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: mainController.currentIndex == 0
+                      ? [
+                          const Color(0xFF1A1A1A),
+                          const Color(0xFF0F0F0F),
+                        ]
+                      : [
+                          Colors.white,
+                          const Color(0xFFFAFAFA),
+                        ],
+                ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
+                    color: mainController.currentIndex == 0
+                        ? Colors.black.withOpacity(0.3)
+                        : Colors.black.withOpacity(0.1),
                     blurRadius: 20,
-                    offset: const Offset(0, -2),
+                    offset: const Offset(0, -4),
                     spreadRadius: 0,
                   ),
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
+                    color: mainController.currentIndex == 0
+                        ? Colors.black.withOpacity(0.2)
+                        : Colors.black.withOpacity(0.05),
                     blurRadius: 8,
-                    offset: const Offset(0, -1),
+                    offset: const Offset(0, -2),
                     spreadRadius: 0,
                   ),
                 ],
               ),
               child: SafeArea(
                 child: Container(
-                  height: 70,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  height: 72, // Increased height to accommodate proper padding
+                  padding: const EdgeInsets.only(
+                    left: 12,
+                    right: 12,
+                    top: 8,
+                    bottom:
+                        16, // Increased bottom padding to prevent text cutoff
+                  ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
@@ -381,6 +402,7 @@ class _MainScreenState extends State<MainScreen>
                         icon: Icons.play_circle_filled,
                         label: 'Yog',
                         onTap: () => _handleNavTap(0, mainController),
+                        mainController: mainController,
                       ),
                       _buildNavItem(
                         index: 1,
@@ -388,6 +410,7 @@ class _MainScreenState extends State<MainScreen>
                         icon: Icons.video_camera_front_rounded,
                         label: 'Vayu',
                         onTap: () => _handleNavTap(1, mainController),
+                        mainController: mainController,
                       ),
                       _buildNavItem(
                         index: 2,
@@ -396,6 +419,7 @@ class _MainScreenState extends State<MainScreen>
                         label: 'Upload',
                         onTap: () => _handleNavTap(2, mainController),
                         isSpecial: true,
+                        mainController: mainController,
                       ),
                       _buildNavItem(
                         index: 3,
@@ -403,6 +427,7 @@ class _MainScreenState extends State<MainScreen>
                         icon: Icons.person_outline_rounded,
                         label: 'Profile',
                         onTap: () => _handleNavTap(3, mainController),
+                        mainController: mainController,
                       ),
                     ],
                   ),
@@ -422,6 +447,7 @@ class _MainScreenState extends State<MainScreen>
     required IconData icon,
     required String label,
     required VoidCallback onTap,
+    required MainController mainController,
     bool isSpecial = false,
   }) {
     final isSelected = currentIndex == index;
@@ -433,51 +459,45 @@ class _MainScreenState extends State<MainScreen>
       onTap: onTap,
       onDoubleTap: isYogTab ? _handleYogTabDoubleTap : null,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
-        padding: EdgeInsets.symmetric(
-          horizontal: isSelected ? 16 : 12,
-          vertical: isSelected ? 12 : 8,
-        ),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? const Color(0xFF424242).withOpacity(0.12)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(
-            isSelected ? 16 : 12,
-          ),
-          border: isSelected
-              ? Border.all(
-                  color: const Color(0xFF424242).withOpacity(0.2),
-                  width: 1.5,
-                )
-              : null,
-        ),
-        child: Row(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // Icon with special handling for upload and refresh animation for Yog
             if (isUpload && isSpecial)
               Container(
-                padding: const EdgeInsets.all(8),
+                width: 56,
+                height: 56,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
+                  gradient: const LinearGradient(
                     colors: [
-                      const Color(0xFF424242).withOpacity(0.1),
-                      const Color(0xFF757575).withOpacity(0.05),
+                      Color(0xFF4CAF50),
+                      Color(0xFF2E7D32),
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(28),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF4CAF50).withOpacity(0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-                child: Icon(
-                  icon,
-                  size: isSelected ? 28 : 24,
-                  color: isSelected
-                      ? const Color(0xFF424242)
-                      : const Color(0xFF757575),
+                child: const Icon(
+                  Icons.add,
+                  size: 28,
+                  color: Colors.white,
                 ),
               )
             else if (isRefreshingYog)
@@ -486,41 +506,66 @@ class _MainScreenState extends State<MainScreen>
                 duration: const Duration(milliseconds: 200),
                 child: RotationTransition(
                   turns: _refreshAnimationController,
-                  child: Icon(
-                    Icons.refresh,
-                    size: isSelected ? 28 : 24,
-                    color: const Color(0xFF424242),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? const Color(0xFF2196F3).withOpacity(0.2)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Icon(
+                      Icons.refresh,
+                      size: 24,
+                      color: isSelected
+                          ? const Color(0xFF2196F3)
+                          : (mainController.currentIndex == 0
+                              ? Colors.grey[400]
+                              : Colors.grey[600]),
+                    ),
                   ),
                 ),
               )
             else
               AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? const Color(0xFF2196F3).withOpacity(0.2)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                ),
                 child: Icon(
                   icon,
-                  size: isSelected ? 28 : 24,
+                  size: 22,
                   color: isSelected
-                      ? const Color(0xFF424242)
-                      : const Color(0xFF757575),
+                      ? const Color(0xFF2196F3)
+                      : (mainController.currentIndex == 0
+                          ? Colors.grey[400]
+                          : Colors.grey[600]),
                 ),
               ),
 
-            // Only show label if this tab is currently selected
-            if (isSelected) ...[
-              const SizedBox(width: 8),
+            const SizedBox(height: 2),
 
-              // Label with better typography (only visible when selected)
-              AnimatedDefaultTextStyle(
-                duration: const Duration(milliseconds: 200),
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF424242),
-                  letterSpacing: 0.2,
-                ),
-                child: Text(isRefreshingYog ? 'Refreshing...' : label),
+            // Label always visible below icon
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 200),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                color: isSelected
+                    ? const Color(0xFF2196F3)
+                    : (mainController.currentIndex == 0
+                        ? Colors.grey[400]
+                        : Colors.grey[600]),
+                letterSpacing: 0.1,
               ),
-            ],
+              child: Text(isRefreshingYog ? 'Refreshing...' : label),
+            ),
           ],
         ),
       ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:snehayog/services/active_ads_service.dart';
+import 'package:snehayog/config/app_config.dart';
 
 /// Widget to display banner ads at the top of video feed
 class BannerAdWidget extends StatelessWidget {
@@ -20,7 +21,8 @@ class BannerAdWidget extends StatelessWidget {
     if (u.startsWith('http://') || u.startsWith('https://')) return u;
     if (u.startsWith('//')) return 'https:$u';
     if (u.startsWith('/')) {
-      return 'https://snehayog-production.up.railway.app$u';
+      // Use environment-configured baseUrl for relative backend paths
+      return '${AppConfig.baseUrl}$u';
     }
     return 'https://$u';
   }
@@ -32,16 +34,21 @@ class BannerAdWidget extends StatelessWidget {
         adData['image'] ??
         adData['bannerImageUrl'] ??
         adData['mediaUrl'] ??
+        adData['cloudinaryUrl'] ??
+        adData['thumbnail'] ??
         '';
     final String imageUrl = _ensureAbsoluteUrl(
         rawImage is String ? rawImage : rawImage?.toString() ?? '');
 
     // Debug logging for banner ad data
     print('🎯 BannerAdWidget: Building banner ad with data:');
+    print('   Raw adData keys: ${adData.keys.toList()}');
     print('   Image URL: $imageUrl');
     print('   Ad ID: ${adData['_id'] ?? adData['id']}');
     print('   Title: ${adData['title']}');
     print('   Link: ${adData['link']}');
+    print('   CallToAction: ${adData['callToAction']}');
+    print('   AdType: ${adData['adType']}');
 
     return Container(
       width: double.infinity,
@@ -164,16 +171,35 @@ class BannerAdWidget extends StatelessWidget {
   void _handleAdClick(BuildContext context) async {
     try {
       final adId = adData['_id'] ?? adData['id'];
+
+      // Debug logging for click handling
+      print('🖱️ BannerAdWidget: Handling ad click');
+      print('   Ad ID: $adId');
+      print('   Available keys: ${adData.keys.toList()}');
+      print('   Raw link field: ${adData['link']}');
+      print('   Raw callToAction field: ${adData['callToAction']}');
+
       // Resolve link from multiple keys and ensure absolute URL
-      final String link = _ensureAbsoluteUrl(
-        (adData['link'] ??
-                adData['url'] ??
-                adData['ctaUrl'] ??
-                adData['callToActionUrl'] ??
-                adData['targetUrl'] ??
-                '')
-            .toString(),
-      );
+      String link = (adData['link'] ??
+              adData['url'] ??
+              adData['ctaUrl'] ??
+              adData['callToActionUrl'] ??
+              adData['targetUrl'] ??
+              '')
+          .toString();
+
+      // Fallback: nested callToAction map from backend
+      if (link.trim().isEmpty && adData['callToAction'] is Map) {
+        final nested = adData['callToAction'] as Map;
+        final candidate = (nested['url'] ?? nested['link'])?.toString();
+        if (candidate != null && candidate.trim().isNotEmpty) {
+          link = candidate.trim();
+          print('   Found link in callToAction: $link');
+        }
+      }
+
+      link = _ensureAbsoluteUrl(link);
+      print('   Final normalized link: $link');
 
       // Show confirmation dialog if link is available
       if (link.isNotEmpty) {

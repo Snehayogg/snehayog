@@ -724,6 +724,10 @@ class AuthService {
           print('👤 User skipped location benefits dialog');
         },
       );
+
+      // **DEBUG: If dialog didn't show, force show it**
+      // Uncomment the line below to force show location dialog
+      // await LocationOnboardingService.forceShowLocationOnboarding(context);
       print('✅ Location onboarding completed');
     } catch (e) {
       print('❌ Error showing location onboarding: $e');

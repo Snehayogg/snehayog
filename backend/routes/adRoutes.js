@@ -191,7 +191,7 @@ router.post('/create-with-payment', async (req, res) => {
     // Create ad creative
     const adCreative = new AdCreative({
       campaignId: null, // This is the old endpoint, no campaign
-      adType: adType === 'banner' ? 'banner' : adType === 'carousel' ? 'carousel ads' : 'video feeds',
+      adType: adType === 'banner' ? 'banner' : adType === 'carousel' ? 'carousel' : 'video feed ad',
       type: videoUrl ? 'video' : 'image',
       cloudinaryUrl: videoUrl || imageUrl,
       thumbnail: imageUrl,

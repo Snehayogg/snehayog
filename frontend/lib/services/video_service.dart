@@ -449,11 +449,11 @@ class VideoService {
       print('📄 VideoService: Upload response body: $responseBody');
 
       if (streamedResponse.statusCode == 201) {
-        final videoData = responseData['video'];
+        final videoData = responseData['video'] ?? {};
         return {
-          'id': videoData['_id'],
-          'title': videoData['videoName'],
-          'videoUrl': videoData['videoUrl'],
+          'id': videoData['_id'] ?? videoData['id'],
+          'title': videoData['videoName'] ?? title,
+          'videoUrl': videoData['videoUrl'] ?? videoData['hlsPlaylistUrl'],
           'thumbnail': videoData['thumbnailUrl'],
           'originalVideoUrl': videoData['originalVideoUrl'],
           'duration': '0:00',
@@ -462,6 +462,7 @@ class VideoService {
           'uploadTime': 'Just now',
           'isLongVideo': isLong,
           'link': videoData['link'],
+          'processingStatus': videoData['processingStatus'] ?? 'pending',
         };
       } else {
         print(
@@ -595,8 +596,9 @@ class VideoService {
   /// **Check server health**
   Future<bool> checkServerHealth() async {
     try {
+      // Use the configured health endpoint from NetworkHelper
       final response = await http
-          .get(Uri.parse('$baseUrl/api/health'))
+          .get(Uri.parse(NetworkHelper.healthEndpoint))
           .timeout(const Duration(seconds: 5));
       return response.statusCode == 200;
     } catch (e) {
