@@ -282,13 +282,8 @@ class LoginScreen extends StatelessWidget {
                                                   },
                                                 );
 
-                                                // **DEBUG: Check onboarding status**
                                                 await LocationOnboardingService
                                                     .debugOnboardingStatus();
-
-                                                // **DEBUG: If dialog didn't show, force show it**
-                                                // Uncomment the line below to force show location dialog
-                                                // await LocationOnboardingService.forceShowLocationOnboarding(context);
 
                                                 Navigator.pushReplacementNamed(
                                                     context, '/home');
