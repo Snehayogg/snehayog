@@ -28,6 +28,51 @@ const videoCachingMiddleware = (req, res, next) => {
 // Apply caching middleware to all video routes
 router.use(videoCachingMiddleware);
 
+// DEBUG: Check database status - MUST BE FIRST ROUTE
+router.get('/debug/database', async (req, res) => {
+  try {
+    console.log('🔍 DEBUG: Checking database status...');
+    
+    // Count all videos
+    const totalVideos = await Video.countDocuments({});
+    console.log('🔍 DEBUG: Total videos in database:', totalVideos);
+    
+    // Count videos by processing status
+    const statusCounts = await Video.aggregate([
+      { $group: { _id: '$processingStatus', count: { $sum: 1 } } }
+    ]);
+    console.log('🔍 DEBUG: Videos by processing status:', statusCounts);
+    
+    // Count videos by user
+    const userCounts = await Video.aggregate([
+      { $lookup: { from: 'users', localField: 'uploader', foreignField: '_id', as: 'user' } },
+      { $unwind: '$user' },
+      { $group: { _id: { googleId: '$user.googleId', name: '$user.name' }, count: { $sum: 1 } } }
+    ]);
+    console.log('🔍 DEBUG: Videos by user:', userCounts);
+    
+    // Get sample videos
+    const sampleVideos = await Video.find({})
+      .select('videoName uploader createdAt processingStatus videoType')
+      .populate('uploader', 'googleId name')
+      .limit(5)
+      .lean();
+    
+    console.log('🔍 DEBUG: Sample videos:', sampleVideos);
+    
+    res.json({
+      totalVideos,
+      statusCounts,
+      userCounts,
+      sampleVideos,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ DEBUG: Database check failed:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // **NEW: Data validation middleware to ensure consistent types**
 const validateVideoData = (req, res, next) => {
   try {
@@ -436,10 +481,8 @@ router.get('/', async (req, res) => {
     const limitNum = parseInt(limit) || 10;
     const skip = (pageNum - 1) * limitNum;
     
-    // Build query filter - Only return completed videos
-    const queryFilter = { 
-      processingStatus: 'completed' // Only show videos that are ready to play
-    };
+    // Build query filter - Show all videos (remove processing status restriction)
+    const queryFilter = {};
     
     // Add videoType filter if specified
     if (videoType && (videoType === 'yog' || videoType === 'sneha')) {
@@ -447,7 +490,10 @@ router.get('/', async (req, res) => {
       console.log('📹 Filtering by videoType:', videoType);
     }
     
-    // MODIFIED: Only return HLS-encoded videos with optional videoType filter
+    // Debug: Log the query filter
+    console.log('🔍 VideoRoutes: Query filter:', JSON.stringify(queryFilter));
+    
+    // MODIFIED: Return all videos with optional videoType filter
     const [totalVideos, videos] = await Promise.all([
       Video.countDocuments(queryFilter), // Count with filter
       Video.find(queryFilter) // Find with filter
@@ -459,6 +505,21 @@ router.get('/', async (req, res) => {
         .limit(limit)
         .lean()
     ]);
+
+    console.log('📹 Total videos found:', totalVideos);
+    console.log('📹 Videos returned:', videos.length);
+    
+    // Debug: Log first few video details
+    if (videos.length > 0) {
+      console.log('📹 First video details:', {
+        id: videos[0]._id,
+        name: videos[0].videoName,
+        status: videos[0].processingStatus,
+        type: videos[0].videoType
+      });
+    } else {
+      console.log('❌ No videos found in database!');
+    }
 
     // Transform comments to match Flutter app expectations
     const transformedVideos = videos.map(video => ({
@@ -497,6 +558,82 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/videos/:id - Get video by ID for processing status checking
+router.get('/:id', verifyToken, async (req, res) => {
+  try {
+    const videoId = req.params.id;
+    console.log('📹 Getting video by ID:', videoId);
+
+    const video = await Video.findById(videoId)
+      .populate('uploader', 'name profilePic googleId')
+      .populate('comments.user', 'name profilePic googleId');
+
+    if (!video) {
+      console.log('❌ Video not found with ID:', videoId);
+      return res.status(404).json({ error: 'Video not found' });
+    }
+
+    // Transform video data to match frontend expectations
+    const videoObj = video.toObject();
+    const transformedVideo = {
+      _id: videoObj._id?.toString(),
+      videoName: videoObj.videoName || 'Untitled Video',
+      videoUrl: videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || '',
+      thumbnailUrl: videoObj.thumbnailUrl || '',
+      description: videoObj.description || '',
+      likes: parseInt(videoObj.likes) || 0,
+      views: parseInt(videoObj.views) || 0,
+      shares: parseInt(videoObj.shares) || 0,
+      duration: parseInt(videoObj.duration) || 0,
+      aspectRatio: parseFloat(videoObj.aspectRatio) || 9/16,
+      videoType: videoObj.videoType || 'yog',
+      link: videoObj.link || null,
+      uploadedAt: videoObj.uploadedAt?.toISOString?.() || new Date().toISOString(),
+      createdAt: videoObj.createdAt?.toISOString?.() || new Date().toISOString(),
+      updatedAt: videoObj.updatedAt?.toISOString?.() || new Date().toISOString(),
+      // **CRITICAL: Processing status fields**
+      processingStatus: videoObj.processingStatus || 'pending',
+      processingProgress: videoObj.processingProgress || 0,
+      processingError: videoObj.processingError || null,
+      // Uploader information
+      uploader: {
+        id: videoObj.uploader?._id?.toString() || videoObj.uploader?.toString(),
+        name: videoObj.uploader?.name || 'Unknown User',
+        profilePic: videoObj.uploader?.profilePic || '',
+        googleId: videoObj.uploader?.googleId || ''
+      },
+      // HLS Streaming fields
+      hlsMasterPlaylistUrl: videoObj.hlsMasterPlaylistUrl || null,
+      hlsPlaylistUrl: videoObj.hlsPlaylistUrl || null,
+      isHLSEncoded: videoObj.isHLSEncoded || false,
+      likedBy: videoObj.likedBy || [],
+      comments: videoObj.comments.map(comment => ({
+        _id: comment._id,
+        text: comment.text,
+        userId: comment.user?.googleId || comment.user?._id || '',
+        userName: comment.user?.name || '',
+        createdAt: comment.createdAt,
+        likes: comment.likes || 0,
+        likedBy: comment.likedBy || []
+      }))
+    };
+
+    console.log('✅ Video retrieved:', {
+      id: transformedVideo._id,
+      name: transformedVideo.videoName,
+      processingStatus: transformedVideo.processingStatus,
+      processingProgress: transformedVideo.processingProgress
+    });
+
+    res.json(transformedVideo);
+  } catch (error) {
+    console.error('❌ Error getting video by ID:', error);
+    res.status(500).json({ 
+      error: 'Failed to get video',
+      details: error.message 
+    });
+  }
+});
 
 // POST /api/videos/:id/like - Toggle like for a video (must be before /:id route)
 router.post('/:id/like', verifyToken, async (req, res) => {
@@ -1152,5 +1289,101 @@ router.get('/cloudinary-config', verifyToken, async (req, res) => {
 });
 
 
+
+// Get user's videos by user ID
+router.get('/user/:userId', verifyToken, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    console.log('🔍 Getting videos for user:', userId);
+    
+    // Find user by Google ID first, then by MongoDB ObjectId
+    let user = await User.findOne({ googleId: userId });
+    if (!user) {
+      try {
+        user = await User.findById(userId);
+      } catch (e) {
+        // ignore invalid ObjectId errors
+      }
+    }
+    
+    if (!user) {
+      console.log('❌ User not found:', userId);
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    console.log('✅ User found:', user.name);
+    
+    // Get user's videos with population
+    const videos = await Video.find({ uploader: user._id })
+      .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded')
+      .populate('uploader', 'name profilePic googleId')
+      .populate('comments.user', 'name profilePic googleId')
+      .sort({ createdAt: -1 })
+      .lean();
+    
+    console.log('🎬 Found videos count:', videos.length);
+    if (videos.length === 0) {
+      console.log('⚠️ No videos found for user:', user.name);
+    }
+
+    // Transform videos to match frontend expectations
+    const transformedVideos = videos.map(video => {
+      const videoObj = video;
+      const result = {
+        _id: videoObj._id?.toString(),
+        videoName: videoObj.videoName || 'Untitled Video',
+        videoUrl: videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || '',
+        thumbnailUrl: videoObj.thumbnailUrl || '',
+        description: videoObj.description || '',
+        likes: parseInt(videoObj.likes) || 0,
+        views: parseInt(videoObj.views) || 0,
+        shares: parseInt(videoObj.shares) || 0,
+        duration: parseInt(videoObj.duration) || 0,
+        aspectRatio: parseFloat(videoObj.aspectRatio) || 9/16,
+        videoType: videoObj.videoType || 'yog',
+        link: videoObj.link || null,
+        uploadedAt: videoObj.uploadedAt?.toISOString?.() || new Date().toISOString(),
+        createdAt: videoObj.createdAt?.toISOString?.() || new Date().toISOString(),
+        updatedAt: videoObj.updatedAt?.toISOString?.() || new Date().toISOString(),
+        uploader: {
+          id: videoObj.uploader?._id?.toString() || videoObj.uploader?.toString(),
+          name: videoObj.uploader?.name || 'Unknown User',
+          profilePic: videoObj.uploader?.profilePic || '',
+          googleId: videoObj.uploader?.googleId || ''
+        },
+        hlsMasterPlaylistUrl: videoObj.hlsMasterPlaylistUrl || null,
+        hlsPlaylistUrl: videoObj.hlsPlaylistUrl || null,
+        isHLSEncoded: videoObj.isHLSEncoded || false,
+        likedBy: videoObj.likedBy || [],
+        comments: videoObj.comments || []
+      };
+      
+      console.log(`🎬 Video ${result.videoName}:`, {
+        id: result._id,
+        hasVideoUrl: !!result.videoUrl,
+        hasThumbnail: !!result.thumbnailUrl,
+        likes: result.likes,
+        views: result.views,
+        uploader: result.uploader.name,
+        uploaderGoogleId: result.uploader.googleId
+      });
+      
+      return result;
+    });
+
+    console.log('✅ Sending user videos response:', {
+      totalVideos: transformedVideos.length,
+      firstVideo: transformedVideos.length > 0 ? transformedVideos[0].videoName : 'None'
+    });
+
+    res.json(transformedVideos);
+  } catch (error) {
+    console.error('❌ Error fetching user videos:', error);
+    res.status(500).json({ 
+      error: 'Error fetching videos',
+      details: error.message 
+    });
+  }
+});
 
 export default router

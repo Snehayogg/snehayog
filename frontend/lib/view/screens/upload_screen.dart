@@ -350,35 +350,53 @@ class _UploadScreenState extends State<UploadScreen> {
         },
       );
 
-      print('✅ HLS video upload completed successfully!');
+      print('✅ Video upload started successfully!');
       print('🎬 Uploaded video details: $uploadedVideo');
-      print('🔗 HLS Playlist URL: ${uploadedVideo['videoUrl']}');
-      print('🖼️ Thumbnail URL: ${uploadedVideo['thumbnail']}');
+      print(
+          '🔄 Processing status: ${uploadedVideo['video']['processingStatus']}');
 
+      // **FIXED: Wait for processing to complete**
       if (mounted) {
-        // Call the callback to refresh video list first
-        print('🔄 UploadScreen: Calling onVideoUploaded callback');
-        if (widget.onVideoUploaded != null) {
-          widget.onVideoUploaded!();
-          print('✅ UploadScreen: onVideoUploaded callback called successfully');
-        } else {
-          print('❌ UploadScreen: onVideoUploaded callback is null');
-        }
-
-        // Clear form
         setState(() {
-          _selectedVideo = null;
-          _titleController.clear();
-          _linkController.clear();
-          _selectedCategory = null;
-          _tags.clear();
+          _uploadStatus = 'Processing video... Please wait...';
         });
 
-        // Stop progress tracking
-        _stopUploadProgress();
+        // Wait for processing to complete
+        final completedVideo =
+            await _waitForProcessingCompletion(uploadedVideo['video']['id']);
 
-        // Show beautiful success dialog
-        await _showSuccessDialog();
+        if (completedVideo != null) {
+          print('✅ Video processing completed successfully!');
+          print('🔗 HLS Playlist URL: ${completedVideo['videoUrl']}');
+          print('🖼️ Thumbnail URL: ${completedVideo['thumbnailUrl']}');
+
+          // Call the callback to refresh video list first
+          print('🔄 UploadScreen: Calling onVideoUploaded callback');
+          if (widget.onVideoUploaded != null) {
+            widget.onVideoUploaded!();
+            print(
+                '✅ UploadScreen: onVideoUploaded callback called successfully');
+          } else {
+            print('❌ UploadScreen: onVideoUploaded callback is null');
+          }
+
+          // Clear form
+          setState(() {
+            _selectedVideo = null;
+            _titleController.clear();
+            _linkController.clear();
+            _selectedCategory = null;
+            _tags.clear();
+          });
+
+          // Stop progress tracking
+          _stopUploadProgress();
+
+          // Show beautiful success dialog
+          await _showSuccessDialog();
+        } else {
+          throw Exception('Video processing failed or timed out');
+        }
       }
     } on TimeoutException catch (e) {
       print('Upload timeout error: $e');
@@ -462,9 +480,6 @@ class _UploadScreenState extends State<UploadScreen> {
 
     final fileSizeMB = _selectedVideo!.lengthSync() / (1024 * 1024);
 
-    // Estimate upload time based on file size (assuming 2-5 MB/s upload speed)
-    final estimatedUploadSeconds = fileSizeMB / 3.0; // 3 MB/s average
-
     // Progress updates every 2 seconds
     Timer.periodic(const Duration(seconds: 2), (timer) {
       if (!mounted || !_isUploading) {
@@ -510,6 +525,58 @@ class _UploadScreenState extends State<UploadScreen> {
     _uploadProgress = 0.0;
     _elapsedSeconds = 0;
     _uploadStatus = '';
+  }
+
+  /// **NEW: Wait for video processing to complete**
+  Future<Map<String, dynamic>?> _waitForProcessingCompletion(
+      String videoId) async {
+    const maxWaitTime = Duration(minutes: 10); // Maximum wait time
+    const checkInterval = Duration(seconds: 10); // Check every 10 seconds
+    final startTime = DateTime.now();
+
+    print('🔄 Waiting for video processing to complete...');
+    print('📹 Video ID: $videoId');
+
+    while (DateTime.now().difference(startTime) < maxWaitTime) {
+      try {
+        // Check processing status
+        final response = await _videoService.getVideoById(videoId);
+
+        if (response != null) {
+          final processingStatus = response['processingStatus'];
+          final processingProgress = response['processingProgress'] ?? 0;
+
+          print(
+              '🔄 Processing status: $processingStatus (${processingProgress}%)');
+
+          // Update UI with progress
+          if (mounted) {
+            setState(() {
+              _uploadStatus = 'Processing video... $processingProgress%';
+              _uploadProgress =
+                  0.85 + (processingProgress / 100 * 0.15); // 85-100%
+            });
+          }
+
+          if (processingStatus == 'completed') {
+            print('✅ Video processing completed successfully!');
+            return response;
+          } else if (processingStatus == 'failed') {
+            print('❌ Video processing failed');
+            return null;
+          }
+        }
+
+        // Wait before checking again
+        await Future.delayed(checkInterval);
+      } catch (e) {
+        print('⚠️ Error checking processing status: $e');
+        await Future.delayed(checkInterval);
+      }
+    }
+
+    print('⏰ Processing timeout - maximum wait time exceeded');
+    return null;
   }
 
   /// **Show beautiful success dialog**
@@ -566,7 +633,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
                 // Success message
                 const Text(
-                  'Your video has been uploaded successfully and is now being processed. It will appear in your feed shortly!',
+                  'Your video has been uploaded and processed successfully! It is now available in your feed.',
                   style: TextStyle(
                     fontSize: 16,
                     color: Colors.black54,
@@ -580,19 +647,19 @@ class _UploadScreenState extends State<UploadScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
+                    color: Colors.green.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.info_outline,
-                          color: Colors.blue, size: 20),
+                      const Icon(Icons.check_circle_outline,
+                          color: Colors.green, size: 20),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'Converting to HLS format for better playback...',
+                          'Video has been processed and is ready for streaming!',
                           style: TextStyle(
-                            color: Colors.blue.shade700,
+                            color: Colors.green.shade700,
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
                           ),

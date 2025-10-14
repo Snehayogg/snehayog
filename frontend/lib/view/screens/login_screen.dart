@@ -340,7 +340,7 @@ class LoginScreen extends StatelessWidget {
                           Expanded(
                             flex: 2,
                             child: SizedBox(
-                              height: 56,
+                              height: 64,
                               child: TextButton.icon(
                                 onPressed: () {
                                   // Skip sign-in and go to home
@@ -380,7 +380,7 @@ class LoginScreen extends StatelessWidget {
                           Expanded(
                             flex: 3,
                             child: SizedBox(
-                              height: 56,
+                              height: 64,
                               child: ElevatedButton.icon(
                                 onPressed: () async {
                                   final user = await authController.signIn();
@@ -423,7 +423,7 @@ class LoginScreen extends StatelessWidget {
                                   // Fallback to an icon if the asset is missing
                                   errorBuilder: (context, error, stackTrace) =>
                                       const Icon(
-                                    Icons.g_translate,
+                                    Icons.login,
                                     color: Colors.white,
                                     size: 20,
                                   ),

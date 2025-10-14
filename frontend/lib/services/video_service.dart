@@ -620,6 +620,36 @@ class VideoService {
     }
   }
 
+  /// **Get video by ID for processing status checking**
+  Future<Map<String, dynamic>?> getVideoProcessingStatus(String videoId) async {
+    try {
+      print('🔍 VideoService: Getting video by ID: $videoId');
+
+      final headers = await _getAuthHeaders();
+      final response = await _makeRequest(
+        () => _client.get(
+          Uri.parse('$baseUrl/api/videos/$videoId'),
+          headers: headers,
+        ),
+        timeout: const Duration(seconds: 10),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print('✅ VideoService: Video retrieved successfully');
+        print('   Processing status: ${data['processingStatus']}');
+        print('   Processing progress: ${data['processingProgress']}%');
+        return data;
+      } else {
+        print('❌ VideoService: Failed to get video: ${response.statusCode}');
+        return null;
+      }
+    } catch (e) {
+      print('❌ VideoService: Error getting video by ID: $e');
+      return null;
+    }
+  }
+
   /// **Compress video**
   Future<File?> compressVideo(File videoFile) async {
     try {
