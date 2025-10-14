@@ -1,0 +1,5 @@
+[33m4f2e026a[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mbug-ad[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmain[m[33m)[m Fix video visibility issues: Add debug route, fix user videos route, improve upload processing
+[33mad8964bd[m fix ad bug
+[33m1ad84cd1[m Update login screen
+[33mfb5c5e6b[m Fix carousel functionality and update related services
+[33me8a63e71[m Merge pull request #12 from Snehayogg/fix-carousel

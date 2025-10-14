@@ -29,7 +29,7 @@ const videoCachingMiddleware = (req, res, next) => {
 router.use(videoCachingMiddleware);
 
 // DEBUG: Check database status - MUST BE FIRST ROUTE
-router.get('/debug/database', async (req, res) => {
+router.get('/debug-database', async (req, res) => {
   try {
     console.log('🔍 DEBUG: Checking database status...');
     
