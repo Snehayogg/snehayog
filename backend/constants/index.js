@@ -5,7 +5,7 @@ export const APP_CONFIG = {
   VERSION: '1.0.0',
   DEFAULT_PORT: 5001,
   DEFAULT_HOST: '0.0.0.0',
-  LOCAL_NETWORK_IP: '192.168.0.190'
+  LOCAL_NETWORK_IP: '192.168.0.199'
 };
 
 export const DATABASE_CONFIG = {

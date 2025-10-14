@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "dev:local": "HOST=192.168.0.199 PORT=5001 nodemon server.js",
+    "start:local": "HOST=192.168.0.199 PORT=5001 node server.js",
     "test": "jest",
     "setup": "npm install && npm run setup:ffmpeg",
     "setup:ffmpeg": "node scripts/setup-ffmpeg.js",

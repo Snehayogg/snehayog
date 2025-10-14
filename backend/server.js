@@ -46,7 +46,7 @@ process.env.MONGO_URI = mongoUri;
 
 // Port and Host configuration
 const PORT = process.env.PORT || 5001;
-const HOST = process.env.HOST || '0.0.0.0'; // Railway requires 0.0.0.0
+const HOST = process.env.HOST || '0.0.0.0';
 
 console.log('🔧 Server Configuration:');
 console.log(`   📍 Port: ${PORT}`);

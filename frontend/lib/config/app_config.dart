@@ -1,11 +1,19 @@
+import '../services/network_service.dart';
+
 /// Optimized app configuration for better performance and smaller size
 class AppConfig {
   static const bool _isDevelopment = true;
 
-  // Backend API configuration
+  // Backend API configuration with automatic fallback
   static String get baseUrl {
+    // Use NetworkService for automatic fallback between local and production
+    return NetworkService.instance.baseUrl;
+  }
+
+  // Legacy method for direct URL access (for backward compatibility)
+  static String get _legacyBaseUrl {
     if (_isDevelopment) {
-      return 'https://snehayog-production.up.railway.app';
+      return 'http://192.168.0.199:5001';
     } else {
       return 'https://snehayog-production.up.railway.app';
     }
@@ -13,6 +21,7 @@ class AppConfig {
 
   // **NEW: Fallback URLs for development**
   static const List<String> fallbackUrls = [
+    'http://192.168.0.199:5001',
     'https://snehayog-production.up.railway.app',
     'http://192.168.0.188:3000',
     'http://localhost:5001',

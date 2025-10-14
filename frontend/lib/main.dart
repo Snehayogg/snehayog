@@ -23,6 +23,8 @@ import 'package:snehayog/core/managers/smart_cache_manager.dart';
 import 'package:snehayog/model/video_model.dart';
 import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/services/background_profile_preloader.dart';
+import 'package:snehayog/services/app_initialization_service.dart';
+import 'package:snehayog/widgets/network_status_widget.dart';
 
 final RazorpayService razorpayService = RazorpayService();
 
@@ -286,28 +288,36 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      navigatorKey: AuthService.navigatorKey,
-      debugShowCheckedModeBanner: false,
-      title: 'Snehayog',
-      theme: AppTheme.lightTheme,
-      builder: (context, child) {
-        return MediaQuery(
-          data: MediaQuery.of(context)
-              .copyWith(textScaler: const TextScaler.linear(1.0)),
-          child: child!,
-        );
-      },
-      routes: {
-        '/home': (context) => const MainScreen(),
-        '/video': (context) {
-          final args = ModalRoute.of(context)?.settings.arguments
-              as Map<String, dynamic>?;
-          final videoId = args?['videoId'] as String?;
-          return VideoScreen(initialVideoId: videoId);
+    return NetworkInitializationWrapper(
+      child: MaterialApp(
+        navigatorKey: AuthService.navigatorKey,
+        debugShowCheckedModeBanner: false,
+        title: 'Snehayog',
+        theme: AppTheme.lightTheme,
+        builder: (context, child) {
+          return Stack(
+            children: [
+              MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: const TextScaler.linear(1.0)),
+                child: child!,
+              ),
+              // Network status widget for debug mode
+              const NetworkStatusWidget(),
+            ],
+          );
         },
-      },
-      home: const AuthWrapper(),
+        routes: {
+          '/home': (context) => const MainScreen(),
+          '/video': (context) {
+            final args = ModalRoute.of(context)?.settings.arguments
+                as Map<String, dynamic>?;
+            final videoId = args?['videoId'] as String?;
+            return VideoScreen(initialVideoId: videoId);
+          },
+        },
+        home: const AuthWrapper(),
+      ),
     );
   }
 }
