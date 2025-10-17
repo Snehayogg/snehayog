@@ -42,6 +42,59 @@ const upload = multer({
   }
 });
 
+// GET /ads/serve - Serve active ads to frontend
+router.get('/serve', async (req, res) => {
+  try {
+    console.log('🎯 Serving active ads...');
+    
+    // Find all active ad creatives
+    const activeCreatives = await AdCreative.find({ 
+      isActive: true,
+      reviewStatus: 'approved'
+    }).populate('campaignId');
+    
+    console.log(`✅ Found ${activeCreatives.length} active ad creatives`);
+    
+    // Transform creatives to frontend format
+    const ads = activeCreatives.map(creative => {
+      const campaign = creative.campaignId;
+      
+      return {
+        _id: creative._id.toString(),
+        id: creative._id.toString(),
+        title: campaign?.name || 'Untitled Ad',
+        description: campaign?.objective || '',
+        imageUrl: creative.adType === 'carousel' 
+          ? (creative.slides?.[0]?.mediaUrl || creative.cloudinaryUrl)
+          : creative.cloudinaryUrl,
+        videoUrl: creative.type === 'video' ? creative.cloudinaryUrl : null,
+        link: creative.callToAction?.url || '',
+        adType: creative.adType,
+        isActive: creative.isActive,
+        impressions: creative.impressions || 0,
+        clicks: creative.clicks || 0,
+        ctr: creative.ctr || 0,
+        slides: creative.slides || null,
+        callToAction: creative.callToAction
+      };
+    });
+    
+    console.log(`📊 Returning ${ads.length} ads:`, {
+      banner: ads.filter(a => a.adType === 'banner').length,
+      carousel: ads.filter(a => a.adType === 'carousel').length,
+      videoFeed: ads.filter(a => a.adType === 'video feed ad').length
+    });
+    
+    res.json({ ads });
+  } catch (error) {
+    console.error('❌ Error serving ads:', error);
+    res.status(500).json({ 
+      error: 'Failed to serve ads',
+      details: error.message 
+    });
+  }
+});
+
 // POST /ads/campaigns - Create draft campaign
 router.post('/campaigns', async (req, res) => {
   try {
@@ -188,10 +241,29 @@ router.post('/create-with-payment', async (req, res) => {
     const cpm = adType === 'banner' ? 10 : 30; 
     const calculatedImpressions = estimatedImpressions || Math.floor(budget / cpm * 1000);
 
-    // Create ad creative
+    // **FIXED: Create a campaign first (required for AdCreative)**
+    const campaign = new AdCampaign({
+      name: title || 'Legacy Ad Campaign',
+      advertiserUserId: req.user?.id || 'legacy-user',
+      objective: 'awareness',
+      startDate: new Date(),
+      endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+      dailyBudget: budget || 100,
+      totalBudget: budget || 100,
+      bidType: 'CPM',
+      cpmINR: adType === 'banner' ? 10 : 30,
+      target: {},
+      pacing: 'smooth',
+      frequencyCap: 3
+    });
+
+    await campaign.save();
+    console.log('✅ Created campaign for legacy ad:', campaign._id);
+
+    // **FIXED: Create ad creative with valid campaignId**
     const adCreative = new AdCreative({
-      campaignId: null, // This is the old endpoint, no campaign
-      adType: adType === 'banner' ? 'banner' : adType === 'carousel' ? 'carousel ads' : 'video feeds',
+      campaignId: campaign._id, // **FIX: Now using valid campaign ID**
+      adType: adType === 'banner' ? 'banner' : adType === 'carousel' ? 'carousel' : 'video feed ad',
       type: videoUrl ? 'video' : 'image',
       cloudinaryUrl: videoUrl || imageUrl,
       thumbnail: imageUrl,
@@ -199,13 +271,14 @@ router.post('/create-with-payment', async (req, res) => {
       durationSec: videoUrl ? 15 : undefined,
       callToAction: {
         label: 'Learn More',
-        url: link || 'https://example.com'
+        url: link
       },
       reviewStatus: 'approved', // **FIX: Auto-approve ads with payment**
       isActive: true // **FIX: Activate ads immediately after payment**
     });
 
     await adCreative.save();
+    console.log('✅ Created ad creative:', adCreative._id);
 
     // Create invoice for payment
     const invoice = new Invoice({
@@ -317,6 +390,35 @@ router.get('/serve', async (req, res) => {
   } catch (error) {
     console.error('Error serving ads:', error);
     res.status(500).json({ error: 'Failed to serve ads' });
+  }
+});
+
+// **NEW: Get carousel ads specifically**
+router.get('/carousel', async (req, res) => {
+  try {
+    const { userId, platform, location } = req.query;
+
+    console.log('🎯 Carousel ads request:', { userId, platform, location });
+
+    // Use the service method for consistent logic
+    const targetingCriteria = { userId, platform, location };
+    const activeAds = await adService.getActiveAds(targetingCriteria);
+
+    // Filter only carousel ads
+    const carouselAds = activeAds.filter(ad => 
+      ad.adType && ad.adType.toLowerCase() === 'carousel'
+    );
+
+    console.log(`✅ Found ${carouselAds.length} carousel ads (${activeAds.length} total ads)`);
+
+    res.json({
+      ads: carouselAds,
+      count: carouselAds.length
+    });
+
+  } catch (error) {
+    console.error('Error serving carousel ads:', error);
+    res.status(500).json({ error: 'Failed to serve carousel ads' });
   }
 });
 

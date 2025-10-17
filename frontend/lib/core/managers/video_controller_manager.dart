@@ -30,7 +30,11 @@ class VideoControllerManager {
     print('🎬 VIDEO URL SELECTION for: ${video.videoName}');
     print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-    // Prefer explicit HLS URLs if present (served by backend/CDN)
+    // **REMOVED EMPTY URL CHECK: All videos should play regardless of URL status**
+    print('🔍 Video URL: ${video.videoUrl}');
+    print('🔍 Video ID: ${video.id}');
+    print('🔍 Video Name: ${video.videoName}');
+
     if (video.hlsMasterPlaylistUrl != null &&
         video.hlsMasterPlaylistUrl!.isNotEmpty) {
       print('✅ SELECTED: HLS Master Playlist');

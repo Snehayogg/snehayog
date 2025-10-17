@@ -14,6 +14,14 @@ import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/services/ad_service.dart';
 import 'package:snehayog/config/app_config.dart';
 
+/// **Network Helper for dynamic base URL**
+class NetworkHelper {
+  static String getBaseUrl() {
+    // Use AppConfig for dynamic base URL
+    return AppConfig.baseUrl;
+  }
+}
+
 /// **OPTIMIZED VideoService - Single source of truth for all video operations**
 /// Merged from VideoService, BaseVideoService, and InstagramVideoService
 /// Eliminates code duplication and provides consistent API
@@ -39,6 +47,32 @@ class VideoService {
   static const int retryDelay = 1;
   static const int maxShortVideoDuration = 120;
   static const int maxFileSize = 100 * 1024 * 1024; // 100MB
+
+  /// **Get the best playable URL for a video (HLS priority)**
+  static String getPlayableUrl(VideoModel video) {
+    // HLS URLs को priority दें (better streaming)
+    if (video.hlsPlaylistUrl?.isNotEmpty == true) {
+      return video.hlsPlaylistUrl!;
+    }
+    if (video.hlsMasterPlaylistUrl?.isNotEmpty == true) {
+      return video.hlsMasterPlaylistUrl!;
+    }
+    // Fallback to direct URL
+    return video.videoUrl;
+  }
+
+  /// **Check if video has any playable URL**
+  static bool hasPlayableUrl(VideoModel video) {
+    return video.videoUrl.isNotEmpty ||
+        video.hlsPlaylistUrl?.isNotEmpty == true ||
+        video.hlsMasterPlaylistUrl?.isNotEmpty == true;
+  }
+
+  /// **Check if video uses HLS streaming**
+  static bool hasHlsStreaming(VideoModel video) {
+    return video.hlsPlaylistUrl?.isNotEmpty == true ||
+        video.hlsMasterPlaylistUrl?.isNotEmpty == true;
+  }
 
   // **GETTERS: Video tracking state**
   int get currentVisibleVideoIndex => _currentVisibleVideoIndex;
@@ -129,7 +163,7 @@ class VideoService {
   }) async {
     try {
       String url = '$baseUrl/api/videos?page=$page&limit=$limit';
-      if (videoType != null && (videoType == 'yog' || videoType == 'sneha')) {
+      if (videoType != null && (videoType == 'yog' || videoType == 'vayu')) {
         url += '&videoType=$videoType';
         print('🔍 VideoService: Filtering by videoType: $videoType');
       }
@@ -182,6 +216,10 @@ class VideoService {
           return VideoModel.fromJson(json);
         }).toList();
 
+        // **REMOVED FILTERING: Return all videos**
+        print(
+            '✅ VideoService: Returning ${videos.length} videos (filtering removed)');
+
         return {
           'videos': List<VideoModel>.from(videos),
           'hasMore': responseData['hasMore'] ?? false,
@@ -207,6 +245,38 @@ class VideoService {
     } catch (e) {
       if (e is Exception) rethrow;
       throw Exception('Network error: $e');
+    }
+  }
+
+  /// **Get video processing status by ID**
+  Future<Map<String, dynamic>?> getVideoProcessingStatus(String videoId) async {
+    try {
+      print(
+          '🔍 VideoService: Getting video processing status for ID: $videoId');
+
+      final headers = await _getAuthHeaders();
+      final response = await _makeRequest(
+        () => _client.get(
+          Uri.parse('$baseUrl/api/videos/$videoId'),
+          headers: headers,
+        ),
+        timeout: const Duration(seconds: 10),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print('✅ VideoService: Video status retrieved successfully');
+        print('   Processing status: ${data['processingStatus']}');
+        print('   Processing progress: ${data['processingProgress']}%');
+        return data;
+      } else {
+        print(
+            '❌ VideoService: Failed to get video status: ${response.statusCode}');
+        return null;
+      }
+    } catch (e) {
+      print('❌ VideoService: Error getting video processing status: $e');
+      return null;
     }
   }
 
@@ -408,7 +478,7 @@ class VideoService {
       // **Add fields**
       request.fields['videoName'] = title;
       // Description intentionally omitted from upload flow
-      request.fields['videoType'] = isLong ? 'sneha' : 'yog';
+      request.fields['videoType'] = isLong ? 'vayu' : 'yog';
       if (link != null && link.isNotEmpty) {
         request.fields['link'] = link;
       }
@@ -450,18 +520,28 @@ class VideoService {
 
       if (streamedResponse.statusCode == 201) {
         final videoData = responseData['video'];
+        // Return the expected nested structure that UploadScreen expects
         return {
-          'id': videoData['_id'],
-          'title': videoData['videoName'],
-          'videoUrl': videoData['videoUrl'],
-          'thumbnail': videoData['thumbnailUrl'],
-          'originalVideoUrl': videoData['originalVideoUrl'],
-          'duration': '0:00',
-          'views': 0,
-          'uploader': userData['name'],
-          'uploadTime': 'Just now',
-          'isLongVideo': isLong,
-          'link': videoData['link'],
+          'video': {
+            'id': videoData['id'], // ✅ FIXED: Backend sends 'id', not '_id'
+            'title': videoData['videoName'], // ✅ Backend sends 'videoName'
+            'videoUrl': videoData['videoUrl'] ??
+                '', // ✅ Backend may not have videoUrl initially
+            'thumbnail': videoData['thumbnailUrl'] ??
+                '', // ✅ Backend may not have thumbnailUrl initially
+            'originalVideoUrl': videoData['originalVideoUrl'] ??
+                '', // ✅ Fallback for missing field
+            'duration': '0:00', // ✅ Default duration
+            'views': 0, // ✅ Default views
+            'uploader': userData['name'], // ✅ Use userData from auth
+            'uploadTime': 'Just now', // ✅ Default upload time
+            'isLongVideo': isLong, // ✅ Use frontend calculation
+            'link': videoData['link'] ?? '', // ✅ Backend may not have link
+            'processingStatus': videoData['processingStatus'] ??
+                'pending', // ✅ FIXED: Default to 'pending'
+            'processingProgress':
+                videoData['processingProgress'] ?? 0, // ✅ Backend sends this
+          }
         };
       } else {
         print(
@@ -779,7 +859,7 @@ class VideoService {
       'views': 0,
       'shares': 0,
       'uploader': {
-        'id': ad.uploaderId ?? 'advertiser',
+        'id': ad.uploaderId,
         'name': 'Sponsored',
         'profilePic': ad.uploaderProfilePic ?? '',
       },

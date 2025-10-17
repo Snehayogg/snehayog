@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:snehayog/controller/google_sign_in_controller.dart';
-import 'package:snehayog/services/location_onboarding_service.dart';
+import 'package:snehayog/services/location_permission_service.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
@@ -264,22 +264,10 @@ class LoginScreen extends StatelessWidget {
                                               if (user != null &&
                                                   context.mounted) {
                                                 // Show location permission dialog for new user
-                                                await LocationOnboardingService
-                                                    .showLocationOnboardingIfNeeded(
+                                                await LocationPermissionService
+                                                    .requestLocationPermissionOnStartup(
                                                   context,
                                                   appName: 'Snehayog',
-                                                  onPermissionGranted: () {
-                                                    print(
-                                                        '✅ User granted location permission');
-                                                  },
-                                                  onPermissionDenied: () {
-                                                    print(
-                                                        '❌ User denied location permission');
-                                                  },
-                                                  onSkip: () {
-                                                    print(
-                                                        '⏭️ User skipped location permission');
-                                                  },
                                                 );
 
                                                 Navigator.pushReplacementNamed(
@@ -383,22 +371,10 @@ class LoginScreen extends StatelessWidget {
                                   final user = await authController.signIn();
                                   if (user != null && context.mounted) {
                                     // Show location permission dialog for new user
-                                    await LocationOnboardingService
-                                        .showLocationOnboardingIfNeeded(
+                                    await LocationPermissionService
+                                        .requestLocationPermissionOnStartup(
                                       context,
                                       appName: 'Snehayog',
-                                      onPermissionGranted: () {
-                                        print(
-                                            '✅ User granted location permission');
-                                      },
-                                      onPermissionDenied: () {
-                                        print(
-                                            '❌ User denied location permission');
-                                      },
-                                      onSkip: () {
-                                        print(
-                                            '⏭️ User skipped location permission');
-                                      },
                                     );
 
                                     Navigator.pushReplacementNamed(

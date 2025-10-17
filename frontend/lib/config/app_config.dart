@@ -19,13 +19,13 @@ class AppConfig {
     }
   }
 
-  // **NEW: Fallback URLs for development**
+  // **NEW: Fallback URLs for development (local first, then production)**
   static const List<String> fallbackUrls = [
     'http://192.168.0.199:5001',
-    'https://snehayog-production.up.railway.app',
-    'http://192.168.0.188:3000',
     'http://localhost:5001',
     'http://10.0.2.2:5001',
+    'https://snehayog-production.up.railway.app',
+    'http://192.168.0.188:3000',
   ];
 
   // **NEW: Network timeout configurations**

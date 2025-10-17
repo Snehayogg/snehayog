@@ -144,6 +144,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/referrals', referralRoutes);
+// app.use('/api/async-video', asyncVideoRoutes); // Commented out - file doesn't exist
 
 // Health check endpoints (both /health and /api/health)
 app.get('/health', (req, res) => {
@@ -174,14 +175,15 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString(),
     database: dbStatus,
     message: 'Backend API is running successfully',
-    endpoints: {
-      auth: '/api/auth',
-      users: '/api/users',
-      videos: '/api/videos',
-      ads: '/api/ads',
-      billing: '/api/billing',
-      upload: '/api/upload'
-    }
+      endpoints: {
+        auth: '/api/auth',
+        users: '/api/users',
+        videos: '/api/videos',
+        ads: '/api/ads',
+        billing: '/api/billing',
+        upload: '/api/upload',
+        asyncVideo: '/api/async-video'
+      }
   });
 });
 
@@ -220,10 +222,17 @@ const startServer = async () => {
     automatedPayoutService.startScheduler();
     
     // Start HTTP server
-    app.listen(PORT, HOST, () => {
+    const server = app.listen(PORT, HOST, () => {
       console.log(`🚀 Server running on http://${HOST}:${PORT}`);
       console.log('✅ All services initialized successfully');
     });
+
+    // Extend request timeouts for long uploads/processing
+    const REQUEST_TIMEOUT_MS = parseInt(process.env.REQUEST_TIMEOUT_MS || '600000'); // 10 minutes
+    const HEADERS_TIMEOUT_MS = parseInt(process.env.HEADERS_TIMEOUT_MS || '650000');
+    server.requestTimeout = REQUEST_TIMEOUT_MS;
+    server.headersTimeout = HEADERS_TIMEOUT_MS;
+    server.keepAliveTimeout = parseInt(process.env.KEEPALIVE_TIMEOUT_MS || '120000');
     
   } catch (error) {
     console.error('❌ Failed to start server:', error);

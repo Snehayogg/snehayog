@@ -7,7 +7,8 @@ import 'package:snehayog/config/app_config.dart';
 // **NEW: Import JWT decoder**
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:snehayog/config/google_sign_in_config.dart';
-import 'package:snehayog/services/location_onboarding_service.dart';
+import 'package:snehayog/services/location_permission_service.dart';
+import 'package:snehayog/services/location_service.dart';
 
 class AuthService {
   // ✅ Use platform-specific client ID
@@ -711,18 +712,9 @@ class AuthService {
         return;
       }
 
-      await LocationOnboardingService.showLocationOnboardingIfNeeded(
+      await LocationPermissionService.requestLocationPermissionOnStartup(
         context,
         appName: 'Snehayog',
-        onPermissionGranted: () {
-          print('✅ New user granted location permission');
-        },
-        onPermissionDenied: () {
-          print('❌ New user denied location permission');
-        },
-        onSkip: () {
-          print('👤 User skipped location benefits dialog');
-        },
       );
       print('✅ Location onboarding completed');
     } catch (e) {
@@ -735,15 +727,9 @@ class AuthService {
     try {
       print('📍 Showing location onboarding...');
 
-      await LocationOnboardingService.showLocationOnboardingIfNeeded(
+      await LocationPermissionService.requestLocationPermissionOnStartup(
         context,
         appName: 'Snehayog',
-        onPermissionGranted: () {
-          print('✅ User granted location permission');
-        },
-        onPermissionDenied: () {
-          print('❌ User denied location permission');
-        },
       );
     } catch (e) {
       print('❌ Error showing location onboarding: $e');
@@ -756,7 +742,7 @@ class AuthService {
       print('🧪 TESTING: Force showing location permission dialog...');
 
       // Reset onboarding state first
-      await LocationOnboardingService.resetOnboarding();
+      await LocationPermissionService.resetPermissionRequest();
 
       // Then show the dialog
       await showLocationOnboarding(context);
@@ -767,6 +753,7 @@ class AuthService {
 
   /// **TESTING: Check if location permission is granted**
   static Future<bool> checkLocationPermission() async {
-    return await LocationOnboardingService.hasLocationPermission();
+    final locationService = LocationService();
+    return await locationService.isLocationPermissionGranted();
   }
 }

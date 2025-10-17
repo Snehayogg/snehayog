@@ -94,9 +94,9 @@ class _NetworkStatusWidgetState extends State<NetworkStatusWidget> {
               size: 16,
             ),
             const SizedBox(width: 8),
-            Text(
+            const Text(
               'Network Status',
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.white,
                 fontSize: 12,
                 fontWeight: FontWeight.bold,

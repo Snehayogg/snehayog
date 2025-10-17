@@ -140,7 +140,7 @@ class AdService {
     // **NEW: Create AdCreative with correct field mapping**
     const creativeData = {
       campaignId: campaign._id,
-      adType: adType === 'banner' ? 'banner' : adType === 'carousel' ? 'carousel ads' : 'video feeds',
+      adType: adType === 'banner' ? 'banner' : adType === 'carousel' ? 'carousel' : 'video feed ad',
       type: mediaType,
       callToAction: {
         label: callToActionLabel,

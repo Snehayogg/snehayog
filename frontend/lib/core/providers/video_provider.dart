@@ -288,9 +288,9 @@ class VideoProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Filter videos by type (yog or sneha)
+  /// Filter videos by type (yog or vayu)
   Future<void> filterVideosByType(String videoType) async {
-    if (videoType != 'yog' && videoType != 'sneha') {
+    if (videoType != 'yog' && videoType != 'vayu') {
       print('⚠️ VideoProvider: Invalid videoType: $videoType');
       return;
     }
@@ -304,9 +304,9 @@ class VideoProvider extends ChangeNotifier {
     await filterVideosByType('yog');
   }
 
-  /// Get sneha videos only
-  Future<void> loadSnehaVideos() async {
-    await filterVideosByType('sneha');
+  /// Get vayu videos only
+  Future<void> loadVayuVideos() async {
+    await filterVideosByType('vayu');
   }
 
   /// Load all videos (no filter)

@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -10,10 +9,10 @@ class NetworkService {
 
   NetworkService._();
 
-  // Server URLs in priority order
+  // Server URLs in priority order - Local server first, Railway as fallback
   static const List<String> _serverUrls = [
-    'http://192.168.0.199:5001', // Local development server
-    'https://snehayog-production.up.railway.app', // Production fallback
+    'http://192.168.0.199:5001', // Local development server (primary)
+    'https://snehayog-production.up.railway.app', // Production server (fallback)
   ];
 
   String? _currentBaseUrl;
@@ -31,7 +30,7 @@ class NetworkService {
 
   /// Check if currently using local server
   bool get isUsingLocalServer =>
-      _currentBaseUrl?.contains('192.168.0.199') ?? false;
+      _currentBaseUrl?.contains('192.168.0.199') ?? true; // Default to local
 
   /// Check if currently using production server
   bool get isUsingProductionServer =>
@@ -141,12 +140,12 @@ class NetworkService {
       print('🏠 NetworkService: Attempting to connect to local server...');
     }
 
-    final localUrl = _serverUrls.first;
+    final localUrl = _serverUrls.first; // Local server is now first in the list
     final isOnline = await _testConnection(localUrl);
 
     if (isOnline) {
       _currentBaseUrl = localUrl;
-      _currentIndex = 0;
+      _currentIndex = 0; // Update index to first position
       _serverStatusCache[localUrl] = true;
 
       if (kDebugMode) {
@@ -167,8 +166,9 @@ class NetworkService {
       print('☁️ NetworkService: Switching to production server...');
     }
 
-    _currentBaseUrl = _serverUrls.last;
-    _currentIndex = _serverUrls.length - 1;
+    _currentBaseUrl =
+        _serverUrls.last; // Production server is now last in the list
+    _currentIndex = 1; // Update index to last position
 
     if (kDebugMode) {
       print('✅ NetworkService: Switched to production server');
@@ -231,7 +231,7 @@ class NetworkService {
       if (isUsingLocalServer) {
         if (kDebugMode) {
           print(
-              '🔄 NetworkService: Request failed, trying production server...');
+              '🔄 NetworkService: Local server failed, trying production server...');
         }
 
         await switchToProduction();

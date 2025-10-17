@@ -7,6 +7,7 @@ import 'package:snehayog/model/video_model.dart';
 import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/services/user_service.dart';
 import 'package:snehayog/services/video_service.dart';
+import 'package:snehayog/services/background_profile_preloader.dart';
 import 'package:snehayog/utils/feature_flags.dart';
 import 'package:snehayog/core/constants/profile_constants.dart';
 
@@ -552,6 +553,17 @@ class ProfileStateManager extends ChangeNotifier {
           }
         }
 
+        // **FIX: Clear BackgroundProfilePreloader cache to prevent deleted videos from reappearing on app restart**
+        try {
+          final preloader = BackgroundProfilePreloader();
+          await preloader.clearCache();
+          print(
+              '🧹 ProfileStateManager: Cleared BackgroundProfilePreloader cache after video deletion');
+        } catch (e) {
+          print(
+              '⚠️ ProfileStateManager: Error clearing BackgroundProfilePreloader cache: $e');
+        }
+
         // Proactively refresh from server to ensure DB state is reflected immediately
         try {
           final refreshUserId = _userData?['googleId'] ?? _userData?['id'];
@@ -612,6 +624,17 @@ class ProfileStateManager extends ChangeNotifier {
         _userVideos.removeWhere((video) => video.id == videoId);
 
         _isLoading = false;
+
+        // **FIX: Clear BackgroundProfilePreloader cache to prevent deleted video from reappearing on app restart**
+        try {
+          final preloader = BackgroundProfilePreloader();
+          await preloader.clearCache();
+          print(
+              '🧹 ProfileStateManager: Cleared BackgroundProfilePreloader cache after single video deletion');
+        } catch (e) {
+          print(
+              '⚠️ ProfileStateManager: Error clearing BackgroundProfilePreloader cache: $e');
+        }
 
         // Notify VideoProvider to update the main video feed
         if (_context != null) {

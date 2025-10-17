@@ -15,8 +15,7 @@ class CarouselAdService {
       // Try multiple endpoints to find carousel ads
       final endpoints = [
         '$_baseUrl/api/ads/carousel', // Direct carousel endpoint
-        '$_baseUrl/api/ads/serve?adType=carousel ads', // With space as backend expects
-        '$_baseUrl/api/ads/serve?adType=carousel',
+        '$_baseUrl/api/ads/serve?adType=carousel', // Fixed: no space
         '$_baseUrl/api/ads/active',
       ];
 

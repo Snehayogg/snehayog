@@ -96,7 +96,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   final Set<int> _loadingVideos = {};
   Timer? _preloadTimer;
 
-  // **INFINITE SCROLLING**
   static const int _infiniteScrollThreshold =
       5; // Load more when 5 videos from end
   bool _isLoadingMore = false;
@@ -681,7 +680,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     try {
       print('🎯 VideoFeedAdvanced: Loading carousel ads for Yog tab...');
 
-      final carouselAds = await _carouselAdManager.carouselAds;
+      final carouselAds = _carouselAdManager.carouselAds;
 
       if (mounted) {
         setState(() {
@@ -1164,17 +1163,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           ValueListenableBuilder<int>(
             valueListenable: _currentHorizontalPage[index]!,
             builder: (context, currentPage, child) {
+              print(
+                  '🎯 ValueListenableBuilder for index $index, currentPage: $currentPage');
               return IndexedStack(
                 index: currentPage,
                 children: [
                   // Page 0: Video
                   _buildVideoPage(video, controller, isActive, index),
 
-                  // Page 1: Carousel Ad (if available)
-                  if (_carouselAds.isNotEmpty)
-                    _buildCarouselAdPage(index)
-                  else
-                    Container(), // Empty container if no ads
+                  _buildCarouselAdPage(index),
                 ],
               );
             },
@@ -1489,16 +1486,130 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   /// **BUILD CAROUSEL AD PAGE: Full-screen carousel ad within horizontal PageView**
   Widget _buildCarouselAdPage(int videoIndex) {
+    print(
+        '🎯 _buildCarouselAdPage called for video $videoIndex, carousel ads: ${_carouselAds.length}');
     if (_carouselAds.isEmpty) {
+      print('🎯 Showing "No Sponsored Product" message');
       return Container(
         width: double.infinity,
         height: double.infinity,
         color: Colors.black,
-        child: const Center(
-          child: Text(
-            'No carousel ads available',
-            style: TextStyle(color: Colors.white),
-          ),
+        child: Stack(
+          children: [
+            // Top Bar with Yog Title removed as requested
+
+            // **Sponsored Text at Top Corner**
+            Positioned(
+              top: 56,
+              right: 12,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.grey[600]!,
+                    width: 0.8,
+                  ),
+                ),
+                child: const Text(
+                  'Sponsored',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+
+            // **Main Content - No Sponsored Product Message**
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  FractionallySizedBox(
+                    widthFactor: 0.6, // reduce size by ~40%
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      margin: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[800]!.withOpacity(0.95),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Colors.grey[600]!,
+                          width: 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.campaign_outlined,
+                            color: Colors.grey[300],
+                            size: 56,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'No Sponsored Product Available',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // **Back Button**
+            Positioned(
+              right: 16,
+              bottom: 20,
+              child: GestureDetector(
+                onTap: () {
+                  if (_currentHorizontalPage.containsKey(videoIndex)) {
+                    _currentHorizontalPage[videoIndex]!.value = 0;
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.8),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.grey[600]!,
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.arrow_back_ios,
+                    color: Colors.white,
+                    size: 22,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -1819,8 +1930,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                   video.videoName,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -1943,9 +2054,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               ),
               const SizedBox(height: 12),
 
-              // **NEW: Carousel ad navigation - swipe indicator**
-              if (_carouselAds.isNotEmpty &&
-                  (_currentHorizontalPage[index]?.value ?? 0) == 0)
+              // **FIXED: Carousel ad navigation - always show arrow button**
+              if ((_currentHorizontalPage[index]?.value ?? 0) == 0)
                 GestureDetector(
                   onTap: () => _navigateToCarouselAd(index),
                   child: Column(
@@ -2188,10 +2298,20 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   /// **NAVIGATE TO CAROUSEL AD: Switch to carousel ad page (no rebuild)**
   void _navigateToCarouselAd(int index) {
-    if (_carouselAds.isNotEmpty && _currentHorizontalPage.containsKey(index)) {
+    print('🎯 _navigateToCarouselAd called for index $index');
+    print(
+        '🎯 _currentHorizontalPage contains key: ${_currentHorizontalPage.containsKey(index)}');
+    print(
+        '🎯 Current horizontal pages: ${_currentHorizontalPage.keys.toList()}');
+
+    if (_currentHorizontalPage.containsKey(index)) {
+      print('🎯 Setting horizontal page to 1 for index $index');
       _currentHorizontalPage[index]!.value =
           1; // Switch to carousel ad page - no setState needed!
-      print('🎯 Navigated to carousel ad for video $index');
+      print(
+          '🎯 Navigated to sponsored content for video $index (carousel ads: ${_carouselAds.length})');
+    } else {
+      print('❌ No horizontal page found for index $index');
     }
   }
 

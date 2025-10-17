@@ -110,7 +110,7 @@ class HLSEncodingService {
           '-hls_list_size', '0',       // Keep all segments
           '-hls_segment_filename', path.join(outputDir, 'segment_%03d.ts'),
           '-hls_playlist_type', 'vod', // Video on demand
-          '-hls_flags', 'independent_segments+delete_segments', // Better segment management
+          '-hls_flags', 'independent_segments', // Avoid deleting segments during VOD
           '-hls_segment_type', 'mpegts', // MPEG-TS segments for compatibility
           
           // Additional optimizations
@@ -307,7 +307,7 @@ async checkFFmpegInstallation() {
         .outputOptions([
           // Video codec settings - simplified for reliability
           '-c:v', 'libx264',
-          '-preset', 'fast',           // Fast preset for better compatibility
+          '-preset', 'ultrafast',      // Ultrafast preset for speed
           '-profile:v', 'baseline',    // Baseline profile for maximum compatibility
           '-level', '3.0',             // H.264 level for broad device support
           '-crf', variant.crf.toString(),

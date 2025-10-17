@@ -37,9 +37,28 @@ class CloudflareR2Service {
       const cleanDomain = this.publicDomain.replace(/^https?:\/\//, '').replace(/\/$/, '');
       return `https://${cleanDomain}/${key}`;
     } else {
-      // Fallback to direct R2 URL (not recommended for production)
-      return `https://${this.bucketName}.${this.accountId}.r2.cloudflarestorage.com/${key}`;
+      // Fallback to direct R2 URL
+      // Correct R2 format is https://<accountId>.r2.cloudflarestorage.com/<bucket>/<key>
+      return `https://${this.accountId}.r2.cloudflarestorage.com/${this.bucketName}/${key}`;
     }
+  }
+
+  /**
+   * Get content type based on file extension
+   */
+  getContentType(filePath) {
+    const ext = path.extname(filePath).toLowerCase();
+    const contentTypes = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.mp4': 'video/mp4',
+      '.mov': 'video/quicktime',
+      '.avi': 'video/x-msvideo'
+    };
+    return contentTypes[ext] || 'application/octet-stream';
   }
 
   /**
@@ -123,6 +142,47 @@ class CloudflareR2Service {
       
     } catch (error) {
       console.error('❌ Error uploading to R2:', error);
+      throw error;
+    }
+  }
+
+  
+  async uploadImage(filePath, key) {
+    try {
+      console.log('📤 Uploading image to R2 (S3-compatible)...');
+      
+      const fileContent = await fs.promises.readFile(filePath);
+      const contentType = this.getContentType(filePath);
+      
+      const command = new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+        Body: fileContent,
+        ContentType: contentType,
+        CacheControl: 'public, max-age=31536000', // 1 year cache
+        Metadata: {
+          'image-type': 'user-upload',
+          'upload-date': new Date().toISOString()
+        }
+      });
+
+      await this.s3Client.send(command);
+      
+      // **USE CUSTOM DOMAIN** (cdn.snehayog.com) for public URL
+      const publicUrl = this.getPublicUrl(key);
+      console.log('✅ Image uploaded to R2');
+      console.log('   Key:', key);
+      console.log('   Public URL:', publicUrl);
+      
+      return {
+        url: publicUrl,
+        key: key,
+        size: fileContent.length,
+        contentType: contentType
+      };
+      
+    } catch (error) {
+      console.error('❌ Error uploading image to R2:', error);
       throw error;
     }
   }

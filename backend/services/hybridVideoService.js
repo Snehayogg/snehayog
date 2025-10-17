@@ -130,15 +130,16 @@ class HybridVideoService {
           },
           { 
             // 480p equivalent settings for cost optimization
-            bitrate: '800k', // 480p quality bitrate
-            max_bit_rate: '800k', // Ensure max 480p quality
+            bitrate: '600k', // Reduced bitrate for faster processing
+            max_bit_rate: '600k', // Ensure max 480p quality
             audio_codec: 'aac',
             video_codec: 'h264'
           },
           {
-            // Optimize for streaming
+            // Optimize for streaming and speed
             streaming_profile: 'hd',
-            keyframe_interval: 2.0
+            keyframe_interval: 1.0, // Reduced for faster processing
+            eager_async: true // Enable async processing
           }
         ],
         overwrite: true,

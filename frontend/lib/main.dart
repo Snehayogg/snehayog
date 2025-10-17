@@ -23,8 +23,8 @@ import 'package:snehayog/core/managers/smart_cache_manager.dart';
 import 'package:snehayog/model/video_model.dart';
 import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/services/background_profile_preloader.dart';
-import 'package:snehayog/services/app_initialization_service.dart';
 import 'package:snehayog/widgets/network_status_widget.dart';
+import 'package:snehayog/widgets/network_initialization_wrapper.dart';
 
 final RazorpayService razorpayService = RazorpayService();
 

@@ -25,6 +25,12 @@ class VideoModel {
   // Keeping lowQualityUrl for backward compatibility (will contain 480p URL)
   final String? lowQualityUrl; // 480p - the only quality we use
 
+  // **NEW: Video processing status fields**
+  final String?
+      processingStatus; // 'pending', 'processing', 'completed', 'failed'
+  final int? processingProgress; // 0-100 percentage
+  final String? processingError; // Error message if processing failed
+
   VideoModel({
     required this.id,
     required this.videoName,
@@ -47,6 +53,9 @@ class VideoModel {
     this.hlsVariants,
     this.isHLSEncoded,
     this.lowQualityUrl, // 480p URL for all videos
+    this.processingStatus,
+    this.processingProgress,
+    this.processingError,
   }) : comments = comments; // **FIXED: Initialize the field**
 
   factory VideoModel.fromJson(Map<String, dynamic> json) {
@@ -242,6 +251,12 @@ class VideoModel {
         }(),
         isHLSEncoded: json['isHLSEncoded'] == true,
         lowQualityUrl: json['lowQualityUrl']?.toString(), // 480p URL
+        // Parse processing status fields
+        processingStatus: json['processingStatus']?.toString(),
+        processingProgress: json['processingProgress'] is int
+            ? json['processingProgress']
+            : int.tryParse(json['processingProgress']?.toString() ?? '0'),
+        processingError: json['processingError']?.toString(),
       );
     } catch (e, stackTrace) {
       print('❌ VideoModel.fromJson Error: $e');
@@ -278,6 +293,9 @@ class VideoModel {
       'hlsVariants': hlsVariants,
       'isHLSEncoded': isHLSEncoded,
       'lowQualityUrl': lowQualityUrl, // 480p URL
+      'processingStatus': processingStatus,
+      'processingProgress': processingProgress,
+      'processingError': processingError,
     };
   }
 
@@ -304,6 +322,9 @@ class VideoModel {
     List<Map<String, dynamic>>? hlsVariants,
     bool? isHLSEncoded,
     String? lowQualityUrl, // 480p URL
+    String? processingStatus,
+    int? processingProgress,
+    String? processingError,
   }) {
     return VideoModel(
       id: id ?? this.id,
@@ -329,10 +350,23 @@ class VideoModel {
       hlsVariants: hlsVariants ?? this.hlsVariants,
       isHLSEncoded: isHLSEncoded ?? this.isHLSEncoded,
       lowQualityUrl: lowQualityUrl ?? this.lowQualityUrl, // 480p URL
+      processingStatus: processingStatus ?? this.processingStatus,
+      processingProgress: processingProgress ?? this.processingProgress,
+      processingError: processingError ?? this.processingError,
     );
   }
 
   bool isLikedBy(String userId) => likedBy.contains(userId);
+
+  // **NEW: Processing status helper methods**
+  bool get isProcessing => processingStatus == 'processing';
+  bool get isCompleted => processingStatus == 'completed';
+  bool get isFailed => processingStatus == 'failed';
+  bool get isPending => processingStatus == 'pending';
+  bool get isProcessingComplete =>
+      processingStatus == 'completed' || processingStatus == null;
+
+  double get processingProgressPercent => (processingProgress ?? 0) / 100.0;
 
   VideoModel toggleLike(String userId) {
     final updatedLikedBy = List<String>.from(likedBy);

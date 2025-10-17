@@ -468,6 +468,17 @@ class _ProfileScreenState extends State<ProfileScreen>
       // **ENHANCED: Clear profile cache on logout**
       await _clearProfileCache();
 
+      // **FIX: Clear BackgroundProfilePreloader cache on logout**
+      try {
+        final preloader = BackgroundProfilePreloader();
+        await preloader.clearCache();
+        print(
+            '🧹 ProfileScreen: Cleared BackgroundProfilePreloader cache on logout');
+      } catch (e) {
+        print(
+            '⚠️ ProfileScreen: Error clearing BackgroundProfilePreloader cache: $e');
+      }
+
       await _stateManager.handleLogout();
 
       // **ENHANCED: Clear UserProvider cache**

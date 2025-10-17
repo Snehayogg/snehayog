@@ -3,7 +3,8 @@ import multer from 'multer';
 import mongoose from 'mongoose';
 import Video from '../models/Video.js';
 import User from '../models/User.js';
-import fs from 'fs'; 
+import fs from 'fs';
+import path from 'path';
 import { verifyToken } from '../utils/verifytoken.js';
 import { isCloudinaryConfigured } from '../config.js';
 import hybridVideoService from '../services/hybridVideoService.js';
@@ -81,14 +82,60 @@ const upload = multer({
     fileSize: 100 * 1024 * 1024, // 100MB limit
   },
   fileFilter: (req, file, cb) => {
-    // Check file type
-    const allowedMimeTypes = ['video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/webm'];
-    if (allowedMimeTypes.includes(file.mimetype)) {
+    // Check file type - more permissive for video files
+    const allowedMimeTypes = [
+      'video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/webm',
+      'video/quicktime', 'video/x-msvideo', 'video/x-ms-wmv', 'video/3gpp', 'video/x-flv',
+      'video/mpeg', 'video/mp2t', 'video/x-m4v', 'video/ogg', 'video/x-matroska',
+      'application/octet-stream' // Add this for generic binary files
+    ];
+    
+    // Check file extension as fallback
+    const fileExtension = path.extname(file.originalname).toLowerCase();
+    const allowedExtensions = ['.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mkv', '.3gp', '.mpeg', '.mpg'];
+    
+    console.log('🔍 File upload attempt:', {
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+      extension: fileExtension,
+      size: file.size
+    });
+    
+    // Accept if either MIME type OR extension is valid
+    if (allowedMimeTypes.includes(file.mimetype) || allowedExtensions.includes(fileExtension)) {
+      console.log('✅ File type accepted:', file.mimetype, 'Extension:', fileExtension);
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only video files are allowed.'), false);
+      console.log('❌ File type rejected:', file.mimetype, 'Extension:', fileExtension);
+      console.log('📋 Allowed MIME types:', allowedMimeTypes);
+      console.log('📋 Allowed extensions:', allowedExtensions);
+      cb(new Error(`Invalid file type: ${file.mimetype} (${fileExtension}). Allowed types: ${allowedMimeTypes.join(', ')}`), false);
     }
   }
+});
+
+// Error handling middleware for multer errors
+router.use((error, req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    console.log('❌ Multer error:', error.message);
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ 
+        error: 'File too large', 
+        message: 'Maximum file size is 100MB' 
+      });
+    }
+    return res.status(400).json({ 
+      error: 'File upload error', 
+      message: error.message 
+    });
+  } else if (error.message.includes('Invalid file type')) {
+    console.log('❌ File type error:', error.message);
+    return res.status(400).json({ 
+      error: 'Invalid file type', 
+      message: error.message 
+    });
+  }
+  next(error);
 });
 
 // POST /api/videos/upload
@@ -169,28 +216,8 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
     }
     console.log('✅ Upload: User found:', user.name);
 
-    // 5. Check Cloudinary configuration
-    console.log('🔍 Upload: Checking Cloudinary configuration...');
-    console.log('🔍 Upload: CLOUD_NAME:', process.env.CLOUD_NAME);
-    console.log('🔍 Upload: CLOUD_KEY:', process.env.CLOUD_KEY ? 'Set' : 'Missing');
-    console.log('🔍 Upload: CLOUD_SECRET:', process.env.CLOUD_SECRET ? 'Set' : 'Missing');
-    
-    if (!isCloudinaryConfigured()) {
-      console.log('❌ Upload: Cloudinary not configured');
-      fs.unlinkSync(req.file.path);
-      return res.status(500).json({ 
-        error: 'Video upload service not configured. Please contact administrator.',
-        details: 'Cloudinary API credentials are missing. Check CLOUDINARY_SETUP.md for setup instructions.',
-        solution: 'Create a .env file with CLOUD_NAME, CLOUD_KEY, and CLOUD_SECRET variables'
-      });
-    }
-    
-    console.log('✅ Upload: Cloudinary configuration verified');
-
-    // **NEW: Use Pure HLS Processing (FFmpeg → R2) for 100% FREE processing**
-    console.log('🚀 Starting Pure HLS Video Processing (FFmpeg → R2)...');
-    console.log('💰 Expected cost: $0 processing (FREE!) + $0.015/GB/month storage + $0 bandwidth (FREE!)');
-    console.log('📹 Format: HLS (HTTP Live Streaming) - Single 480p quality');
+    // Switch to Pure HLS Processing (FFmpeg → R2)
+    console.log('🚀 Using Pure HLS Video Processing (FFmpeg → R2)...');
     
     // **NEW: Validate video with hybrid service**
     const videoValidation = await hybridVideoService.validateVideo(req.file.path);
@@ -226,29 +253,81 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
     
     console.log('✅ Video record created with ID:', video._id);
     
-    // **NEW: Start HLS processing in background (non-blocking)**
-    processVideoToHLS(video._id, req.file.path, videoName, user._id.toString());
-    
-    // **NEW: Return immediate response**
-    return res.status(201).json({
-      success: true,
-      message: 'Video upload started. Processing via FFmpeg → R2 HLS (100% FREE!).',
-      video: {
-        id: video._id,
-        videoName: video.videoName,
-        processingStatus: video.processingStatus,
-        processingProgress: video.processingProgress,
-        estimatedTime: '2-5 minutes',
-        format: 'HLS (HTTP Live Streaming)',
-        quality: '480p (single quality)',
-        costBreakdown: {
-          processing: '$0 (FREE! FFmpeg local)',
-          storage: '$0.015/GB/month',
-          bandwidth: '$0 (FREE forever!)',
-          savings: '100% vs cloud processing'
-        }
+    try {
+      console.log('🎬 Starting FFmpeg → R2 HLS processing...');
+      const hlsResult = await hybridVideoService.processVideoToHLS(
+        req.file.path,
+        video.videoName || `video_${video._id}`,
+        user._id.toString()
+      );
+
+      // Update video record with HLS URLs
+      video.videoUrl = hlsResult.videoUrl; // HLS playlist URL
+      video.hlsPlaylistUrl = hlsResult.hlsPlaylistUrl;
+      video.thumbnailUrl = hlsResult.thumbnailUrl;
+      video.processingStatus = 'completed';
+      video.processingProgress = 100;
+      video.isHLSEncoded = true;
+      video.lowQualityUrl = hlsResult.videoUrl; // single quality
+      await video.save();
+
+      // Clean temp
+      try { fs.unlinkSync(req.file.path); } catch (_) {}
+      
+      console.log('✅ FFmpeg HLS processing completed!');
+      console.log('🔗 Video URL:', video.videoUrl);
+      console.log('🖼️ Thumbnail URL:', video.thumbnailUrl);
+      
+      // Clean up temporary file
+      try {
+        fs.unlinkSync(req.file.path);
+        console.log('🗑️ Temporary file cleaned up');
+      } catch (cleanupError) {
+        console.log('⚠️ Could not clean up temporary file:', cleanupError.message);
       }
-    });
+      
+      // **FIXED: Return response with processed video URLs**
+      return res.status(201).json({
+        success: true,
+        message: 'Video uploaded and processed to HLS successfully!',
+        video: {
+          id: video._id,
+          videoName: video.videoName,
+          videoUrl: video.videoUrl,
+          thumbnailUrl: video.thumbnailUrl,
+          hlsPlaylistUrl: video.hlsPlaylistUrl,
+          processingStatus: video.processingStatus,
+          processingProgress: video.processingProgress,
+          format: 'HLS',
+          quality: '480p (single quality)',
+          duration: video.duration,
+          aspectRatio: video.aspectRatio
+        }
+      });
+      
+    } catch (processingError) {
+      console.error('❌ Cloudinary video processing failed:', processingError);
+      
+      // Update video status to failed
+      video.processingStatus = 'failed';
+      video.processingError = processingError.message;
+      await video.save();
+      
+      // Clean up temporary file
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (cleanupError) {
+        console.log('⚠️ Could not clean up temporary file:', cleanupError.message);
+      }
+      
+      // **FALLBACK: Return error response**
+      return res.status(500).json({
+        success: false,
+        error: 'Video processing failed',
+        message: 'Your video was uploaded but processing failed. Please try again.',
+        details: processingError.message
+      });
+    }
     
   } catch (error) {
     console.error('❌ Upload: Error in video upload process:', error);
@@ -342,8 +421,10 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
       videosArrayLength: user.videos?.length || 0
     });
 
-    // **IMPROVED: Get videos directly from Video collection using uploader field**
-    const videos = await Video.find({ uploader: user._id })
+    // **REMOVED FILTERING: Return all videos for user**
+    const videos = await Video.find({
+      uploader: user._id,
+    })
       .populate('uploader', 'name profilePic googleId')
       .sort({ createdAt: -1 }); // Latest videos first
 
@@ -362,7 +443,7 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
       const result = {
         _id: videoObj._id?.toString(),
         videoName: videoObj.videoName || 'Untitled Video',
-        videoUrl: videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || '',
+        videoUrl: videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || videoObj.lowQualityUrl || videoObj.mediumQualityUrl || videoObj.highQualityUrl || '',
         thumbnailUrl: videoObj.thumbnailUrl || '',
         description: videoObj.description || '',
         likes: parseInt(videoObj.likes) || 0,
@@ -386,6 +467,9 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
         hlsMasterPlaylistUrl: videoObj.hlsMasterPlaylistUrl || null,
         hlsPlaylistUrl: videoObj.hlsPlaylistUrl || null,
         isHLSEncoded: videoObj.isHLSEncoded || false,
+        // Include processing info for completeness (should be 'completed' here)
+        processingStatus: videoObj.processingStatus || 'completed',
+        processingProgress: parseInt(videoObj.processingProgress) || 100,
         likedBy: videoObj.likedBy || [],
         comments: videoObj.comments || []
       };
@@ -420,9 +504,6 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
 });
 
 
-
-
-// Get all videos (optimized for performance) - SUPPORTS MP4 AND HLS
 router.get('/', async (req, res) => {
   try {
     const { videoType, page = 1, limit = 10 } = req.query;
@@ -433,14 +514,17 @@ router.get('/', async (req, res) => {
     const limitNum = parseInt(limit) || 10;
     const skip = (pageNum - 1) * limitNum;
     
-    // Build query filter - Allow both HLS and MP4 videos
-    const queryFilter = {}; // Allow all processed videos
+    // **REMOVED FILTERING: Return all videos**
+    const queryFilter = {};
     
     // Add videoType filter if specified
-    if (videoType && (videoType === 'yog' || videoType === 'sneha')) {
+    if (videoType && (videoType === 'yog' || videoType === 'vayu')) {
       queryFilter.videoType = videoType;
       console.log('📹 Filtering by videoType:', videoType);
     }
+    
+    console.log('🔍 Video Query Filter:', JSON.stringify(queryFilter, null, 2));
+    console.log('📹 Returning all videos (filtering removed)');
     
     // MODIFIED: Only return HLS-encoded videos with optional videoType filter
     const [totalVideos, videos] = await Promise.all([
@@ -564,7 +648,7 @@ router.post('/:id/like', verifyToken, async (req, res) => {
     const transformedVideo = {
       _id: videoObj._id?.toString(),
       videoName: videoObj.videoName || '',
-      videoUrl: videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || '',
+      videoUrl: videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || videoObj.lowQualityUrl || videoObj.mediumQualityUrl || videoObj.highQualityUrl || '',
       thumbnailUrl: videoObj.thumbnailUrl || '',
       likes: parseInt(videoObj.likes) || 0,
       views: parseInt(videoObj.views) || 0,
@@ -683,7 +767,7 @@ router.delete('/:id/like', verifyToken, async (req, res) => {
     const transformedVideo = {
       _id: videoObj._id?.toString(),
       videoName: videoObj.videoName || '',
-      videoUrl: videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || '',
+      videoUrl: videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || videoObj.lowQualityUrl || videoObj.mediumQualityUrl || videoObj.highQualityUrl || '',
       thumbnailUrl: videoObj.thumbnailUrl || '',
       likes: parseInt(videoObj.likes) || 0,
       views: parseInt(videoObj.views) || 0,
@@ -759,11 +843,14 @@ router.get('/:id', async (req, res) => {
       uploadedAt: videoObj.uploadedAt?.toISOString?.() || videoObj.uploadedAt,
       createdAt: videoObj.createdAt?.toISOString?.() || videoObj.createdAt,
       updatedAt: videoObj.updatedAt?.toISOString?.() || videoObj.updatedAt,
-      // **FIXED: Ensure HLS URLs are properly set**
-      videoUrl: videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || '',
+      // **FIXED: Ensure HLS URLs are properly set with better fallback**
+      videoUrl: videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || videoObj.lowQualityUrl || videoObj.mediumQualityUrl || videoObj.highQualityUrl || '',
       hlsMasterPlaylistUrl: videoObj.hlsMasterPlaylistUrl || null,
       hlsPlaylistUrl: videoObj.hlsPlaylistUrl || null,
       isHLSEncoded: videoObj.isHLSEncoded || false,
+      // **NEW: Include processing fields for polling from app**
+      processingStatus: videoObj.processingStatus || 'pending',
+      processingProgress: parseInt(videoObj.processingProgress) || 0,
       // **FIXED: Transform comments to match Flutter app expectations**
       comments: videoObj.comments.map(comment => ({
         _id: comment._id,
