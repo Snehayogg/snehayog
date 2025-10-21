@@ -145,6 +145,11 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/referrals', referralRoutes);
 
+// Admin Dashboard route
+app.get('/admin/dashboard', (req, res) => {
+  res.sendFile(path.join(__dirname, 'admin', 'admin_dashboard.html'));
+});
+
 // Health check endpoints (both /health and /api/health)
 app.get('/health', (req, res) => {
   const dbStatus = databaseManager.getConnectionStatus();
