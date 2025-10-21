@@ -55,20 +55,35 @@ router.get('/debug-database', async (req, res) => {
     ]);
     console.log('🔍 DEBUG: Videos by user:', userCounts);
     
-    // Get sample videos
+    // Get sample videos with detailed URL information
     const sampleVideos = await Video.find({})
-      .select('videoName uploader createdAt processingStatus videoType')
+      .select('videoName uploader createdAt processingStatus videoType videoUrl thumbnailUrl hlsPlaylistUrl hlsMasterPlaylistUrl isHLSEncoded')
       .populate('uploader', 'googleId name')
       .limit(5)
       .lean();
     
     console.log('🔍 DEBUG: Sample videos:', sampleVideos);
     
+    // **NEW: Check for broken video URLs**
+    const brokenVideos = await Video.find({
+      $or: [
+        { videoUrl: { $exists: false } },
+        { videoUrl: null },
+        { videoUrl: '' },
+        { videoUrl: { $regex: /^uploads[\\\/]/ } }, // Local file paths
+        { processingStatus: 'failed' },
+        { processingStatus: 'error' }
+      ]
+    }).select('videoName videoUrl processingStatus processingError').lean();
+    
+    console.log('🔍 DEBUG: Broken videos found:', brokenVideos.length);
+    
     res.json({
       totalVideos,
       statusCounts,
       userCounts,
       sampleVideos,
+      brokenVideos,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -1543,6 +1558,7 @@ router.post('/cleanup-orphaned', verifyToken, async (req, res) => {
   }
 });
 
+
 // **NEW: Cloudinary video processing function (Cloudinary → R2)**
 async function processVideoHybrid(videoId, videoPath, videoName, userId) {
   try {
@@ -1650,6 +1666,112 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
     }
   }
 }
+
+// **NEW: Test video URL accessibility**
+router.get('/test-video-url/:videoId', async (req, res) => {
+  try {
+    const videoId = req.params.videoId;
+    console.log('🔍 Testing video URL for video ID:', videoId);
+    
+    const video = await Video.findById(videoId);
+    if (!video) {
+      return res.status(404).json({ error: 'Video not found' });
+    }
+    
+    console.log('📹 Video details:', {
+      id: video._id,
+      name: video.videoName,
+      videoUrl: video.videoUrl,
+      thumbnailUrl: video.thumbnailUrl,
+      hlsPlaylistUrl: video.hlsPlaylistUrl,
+      hlsMasterPlaylistUrl: video.hlsMasterPlaylistUrl,
+      isHLSEncoded: video.isHLSEncoded,
+      processingStatus: video.processingStatus,
+      processingProgress: video.processingProgress
+    });
+    
+    // Test video URL accessibility
+    const testResults = {
+      videoId: video._id,
+      videoName: video.videoName,
+      urls: {
+        videoUrl: video.videoUrl,
+        thumbnailUrl: video.thumbnailUrl,
+        hlsPlaylistUrl: video.hlsPlaylistUrl,
+        hlsMasterPlaylistUrl: video.hlsMasterPlaylistUrl
+      },
+      processing: {
+        status: video.processingStatus,
+        progress: video.processingProgress,
+        error: video.processingError
+      },
+      isHLSEncoded: video.isHLSEncoded,
+      recommendations: []
+    };
+    
+    // Check if video URL is accessible
+    if (video.videoUrl) {
+      try {
+        const axios = (await import('axios')).default;
+        const response = await axios.head(video.videoUrl, { timeout: 10000 });
+        testResults.urlAccessibility = {
+          videoUrl: {
+            accessible: true,
+            statusCode: response.status,
+            contentType: response.headers['content-type']
+          }
+        };
+      } catch (urlError) {
+        testResults.urlAccessibility = {
+          videoUrl: {
+            accessible: false,
+            error: urlError.message
+          }
+        };
+        testResults.recommendations.push('Video URL is not accessible - check R2 configuration');
+      }
+    } else {
+      testResults.recommendations.push('No video URL found - video processing may have failed');
+    }
+    
+    // Check thumbnail URL
+    if (video.thumbnailUrl) {
+      try {
+        const axios = (await import('axios')).default;
+        const response = await axios.head(video.thumbnailUrl, { timeout: 5000 });
+        testResults.urlAccessibility.thumbnailUrl = {
+          accessible: true,
+          statusCode: response.status,
+          contentType: response.headers['content-type']
+        };
+      } catch (thumbError) {
+        testResults.urlAccessibility.thumbnailUrl = {
+          accessible: false,
+          error: thumbError.message
+        };
+        testResults.recommendations.push('Thumbnail URL is not accessible');
+      }
+    }
+    
+    // Add specific recommendations based on processing status
+    if (video.processingStatus === 'failed' || video.processingStatus === 'error') {
+      testResults.recommendations.push('Video processing failed - check server logs for details');
+    } else if (video.processingStatus === 'pending' || video.processingStatus === 'processing') {
+      testResults.recommendations.push('Video is still processing - wait for completion');
+    } else if (video.processingStatus === 'completed' && !video.videoUrl) {
+      testResults.recommendations.push('Processing completed but no video URL - check R2 upload');
+    }
+    
+    res.json(testResults);
+    
+  } catch (error) {
+    console.error('❌ Error testing video URL:', error);
+    res.status(500).json({ 
+      error: 'Failed to test video URL',
+      details: error.message 
+    });
+  }
+});
 
 // **NEW: Cleanup endpoint to remove only recently uploaded videos that don't play**
 router.post('/cleanup-broken-videos', verifyToken, async (req, res) => {
@@ -1767,5 +1889,23 @@ router.post('/sync-user-video-arrays', verifyToken, async (req, res) => {
     });
   }
 });
+
+// **NEW: Serve static video files**
+router.use('/uploads', express.static('uploads', {
+  maxAge: '1d', // Cache for 1 day
+  etag: true,
+  lastModified: true,
+  setHeaders: (res, path) => {
+    // Set appropriate headers for video files
+    if (path.endsWith('.mp4')) {
+      res.setHeader('Content-Type', 'video/mp4');
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Cache-Control', 'public, max-age=86400'); // 1 day cache
+    } else if (path.endsWith('.jpg') || path.endsWith('.jpeg')) {
+      res.setHeader('Content-Type', 'image/jpeg');
+      res.setHeader('Cache-Control', 'public, max-age=86400'); // 1 day cache
+    }
+  }
+}));
 
 export default router
