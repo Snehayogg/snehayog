@@ -291,6 +291,7 @@ class HybridVideoService {
         
         ffprobeCheck.on('error', (error) => {
           console.log('⚠️ FFprobe not available, using fallback video info');
+          console.log('⚠️ Error details:', error.message);
           // Return fallback video info when ffprobe is not available
           resolve({
             width: 720,
