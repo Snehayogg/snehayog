@@ -11,4 +11,4 @@ cmds = ["npm run setup:ffmpeg"]
 cmd = "npm start"
 
 [providers]
-node = "20"
+node = ["20"]
