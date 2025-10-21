@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:snehayog/config/app_config.dart';
+import 'package:snehayog/services/authservices.dart';
 
 class FeedbackDialogWidget extends StatefulWidget {
   const FeedbackDialogWidget({super.key});
@@ -24,13 +28,43 @@ class _FeedbackDialogWidgetState extends State<FeedbackDialogWidget> {
     setState(() => _submitting = true);
 
     try {
-      // TODO: Hook into backend when available
-      await Future.delayed(const Duration(milliseconds: 500));
+      // Get user data for feedback submission
+      final authService = AuthService();
+      final userData = await authService.getUserData();
 
+      // Submit feedback to backend
+      final response = await http.post(
+        Uri.parse('${AppConfig.baseUrl}/api/feedback/submit'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'rating': _rating.toInt(),
+          'comments': _messageController.text.trim(),
+          'userEmail': userData?['email'] ?? 'anonymous@user.com',
+          'userId': userData?['googleId'] ?? userData?['id'] ?? 'anonymous',
+        }),
+      );
+
+      if (response.statusCode == 201) {
+        if (!mounted) return;
+        Navigator.of(context).pop(true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Thanks for your feedback!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        throw Exception('Failed to submit feedback');
+      }
+    } catch (e) {
       if (!mounted) return;
-      Navigator.of(context).pop(true);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Thanks for your feedback!')),
+        SnackBar(
+          content: Text('Error submitting feedback: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
       if (mounted) setState(() => _submitting = false);

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:snehayog/config/app_config.dart';
 import 'package:snehayog/services/authservices.dart';
+import 'package:snehayog/services/payment_setup_service.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -335,6 +336,10 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
             backgroundColor: Colors.green,
           ),
         );
+
+        // **NEW: Mark payment setup as completed using service**
+        final paymentService = PaymentSetupService();
+        await paymentService.markPaymentSetupCompleted();
 
         // **FIX: Persist user-specific payment setup flag and cache**
         final prefs = await SharedPreferences.getInstance();
