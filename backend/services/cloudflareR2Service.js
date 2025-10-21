@@ -29,17 +29,24 @@ class CloudflareR2Service {
 
   /**
    * Get public URL for an R2 object key
-   * Uses custom domain (cdn.snehayog.com) if configured, otherwise direct R2 URL
+   * Uses custom domain (cdn.snehayog.site) if configured, otherwise direct R2 URL
    */
   getPublicUrl(key) {
+    // **FIX: Normalize key path to use forward slashes**
+    const normalizedKey = key.replace(/\\/g, '/');
+    
     if (this.publicDomain) {
       // Use custom domain with HTTPS
       const cleanDomain = this.publicDomain.replace(/^https?:\/\//, '').replace(/\/$/, '');
-      return `https://${cleanDomain}/${key}`;
-    } else {
-      // Fallback to direct R2 URL (not recommended for production)
-      return `https://${this.bucketName}.${this.accountId}.r2.cloudflarestorage.com/${key}`;
+      const url = `https://${cleanDomain}/${normalizedKey}`;
+      console.log('🔗 Generated custom domain URL:', url);
+      return url;
     }
+
+    // Fallback to direct R2 URL if custom domain not set
+    const directR2Url = `https://${this.bucketName}.${this.accountId}.r2.cloudflarestorage.com/${normalizedKey}`;
+    console.log('🔗 Generated direct R2 URL (fallback):', directR2Url);
+    return directR2Url;
   }
 
   /**
@@ -54,23 +61,37 @@ class CloudflareR2Service {
         fs.mkdirSync(tempDir, { recursive: true });
       }
       
-      const localPath = path.join(tempDir, `${fileName}_480p.mp4`);
+      // Sanitize fileName to remove invalid characters for Windows
+      const sanitizedFileName = fileName.replace(/[<>:"/\\|?*]/g, '_').replace(/:/g, '-');
+      const localPath = path.join(tempDir, `${sanitizedFileName}_480p.mp4`);
       
+      console.log('📥 Starting download from:', cloudinaryUrl);
       const response = await axios({
         method: 'GET',
         url: cloudinaryUrl,
-        responseType: 'stream'
+        responseType: 'stream',
+        timeout: 5 * 60 * 1000 // 5 minutes timeout
       });
       
       const writer = fs.createWriteStream(localPath);
       response.data.pipe(writer);
       
       return new Promise((resolve, reject) => {
+        // Set up timeout for the download
+        const timeout = setTimeout(() => {
+          writer.destroy();
+          reject(new Error('Download timeout after 5 minutes'));
+        }, 5 * 60 * 1000);
+        
         writer.on('finish', () => {
+          clearTimeout(timeout);
           console.log('✅ Video downloaded from Cloudinary');
           resolve(localPath);
         });
-        writer.on('error', reject);
+        writer.on('error', (error) => {
+          clearTimeout(timeout);
+          reject(error);
+        });
       });
       
     } catch (error) {

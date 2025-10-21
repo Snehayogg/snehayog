@@ -257,28 +257,25 @@ class AdService {
     });
 
     // **STEP 1: Get ads with their campaigns**
-    // TEST MODE: Include ads regardless of payment/review to allow quick visual testing
-    const activeCreatives = await AdCreative.find({})
+    // Only include active and approved ads
+    const activeCreatives = await AdCreative.find({
+      isActive: true,
+      reviewStatus: 'approved'
+    })
       .sort({ createdAt: -1 })
       .populate('campaignId')
       .limit(50);
 
     console.log(`🔍 AdService: Found ${activeCreatives.length} active ad creatives`);
 
-    // **FAST PATH: If no contextual signals were provided, show generic active ads**
+    // **FAST PATH: If no contextual signals were provided, return empty array**
     const hasContext = Boolean(videoCategory) ||
       (Array.isArray(videoTags) && videoTags.length > 0) ||
       (Array.isArray(videoKeywords) && videoKeywords.length > 0);
 
     if (!hasContext) {
-      console.log('ℹ️ AdService: No video context provided; returning generic active ads');
-      const finalAds = activeCreatives.slice(0, 10);
-      for (const ad of finalAds) {
-        ad.impressions = (ad.impressions || 0) + 1;
-        await ad.save();
-      }
-      // Transform raw AdCreative documents to frontend-expected format
-      return finalAds.map(ad => this.transformAdForFrontend(ad));
+      console.log('ℹ️ AdService: No video context provided; returning empty array');
+      return [];
     }
 
     // **STEP 2: Filter ads based on targeting**
@@ -385,15 +382,10 @@ class AdService {
       }
     }
 
-    // **FALLBACK: If nothing matched, return generic active ads**
+    // **FALLBACK: If nothing matched, return empty array**
     if (targetedAds.length === 0) {
-      console.log('⚠️ AdService: No targeted ads matched; falling back to generic active ads');
-      const fallbackAds = activeCreatives.slice(0, 10);
-      for (const ad of fallbackAds) {
-        ad.impressions = (ad.impressions || 0) + 1;
-        await ad.save();
-      }
-      return fallbackAds;
+      console.log('⚠️ AdService: No targeted ads matched; returning empty array');
+      return [];
     }
 
     // **STEP 3: Sort by relevance score (highest first)**
@@ -508,6 +500,141 @@ class AdService {
         fixedCpm: ad.fixedCpm
       }
     };
+  }
+
+  /**
+   * Get active ads for serving with targeting
+   */
+  async getActiveAds(targetingCriteria = {}) {
+    try {
+      console.log('🎯 AdService: Getting active ads with criteria:', targetingCriteria);
+      
+      const { userId, platform, location, videoCategory, videoTags, videoKeywords, adType } = targetingCriteria;
+      
+      // Build query for active ads
+      const query = {
+        isActive: true,
+        reviewStatus: 'approved'
+      };
+      
+      // Add adType filter if specified
+      if (adType) {
+        query.adType = adType;
+      }
+      
+      // Find ads with active campaigns
+      const ads = await AdCreative.find(query)
+        .populate({
+          path: 'campaignId',
+          match: { 
+            status: 'active',
+            startDate: { $lte: new Date() },
+            endDate: { $gte: new Date() }
+          }
+        })
+        .lean();
+      
+      // Filter out ads with null campaign (campaign not active)
+      const activeAds = ads.filter(ad => ad.campaignId !== null);
+      
+      console.log(`✅ AdService: Found ${activeAds.length} active ads`);
+      
+      // Apply additional targeting if provided
+      let targetedAds = activeAds;
+      
+      if (videoCategory && videoTags && videoKeywords) {
+        // Apply content-based targeting
+        targetedAds = activeAds.filter(ad => {
+          const campaign = ad.campaignId;
+          if (!campaign || !campaign.target) return true;
+          
+          // Check if campaign targets this category
+          if (campaign.target.interests && campaign.target.interests.length > 0) {
+            const hasRelevantInterest = campaign.target.interests.some(interest => 
+              interest.toLowerCase().includes(videoCategory.toLowerCase()) ||
+              videoTags.some(tag => tag.toLowerCase().includes(interest.toLowerCase())) ||
+              videoKeywords.some(keyword => keyword.toLowerCase().includes(interest.toLowerCase()))
+            );
+            if (!hasRelevantInterest) return false;
+          }
+          
+          return true;
+        });
+      }
+      
+      console.log(`🎯 AdService: After targeting: ${targetedAds.length} ads`);
+      
+      return targetedAds;
+      
+    } catch (error) {
+      console.error('❌ AdService: Error getting active ads:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Track ad click
+   */
+  async trackAdClick(adId, clickData = {}) {
+    try {
+      console.log('🖱️ AdService: Tracking click for ad:', adId);
+      
+      const ad = await AdCreative.findById(adId);
+      if (!ad) {
+        throw new Error('Ad not found');
+      }
+      
+      // Increment click count
+      ad.clicks = (ad.clicks || 0) + 1;
+      await ad.save();
+      
+      // Also increment campaign clicks if available
+      if (ad.campaignId) {
+        const campaign = await AdCampaign.findById(ad.campaignId);
+        if (campaign) {
+          campaign.clicks = (campaign.clicks || 0) + 1;
+          await campaign.save();
+        }
+      }
+      
+      console.log('✅ AdService: Click tracked successfully');
+      return { success: true, clicks: ad.clicks };
+      
+    } catch (error) {
+      console.error('❌ AdService: Error tracking click:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get ad analytics
+   */
+  async getAdAnalytics(adId, userId = null) {
+    try {
+      const ad = await AdCreative.findById(adId).populate('campaignId');
+      if (!ad) {
+        throw new Error('Ad not found');
+      }
+      
+      const ctr = this.calculateCTR(ad.clicks || 0, ad.impressions || 0);
+      const spend = this.calculateSpend(ad.impressions || 0, ad.campaignId?.cpmINR || 30);
+      const revenue = spend * 0.7; // 70% to advertiser, 30% to platform
+      
+      return {
+        adId: ad._id,
+        title: ad.campaignId?.name || 'Unknown Ad',
+        impressions: ad.impressions || 0,
+        clicks: ad.clicks || 0,
+        ctr: ctr.toFixed(2),
+        spend: spend.toFixed(2),
+        revenue: revenue.toFixed(2),
+        status: ad.isActive ? 'active' : 'inactive'
+      };
+      
+    } catch (error) {
+      console.error('❌ AdService: Error getting analytics:', error);
+      return { error: error.message };
+    }
   }
 
   /**

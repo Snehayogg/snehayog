@@ -59,6 +59,27 @@
 		</dict>
 	</array>
 	
+	<!-- Deep Link Configuration -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>snehayog.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>snehayog</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>snehayog.web</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>https</string>
+			</array>
+		</dict>
+	</array>
+	
 	<!-- Location permissions -->
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>We need your location to show you relevant local content and personalized experiences.</string>

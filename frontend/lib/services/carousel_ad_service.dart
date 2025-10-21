@@ -12,12 +12,16 @@ class CarouselAdService {
     try {
       print('🎯 CarouselAdService: Fetching carousel ads...');
 
+      // Get base URL with Railway first, local fallback
+      final baseUrl = await AppConfig.getBaseUrlWithFallback();
+      print('🎯 CarouselAdService: Using base URL: $baseUrl');
+
       // Try multiple endpoints to find carousel ads
       final endpoints = [
-        '$_baseUrl/api/ads/carousel', // Direct carousel endpoint
-        '$_baseUrl/api/ads/serve?adType=carousel ads', // With space as backend expects
-        '$_baseUrl/api/ads/serve?adType=carousel',
-        '$_baseUrl/api/ads/active',
+        '$baseUrl/api/ads/carousel', // Direct carousel endpoint
+        '$baseUrl/api/ads/serve?adType=carousel', // Fixed: use 'carousel' not 'carousel ads'
+        '$baseUrl/api/ads/serve', // General ads endpoint
+        '$baseUrl/api/ads/active',
       ];
 
       for (final endpoint in endpoints) {

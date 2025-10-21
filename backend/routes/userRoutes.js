@@ -4,6 +4,70 @@ import { verifyToken } from '../utils/verifytoken.js';
 import jwt from 'jsonwebtoken'; // Added for token info endpoint
 const router = express.Router();
 
+// ✅ Route to register/create user (for Google OAuth)
+router.post('/register', async (req, res) => {
+  try {
+    console.log('🔍 User registration API: Request received');
+    console.log('🔍 User registration API: Body:', req.body);
+    
+    const { googleId, name, email, profilePicture } = req.body;
+    
+    if (!googleId || !name || !email) {
+      return res.status(400).json({ 
+        error: 'Missing required fields: googleId, name, email' 
+      });
+    }
+    
+    // Check if user already exists
+    const existingUser = await User.findOne({ googleId });
+    if (existingUser) {
+      console.log('✅ User already exists, returning existing user');
+      return res.json({
+        success: true,
+        user: {
+          _id: existingUser._id,
+          googleId: existingUser.googleId,
+          name: existingUser.name,
+          email: existingUser.email,
+          profilePicture: existingUser.profilePicture,
+          isNewUser: false
+        }
+      });
+    }
+    
+    // Create new user
+    const newUser = new User({
+      googleId,
+      name,
+      email,
+      profilePicture: profilePicture || '',
+      isActive: true
+    });
+    
+    await newUser.save();
+    console.log('✅ New user created successfully');
+    
+    res.status(201).json({
+      success: true,
+      user: {
+        _id: newUser._id,
+        googleId: newUser.googleId,
+        name: newUser.name,
+        email: newUser.email,
+        profilePicture: newUser.profilePicture,
+        isNewUser: true
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error in user registration:', error);
+    res.status(500).json({ 
+      error: 'User registration failed', 
+      details: error.message 
+    });
+  }
+});
+
 // ✅ Route to get current user profile (requires authentication)
 // **IMPORTANT: This must come before /:id route**
 router.get('/profile', verifyToken, async (req, res) => {
@@ -370,6 +434,118 @@ router.get('/token-info', async (req, res) => {
   } catch (err) {
     console.error('❌ Token info error:', err);
     res.status(500).json({ error: 'Failed to decode token' });
+  }
+});
+
+// **NEW: Location Data Endpoints**
+
+// ✅ Route to update user location data
+router.post('/update-location', verifyToken, async (req, res) => {
+  try {
+    console.log('📍 Update Location API: Request received');
+    console.log('📍 Update Location API: Request body:', req.body);
+    console.log('📍 Update Location API: Current user from token:', req.user);
+    
+    const { latitude, longitude, address, city, state, country } = req.body;
+    const currentUserId = req.user.id; // Google user ID
+
+    console.log('📍 Update Location API: currentUserId:', currentUserId);
+    console.log('📍 Update Location API: Location data:', { latitude, longitude, address, city, state, country });
+
+    if (!latitude || !longitude) {
+      return res.status(400).json({ error: 'Latitude and longitude are required' });
+    }
+
+    // Find current user
+    const user = await User.findOne({ googleId: currentUserId });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Update location data
+    user.location = {
+      latitude: parseFloat(latitude),
+      longitude: parseFloat(longitude),
+      address: address || '',
+      city: city || '',
+      state: state || '',
+      country: country || '',
+      lastUpdated: new Date(),
+      permissionGranted: true
+    };
+
+    await user.save();
+
+    console.log('✅ Update Location API: Location updated successfully');
+
+    res.json({
+      message: 'Location updated successfully',
+      location: user.location
+    });
+  } catch (err) {
+    console.error('❌ Update location error:', err);
+    res.status(500).json({ error: 'Failed to update location' });
+  }
+});
+
+// ✅ Route to get user location data
+router.get('/location', verifyToken, async (req, res) => {
+  try {
+    console.log('📍 Get Location API: Request received');
+    console.log('📍 Get Location API: Current user from token:', req.user);
+    
+    const currentUserId = req.user.id; // Google user ID
+
+    console.log('📍 Get Location API: currentUserId:', currentUserId);
+
+    // Find current user
+    const user = await User.findOne({ googleId: currentUserId });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    console.log('📍 Get Location API: User location data:', user.location);
+
+    res.json({
+      location: user.location,
+      hasLocation: !!(user.location && user.location.latitude && user.location.longitude)
+    });
+  } catch (err) {
+    console.error('❌ Get location error:', err);
+    res.status(500).json({ error: 'Failed to get location' });
+  }
+});
+
+// ✅ Route to check if user has location permission
+router.get('/location-permission', verifyToken, async (req, res) => {
+  try {
+    console.log('📍 Location Permission API: Request received');
+    console.log('📍 Location Permission API: Current user from token:', req.user);
+    
+    const currentUserId = req.user.id; // Google user ID
+
+    console.log('📍 Location Permission API: currentUserId:', currentUserId);
+
+    // Find current user
+    const user = await User.findOne({ googleId: currentUserId });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const hasLocationPermission = user.location && user.location.permissionGranted;
+    const hasLocationData = user.location && user.location.latitude && user.location.longitude;
+
+    console.log('📍 Location Permission API: Permission status:', { hasLocationPermission, hasLocationData });
+
+    res.json({
+      hasLocationPermission,
+      hasLocationData,
+      needsLocationPermission: !hasLocationPermission,
+      needsLocationData: !hasLocationData
+    });
+  } catch (err) {
+    console.error('❌ Get location permission error:', err);
+    res.status(500).json({ error: 'Failed to check location permission' });
   }
 });
 

@@ -28,8 +28,11 @@ class AdMobService {
     AdSize size = AdSize.banner,
     AdRequest? request,
   }) {
-    // Use test ad unit ID for development
-    final adUnitIdToUse = adUnitId ?? 'ca-app-pub-3940256099942544/6300978111';
+    // Use provided ad unit ID or throw error if not provided
+    if (adUnitId == null || adUnitId.isEmpty) {
+      throw Exception('Ad unit ID is required for production');
+    }
+    final adUnitIdToUse = adUnitId;
 
     final bannerAd = BannerAd(
       adUnitId: adUnitIdToUse,

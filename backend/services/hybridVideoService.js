@@ -7,12 +7,19 @@ import { spawn } from 'child_process';
 
 class HybridVideoService {
   constructor() {
-    // Configure Cloudinary
+    // Configure Cloudinary with fallback to old env var names
     cloudinary.v2.config({
-      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-      api_key: process.env.CLOUDINARY_API_KEY,
-      api_secret: process.env.CLOUDINARY_API_SECRET
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY || process.env.CLOUD_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET || process.env.CLOUD_SECRET
     });
+    
+    // Log configuration status
+    const config = cloudinary.v2.config();
+    console.log('☁️ HybridVideoService: Cloudinary configuration:');
+    console.log('   cloud_name:', config.cloud_name ? '✅ Set' : '❌ Missing');
+    console.log('   api_key:', config.api_key ? '✅ Set' : '❌ Missing');
+    console.log('   api_secret:', config.api_secret ? '✅ Set' : '❌ Missing');
   }
 
   /**
@@ -23,46 +30,137 @@ class HybridVideoService {
     try {
       console.log('🚀 Starting Hybrid Processing (Cloudinary → R2)...');
       console.log('💰 Expected savings: 93% vs current setup');
+      console.log('📁 Video path:', videoPath);
+      console.log('📝 Video name:', videoName);
+      console.log('👤 User ID:', userId);
       
-      // Step 1: Process video to 480p using Cloudinary
-      const cloudinaryResult = await this.processWithCloudinary(videoPath, videoName, userId);
+      // Check if video file exists
+      if (!fs.existsSync(videoPath)) {
+        throw new Error(`Video file not found: ${videoPath}`);
+      }
       
-      // Step 2: Download processed 480p video from Cloudinary
-      const localVideoPath = await cloudflareR2Service.downloadFromCloudinary(
-        cloudinaryResult.videoUrl, 
-        videoName
-      );
+      const stats = fs.statSync(videoPath);
+      console.log('📊 Video file size:', stats.size, 'bytes');
       
-      // Step 3: Upload 480p video to Cloudflare R2 (FREE bandwidth!)
-      const r2VideoResult = await cloudflareR2Service.uploadVideoToR2(
-        localVideoPath, 
-        videoName, 
-        userId
-      );
-      
-      // Step 4: Upload thumbnail to R2
-      const r2ThumbnailUrl = await cloudflareR2Service.uploadThumbnailToR2(
-        cloudinaryResult.thumbnailUrl, 
-        videoName, 
-        userId
-      );
-      
-      // Step 5: **DELETE FROM CLOUDINARY** to avoid storage costs!
-      console.log('🗑️ Deleting video from Cloudinary (no longer needed)...');
+      // Step 1: Process video to 480p using Cloudinary (with fallback)
+      console.log('☁️ Step 1: Processing with Cloudinary...');
+      let cloudinaryResult;
       try {
-        await cloudinary.v2.uploader.destroy(cloudinaryResult.cloudinaryPublicId, {
-          resource_type: 'video',
-          invalidate: true
-        });
-        console.log('✅ Video deleted from Cloudinary successfully');
-        console.log('💰 Cost saved: ~$0.02/GB/month in Cloudinary storage');
-      } catch (deleteError) {
-        console.warn('⚠️ Failed to delete video from Cloudinary:', deleteError.message);
-        console.warn('   Manual cleanup recommended to avoid storage costs');
+        console.log('⏱️ Starting Cloudinary processing at:', new Date().toISOString());
+        cloudinaryResult = await this.processWithCloudinary(videoPath, videoName, userId);
+        console.log('✅ Step 1 completed: Cloudinary processing successful at:', new Date().toISOString());
+      } catch (cloudinaryError) {
+        console.error('❌ Cloudinary processing failed:', cloudinaryError.message);
+        console.error('❌ Error details:', cloudinaryError);
+        console.log('🔄 Falling back to Pure HLS Processing (FFmpeg → R2)...');
+        console.log('⏱️ Starting HLS fallback at:', new Date().toISOString());
+        
+        // Fallback to pure HLS processing with timeout
+        console.log('🎬 Starting HLS encoding with 5-minute timeout...');
+        const hlsResult = await Promise.race([
+          hlsEncodingService.convertToHLS(videoPath, `${videoName}_${Date.now()}`, {
+            quality: 'medium',
+            resolution: '480p'
+          }),
+          new Promise((_, reject) => 
+            setTimeout(() => {
+              console.log('⏰ HLS encoding timeout after 5 minutes');
+              reject(new Error('HLS encoding timeout after 5 minutes'))
+            }, 5 * 60 * 1000)
+          )
+        ]);
+        console.log('✅ HLS fallback completed at:', new Date().toISOString());
+        
+        // Convert HLS result to cloudinaryResult format
+        cloudinaryResult = {
+          videoUrl: hlsResult.playlistUrl,
+          thumbnailUrl: hlsResult.thumbnailUrl || '',
+          cloudinaryPublicId: null,
+          duration: hlsResult.duration || 0,
+          size: hlsResult.size || 0,
+          format: 'HLS',
+          originalVideoInfo: hlsResult.originalVideoInfo || {},
+          aspectRatio: hlsResult.aspectRatio || 9/16,
+          width: hlsResult.width || 480,
+          height: hlsResult.height || 854,
+          isPortrait: true,
+          outputDir: hlsResult.outputDir
+        };
+        console.log('✅ Fallback completed: Pure HLS processing successful');
+      }
+      
+      // Step 2: Handle video processing result based on processing method
+      let r2VideoResult, r2ThumbnailUrl, localVideoPath;
+      
+      if (cloudinaryResult.videoUrl && cloudinaryResult.videoUrl.includes('cloudinary') && cloudinaryResult.cloudinaryPublicId) {
+        // Cloudinary processing was successful
+        console.log('📥 Downloading processed video from Cloudinary...');
+        localVideoPath = await cloudflareR2Service.downloadFromCloudinary(
+          cloudinaryResult.videoUrl, 
+          videoName
+        );
+        
+        // Step 3: Upload 480p video to Cloudflare R2 (FREE bandwidth!)
+        console.log('⏱️ Starting R2 video upload at:', new Date().toISOString());
+        r2VideoResult = await cloudflareR2Service.uploadVideoToR2(
+          localVideoPath, 
+          videoName, 
+          userId
+        );
+        console.log('✅ R2 video upload completed at:', new Date().toISOString());
+        
+        // Step 4: Upload thumbnail to R2
+        console.log('⏱️ Starting R2 thumbnail upload at:', new Date().toISOString());
+        r2ThumbnailUrl = await cloudflareR2Service.uploadThumbnailToR2(
+          cloudinaryResult.thumbnailUrl, 
+          videoName, 
+          userId
+        );
+        console.log('✅ R2 thumbnail upload completed at:', new Date().toISOString());
+      } else {
+        // HLS processing fallback was used
+        console.log('📥 Using HLS processing result directly...');
+        
+        // Upload HLS files to R2
+        const hlsResult = await cloudflareR2Service.uploadHLSDirectoryToR2(
+          cloudinaryResult.outputDir, 
+          videoName, 
+          userId
+        );
+        
+        r2VideoResult = {
+          url: hlsResult.playlistUrl,
+          key: hlsResult.playlistKey,
+          size: 0, // HLS size calculation would be complex
+          format: 'hls'
+        };
+        r2ThumbnailUrl = cloudinaryResult.thumbnailUrl;
+        localVideoPath = null; // No local file for HLS processing
+      }
+      
+      // Step 5: **DELETE FROM CLOUDINARY** to avoid storage costs! (only if Cloudinary was used)
+      if (cloudinaryResult.cloudinaryPublicId) {
+        console.log('🗑️ Deleting video from Cloudinary (no longer needed)...');
+        try {
+          await cloudinary.v2.uploader.destroy(cloudinaryResult.cloudinaryPublicId, {
+            resource_type: 'video',
+            invalidate: true
+          });
+          console.log('✅ Video deleted from Cloudinary successfully');
+          console.log('💰 Cost saved: ~$0.02/GB/month in Cloudinary storage');
+        } catch (deleteError) {
+          console.warn('⚠️ Failed to delete video from Cloudinary:', deleteError.message);
+          console.warn('   Manual cleanup recommended to avoid storage costs');
+        }
+      } else {
+        console.log('ℹ️ No Cloudinary cleanup needed (HLS processing used)');
       }
       
       // Step 6: Cleanup temp files
-      await cloudflareR2Service.cleanupLocalFile(localVideoPath);
+      if (localVideoPath) {
+        // Only cleanup if we downloaded from Cloudinary
+        await cloudflareR2Service.cleanupLocalFile(localVideoPath);
+      }
       await cloudflareR2Service.cleanupLocalFile(videoPath);
       
       console.log('🎉 Hybrid processing completed successfully!');
@@ -111,48 +209,41 @@ class HybridVideoService {
       const originalVideoInfo = await this.getOriginalVideoInfo(videoPath);
       console.log('📊 Original video info:', originalVideoInfo);
       
-      // Upload and process while preserving original aspect ratio
-      const result = await cloudinary.uploader.upload(videoPath, {
+      // Upload and process while preserving original aspect ratio with timeout
+      console.log('☁️ Starting Cloudinary upload with 5-minute timeout...');
+      console.log('📁 Uploading file:', videoPath);
+      console.log('📊 File size:', fs.statSync(videoPath).size, 'bytes');
+      
+      const result = await Promise.race([
+        cloudinary.v2.uploader.upload(videoPath, {
         resource_type: 'video',
         folder: `temp-processing/${userId}`, // Temporary folder
         public_id: `${videoName}_preserved_${Date.now()}`,
         transformation: [
-          {
-            // Normalize orientation based on source metadata (prevents unintended landscape)
-            angle: 'auto_right'
-          },
           { 
-            // Preserve original aspect ratio - no forced dimensions
-            // Maintain 480p equivalent quality for cost optimization
-            quality: 'auto:good', 
-            fetch_format: 'mp4',
-            flags: 'progressive' // Enable progressive loading
-          },
-          { 
-            // 480p equivalent settings for cost optimization
-            bitrate: '800k', // 480p quality bitrate
-            max_bit_rate: '800k', // Ensure max 480p quality
-            audio_codec: 'aac',
-            video_codec: 'h264'
-          },
-          {
-            // Optimize for streaming
-            streaming_profile: 'hd',
-            keyframe_interval: 2.0
+            // Simplified transformation - no complex processing
+            quality: 'auto',
+            fetch_format: 'mp4'
           }
         ],
         overwrite: true,
-        // Auto-generate thumbnail
+        // Simplified thumbnail generation
         eager: [
           { 
             width: 320, 
             height: 180, 
             crop: 'fill', 
-            format: 'jpg',
-            quality: 'auto:good'
+            format: 'jpg'
           }
         ]
-      });
+        }),
+        new Promise((_, reject) => 
+          setTimeout(() => {
+            console.log('⏰ Cloudinary upload timeout after 5 minutes - forcing fallback to HLS');
+            reject(new Error('Cloudinary upload timeout after 5 minutes'))
+          }, 5 * 60 * 1000)
+        )
+      ]);
 
       console.log('✅ Cloudinary processing completed');
       console.log('🔗 Processed video URL:', result.secure_url);
@@ -195,63 +286,127 @@ class HybridVideoService {
       const { spawn } = await import('child_process');
       
       return new Promise((resolve, reject) => {
-        const ffprobe = spawn('ffprobe', [
-          '-v', 'quiet',
-          '-print_format', 'json',
-          '-show_format',
-          '-show_streams',
-          videoPath
-        ]);
-
-        let output = '';
-        let errorOutput = '';
-
-        ffprobe.stdout.on('data', (data) => {
-          output += data.toString();
+        // Check if ffprobe is available first
+        const ffprobeCheck = spawn('ffprobe', ['-version']);
+        
+        ffprobeCheck.on('error', (error) => {
+          console.log('⚠️ FFprobe not available, using fallback video info');
+          // Return fallback video info when ffprobe is not available
+          resolve({
+            width: 720,
+            height: 1280,
+            aspectRatio: 9/16,
+            duration: 30, // Default duration
+            codec: 'unknown',
+            format: 'mp4'
+          });
         });
-
-        ffprobe.stderr.on('data', (data) => {
-          errorOutput += data.toString();
-        });
-
-        ffprobe.on('close', (code) => {
+        
+        ffprobeCheck.on('close', (code) => {
           if (code !== 0) {
-            reject(new Error(`FFprobe failed: ${errorOutput}`));
+            console.log('⚠️ FFprobe not working, using fallback video info');
+            resolve({
+              width: 720,
+              height: 1280,
+              aspectRatio: 9/16,
+              duration: 30,
+              codec: 'unknown',
+              format: 'mp4'
+            });
             return;
           }
+          
+          // FFprobe is available, proceed with normal detection
+          const ffprobe = spawn('ffprobe', [
+            '-v', 'quiet',
+            '-print_format', 'json',
+            '-show_format',
+            '-show_streams',
+            videoPath
+          ]);
 
-          try {
-            const info = JSON.parse(output);
-            const videoStream = info.streams.find(stream => stream.codec_type === 'video');
-            
-            if (!videoStream) {
-              reject(new Error('No video stream found'));
+          let output = '';
+          let errorOutput = '';
+
+          ffprobe.stdout.on('data', (data) => {
+            output += data.toString();
+          });
+
+          ffprobe.stderr.on('data', (data) => {
+            errorOutput += data.toString();
+          });
+
+          ffprobe.on('close', (code) => {
+            if (code !== 0) {
+              console.log('⚠️ FFprobe failed, using fallback video info');
+              resolve({
+                width: 720,
+                height: 1280,
+                aspectRatio: 9/16,
+                duration: 30,
+                codec: 'unknown',
+                format: 'mp4'
+              });
               return;
             }
 
-            const width = parseInt(videoStream.width);
-            const height = parseInt(videoStream.height);
-            const aspectRatio = width / height;
-            
-            console.log('📊 Original video dimensions:', { width, height, aspectRatio });
-            
-            resolve({
-              width,
-              height,
-              aspectRatio,
-              duration: parseFloat(info.format.duration) || 0,
-              size: parseInt(info.format.size) || 0,
-              isPortrait: aspectRatio < 1.0,
-              isLandscape: aspectRatio >= 1.0
-            });
-          } catch (parseError) {
-            reject(new Error(`Failed to parse video info: ${parseError.message}`));
-          }
+            try {
+              const info = JSON.parse(output);
+              const videoStream = info.streams.find(stream => stream.codec_type === 'video');
+              
+              if (!videoStream) {
+                console.log('⚠️ No video stream found, using fallback video info');
+                resolve({
+                  width: 720,
+                  height: 1280,
+                  aspectRatio: 9/16,
+                  duration: 30,
+                  codec: 'unknown',
+                  format: 'mp4'
+                });
+                return;
+              }
+
+              const width = parseInt(videoStream.width);
+              const height = parseInt(videoStream.height);
+              const aspectRatio = width / height;
+              
+              console.log('📊 Original video dimensions:', { width, height, aspectRatio });
+              
+              resolve({
+                width,
+                height,
+                aspectRatio,
+                duration: parseFloat(info.format.duration) || 0,
+                size: parseInt(info.format.size) || 0,
+                isPortrait: aspectRatio < 1.0,
+                isLandscape: aspectRatio >= 1.0
+              });
+            } catch (parseError) {
+              console.log('⚠️ Failed to parse video info, using fallback');
+              resolve({
+                width: 720,
+                height: 1280,
+                aspectRatio: 9/16,
+                duration: 30,
+                codec: 'unknown',
+                format: 'mp4'
+              });
+            }
+          });
         });
       });
     } catch (error) {
-      console.error('❌ Error getting original video info:', error);
-      throw error;
+      console.log('⚠️ Error getting original video info, using fallback:', error.message);
+      // Return fallback video info on any error
+      return {
+        width: 720,
+        height: 1280,
+        aspectRatio: 9/16,
+        duration: 30,
+        codec: 'unknown',
+        format: 'mp4'
+      };
     }
   }
 
@@ -366,18 +521,23 @@ class HybridVideoService {
       console.log(`   Playlist URL: ${r2HLSResult.playlistUrl}`);
       console.log(`   Segments: ${r2HLSResult.segments}`);
       
-      // Step 4: Generate thumbnail using FFmpeg
+      // Step 4: Generate thumbnail using FFmpeg (optional)
       console.log('📸 Generating thumbnail...');
       const thumbnailPath = await this.generateThumbnailWithFFmpeg(videoPath, videoName, userId);
       
-      // Step 5: Upload thumbnail to R2
-      const thumbnailUrl = await this.uploadThumbnailImageToR2(
-        thumbnailPath,
-        videoName,
-        userId
-      );
-      
-      console.log(`✅ Thumbnail uploaded: ${thumbnailUrl}`);
+      // Step 5: Upload thumbnail to R2 (if generated)
+      let thumbnailUrl = '';
+      if (thumbnailPath) {
+        thumbnailUrl = await this.uploadThumbnailImageToR2(
+          thumbnailPath,
+          videoName,
+          userId
+        );
+        console.log(`✅ Thumbnail uploaded: ${thumbnailUrl}`);
+      } else {
+        console.log('⚠️ No thumbnail generated, using default');
+        thumbnailUrl = 'https://via.placeholder.com/320x180/000000/FFFFFF?text=Video+Thumbnail';
+      }
       
       // Step 6: Cleanup local files
       console.log('🧹 Cleaning up local files...');
@@ -426,52 +586,70 @@ class HybridVideoService {
   async generateThumbnailWithFFmpeg(videoPath, videoName, userId) {
     return new Promise((resolve, reject) => {
       try {
-        const tempDir = path.join(process.cwd(), 'temp');
-        if (!fs.existsSync(tempDir)) {
-          fs.mkdirSync(tempDir, { recursive: true });
-        }
+        // Check if FFmpeg is available first
+        const ffmpegCheck = spawn('ffmpeg', ['-version']);
         
-        const thumbnailPath = path.join(tempDir, `${videoName}_thumb_${Date.now()}.jpg`);
-        
-        console.log('📸 Generating thumbnail with FFmpeg...');
-        console.log(`   Input: ${videoPath}`);
-        console.log(`   Output: ${thumbnailPath}`);
-        
-        // FFmpeg command to extract frame at 1 second
-        const ffmpeg = spawn('ffmpeg', [
-          '-i', videoPath,
-          '-ss', '00:00:01.000',  // Capture at 1 second
-          '-vframes', '1',         // Extract 1 frame
-          '-vf', 'scale=320:180',  // Resize to 320x180
-          '-q:v', '2',             // High quality
-          '-y',                    // Overwrite output
-          thumbnailPath
-        ]);
-        
-        let errorOutput = '';
-        
-        ffmpeg.stderr.on('data', (data) => {
-          errorOutput += data.toString();
+        ffmpegCheck.on('error', (error) => {
+          console.log('⚠️ FFmpeg not available, skipping thumbnail generation');
+          // Return null to indicate no thumbnail was generated
+          resolve(null);
         });
         
-        ffmpeg.on('close', (code) => {
-          if (code === 0) {
-            console.log('✅ Thumbnail generated successfully');
-            resolve(thumbnailPath);
-          } else {
-            console.error('❌ FFmpeg thumbnail generation failed:', errorOutput);
-            reject(new Error(`FFmpeg thumbnail generation failed with code ${code}`));
+        ffmpegCheck.on('close', (code) => {
+          if (code !== 0) {
+            console.log('⚠️ FFmpeg not working, skipping thumbnail generation');
+            resolve(null);
+            return;
           }
-        });
-        
-        ffmpeg.on('error', (error) => {
-          console.error('❌ FFmpeg spawn error:', error);
-          reject(new Error(`Failed to spawn FFmpeg: ${error.message}`));
+          
+          // FFmpeg is available, proceed with thumbnail generation
+          const tempDir = path.join(process.cwd(), 'temp');
+          if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
+          }
+          
+          const thumbnailPath = path.join(tempDir, `${videoName}_thumb_${Date.now()}.jpg`);
+          
+          console.log('📸 Generating thumbnail with FFmpeg...');
+          console.log(`   Input: ${videoPath}`);
+          console.log(`   Output: ${thumbnailPath}`);
+          
+          // FFmpeg command to extract frame at 1 second
+          const ffmpeg = spawn('ffmpeg', [
+            '-i', videoPath,
+            '-ss', '00:00:01.000',  // Capture at 1 second
+            '-vframes', '1',         // Extract 1 frame
+            '-vf', 'scale=320:180',  // Resize to 320x180
+            '-q:v', '2',             // High quality
+            '-y',                    // Overwrite output
+            thumbnailPath
+          ]);
+          
+          let errorOutput = '';
+          
+          ffmpeg.stderr.on('data', (data) => {
+            errorOutput += data.toString();
+          });
+          
+          ffmpeg.on('close', (code) => {
+            if (code === 0) {
+              console.log('✅ Thumbnail generated successfully');
+              resolve(thumbnailPath);
+            } else {
+              console.log('⚠️ FFmpeg thumbnail generation failed, skipping thumbnail');
+              resolve(null);
+            }
+          });
+          
+          ffmpeg.on('error', (error) => {
+            console.log('⚠️ FFmpeg spawn error, skipping thumbnail:', error.message);
+            resolve(null);
+          });
         });
         
       } catch (error) {
-        console.error('❌ Thumbnail generation error:', error);
-        reject(error);
+        console.log('⚠️ Thumbnail generation error, skipping thumbnail:', error.message);
+        resolve(null);
       }
     });
   }

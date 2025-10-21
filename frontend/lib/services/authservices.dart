@@ -179,11 +179,59 @@ class AuthService {
       } catch (e) {
         print('❌ Backend communication error: $e');
 
-        // If backend is unreachable, create a fallback session
+        // If backend is unreachable, try to reconnect and retry
         if (e.toString().contains('SocketException') ||
             e.toString().contains('Connection refused') ||
             e.toString().contains('timeout')) {
-          print('🔄 Backend unreachable, creating fallback session...');
+          print('🔄 Backend unreachable, checking server connectivity...');
+
+          // Try to find a working server
+          try {
+            await AppConfig.checkAndUpdateServerUrl();
+            print('🔄 Retrying with updated server URL...');
+
+            // Retry the authentication with new URL
+            final authResponse = await http
+                .post(
+                  Uri.parse('${AppConfig.baseUrl}/api/auth'),
+                  headers: {'Content-Type': 'application/json'},
+                  body: jsonEncode({'idToken': idToken}),
+                )
+                .timeout(const Duration(seconds: 10));
+
+            if (authResponse.statusCode == 200) {
+              final authData = jsonDecode(authResponse.body);
+              SharedPreferences prefs = await SharedPreferences.getInstance();
+              await prefs.setString('jwt_token', authData['token']);
+
+              // Continue with user registration...
+              final userData = {
+                'googleId': googleUser.id,
+                'name': googleUser.displayName ?? 'User',
+                'email': googleUser.email,
+                'profilePic': googleUser.photoUrl,
+              };
+
+              await http.post(
+                Uri.parse('${AppConfig.baseUrl}/api/users/register'),
+                headers: {'Content-Type': 'application/json'},
+                body: jsonEncode(userData),
+              );
+
+              return {
+                'id': googleUser.id,
+                'googleId': googleUser.id,
+                'name': googleUser.displayName ?? 'User',
+                'email': googleUser.email,
+                'profilePic': googleUser.photoUrl,
+                'token': authData['token'],
+              };
+            }
+          } catch (retryError) {
+            print('❌ Retry failed: $retryError');
+          }
+
+          print('🔄 All servers failed, creating fallback session...');
           return await _createFallbackSession(googleUser);
         }
 
@@ -238,6 +286,42 @@ class AuthService {
     } catch (e) {
       print('❌ Failed to create fallback session: $e');
       return null;
+    }
+  }
+
+  // **NEW: Show location onboarding after successful sign in**
+  static void _showLocationOnboardingAfterSignIn() async {
+    try {
+      print(
+          '📍 AuthService: Checking if location onboarding should be shown...');
+
+      // Check if we should show location onboarding
+      final shouldShow =
+          await LocationOnboardingService.shouldShowLocationOnboarding();
+
+      if (shouldShow) {
+        print('📍 AuthService: Showing location onboarding...');
+
+        // Get the current context
+        final context = navigatorKey.currentContext;
+        if (context != null) {
+          // Show location permission request
+          final granted =
+              await LocationOnboardingService.showLocationOnboarding(context);
+
+          if (granted) {
+            print('✅ AuthService: Location permission granted');
+          } else {
+            print('❌ AuthService: Location permission denied');
+          }
+        } else {
+          print('❌ AuthService: No context available for location onboarding');
+        }
+      } else {
+        print('📍 AuthService: Location onboarding not needed');
+      }
+    } catch (e) {
+      print('❌ AuthService: Error in location onboarding: $e');
     }
   }
 
@@ -701,58 +785,36 @@ class AuthService {
     }
   }
 
-  /// Show location onboarding for new users after sign-in
-  Future<void> _showLocationOnboardingAfterSignIn() async {
-    try {
-      print('📍 Showing location onboarding for new user...');
-      final context = navigatorKey.currentContext;
-      if (context == null) {
-        print('❌ No context available for location onboarding');
-        return;
-      }
-
-      await LocationOnboardingService.showLocationOnboardingIfNeeded(
-        context,
-        appName: 'Snehayog',
-        onPermissionGranted: () {
-          print('✅ New user granted location permission');
-        },
-        onPermissionDenied: () {
-          print('❌ New user denied location permission');
-        },
-        onSkip: () {
-          print('👤 User skipped location benefits dialog');
-        },
-      );
-
-      // **DEBUG: If dialog didn't show, force show it**
-      // Uncomment the line below to force show location dialog
-      // await LocationOnboardingService.forceShowLocationOnboarding(context);
-      print('✅ Location onboarding completed');
-    } catch (e) {
-      print('❌ Error showing location onboarding: $e');
-    }
-  }
-
   /// Alternative method to show location onboarding with explicit context
   static Future<void> showLocationOnboarding(BuildContext context) async {
     try {
       print('📍 Showing location onboarding...');
 
-      await LocationOnboardingService.showLocationOnboardingIfNeeded(
-        context,
-        appName: 'Snehayog',
-        onPermissionGranted: () {
-          print('✅ User granted location permission');
-        },
-        onPermissionDenied: () {
-          print('❌ User denied location permission');
-        },
-      );
+      final result =
+          await LocationOnboardingService.showLocationOnboarding(context);
+      if (result) {
+        print('✅ User granted location permission');
+      } else {
+        print('❌ User denied location permission');
+      }
     } catch (e) {
       print('❌ Error showing location onboarding: $e');
     }
   }
+
+  /// Get current JWT token
+  static Future<String?> getToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('jwt_token');
+    } catch (e) {
+      print('❌ Error getting token: $e');
+      return null;
+    }
+  }
+
+  /// Get base URL for API calls
+  static String get baseUrl => AppConfig.baseUrl;
 
   /// **TESTING: Force show location dialog (ignores SharedPreferences check)**
   static Future<void> forceShowLocationDialog(BuildContext context) async {
@@ -760,7 +822,8 @@ class AuthService {
       print('🧪 TESTING: Force showing location permission dialog...');
 
       // Reset onboarding state first
-      await LocationOnboardingService.resetOnboarding();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('location_onboarding_shown');
 
       // Then show the dialog
       await showLocationOnboarding(context);
@@ -771,6 +834,6 @@ class AuthService {
 
   /// **TESTING: Check if location permission is granted**
   static Future<bool> checkLocationPermission() async {
-    return await LocationOnboardingService.hasLocationPermission();
+    return await LocationOnboardingService.isLocationPermissionGranted();
   }
 }

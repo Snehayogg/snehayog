@@ -23,6 +23,7 @@ import 'package:snehayog/core/managers/smart_cache_manager.dart';
 import 'package:snehayog/model/video_model.dart';
 import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/services/background_profile_preloader.dart';
+import 'package:snehayog/services/location_onboarding_service.dart';
 
 final RazorpayService razorpayService = RazorpayService();
 
@@ -49,6 +50,22 @@ void main() async {
 
   // **BACKGROUND: Initialize heavy services after app starts**
   _initializeServicesInBackground();
+
+  // **NEW: Check server connectivity and set optimal URL**
+  _checkServerConnectivity();
+}
+
+/// **NEW: Check server connectivity and set optimal URL**
+void _checkServerConnectivity() async {
+  try {
+    print('🔍 Main: Checking server connectivity...');
+    // Clear any cached URLs to force fresh check
+    AppConfig.clearCache();
+    final workingUrl = await AppConfig.checkAndUpdateServerUrl();
+    print('✅ Main: Using server URL: $workingUrl');
+  } catch (e) {
+    print('❌ Main: Error checking server connectivity: $e');
+  }
 }
 
 /// **OPTIMIZED: Initialize heavy services in background**
@@ -188,18 +205,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
     // Handle initial link if app launched from deep link
     try {
-      final initial = await appLinks.getInitialAppLink();
+      final initial = await appLinks.getInitialLink();
       if (initial != null) {
         _handleIncomingUri(initial);
       }
-    } catch (_) {}
+    } catch (e) {
+      print('❌ Error getting initial URI: $e');
+    }
 
     // Listen for links while app is running
-    _sub = appLinks.uriLinkStream.listen((Uri? uri) {
-      if (uri != null) {
-        _handleIncomingUri(uri);
-      }
-    }, onError: (err) {});
+    _sub = appLinks.uriLinkStream.listen((Uri uri) {
+      _handleIncomingUri(uri);
+    }, onError: (err) {
+      print('❌ Deep link stream error: $err');
+    });
   }
 
   Future<void> _handleIncomingUri(Uri uri) async {
@@ -374,10 +393,11 @@ class _AuthWrapperState extends State<AuthWrapper> {
           );
         }
 
-        // If user is signed in, go directly to MainScreen
+        // If user is signed in, check location permission and navigate to MainScreen
         if (authController.isSignedIn) {
-          print('✅ AuthWrapper: User is signed in, navigating to MainScreen');
-          return const MainScreen();
+          print(
+              '✅ AuthWrapper: User is signed in, checking location permission');
+          return const LocationPermissionWrapper();
         }
 
         // Show login screen if not signed in
@@ -385,5 +405,101 @@ class _AuthWrapperState extends State<AuthWrapper> {
         return const LoginScreen();
       },
     );
+  }
+}
+
+class LocationPermissionWrapper extends StatefulWidget {
+  const LocationPermissionWrapper({super.key});
+
+  @override
+  State<LocationPermissionWrapper> createState() =>
+      _LocationPermissionWrapperState();
+}
+
+class _LocationPermissionWrapperState extends State<LocationPermissionWrapper> {
+  bool _isCheckingLocation = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLocationPermission();
+  }
+
+  Future<void> _checkLocationPermission() async {
+    try {
+      print('📍 LocationPermissionWrapper: Checking location permission...');
+
+      // Check if we should show location onboarding
+      final shouldShow =
+          await LocationOnboardingService.shouldShowLocationOnboarding();
+
+      print(
+          '📍 LocationPermissionWrapper: Should show location dialog: $shouldShow');
+
+      setState(() {
+        _isCheckingLocation = false;
+      });
+
+      // If we should show the native permission dialog, show it after a short delay
+      if (shouldShow && mounted) {
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            _requestNativeLocationPermission();
+          }
+        });
+      }
+    } catch (e) {
+      print(
+          '❌ LocationPermissionWrapper: Error checking location permission: $e');
+      setState(() {
+        _isCheckingLocation = false;
+      });
+    }
+  }
+
+  Future<void> _requestNativeLocationPermission() async {
+    if (!mounted) return;
+
+    try {
+      print(
+          '📍 LocationPermissionWrapper: Requesting native location permission...');
+
+      // Use the native permission request directly
+      final granted =
+          await LocationOnboardingService.showLocationOnboarding(context);
+
+      print('📍 LocationPermissionWrapper: Native permission result: $granted');
+
+      if (granted) {
+        print('✅ Location permission granted via native dialog');
+      } else {
+        print('❌ Location permission denied via native dialog');
+      }
+    } catch (e) {
+      print(
+          '❌ LocationPermissionWrapper: Error requesting native permission: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Show loading while checking location permission
+    if (_isCheckingLocation) {
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Checking location permission...'),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Show main screen
+    return const MainScreen();
   }
 }

@@ -1,6 +1,7 @@
 {
   "build": {
-    "builder": "NIXPACKS"
+    "builder": "NIXPACKS",
+    "buildCommand": "npm run setup && npm run setup:ffmpeg"
   },
   "deploy": {
     "startCommand": "npm start",

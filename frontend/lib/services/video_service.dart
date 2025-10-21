@@ -35,6 +35,10 @@ class VideoService {
 
   // **CONSTANTS: Optimized values for better performance**
   static String get baseUrl => NetworkHelper.getBaseUrl();
+
+  // **NEW: Get base URL with Railway first, local fallback**
+  static Future<String> getBaseUrlWithFallback() =>
+      NetworkHelper.getBaseUrlWithFallback();
   static const int maxRetries = 2;
   static const int retryDelay = 1;
   static const int maxShortVideoDuration = 120;
@@ -128,6 +132,10 @@ class VideoService {
     String? videoType,
   }) async {
     try {
+      // Get base URL with Railway first, local fallback
+      final baseUrl = await getBaseUrlWithFallback();
+      print('🔍 VideoService: Using base URL: $baseUrl');
+
       String url = '$baseUrl/api/videos?page=$page&limit=$limit';
       if (videoType != null && (videoType == 'yog' || videoType == 'sneha')) {
         url += '&videoType=$videoType';
@@ -154,25 +162,41 @@ class VideoService {
           // **HLS URL Priority**: Use HLS for better streaming
           if (json['hlsPlaylistUrl'] != null &&
               json['hlsPlaylistUrl'].toString().isNotEmpty) {
-            if (!json['hlsPlaylistUrl'].toString().startsWith('http')) {
-              json['videoUrl'] = '$baseUrl${json['hlsPlaylistUrl']}';
+            String hlsUrl = json['hlsPlaylistUrl'].toString();
+            if (!hlsUrl.startsWith('http')) {
+              // Remove leading slash if present to avoid double slash
+              if (hlsUrl.startsWith('/')) {
+                hlsUrl = hlsUrl.substring(1);
+              }
+              json['videoUrl'] = '$baseUrl/$hlsUrl';
             } else {
-              json['videoUrl'] = json['hlsPlaylistUrl'];
+              json['videoUrl'] = hlsUrl;
             }
-            print('🔗 VideoService: Using HLS URL: ${json['videoUrl']}');
+            print(
+                '🔗 VideoService: Using HLS Playlist URL: ${json['videoUrl']}');
           } else if (json['hlsMasterPlaylistUrl'] != null &&
               json['hlsMasterPlaylistUrl'].toString().isNotEmpty) {
-            if (!json['hlsMasterPlaylistUrl'].toString().startsWith('http')) {
-              json['videoUrl'] = '$baseUrl${json['hlsMasterPlaylistUrl']}';
+            String masterUrl = json['hlsMasterPlaylistUrl'].toString();
+            if (!masterUrl.startsWith('http')) {
+              // Remove leading slash if present to avoid double slash
+              if (masterUrl.startsWith('/')) {
+                masterUrl = masterUrl.substring(1);
+              }
+              json['videoUrl'] = '$baseUrl/$masterUrl';
             } else {
-              json['videoUrl'] = json['hlsMasterPlaylistUrl'];
+              json['videoUrl'] = masterUrl;
             }
             print('🔗 VideoService: Using HLS Master URL: ${json['videoUrl']}');
           } else {
             // **Fallback**: Ensure relative URLs are complete
             if (json['videoUrl'] != null &&
                 !json['videoUrl'].toString().startsWith('http')) {
-              json['videoUrl'] = '$baseUrl${json['videoUrl']}';
+              String videoUrl = json['videoUrl'].toString();
+              // Remove leading slash if present to avoid double slash
+              if (videoUrl.startsWith('/')) {
+                videoUrl = videoUrl.substring(1);
+              }
+              json['videoUrl'] = '$baseUrl/$videoUrl';
             }
             print(
               '🔗 VideoService: Using original video URL: ${json['videoUrl']}',
@@ -301,18 +325,60 @@ class VideoService {
         final List<dynamic> videoList = json.decode(response.body);
 
         final videos = videoList.map((json) {
-          // **Ensure URLs are complete**
-          if (json['videoUrl'] != null &&
-              !json['videoUrl'].toString().startsWith('http')) {
-            json['videoUrl'] = '$baseUrl${json['videoUrl']}';
+          // **HLS URL Priority**: Use HLS for better streaming
+          if (json['hlsPlaylistUrl'] != null &&
+              json['hlsPlaylistUrl'].toString().isNotEmpty) {
+            String hlsUrl = json['hlsPlaylistUrl'].toString();
+            if (!hlsUrl.startsWith('http')) {
+              if (hlsUrl.startsWith('/')) {
+                hlsUrl = hlsUrl.substring(1);
+              }
+              json['videoUrl'] = '$baseUrl/$hlsUrl';
+            } else {
+              json['videoUrl'] = hlsUrl;
+            }
+            print(
+                '🔗 VideoService: Using HLS Playlist URL: ${json['videoUrl']}');
+          } else if (json['hlsMasterPlaylistUrl'] != null &&
+              json['hlsMasterPlaylistUrl'].toString().isNotEmpty) {
+            String masterUrl = json['hlsMasterPlaylistUrl'].toString();
+            if (!masterUrl.startsWith('http')) {
+              if (masterUrl.startsWith('/')) {
+                masterUrl = masterUrl.substring(1);
+              }
+              json['videoUrl'] = '$baseUrl/$masterUrl';
+            } else {
+              json['videoUrl'] = masterUrl;
+            }
+            print('🔗 VideoService: Using HLS Master URL: ${json['videoUrl']}');
+          } else {
+            // **Fallback**: Ensure relative URLs are complete
+            if (json['videoUrl'] != null &&
+                !json['videoUrl'].toString().startsWith('http')) {
+              String videoUrl = json['videoUrl'].toString();
+              if (videoUrl.startsWith('/')) {
+                videoUrl = videoUrl.substring(1);
+              }
+              json['videoUrl'] = '$baseUrl/$videoUrl';
+            }
           }
+
+          // **Ensure other URLs are complete**
           if (json['originalVideoUrl'] != null &&
               !json['originalVideoUrl'].toString().startsWith('http')) {
-            json['originalVideoUrl'] = '$baseUrl${json['originalVideoUrl']}';
+            String originalUrl = json['originalVideoUrl'].toString();
+            if (originalUrl.startsWith('/')) {
+              originalUrl = originalUrl.substring(1);
+            }
+            json['originalVideoUrl'] = '$baseUrl/$originalUrl';
           }
           if (json['thumbnailUrl'] != null &&
               !json['thumbnailUrl'].toString().startsWith('http')) {
-            json['thumbnailUrl'] = '$baseUrl${json['thumbnailUrl']}';
+            String thumbnailUrl = json['thumbnailUrl'].toString();
+            if (thumbnailUrl.startsWith('/')) {
+              thumbnailUrl = thumbnailUrl.substring(1);
+            }
+            json['thumbnailUrl'] = '$baseUrl/$thumbnailUrl';
           }
 
           return VideoModel.fromJson(json);
@@ -384,7 +450,7 @@ class VideoService {
       // **Create multipart request**
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('$baseUrl/api/videos/upload'),
+        Uri.parse('$baseUrl/api/upload/video'),
       );
 
       final headers = await _getAuthHeaders();
@@ -408,7 +474,7 @@ class VideoService {
       // **Add fields**
       request.fields['videoName'] = title;
       // Description intentionally omitted from upload flow
-      request.fields['videoType'] = isLong ? 'sneha' : 'yog';
+      request.fields['videoType'] = 'yog';
       if (link != null && link.isNotEmpty) {
         request.fields['link'] = link;
       }
@@ -441,6 +507,12 @@ class VideoService {
       );
 
       final responseBody = await streamedResponse.stream.bytesToString();
+
+      // **FIX: Add response validation**
+      if (responseBody.isEmpty) {
+        throw Exception('Empty response from server');
+      }
+
       final responseData = json.decode(responseBody);
 
       print(
@@ -448,20 +520,33 @@ class VideoService {
       );
       print('📄 VideoService: Upload response body: $responseBody');
 
+      // **FIX: Validate response structure**
+      if (responseData == null) {
+        throw Exception('Invalid JSON response from server');
+      }
+
       if (streamedResponse.statusCode == 201) {
-        final videoData = responseData['video'] ?? {};
+        final videoData = responseData['video'];
+
+        // **FIX: Add null checks to prevent NoSuchMethodError**
+        if (videoData == null) {
+          print('❌ VideoService: Video data is null in response');
+          throw Exception('Invalid response: Video data is missing');
+        }
+
         return {
-          'id': videoData['_id'] ?? videoData['id'],
+          'id': videoData['_id'] ?? videoData['id'] ?? '',
           'title': videoData['videoName'] ?? title,
-          'videoUrl': videoData['videoUrl'] ?? videoData['hlsPlaylistUrl'],
-          'thumbnail': videoData['thumbnailUrl'],
-          'originalVideoUrl': videoData['originalVideoUrl'],
+          'videoUrl':
+              videoData['videoUrl'] ?? videoData['hlsPlaylistUrl'] ?? '',
+          'thumbnail': videoData['thumbnailUrl'] ?? '',
+          'originalVideoUrl': videoData['originalVideoUrl'] ?? '',
           'duration': '0:00',
           'views': 0,
-          'uploader': userData['name'],
+          'uploader': userData['name'] ?? 'Unknown',
           'uploadTime': 'Just now',
           'isLongVideo': isLong,
-          'link': videoData['link'],
+          'link': videoData['link'] ?? '',
           'processingStatus': videoData['processingStatus'] ?? 'pending',
         };
       } else {
@@ -545,6 +630,35 @@ class VideoService {
     }
   }
 
+  /// **Get video processing status**
+  Future<Map<String, dynamic>?> getVideoProcessingStatus(String videoId) async {
+    try {
+      print('🔄 VideoService: Getting processing status for video: $videoId');
+
+      final headers = await _getAuthHeaders();
+      final res = await http
+          .get(Uri.parse('$baseUrl/api/upload/video/$videoId/status'),
+              headers: headers)
+          .timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 200) {
+        final responseData = json.decode(res.body);
+        print('✅ VideoService: Processing status retrieved successfully');
+        return responseData;
+      } else if (res.statusCode == 404) {
+        print('⚠️ VideoService: Video not found for status check');
+        return null;
+      } else {
+        print(
+            '❌ VideoService: Failed to get processing status: ${res.statusCode}');
+        return null;
+      }
+    } catch (e) {
+      print('❌ VideoService: Error getting processing status: $e');
+      return null;
+    }
+  }
+
   /// **Share video**
   Future<VideoModel> shareVideo(
     String videoId,
@@ -617,36 +731,6 @@ class VideoService {
     } catch (e) {
       print('❌ VideoService: Error checking video duration: $e');
       return false;
-    }
-  }
-
-  /// **Get video by ID for processing status checking**
-  Future<Map<String, dynamic>?> getVideoProcessingStatus(String videoId) async {
-    try {
-      print('🔍 VideoService: Getting video by ID: $videoId');
-
-      final headers = await _getAuthHeaders();
-      final response = await _makeRequest(
-        () => _client.get(
-          Uri.parse('$baseUrl/api/videos/$videoId'),
-          headers: headers,
-        ),
-        timeout: const Duration(seconds: 10),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        print('✅ VideoService: Video retrieved successfully');
-        print('   Processing status: ${data['processingStatus']}');
-        print('   Processing progress: ${data['processingProgress']}%');
-        return data;
-      } else {
-        print('❌ VideoService: Failed to get video: ${response.statusCode}');
-        return null;
-      }
-    } catch (e) {
-      print('❌ VideoService: Error getting video by ID: $e');
-      return null;
     }
   }
 
@@ -811,7 +895,7 @@ class VideoService {
       'views': 0,
       'shares': 0,
       'uploader': {
-        'id': ad.uploaderId ?? 'advertiser',
+        'id': ad.uploaderId,
         'name': 'Sponsored',
         'profilePic': ad.uploaderProfilePic ?? '',
       },
@@ -826,6 +910,77 @@ class VideoService {
       'targetAudience': ad.targetAudience,
       'targetKeywords': ad.targetKeywords,
     };
+  }
+
+  /// **Upload video to server**
+  Future<Map<String, dynamic>?> uploadVideoFile(
+    File videoFile,
+    String title, {
+    String description = '',
+    String link = '',
+    String videoType = 'yog',
+    String category = '',
+    List<String> tags = const [],
+  }) async {
+    try {
+      print('🚀 VideoService: Starting video upload...');
+      print('📁 File: ${videoFile.path}');
+      print('📝 Title: $title');
+      print('🏷️ Category: $category');
+
+      // Get auth headers
+      final headers = await _getAuthHeaders();
+
+      // Create multipart request
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/api/videos/upload'),
+      );
+
+      // Add headers
+      request.headers.addAll(headers);
+
+      // Add video file
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'video',
+          videoFile.path,
+          contentType: MediaType('video', 'mp4'),
+        ),
+      );
+
+      // Add form fields
+      request.fields['videoName'] = title;
+      request.fields['description'] = description;
+      request.fields['link'] = link;
+      request.fields['videoType'] = videoType;
+      request.fields['category'] = category;
+
+      if (tags.isNotEmpty) {
+        request.fields['tags'] = tags.join(',');
+      }
+
+      print('📤 VideoService: Sending upload request...');
+
+      // Send request
+      final response = await request.send().timeout(
+            const Duration(minutes: 10),
+          );
+
+      final responseBody = await response.stream.bytesToString();
+      final data = json.decode(responseBody);
+
+      if (response.statusCode == 201) {
+        print('✅ VideoService: Upload successful');
+        return data;
+      } else {
+        print('❌ VideoService: Upload failed: ${response.statusCode}');
+        throw Exception(data['error'] ?? 'Upload failed');
+      }
+    } catch (e) {
+      print('❌ VideoService: Upload error: $e');
+      rethrow;
+    }
   }
 
   // **DISPOSE METHOD**

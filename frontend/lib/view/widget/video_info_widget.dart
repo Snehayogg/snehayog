@@ -250,14 +250,18 @@ class _VisitNowButton extends StatelessWidget {
           }
         },
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF2196F3), // Blue color
+          backgroundColor: const Color(
+              0x99444444), // Grey color with 0.6 opacity (99 in hex = 153/255 ≈ 0.6)
           foregroundColor: Colors.white,
+          surfaceTintColor:
+              Colors.transparent, // Remove Material 3 surface tint
+          shadowColor: Colors.transparent, // Remove shadow
           // **KEEPING same height - only vertical padding unchanged**
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(6),
           ),
-          elevation: 1,
+          elevation: 0, // Set to 0 for transparent effect
           // **NEW: Ensure button takes full width of container**
           minimumSize: const Size(double.infinity, 0),
         ),

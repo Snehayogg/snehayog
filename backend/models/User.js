@@ -90,6 +90,41 @@ const UserSchema = new mongoose.Schema({
   payoutCount: {
     type: Number,
     default: 0
+  },
+  // **NEW: Location Data**
+  location: {
+    latitude: {
+      type: Number,
+      required: false
+    },
+    longitude: {
+      type: Number,
+      required: false
+    },
+    address: {
+      type: String,
+      required: false
+    },
+    city: {
+      type: String,
+      required: false
+    },
+    state: {
+      type: String,
+      required: false
+    },
+    country: {
+      type: String,
+      required: false
+    },
+    lastUpdated: {
+      type: Date,
+      default: Date.now
+    },
+    permissionGranted: {
+      type: Boolean,
+      default: false
+    }
   }
 }, {
   timestamps: true

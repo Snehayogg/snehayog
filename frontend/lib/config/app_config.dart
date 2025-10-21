@@ -1,22 +1,126 @@
+import 'package:http/http.dart' as http;
+
 /// Optimized app configuration for better performance and smaller size
 class AppConfig {
-  static const bool _isDevelopment = true;
+  // **MANUAL: Development mode control**
+  static const bool _isDevelopment =
+      false; // Set to true for local development, false for production
 
-  // Backend API configuration
+  // **NEW: Smart URL selection with fallback**
+  static String? _cachedBaseUrl;
+
+  // **NEW: Clear cache method for development**
+  static void clearCache() {
+    _cachedBaseUrl = null;
+  }
+
+  // Backend API configuration with smart fallback
   static String get baseUrl {
-    if (_isDevelopment) {
-      return 'https://snehayog-production.up.railway.app';
-    } else {
-      return 'https://snehayog-production.up.railway.app';
+    if (_cachedBaseUrl != null) {
+      print('🔍 AppConfig: Using cached URL: $_cachedBaseUrl');
+      return _cachedBaseUrl!;
     }
+
+    // Default to Railway first, but will be updated by checkAndUpdateServerUrl()
+    print(
+        '🔍 AppConfig: Default to Railway server, will check connectivity on first API call');
+    return 'https://snehayog-production.up.railway.app';
+  }
+
+  // **NEW: Get base URL with automatic Railway first, local fallback**
+  static Future<String> getBaseUrlWithFallback() async {
+    if (_cachedBaseUrl != null) {
+      print('🔍 AppConfig: Using cached URL: $_cachedBaseUrl');
+      return _cachedBaseUrl!;
+    }
+
+    // Try Railway first, then local server fallback
+    final urlsToTry = [
+      'https://snehayog-production.up.railway.app', // Railway server first
+      'http://192.168.0.200:5001', // Your local network IP (for phone testing)
+      'http://localhost:5001', // Localhost (for emulator)
+      'http://127.0.0.1:5001', // Localhost alternative
+      'http://10.0.2.2:5001', // Android emulator
+    ];
+
+    for (final url in urlsToTry) {
+      try {
+        print('🔍 AppConfig: Testing $url...');
+
+        final response = await http.get(
+          Uri.parse('$url/api/health'),
+          headers: {'Content-Type': 'application/json'},
+        ).timeout(const Duration(seconds: 3));
+
+        if (response.statusCode == 200) {
+          print('✅ AppConfig: Server is accessible at $url');
+          _cachedBaseUrl = url;
+          return url;
+        }
+      } catch (e) {
+        print('❌ AppConfig: $url not accessible: $e');
+        continue;
+      }
+    }
+
+    // If all fail, default to Railway
+    print('⚠️ AppConfig: All servers failed, using Railway as final fallback');
+    _cachedBaseUrl = 'https://snehayog-production.up.railway.app';
+    return _cachedBaseUrl!;
+  }
+
+  // **NEW: Check server connectivity and update URL**
+  static Future<String> checkAndUpdateServerUrl() async {
+    print('🔍 AppConfig: Checking server connectivity...');
+    print('🔍 AppConfig: Development mode: $_isDevelopment');
+
+    // Priority order: Railway server first, then local server fallback
+    final urlsToTry = [
+      'https://snehayog-production.up.railway.app', // Railway server first
+      'http://192.168.0.200:5001', // Your local network IP (for phone testing)
+      'http://localhost:5001', // Localhost (for emulator)
+      'http://127.0.0.1:5001', // Localhost alternative
+      'http://10.0.2.2:5001', // Android emulator
+    ];
+
+    for (final url in urlsToTry) {
+      try {
+        print('🔍 AppConfig: Testing $url...');
+
+        final response = await http.get(
+          Uri.parse('$url/api/health'),
+          headers: {'Content-Type': 'application/json'},
+        ).timeout(const Duration(seconds: 3));
+
+        if (response.statusCode == 200) {
+          print('✅ AppConfig: Server is accessible at $url');
+          _cachedBaseUrl = url;
+          return url;
+        }
+      } catch (e) {
+        print('❌ AppConfig: $url not accessible: $e');
+        continue;
+      }
+    }
+
+    // If all fail, default to Railway
+    print('⚠️ AppConfig: All servers failed, using Railway as final fallback');
+    _cachedBaseUrl = 'https://snehayog-production.up.railway.app';
+    return _cachedBaseUrl!;
+  }
+
+  // **NEW: Reset cached URL (useful for retry scenarios)**
+  static void resetCachedUrl() {
+    _cachedBaseUrl = null;
+    print('🔄 AppConfig: Cached URL reset, will recheck on next request');
   }
 
   // **NEW: Fallback URLs for development**
   static const List<String> fallbackUrls = [
-    'https://snehayog-production.up.railway.app',
-    'http://192.168.0.188:3000',
-    'http://localhost:5001',
-    'http://10.0.2.2:5001',
+    'https://snehayog-production.up.railway.app', // Railway server first
+    'http://192.168.0.199:5001', // Your local network IP
+    'http://localhost:5001', // Localhost
+    'http://10.0.2.2:5001', // Android emulator
   ];
 
   // **NEW: Network timeout configurations**
@@ -215,12 +319,6 @@ class AppConfig {
   static const String cloudinaryApiSecret =
       ''; // Empty - never store in frontend
 
-  // **SECURITY NOTE**: All Cloudinary operations are handled securely via backend:
-  // 1. Frontend requests signed URLs from backend
-  // 2. Backend generates signed URLs using server-side credentials
-  // 3. Frontend receives pre-signed URLs for video streaming
-  // This ensures API secrets never leave the server
-
   // Cloudinary streaming profiles - Cost optimized (720p max)
   static const Map<String, Map<String, dynamic>> streamingProfiles = {
     'portrait_reels': {
@@ -315,19 +413,6 @@ class AppConfig {
   static int calculateImpressionsFromBudgetWithCpm(double budget, double cpm) {
     return (budget / cpm * 1000).round();
   }
-
-  // **NEW: Check if backend is accessible**
-  // Note: This method requires http package import in the file where it's used
-  // static Future<bool> isBackendAccessible() async {
-  //   try {
-  //     final response = await http.get(
-  //       Uri.parse('$baseUrl/api/health'),
-  //     ).timeout(const Duration(seconds: 5));
-  //     return response.statusCode == 200;
-  //   } catch (e) {
-  //     return false;
-  //   }
-  // }
 }
 
 /// Optimized network helper for better performance
@@ -337,6 +422,13 @@ class NetworkHelper {
 
   /// Get the appropriate base URL for the current environment
   static String getBaseUrl() => AppConfig.baseUrl;
+
+  /// Get base URL with automatic Railway first, local fallback (async version)
+  static Future<String> getBaseUrlAsync() => AppConfig.getBaseUrlWithFallback();
+
+  /// Get base URL with Railway first, local fallback
+  static Future<String> getBaseUrlWithFallback() =>
+      AppConfig.getBaseUrlWithFallback();
 
   /// API endpoints
   static String get apiBaseUrl => '${AppConfig.baseUrl}/api';

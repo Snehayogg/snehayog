@@ -1,193 +1,359 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../widgets/location_permission_dialog.dart';
-import 'location_service.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:geocoding/geocoding.dart';
+import 'package:snehayog/services/authservices.dart';
 
-/// Service to handle location permission onboarding for new users
 class LocationOnboardingService {
-  static const String _hasRequestedLocationKey =
-      'has_requested_location_permission';
-  static const String _userHasSeenLocationPromptKey =
-      'user_seen_location_prompt';
+  static const String _locationPermissionKey = 'location_permission_granted';
+  static const String _locationOnboardingShownKey = 'location_onboarding_shown';
 
-  /// Check if we should show location permission dialog for new user
+  /// Check if location onboarding should be shown
   static Future<bool> shouldShowLocationOnboarding() async {
-    final prefs = await SharedPreferences.getInstance();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final hasShownOnboarding =
+          prefs.getBool(_locationOnboardingShownKey) ?? false;
+      final hasPermission = prefs.getBool(_locationPermissionKey) ?? false;
 
-    // Check if user has already seen the location prompt
-    bool hasSeenPrompt = prefs.getBool(_userHasSeenLocationPromptKey) ?? false;
+      // Check if user has location data in backend
+      final hasLocationDataInBackend = await hasLocationInBackend();
 
-    return !hasSeenPrompt;
-  }
+      print(
+          '🔍 LocationOnboarding: shouldShowOnboarding = ${!hasShownOnboarding || !hasPermission || !hasLocationDataInBackend}');
+      print('   - Has shown onboarding: $hasShownOnboarding');
+      print('   - Has permission: $hasPermission');
+      print('   - Has location in backend: $hasLocationDataInBackend');
 
-  /// Mark that user has seen the location onboarding prompt
-  static Future<void> markLocationOnboardingSeen() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_userHasSeenLocationPromptKey, true);
-  }
-
-  /// Show location permission dialog for new users
-  /// Call this after successful sign-in
-  static Future<void> showLocationOnboardingIfNeeded(
-    context, {
-    String? appName,
-    VoidCallback? onPermissionGranted,
-    VoidCallback? onPermissionDenied,
-    VoidCallback? onSkip,
-  }) async {
-    // Check if we should show the onboarding
-    bool shouldShow = await shouldShowLocationOnboarding();
-
-    if (!shouldShow) {
-      return; // User has already seen this
-    }
-
-    // Mark that user has seen the prompt
-    await markLocationOnboardingSeen();
-
-    // Show the permission dialog
-    bool granted = await LocationPermissionHelper.requestLocationPermission(
-      context,
-      appName: appName ?? 'Snehayog',
-      onGranted: () {
-        print('✅ New user granted location permission');
-        onPermissionGranted?.call();
-      },
-      onDenied: () {
-        print('❌ New user denied location permission');
-        onPermissionDenied?.call();
-      },
-    );
-
-    // If user denied, you can show additional onboarding UI
-    if (!granted) {
-      _showLocationBenefitsDialog(context, onSkip: onSkip);
+      // Show onboarding if:
+      // 1. Haven't shown onboarding yet, OR
+      // 2. Don't have permission, OR
+      // 3. Don't have location data in backend
+      return !hasShownOnboarding || !hasPermission || !hasLocationDataInBackend;
+    } catch (e) {
+      print('❌ LocationOnboarding: Error checking onboarding status: $e');
+      return true; // Show onboarding on error
     }
   }
 
-  /// Show additional dialog explaining benefits of location
-  static Future<void> _showLocationBenefitsDialog(
-    context, {
-    VoidCallback? onSkip,
-  }) async {
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.location_on, color: Colors.blue),
-            SizedBox(width: 8),
-            Text('Discover Local Content'),
-          ],
+  /// Show location permission request using native system dialog
+  static Future<bool> showLocationOnboarding(BuildContext context) async {
+    try {
+      print(
+          '🚀 LocationOnboarding: Starting native location permission request');
+
+      // Check current permission status
+      final currentPermission = await Geolocator.checkPermission();
+      print('📍 Current location permission: $currentPermission');
+
+      if (currentPermission == LocationPermission.always ||
+          currentPermission == LocationPermission.whileInUse) {
+        print('✅ Location permission already granted');
+        await _markLocationPermissionGranted();
+        return true;
+      }
+
+      // Check if permission is permanently denied
+      if (currentPermission == LocationPermission.deniedForever) {
+        print('❌ Location permission permanently denied');
+        await _markOnboardingShown();
+        return false;
+      }
+
+      // Request permission using native system dialog
+      print('📍 Requesting location permission via native system dialog...');
+      final permission = await Geolocator.requestPermission();
+      print('📍 Permission result: $permission');
+
+      // Mark onboarding as shown regardless of result
+      await _markOnboardingShown();
+
+      if (permission == LocationPermission.always ||
+          permission == LocationPermission.whileInUse) {
+        print('✅ Location permission granted via native dialog');
+        await _markLocationPermissionGranted();
+
+        // Try to get and save location to backend
+        final locationSaved = await getCurrentLocationAndSave();
+        if (locationSaved) {
+          print('✅ Location data saved to backend');
+        } else {
+          print(
+              '⚠️ Location permission granted but failed to save location data');
+        }
+
+        return true;
+      } else {
+        print('❌ Location permission denied via native dialog');
+        return false;
+      }
+    } catch (e) {
+      print('❌ LocationOnboarding: Error in location permission request: $e');
+      await _markOnboardingShown();
+      return false;
+    }
+  }
+
+  /// Check if location permission is currently granted
+  static Future<bool> isLocationPermissionGranted() async {
+    try {
+      final permission = await Geolocator.checkPermission();
+      final isGranted = permission == LocationPermission.always ||
+          permission == LocationPermission.whileInUse;
+
+      print('🔍 LocationOnboarding: Permission granted: $isGranted');
+      return isGranted;
+    } catch (e) {
+      print('❌ LocationOnboarding: Error checking permission: $e');
+      return false;
+    }
+  }
+
+  /// Request location permission (direct call without onboarding logic)
+  static Future<bool> requestLocationPermission() async {
+    try {
+      print('📍 Direct location permission request...');
+      final permission = await Geolocator.requestPermission();
+
+      if (permission == LocationPermission.always ||
+          permission == LocationPermission.whileInUse) {
+        await _markLocationPermissionGranted();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('❌ LocationOnboarding: Error requesting permission: $e');
+      return false;
+    }
+  }
+
+  /// Get current location if permission is granted
+  static Future<Position?> getCurrentLocation() async {
+    try {
+      final hasPermission = await isLocationPermissionGranted();
+      if (!hasPermission) {
+        print('❌ LocationOnboarding: No location permission');
+        return null;
+      }
+
+      print('📍 Getting current location...');
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 10),
         ),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('📍 Find videos from creators near you'),
-            SizedBox(height: 8),
-            Text('🎯 Get personalized recommendations'),
-            SizedBox(height: 8),
-            Text('🤝 Connect with local communities'),
-            SizedBox(height: 8),
-            Text('📱 Share your location in videos (optional)'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              onSkip?.call();
-            },
-            child: const Text('Skip for Now'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              // Try requesting permission again
-              bool granted =
-                  await LocationPermissionHelper.requestLocationPermission(
-                context,
-                appName: 'Snehayog',
-              );
+      );
 
-              if (granted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                        '🎉 Location enabled! Enjoy personalized content.'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              }
-            },
-            child: const Text('Enable Location'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Reset onboarding (for testing purposes)
-  static Future<void> resetOnboarding() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_userHasSeenLocationPromptKey);
-    await prefs.remove(_hasRequestedLocationKey);
-    print('✅ Location onboarding reset - dialog will show on next sign-in');
-  }
-
-  /// Force show location onboarding (bypasses the "seen" check)
-  static Future<void> forceShowLocationOnboarding(
-    BuildContext context, {
-    String? appName,
-    VoidCallback? onPermissionGranted,
-    VoidCallback? onPermissionDenied,
-    VoidCallback? onSkip,
-  }) async {
-    print('🔧 Force showing location onboarding dialog');
-
-    // Show the permission dialog directly
-    bool granted = await LocationPermissionHelper.requestLocationPermission(
-      context,
-      appName: appName ?? 'Snehayog',
-      onGranted: () {
-        print('✅ User granted location permission');
-        onPermissionGranted?.call();
-      },
-      onDenied: () {
-        print('❌ User denied location permission');
-        onPermissionDenied?.call();
-      },
-    );
-
-    // If user denied, show benefits dialog
-    if (!granted) {
-      _showLocationBenefitsDialog(context, onSkip: onSkip);
+      print(
+          '✅ LocationOnboarding: Got location: ${position.latitude}, ${position.longitude}');
+      return position;
+    } catch (e) {
+      print('❌ LocationOnboarding: Error getting location: $e');
+      return null;
     }
   }
 
-  /// Check if user has location permission
-  static Future<bool> hasLocationPermission() async {
-    final locationService = LocationService();
-    return await locationService.isLocationPermissionGranted();
+  /// Get current location and save to backend
+  static Future<bool> getCurrentLocationAndSave() async {
+    try {
+      final position = await getCurrentLocation();
+      if (position == null) {
+        print('❌ LocationOnboarding: No location data to save');
+        return false;
+      }
+
+      print('📍 Getting address from coordinates...');
+      List<Placemark> placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+
+      if (placemarks.isNotEmpty) {
+        final placemark = placemarks.first;
+        final address = _formatAddress(placemark);
+
+        print('📍 Formatted address: $address');
+
+        // Save to backend
+        final success = await _saveLocationToBackend(
+          latitude: position.latitude,
+          longitude: position.longitude,
+          address: address,
+          city: placemark.locality ?? '',
+          state: placemark.administrativeArea ?? '',
+          country: placemark.country ?? '',
+        );
+
+        if (success) {
+          print('✅ LocationOnboarding: Location saved to backend successfully');
+          return true;
+        } else {
+          print('❌ LocationOnboarding: Failed to save location to backend');
+          return false;
+        }
+      } else {
+        print('❌ LocationOnboarding: No address found for coordinates');
+        return false;
+      }
+    } catch (e) {
+      print('❌ LocationOnboarding: Error getting and saving location: $e');
+      return false;
+    }
   }
 
-  /// Debug method to check onboarding status
+  /// Save location data to backend
+  static Future<bool> _saveLocationToBackend({
+    required double latitude,
+    required double longitude,
+    required String address,
+    required String city,
+    required String state,
+    required String country,
+  }) async {
+    try {
+      final token = await AuthService.getToken();
+      if (token == null) {
+        print('❌ LocationOnboarding: No auth token available');
+        return false;
+      }
+
+      final response = await http.post(
+        Uri.parse('${AuthService.baseUrl}/api/users/update-location'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({
+          'latitude': latitude,
+          'longitude': longitude,
+          'address': address,
+          'city': city,
+          'state': state,
+          'country': country,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        print('✅ LocationOnboarding: Location saved to backend');
+        return true;
+      } else {
+        print(
+            '❌ LocationOnboarding: Backend error: ${response.statusCode} - ${response.body}');
+        return false;
+      }
+    } catch (e) {
+      print('❌ LocationOnboarding: Error saving to backend: $e');
+      return false;
+    }
+  }
+
+  /// Check if user has location data in backend
+  static Future<bool> hasLocationInBackend() async {
+    try {
+      final token = await AuthService.getToken();
+      if (token == null) {
+        print('❌ LocationOnboarding: No auth token available');
+        return false;
+      }
+
+      final response = await http.get(
+        Uri.parse('${AuthService.baseUrl}/api/users/location-permission'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final hasLocationData = data['hasLocationData'] ?? false;
+        print(
+            '📍 LocationOnboarding: Backend location status: $hasLocationData');
+        return hasLocationData;
+      } else {
+        print(
+            '❌ LocationOnboarding: Backend error: ${response.statusCode} - ${response.body}');
+        return false;
+      }
+    } catch (e) {
+      print('❌ LocationOnboarding: Error checking backend location: $e');
+      return false;
+    }
+  }
+
+  /// Format address from placemark
+  static String _formatAddress(Placemark placemark) {
+    final parts = <String>[];
+
+    if (placemark.street?.isNotEmpty == true) {
+      parts.add(placemark.street!);
+    }
+    if (placemark.locality?.isNotEmpty == true) {
+      parts.add(placemark.locality!);
+    }
+    if (placemark.administrativeArea?.isNotEmpty == true) {
+      parts.add(placemark.administrativeArea!);
+    }
+    if (placemark.country?.isNotEmpty == true) {
+      parts.add(placemark.country!);
+    }
+
+    return parts.join(', ');
+  }
+
+  /// Reset onboarding state (for testing)
+  static Future<void> resetOnboardingState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_locationPermissionKey);
+      await prefs.remove(_locationOnboardingShownKey);
+      print('🔄 LocationOnboarding: Reset onboarding state');
+    } catch (e) {
+      print('❌ LocationOnboarding: Error resetting state: $e');
+    }
+  }
+
+  /// Debug: Print current onboarding status
   static Future<void> debugOnboardingStatus() async {
-    final prefs = await SharedPreferences.getInstance();
-    bool hasSeenPrompt = prefs.getBool(_userHasSeenLocationPromptKey) ?? false;
-    bool hasRequestedPermission =
-        prefs.getBool(_hasRequestedLocationKey) ?? false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final hasShownOnboarding =
+          prefs.getBool(_locationOnboardingShownKey) ?? false;
+      final hasPermission = prefs.getBool(_locationPermissionKey) ?? false;
+      final currentPermission = await Geolocator.checkPermission();
 
-    print('🔍 Location Onboarding Debug Status:');
-    print('   Has seen prompt: $hasSeenPrompt');
-    print('   Has requested permission: $hasRequestedPermission');
-    print('   Should show onboarding: ${!hasSeenPrompt}');
+      print('🔍 LocationOnboarding Debug Status:');
+      print('   - Has shown onboarding: $hasShownOnboarding');
+      print('   - Has permission flag: $hasPermission');
+      print('   - Current system permission: $currentPermission');
+      print(
+          '   - Should show onboarding: ${await shouldShowLocationOnboarding()}');
+    } catch (e) {
+      print('❌ LocationOnboarding: Error in debug status: $e');
+    }
+  }
 
-    // Check actual permission status
-    final locationService = LocationService();
-    bool hasPermission = await locationService.isLocationPermissionGranted();
-    print('   Has location permission: $hasPermission');
+  // Private helper methods
+
+  static Future<void> _markLocationPermissionGranted() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_locationPermissionKey, true);
+      print('✅ LocationOnboarding: Marked location permission as granted');
+    } catch (e) {
+      print('❌ LocationOnboarding: Error marking permission granted: $e');
+    }
+  }
+
+  static Future<void> _markOnboardingShown() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_locationOnboardingShownKey, true);
+      print('✅ LocationOnboarding: Marked onboarding as shown');
+    } catch (e) {
+      print('❌ LocationOnboarding: Error marking onboarding shown: $e');
+    }
   }
 }

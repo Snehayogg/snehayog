@@ -66,6 +66,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     super.initState();
     ProfileScreenLogger.logProfileScreenInit();
     _stateManager = ProfileStateManager();
+    _stateManager.setContext(context);
 
     // Ensure context is set early for providers that may be used during loads
     // It will be set again in didChangeDependencies
@@ -1380,15 +1381,26 @@ class _ProfileScreenState extends State<ProfileScreen>
             elevation: 0,
             shadowColor: Colors.transparent,
             surfaceTintColor: Colors.transparent,
-            title: Text(
-              stateManager.userData?['name'] ?? 'Profile',
-              style: const TextStyle(
-                color: Color(0xFF1A1A1A),
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.5,
-              ),
-            ),
+            title: stateManager.isSelecting &&
+                    stateManager.selectedVideoIds.isNotEmpty
+                ? Text(
+                    '${stateManager.selectedVideoIds.length} video${stateManager.selectedVideoIds.length == 1 ? '' : 's'} selected',
+                    style: const TextStyle(
+                      color: Color(0xFF1A1A1A),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.5,
+                    ),
+                  )
+                : Text(
+                    stateManager.userData?['name'] ?? 'Profile',
+                    style: const TextStyle(
+                      color: Color(0xFF1A1A1A),
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
             leading: IconButton(
               icon: const Icon(Icons.menu, color: Color(0xFF1A1A1A), size: 24),
               tooltip: 'Menu',
@@ -1396,6 +1408,49 @@ class _ProfileScreenState extends State<ProfileScreen>
                 _scaffoldKey.currentState?.openDrawer();
               },
             ),
+            actions: [
+              // Show delete icon when videos are selected
+              if (stateManager.isSelecting &&
+                  stateManager.selectedVideoIds.isNotEmpty) ...[
+                IconButton(
+                  icon: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.delete_forever,
+                      color: Colors.red,
+                      size: 24,
+                    ),
+                  ),
+                  tooltip: 'Delete Selected Videos',
+                  onPressed: _handleDeleteSelectedVideos,
+                ),
+                const SizedBox(width: 8),
+              ],
+              // Show cancel icon when in selection mode
+              if (stateManager.isSelecting)
+                IconButton(
+                  icon: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.close,
+                      color: Colors.grey,
+                      size: 24,
+                    ),
+                  ),
+                  tooltip: 'Cancel Selection',
+                  onPressed: () {
+                    stateManager.exitSelectionMode();
+                  },
+                ),
+            ],
             bottom: PreferredSize(
               preferredSize: const Size.fromHeight(1),
               child: Container(
@@ -1443,222 +1498,239 @@ class _ProfileScreenState extends State<ProfileScreen>
               Expanded(
                 child: Consumer<ProfileStateManager>(
                   builder: (context, stateManager, child) {
-                    return ListView(
-                      children: [
-                        FutureBuilder<bool>(
-                          future: AutoScrollSettings.isEnabled(),
-                          builder: (context, snapshot) {
-                            final enabled = snapshot.data ?? false;
-                            return ListTile(
-                              leading: const Icon(Icons.swap_vert_circle,
-                                  color: Colors.black54),
-                              title: const Text('Auto Scroll',
-                                  style: TextStyle(color: Colors.black87)),
-                              subtitle: Text(
-                                enabled
-                                    ? 'Auto-scroll is ON'
-                                    : 'Auto-scroll is OFF',
-                                style: const TextStyle(color: Colors.black54),
-                              ),
-                              trailing: Switch(
-                                value: enabled,
-                                activeThumbColor: Colors.blue,
-                                activeTrackColor: Colors.blue.withOpacity(0.3),
-                                inactiveThumbColor: Colors.grey,
-                                inactiveTrackColor:
-                                    Colors.grey.withOpacity(0.3),
-                                onChanged: (val) async {
-                                  await AutoScrollSettings.setEnabled(val);
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                            'Auto Scroll: ${val ? 'ON' : 'OFF'}'),
-                                        duration: const Duration(seconds: 1),
-                                      ),
-                                    );
-                                  }
-                                  (context as Element).markNeedsBuild();
-                                },
-                              ),
-                              onTap: () async {
-                                final next = !enabled;
-                                await AutoScrollSettings.setEnabled(next);
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                          'Auto Scroll: ${next ? 'ON' : 'OFF'}'),
-                                      duration: const Duration(seconds: 1),
-                                    ),
-                                  );
-                                }
-                                (context as Element).markNeedsBuild();
-                              },
-                            );
-                          },
-                        ),
-                        Divider(
-                            color: Colors.grey[300], height: 1, thickness: 0.5),
-                        // Edit Profile / Save / Cancel
-                        if (!stateManager.isEditing) ...[
-                          ListTile(
-                            leading:
-                                const Icon(Icons.edit, color: Colors.black54),
-                            title: const Text('Edit Profile',
-                                style: TextStyle(color: Colors.black87)),
-                            subtitle: const Text(
-                                'Update your profile information',
-                                style: TextStyle(color: Colors.black54)),
-                            onTap: () {
-                              Navigator.pop(context);
-                              _handleEditProfile();
-                            },
+                    // Create list of menu items
+                    List<Map<String, dynamic>> menuItems = [];
+
+                    // Auto Scroll item
+                    menuItems.add({
+                      'title': 'Auto Scroll',
+                      'icon': Icons.swap_vert_circle,
+                      'color': Colors.blue,
+                      'onTap': () async {
+                        final enabled = await AutoScrollSettings.isEnabled();
+                        await AutoScrollSettings.setEnabled(!enabled);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                  'Auto Scroll: ${!enabled ? 'ON' : 'OFF'}'),
+                              duration: const Duration(seconds: 1),
+                            ),
+                          );
+                        }
+                        Navigator.pop(context);
+                      },
+                    });
+
+                    // Edit Profile / Save / Cancel items
+                    if (!stateManager.isEditing) {
+                      menuItems.add({
+                        'title': 'Edit Profile',
+                        'icon': Icons.edit,
+                        'color': Colors.green,
+                        'onTap': () {
+                          Navigator.pop(context);
+                          _handleEditProfile();
+                        },
+                      });
+                    } else {
+                      menuItems.add({
+                        'title': 'Save',
+                        'icon': Icons.save,
+                        'color': Colors.green,
+                        'onTap': () {
+                          Navigator.pop(context);
+                          _handleSaveProfile();
+                        },
+                      });
+                      menuItems.add({
+                        'title': 'Cancel',
+                        'icon': Icons.close,
+                        'color': Colors.red,
+                        'onTap': () {
+                          Navigator.pop(context);
+                          _handleCancelEdit();
+                        },
+                      });
+                    }
+
+                    // Creator Dashboard
+                    menuItems.add({
+                      'title': 'Dashboard',
+                      'icon': Icons.dashboard,
+                      'color': Colors.purple,
+                      'onTap': () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                const CreatorPayoutDashboard(),
                           ),
-                          Divider(
-                              color: Colors.grey[300],
-                              height: 1,
-                              thickness: 0.5),
-                        ] else ...[
-                          ListTile(
-                            leading:
-                                const Icon(Icons.save, color: Colors.black54),
-                            title: const Text('Save Changes',
-                                style: TextStyle(color: Colors.black87)),
-                            subtitle: const Text('Apply your edits',
-                                style: TextStyle(color: Colors.black54)),
-                            onTap: () {
-                              Navigator.pop(context);
-                              _handleSaveProfile();
-                            },
-                          ),
-                          ListTile(
-                            leading:
-                                const Icon(Icons.close, color: Colors.black54),
-                            title: const Text('Cancel Edit',
-                                style: TextStyle(color: Colors.black87)),
-                            subtitle: const Text('Discard changes',
-                                style: TextStyle(color: Colors.black54)),
-                            onTap: () {
-                              Navigator.pop(context);
-                              _handleCancelEdit();
-                            },
-                          ),
-                          Divider(
-                              color: Colors.grey[300],
-                              height: 1,
-                              thickness: 0.5),
-                        ],
-                        ListTile(
-                          leading: const Icon(Icons.dashboard,
-                              color: Colors.black54),
-                          title: const Text('Creator Dashboard',
-                              style: TextStyle(color: Colors.black87)),
-                          subtitle: const Text('View earnings and analytics',
-                              style: TextStyle(color: Colors.black54)),
-                          onTap: () {
-                            Navigator.pop(context);
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const CreatorPayoutDashboard(),
-                              ),
-                            );
-                          },
+                        );
+                      },
+                    });
+
+                    // Report User (conditionally show)
+                    if (widget.userId != null &&
+                        ((_stateManager.userData?['_id'] ??
+                                _stateManager.userData?['id'] ??
+                                _stateManager.userData?['googleId']) !=
+                            widget.userId)) {
+                      menuItems.add({
+                        'title': 'Report',
+                        'icon': Icons.flag_outlined,
+                        'color': Colors.orange,
+                        'onTap': () {
+                          Navigator.pop(context);
+                          final targetId = widget.userId!;
+                          _openReportDialog(
+                            targetType: 'user',
+                            targetId: targetId,
+                          );
+                        },
+                      });
+                    }
+
+                    // Feedback
+                    menuItems.add({
+                      'title': 'Feedback',
+                      'icon': Icons.feedback_outlined,
+                      'color': Colors.teal,
+                      'onTap': () {
+                        Navigator.pop(context);
+                        _showFeedbackDialog();
+                      },
+                    });
+
+                    // FAQ
+                    menuItems.add({
+                      'title': 'FAQ',
+                      'icon': Icons.help_outline,
+                      'color': Colors.indigo,
+                      'onTap': () {
+                        Navigator.pop(context);
+                        _showFAQDialog();
+                      },
+                    });
+
+                    // Delete Videos
+                    menuItems.add({
+                      'title': 'Delete',
+                      'icon': Icons.delete_outline,
+                      'color': Colors.red,
+                      'onTap': () {
+                        Navigator.pop(context);
+                        stateManager.enterSelectionMode();
+                      },
+                    });
+
+                    // Settings
+                    menuItems.add({
+                      'title': 'Settings',
+                      'icon': Icons.settings,
+                      'color': Colors.grey,
+                      'onTap': () {
+                        Navigator.pop(context);
+                        _showSettingsBottomSheet();
+                      },
+                    });
+
+                    // Sign Out
+                    menuItems.add({
+                      'title': 'Sign Out',
+                      'icon': Icons.logout,
+                      'color': Colors.red,
+                      'onTap': () {
+                        Navigator.pop(context);
+                        _handleLogout();
+                      },
+                    });
+
+                    return Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: GridView.builder(
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 1.2,
                         ),
-                        Divider(
-                            color: Colors.grey[300], height: 1, thickness: 0.5),
-                        // Conditionally show Report User when viewing someone else's profile
-                        if (widget.userId != null &&
-                            ((_stateManager.userData?['_id'] ??
-                                    _stateManager.userData?['id'] ??
-                                    _stateManager.userData?['googleId']) !=
-                                widget.userId)) ...[
-                          ListTile(
-                            leading: const Icon(Icons.flag_outlined,
-                                color: Colors.black54),
-                            title: const Text('Report User',
-                                style: TextStyle(color: Colors.black87)),
-                            subtitle: const Text(
-                                'Report inappropriate behavior',
-                                style: TextStyle(color: Colors.black54)),
-                            onTap: () {
-                              Navigator.pop(context);
-                              final targetId = widget.userId!;
-                              _openReportDialog(
-                                targetType: 'user',
-                                targetId: targetId,
-                              );
-                            },
-                          ),
-                          Divider(
-                              color: Colors.grey[300],
-                              height: 1,
-                              thickness: 0.5),
-                        ],
-                        // Feedback
-                        ListTile(
-                          leading: const Icon(Icons.feedback_outlined,
-                              color: Colors.black54),
-                          title: const Text('Feedback',
-                              style: TextStyle(color: Colors.black87)),
-                          subtitle: const Text('Tell us what you think',
-                              style: TextStyle(color: Colors.black54)),
-                          onTap: () {
-                            Navigator.pop(context);
-                            _showFeedbackDialog();
-                          },
-                        ),
-                        Divider(
-                            color: Colors.grey[300], height: 1, thickness: 0.5),
-                        ListTile(
-                          leading: const Icon(Icons.delete_outline,
-                              color: Colors.black54),
-                          title: const Text('Delete Videos',
-                              style: TextStyle(color: Colors.black87)),
-                          subtitle: const Text('Select and delete your videos',
-                              style: TextStyle(color: Colors.black54)),
-                          onTap: () {
-                            Navigator.pop(context);
-                            stateManager.enterSelectionMode();
-                          },
-                        ),
-                        Divider(
-                            color: Colors.grey[300], height: 1, thickness: 0.5),
-                        ListTile(
-                          leading:
-                              const Icon(Icons.settings, color: Colors.black54),
-                          title: const Text('Settings',
-                              style: TextStyle(color: Colors.black87)),
-                          subtitle: const Text('App settings and preferences',
-                              style: TextStyle(color: Colors.black54)),
-                          onTap: () {
-                            Navigator.pop(context);
-                            _showSettingsBottomSheet();
-                          },
-                        ),
-                        Divider(
-                            color: Colors.grey[300], height: 1, thickness: 0.5),
-                        ListTile(
-                          leading:
-                              const Icon(Icons.logout, color: Colors.black54),
-                          title: const Text('Sign Out',
-                              style: TextStyle(color: Colors.black87)),
-                          subtitle: const Text('Sign out of your account',
-                              style: TextStyle(color: Colors.black54)),
-                          onTap: () {
-                            Navigator.pop(context);
-                            _handleLogout();
-                          },
-                        ),
-                      ],
+                        itemCount: menuItems.length,
+                        itemBuilder: (context, index) {
+                          final item = menuItems[index];
+                          return _buildMenuBox(
+                            title: item['title'],
+                            icon: item['icon'],
+                            color: item['color'],
+                            onTap: item['onTap'],
+                          );
+                        },
+                      ),
                     );
                   },
                 ),
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMenuBox({
+    required String title,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: color.withOpacity(0.2),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                icon,
+                color: color,
+                size: 24,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: const TextStyle(
+                color: Colors.black87,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
       ),
     );
@@ -1970,6 +2042,236 @@ class _ProfileScreenState extends State<ProfileScreen>
       builder: (context) => ReportDialogWidget(
         targetType: targetType,
         targetId: targetId,
+      ),
+    );
+  }
+
+  /// **NEW: Show Professional FAQ Dialog**
+  void _showFAQDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.9,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (context, scrollController) => Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade100,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.help_outline,
+                      color: Colors.blue.shade700,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Frequently Asked Questions',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Everything you need to know about Snehayog',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              // FAQ Content
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: scrollController,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildFAQItem(
+                        question:
+                            "Why should I use Snehayog instead of Instagram?",
+                        answer:
+                            "Because on Snehayog, you can start earning from day one, not after months of growth. And unlike Instagram, you'll see relevant, meaningful content, not adult or sexual material. It's a platform built to reward real creators and protect genuine viewers.",
+                        icon: Icons.compare_arrows,
+                        color: Colors.green,
+                      ),
+                      _buildFAQItem(
+                        question:
+                            "YouTube already lets creators earn money. Why switch to Snehayog?",
+                        answer:
+                            "YouTube has strict monetization rules — you need 1,000 subscribers and 4,000 watch hours. On Snehayog, there's no barrier — creators start earning from the first upload. It's a platform that values your effort, not your follower count.",
+                        icon: Icons.video_library,
+                        color: Colors.red,
+                      ),
+                      _buildFAQItem(
+                        question:
+                            "Does Snehayog really give 80% ad revenue? Sounds too good to be true.",
+                        answer:
+                            "Yes — creators get 80% of ad revenue directly. The system automatically credits it to your bank account based on your views and engagement. Our goal is to make creators financially independent, not exploit their content.",
+                        icon: Icons.account_balance_wallet,
+                        color: Colors.orange,
+                      ),
+                      _buildFAQItem(
+                        question:
+                            "What's the point of joining a new app if my followers are on Instagram and YouTube?",
+                        answer:
+                            "That's exactly why now is the best time — you can be an early creator on a growing platform. Early creators get more reach, visibility, and partnership opportunities. On Snehayog, you're not lost in the crowd — your content actually gets discovered.",
+                        icon: Icons.trending_up,
+                        color: Colors.purple,
+                      ),
+                      _buildFAQItem(
+                        question:
+                            "How will I get views or reach on Snehayog? New platforms usually have low traffic.",
+                        answer:
+                            "We're actively promoting creators through in-app boosts and personalized recommendations. Because fewer creators are competing right now, your chances to go viral are much higher. Early users always benefit the most — just like YouTubers who started in 2010.",
+                        icon: Icons.visibility,
+                        color: Colors.blue,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Bottom Action Button
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.check_circle_outline),
+                  label: const Text('Got it, thanks!'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: Colors.blue.shade600,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 2,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// **NEW: Build FAQ Item Widget**
+  Widget _buildFAQItem({
+    required String question,
+    required String answer,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.grey.shade200,
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Question Row
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  question,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Answer
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Colors.grey.shade200,
+                width: 1,
+              ),
+            ),
+            child: Text(
+              answer,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade700,
+                height: 1.5,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2830,141 +3132,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                           },
                         ),
                       );
-                    },
-                  ),
-
-                  // **PROFESSIONAL: Modern delete action bar**
-                  Consumer<ProfileStateManager>(
-                    builder: (context, stateManager, child) {
-                      if (stateManager.isSelecting &&
-                          stateManager.selectedVideoIds.isNotEmpty) {
-                        return RepaintBoundary(
-                          child: Container(
-                            margin: const EdgeInsets.all(16),
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: Colors.black,
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.2),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              children: [
-                                // Selection info with icon
-                                Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: Colors.red.withOpacity(0.1),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        Icons.video_library,
-                                        color: Colors.red,
-                                        size: 20,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            '${stateManager.selectedVideoIds.length} video${stateManager.selectedVideoIds.length == 1 ? '' : 's'} selected',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          Text(
-                                            'Ready for deletion',
-                                            style: TextStyle(
-                                              color: Colors.grey[400],
-                                              fontSize: 14,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 20),
-
-                                // Action buttons
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextButton(
-                                        onPressed: () {
-                                          stateManager.exitSelectionMode();
-                                        },
-                                        style: TextButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(
-                                              vertical: 14),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                            side: BorderSide(
-                                              color:
-                                                  Colors.grey.withOpacity(0.3),
-                                            ),
-                                          ),
-                                        ),
-                                        child: const Text(
-                                          'Cancel',
-                                          style: TextStyle(
-                                            color: Colors.grey,
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      flex: 2,
-                                      child: ElevatedButton.icon(
-                                        onPressed: _handleDeleteSelectedVideos,
-                                        icon: const Icon(
-                                          Icons.delete_forever,
-                                          size: 20,
-                                        ),
-                                        label: Text(
-                                          'Delete ${stateManager.selectedVideoIds.length == 1 ? 'Video' : 'Videos'}',
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.red,
-                                          foregroundColor: Colors.white,
-                                          padding: const EdgeInsets.symmetric(
-                                              vertical: 14),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                          ),
-                                          elevation: 0,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }
-                      return const SizedBox.shrink();
                     },
                   ),
                 ],

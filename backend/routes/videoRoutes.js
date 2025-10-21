@@ -4,10 +4,13 @@ import mongoose from 'mongoose';
 import Video from '../models/Video.js';
 import User from '../models/User.js';
 import fs from 'fs'; 
+import path from 'path';
 import { verifyToken } from '../utils/verifytoken.js';
 import { isCloudinaryConfigured } from '../config.js';
-import hybridVideoService from '../services/hybridVideoService.js';
+// Lazy import to ensure env vars are loaded first
+let hybridVideoService;
 const router = express.Router();
+
 
 
 
@@ -27,6 +30,7 @@ const videoCachingMiddleware = (req, res, next) => {
 
 // Apply caching middleware to all video routes
 router.use(videoCachingMiddleware);
+
 
 // DEBUG: Check database status - MUST BE FIRST ROUTE
 router.get('/debug-database', async (req, res) => {
@@ -237,6 +241,12 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
     console.log('💰 Expected cost: $0 processing (FREE!) + $0.015/GB/month storage + $0 bandwidth (FREE!)');
     console.log('📹 Format: HLS (HTTP Live Streaming) - Single 480p quality');
     
+    // **NEW: Lazy load hybrid service to ensure env vars are loaded**
+    if (!hybridVideoService) {
+      const { default: service } = await import('../services/hybridVideoService.js');
+      hybridVideoService = service;
+    }
+    
     // **NEW: Validate video with hybrid service**
     const videoValidation = await hybridVideoService.validateVideo(req.file.path);
     if (!videoValidation.isValid) {
@@ -252,7 +262,7 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
       videoName: videoName,
       description: description || '',
       link: link || '',
-      videoUrl: req.file.path, // Temporary, will be updated after processing
+      videoUrl: '', // Will be set after processing - don't store local paths
       thumbnailUrl: '', // Will be generated during processing
       uploader: user._id,
       videoType: videoType || 'yog',
@@ -271,26 +281,26 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
     
     console.log('✅ Video record created with ID:', video._id);
     
-    // **NEW: Start HLS processing in background (non-blocking)**
-    processVideoToHLS(video._id, req.file.path, videoName, user._id.toString());
+    // **NEW: Start Cloudinary processing in background (non-blocking)**
+    processVideoHybrid(video._id, req.file.path, videoName, user._id.toString());
     
     // **NEW: Return immediate response**
     return res.status(201).json({
       success: true,
-      message: 'Video upload started. Processing via FFmpeg → R2 HLS (100% FREE!).',
+      message: 'Video upload started. Processing via Cloudinary → R2 (93% cost savings!).',
       video: {
         id: video._id,
         videoName: video.videoName,
         processingStatus: video.processingStatus,
         processingProgress: video.processingProgress,
         estimatedTime: '2-5 minutes',
-        format: 'HLS (HTTP Live Streaming)',
+        format: 'MP4 (Progressive Loading)',
         quality: '480p (single quality)',
         costBreakdown: {
-          processing: '$0 (FREE! FFmpeg local)',
-          storage: '$0.015/GB/month',
+          processing: '$0.001 (Cloudinary)',
+          storage: '$0.015/GB/month (R2)',
           bandwidth: '$0 (FREE forever!)',
-          savings: '100% vs cloud processing'
+          savings: '93% vs pure Cloudinary'
         }
       }
     });
@@ -320,6 +330,12 @@ async function processVideoToHLS(videoId, videoPath, videoName, userId) {
     video.processingStatus = 'processing';
     video.processingProgress = 10;
     await video.save();
+    
+    // **NEW: Lazy load hybrid service to ensure env vars are loaded**
+    if (!hybridVideoService) {
+      const { default: service } = await import('../services/hybridVideoService.js');
+      hybridVideoService = service;
+    }
     
     // Process video using Pure HLS service (FFmpeg → R2)
     const hlsResult = await hybridVideoService.processVideoToHLS(
@@ -387,31 +403,57 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
       videosArrayLength: user.videos?.length || 0
     });
 
-    // **IMPROVED: Get videos directly from Video collection using uploader field - only completed videos**
+    // **IMPROVED: Get videos directly from Video collection using uploader field**
     const videos = await Video.find({ 
       uploader: user._id,
-      processingStatus: 'completed' // Only show completed videos
+      videoUrl: { $exists: true, $ne: null, $ne: '' }, // Ensure video URL exists and is not empty
+      processingStatus: { $nin: ['failed', 'error'] } // Only exclude explicitly failed videos
     })
       .populate('uploader', 'name profilePic googleId')
       .sort({ createdAt: -1 }); // Latest videos first
 
-    console.log('🎬 Found videos count:', videos.length);
+    // **NEW: Filter out videos with invalid uploader references**
+    const validVideos = videos.filter(video => {
+      return video.uploader && 
+             video.uploader._id && 
+             video.uploader.name && 
+             video.uploader.name.trim() !== '';
+    });
 
-    if (videos.length === 0) {
-      console.log('⚠️ No videos found for user:', user.name);
+    console.log('🎬 Found videos count:', videos.length);
+    console.log(`🎬 Valid videos count: ${validVideos.length}`);
+
+    // **NEW: Sync user.videos array with actual valid videos**
+    if (validVideos.length !== videos.length) {
+      console.log('🔄 Syncing user.videos array with valid videos...');
+      const validVideoIds = validVideos.map(v => v._id);
+      await User.findByIdAndUpdate(user._id, { 
+        $set: { videos: validVideoIds } 
+      });
+      console.log(`✅ Updated user.videos array: ${videos.length} -> ${validVideos.length} videos`);
+    }
+
+    if (validVideos.length === 0) {
+      console.log('⚠️ No valid videos found for user:', user.name);
       return res.json([]);
     }
 
     // **IMPROVED: Better data formatting and validation**
-    const videosWithUrls = videos.map(video => {
+    const videosWithUrls = validVideos.map(video => {
       const videoObj = video.toObject();
       
       // **CRITICAL: Ensure all required fields are present**
+      // **FIX: Normalize video URLs to fix Windows path separator issues**
+      const normalizeUrl = (url) => {
+        if (!url) return url;
+        return url.replace(/\\/g, '/');
+      };
+      
       const result = {
         _id: videoObj._id?.toString(),
         videoName: videoObj.videoName || 'Untitled Video',
-        videoUrl: videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || '',
-        thumbnailUrl: videoObj.thumbnailUrl || '',
+        videoUrl: normalizeUrl(videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || ''),
+        thumbnailUrl: normalizeUrl(videoObj.thumbnailUrl || ''),
         description: videoObj.description || '',
         likes: parseInt(videoObj.likes) || 0,
         views: parseInt(videoObj.views) || 0,
@@ -481,11 +523,23 @@ router.get('/', async (req, res) => {
     const limitNum = parseInt(limit) || 10;
     const skip = (pageNum - 1) * limitNum;
     
-    // Build query filter - Show all videos (remove processing status restriction)
-    const queryFilter = {};
+    // Build query filter - Show only valid videos with proper uploader references
+    const queryFilter = {
+      uploader: { $exists: true, $ne: null }, // Ensure uploader exists and is not null
+      videoUrl: { 
+        $exists: true, 
+        $ne: null, 
+        $ne: '',
+        $not: /^uploads[\\\/]/,  // Exclude local file paths
+        $regex: /^https?:\/\//    // Only allow HTTP/HTTPS URLs
+      }
+    };
+    
+    // Only exclude videos that are explicitly failed or have invalid processing status
+    queryFilter.processingStatus = { $nin: ['failed', 'error'] };
     
     // Add videoType filter if specified
-    if (videoType && (videoType === 'yog' || videoType === 'sneha')) {
+    if (videoType && videoType === 'yog') {
       queryFilter.videoType = videoType;
       console.log('📹 Filtering by videoType:', videoType);
     }
@@ -493,7 +547,7 @@ router.get('/', async (req, res) => {
     // Debug: Log the query filter
     console.log('🔍 VideoRoutes: Query filter:', JSON.stringify(queryFilter));
     
-    // MODIFIED: Return all videos with optional videoType filter
+    // MODIFIED: Return all videos with optional videoType filter and valid uploaders
     const [totalVideos, videos] = await Promise.all([
       Video.countDocuments(queryFilter), // Count with filter
       Video.find(queryFilter) // Find with filter
@@ -506,23 +560,35 @@ router.get('/', async (req, res) => {
         .lean()
     ]);
 
+    // **NEW: Filter out videos with invalid uploader references**
+    const validVideos = videos.filter(video => {
+      // Check if uploader exists and has required fields
+      return video.uploader && 
+             video.uploader._id && 
+             video.uploader.name && 
+             video.uploader.name.trim() !== '';
+    });
+
+    console.log(`📹 Filtered out ${videos.length - validVideos.length} videos with invalid uploader references`);
+    console.log(`📹 Returning ${validVideos.length} valid videos`);
+
     console.log('📹 Total videos found:', totalVideos);
-    console.log('📹 Videos returned:', videos.length);
+    console.log('📹 Videos returned:', validVideos.length);
     
     // Debug: Log first few video details
-    if (videos.length > 0) {
+    if (validVideos.length > 0) {
       console.log('📹 First video details:', {
-        id: videos[0]._id,
-        name: videos[0].videoName,
-        status: videos[0].processingStatus,
-        type: videos[0].videoType
+        id: validVideos[0]._id,
+        name: validVideos[0].videoName,
+        status: validVideos[0].processingStatus,
+        type: validVideos[0].videoType
       });
     } else {
-      console.log('❌ No videos found in database!');
+      console.log('❌ No valid videos found in database!');
     }
 
     // Transform comments to match Flutter app expectations
-    const transformedVideos = videos.map(video => ({
+    const transformedVideos = validVideos.map(video => ({
       ...video,
       comments: video.comments.map(comment => ({
         _id: comment._id,
@@ -535,7 +601,7 @@ router.get('/', async (req, res) => {
       }))
     }));
     
-    console.log(`✅ Found ${videos.length} videos (page ${page}, total: ${totalVideos})`);
+    console.log(`✅ Found ${validVideos.length} valid videos (page ${page}, total: ${totalVideos})`);
     
     res.json({
       videos: transformedVideos,
@@ -547,7 +613,7 @@ router.get('/', async (req, res) => {
         videoType: videoType || 'all',
         format: 'mp4_and_hls'
       },
-      message: `✅ Fetched ${videos.length} videos successfully${videoType ? ` (${videoType} type)` : ''}`
+      message: `✅ Fetched ${validVideos.length} valid videos successfully${videoType ? ` (${videoType} type)` : ''}`
     });
   } catch (error) {
     console.error('❌ Error fetching videos:', error);
@@ -575,11 +641,18 @@ router.get('/:id', verifyToken, async (req, res) => {
 
     // Transform video data to match frontend expectations
     const videoObj = video.toObject();
+    
+    // **FIX: Normalize video URLs to fix Windows path separator issues**
+    const normalizeUrl = (url) => {
+      if (!url) return url;
+      return url.replace(/\\/g, '/');
+    };
+    
     const transformedVideo = {
       _id: videoObj._id?.toString(),
       videoName: videoObj.videoName || 'Untitled Video',
-      videoUrl: videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || '',
-      thumbnailUrl: videoObj.thumbnailUrl || '',
+      videoUrl: normalizeUrl(videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || ''),
+      thumbnailUrl: normalizeUrl(videoObj.thumbnailUrl || ''),
       description: videoObj.description || '',
       likes: parseInt(videoObj.likes) || 0,
       views: parseInt(videoObj.views) || 0,
@@ -1126,6 +1199,13 @@ router.delete('/:id', verifyToken, async (req, res) => {
       return res.status(404).json({ error: 'Video not found' });
     }
 
+    // **NEW: Remove video reference from user's videos array**
+    await User.findByIdAndUpdate(
+      user._id,
+      { $pull: { videos: videoId } },
+      { new: true }
+    );
+
     console.log(`🗑️ Video deleted: ${videoId} by user: ${user._id}`);
     res.json({ success: true, message: 'Video deleted successfully' });
   } catch (error) {
@@ -1173,6 +1253,13 @@ router.post('/bulk-delete', verifyToken, async (req, res) => {
 
     // Delete all videos
     const deleteResult = await Video.deleteMany({ _id: { $in: videoIds } });
+    
+    // **NEW: Remove video references from user's videos array**
+    await User.findByIdAndUpdate(
+      user._id,
+      { $pull: { videos: { $in: videoIds } } },
+      { new: true }
+    );
     
     console.log(`✅ Bulk delete successful: ${deleteResult.deletedCount} videos deleted`);
     
@@ -1314,20 +1401,44 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
     console.log('✅ User found:', user.name);
     
     // Get user's videos with population
-    const videos = await Video.find({ uploader: user._id })
+    const videos = await Video.find({ 
+      uploader: user._id,
+      videoUrl: { $exists: true, $ne: null, $ne: '' }, // Ensure video URL exists and is not empty
+      processingStatus: { $nin: ['failed', 'error'] } // Only exclude explicitly failed videos
+    })
       .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded')
       .populate('uploader', 'name profilePic googleId')
       .populate('comments.user', 'name profilePic googleId')
       .sort({ createdAt: -1 })
       .lean();
     
+    // **NEW: Filter out videos with invalid uploader references**
+    const validVideos = videos.filter(video => {
+      return video.uploader && 
+             video.uploader._id && 
+             video.uploader.name && 
+             video.uploader.name.trim() !== '';
+    });
+    
     console.log('🎬 Found videos count:', videos.length);
-    if (videos.length === 0) {
-      console.log('⚠️ No videos found for user:', user.name);
+    console.log(`🎬 Valid videos count: ${validVideos.length}`);
+    
+    // **NEW: Sync user.videos array with actual valid videos**
+    if (validVideos.length !== videos.length) {
+      console.log('🔄 Syncing user.videos array with valid videos...');
+      const validVideoIds = validVideos.map(v => v._id);
+      await User.findByIdAndUpdate(user._id, { 
+        $set: { videos: validVideoIds } 
+      });
+      console.log(`✅ Updated user.videos array: ${videos.length} -> ${validVideos.length} videos`);
+    }
+    
+    if (validVideos.length === 0) {
+      console.log('⚠️ No valid videos found for user:', user.name);
     }
 
     // Transform videos to match frontend expectations
-    const transformedVideos = videos.map(video => {
+    const transformedVideos = validVideos.map(video => {
       const videoObj = video;
       const result = {
         _id: videoObj._id?.toString(),
@@ -1381,6 +1492,277 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
     console.error('❌ Error fetching user videos:', error);
     res.status(500).json({ 
       error: 'Error fetching videos',
+      details: error.message 
+    });
+  }
+});
+
+// **NEW: Cleanup orphaned videos (videos with invalid uploader references)**
+router.post('/cleanup-orphaned', verifyToken, async (req, res) => {
+  try {
+    console.log('🧹 Starting orphaned videos cleanup...');
+    
+    // Find videos with invalid uploader references
+    const orphanedVideos = await Video.find({
+      $or: [
+        { uploader: { $exists: false } },
+        { uploader: null },
+        { uploader: { $type: 'string' } } // Invalid ObjectId type
+      ]
+    });
+    
+    console.log(`🧹 Found ${orphanedVideos.length} orphaned videos`);
+    
+    if (orphanedVideos.length === 0) {
+      return res.json({ 
+        success: true, 
+        message: 'No orphaned videos found',
+        deletedCount: 0
+      });
+    }
+    
+    // Delete orphaned videos
+    const orphanedIds = orphanedVideos.map(v => v._id);
+    const deleteResult = await Video.deleteMany({ _id: { $in: orphanedIds } });
+    
+    console.log(`✅ Cleanup successful: ${deleteResult.deletedCount} orphaned videos deleted`);
+    
+    res.json({ 
+      success: true, 
+      message: `${deleteResult.deletedCount} orphaned videos deleted successfully`,
+      deletedCount: deleteResult.deletedCount,
+      orphanedVideoIds: orphanedIds
+    });
+    
+  } catch (error) {
+    console.error('❌ Error cleaning up orphaned videos:', error);
+    res.status(500).json({ 
+      error: 'Failed to cleanup orphaned videos',
+      details: error.message 
+    });
+  }
+});
+
+// **NEW: Cloudinary video processing function (Cloudinary → R2)**
+async function processVideoHybrid(videoId, videoPath, videoName, userId) {
+  try {
+    console.log('🚀 Starting hybrid video processing (Cloudinary → R2) for:', videoId);
+    
+    // **NEW: Update status to processing**
+    const video = await Video.findById(videoId);
+    if (!video) {
+      throw new Error('Video not found');
+    }
+
+    video.processingStatus = 'processing';
+    video.processingProgress = 10;
+    await video.save();
+    console.log('📊 Processing status updated to 10%');
+
+    // **NEW: Lazy load hybrid service to ensure env vars are loaded**
+    if (!hybridVideoService) {
+      const { default: service } = await import('../services/hybridVideoService.js');
+      hybridVideoService = service;
+    }
+    
+    // **NEW: Process video using hybrid approach**
+    const hybridResult = await hybridVideoService.processVideoHybrid(
+      videoPath, 
+      videoName, 
+      userId
+    );
+
+    console.log('✅ Hybrid processing completed');
+    console.log('🔗 Hybrid result:', hybridResult);
+
+    // **NEW: Update video record with R2 URLs**
+    video.videoUrl = hybridResult.videoUrl; // R2 video URL with FREE bandwidth
+    video.thumbnailUrl = hybridResult.thumbnailUrl; // R2 thumbnail URL
+    
+    // **NEW: Clear old quality URLs (single format now)**
+    video.preloadQualityUrl = null;
+    video.lowQualityUrl = hybridResult.videoUrl; // Same as main URL (480p)
+    video.mediumQualityUrl = null;
+    video.highQualityUrl = null;
+    
+    video.processingStatus = 'completed';
+    video.processingProgress = 100;
+
+    // **NEW: Add hybrid metadata**
+    video.originalSize = hybridResult.size;
+    video.originalFormat = 'mp4';
+    video.originalResolution = {
+      width: 854,
+      height: 480
+    };
+
+    // **NEW: Add single quality version**
+    video.qualitiesGenerated = [{
+      quality: 'optimized',
+      url: hybridResult.videoUrl,
+      size: hybridResult.size,
+      resolution: {
+        width: 854,
+        height: 480
+      },
+      bitrate: '800k',
+      generatedAt: new Date()
+    }];
+
+    await video.save();
+    console.log('🎉 Hybrid video processing completed successfully!');
+    console.log('💰 Cost savings: 93% vs previous setup');
+    console.log('📊 Final video data:', {
+      id: video._id,
+      videoUrl: video.videoUrl,
+      thumbnailUrl: video.thumbnailUrl,
+      quality: '480p optimized',
+      storage: 'Cloudflare R2',
+      bandwidth: 'FREE',
+      status: video.processingStatus
+    });
+
+  } catch (error) {
+    console.error('❌ Error in hybrid video processing:', error);
+    
+    try {
+      // **NEW: Update video status and try fallback URL**
+      const video = await Video.findById(videoId);
+      if (video) {
+        // Try to create a fallback URL using the local file
+        const isProduction = process.env.NODE_ENV === 'production';
+        const baseUrl = isProduction 
+          ? 'https://snehayog-production.up.railway.app'
+          : (process.env.SERVER_URL || 'http://192.168.0.199:5001');
+        
+        // Create fallback URL for the uploaded file
+        const fallbackUrl = `${baseUrl}/${videoPath.replace(/\\/g, '/')}`;
+        
+        video.videoUrl = fallbackUrl;
+        video.processingStatus = 'completed'; // Mark as completed with fallback
+        video.processingError = `Hybrid processing failed, using fallback: ${error.message}`;
+        await video.save();
+        
+        console.log('⚠️ Using fallback URL for video:', fallbackUrl);
+      }
+    } catch (updateError) {
+      console.error('❌ Failed to update video status:', updateError);
+    }
+  }
+}
+
+// **NEW: Cleanup endpoint to remove only recently uploaded videos that don't play**
+router.post('/cleanup-broken-videos', verifyToken, async (req, res) => {
+  try {
+    console.log('🧹 Starting cleanup of recently broken videos...');
+    
+    // Only target videos uploaded in the last 24 hours that have issues
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    
+    // Find recently uploaded videos that are broken or have invalid URLs
+    const brokenVideos = await Video.find({
+      $and: [
+        { uploadedAt: { $gte: oneDayAgo } }, // Only recent videos (last 24 hours)
+        {
+          $or: [
+            { processingStatus: 'failed' },
+            { processingStatus: 'error' },
+            { videoUrl: { $exists: false } },
+            { videoUrl: null },
+            { videoUrl: '' },
+            { uploader: { $exists: false } },
+            { uploader: null }
+          ]
+        }
+      ]
+    });
+    
+    console.log(`🧹 Found ${brokenVideos.length} recently broken videos to clean up`);
+    
+    if (brokenVideos.length === 0) {
+      return res.json({ 
+        success: true, 
+        message: 'No recently broken videos found',
+        deletedCount: 0
+      });
+    }
+    
+    // Get video IDs for cleanup
+    const brokenVideoIds = brokenVideos.map(v => v._id);
+    
+    // Remove video references from users' videos arrays
+    await User.updateMany(
+      { videos: { $in: brokenVideoIds } },
+      { $pull: { videos: { $in: brokenVideoIds } } }
+    );
+    
+    // Delete the broken videos
+    const deleteResult = await Video.deleteMany({ _id: { $in: brokenVideoIds } });
+    
+    console.log(`✅ Cleanup successful: ${deleteResult.deletedCount} recently broken videos deleted`);
+    
+    res.json({ 
+      success: true, 
+      message: `${deleteResult.deletedCount} recently broken videos deleted successfully`,
+      deletedCount: deleteResult.deletedCount,
+      brokenVideoIds: brokenVideoIds
+    });
+    
+  } catch (error) {
+    console.error('❌ Error cleaning up broken videos:', error);
+    res.status(500).json({ 
+      error: 'Failed to cleanup broken videos',
+      details: error.message 
+    });
+  }
+});
+
+// **NEW: Sync all users' video arrays with actual valid videos**
+router.post('/sync-user-video-arrays', verifyToken, async (req, res) => {
+  try {
+    console.log('🔄 Starting sync of all users\' video arrays...');
+    
+    const users = await User.find({ videos: { $exists: true, $ne: [] } });
+    let totalUpdated = 0;
+    let totalUsers = users.length;
+    
+    for (const user of users) {
+      try {
+        // Get actual valid videos for this user
+        const validVideos = await Video.find({ 
+          uploader: user._id,
+          videoUrl: { $exists: true, $ne: null, $ne: '' },
+          processingStatus: { $nin: ['failed', 'error'] }
+        }).select('_id');
+        
+        const validVideoIds = validVideos.map(v => v._id);
+        
+        // Update user's videos array if different
+        if (validVideoIds.length !== user.videos.length) {
+          await User.findByIdAndUpdate(user._id, { 
+            $set: { videos: validVideoIds } 
+          });
+          totalUpdated++;
+          console.log(`✅ Updated user ${user.name}: ${user.videos.length} -> ${validVideoIds.length} videos`);
+        }
+      } catch (userError) {
+        console.error(`❌ Error syncing user ${user.name}:`, userError);
+      }
+    }
+    
+    console.log(`✅ Sync completed: ${totalUpdated}/${totalUsers} users updated`);
+    
+    res.json({ 
+      success: true, 
+      message: `Synced ${totalUpdated} out of ${totalUsers} users`,
+      updatedUsers: totalUpdated,
+      totalUsers: totalUsers
+    });
+    
+  } catch (error) {
+    console.error('❌ Error syncing user video arrays:', error);
+    res.status(500).json({ 
+      error: 'Failed to sync user video arrays',
       details: error.message 
     });
   }

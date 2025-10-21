@@ -8,6 +8,7 @@ import 'package:snehayog/view/screens/upload_screen.dart';
 import 'package:snehayog/view/screens/video_screen.dart';
 import 'package:snehayog/services/authservices.dart';
 import 'package:snehayog/services/background_profile_preloader.dart';
+import 'package:snehayog/services/location_onboarding_service.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -190,6 +191,9 @@ class _MainScreenState extends State<MainScreen>
       print(
           '🚀 MainScreen: Starting background profile preloading on app start');
       _profilePreloader.startBackgroundPreloading();
+
+      // **LOCATION ONBOARDING: Check and show location permission request**
+      _checkAndShowLocationOnboarding();
     });
   }
 
@@ -233,6 +237,41 @@ class _MainScreenState extends State<MainScreen>
         ],
       ),
     );
+  }
+
+  /// Check and show location onboarding if needed
+  Future<void> _checkAndShowLocationOnboarding() async {
+    try {
+      print('📍 MainScreen: Checking location onboarding status...');
+
+      // Wait a bit to ensure the app is fully loaded
+      await Future.delayed(const Duration(seconds: 2));
+
+      if (!mounted) return;
+
+      final shouldShow =
+          await LocationOnboardingService.shouldShowLocationOnboarding();
+      print('📍 MainScreen: Should show location onboarding: $shouldShow');
+
+      if (shouldShow) {
+        print('📍 MainScreen: Showing location onboarding dialog...');
+        final result =
+            await LocationOnboardingService.showLocationOnboarding(context);
+        print('📍 MainScreen: Location onboarding result: $result');
+
+        if (result) {
+          print('✅ MainScreen: Location permission granted successfully');
+          // You can add additional logic here, like getting current location
+          // or updating user preferences
+        } else {
+          print('❌ MainScreen: Location permission not granted');
+        }
+      } else {
+        print('📍 MainScreen: Location onboarding not needed');
+      }
+    } catch (e) {
+      print('❌ MainScreen: Error in location onboarding: $e');
+    }
   }
 
   @override
@@ -384,14 +423,14 @@ class _MainScreenState extends State<MainScreen>
                 ],
               ),
               child: SafeArea(
+                bottom: true, // Ensure bottom safe area is respected
                 child: Container(
-                  height: 72, // Increased height to accommodate proper padding
+                  height: 60, // Reduced height for more compact design
                   padding: const EdgeInsets.only(
-                    left: 12,
-                    right: 12,
-                    top: 8,
-                    bottom:
-                        16, // Increased bottom padding to prevent text cutoff
+                    left: 8,
+                    right: 8,
+                    top: 4,
+                    bottom: 4, // Minimal bottom padding to prevent text cutoff
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -415,10 +454,9 @@ class _MainScreenState extends State<MainScreen>
                       _buildNavItem(
                         index: 2,
                         currentIndex: mainController.currentIndex,
-                        icon: Icons.add_circle_outline,
+                        icon: Icons.add,
                         label: 'Upload',
                         onTap: () => _handleNavTap(2, mainController),
-                        isSpecial: true,
                         mainController: mainController,
                       ),
                       _buildNavItem(
@@ -448,125 +486,95 @@ class _MainScreenState extends State<MainScreen>
     required String label,
     required VoidCallback onTap,
     required MainController mainController,
-    bool isSpecial = false,
   }) {
     final isSelected = currentIndex == index;
-    final isUpload = index == 2;
     final isYogTab = index == 0; // Yog tab is at index 0
     final isRefreshingYog = isYogTab && _isRefreshing;
 
-    return GestureDetector(
-      onTap: onTap,
-      onDoubleTap: isYogTab ? _handleYogTabDoubleTap : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Icon with special handling for upload and refresh animation for Yog
-            if (isUpload && isSpecial)
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [
-                      Color(0xFF4CAF50),
-                      Color(0xFF2E7D32),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(28),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF4CAF50).withOpacity(0.3),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.add,
-                  size: 28,
-                  color: Colors.white,
-                ),
-              )
-            else if (isRefreshingYog)
-              // **NEW: Show rotating refresh icon when Yog tab is refreshing**
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                child: RotationTransition(
-                  turns: _refreshAnimationController,
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? const Color(0xFF2196F3).withOpacity(0.2)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Icon(
-                      Icons.refresh,
-                      size: 24,
-                      color: isSelected
-                          ? const Color(0xFF2196F3)
-                          : (mainController.currentIndex == 0
-                              ? Colors.grey[400]
-                              : Colors.grey[600]),
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        onDoubleTap: isYogTab ? _handleYogTabDoubleTap : null,
+        behavior: HitTestBehavior.opaque, // **FIX: Make entire area tappable**
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (isRefreshingYog)
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  child: RotationTransition(
+                    turns: _refreshAnimationController,
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? const Color(0xFF2196F3).withOpacity(0.2)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Icon(
+                        Icons.refresh,
+                        size: isSelected
+                            ? 22
+                            : 20, // Smaller icons for compact design
+                        color: isSelected
+                            ? const Color(0xFF2196F3)
+                            : (mainController.currentIndex == 0
+                                ? Colors.grey[400]
+                                : Colors.grey[600]),
+                      ),
                     ),
                   ),
+                )
+              else
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? const Color(0xFF2196F3).withOpacity(0.2)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: isSelected
+                        ? 22
+                        : 20, // Smaller icons for compact design
+                    color: isSelected
+                        ? const Color(0xFF2196F3)
+                        : (mainController.currentIndex == 0
+                            ? Colors.grey[400]
+                            : Colors.grey[600]),
+                  ),
                 ),
-              )
-            else
-              AnimatedContainer(
+
+              const SizedBox(height: 2), // Reduced spacing for compact design
+
+              // Label always visible below icon
+              AnimatedDefaultTextStyle(
                 duration: const Duration(milliseconds: 200),
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? const Color(0xFF2196F3).withOpacity(0.2)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Icon(
-                  icon,
-                  size: 22,
+                style: TextStyle(
+                  fontSize: 10, // Reduced for compact design
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                   color: isSelected
                       ? const Color(0xFF2196F3)
                       : (mainController.currentIndex == 0
                           ? Colors.grey[400]
                           : Colors.grey[600]),
+                  letterSpacing: 0.2, // Better readability
                 ),
+                child: Text(isRefreshingYog ? 'Refreshing...' : label),
               ),
-
-            const SizedBox(height: 2),
-
-            // Label always visible below icon
-            AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 200),
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                color: isSelected
-                    ? const Color(0xFF2196F3)
-                    : (mainController.currentIndex == 0
-                        ? Colors.grey[400]
-                        : Colors.grey[600]),
-                letterSpacing: 0.1,
-              ),
-              child: Text(isRefreshingYog ? 'Refreshing...' : label),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

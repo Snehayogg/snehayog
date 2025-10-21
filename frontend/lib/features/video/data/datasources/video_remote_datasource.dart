@@ -39,7 +39,7 @@ class VideoRemoteDataSource {
           if (json['videoUrl'] != null &&
               !json['videoUrl'].toString().startsWith('http')) {
             json['videoUrl'] =
-                '${NetworkHelper.getBaseUrl()}${json['videoUrl']}';
+                '${NetworkHelper.getBaseUrl()}/${json['videoUrl']}';
           }
           return VideoModel.fromJson(json);
         }).toList();
@@ -101,12 +101,12 @@ class VideoRemoteDataSource {
           if (json['videoUrl'] != null &&
               !json['videoUrl'].toString().startsWith('http')) {
             json['videoUrl'] =
-                '${NetworkHelper.getBaseUrl()}${json['videoUrl']}';
+                '${NetworkHelper.getBaseUrl()}/${json['videoUrl']}';
           }
           if (json['thumbnailUrl'] != null &&
               !json['thumbnailUrl'].toString().startsWith('http')) {
             json['thumbnailUrl'] =
-                '${NetworkHelper.getBaseUrl()}${json['thumbnailUrl']}';
+                '${NetworkHelper.getBaseUrl()}/${json['thumbnailUrl']}';
           }
           return VideoModel.fromJson(json);
         }).toList();
@@ -153,7 +153,7 @@ class VideoRemoteDataSource {
       // Add other fields
       request.fields['videoName'] = title;
       request.fields['description'] = description;
-      request.fields['videoType'] = isLong ? 'sneha' : 'yog';
+      request.fields['videoType'] = 'yog';
       if (link != null && link.isNotEmpty) {
         request.fields['link'] = link;
       }

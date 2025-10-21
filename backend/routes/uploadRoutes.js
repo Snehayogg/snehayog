@@ -2,8 +2,11 @@ import express from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs/promises';
+import mongoose from 'mongoose';
 import Video from '../models/Video.js';
-import hybridVideoService from '../services/hybridVideoService.js';
+import User from '../models/User.js';
+// Lazy import to ensure env vars are loaded first
+let hybridVideoService;
 import { verifyToken } from '../utils/verifytoken.js';
 import cloudinary from '../config/cloudinary.js';
 
@@ -108,6 +111,12 @@ router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
     console.log('📁 File path:', videoPath);
     console.log('👤 User ID:', userId);
 
+    // **NEW: Lazy load hybrid service to ensure env vars are loaded**
+    if (!hybridVideoService) {
+      const { default: service } = await import('../services/hybridVideoService.js');
+      hybridVideoService = service;
+    }
+    
     // **NEW: Validate video file with hybrid service**
     const videoValidation = await hybridVideoService.validateVideo(videoPath);
     if (!videoValidation.isValid) {
@@ -125,21 +134,40 @@ router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
     const costEstimate = hybridVideoService.getCostEstimate(videoValidation.sizeInMB);
     console.log('💰 Cost estimate:', costEstimate);
 
+    // **NEW: Find user by Google ID to get proper ObjectId**
+    const user = await User.findOne({ googleId: userId });
+    if (!user) {
+      await fs.unlink(videoPath);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // **NEW: Get video dimensions safely**
+    const videoInfo = await hybridVideoService.getOriginalVideoInfo(videoPath);
+    const aspectRatio = videoInfo.width && videoInfo.height ? 
+      videoInfo.width / videoInfo.height : 9/16; // Default to 9:16 if dimensions unavailable
+
     // **NEW: Create initial video record with pending status**
+    // **FIX: Use proper URL format instead of local file path**
+    const baseUrl = process.env.SERVER_URL || 'http://192.168.0.199:5001';
+    const relativePath = videoPath.replace(/\\/g, '/').replace(process.cwd().replace(/\\/g, '/'), '');
+    const tempVideoUrl = `${baseUrl}${relativePath}`;
+    
+    console.log('🔗 Generated temp video URL:', tempVideoUrl);
+    
     const video = new Video({
       videoName: videoName || req.file.originalname,
       description: description || '',
-      videoUrl: videoPath, // Temporary path, will be updated after processing
+      videoUrl: tempVideoUrl, // Proper URL format, will be updated after processing
       thumbnailUrl: '', // Will be generated during processing
-      uploader: userId,
+      uploader: user._id, // Use user's ObjectId, not Google ID
       videoType: 'yog',
-      aspectRatio: videoValidation.width / videoValidation.height,
-      duration: videoValidation.duration,
+      aspectRatio: aspectRatio,
+      duration: videoInfo.duration || 0,
       originalSize: videoValidation.size,
       originalFormat: path.extname(req.file.originalname).substring(1),
       originalResolution: {
-        width: videoValidation.width,
-        height: videoValidation.height
+        width: videoInfo.width || 0,
+        height: videoInfo.height || 0
       },
       processingStatus: 'pending',
       processingProgress: 0
@@ -150,7 +178,15 @@ router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
     console.log('💾 Video record saved with ID:', video._id);
 
     // **NEW: Start hybrid processing in background (Cloudinary → R2)**
-    processVideoHybrid(video._id, videoPath, videoName, userId);
+    console.log('🔄 Starting background processing for video:', video._id);
+    console.log('📁 Video path:', videoPath);
+    console.log('👤 User ID:', userId);
+    
+    // Start processing in background with proper error handling
+    processVideoHybrid(video._id, videoPath, videoName, userId).catch(error => {
+      console.error('❌ Background processing failed:', error);
+      console.error('❌ Error stack:', error.stack);
+    });
 
     // **NEW: Return immediate response with processing status**
     res.status(201).json({
@@ -184,10 +220,54 @@ router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
   }
 });
 
+// **NEW: URL normalization function**
+function normalizeVideoUrl(url) {
+  if (!url) return url;
+  
+  // **FIX: Replace backslashes with forward slashes**
+  let normalizedUrl = url.replace(/\\/g, '/');
+  
+  // **FIX: Ensure proper URL format**
+  if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+    // If it's a relative path, make it absolute
+    const baseUrl = process.env.SERVER_URL || 'http://192.168.0.199:5001';
+    normalizedUrl = `${baseUrl}/${normalizedUrl}`;
+  }
+  
+  // **FIX: Ensure single forward slashes between path segments (but preserve protocol slashes)**
+  // Only normalize multiple slashes in the path part, not the protocol
+  if (normalizedUrl.includes('://')) {
+    const [protocol, rest] = normalizedUrl.split('://');
+    const normalizedRest = rest.replace(/\/+/g, '/');
+    normalizedUrl = `${protocol}://${normalizedRest}`;
+  } else {
+    normalizedUrl = normalizedUrl.replace(/\/+/g, '/');
+  }
+  
+  console.log('🔧 URL normalization:');
+  console.log('   Original:', url);
+  console.log('   Normalized:', normalizedUrl);
+  
+  return normalizedUrl;
+}
+
 // **NEW: Hybrid video processing function (Cloudinary → R2)**
 async function processVideoHybrid(videoId, videoPath, videoName, userId) {
   try {
     console.log('🚀 Starting hybrid video processing (Cloudinary → R2) for:', videoId);
+    console.log('📁 Video path:', videoPath);
+    console.log('📝 Video name:', videoName);
+    console.log('👤 User ID:', userId);
+    
+    // **FIX: Sanitize video name to remove invalid characters for Cloudinary**
+    const sanitizedVideoName = videoName.replace(/[^a-zA-Z0-9\s_-]/g, '_').replace(/\s+/g, '_').substring(0, 50);
+    console.log('📝 Sanitized video name:', sanitizedVideoName);
+    
+    // **NEW: Lazy load hybrid service to ensure env vars are loaded**
+    if (!hybridVideoService) {
+      const { default: service } = await import('../services/hybridVideoService.js');
+      hybridVideoService = service;
+    }
     
     // **NEW: Update status to processing**
     const video = await Video.findById(videoId);
@@ -198,27 +278,72 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
     video.processingStatus = 'processing';
     video.processingProgress = 10;
     await video.save();
-    console.log('📊 Processing status updated to 10%');
+    console.log('📊 Processing status updated to 10% - Starting validation');
 
-    // **NEW: Process video using hybrid approach**
-    const hybridResult = await hybridVideoService.processVideoHybrid(
-      videoPath, 
-      videoName, 
-      userId
-    );
+    // **UPDATE: Validation phase (10-30%)**
+    video.processingProgress = 30;
+    await video.save();
+    console.log('📊 Processing status updated to 30% - Validation complete, starting conversion');
+
+    // **NEW: Process video using hybrid approach with timeout**
+    console.log('🔄 Starting hybrid processing...');
+    let hybridResult;
+    try {
+      hybridResult = await Promise.race([
+        hybridVideoService.processVideoHybrid(
+          videoPath, 
+          sanitizedVideoName, 
+          userId
+        ),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Hybrid processing timeout after 10 minutes')), 10 * 60 * 1000)
+        )
+      ]);
+      console.log('✅ Hybrid processing completed successfully');
+    } catch (error) {
+      console.error('❌ Hybrid processing failed:', error);
+      // Update video status to failed
+      video.processingStatus = 'failed';
+      video.processingError = error.message;
+      await video.save();
+      throw error;
+    }
 
     console.log('✅ Hybrid processing completed');
     console.log('🔗 Hybrid result:', hybridResult);
 
+    // **UPDATE: Finalizing phase (80-95%)**
+    video.processingProgress = 95;
+    await video.save();
+    console.log('📊 Processing status updated to 95% - Finalizing');
+
     // **NEW: Update video record with R2 URLs**
-    video.videoUrl = hybridResult.videoUrl; // R2 video URL with FREE bandwidth
-    video.thumbnailUrl = hybridResult.thumbnailUrl; // R2 thumbnail URL
+    // **FIX: Validate and normalize URLs before saving**
+    const normalizedVideoUrl = normalizeVideoUrl(hybridResult.videoUrl);
+    const normalizedThumbnailUrl = normalizeVideoUrl(hybridResult.thumbnailUrl);
+    
+    video.videoUrl = normalizedVideoUrl; // R2 video URL with FREE bandwidth
+    video.thumbnailUrl = normalizedThumbnailUrl; // R2 thumbnail URL
+    
+    console.log('🔗 Final video URL:', normalizedVideoUrl);
+    console.log('🖼️ Final thumbnail URL:', normalizedThumbnailUrl);
     
     // **NEW: Clear old quality URLs (single format now)**
     video.preloadQualityUrl = null;
-    video.lowQualityUrl = hybridResult.videoUrl; // Same as main URL (480p)
+    video.lowQualityUrl = normalizedVideoUrl; // Same as main URL (480p)
     video.mediumQualityUrl = null;
     video.highQualityUrl = null;
+
+    // **NEW: If URL is HLS (.m3u8), set HLS flags/fields for frontend autoplay**
+    if (normalizedVideoUrl && normalizedVideoUrl.includes('.m3u8')) {
+      video.isHLSEncoded = true;
+      video.hlsPlaylistUrl = normalizedVideoUrl;
+      video.hlsMasterPlaylistUrl = normalizedVideoUrl;
+    } else {
+      video.isHLSEncoded = false;
+      video.hlsPlaylistUrl = null;
+      video.hlsMasterPlaylistUrl = null;
+    }
     
     video.processingStatus = 'completed';
     video.processingProgress = 100;
@@ -234,7 +359,7 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
     // **NEW: Add single quality version**
     video.qualitiesGenerated = [{
       quality: 'optimized',
-      url: hybridResult.videoUrl,
+      url: normalizedVideoUrl,
       size: hybridResult.size,
       resolution: {
         width: 854,
@@ -249,8 +374,8 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
     console.log('💰 Cost savings: 93% vs previous setup');
     console.log('📊 Final video data:', {
       id: video._id,
-      videoUrl: video.videoUrl,
-      thumbnailUrl: video.thumbnailUrl,
+      videoUrl: normalizedVideoUrl,
+      thumbnailUrl: normalizedThumbnailUrl,
       quality: '480p optimized',
       storage: 'Cloudflare R2',
       bandwidth: 'FREE',
@@ -282,8 +407,9 @@ router.get('/video/:videoId/status', verifyToken, async (req, res) => {
       return res.status(404).json({ error: 'Video not found' });
     }
 
-    // **NEW: Check if user owns the video**
-    if (video.uploader.toString() !== req.user.id) {
+    // **FIX: Compare against the user's ObjectId, not Google ID**
+    const owner = await User.findOne({ googleId: req.user.id });
+    if (!owner || video.uploader.toString() !== owner._id.toString()) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -296,7 +422,12 @@ router.get('/video/:videoId/status', verifyToken, async (req, res) => {
         processingProgress: video.processingProgress,
         processingError: video.processingError,
         hasMultipleQualities: video.hasMultipleQualities,
-        qualitiesGenerated: video.qualitiesGenerated.length
+        qualitiesGenerated: video.qualitiesGenerated.length,
+        isHLSEncoded: video.isHLSEncoded || false,
+        hlsPlaylistUrl: video.hlsPlaylistUrl || null,
+        // Include URLs when processing is completed
+        videoUrl: video.processingStatus === 'completed' ? video.videoUrl : null,
+        thumbnailUrl: video.processingStatus === 'completed' ? video.thumbnailUrl : null
       }
     });
 
@@ -475,6 +606,69 @@ router.post('/image', verifyToken, imageUpload.single('image'), async (req, res)
     console.error('❌ Error in image upload route:', error);
     res.status(500).json({ 
       error: 'Image upload failed', 
+      details: error.message 
+    });
+  }
+});
+
+// **NEW: Get video processing status endpoint**
+router.get('/video/:videoId/status', verifyToken, async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    const userId = req.user.id;
+
+    console.log('🔍 Status check request:', { videoId, userId });
+
+    // Validate video ID
+    if (!videoId || !mongoose.Types.ObjectId.isValid(videoId)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid video ID' 
+      });
+    }
+
+    // Find the video
+    const video = await Video.findById(videoId);
+    if (!video) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Video not found' 
+      });
+    }
+
+    // **FIX: Compare against the user's ObjectId, not Google ID**
+    const owner = await User.findOne({ googleId: userId });
+    if (!owner || video.uploader.toString() !== owner._id.toString()) {
+      return res.status(403).json({ 
+        success: false, 
+        error: 'Access denied' 
+      });
+    }
+
+    // Return processing status
+    const statusResponse = {
+      success: true,
+      video: {
+        _id: video._id,
+        videoName: video.videoName,
+        processingStatus: video.processingStatus || 'pending',
+        processingProgress: video.processingProgress || 0,
+        processingError: video.processingError || null,
+        videoUrl: video.videoUrl || null,
+        thumbnailUrl: video.thumbnailUrl || null,
+        uploadedAt: video.uploadedAt,
+        estimatedTime: '2-5 minutes depending on video length'
+      }
+    };
+
+    console.log('✅ Status response:', statusResponse.video.processingStatus);
+    res.json(statusResponse);
+
+  } catch (error) {
+    console.error('❌ Error getting video status:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to get video status',
       details: error.message 
     });
   }

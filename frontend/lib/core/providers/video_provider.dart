@@ -3,6 +3,7 @@ import 'package:snehayog/model/video_model.dart';
 import 'package:snehayog/services/video_service.dart';
 import 'package:snehayog/core/enums/video_state.dart';
 import 'package:snehayog/core/constants/app_constants.dart';
+import 'package:snehayog/core/managers/smart_cache_manager.dart';
 
 class VideoProvider extends ChangeNotifier {
   final VideoService _videoService = VideoService();
@@ -80,11 +81,12 @@ class VideoProvider extends ChangeNotifier {
 
   /// Refresh videos (reset and reload)
   Future<void> refreshVideos() async {
+    print('🔄 VideoProvider: Refreshing videos from server...');
     _videos.clear();
     _currentPage = AppConstants.initialPage;
     _hasMore = true;
     _errorMessage = null;
-    await loadVideos(isInitialLoad: true);
+    await loadVideos(isInitialLoad: true, videoType: _currentVideoType);
   }
 
   /// Toggle like for a video
@@ -211,6 +213,15 @@ class VideoProvider extends ChangeNotifier {
 
       if (allDeleted) {
         print('✅ VideoProvider: Videos deleted from backend successfully');
+
+        // **NEW: Invalidate SmartCacheManager cache to prevent deleted videos from showing**
+        try {
+          final cacheManager = SmartCacheManager();
+          await cacheManager.invalidateVideoCache(videoType: _currentVideoType);
+          print('🗑️ VideoProvider: Invalidated video cache after deletion');
+        } catch (e) {
+          print('⚠️ VideoProvider: Failed to invalidate cache: $e');
+        }
       } else {
         throw Exception('Some videos failed to delete');
       }
@@ -304,15 +315,11 @@ class VideoProvider extends ChangeNotifier {
     await filterVideosByType('yog');
   }
 
-  /// Get sneha videos only
-  Future<void> loadSnehaVideos() async {
-    await filterVideosByType('sneha');
-  }
-
   /// Load all videos (no filter)
   Future<void> loadAllVideos() async {
     print('🔍 VideoProvider: Loading all videos (no filter)');
     await loadVideos(isInitialLoad: true, videoType: null);
+    
   }
 
   void _setLoadState(VideoLoadState state) {

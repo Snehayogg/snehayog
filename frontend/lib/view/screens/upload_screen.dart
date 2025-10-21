@@ -24,23 +24,271 @@ class _UploadScreenState extends State<UploadScreen> {
   String? _errorMessage;
   bool _showUploadForm = false;
 
-  double _uploadProgress = 0.0;
+  // **UNIFIED PROGRESS TRACKING** - Single progress bar for entire flow
+  double _unifiedProgress = 0.0;
+  String _currentPhase = '';
+  String _phaseDescription = '';
   int _uploadStartTime = 0;
   int _elapsedSeconds = 0;
-  String _uploadStatus = '';
 
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _linkController = TextEditingController();
   final VideoService _videoService = VideoService();
   final AuthService _authService = AuthService();
 
-  // Timer for upload progress
-  Timer? _uploadTimer;
+  // Timer for unified progress tracking
+  Timer? _progressTimer;
+
+  // **UNIFIED PROGRESS PHASES** - Complete video processing flow
+  static const Map<String, Map<String, dynamic>> _progressPhases = {
+    'preparation': {
+      'name': 'Preparing Video',
+      'description': 'Validating file and preparing for upload...',
+      'progress': 0.1,
+      'icon': Icons.video_file,
+    },
+    'upload': {
+      'name': 'Uploading Video',
+      'description': 'Transferring video to server...',
+      'progress': 0.4,
+      'icon': Icons.cloud_upload,
+    },
+    'validation': {
+      'name': 'Validating Video',
+      'description': 'Checking video format and quality...',
+      'progress': 0.5,
+      'icon': Icons.verified,
+    },
+    'processing': {
+      'name': 'Processing Video',
+      'description': 'Converting to optimized format...',
+      'progress': 0.8,
+      'icon': Icons.settings,
+    },
+    'completed': {
+      'name': 'Upload Complete!',
+      'description': 'Video processing completed successfully!',
+      'progress': 1.0,
+      'icon': Icons.check_circle,
+    },
+    'finalizing': {
+      'name': 'Finalizing',
+      'description': 'Generating thumbnails and completing...',
+      'progress': 0.95,
+      'icon': Icons.check_circle,
+    },
+  };
 
   // NEW: Category and Tags to align with ad targeting interests
   String? _selectedCategory;
   final List<String> _tags = [];
   final TextEditingController _tagInputController = TextEditingController();
+
+  // **UNIFIED PROGRESS TRACKING METHODS**
+
+  /// Start unified progress tracking for complete video processing flow
+  void _startUnifiedProgress() {
+    _uploadStartTime = DateTime.now().millisecondsSinceEpoch;
+    _unifiedProgress = 0.0;
+    _currentPhase = 'preparation';
+    _phaseDescription = _progressPhases['preparation']!['description'];
+
+    _progressTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          _elapsedSeconds =
+              (DateTime.now().millisecondsSinceEpoch - _uploadStartTime) ~/
+                  1000;
+        });
+      }
+    });
+  }
+
+  /// Update progress phase with smooth transitions
+  void _updateProgressPhase(String phase) {
+    if (mounted && _progressPhases.containsKey(phase)) {
+      setState(() {
+        _currentPhase = phase;
+        _phaseDescription = _progressPhases[phase]!['description'];
+        _unifiedProgress = _progressPhases[phase]!['progress'];
+      });
+    }
+  }
+
+  /// Stop unified progress tracking
+  void _stopUnifiedProgress() {
+    _progressTimer?.cancel();
+    _progressTimer = null;
+    if (mounted) {
+      setState(() {
+        _unifiedProgress = 1.0;
+        _currentPhase = 'completed';
+        _phaseDescription = 'Video is ready!';
+      });
+    }
+  }
+
+  /// Get current phase icon
+  IconData _getCurrentPhaseIcon() {
+    return _progressPhases[_currentPhase]?['icon'] ?? Icons.upload;
+  }
+
+  /// Get current phase color
+  Color _getCurrentPhaseColor() {
+    switch (_currentPhase) {
+      case 'preparation':
+        return Colors.blue;
+      case 'upload':
+        return Colors.orange;
+      case 'validation':
+        return Colors.purple;
+      case 'processing':
+        return Colors.indigo;
+      case 'finalizing':
+        return Colors.teal;
+      case 'completed':
+        return Colors.green;
+      default:
+        return Colors.blue;
+    }
+  }
+
+  /// **UNIFIED PROGRESS WIDGET** - Beautiful progress display
+  Widget _buildUnifiedProgressWidget() {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Phase Icon and Name
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _getCurrentPhaseColor().withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  _getCurrentPhaseIcon(),
+                  color: _getCurrentPhaseColor(),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _progressPhases[_currentPhase]?['name'] ?? 'Processing',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _phaseDescription,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 20),
+
+          // Progress Bar
+          Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Progress',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                  Text(
+                    '${(_unifiedProgress * 100).toInt()}%',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: _getCurrentPhaseColor(),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: LinearProgressIndicator(
+                  value: _unifiedProgress,
+                  backgroundColor: Colors.grey[200],
+                  valueColor:
+                      AlwaysStoppedAnimation<Color>(_getCurrentPhaseColor()),
+                  minHeight: 8,
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Time Information
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.access_time,
+                    size: 16,
+                    color: Colors.grey[600],
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Time: ${_formatTime(_elapsedSeconds)}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Format time in MM:SS format
+  String _formatTime(int seconds) {
+    final minutes = seconds ~/ 60;
+    final remainingSeconds = seconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+  }
 
   // Professional helper to render a notice bullet point
   Widget _buildNoticePoint({required String title, required String body}) {
@@ -177,80 +425,7 @@ class _UploadScreenState extends State<UploadScreen> {
     super.initState();
   }
 
-  Future<void> _pickVideo() async {
-    final userData = await _authService.getUserData();
-    if (userData == null) {
-      _showLoginPrompt();
-      return;
-    }
-
-    try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowMultiple: false,
-        allowedExtensions: ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm'],
-      );
-
-      if (result != null) {
-        setState(() {
-          _isProcessing = true;
-          _errorMessage = null;
-        });
-
-        final videoFile = File(result.files.single.path!);
-
-        final fileSize = await videoFile.length();
-        const maxSize = 100 * 1024 * 1024;
-
-        if (fileSize > maxSize) {
-          setState(() {
-            _errorMessage = 'Video file is too large. Maximum size is 100MB';
-            _isProcessing = false;
-          });
-          return;
-        }
-
-        setState(() {
-          _selectedVideo = videoFile;
-          _isProcessing = false;
-        });
-
-        print('✅ Video selected: ${videoFile.path}');
-        print(
-          '📏 File size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB',
-        );
-      }
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Error picking video: $e';
-        _isProcessing = false;
-      });
-    }
-  }
-
-  void _showLoginPrompt() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Login Required'),
-        content: const Text('Please sign in to upload videos.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await _authService.signInWithGoogle();
-            },
-            child: const Text('Sign In'),
-          ),
-        ],
-      ),
-    );
-  }
-
+  /// **UPLOAD VIDEO METHOD** - Handles video upload with progress tracking
   Future<void> _uploadVideo() async {
     final userData = await _authService.getUserData();
     if (userData == null) {
@@ -297,13 +472,16 @@ class _UploadScreenState extends State<UploadScreen> {
         '🎬 Note: Video will be converted to HLS (.m3u8) format for optimal streaming',
       );
 
-      // Start upload progress tracking
-      _startUploadProgress();
+      // Start unified progress tracking
+      _startUnifiedProgress();
 
       // Check if file exists and is readable
       if (!await _selectedVideo!.exists()) {
         throw Exception('Selected video file does not exist');
       }
+
+      // Update to preparation phase
+      _updateProgressPhase('preparation');
 
       // Check file size
       final fileSize = await _selectedVideo!.length();
@@ -326,12 +504,15 @@ class _UploadScreenState extends State<UploadScreen> {
         );
       }
 
+      // Update to upload phase
+      _updateProgressPhase('upload');
+
       final uploadedVideo = await runZoned(
         () => _videoService.uploadVideo(
           _selectedVideo!,
           _titleController.text,
-          null,
-          _linkController.text.isNotEmpty ? _linkController.text : null,
+          '', // description
+          _linkController.text.isNotEmpty ? _linkController.text : '', // link
         ),
         zoneValues: {
           'upload_metadata': {
@@ -352,20 +533,35 @@ class _UploadScreenState extends State<UploadScreen> {
 
       print('✅ Video upload started successfully!');
       print('🎬 Uploaded video details: $uploadedVideo');
-      print(
-          '🔄 Processing status: ${uploadedVideo['video']['processingStatus']}');
+
+      // **FIX: Handle correct response structure from VideoService**
+      print('🔄 Processing status: ${uploadedVideo['processingStatus']}');
+      print('🆔 Video ID: ${uploadedVideo['id']}');
+    
+      // Update to validation phase
+      _updateProgressPhase('validation');
 
       // **FIXED: Wait for processing to complete**
       if (mounted) {
-        setState(() {
-          _uploadStatus = 'Processing video... Please wait...';
-        });
+        setState(() {});
+
+        // Update to processing phase
+        _updateProgressPhase('processing');
 
         // Wait for processing to complete
-        final completedVideo =
-            await _waitForProcessingCompletion(uploadedVideo['video']['id']);
+        String? videoId;
+        videoId = uploadedVideo['id']?.toString();
+      
+        if (videoId == null) {
+          throw Exception('Video ID not found in upload response');
+        }
+
+        final completedVideo = await _waitForProcessingCompletion(videoId);
 
         if (completedVideo != null) {
+          // Update to finalizing phase
+          _updateProgressPhase('finalizing');
+
           print('✅ Video processing completed successfully!');
           print('🔗 HLS Playlist URL: ${completedVideo['videoUrl']}');
           print('🖼️ Thumbnail URL: ${completedVideo['thumbnailUrl']}');
@@ -389,11 +585,17 @@ class _UploadScreenState extends State<UploadScreen> {
             _tags.clear();
           });
 
-          // Stop progress tracking
-          _stopUploadProgress();
+          // Stop unified progress tracking
+          _stopUnifiedProgress();
 
           // Show beautiful success dialog
           await _showSuccessDialog();
+
+          // **NEW: Trigger video feed refresh after successful upload**
+          if (widget.onVideoUploaded != null) {
+            print('🔄 Triggering video feed refresh after upload completion');
+            widget.onVideoUploaded!();
+          }
         } else {
           throw Exception('Video processing failed or timed out');
         }
@@ -446,92 +648,17 @@ class _UploadScreenState extends State<UploadScreen> {
           _isUploading = false;
         });
 
-        // Stop progress tracking
-        _stopUploadProgress();
+        // Stop unified progress tracking
+        _stopUnifiedProgress();
       }
     }
-  }
-
-  /// Start upload progress tracking
-  void _startUploadProgress() {
-    _uploadProgress = 0.0;
-    _elapsedSeconds = 0;
-    _uploadStartTime = DateTime.now().millisecondsSinceEpoch;
-    _uploadStatus = 'Preparing upload...';
-
-    // Start timer for progress updates
-    _uploadTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        setState(() {
-          _elapsedSeconds =
-              (DateTime.now().millisecondsSinceEpoch - _uploadStartTime) ~/
-                  1000;
-        });
-      }
-    });
-
-    // Simulate realistic upload progress based on file size
-    _simulateRealisticProgress();
-  }
-
-  /// Simulate realistic upload progress
-  void _simulateRealisticProgress() {
-    if (_selectedVideo == null) return;
-
-    final fileSizeMB = _selectedVideo!.lengthSync() / (1024 * 1024);
-
-    // Progress updates every 2 seconds
-    Timer.periodic(const Duration(seconds: 2), (timer) {
-      if (!mounted || !_isUploading) {
-        timer.cancel();
-        return;
-      }
-
-      setState(() {
-        if (_uploadProgress < 0.85) {
-          // Upload phase (0-85%)
-          _uploadProgress += 0.15;
-          if (_uploadProgress < 0.3) {
-            _uploadStatus =
-                'Uploading video file... (${(_uploadProgress * 100).toStringAsFixed(0)}%)';
-          } else if (_uploadProgress < 0.6) {
-            _uploadStatus =
-                'Uploading video file... (${(_uploadProgress * 100).toStringAsFixed(0)}%)';
-          } else if (_uploadProgress < 0.85) {
-            _uploadStatus =
-                'Uploading video file... (${(_uploadProgress * 100).toStringAsFixed(0)}%)';
-          }
-        } else if (_uploadProgress < 0.95) {
-          // Processing phase (85-95%)
-          _uploadProgress += 0.02;
-          _uploadStatus = 'Processing video... (Converting to HLS)';
-        } else if (_uploadProgress < 0.98) {
-          // Finalizing phase (95-98%)
-          _uploadProgress += 0.01;
-          _uploadStatus = 'Finalizing... (Almost done!)';
-        } else {
-          // Complete (98-100%)
-          _uploadProgress = 1.0;
-          _uploadStatus = 'Upload complete!';
-        }
-      });
-    });
-  }
-
-  /// Stop upload progress tracking
-  void _stopUploadProgress() {
-    _uploadTimer?.cancel();
-    _uploadTimer = null;
-    _uploadProgress = 0.0;
-    _elapsedSeconds = 0;
-    _uploadStatus = '';
   }
 
   /// **NEW: Wait for video processing to complete**
   Future<Map<String, dynamic>?> _waitForProcessingCompletion(
       String videoId) async {
     const maxWaitTime = Duration(minutes: 10); // Maximum wait time
-    const checkInterval = Duration(seconds: 10); // Check every 10 seconds
+    const checkInterval = Duration(seconds: 3); // Poll faster to avoid UI stall
     final startTime = DateTime.now();
 
     print('🔄 Waiting for video processing to complete...');
@@ -539,32 +666,59 @@ class _UploadScreenState extends State<UploadScreen> {
 
     while (DateTime.now().difference(startTime) < maxWaitTime) {
       try {
-        // Check processing status
-        final response = await _videoService.getVideoById(videoId);
+        // Check processing status using the correct endpoint
+        final response = await _videoService.getVideoProcessingStatus(videoId);
 
-        if (response != null) {
-          final processingStatus = response['processingStatus'];
-          final processingProgress = response['processingProgress'] ?? 0;
+        if (response != null && response['success'] == true) {
+          final videoData = response['video'];
+          final processingStatus =
+              (videoData?['processingStatus'] ?? '').toString();
+          final processingProgress =
+              (videoData?['processingProgress'] ?? 0) as int;
+          final videoUrl = (videoData?['videoUrl'] ?? '').toString();
 
           print(
-              '🔄 Processing status: $processingStatus (${processingProgress}%)');
+              '🔄 Processing status: $processingStatus ($processingProgress%)');
+          print('🔗 Current videoUrl: $videoUrl');
 
-          // Update UI with progress
+          // Update UI with progress (map 0-100% server progress to 80-95% UI)
           if (mounted) {
             setState(() {
-              _uploadStatus = 'Processing video... $processingProgress%';
-              _uploadProgress =
-                  0.85 + (processingProgress / 100 * 0.15); // 85-100%
+              final clamped = processingProgress.clamp(0, 100);
+              _unifiedProgress = 0.8 + (clamped / 100.0 * 0.15);
             });
           }
 
-          if (processingStatus == 'completed') {
-            print('✅ Video processing completed successfully!');
-            return response;
+          final hasAbsoluteUrl =
+              videoUrl.startsWith('http://') || videoUrl.startsWith('https://');
+
+          if (processingStatus == 'completed' || hasAbsoluteUrl) {
+            print('✅ Processing complete signal received');
+
+            if (mounted) {
+              setState(() {
+                _unifiedProgress = 1.0;
+                _currentPhase = 'completed';
+                _phaseDescription = 'Video processing completed successfully!';
+              });
+            }
+
+            await Future.delayed(const Duration(seconds: 1));
+
+            return {
+              'videoUrl': videoUrl,
+              'thumbnailUrl': (videoData?['thumbnailUrl'] ?? '').toString(),
+              'processingStatus': 'completed',
+              'processingProgress': 100,
+            };
           } else if (processingStatus == 'failed') {
-            print('❌ Video processing failed');
+            print(
+                '❌ Video processing failed: ${videoData?['processingError']}');
             return null;
           }
+        } else {
+          print(
+              '❌ Failed to get processing status: ${response?['error'] ?? 'Unknown error'}');
         }
 
         // Wait before checking again
@@ -733,41 +887,77 @@ class _UploadScreenState extends State<UploadScreen> {
     );
   }
 
-  /// Format time in MM:SS format
-  String _formatTime(int seconds) {
-    final minutes = seconds ~/ 60;
-    final remainingSeconds = seconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+  void _showLoginPrompt() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Login Required'),
+        content: const Text('Please sign in to upload videos.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _authService.signInWithGoogle();
+            },
+            child: const Text('Sign In'),
+          ),
+        ],
+      ),
+    );
   }
 
-  /// Calculate upload speed
-  String _calculateUploadSpeed() {
-    if (_elapsedSeconds > 0 && _selectedVideo != null) {
-      final fileSizeMB = _selectedVideo!.lengthSync() / (1024 * 1024);
-      final speedMBps = fileSizeMB / _elapsedSeconds;
-      return '${speedMBps.toStringAsFixed(2)} MB/s';
+  Future<void> _pickVideo() async {
+    final userData = await _authService.getUserData();
+    if (userData == null) {
+      _showLoginPrompt();
+      return;
     }
-    return '0.00 MB/s';
-  }
 
-  /// Estimate upload time based on file size
-  String _estimateUploadTime() {
-    if (_selectedVideo == null) return 'Unknown';
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowMultiple: false,
+        allowedExtensions: ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm'],
+      );
 
-    final fileSizeMB = _selectedVideo!.lengthSync() / (1024 * 1024);
+      if (result != null) {
+        setState(() {
+          _isProcessing = true;
+          _errorMessage = null;
+        });
 
-    // Assume average upload speed of 3 MB/s
-    final estimatedSeconds = (fileSizeMB / 3.0).round();
+        final videoFile = File(result.files.single.path!);
 
-    if (estimatedSeconds < 60) {
-      return '${estimatedSeconds}s';
-    } else if (estimatedSeconds < 3600) {
-      final minutes = estimatedSeconds ~/ 60;
-      return '${minutes}m';
-    } else {
-      final hours = estimatedSeconds ~/ 3600;
-      final minutes = (estimatedSeconds % 3600) ~/ 60;
-      return '${hours}h ${minutes}m';
+        final fileSize = await videoFile.length();
+        const maxSize = 100 * 1024 * 1024;
+
+        if (fileSize > maxSize) {
+          setState(() {
+            _errorMessage = 'Video file is too large. Maximum size is 100MB';
+            _isProcessing = false;
+          });
+          return;
+        }
+
+        setState(() {
+          _selectedVideo = videoFile;
+          _isProcessing = false;
+        });
+
+        print('✅ Video selected: ${videoFile.path}');
+        print(
+          '📏 File size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB',
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error picking video: $e';
+        _isProcessing = false;
+      });
     }
   }
 
@@ -775,7 +965,7 @@ class _UploadScreenState extends State<UploadScreen> {
   void dispose() {
     _titleController.dispose();
     _linkController.dispose();
-    _stopUploadProgress();
+    _stopUnifiedProgress();
     _tagInputController.dispose();
     super.dispose();
   }
@@ -1209,122 +1399,9 @@ class _UploadScreenState extends State<UploadScreen> {
                             ),
                             const SizedBox(height: 24),
 
-                            // Upload Progress Indicator
+                            // **UNIFIED PROGRESS INDICATOR** - Shows complete upload + processing flow
                             if (_isUploading) ...[
-                              Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: Colors.blue.withOpacity(0.3),
-                                  ),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          Icons.upload_file,
-                                          color: Colors.blue[600],
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            _uploadStatus,
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.blue[800],
-                                              fontSize: 16,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 12),
-
-                                    // File Size & Estimated Time Info
-                                    if (_selectedVideo != null) ...[
-                                      Container(
-                                        padding: const EdgeInsets.all(8),
-                                        decoration: BoxDecoration(
-                                          color: Colors.blue.withOpacity(0.05),
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              Icons.info_outline,
-                                              size: 16,
-                                              color: Colors.blue[600],
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                              child: Text(
-                                                'File: ${(_selectedVideo!.lengthSync() / (1024 * 1024)).toStringAsFixed(1)} MB • Est. Time: ${_estimateUploadTime()}',
-                                                style: TextStyle(
-                                                  color: Colors.blue[700],
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                    ],
-
-                                    // Progress Bar
-                                    LinearProgressIndicator(
-                                      value: _uploadProgress,
-                                      backgroundColor: Colors.blue.withOpacity(
-                                        0.2,
-                                      ),
-                                      valueColor:
-                                          const AlwaysStoppedAnimation<Color>(
-                                        Colors.blue,
-                                      ),
-                                    ),
-
-                                    const SizedBox(height: 8),
-
-                                    // Progress Details
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          '${(_uploadProgress * 100).toStringAsFixed(0)}%',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.blue[800],
-                                          ),
-                                        ),
-                                        Text(
-                                          'Time: ${_formatTime(_elapsedSeconds)}',
-                                          style: TextStyle(
-                                            color: Colors.blue[600],
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-
-                                    const SizedBox(height: 4),
-
-                                    Text(
-                                      'Speed: ${_calculateUploadSpeed()}',
-                                      style: TextStyle(
-                                        color: Colors.blue[600],
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                              _buildUnifiedProgressWidget(),
                               const SizedBox(height: 16),
                             ],
 

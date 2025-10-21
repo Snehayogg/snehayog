@@ -221,8 +221,8 @@ router.post('/create-with-payment', async (req, res) => {
     await invoice.save();
 
     res.status(201).json({
-      success: true, // **TESTING: Add success flag**
-      message: 'Ad created and activated successfully!', // **TESTING: Updated message**
+      success: true,
+      message: 'Ad created and activated successfully!',
       ad: adCreative,
       invoice: {
         id: invoice._id,

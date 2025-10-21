@@ -9,6 +9,7 @@ import 'package:snehayog/services/user_service.dart';
 import 'package:snehayog/services/video_service.dart';
 import 'package:snehayog/utils/feature_flags.dart';
 import 'package:snehayog/core/constants/profile_constants.dart';
+import 'package:snehayog/core/managers/smart_cache_manager.dart';
 
 // Import for unawaited
 
@@ -538,6 +539,17 @@ class ProfileStateManager extends ChangeNotifier {
 
         _isLoading = false;
 
+        // **NEW: Invalidate SmartCacheManager video cache to prevent deleted videos from showing**
+        try {
+          final smartCacheManager = SmartCacheManager();
+          // Invalidate all video caches for all video types (yog, reel, etc)
+          await smartCacheManager.invalidateVideoCache();
+          print(
+              '🗑️ ProfileStateManager: Invalidated SmartCacheManager video cache after deletion');
+        } catch (e) {
+          print('⚠️ ProfileStateManager: Failed to invalidate cache: $e');
+        }
+
         // Clear relevant caches when videos are deleted to avoid stale data on first refresh
         if (FeatureFlags.instance.isEnabled(Features.smartVideoCaching) &&
             _userData != null) {
@@ -577,7 +589,21 @@ class ProfileStateManager extends ChangeNotifier {
                 '✅ ProfileStateManager: Notified VideoProvider of deleted videos');
           } catch (e) {
             print('⚠️ ProfileStateManager: Could not notify VideoProvider: $e');
+            // Try to refresh the video feed as fallback
+            try {
+              final videoProvider =
+                  Provider.of<VideoProvider>(_context!, listen: false);
+              videoProvider.refreshVideos();
+              print(
+                  '🔄 ProfileStateManager: Refreshed VideoProvider as fallback');
+            } catch (refreshError) {
+              print(
+                  '❌ ProfileStateManager: Could not refresh VideoProvider: $refreshError');
+            }
           }
+        } else {
+          print(
+              '⚠️ ProfileStateManager: Context not available, cannot notify VideoProvider');
         }
 
         print(

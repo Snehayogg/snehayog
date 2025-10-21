@@ -264,26 +264,17 @@ class LoginScreen extends StatelessWidget {
                                               if (user != null &&
                                                   context.mounted) {
                                                 // Show location permission dialog for new user
-                                                await LocationOnboardingService
-                                                    .showLocationOnboardingIfNeeded(
-                                                  context,
-                                                  appName: 'Snehayog',
-                                                  onPermissionGranted: () {
-                                                    print(
-                                                        '✅ User granted location permission');
-                                                  },
-                                                  onPermissionDenied: () {
-                                                    print(
-                                                        '❌ User denied location permission');
-                                                  },
-                                                  onSkip: () {
-                                                    print(
-                                                        '⏭️ User skipped location permission');
-                                                  },
-                                                );
-
-                                                await LocationOnboardingService
-                                                    .debugOnboardingStatus();
+                                                final result =
+                                                    await LocationOnboardingService
+                                                        .showLocationOnboarding(
+                                                            context);
+                                                if (result) {
+                                                  print(
+                                                      '✅ User granted location permission');
+                                                } else {
+                                                  print(
+                                                      '❌ User denied location permission');
+                                                }
 
                                                 Navigator.pushReplacementNamed(
                                                     context, '/home');
@@ -386,27 +377,16 @@ class LoginScreen extends StatelessWidget {
                                   final user = await authController.signIn();
                                   if (user != null && context.mounted) {
                                     // Show location permission dialog for new user
-                                    await LocationOnboardingService
-                                        .showLocationOnboardingIfNeeded(
-                                      context,
-                                      appName: 'Snehayog',
-                                      onPermissionGranted: () {
-                                        print(
-                                            '✅ User granted location permission');
-                                      },
-                                      onPermissionDenied: () {
-                                        print(
-                                            '❌ User denied location permission');
-                                      },
-                                      onSkip: () {
-                                        print(
-                                            '⏭️ User skipped location permission');
-                                      },
-                                    );
-
-                                    // **DEBUG: Check onboarding status**
-                                    await LocationOnboardingService
-                                        .debugOnboardingStatus();
+                                    final result =
+                                        await LocationOnboardingService
+                                            .showLocationOnboarding(context);
+                                    if (result) {
+                                      print(
+                                          '✅ User granted location permission');
+                                    } else {
+                                      print(
+                                          '❌ User denied location permission');
+                                    }
 
                                     // **DEBUG: If dialog didn't show, force show it**
                                     // Uncomment the line below to force show location dialog
@@ -420,7 +400,6 @@ class LoginScreen extends StatelessWidget {
                                   'assets/icons/google_logo.png',
                                   width: 20,
                                   height: 20,
-                                  // Fallback to an icon if the asset is missing
                                   errorBuilder: (context, error, stackTrace) =>
                                       const Icon(
                                     Icons.login,

@@ -2,14 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import '../services/location_service.dart';
 
-/// Quick test screen for location service
-/// Add this to your app to test location functionality
-///
-/// Usage:
-/// Navigator.push(
-///   context,
-///   MaterialPageRoute(builder: (context) => LocationTestScreen()),
-/// );
+
 class LocationTestScreen extends StatefulWidget {
   const LocationTestScreen({super.key});
 

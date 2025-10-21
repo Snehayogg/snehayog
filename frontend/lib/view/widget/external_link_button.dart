@@ -28,10 +28,11 @@ class ExternalLinkButton extends StatelessWidget {
           width: 270, // Fixed width for longer button
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            gradient: LinearGradient(
+            gradient: const LinearGradient(
               colors: [
-                Colors.white.withOpacity(0.18),
-                theme.colorScheme.primary.withOpacity(0.92),
+                Color(
+                    0x1CFFFFFF), // White with 0.108 opacity (0.18 * 0.6)
+                Color(0x99444444), // Grey with 0.6 opacity
               ],
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,

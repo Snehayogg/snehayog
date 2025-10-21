@@ -5,7 +5,7 @@ import 'package:snehayog/controller/google_sign_in_controller.dart';
 import 'package:snehayog/core/constants/app_constants.dart';
 import 'package:snehayog/services/video_service.dart';
 import 'package:snehayog/view/widget/comments_sheet_widget.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:snehayog/view/widget/custom_share_widget.dart';
 
 class VideoActionsWidget extends StatelessWidget {
   final VideoModel video;
@@ -71,7 +71,7 @@ class VideoActionsWidget extends StatelessWidget {
                 color: Colors.white,
                 size: AppConstants.actionButtonSize,
               ),
-              onPressed: () => _handleShare(),
+              onPressed: () => _showCustomShareSheet(context),
               label: '${video.shares}',
             ),
 
@@ -109,32 +109,25 @@ class VideoActionsWidget extends StatelessWidget {
     );
   }
 
-  void _handleShare() async {
+  void _showCustomShareSheet(BuildContext context) async {
     try {
-      // **IMPROVED: Always use app deep link for sharing instead of direct video URLs**
-      // This ensures consistent sharing experience regardless of storage backend
-      final videoId = video.id;
-      final appDeepLink = 'https://snehayog.app/video/$videoId';
-
       // Track share
       try {
-        await videoService.incrementShares(videoId);
+        await videoService.incrementShares(video.id);
         video.shares++;
       } catch (e) {
         print('Failed to track share: $e');
       }
 
-      // **NEW: Create a clean, professional share message**
-      await Share.share(
-        '🎬 Watch "${video.videoName}" on Snehayog!\n\n'
-        '👤 Created by: ${video.uploader.name}\n'
-        '👁️ ${video.views} views · ❤️ ${video.likes} likes\n\n'
-        '📱 Open in Snehayog App:\n$appDeepLink\n\n'
-        '#Snehayog #${video.videoType == 'yog' ? 'Yoga' : 'Meditation'} #Wellness',
-        subject: '${video.videoName} - Snehayog',
+      // Show custom share bottom sheet
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => CustomShareWidget(video: video),
       );
     } catch (e) {
-      print('Failed to share video: $e');
+      print('Failed to show share sheet: $e');
     }
   }
 }

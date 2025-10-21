@@ -3,6 +3,7 @@ import 'package:snehayog/core/managers/video_position_cache_manager.dart';
 import 'package:snehayog/core/managers/hot_ui_state_manager.dart';
 import 'package:snehayog/core/factories/video_controller_factory.dart';
 import 'package:snehayog/model/video_model.dart';
+import 'package:snehayog/core/utils/video_disposal_utils.dart';
 import 'dart:collection';
 import 'dart:async';
 
@@ -50,7 +51,8 @@ class VideoControllerManager {
     // Prefer lowQualityUrl if it's Cloudflare/CDN
     if (video.lowQualityUrl != null && video.lowQualityUrl!.isNotEmpty) {
       final lower = video.lowQualityUrl!.toLowerCase();
-      if (lower.contains('cdn.snehayog.com') ||
+      if (lower.contains('cdn.snehayog.site') ||
+          lower.contains('cdn.snehayog.com') ||
           lower.contains('r2.cloudflarestorage.com')) {
         print('✅ SELECTED: Low Quality URL (CDN/R2)');
         print('   URL: ${video.lowQualityUrl}');
@@ -62,7 +64,8 @@ class VideoControllerManager {
 
     // Avoid Cloudinary for playback when possible; if original is Cloudflare/CDN use it
     final origLower = video.videoUrl.toLowerCase();
-    final isCdn = origLower.contains('cdn.snehayog.com') ||
+    final isCdn = origLower.contains('cdn.snehayog.site') ||
+        origLower.contains('cdn.snehayog.com') ||
         origLower.contains('r2.cloudflarestorage.com') ||
         origLower.contains('/hls/');
     if (isCdn) {
@@ -97,7 +100,8 @@ class VideoControllerManager {
         lower.contains('r2.dev')) {
       return '🟢 CLOUDFLARE R2 (Best - Fast CDN)';
     }
-    if (lower.contains('cdn.snehayog.com')) {
+    if (lower.contains('cdn.snehayog.site') ||
+        lower.contains('cdn.snehayog.com')) {
       return '🟢 CUSTOM CDN (Good)';
     }
     if (lower.contains('/hls/')) {
@@ -274,8 +278,16 @@ class VideoControllerManager {
     if (_controllers.containsKey(index)) {
       final controller = _controllers[index]!;
       if (controller.value.isInitialized && !controller.value.hasError) {
-        // **AUDIO FIX: Pause all other videos before playing to prevent echo**
-        await pauseAllVideos();
+        // **AUDIO FIX: Pause/mute all other videos before playing to prevent overlap**
+        for (final entry in _controllers.entries) {
+          if (entry.key != index) {
+            try {
+              await entry.value.pause();
+              entry.value.setVolume(0.0);
+              _intentionallyPaused.add(entry.key);
+            } catch (_) {}
+          }
+        }
 
         // If the video is at the end (or very close), reset to start before playing
         final duration = controller.value.duration;
@@ -286,6 +298,9 @@ class VideoControllerManager {
             await controller.seekTo(Duration.zero);
           } catch (_) {}
         }
+        try {
+          controller.setVolume(1.0);
+        } catch (_) {}
         await controller.play();
         _intentionallyPaused.remove(index);
 
@@ -317,7 +332,14 @@ class VideoControllerManager {
   /// Pause all videos
   Future<void> pauseAllVideos() async {
     for (final index in _controllers.keys) {
-      await pauseController(index);
+      try {
+        final controller = _controllers[index];
+        if (controller != null) {
+          await controller.pause();
+          controller.setVolume(0.0);
+          _intentionallyPaused.add(index);
+        }
+      } catch (_) {}
     }
   }
 
@@ -374,16 +396,22 @@ class VideoControllerManager {
           controller.setVolume(0.0);
         }
 
+        // **POSITION CACHING: Stop tracking position for this video**
+        final videoId = _controllerVideoIds[index];
+        if (videoId != null) {
+          _positionCache.stopPositionTracking(controller);
+        }
+
         // **CACHING: Only dispose if we have too many controllers**
         if (_controllers.length > maxPoolSize) {
-          // **MEMORY: Properly dispose controller to free MediaCodec resources**
-          controller.dispose();
+          // **MEMORY: Use disposal utility for proper cleanup**
+          VideoDisposalUtils.disposeController(controller,
+              identifier: 'manager_index_$index');
           _controllers.remove(index);
           _order.removeWhere((i) => i == index);
           _intentionallyPaused.remove(index);
           _controllerSourceUrl.remove(index);
-          print(
-              '🗑️ VideoControllerManager: Disposed controller $index and freed MediaCodec memory');
+          _controllerVideoIds.remove(index);
         } else {
           // **CACHING: Keep controller in cache but pause it**
           controller.pause();
@@ -396,7 +424,7 @@ class VideoControllerManager {
         // **FORCE: Small delay to ensure MediaCodec cleanup**
         Future.delayed(const Duration(milliseconds: 50), () {
           print(
-              '🗑️ VideoControllerManager: Disposed controller $index and freed MediaCodec memory');
+              '✅ VideoControllerManager: MediaCodec cleanup completed for controller $index');
         });
       } catch (e) {
         print(
@@ -456,15 +484,17 @@ class VideoControllerManager {
     for (final entry in _controllers.entries) {
       try {
         final controller = entry.value;
+        final index = entry.key;
 
-        // **CRITICAL: Pause and stop before disposing**
-        if (controller.value.isInitialized) {
-          controller.pause();
-          controller.setVolume(0.0);
+        // **POSITION CACHING: Stop tracking position for this video**
+        final videoId = _controllerVideoIds[index];
+        if (videoId != null) {
+          _positionCache.stopPositionTracking(controller);
         }
 
-        controller.dispose();
-        print('🗑️ VideoControllerManager: Disposed controller ${entry.key}');
+        // Use the disposal utility for proper cleanup
+        VideoDisposalUtils.disposeController(controller,
+            identifier: 'manager_index_$index');
       } catch (e) {
         print(
             '❌ VideoControllerManager: Error disposing controller ${entry.key}: $e');
@@ -476,11 +506,45 @@ class VideoControllerManager {
     _pinned.clear();
     _intentionallyPaused.clear();
     _controllerSourceUrl.clear();
+    _controllerVideoIds.clear();
 
     // **FORCE: Delay to ensure MediaCodec cleanup completes**
     Future.delayed(const Duration(milliseconds: 100), () {
       print('✅ VideoControllerManager: All MediaCodec resources freed');
     });
+  }
+
+  /// **NEW: Handle app lifecycle changes**
+  void onAppPaused() {
+    print('⏸️ VideoControllerManager: App paused - pausing all videos');
+    pauseAllVideos();
+  }
+
+  void onAppResumed() {
+    print('▶️ VideoControllerManager: App resumed');
+    // Don't auto-resume videos - let user decide
+  }
+
+  void onAppDetached() {
+    print(
+        '🔌 VideoControllerManager: App detached - disposing all controllers');
+    clear();
+  }
+
+  /// **NEW: Comprehensive dispose method for complete cleanup**
+  void dispose() {
+    print('🗑️ VideoControllerManager: Starting comprehensive disposal...');
+
+    // Clear all controllers
+    clear();
+
+    // Dispose position cache manager
+    _positionCache.dispose();
+
+    // Dispose hot UI state manager
+    _hotUIManager.dispose();
+
+    print('✅ VideoControllerManager: Comprehensive disposal completed');
   }
 
   // **COMPATIBILITY METHODS** - For existing code

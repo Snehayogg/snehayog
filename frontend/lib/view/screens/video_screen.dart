@@ -35,6 +35,25 @@ class _VideoScreenState extends State<VideoScreen> {
   }
 
   @override
+  void dispose() {
+    print('🗑️ VideoScreen: Disposing VideoScreen');
+
+    // Clean up the video feed if needed
+    final videoFeedState = _videoFeedKey.currentState;
+    if (videoFeedState != null) {
+      try {
+        // The VideoFeedAdvanced dispose method will be called automatically
+        print(
+            '✅ VideoScreen: VideoFeedAdvanced disposal handled automatically');
+      } catch (e) {
+        print('⚠️ VideoScreen: Error during disposal: $e');
+      }
+    }
+
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return VideoFeedAdvanced(
       key: _videoFeedKey,

@@ -219,4 +219,10 @@ class HotUIStateManager {
       'cachedStateKeys': _cachedState.keys.toList(),
     };
   }
+
+  /// **Dispose and cleanup all resources**
+  void dispose() {
+    print('🗑️ HotUIStateManager: Disposing all resources');
+    clearPreservedState();
+  }
 }

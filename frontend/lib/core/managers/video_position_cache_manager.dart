@@ -17,6 +17,7 @@ class VideoPositionCacheManager {
   // In-memory cache for current session
   final Map<String, Duration> _positionCache = {};
   final Map<String, bool> _playbackStateCache = {};
+  final Map<String, Timer> _trackingTimers = {}; // Track active timers
   String? _lastVideoId;
   int? _lastVideoIndex;
 
@@ -178,10 +179,14 @@ class VideoPositionCacheManager {
 
   /// **Start position tracking for a video**
   void startPositionTracking(VideoPlayerController controller, String videoId) {
+    // Cancel existing timer if any
+    stopPositionTracking(controller);
+
     // Track position every 2 seconds
-    Timer.periodic(const Duration(seconds: 2), (timer) {
+    final timer = Timer.periodic(const Duration(seconds: 2), (timer) {
       if (!controller.value.isInitialized) {
         timer.cancel();
+        _trackingTimers.remove(videoId);
         return;
       }
 
@@ -195,6 +200,22 @@ class VideoPositionCacheManager {
         savePlaybackState(videoId, controller.value.isPlaying);
       }
     });
+
+    _trackingTimers[videoId] = timer;
+  }
+
+  /// **Stop position tracking for a video**
+  void stopPositionTracking(VideoPlayerController controller) {
+    // Find and cancel the timer for this controller
+    final videoIdToRemove = _trackingTimers.keys.firstWhere(
+      (videoId) => _trackingTimers[videoId] != null,
+      orElse: () => '',
+    );
+
+    if (videoIdToRemove.isNotEmpty) {
+      _trackingTimers[videoIdToRemove]?.cancel();
+      _trackingTimers.remove(videoIdToRemove);
+    }
   }
 
   /// **Clear video position**
@@ -246,8 +267,24 @@ class VideoPositionCacheManager {
     return {
       'cachedPositions': _positionCache.length,
       'cachedPlaybackStates': _playbackStateCache.length,
+      'activeTrackingTimers': _trackingTimers.length,
       'lastVideoId': _lastVideoId,
       'lastVideoIndex': _lastVideoIndex,
     };
+  }
+
+  /// **Dispose and cleanup all resources**
+  void dispose() {
+    // Cancel all tracking timers
+    for (final timer in _trackingTimers.values) {
+      timer.cancel();
+    }
+    _trackingTimers.clear();
+
+    // Clear caches
+    _positionCache.clear();
+    _playbackStateCache.clear();
+
+    print('🗑️ VideoPositionCacheManager: Disposed all resources');
   }
 }

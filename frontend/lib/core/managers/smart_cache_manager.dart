@@ -594,6 +594,66 @@ class SmartCacheManager {
     }
   }
 
+  /// **NEW: Clear cache entries matching a specific pattern (e.g., 'videos_page_*')**
+  Future<void> clearCacheByPattern(String pattern) async {
+    try {
+      final keysToRemove = <String>[];
+
+      // Find all keys matching the pattern
+      for (final key in _memoryCache.keys) {
+        if (key.contains(pattern)) {
+          keysToRemove.add(key);
+        }
+      }
+
+      // Remove from memory cache
+      for (final key in keysToRemove) {
+        _memoryCache.remove(key);
+      }
+
+      // Also remove from disk cache
+      if (await _cacheDir.exists()) {
+        final files = _cacheDir.listSync();
+        for (final file in files) {
+          if (file is File && file.path.contains(pattern)) {
+            await file.delete();
+          }
+        }
+      }
+
+      if (keysToRemove.isNotEmpty) {
+        print(
+          '🗑️ SmartCacheManager: Cleared ${keysToRemove.length} cache entries matching pattern "$pattern"',
+        );
+      }
+    } catch (e) {
+      print(
+        '❌ SmartCacheManager: Error clearing cache by pattern "$pattern": $e',
+      );
+    }
+  }
+
+  /// **NEW: Invalidate video cache for a specific video type (used when videos are deleted)**
+  Future<void> invalidateVideoCache({String? videoType}) async {
+    try {
+      print(
+        '🗑️ SmartCacheManager: Invalidating video cache${videoType != null ? ' for type: $videoType' : ''}',
+      );
+
+      if (videoType != null) {
+        // Invalidate specific video type cache
+        await clearCacheByPattern('videos_page_*_$videoType');
+      } else {
+        // Invalidate all video caches
+        await clearCacheByPattern('videos_page_');
+      }
+
+      print('✅ SmartCacheManager: Video cache invalidated successfully');
+    } catch (e) {
+      print('❌ SmartCacheManager: Error invalidating video cache: $e');
+    }
+  }
+
   /// Dispose manager
   Future<void> dispose() async {
     try {
