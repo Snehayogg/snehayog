@@ -707,12 +707,6 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
             _errorMessage =
                 'Carousel ads require exclusive selection. Please choose either images OR video.';
           }
-        } else if (newAdType == 'video feed ad') {
-          if (_selectedImages.isNotEmpty) {
-            _selectedImages.clear();
-            _errorMessage =
-                'Video feed ads only support single images. Multiple images have been removed.';
-          }
         }
 
         _clearErrorMessages();
@@ -771,22 +765,34 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       switch (fieldName) {
         case 'title':
-          // Skip title validation for banner ads
-          if (_selectedAdType == 'banner') {
-            setState(() {
-              _isTitleValid = true;
-              _titleError = null;
-            });
-          } else if (_titleController.text.trim().isEmpty) {
+          // Title is required for all ad types including banner
+          if (_titleController.text.trim().isEmpty) {
             setState(() {
               _isTitleValid = false;
               _titleError = 'Ad title is required';
             });
           } else {
-            setState(() {
-              _isTitleValid = true;
-              _titleError = null;
-            });
+            // Check word count for banner ads (max 30 words)
+            if (_selectedAdType == 'banner') {
+              final wordCount =
+                  _titleController.text.trim().split(RegExp(r'\s+')).length;
+              if (wordCount > 30) {
+                setState(() {
+                  _isTitleValid = false;
+                  _titleError = 'Banner ad title must be 30 words or less';
+                });
+              } else {
+                setState(() {
+                  _isTitleValid = true;
+                  _titleError = null;
+                });
+              }
+            } else {
+              setState(() {
+                _isTitleValid = true;
+                _titleError = null;
+              });
+            }
           }
           break;
         case 'description':
@@ -870,14 +876,6 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
               _mediaError =
                   'Carousel ads require either images or video. Please select media.';
             });
-          } else if (_selectedAdType == 'video feed ad' &&
-              _selectedImage == null &&
-              _selectedVideo == null) {
-            setState(() {
-              _isMediaValid = false;
-              _mediaError =
-                  'Video feed ads require either an image or video. Please select media.';
-            });
           } else {
             setState(() {
               _isMediaValid = true;
@@ -892,20 +890,24 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
   Widget _buildValidationSummary() {
     final List<Map<String, dynamic>> validationItems = [];
 
-    // Only show title and description for non-banner ads
+    // Show title for all ad types (including banner)
+    validationItems.add({
+      'label': _selectedAdType == 'banner'
+          ? 'Banner Title (max 30 words)'
+          : 'Ad Title',
+      'isValid': _titleController.text.trim().isNotEmpty &&
+          (_selectedAdType != 'banner' ||
+              _titleController.text.trim().split(RegExp(r'\s+')).length <= 30),
+      'icon': Icons.title,
+    });
+
+    // Only show description for non-banner ads
     if (_selectedAdType != 'banner') {
-      validationItems.addAll([
-        {
-          'label': 'Ad Title',
-          'isValid': _titleController.text.trim().isNotEmpty,
-          'icon': Icons.title,
-        },
-        {
-          'label': 'Description',
-          'isValid': _descriptionController.text.trim().isNotEmpty,
-          'icon': Icons.description,
-        },
-      ]);
+      validationItems.add({
+        'label': 'Description',
+        'isValid': _descriptionController.text.trim().isNotEmpty,
+        'icon': Icons.description,
+      });
     }
 
     // Link URL is required for all ad types
@@ -1147,25 +1149,36 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
 
     bool isValid = true;
 
-    // Check title (skip for banner ads)
-    if (_selectedAdType != 'banner') {
-      if (_titleController.text.trim().isEmpty) {
-        setState(() {
-          _isTitleValid = false;
-          _titleError = 'Ad title is required';
-          isValid = false;
-        });
+    // Check title (required for all ad types including banner)
+    if (_titleController.text.trim().isEmpty) {
+      setState(() {
+        _isTitleValid = false;
+        _titleError = 'Ad title is required';
+        isValid = false;
+      });
+    } else {
+      // Check word count for banner ads (max 30 words)
+      if (_selectedAdType == 'banner') {
+        final wordCount =
+            _titleController.text.trim().split(RegExp(r'\s+')).length;
+        if (wordCount > 30) {
+          setState(() {
+            _isTitleValid = false;
+            _titleError = 'Banner ad title must be 30 words or less';
+            isValid = false;
+          });
+        } else {
+          setState(() {
+            _isTitleValid = true;
+            _titleError = null;
+          });
+        }
       } else {
         setState(() {
           _isTitleValid = true;
           _titleError = null;
         });
       }
-    } else {
-      setState(() {
-        _isTitleValid = true;
-        _titleError = null;
-      });
     }
 
     // Check description (skip for banner ads)
@@ -1287,15 +1300,6 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
             'Carousel ads require either images or video. Please select media.';
         isValid = false;
       });
-    } else if (_selectedAdType == 'video feed ad' &&
-        _selectedImage == null &&
-        _selectedVideo == null) {
-      setState(() {
-        _isMediaValid = false;
-        _mediaError =
-            'Video feed ads require either an image or video. Please select media.';
-        isValid = false;
-      });
     } else {
       setState(() {
         _isMediaValid = true;
@@ -1357,26 +1361,6 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
           mediaUrls.add(videoUrl);
           print('✅ CreateAdScreen: Carousel video uploaded: $videoUrl');
         }
-      } else if (_selectedAdType == 'video feed ad') {
-        if (_selectedImage != null) {
-          print('🔄 CreateAdScreen: Uploading video feed ad image...');
-          final imageUrl =
-              await _cloudinaryService.uploadImage(_selectedImage!);
-          mediaUrls.add(imageUrl);
-          print('✅ CreateAdScreen: Video feed ad image uploaded: $imageUrl');
-        } else if (_selectedVideo != null) {
-          print('🔄 CreateAdScreen: Uploading video feed ad video...');
-          final result =
-              await _cloudinaryService.uploadVideoForAd(_selectedVideo!);
-          final videoUrl =
-              result['url'] ?? result['hls_urls']?['hls_stream'] ?? '';
-          if (videoUrl.isEmpty) {
-            throw Exception(
-                'Video upload succeeded but no URL returned. Result: $result');
-          }
-          mediaUrls.add(videoUrl);
-          print('✅ CreateAdScreen: Video feed ad video uploaded: $videoUrl');
-        }
       }
 
       print(
@@ -1392,8 +1376,6 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
     if (_selectedAdType == 'banner' && _selectedImage != null) {
       return mediaUrls.first;
     } else if (_selectedAdType == 'carousel' && _selectedImages.isNotEmpty) {
-      return mediaUrls.first;
-    } else if (_selectedAdType == 'video feed ad' && _selectedImage != null) {
       return mediaUrls.first;
     }
     return null;

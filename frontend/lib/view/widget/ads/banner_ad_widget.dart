@@ -53,109 +53,162 @@ class BannerAdWidget extends StatelessWidget {
     return Container(
       width: double.infinity,
       height: 60, // Compact professional height
-      margin: EdgeInsets.zero, // No margin - flush to screen edges
+      margin: const EdgeInsets.only(
+        top: 1,
+        left: 5, // Thin margin from left side
+        right: 8, // Thin margin from right side
+      ),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.zero, // No rounded corners for full-width
+        color:
+            Colors.black.withOpacity(0.7), // Semi-transparent black background
+        borderRadius: BorderRadius.circular(12), // Rounded corners
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.15),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+            spreadRadius: 2,
           ),
         ],
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.zero, // No rounded corners
+        borderRadius:
+            BorderRadius.circular(12), // Match container rounded corners
         child: InkWell(
-          borderRadius: BorderRadius.zero, // No rounded corners
+          borderRadius:
+              BorderRadius.circular(12), // Match container rounded corners
           onTap: () => _handleAdClick(context),
           child: ClipRRect(
-            borderRadius: BorderRadius.zero, // Full-width, no rounding
-            child: Stack(
+            borderRadius: BorderRadius.circular(12), // Rounded corners
+            child: Row(
               children: [
-                // Full-width ad image
-                Positioned.fill(
-                  child: imageUrl.isNotEmpty
-                      ? Image.network(
-                          imageUrl,
-                          fit: BoxFit.cover,
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return Container(
-                              color: Colors.grey[300],
-                              child: const Center(
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.grey,
+                // 40% space for banner image
+                Expanded(
+                  flex: 2,
+                  child: Container(
+                    height: 60,
+                    child: imageUrl.isNotEmpty
+                        ? Image.network(
+                            imageUrl,
+                            fit: BoxFit.cover,
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Container(
+                                color: Colors.grey[300],
+                                child: const Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.grey,
+                                  ),
                                 ),
-                              ),
-                            );
-                          },
-                          errorBuilder: (context, error, stackTrace) {
-                            print(
-                                '❌ BannerAdWidget: Failed to load image: $imageUrl, Error: $error');
-                            return Container(
-                              color: Colors.grey[300],
-                              child: const Center(
-                                child: Icon(
-                                  Icons.image_not_supported,
-                                  color: Colors.grey,
-                                  size: 32,
+                              );
+                            },
+                            errorBuilder: (context, error, stackTrace) {
+                              print(
+                                  '❌ BannerAdWidget: Failed to load image: $imageUrl, Error: $error');
+                              return Container(
+                                color: Colors.grey[300],
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.image_not_supported,
+                                    color: Colors.grey,
+                                    size: 32,
+                                  ),
                                 ),
+                              );
+                            },
+                          )
+                        : Container(
+                            color: Colors.grey[300],
+                            child: const Center(
+                              child: Icon(
+                                Icons.image_not_supported,
+                                color: Colors.grey,
+                                size: 32,
                               ),
-                            );
-                          },
-                        )
-                      : Container(
-                          color: Colors.grey[300],
-                          child: const Center(
-                            child: Icon(
-                              Icons.image_not_supported,
-                              color: Colors.grey,
-                              size: 32,
                             ),
                           ),
-                        ),
-                ),
-
-                // Subtle gradient overlay for text readability
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.transparent,
-                          Colors.black.withOpacity(0.3),
-                        ],
-                      ),
-                    ),
                   ),
                 ),
 
-                // Small "Recommended Ad" label at bottom-right
-                Positioned(
-                  bottom: 4,
-                  right: 4,
+                // 60% space for title and CTA
+                Expanded(
+                  flex: 3,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.6),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Text(
-                      'Sponsored',
-                      style: TextStyle(
-                        fontSize: 9,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: 0.3,
-                      ),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Ad title
+                        Expanded(
+                          child: Text(
+                            adData['title'] ?? 'Sponsored Content',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11, // Reduced from 14 to fit 30 words
+                              fontWeight: FontWeight.w600,
+                              height: 1.1, // Reduced line height
+                            ),
+                            maxLines:
+                                3, // Increased from 2 to 3 to accommodate more text
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+
+                        const SizedBox(height: 4),
+
+                        // Call to action button
+                        Row(
+                          children: [
+                            GestureDetector(
+                              onTap: () => _showLinkDialog(context),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade600,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  adData['callToAction']?['label'] ??
+                                      'Learn More',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const Spacer(),
+                            // Small "Sponsored" label
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.6),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                'Sponsored',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w500,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -164,6 +217,66 @@ class BannerAdWidget extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  /// Show link dialog when Learn More is clicked
+  void _showLinkDialog(BuildContext context) {
+    final String link = (adData['link'] ??
+            adData['url'] ??
+            adData['ctaUrl'] ??
+            adData['callToActionUrl'] ??
+            adData['targetUrl'] ??
+            '')
+        .toString();
+
+    if (link.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No link available for this ad'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Open Link'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('This will open an external link:'),
+              const SizedBox(height: 8),
+              Text(
+                link,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _handleAdClick(context);
+              },
+              child: const Text('Open Link'),
+            ),
+          ],
+        );
+      },
     );
   }
 

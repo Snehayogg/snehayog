@@ -15,7 +15,7 @@ class AdTypeSelectorWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final List<String> adTypes = ['banner', 'carousel', 'video feed ad'];
+    final List<String> adTypes = ['banner', 'carousel'];
 
     return Card(
       child: Padding(
@@ -119,8 +119,6 @@ class AdTypeSelectorWidget extends StatelessWidget {
         return 'Banner ads are static image advertisements displayed at the top or sides of content';
       case 'carousel':
         return 'Carousel ads support up to 3 images and 1 video in a swipeable format. You can add multiple media items to create an engaging slideshow.';
-      case 'video feed ad':
-        return 'Video feed ads appear between video content like Instagram Reels';
       default:
         return '';
     }
@@ -131,7 +129,6 @@ class AdTypeSelectorWidget extends StatelessWidget {
       case 'banner':
         return 'CPM: ₹10 per 1000 impressions (lower cost for static ads)';
       case 'carousel':
-      case 'video feed ad':
         return 'CPM: ₹30 per 1000 impressions (higher engagement for interactive ads)';
       default:
         return '';

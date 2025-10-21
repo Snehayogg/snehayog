@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
@@ -15,7 +14,6 @@ import 'package:snehayog/services/video_view_tracker.dart';
 import 'package:snehayog/services/ad_refresh_notifier.dart';
 import 'package:snehayog/services/background_profile_preloader.dart';
 import 'package:snehayog/view/widget/ads/banner_ad_widget.dart';
-import 'package:snehayog/view/widget/ads/video_feed_ad_widget.dart';
 import 'package:snehayog/view/widget/ads/carousel_ad_widget.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:snehayog/controller/main_controller.dart';
@@ -75,7 +73,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   // **AD STATE - DISABLED**
   List<Map<String, dynamic>> _bannerAds = [];
-  List<Map<String, dynamic>> _videoFeedAds = [];
   bool _adsLoaded = false;
 
   // **PAGE CONTROLLER**
@@ -436,13 +433,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       if (mounted) {
         setState(() {
           _bannerAds = allAds['banner'] ?? [];
-          _videoFeedAds = allAds['video feed ad'] ?? [];
           _adsLoaded = true;
         });
 
         print('✅ VideoFeedAdvanced: Ads loaded and displayed:');
         print('   Banner ads: ${_bannerAds.length}');
-        print('   Video feed ads: ${_videoFeedAds.length}');
 
         // **NEW: Debug banner ad details**
         for (int i = 0; i < _bannerAds.length; i++) {
@@ -456,12 +451,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           print('     Thumbnail: ${ad['thumbnail']}');
           print('     Link: ${ad['link']}');
           print('     CallToAction: ${ad['callToAction']}');
-        }
-
-        // **NEW: Debug ad details**
-        for (int i = 0; i < _videoFeedAds.length; i++) {
-          final ad = _videoFeedAds[i];
-          print('   Video Feed Ad $i: ${ad['title']} (${ad['adType']})');
         }
       }
 
@@ -555,7 +544,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         // Load following users after videos are loaded
         await _loadFollowingUsers();
       }
-        } catch (e) {
+    } catch (e) {
       print('❌ Error loading videos: $e');
       print('❌ Error stack trace: ${StackTrace.current}');
     }
@@ -1125,66 +1114,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   /// **NEW: Get total item count including videos and ads**
   int _getTotalItemCount() {
-    if (!_adsLoaded) {
-      return _videos.length + (_isLoadingMore ? 1 : 0);
-    }
-
-    // **FIXED: Ads are integrated with video content, not separate items**
-    // Only video feed ads are separate items, banner and carousel are integrated
-    const videoFeedAdInterval = 1; // Show video feed ad after every video
-    final totalVideos = _videos.length;
-    final estimatedVideoFeedAds = (totalVideos / videoFeedAdInterval).floor();
-    final actualVideoFeedAds = _videoFeedAds.length;
-    final videoFeedAdsToShow = actualVideoFeedAds.clamp(
-      0,
-      estimatedVideoFeedAds,
-    );
-
-    return totalVideos + videoFeedAdsToShow + (_isLoadingMore ? 1 : 0);
+    return _videos.length + (_isLoadingMore ? 1 : 0);
   }
 
   /// **NEW: Build feed item (video or ad)**
   Widget _buildFeedItem(int index) {
     final totalVideos = _videos.length;
-
-    // **FIXED: Check if this should be a video feed ad (separate item)**
-    if (_adsLoaded && _videoFeedAds.isNotEmpty) {
-      const videoFeedAdInterval = 1; // Show video feed ad after every video
-
-      // Calculate if this index should show a video feed ad
-      if ((index + 1) % (videoFeedAdInterval + 1) == 0) {
-        // This should be a video feed ad position
-        final adIndex = ((index + 1) ~/ (videoFeedAdInterval + 1)) - 1;
-
-        if (adIndex < _videoFeedAds.length) {
-          print(
-            '🎯 Showing video feed recommendation at index $index (recommendation $adIndex)',
-          );
-          print('   Recommendation title: ${_videoFeedAds[adIndex]['title']}');
-          print('   Recommendation type: ${_videoFeedAds[adIndex]['adType']}');
-          return VideoFeedAdWidget(
-            adData: _videoFeedAds[adIndex],
-            onAdClick: () {
-              print(
-                '🖱️ Video feed recommendation clicked: ${_videoFeedAds[adIndex]['title']}',
-              );
-            },
-          );
-        } else {
-          print(
-            '⚠️ No video feed recommendation available at index $index (recommendation $adIndex)',
-          );
-        }
-      }
-    }
-
-    // Calculate actual video index accounting for video feed ads
-    int videoIndex = index;
-    if (_adsLoaded && _videoFeedAds.isNotEmpty) {
-      const videoFeedAdInterval = 1;
-      final adsBeforeThisIndex = (index / (videoFeedAdInterval + 1)).floor();
-      videoIndex = index - adsBeforeThisIndex;
-    }
+    final videoIndex = index;
 
     // Show loading indicator at the end
     if (videoIndex >= totalVideos) {
@@ -1324,9 +1260,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                   adData: (_adsLoaded && _bannerAds.isNotEmpty)
                       ? _bannerAds[index % _bannerAds.length]
                       : {
-                          // graceful fallback (no crash if empty)
                           'imageUrl': '',
-                          'title': 'Sponsored',
+                          'title': 'Sponsored Content',
                         },
                   onAdClick: () {
                     print('🖱️ Banner ad clicked on video $index');
@@ -1391,24 +1326,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
           // Report indicator on side (keeps original styling)
           _buildReportIndicator(index),
-
-          // **NEW: Debug info for ads (only in debug mode)**
-          if (kDebugMode && _videoFeedAds.isNotEmpty)
-            Positioned(
-              top: 100,
-              left: 16,
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.7),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'Recommendations: ${_videoFeedAds.length}',
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                ),
-              ),
-            ),
         ],
       ),
     );

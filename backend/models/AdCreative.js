@@ -87,6 +87,28 @@ const AdCreativeSchema = new mongoose.Schema({
       type: String
     }
   }],
+  // **NEW: Title field for banner ads**
+  title: {
+    type: String,
+    required: function() {
+      return this.adType === 'banner';
+    },
+    trim: true,
+    maxlength: 150, // Max 30 words (5 chars per word average)
+    validate: {
+      validator: function(v) {
+        if (this.adType === 'banner' && (!v || v.trim().length === 0)) {
+          return false;
+        }
+        // Check word count (max 30 words)
+        if (v && v.trim().split(/\s+/).length > 30) {
+          return false;
+        }
+        return true;
+      },
+      message: 'Banner ads require a title with maximum 30 words'
+    }
+  },
   callToAction: {
     label: {
       type: String,

@@ -42,44 +42,45 @@ class AdDetailsFormWidget extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Only show title for non-banner ads
-        if (!isBanner) ...[
-          TextFormField(
-            controller: titleController,
-            decoration: InputDecoration(
-              labelText: 'Ad Title *',
-              hintText: 'Enter a compelling title for your ad',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: (isTitleValid == false) ? Colors.red : Colors.grey,
-                  width: (isTitleValid == false) ? 2.0 : 1.0,
-                ),
+        // Show title for all ad types (including banner)
+        TextFormField(
+          controller: titleController,
+          decoration: InputDecoration(
+            labelText:
+                isBanner ? 'Banner Title * (max 30 words)' : 'Ad Title *',
+            hintText: isBanner
+                ? 'Enter a compelling title for your banner ad'
+                : 'Enter a compelling title for your ad',
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: (isTitleValid == false) ? Colors.red : Colors.grey,
+                width: (isTitleValid == false) ? 2.0 : 1.0,
               ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: (isTitleValid == false) ? Colors.red : Colors.grey,
-                  width: (isTitleValid == false) ? 2.0 : 1.0,
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: (isTitleValid == false) ? Colors.red : Colors.blue,
-                  width: (isTitleValid == false) ? 2.0 : 2.0,
-                ),
-              ),
-              errorText: (isTitleValid == false) ? titleError : null,
-              errorStyle: const TextStyle(color: Colors.red, fontSize: 12),
             ),
-            onChanged: (_) {
-              onClearErrors();
-              onFieldChanged?.call('title');
-            },
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: (isTitleValid == false) ? Colors.red : Colors.grey,
+                width: (isTitleValid == false) ? 2.0 : 1.0,
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: (isTitleValid == false) ? Colors.red : Colors.blue,
+                width: (isTitleValid == false) ? 2.0 : 2.0,
+              ),
+            ),
+            errorText: (isTitleValid == false) ? titleError : null,
+            errorStyle: const TextStyle(color: Colors.red, fontSize: 12),
           ),
-          const SizedBox(height: 16),
-        ],
+          onChanged: (_) {
+            onClearErrors();
+            onFieldChanged?.call('title');
+          },
+        ),
+        const SizedBox(height: 16),
 
         // Only show description for non-banner ads
         if (!isBanner) ...[

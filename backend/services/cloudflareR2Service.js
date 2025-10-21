@@ -8,8 +8,8 @@ class CloudflareR2Service {
     this.accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
     this.bucketName = process.env.CLOUDFLARE_R2_BUCKET_NAME;
     
-    // **NEW: Support custom domain (cdn.snehayog.com) for public URLs**
-    this.publicDomain = process.env.CLOUDFLARE_R2_PUBLIC_DOMAI;
+    // **NEW: Support custom domain (cdn.snehayog.site) for public URLs**
+    this.publicDomain = process.env.CLOUDFLARE_R2_PUBLIC_DOMAIN;
     
     console.log('🔧 Cloudflare R2 Service Configuration:');
     console.log('   Account ID:', this.accountId ? '✓ Set' : '✗ Missing');

@@ -19,9 +19,8 @@ class CarouselAdService {
       // Try multiple endpoints to find carousel ads
       final endpoints = [
         '$baseUrl/api/ads/carousel', // Direct carousel endpoint
-        '$baseUrl/api/ads/serve?adType=carousel', // Fixed: use 'carousel' not 'carousel ads'
+        '$baseUrl/api/ads/serve?adType=carousel', // Serve endpoint with carousel filter
         '$baseUrl/api/ads/serve', // General ads endpoint
-        '$baseUrl/api/ads/active',
       ];
 
       for (final endpoint in endpoints) {

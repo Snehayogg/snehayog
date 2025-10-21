@@ -159,6 +159,14 @@ class CarouselAdManager {
     };
   }
 
+  /// **Refresh carousel ads from backend**
+  Future<void> refreshCarouselAds() async {
+    print('🔄 CarouselAdManager: Refreshing carousel ads...');
+    _isCarouselAdsLoaded = false;
+    _carouselAds.clear();
+    await loadCarouselAds();
+  }
+
   /// **Clear carousel ad data**
   void clearCarouselAds() {
     _carouselAds.clear();

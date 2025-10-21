@@ -17,7 +17,8 @@ router.post('/campaigns/:id/creatives', adUpload.single('creative'), asyncHandle
     aspectRatio,
     durationSec,
     callToActionLabel,
-    callToActionUrl
+    callToActionUrl,
+    title
   } = req.body;
 
   // Validate campaign exists
@@ -28,10 +29,10 @@ router.post('/campaigns/:id/creatives', adUpload.single('creative'), asyncHandle
   }
 
   // Validate adType
-  if (!adType || !['banner', 'carousel', 'video feed ad'].includes(adType)) {
+  if (!adType || !['banner', 'carousel'].includes(adType)) {
     cleanupTempFile(req.file?.path);
     return res.status(400).json({ 
-      error: 'Invalid adType. Must be one of: banner, carousel, video feed ad' 
+      error: 'Invalid adType. Must be one of: banner, carousel' 
     });
   }
 
@@ -54,6 +55,25 @@ router.post('/campaigns/:id/creatives', adUpload.single('creative'), asyncHandle
     return res.status(400).json({ 
       error: 'Invalid media type. Must be image or video' 
     });
+  }
+
+  // Validate title for banner ads
+  if (adType === 'banner') {
+    if (!title || title.trim().length === 0) {
+      cleanupTempFile(req.file?.path);
+      return res.status(400).json({ 
+        error: 'Banner ads require a title' 
+      });
+    }
+    
+    // Check word count (max 30 words)
+    const wordCount = title.trim().split(/\s+/).length;
+    if (wordCount > 30) {
+      cleanupTempFile(req.file?.path);
+      return res.status(400).json({ 
+        error: 'Title must be 30 words or less' 
+      });
+    }
   }
 
   // Validate duration for video ads (non-carousel)
@@ -84,6 +104,7 @@ router.post('/campaigns/:id/creatives', adUpload.single('creative'), asyncHandle
       thumbnail: type === 'video' ? result.thumbnail_url : result.secure_url,
       aspectRatio,
       durationSec: type === 'video' ? durationSec : undefined,
+      title: adType === 'banner' ? title : undefined,
       callToAction: {
         label: callToActionLabel,
         url: callToActionUrl
@@ -272,14 +293,6 @@ router.get('/types', asyncHandler(async (req, res) => {
       restrictions: 'Both images and videos allowed',
       useCase: 'Product showcases, story-based content, multiple offerings'
     },
-    {
-      type: 'video feed ad',
-      name: 'Video Feed Ads',
-      description: 'Video ads that appear between video content (like Instagram reels)',
-      allowedMediaTypes: ['image', 'video'],
-      restrictions: 'Both images and videos allowed',
-      useCase: 'Engaging video content, product demos, brand stories'
-    }
   ];
 
   res.json({

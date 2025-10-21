@@ -1041,4 +1041,138 @@ router.delete('/:adId', verifyToken, async (req, res) => {
   }
 });
 
+// **NEW: Get active ads for serving**
+router.get('/serve', async (req, res) => {
+  try {
+    const { adType } = req.query;
+    
+    // Build query for active ads
+    const query = {
+      status: 'active',
+      startDate: { $lte: new Date() },
+      endDate: { $gte: new Date() }
+    };
+    
+    // Filter by ad type if specified
+    if (adType) {
+      query.adType = adType;
+    }
+    
+    // Find active campaigns
+    const campaigns = await AdCampaign.find(query)
+      .populate('creative')
+      .limit(10);
+    
+    // Filter out campaigns without creatives
+    const validCampaigns = campaigns.filter(campaign => campaign.creative);
+    
+    // Convert to ad format for frontend
+    const ads = validCampaigns.map(campaign => {
+      const creative = campaign.creative;
+      return {
+        id: campaign._id,
+        campaignId: campaign._id,
+        adType: creative.adType,
+        title: creative.title || campaign.name,
+        description: creative.description || '',
+        imageUrl: creative.cloudinaryUrl,
+        videoUrl: creative.type === 'video' ? creative.cloudinaryUrl : null,
+        link: creative.callToAction?.url || '',
+        callToAction: creative.callToAction,
+        slides: creative.slides || [],
+        advertiserName: campaign.name,
+        isActive: true,
+        impressions: creative.impressions || 0,
+        clicks: creative.clicks || 0,
+        createdAt: campaign.createdAt
+      };
+    });
+    
+    res.json(ads);
+  } catch (error) {
+    console.error('❌ Error serving ads:', error);
+    res.status(500).json({ error: 'Failed to serve ads' });
+  }
+});
+
+// **NEW: Get carousel ads specifically**
+router.get('/carousel', async (req, res) => {
+  try {
+    // Find active carousel campaigns
+    const campaigns = await AdCampaign.find({
+      status: 'active',
+      startDate: { $lte: new Date() },
+      endDate: { $gte: new Date() }
+    })
+    .populate({
+      path: 'creative',
+      match: { adType: 'carousel' }
+    })
+    .limit(10);
+    
+    // Filter out campaigns without carousel creatives
+    const validCampaigns = campaigns.filter(campaign => 
+      campaign.creative && campaign.creative.adType === 'carousel'
+    );
+    
+    // Convert to carousel ad format
+    const carouselAds = validCampaigns.map(campaign => {
+      const creative = campaign.creative;
+      return {
+        id: creative._id,
+        campaignId: campaign._id,
+        adType: 'carousel',
+        title: creative.title || campaign.name,
+        description: creative.description || '',
+        slides: creative.slides || [],
+        callToAction: creative.callToAction,
+        advertiserName: campaign.name,
+        isActive: true,
+        impressions: creative.impressions || 0,
+        clicks: creative.clicks || 0,
+        createdAt: campaign.createdAt
+      };
+    });
+    
+    res.json(carouselAds);
+  } catch (error) {
+    console.error('❌ Error fetching carousel ads:', error);
+    res.status(500).json({ error: 'Failed to fetch carousel ads' });
+  }
+});
+
+// **NEW: Track ad impression**
+router.post('/:adId/impression', async (req, res) => {
+  try {
+    const { adId } = req.params;
+    
+    // Find the creative and increment impression count
+    await AdCreative.findByIdAndUpdate(adId, {
+      $inc: { impressions: 1 }
+    });
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Error tracking impression:', error);
+    res.status(500).json({ error: 'Failed to track impression' });
+  }
+});
+
+// **NEW: Track ad click**
+router.post('/:adId/click', async (req, res) => {
+  try {
+    const { adId } = req.params;
+    
+    // Find the creative and increment click count
+    await AdCreative.findByIdAndUpdate(adId, {
+      $inc: { clicks: 1 }
+    });
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Error tracking click:', error);
+    res.status(500).json({ error: 'Failed to track click' });
+  }
+});
+
 export default router;

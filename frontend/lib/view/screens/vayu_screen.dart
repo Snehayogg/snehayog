@@ -6,14 +6,14 @@ class VayuScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: const Color(0xFF0F0F0F),
+      color: Colors.white70,
       alignment: Alignment.center,
       child: const Padding(
         padding: EdgeInsets.all(16),
         child: Text(
           'Videos are available only on the Yog tab.',
           textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.white70, fontSize: 16),
+          style: TextStyle(color: Colors.black, fontSize: 16),
         ),
       ),
     );
