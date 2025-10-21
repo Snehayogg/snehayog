@@ -12,3 +12,5 @@ cmd = "npm start"
 
 [providers]
 node = ["20"]
+
+# Force Railway to rebuild
