@@ -1,13 +1,28 @@
-import express from 'express';
+import mongoose from 'mongoose';
 import AdCreative from '../models/AdCreative.js';
 import AdCampaign from '../models/AdCampaign.js';
 
-const router = express.Router();
+// Connect to Railway MongoDB
+const connectDB = async () => {
+  try {
+    // Use Railway's MongoDB URI from environment
+    const mongoUri = process.env.MONGODB_URI || process.env.DATABASE_URL;
+    if (!mongoUri) {
+      throw new Error('MongoDB URI not found in environment variables');
+    }
+    
+    await mongoose.connect(mongoUri);
+    console.log('✅ Connected to Railway MongoDB');
+  } catch (error) {
+    console.error('❌ MongoDB connection error:', error);
+    process.exit(1);
+  }
+};
 
 // Delete all dummy/placeholder ads
-router.delete('/cleanup-dummy-ads', async (req, res) => {
+const deleteDummyAds = async () => {
   try {
-    console.log('🗑️ Starting to delete dummy ads...');
+    console.log('🗑️ Starting to delete dummy ads from Railway database...');
     
     // Find ads with dummy/placeholder content
     const dummyAds = await AdCreative.find({
@@ -22,9 +37,6 @@ router.delete('/cleanup-dummy-ads', async (req, res) => {
 
     console.log(`🔍 Found ${dummyAds.length} dummy ads to delete`);
 
-    let deletedCount = 0;
-    let deletedCampaigns = 0;
-
     if (dummyAds.length > 0) {
       // Show what we're about to delete
       console.log('📋 Dummy ads to be deleted:');
@@ -37,8 +49,7 @@ router.delete('/cleanup-dummy-ads', async (req, res) => {
         _id: { $in: dummyAds.map(ad => ad._id) }
       });
 
-      deletedCount = result.deletedCount;
-      console.log(`✅ Deleted ${deletedCount} dummy ads`);
+      console.log(`✅ Deleted ${result.deletedCount} dummy ads`);
 
       // Also delete associated campaigns if they exist
       const campaignIds = dummyAds
@@ -49,9 +60,10 @@ router.delete('/cleanup-dummy-ads', async (req, res) => {
         const campaignResult = await AdCampaign.deleteMany({
           _id: { $in: campaignIds }
         });
-        deletedCampaigns = campaignResult.deletedCount;
-        console.log(`✅ Deleted ${deletedCampaigns} associated campaigns`);
+        console.log(`✅ Deleted ${campaignResult.deletedCount} associated campaigns`);
       }
+    } else {
+      console.log('✅ No dummy ads found');
     }
 
     // Also delete any ads with empty or null cloudinaryUrl
@@ -63,35 +75,28 @@ router.delete('/cleanup-dummy-ads', async (req, res) => {
       ]
     });
 
-    let deletedEmptyAds = 0;
     if (emptyAds.length > 0) {
       console.log(`🔍 Found ${emptyAds.length} ads with empty URLs to delete`);
       const emptyResult = await AdCreative.deleteMany({
         _id: { $in: emptyAds.map(ad => ad._id) }
       });
-      deletedEmptyAds = emptyResult.deletedCount;
-      console.log(`✅ Deleted ${deletedEmptyAds} ads with empty URLs`);
+      console.log(`✅ Deleted ${emptyResult.deletedCount} ads with empty URLs`);
     }
 
     console.log('🎉 Dummy ads cleanup completed!');
     
-    res.json({
-      success: true,
-      message: 'Dummy ads cleanup completed',
-      deletedAds: deletedCount,
-      deletedCampaigns: deletedCampaigns,
-      deletedEmptyAds: deletedEmptyAds,
-      totalDeleted: deletedCount + deletedEmptyAds
-    });
-    
   } catch (error) {
     console.error('❌ Error deleting dummy ads:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to delete dummy ads',
-      message: error.message
-    });
   }
-});
+};
 
-export default router;
+// Main execution
+const main = async () => {
+  await connectDB();
+  await deleteDummyAds();
+  await mongoose.disconnect();
+  console.log('✅ Disconnected from Railway MongoDB');
+  process.exit(0);
+};
+
+main();
