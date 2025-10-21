@@ -197,21 +197,31 @@ class VideoModel {
           }
         }(),
         link: () {
+          print(
+              '🔗 VideoModel: Parsing link field for video: ${json['videoName']}');
+          print('🔗 VideoModel: Raw JSON data: $json');
+
           // Try multiple possible field names for the link
           final possibleFields = ['link', 'externalLink', 'websiteUrl', 'url'];
 
           for (final field in possibleFields) {
+            print('🔗 VideoModel: Checking field "$field": ${json[field]}');
             if (json.containsKey(field)) {
               final linkValue = json[field]?.toString().trim();
+              print('🔗 VideoModel: Field "$field" value: "$linkValue"');
               if (linkValue?.isNotEmpty == true) {
                 print(
-                    '🔗 VideoModel: Found link in field "$field": "$linkValue"');
+                    '✅ VideoModel: Found link in field "$field": "$linkValue"');
                 return linkValue;
+              } else {
+                print('⚠️ VideoModel: Field "$field" is empty or null');
               }
+            } else {
+              print('❌ VideoModel: Field "$field" not found');
             }
           }
 
-          print('🔗 VideoModel: No link field found in video data');
+          print('❌ VideoModel: No link field found in video data');
           print('🔗 VideoModel: Available fields: ${json.keys.toList()}');
           return null;
         }(),

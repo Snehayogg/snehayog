@@ -50,7 +50,7 @@ class _AdDisplayWidgetState extends State<AdDisplayWidget> {
 
   Future<void> _trackClick() async {
     if (_hasInteracted) return; // Prevent multiple clicks
-    
+
     setState(() => _isLoading = true);
     _hasInteracted = true;
 
@@ -96,16 +96,15 @@ class _AdDisplayWidgetState extends State<AdDisplayWidget> {
 
   Widget _buildBannerAd() {
     return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.blue.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.blue.withOpacity(0.3)),
-      ),
-      child: InkWell(
-        onTap: _trackClick,
-        child: Column(
-          children: [
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: Colors.blue.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.blue.withOpacity(0.3)),
+        ),
+        child: InkWell(
+          onTap: _trackClick,
+          child: Column(children: [
             // **FIX: Add "Sponsored content" banner at top**
             Container(
               width: double.infinity,
@@ -126,7 +125,9 @@ class _AdDisplayWidgetState extends State<AdDisplayWidget> {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    'Sponsored content',
+                    widget.ad.title.isNotEmpty
+                        ? widget.ad.title
+                        : 'Sponsored content',
                     style: TextStyle(
                       color: Colors.blue[700],
                       fontSize: 12,
@@ -177,26 +178,27 @@ class _AdDisplayWidgetState extends State<AdDisplayWidget> {
                       ],
                     ),
                   ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.blue,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Text(
-                  'Ad',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.blue,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Text(
+                      'Ad',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
-            ],
-          ),
-        ),
-      ),
-    );
+            ),
+          ]),
+        ));
   }
 
   Widget _buildInterstitialAd() {
@@ -335,7 +337,8 @@ class _AdDisplayWidgetState extends State<AdDisplayWidget> {
                     ),
                     const SizedBox(height: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
                         color: Colors.orange,
                         borderRadius: BorderRadius.circular(16),
@@ -437,7 +440,8 @@ class _AdDisplayWidgetState extends State<AdDisplayWidget> {
                         height: 16,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
                         ),
                       )
                     : const Text('Learn More'),

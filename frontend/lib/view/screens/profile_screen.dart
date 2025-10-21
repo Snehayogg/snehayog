@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:snehayog/utils/responsive_helper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -72,8 +73,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (mounted) _stateManager.setContext(context);
     });
 
-    // Start progressive loading immediately
-    _startProgressiveLoading();
+    // **ENHANCED: Start loading with multiple fallback mechanisms**
+    _startEnhancedLoading();
     // Load referral stats
     _loadReferralStats();
     _fetchVerifiedReferralStats();
@@ -84,16 +85,45 @@ class _ProfileScreenState extends State<ProfileScreen>
   void onProfileTabSelected() {
     print('🔄 ProfileScreen: Profile tab selected, ensuring data is loaded');
 
-    // If data is not loaded yet, force immediate load
+    // **ENHANCED: Better tab selection handling with multiple checks**
     if (!_isProfileDataLoaded || _stateManager.userData == null) {
       print('📡 ProfileScreen: Data not loaded, forcing immediate load');
       _forceImmediateLoad();
     } else {
-      print('✅ ProfileScreen: Data already loaded, no action needed');
+      print('✅ ProfileScreen: Data already loaded, checking if refresh needed');
 
-      // **OPTIMIZATION: Trigger background refresh if data might be stale**
-      final preloader = BackgroundProfilePreloader();
-      preloader.startBackgroundPreloading();
+      // **ENHANCED: Check if data is stale and needs refresh**
+      _checkAndRefreshStaleData();
+    }
+  }
+
+  /// **NEW: Check if data is stale and needs refresh**
+  Future<void> _checkAndRefreshStaleData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = _getProfileCacheKey();
+      final cacheTimestamp = prefs.getInt('profile_cache_timestamp_$cacheKey');
+
+      if (cacheTimestamp != null) {
+        final cacheAge = DateTime.now().millisecondsSinceEpoch - cacheTimestamp;
+        const staleThreshold = 10 * 60 * 1000; // 10 minutes
+
+        if (cacheAge > staleThreshold) {
+          print('🔄 ProfileScreen: Data is stale, refreshing in background');
+          // Trigger background refresh
+          final preloader = BackgroundProfilePreloader();
+          preloader.startBackgroundPreloading();
+        } else {
+          print('✅ ProfileScreen: Data is fresh, no refresh needed');
+        }
+      } else {
+        print(
+            '🔄 ProfileScreen: No cache timestamp, triggering background refresh');
+        final preloader = BackgroundProfilePreloader();
+        preloader.startBackgroundPreloading();
+      }
+    } catch (e) {
+      print('❌ ProfileScreen: Error checking stale data: $e');
     }
   }
 
@@ -150,6 +180,301 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
+  /// **ENHANCED: Multi-layered loading approach with fallbacks**
+  void _startEnhancedLoading() {
+    print(
+        '🚀 ProfileScreen: Starting enhanced loading with multiple fallbacks');
+
+    // **LAYER 1: Immediate cache check (fastest)**
+    _loadFromCacheFirst();
+
+    // **LAYER 2: Progressive loading with improved reliability**
+    _startProgressiveLoading();
+
+    // **LAYER 3: Aggressive backup loading (if progressive fails)**
+    Timer(const Duration(milliseconds: 1500), () {
+      if (!_isProfileDataLoaded && mounted) {
+        print(
+            '⚠️ ProfileScreen: Progressive loading taking too long, starting aggressive backup load');
+        _startAggressiveBackupLoading();
+      }
+    });
+
+    // **LAYER 4: Final aggressive fallback (if everything else fails)**
+    Timer(const Duration(seconds: 3), () {
+      if (!_isProfileDataLoaded && mounted) {
+        print(
+            '🆘 ProfileScreen: All loading methods failed, starting final aggressive load');
+        _startFinalAggressiveLoad();
+      }
+    });
+
+    // **LAYER 5: Background continuous retry (silent)**
+    Timer(const Duration(seconds: 5), () {
+      if (!_isProfileDataLoaded && mounted) {
+        print('🔄 ProfileScreen: Starting background continuous retry');
+        _startBackgroundContinuousRetry();
+      }
+    });
+  }
+
+  /// **NEW: Load from cache first for instant response**
+  Future<void> _loadFromCacheFirst() async {
+    try {
+      print('⚡ ProfileScreen: Checking cache first for instant load');
+
+      // Check background preloaded data first
+      final preloader = BackgroundProfilePreloader();
+      final preloadedData = await preloader.getPreloadedProfileData();
+
+      if (preloadedData != null) {
+        print('⚡ ProfileScreen: Using preloaded data (instant!)');
+        _stateManager.setUserData(preloadedData);
+        setState(() {
+          _isProfileDataLoaded = true;
+          _isLoading = false;
+        });
+
+        // Load videos and followers in background
+        _loadVideosProgressive();
+        _loadFollowersProgressive();
+        return;
+      }
+
+      // Check SharedPreferences cache
+      final cachedData = await _loadCachedProfileData();
+      if (cachedData != null) {
+        print('⚡ ProfileScreen: Using cached data (instant!)');
+        _stateManager.setUserData(cachedData);
+        setState(() {
+          _isProfileDataLoaded = true;
+          _isLoading = false;
+        });
+
+        // Load videos and followers in background
+        _loadVideosProgressive();
+        _loadFollowersProgressive();
+        return;
+      }
+
+      print('📡 ProfileScreen: No cache available, will load from server');
+    } catch (e) {
+      print('❌ ProfileScreen: Cache loading failed: $e');
+    }
+  }
+
+  /// **NEW: Aggressive backup loading with multiple strategies**
+  Future<void> _startAggressiveBackupLoading() async {
+    try {
+      print('🔥 ProfileScreen: Starting aggressive backup loading');
+
+      // Strategy 1: Try direct server load with timeout
+      try {
+        await _stateManager.loadUserData(widget.userId).timeout(
+          const Duration(seconds: 3),
+          onTimeout: () {
+            print('⏰ ProfileScreen: Direct server load timed out');
+            throw TimeoutException('Direct server load timeout');
+          },
+        );
+
+        if (_stateManager.userData != null) {
+          print('✅ ProfileScreen: Aggressive backup loading successful');
+          setState(() {
+            _isProfileDataLoaded = true;
+            _isLoading = false;
+          });
+          return;
+        }
+      } catch (e) {
+        print('❌ ProfileScreen: Aggressive backup loading failed: $e');
+      }
+
+      // Strategy 2: Try with different user ID combinations
+      await _tryAlternativeUserIds();
+    } catch (e) {
+      print('❌ ProfileScreen: Aggressive backup loading completely failed: $e');
+    }
+  }
+
+  /// **NEW: Final aggressive load with all possible methods**
+  Future<void> _startFinalAggressiveLoad() async {
+    try {
+      print('🚀 ProfileScreen: Starting final aggressive load');
+
+      // Clear all caches first
+      await _clearProfileCache();
+
+      // Try multiple loading strategies in parallel
+      final futures = [
+        _stateManager.loadUserData(widget.userId),
+        _loadFromAlternativeSources(),
+        _loadFromBackgroundPreloader(),
+      ];
+
+      // Wait for any one to succeed
+      await Future.wait(
+        futures.map((f) => f.catchError((e) => null)),
+        eagerError: false,
+      );
+
+      // Check if any succeeded
+      bool anySucceeded = _stateManager.userData != null;
+
+      if (anySucceeded) {
+        print('✅ ProfileScreen: Final aggressive load succeeded');
+        setState(() {
+          _isProfileDataLoaded = true;
+          _isLoading = false;
+        });
+      } else {
+        print('❌ ProfileScreen: Final aggressive load failed');
+        setState(() {
+          _error = 'Unable to load profile data. Please check your connection.';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('❌ ProfileScreen: Final aggressive load error: $e');
+      setState(() {
+        _error = 'Failed to load profile data: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  /// **NEW: Background continuous retry (silent)**
+  void _startBackgroundContinuousRetry() {
+    print('🔄 ProfileScreen: Starting background continuous retry');
+
+    Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      if (_isProfileDataLoaded) {
+        print('✅ ProfileScreen: Data loaded, stopping background retry');
+        timer.cancel();
+        return;
+      }
+
+      print('🔄 ProfileScreen: Background retry attempt');
+      _silentBackgroundLoad();
+    });
+  }
+
+  /// **NEW: Silent background load (no UI changes)**
+  Future<void> _silentBackgroundLoad() async {
+    try {
+      print('🔇 ProfileScreen: Silent background load attempt');
+
+      // Try to load without affecting UI state
+      await _stateManager.loadUserData(widget.userId);
+
+      if (_stateManager.userData != null && mounted) {
+        print('✅ ProfileScreen: Silent background load succeeded');
+        setState(() {
+          _isProfileDataLoaded = true;
+          _isLoading = false;
+        });
+
+        // Load additional data
+        _loadVideosProgressive();
+        _loadFollowersProgressive();
+      }
+    } catch (e) {
+      print('❌ ProfileScreen: Silent background load failed: $e');
+    }
+  }
+
+  /// **NEW: Try alternative user ID combinations**
+  Future<void> _tryAlternativeUserIds() async {
+    try {
+      print('🔄 ProfileScreen: Trying alternative user ID combinations');
+
+      // Get current user data to try different ID formats
+      final prefs = await SharedPreferences.getInstance();
+      final fallbackUser = prefs.getString('fallback_user');
+
+      if (fallbackUser != null) {
+        final userData = jsonDecode(fallbackUser);
+        final alternativeIds = [
+          userData['id'],
+          userData['googleId'],
+          widget.userId,
+        ].where((id) => id != null).toList();
+
+        for (final altId in alternativeIds) {
+          try {
+            await _stateManager.loadUserData(altId);
+            if (_stateManager.userData != null) {
+              print('✅ ProfileScreen: Alternative ID $altId worked');
+              setState(() {
+                _isProfileDataLoaded = true;
+                _isLoading = false;
+              });
+              return;
+            }
+          } catch (e) {
+            print('❌ ProfileScreen: Alternative ID $altId failed: $e');
+          }
+        }
+      }
+    } catch (e) {
+      print('❌ ProfileScreen: Alternative user ID strategy failed: $e');
+    }
+  }
+
+  /// **NEW: Load from alternative sources**
+  Future<void> _loadFromAlternativeSources() async {
+    try {
+      print('🔄 ProfileScreen: Loading from alternative sources');
+
+      // Try to get user data from different sources
+      final cachedData = await _loadCachedProfileData();
+
+      if (cachedData != null) {
+        _stateManager.setUserData(cachedData);
+        print('✅ ProfileScreen: Loaded from alternative source (cache)');
+        return;
+      }
+
+      // Try background preloader
+      final preloader = BackgroundProfilePreloader();
+      final preloadedData = await preloader.getPreloadedProfileData();
+
+      if (preloadedData != null) {
+        _stateManager.setUserData(preloadedData);
+        print('✅ ProfileScreen: Loaded from alternative source (preloader)');
+        return;
+      }
+
+      print('❌ ProfileScreen: No alternative sources available');
+    } catch (e) {
+      print('❌ ProfileScreen: Alternative source loading failed: $e');
+    }
+  }
+
+  /// **NEW: Load from background preloader**
+  Future<void> _loadFromBackgroundPreloader() async {
+    try {
+      print('🔄 ProfileScreen: Loading from background preloader');
+
+      final preloader = BackgroundProfilePreloader();
+      final preloadedData = await preloader.getPreloadedProfileData();
+
+      if (preloadedData != null) {
+        _stateManager.setUserData(preloadedData);
+        print('✅ ProfileScreen: Loaded from background preloader');
+      } else {
+        print('❌ ProfileScreen: No preloaded data available');
+      }
+    } catch (e) {
+      print('❌ ProfileScreen: Background preloader loading failed: $e');
+    }
+  }
+
   void _startProgressiveLoading() {
     // Step 1: Load basic profile data first (fastest)
     _loadBasicProfileData();
@@ -193,22 +518,29 @@ class _ProfileScreenState extends State<ProfileScreen>
     try {
       ProfileScreenLogger.logProfileLoad();
 
-      // Check authentication first
+      // **ENHANCED: Improved authentication check with better retry logic**
       final prefs = await SharedPreferences.getInstance();
       final hasJwtToken = prefs.getString('jwt_token') != null;
       final hasFallbackUser = prefs.getString('fallback_user') != null;
 
+      print(
+          '🔐 ProfileScreen: Auth check - JWT: $hasJwtToken, Fallback: $hasFallbackUser');
+
       if (!hasJwtToken && !hasFallbackUser) {
-        // Retry a few times on first entry; auth may still be restoring
-        if (_authRetryAttempts < 5) {
+        // **ENHANCED: Better retry mechanism with exponential backoff**
+        if (_authRetryAttempts < 3) {
           _authRetryAttempts++;
-          Future.delayed(const Duration(seconds: 1), () {
+          print(
+              '🔄 ProfileScreen: No auth data found, retrying in ${_authRetryAttempts} seconds (attempt $_authRetryAttempts/3)');
+
+          Future.delayed(Duration(seconds: _authRetryAttempts), () {
             if (mounted) _loadBasicProfileData();
           });
           return; // keep showing loading spinner
         } else {
+          print('❌ ProfileScreen: Authentication retry limit reached');
           setState(() {
-            _error = 'No authentication data found';
+            _error = 'No authentication data found. Please sign in again.';
             _isLoading = false;
           });
           return;
@@ -547,6 +879,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       _isLoading = true;
       _error = null;
       _currentLoadStep = 0;
+      _authRetryAttempts = 0; // Reset auth retry attempts
     });
 
     // Clear all caches to force fresh data load
@@ -558,7 +891,9 @@ class _ProfileScreenState extends State<ProfileScreen>
     preloader.forcePreload(); // Trigger fresh preload
 
     _progressiveLoadTimer?.cancel();
-    _startProgressiveLoading();
+
+    // **ENHANCED: Use the new enhanced loading approach**
+    _startEnhancedLoading();
   }
 
   /// Share app referral message
@@ -1028,55 +1363,79 @@ class _ProfileScreenState extends State<ProfileScreen>
       // Otherwise show error with retry
       return RepaintBoundary(
         child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.error_outline,
-                size: 64,
-                color: Colors.red[300],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Failed to load profile data',
-                style: TextStyle(
-                  color: Colors.red[700],
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 64,
+                  color: Colors.red[300],
                 ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'You appear to be signed in, but we couldn\'t load your profile.',
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 14,
+                const SizedBox(height: 16),
+                Text(
+                  'Failed to load profile data',
+                  style: TextStyle(
+                    color: Colors.red[700],
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: _restartProgressiveLoading,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry Loading Profile'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                const SizedBox(height: 8),
+                Text(
+                  'You appear to be signed in, but we couldn\'t load your profile.',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 14,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-              ),
-              const SizedBox(height: 16),
-              TextButton.icon(
-                onPressed: _handleGoogleSignIn,
-                icon: const Icon(Icons.login),
-                label: const Text('Sign In Again'),
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.blue,
+                const SizedBox(height: 24),
+
+                // **AUTOMATIC: Auto-retry loading without manual buttons**
+                TextButton.icon(
+                  onPressed: _handleGoogleSignIn,
+                  icon: const Icon(Icons.login),
+                  label: const Text('Sign In Again'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.blue,
+                  ),
                 ),
-              ),
-            ],
+
+                const SizedBox(height: 16),
+
+                // **NEW: Debug information for troubleshooting**
+                if (kDebugMode) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Debug Info:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text('Auth Retry Attempts: $_authRetryAttempts'),
+                        Text('Profile Data Loaded: $_isProfileDataLoaded'),
+                        Text('Videos Loaded: $_isVideosLoaded'),
+                        Text('Followers Loaded: $_isFollowersLoaded'),
+                        Text('Error: $_error'),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       );

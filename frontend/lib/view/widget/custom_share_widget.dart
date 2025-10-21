@@ -433,11 +433,11 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
   }
 
   String _generateShareText() {
-    return 'Want to earn from your content without waiting for 1000 subs or long watch hours?\n'
-        'Upload your videos on Snehayog and start earning from day one! 💰\n\n'
+    return 'Upload your videos on Snehayog and start earning from day one! 💰\n'
+        'No 1000 subs or long watch hours\n\n'
         '🎯 Example video: ${widget.video.videoName} ⬇️\n'
         'https://snehayog.app/video/${widget.video.id}\n\n'
-        'First 1000 early creators — grab 80% ad revenue share now!';
+        'Only First 1000 early creators — grab 80% ad revenue';
   }
 
   void _showLoadingDialog() {

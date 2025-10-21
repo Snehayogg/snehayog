@@ -152,7 +152,7 @@ class AdService {
         'videoUrl': videoUrl,
         'link': link,
         'adType': backendAdType, // **FIX: Use corrected adType**
-        'budget': budget is int ? budget : budget.toInt(),
+        'budget': budget.toDouble(),
         'targetAudience': targetAudience,
         'uploaderId': userData['googleId'] ?? userData['id'],
         'uploaderName': userData['name'],

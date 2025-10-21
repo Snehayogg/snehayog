@@ -50,10 +50,33 @@ class VideoInfoWidget extends StatelessWidget {
           _UploaderInfoSection(video: video),
 
           // Visit Now button below uploader info (if video has a link)
-          if (video.link != null && video.link!.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            _VisitNowButton(link: video.link!),
-          ],
+          // **DEBUG: Add logging to check link status**
+          Builder(
+            builder: (context) {
+              print(
+                  '🔗 VideoInfoWidget: Checking link for video: ${video.videoName}');
+              print('🔗 VideoInfoWidget: video.link = ${video.link}');
+              print(
+                  '🔗 VideoInfoWidget: video.link != null = ${video.link != null}');
+              print(
+                  '🔗 VideoInfoWidget: video.link!.isNotEmpty = ${video.link?.isNotEmpty}');
+
+              if (video.link != null && video.link!.isNotEmpty) {
+                print(
+                    '✅ VideoInfoWidget: Link found, showing Visit Now button');
+                return Column(
+                  children: [
+                    const SizedBox(height: 4),
+                    _VisitNowButton(link: video.link!),
+                  ],
+                );
+              } else {
+                print(
+                    '❌ VideoInfoWidget: No link found, not showing Visit Now button');
+                return const SizedBox.shrink();
+              }
+            },
+          ),
         ],
       ),
     );
@@ -193,32 +216,6 @@ class _UploaderAvatar extends StatelessWidget {
             fontSize: 10,
             fontWeight: FontWeight.bold,
           ),
-        ),
-      ),
-    );
-  }
-}
-
-// Lightweight link status badge widget
-class _LinkStatusBadge extends StatelessWidget {
-  final String link;
-
-  const _LinkStatusBadge({required this.link});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xCC4CAF50), // Colors.green.withOpacity(0.8)
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        'Link: $link',
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 10,
-          fontWeight: FontWeight.w500,
         ),
       ),
     );

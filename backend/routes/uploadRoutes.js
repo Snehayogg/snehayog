@@ -170,7 +170,8 @@ router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
         height: videoInfo.height || 0
       },
       processingStatus: 'pending',
-      processingProgress: 0
+      processingProgress: 0,
+      link: link || '' // **FIX: Include link field from request body**
     });
 
     // **NEW: Save video record first**

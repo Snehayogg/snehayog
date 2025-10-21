@@ -724,7 +724,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Upload videos to start earning revenue',
+                  'Upload videos to start earning',
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.grey[500],
@@ -1014,46 +1014,76 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Revenue is calculated based on REAL ad impressions only. '
-              'If you see ₹0.00 revenue, it means no ads have been shown on your videos yet. '
-              'Ad impressions are counted when banner or carousel ads are actually displayed to users. '
-              'For banner ads: ₹10 per 1000 impressions. '
-              'For carousel ads: ₹30 per 1000 impressions.',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[700],
-              ),
-            ),
             const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue[200]!),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, color: Colors.blue[700], size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'No fake data: Revenue shown is based on actual ad impressions from the backend.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.blue[700],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+
+            // How they earn
+            _buildInfoRow(
+              Icons.monetization_on,
+              'How to Earn',
+              'Post original gaming or educational content. Every ad impression pays you money.',
+            ),
+
+            const SizedBox(height: 8),
+
+            // Payment schedule
+            _buildInfoRow(
+              Icons.calendar_today,
+              'Payment Schedule',
+              'Money is sent to your bank account every 1st of the month.',
+            ),
+
+            const SizedBox(height: 8),
+
+            // No criteria
+            _buildInfoRow(
+              Icons.check_circle,
+              'No Monetization Criteria',
+              'No minimum requirements. Every ad impression counts and pays you.',
+            ),
+
+            const SizedBox(height: 8),
+
+            // Payment setup
+            _buildInfoRow(
+              Icons.account_balance,
+              'Setup Payment Details',
+              'Go to Profile → clicks → Earnings → Payment Setup to add your bank account details for payments.',
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String title, String description) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: Colors.green, size: 20),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                description,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey[700],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

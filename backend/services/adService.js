@@ -437,9 +437,9 @@ class AdService {
       updatedAt: adCreative.updatedAt,
     };
     
-    // Add title and description only for non-banner ads
+    // Add title for all ad types, description only for non-banner ads
+    response.title = campaign?.name || 'Untitled Ad';
     if (adCreative.adType !== 'banner') {
-      response.title = campaign?.name || 'Untitled Ad';
       response.description = campaign?.objective || '';
     }
     
