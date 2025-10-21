@@ -218,7 +218,8 @@ router.post('/campaigns/:id/creatives/carousel', adUpload.array('creatives', 10)
         url: callToActionUrl
       },
       reviewStatus: 'approved', // Auto-approve carousel ads
-      isActive: false // Will be activated after payment
+      isActive: true, // **FIX: Activate carousel ads immediately**
+      activatedAt: new Date() // **FIX: Set activation timestamp**
     });
 
     await creative.save();

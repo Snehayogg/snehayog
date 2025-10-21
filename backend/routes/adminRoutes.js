@@ -4,6 +4,77 @@ import AdCampaign from '../models/AdCampaign.js';
 
 const router = express.Router();
 
+// **NEW: Remove test carousel ads**
+router.delete('/cleanup-test-carousel-ads', async (req, res) => {
+  try {
+    console.log('🗑️ Starting to delete test carousel ads...');
+    
+    // Find test carousel ads
+    const testCarouselAds = await AdCreative.find({
+      adType: 'carousel',
+      $or: [
+        { 'callToAction.label': 'Learn More' },
+        { 'callToAction.url': 'https://example.com' },
+        { advertiserName: { $regex: /test|dummy|placeholder/i } },
+        { title: { $regex: /test|dummy|placeholder/i } },
+        { description: { $regex: /test|dummy|placeholder/i } }
+      ]
+    });
+
+    console.log(`🔍 Found ${testCarouselAds.length} test carousel ads to delete`);
+
+    let deletedCount = 0;
+    let deletedCampaigns = 0;
+
+    if (testCarouselAds.length > 0) {
+      // Show what we're about to delete
+      console.log('📋 Test carousel ads to be deleted:');
+      testCarouselAds.forEach((ad, index) => {
+        console.log(`   ${index + 1}. ${ad.title || 'No title'} - ${ad.slides?.length || 0} slides`);
+      });
+
+      // Delete the ads
+      const result = await AdCreative.deleteMany({
+        _id: { $in: testCarouselAds.map(ad => ad._id) }
+      });
+
+      deletedCount = result.deletedCount;
+      console.log(`✅ Deleted ${deletedCount} test carousel ads`);
+
+      // Also delete associated campaigns if they exist
+      const campaignIds = testCarouselAds
+        .map(ad => ad.campaignId)
+        .filter(id => id !== null);
+
+      if (campaignIds.length > 0) {
+        const campaignResult = await AdCampaign.deleteMany({
+          _id: { $in: campaignIds }
+        });
+        deletedCampaigns = campaignResult.deletedCount;
+        console.log(`✅ Deleted ${deletedCampaigns} associated campaigns`);
+      }
+    }
+
+    console.log('🎉 Test carousel ads cleanup completed!');
+    
+    res.json({
+      success: true,
+      message: 'Test carousel ads cleanup completed',
+      deletedAds: deletedCount,
+      deletedCampaigns: deletedCampaigns,
+      totalDeleted: deletedCount
+    });
+    
+  } catch (error) {
+    console.error('❌ Error deleting test carousel ads:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete test carousel ads',
+      message: error.message
+    });
+  }
+});
+
 // Delete all dummy/placeholder ads
 router.delete('/cleanup-dummy-ads', async (req, res) => {
   try {
