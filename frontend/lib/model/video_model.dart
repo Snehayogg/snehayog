@@ -454,17 +454,19 @@ class Comment {
 
   factory Comment.fromJson(Map<String, dynamic> json) {
     try {
+      print('🔍 Comment.fromJson: Parsing comment data: $json');
+
       return Comment(
         id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
-        userId: json['user']?['_id']?.toString() ??
+        userId: json['userId']?.toString() ??
+            json['user']?['_id']?.toString() ??
             json['user']?['googleId']?.toString() ??
-            json['userId']?.toString() ??
             '',
-        userName: json['user']?['name']?.toString() ??
-            json['userName']?.toString() ??
-            '',
-        userProfilePic: json['user']?['profilePic']?.toString() ??
-            json['userProfilePic']?.toString() ??
+        userName: json['userName']?.toString() ??
+            json['user']?['name']?.toString() ??
+            'User',
+        userProfilePic: json['userProfilePic']?.toString() ??
+            json['user']?['profilePic']?.toString() ??
             '',
         text: json['text']?.toString() ?? '',
         createdAt: json['createdAt'] != null

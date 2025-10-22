@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 class AppConfig {
   // **MANUAL: Development mode control**
   static const bool _isDevelopment =
-      false; // Set to true for local development, false for production
+      true; // Set to true for local development, false for production
 
   // **NEW: Smart URL selection with fallback**
   static String? _cachedBaseUrl;
@@ -24,7 +24,7 @@ class AppConfig {
     // Default to local server first, but will be updated by checkAndUpdateServerUrl()
     print(
         '🔍 AppConfig: Default to local server, will check connectivity on first API call');
-    return 'http://192.168.0.200:5001';
+    return 'http://192.168.0.199:5001';
   }
 
   // **NEW: Get base URL with local server first, Railway fallback**
@@ -36,7 +36,7 @@ class AppConfig {
 
     // Try local server first, then Railway fallback
     final urlsToTry = [
-      'http://192.168.0.200:5001', // Your local network IP (for phone testing)
+      'http://192.168.0.199:5001', // Your laptop IP (for phone testing)
       'http://localhost:5001', // Localhost (for emulator)
       'http://127.0.0.1:5001', // Localhost alternative
       'http://10.0.2.2:5001', // Android emulator
@@ -76,7 +76,7 @@ class AppConfig {
 
     // Priority order: Local server first, then Railway fallback
     final urlsToTry = [
-      'http://192.168.0.200:5001', // Your local network IP (for phone testing)
+      'http://192.168.0.199:5001', // Your laptop IP (for phone testing)
       'http://localhost:5001', // Localhost (for emulator)
       'http://127.0.0.1:5001', // Localhost alternative
       'http://10.0.2.2:5001', // Android emulator
@@ -117,7 +117,7 @@ class AppConfig {
 
   // **NEW: Fallback URLs for development**
   static const List<String> fallbackUrls = [
-    'http://192.168.0.200:5001', // Your local network IP (for phone testing)
+    'http://192.168.0.199:5001', // Your laptop IP (for phone testing)
     'http://localhost:5001', // Localhost (for emulator)
     'http://127.0.0.1:5001', // Localhost alternative
     'http://10.0.2.2:5001', // Android emulator

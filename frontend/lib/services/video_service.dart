@@ -311,6 +311,111 @@ class VideoService {
     }
   }
 
+  /// **Get comments for a video**
+  Future<List<Comment>> getComments(
+    String videoId, {
+    int page = 1,
+    int limit = 20,
+  }) async {
+    try {
+      final headers = await _getAuthHeaders();
+      final res = await http
+          .get(
+            Uri.parse(
+                '$baseUrl/api/videos/$videoId/comments?page=$page&limit=$limit'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 200) {
+        final List<dynamic> commentsJson = json.decode(res.body);
+        return commentsJson.map((json) => Comment.fromJson(json)).toList();
+      } else if (res.statusCode == 404) {
+        return [];
+      } else {
+        final error = json.decode(res.body);
+        throw Exception(error['error'] ?? 'Failed to fetch comments');
+      }
+    } catch (e) {
+      if (e is TimeoutException) {
+        throw Exception('Request timed out. Please try again.');
+      }
+      rethrow;
+    }
+  }
+
+  /// **Delete a comment**
+  Future<List<Comment>> deleteComment(String videoId, String commentId) async {
+    try {
+      final headers = await _getAuthHeaders();
+
+      // Get current user ID for the request
+      final userData = await _authService.getUserData();
+      if (userData == null || userData['googleId'] == null) {
+        throw Exception('User not authenticated');
+      }
+
+      final res = await http
+          .delete(
+            Uri.parse('$baseUrl/api/videos/$videoId/comments/$commentId'),
+            headers: headers,
+            body: json.encode({'userId': userData['googleId']}),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 200) {
+        // Return updated comments list
+        final List<dynamic> commentsJson = json.decode(res.body);
+        return commentsJson.map((json) => Comment.fromJson(json)).toList();
+      } else if (res.statusCode == 401) {
+        throw Exception('Please sign in to delete comments');
+      } else if (res.statusCode == 403) {
+        throw Exception('You can only delete your own comments');
+      } else if (res.statusCode == 404) {
+        throw Exception('Comment not found');
+      } else {
+        final error = json.decode(res.body);
+        throw Exception(error['error'] ?? 'Failed to delete comment');
+      }
+    } catch (e) {
+      if (e is TimeoutException) {
+        throw Exception('Request timed out. Please try again.');
+      }
+      rethrow;
+    }
+  }
+
+  /// **Like/unlike a comment**
+  Future<Comment> likeComment(String videoId, String commentId) async {
+    try {
+      final headers = await _getAuthHeaders();
+      final res = await http
+          .post(
+            Uri.parse('$baseUrl/api/videos/$videoId/comments/$commentId/like'),
+            headers: headers,
+            body: json.encode({}),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 200) {
+        final commentJson = json.decode(res.body);
+        return Comment.fromJson(commentJson);
+      } else if (res.statusCode == 401) {
+        throw Exception('Please sign in to like comments');
+      } else if (res.statusCode == 404) {
+        throw Exception('Comment not found');
+      } else {
+        final error = json.decode(res.body);
+        throw Exception(error['error'] ?? 'Failed to like comment');
+      }
+    } catch (e) {
+      if (e is TimeoutException) {
+        throw Exception('Request timed out. Please try again.');
+      }
+      rethrow;
+    }
+  }
+
   /// **Get user videos**
   Future<List<VideoModel>> getUserVideos(String userId) async {
     try {

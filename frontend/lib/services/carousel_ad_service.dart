@@ -259,4 +259,79 @@ class CarouselAdService {
       return false;
     }
   }
+
+  /// Like carousel ad
+  Future<bool> likeAd(String adId, String userId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/ads/carousel/$adId/like'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({'userId': userId}),
+      );
+
+      return response.statusCode == 200;
+    } catch (e) {
+      print('❌ Exception liking ad: $e');
+      return false;
+    }
+  }
+
+  /// Unlike carousel ad
+  Future<bool> unlikeAd(String adId, String userId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/ads/carousel/$adId/unlike'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({'userId': userId}),
+      );
+
+      return response.statusCode == 200;
+    } catch (e) {
+      print('❌ Exception unliking ad: $e');
+      return false;
+    }
+  }
+
+  /// Share carousel ad
+  Future<bool> shareAd(String adId, String userId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/ads/carousel/$adId/share'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({'userId': userId}),
+      );
+
+      return response.statusCode == 200;
+    } catch (e) {
+      print('❌ Exception sharing ad: $e');
+      return false;
+    }
+  }
+
+  /// Comment on carousel ad
+  Future<bool> commentOnAd(String adId, String userId, String comment) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/ads/carousel/$adId/comment'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'userId': userId,
+          'comment': comment,
+        }),
+      );
+
+      return response.statusCode == 200;
+    } catch (e) {
+      print('❌ Exception commenting on ad: $e');
+      return false;
+    }
+  }
 }

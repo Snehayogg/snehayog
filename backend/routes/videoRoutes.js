@@ -3,6 +3,7 @@ import multer from 'multer';
 import mongoose from 'mongoose';
 import Video from '../models/Video.js';
 import User from '../models/User.js';
+import Comment from '../models/Comment.js';
 import fs from 'fs'; 
 import path from 'path';
 import { verifyToken } from '../utils/verifytoken.js';
@@ -1033,31 +1034,228 @@ router.get('/:id', async (req, res) => {
 
 router.post('/:id/comments', async (req, res) => {
   try {
+    console.log('💬 Comment POST request received:', {
+      videoId: req.params.id,
+      body: req.body,
+      timestamp: new Date().toISOString()
+    });
+
     const { userId, text } = req.body;
+
+    if (!userId || !text) {
+      console.log('❌ Missing required fields:', { userId: !!userId, text: !!text });
+      return res.status(400).json({ error: 'Missing required fields: userId and text' });
+    }
 
     const user = await User.findOne({ googleId: userId });
     if (!user) {
+      console.log('❌ User not found with googleId:', userId);
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const comment = {
+    console.log('✅ User found:', { userId: user._id, googleId: user.googleId });
+
+    // **FIX: Create a separate Comment document first**
+    const newComment = new Comment({
       user: user._id,
       text,
       createdAt: new Date(),
-    };
+    });
 
-    // ✅ Safely push comment without modifying the whole document
+    console.log('💬 Creating comment:', { user: user._id, text });
+
+    // Save the comment document
+    const savedComment = await newComment.save();
+    console.log('✅ Comment saved:', { commentId: savedComment._id });
+
+    // **FIX: Push the Comment's ObjectId to the Video's comments array**
     const video = await Video.findByIdAndUpdate(
       req.params.id,
-      { $push: { comments: comment } },
+      { $push: { comments: savedComment._id } },
       { new: true }
-    ).populate('comments.user', 'name profilePic googleId');
+    ).populate({
+      path: 'comments',
+      populate: {
+        path: 'user',
+        select: 'name profilePic googleId'
+      }
+    });
+
+    console.log('✅ Video updated with comment:', { videoId: video._id, commentsCount: video.comments.length });
+    console.log('🔍 Video comments after population:', video.comments.map(c => ({
+      _id: c._id,
+      text: c.text,
+      user: c.user,
+      hasUser: !!c.user,
+      userType: typeof c.user
+    })));
 
     if (!video) {
       return res.status(404).json({ error: 'Video not found' });
     }
 
     // Transform comments to match Flutter app expectations
+    const videoObj = video.toObject();
+    console.log('🔍 Comment transformation - Raw comments:', videoObj.comments.map(c => ({
+      _id: c._id,
+      text: c.text,
+      user: c.user,
+      userType: typeof c.user,
+      userName: c.user?.name,
+      userGoogleId: c.user?.googleId
+    })));
+    
+    const transformedVideo = {
+      ...videoObj,
+      comments: videoObj.comments.map(comment => ({
+        _id: comment._id,
+        text: comment.text,
+        userId: comment.user?.googleId || comment.user?._id || '',
+        userName: comment.user?.name || 'User',
+        createdAt: comment.createdAt,
+        likes: comment.likes || 0,
+        likedBy: comment.likedBy || []
+      }))
+    };
+    
+    console.log('🔍 Comment transformation - Transformed comments:', transformedVideo.comments);
+
+    // **FIX: Return comments array directly to match frontend expectations**
+    console.log('📤 Sending response:', { commentsCount: transformedVideo.comments.length });
+    res.json(transformedVideo.comments);
+  } catch (err) {
+    console.error('Error adding comment:', err);
+    res.status(500).json({ error: 'Failed to add comment', details: err.message });
+  }
+});
+
+// **NEW: Get comments for a video**
+router.get('/:videoId/comments', async (req, res) => {
+  try {
+    console.log('💬 Comment GET request received:', {
+      videoId: req.params.videoId,
+      timestamp: new Date().toISOString()
+    });
+
+    const video = await Video.findById(req.params.videoId)
+      .populate({
+        path: 'comments',
+        populate: {
+          path: 'user',
+          select: 'name profilePic googleId'
+        }
+      });
+
+    if (!video) {
+      console.log('❌ Video not found:', req.params.videoId);
+      return res.status(404).json({ error: 'Video not found' });
+    }
+
+    console.log('✅ Video found with comments:', { 
+      videoId: video._id, 
+      commentsCount: video.comments.length 
+    });
+
+    // Transform comments to match Flutter app expectations
+    const transformedComments = video.comments.map(comment => ({
+      _id: comment._id,
+      text: comment.text,
+      userId: comment.user?.googleId || comment.user?._id || '',
+      userName: comment.user?.name || 'User',
+      userProfilePic: comment.user?.profilePic || '',
+      createdAt: comment.createdAt,
+      likes: comment.likes || 0,
+      likedBy: comment.likedBy || []
+    }));
+
+    console.log('📤 Sending comments response:', { 
+      commentsCount: transformedComments.length,
+      comments: transformedComments.map(c => ({
+        _id: c._id,
+        text: c.text,
+        userName: c.userName,
+        userId: c.userId
+      }))
+    });
+
+    res.json(transformedComments);
+  } catch (err) {
+    console.error('❌ Error fetching comments:', err);
+    res.status(500).json({ error: 'Failed to fetch comments', details: err.message });
+  }
+});
+
+// **NEW: Delete comment route**
+router.delete('/:videoId/comments/:commentId', async (req, res) => {
+  try {
+    console.log('🗑️ Comment DELETE request received:', {
+      videoId: req.params.videoId,
+      commentId: req.params.commentId,
+      timestamp: new Date().toISOString()
+    });
+
+    const { userId } = req.body;
+
+    if (!userId) {
+      console.log('❌ Missing userId in request body');
+      return res.status(400).json({ error: 'Missing required field: userId' });
+    }
+
+    // Find the user
+    const user = await User.findOne({ googleId: userId });
+    if (!user) {
+      console.log('❌ User not found with googleId:', userId);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    console.log('✅ User found:', { userId: user._id, googleId: user.googleId });
+
+    // Find the comment and verify ownership
+    const comment = await Comment.findById(req.params.commentId);
+    if (!comment) {
+      console.log('❌ Comment not found:', req.params.commentId);
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+
+    // Check if the user owns this comment
+    if (comment.user.toString() !== user._id.toString()) {
+      console.log('❌ User does not own this comment:', {
+        commentOwner: comment.user.toString(),
+        requestingUser: user._id.toString()
+      });
+      return res.status(403).json({ error: 'You can only delete your own comments' });
+    }
+
+    console.log('✅ Comment ownership verified, proceeding with deletion');
+
+    // Remove comment from video's comments array
+    const video = await Video.findByIdAndUpdate(
+      req.params.videoId,
+      { $pull: { comments: req.params.commentId } },
+      { new: true }
+    ).populate({
+      path: 'comments',
+      populate: {
+        path: 'user',
+        select: 'name profilePic googleId'
+      }
+    });
+
+    if (!video) {
+      console.log('❌ Video not found:', req.params.videoId);
+      return res.status(404).json({ error: 'Video not found' });
+    }
+
+    // Delete the comment document
+    await Comment.findByIdAndDelete(req.params.commentId);
+
+    console.log('✅ Comment deleted successfully:', {
+      commentId: req.params.commentId,
+      videoId: req.params.videoId,
+      remainingComments: video.comments.length
+    });
+
+    // Transform comments to match frontend expectations
     const videoObj = video.toObject();
     const transformedVideo = {
       ...videoObj,
@@ -1072,13 +1270,13 @@ router.post('/:id/comments', async (req, res) => {
       }))
     };
 
-    res.json({
-      message: 'Comment added successfully',
-      video: transformedVideo
-    });
+    // Return updated comments array
+    console.log('📤 Sending updated comments:', { commentsCount: transformedVideo.comments.length });
+    res.json(transformedVideo.comments);
+
   } catch (err) {
-    console.error('Error adding comment:', err);
-    res.status(500).json({ error: 'Failed to add comment', details: err.message });
+    console.error('❌ Error deleting comment:', err);
+    res.status(500).json({ error: 'Failed to delete comment', details: err.message });
   }
 });
 

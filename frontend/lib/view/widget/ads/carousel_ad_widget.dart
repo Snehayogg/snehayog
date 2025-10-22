@@ -2,7 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:snehayog/model/carousel_ad_model.dart';
 import 'package:snehayog/services/carousel_ad_service.dart';
+import 'package:snehayog/services/authservices.dart';
+import 'package:snehayog/services/video_service.dart';
+import 'package:snehayog/view/widget/comments_sheet_widget.dart';
+import 'package:snehayog/services/comments/ad_comments_data_source.dart';
+import 'package:snehayog/services/ad_comment_service.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:snehayog/view/widget/custom_share_widget.dart';
 
 /// **Professional Carousel Ad Widget**
 class CarouselAdWidget extends StatefulWidget {
@@ -29,8 +35,13 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
   int _currentSlideIndex = 0;
   bool _hasTrackedImpression = false;
   bool _hasTrackedClick = false;
+  bool _isLiked = false;
+  bool _initiallyLiked = false;
+  String? _currentUserId;
 
   final CarouselAdService _carouselAdService = CarouselAdService();
+  final AuthService _authService = AuthService();
+  final VideoService _videoService = VideoService();
 
   @override
   void initState() {
@@ -41,8 +52,25 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
       vsync: this,
     );
 
+    _loadUserData();
     _trackImpression();
     _startProgressAnimation();
+  }
+
+  Future<void> _loadUserData() async {
+    try {
+      final userData = await _authService.getUserData();
+      if (userData != null) {
+        setState(() {
+          _currentUserId = userData['id'] ?? userData['googleId'];
+          _isLiked = _currentUserId != null &&
+              widget.carouselAd.likedBy.contains(_currentUserId);
+          _initiallyLiked = _isLiked;
+        });
+      }
+    } catch (e) {
+      print('❌ Error loading user data: $e');
+    }
   }
 
   @override
@@ -363,20 +391,38 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
   /// **BUILD SPONSORED TEXT: Top-right corner sponsored label**
   Widget _buildSponsoredText() {
     return Positioned(
-      top: 60,
       right: 16,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.6),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: const Text(
-          'Sponsored',
-          style: TextStyle(
-            color: Colors.white70,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
+      top: 0,
+      child: SafeArea(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.8),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white70, width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.4),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.campaign, size: 14, color: Colors.white70),
+              SizedBox(width: 6),
+              Text(
+                'Sponsored',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -403,8 +449,9 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
         children: [
           // Heart icon
           _buildActionButton(
-            icon: Icons.favorite_border,
+            icon: _isLiked ? Icons.favorite : Icons.favorite_border,
             onTap: _onHeartTap,
+            count: _displayLikes(),
           ),
           const SizedBox(height: 20),
 
@@ -412,6 +459,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
           _buildActionButton(
             icon: Icons.chat_bubble_outline,
             onTap: _onCommentTap,
+            count: widget.carouselAd.comments,
           ),
           const SizedBox(height: 20),
 
@@ -419,6 +467,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
           _buildActionButton(
             icon: Icons.send,
             onTap: _onShareTap,
+            count: widget.carouselAd.shares,
           ),
           const SizedBox(height: 20), // Spacing before back button
         ],
@@ -542,37 +591,156 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
   Widget _buildActionButton({
     required IconData icon,
     required VoidCallback onTap,
+    int? count,
   }) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.6),
-          shape: BoxShape.circle,
-        ),
-        child: Icon(
-          icon,
-          color: Colors.white,
-          size: 24,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.6),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              color: Colors.white,
+              size: 24,
+            ),
+          ),
+          if (count != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              _formatCount(count),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _formatCount(int count) {
+    if (count < 1000) {
+      return count.toString();
+    } else if (count < 1000000) {
+      return '${(count / 1000).toStringAsFixed(1)}K';
+    } else {
+      return '${(count / 1000000).toStringAsFixed(1)}M';
+    }
+  }
+
+  /// **ACTION HANDLERS: Handle user interactions**
+  Future<void> _onHeartTap() async {
+    if (_currentUserId == null) {
+      // Silently ignore or you can navigate to login if required
+      return;
+    }
+
+    // Store original state for rollback
+    final wasLiked = _isLiked;
+    final originalLikes = widget.carouselAd.likes;
+    final originalLikedBy = List<String>.from(widget.carouselAd.likedBy);
+
+    try {
+      // Optimistic UI update
+      setState(() {
+        _isLiked = !_isLiked;
+      });
+
+      // Make API call
+      if (_isLiked) {
+        await _carouselAdService.likeAd(widget.carouselAd.id, _currentUserId!);
+      } else {
+        await _carouselAdService.unlikeAd(
+            widget.carouselAd.id, _currentUserId!);
+      }
+
+      print('✅ Successfully toggled like for ad ${widget.carouselAd.id}');
+    } catch (e) {
+      print('❌ Error handling like: $e');
+
+      // Revert optimistic update on error
+      setState(() {
+        _isLiked = wasLiked;
+      });
+
+      // Avoid showing snackbar per requirement
+    }
+  }
+
+  int _displayLikes() {
+    // Derive display likes without mutating model
+    final base = widget.carouselAd.likes;
+    if (_initiallyLiked) {
+      // If initially liked and now unliked, subtract one
+      return _isLiked ? base : (base - 1).clamp(0, 1 << 31);
+    } else {
+      // If initially not liked and now liked, add one
+      return _isLiked ? base + 1 : base;
+    }
+  }
+
+  void _onCommentTap() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => CommentsSheetWidget(
+        dataSource: AdCommentsDataSource(
+          adId: widget.carouselAd.id,
+          adCommentService: AdCommentService(),
         ),
       ),
     );
   }
 
-  /// **ACTION HANDLERS: Handle user interactions**
-  void _onHeartTap() {
-    // Handle heart/like action
-    print('❤️ Heart tapped');
-  }
-
-  void _onCommentTap() {
-    // Handle comment action
-    print('💬 Comment tapped');
-  }
-
   void _onShareTap() {
-    // Handle share action
-    print('📤 Share tapped');
+    // Create a mock VideoModel for the ad to use existing CustomShareWidget
+    final mockVideo = _createMockVideoFromAd();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => CustomShareWidget(video: mockVideo),
+    );
+  }
+
+  /// Create a mock VideoModel from the carousel ad for compatibility
+  dynamic _createMockVideoFromAd() {
+    // Return a simple object with the required fields for the widgets
+    return {
+      'id': widget.carouselAd.id,
+      'videoName': _getAdTitle(),
+      'description': _getAdDescription(),
+      'uploader': {
+        'id': widget.carouselAd.campaignId,
+        'name': widget.carouselAd.advertiserName,
+        'profilePic': widget.carouselAd.advertiserProfilePic,
+      },
+      'likes': widget.carouselAd.likes,
+      'comments': [], // Empty for now
+      'shares': widget.carouselAd.shares,
+      'likedBy': widget.carouselAd.likedBy,
+      'link': widget.carouselAd.callToActionUrl,
+    };
+  }
+
+  void _showSnackBar(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red : Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 }

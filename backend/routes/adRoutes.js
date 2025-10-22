@@ -8,6 +8,8 @@ import fs from 'fs';
 import User from '../models/User.js';
 import { verifyToken } from '../utils/verifytoken.js';
 import adService from '../services/adService.js';
+import adTargetingRoutes from './adTargetingRoutes.js';
+import adCommentRoutes from './adCommentRoutes.js';
 
 const router = express.Router();
 
@@ -868,7 +870,17 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
       .sort({ createdAt: -1 });
 
     const campaignIds = campaigns.map(c => c._id);
-    const creatives = await AdCreative.find({ campaignId: { $in: campaignIds } })
+    // **FIXED: Filter out failed ads - only return successful ads**
+    const creatives = await AdCreative.find({ 
+      campaignId: { $in: campaignIds },
+      reviewStatus: { $ne: 'rejected' }, // Exclude rejected ads
+      cloudinaryUrl: { $exists: true, $ne: null }, // Must have media URL
+      $or: [
+        { adType: 'banner', title: { $exists: true, $ne: null } }, // Banner ads must have title
+        { adType: 'carousel', slides: { $exists: true, $not: { $size: 0 } } }, // Carousel must have slides
+        { adType: 'video feed ad' } // Video feed ads just need cloudinaryUrl
+      ]
+    })
       .sort({ createdAt: -1 });
 
     console.log(`🔍 Found ${campaigns.length} campaigns and ${creatives.length} creatives for user ${user._id}`);
@@ -1174,5 +1186,11 @@ router.post('/:adId/click', async (req, res) => {
     res.status(500).json({ error: 'Failed to track click' });
   }
 });
+
+// **TARGETING ROUTES**
+router.use('/targeting', adTargetingRoutes);
+
+// **AD COMMENTS ROUTES**
+router.use('/comments', adCommentRoutes);
 
 export default router;

@@ -78,7 +78,7 @@ class BannerAdWidget extends StatelessWidget {
         child: InkWell(
           borderRadius:
               BorderRadius.circular(12), // Match container rounded corners
-          onTap: () => _handleAdClick(context),
+          onTap: () => _handleAdClickWithDialog(context),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(12), // Rounded corners
             child: Row(
@@ -86,7 +86,7 @@ class BannerAdWidget extends StatelessWidget {
                 // 40% space for banner image
                 Expanded(
                   flex: 2,
-                  child: Container(
+                  child: SizedBox(
                     height: 60,
                     child: imageUrl.isNotEmpty
                         ? Image.network(
@@ -164,7 +164,7 @@ class BannerAdWidget extends StatelessWidget {
                         Row(
                           children: [
                             GestureDetector(
-                              onTap: () => _showLinkDialog(context),
+                              onTap: () => _handleAdClick(context),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 8,
@@ -220,77 +220,11 @@ class BannerAdWidget extends StatelessWidget {
     );
   }
 
-  /// Show link dialog when Learn More is clicked
-  void _showLinkDialog(BuildContext context) {
-    final String link = (adData['link'] ??
-            adData['url'] ??
-            adData['ctaUrl'] ??
-            adData['callToActionUrl'] ??
-            adData['targetUrl'] ??
-            '')
-        .toString();
-
-    if (link.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No link available for this ad'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Open Link'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('This will open an external link:'),
-              const SizedBox(height: 8),
-              Text(
-                link,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _handleAdClick(context);
-              },
-              child: const Text('Open Link'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  /// Handle ad click
-  void _handleAdClick(BuildContext context) async {
+  /// Handle ad click with confirmation dialog (for image/text clicks)
+  void _handleAdClickWithDialog(BuildContext context) async {
     try {
       final adId = adData['_id'] ?? adData['id'];
 
-      // Debug logging for click handling
-      print('🖱️ BannerAdWidget: Handling ad click');
-      print('   Ad ID: $adId');
-      print('   Available keys: ${adData.keys.toList()}');
-      print('   Raw link field: ${adData['link']}');
-      print('   Raw callToAction field: ${adData['callToAction']}');
 
       // Resolve link from multiple keys and ensure absolute URL
       String link = (adData['link'] ??
@@ -392,6 +326,100 @@ class BannerAdWidget extends StatelessWidget {
                 ),
               );
             }
+          }
+        }
+      } else {
+        print('🔍 No link provided for banner ad');
+
+        // Show info to user
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('This ad has no link to open'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('❌ Error handling banner ad click: $e');
+
+      // Show error to user
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error opening link'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Handle ad click directly (for Learn More button)
+  void _handleAdClick(BuildContext context) async {
+    try {
+      final adId = adData['_id'] ?? adData['id'];
+
+      // Debug logging for click handling
+      print('🖱️ BannerAdWidget: Handling ad click');
+      print('   Ad ID: $adId');
+      print('   Available keys: ${adData.keys.toList()}');
+      print('   Raw link field: ${adData['link']}');
+      print('   Raw callToAction field: ${adData['callToAction']}');
+
+      // Resolve link from multiple keys and ensure absolute URL
+      String link = (adData['link'] ??
+              adData['url'] ??
+              adData['ctaUrl'] ??
+              adData['callToActionUrl'] ??
+              adData['targetUrl'] ??
+              '')
+          .toString();
+
+      // Fallback: nested callToAction map from backend
+      if (link.trim().isEmpty && adData['callToAction'] is Map) {
+        final nested = adData['callToAction'] as Map;
+        final candidate = (nested['url'] ?? nested['link'])?.toString();
+        if (candidate != null && candidate.trim().isNotEmpty) {
+          link = candidate.trim();
+          print('   Found link in callToAction: $link');
+        }
+      }
+
+      link = _ensureAbsoluteUrl(link);
+      print('   Final normalized link: $link');
+
+      // Directly open link if available (no confirmation dialog)
+      if (link.isNotEmpty) {
+        // Track click
+        if (adId != null) {
+          final activeAdsService = ActiveAdsService();
+          await activeAdsService.trackClick(adId);
+          print('✅ Banner ad click tracked: $adId');
+        }
+
+        // Execute callback
+        onAdClick?.call();
+
+        // Open link directly
+        final uri = Uri.parse(link);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+          print('✅ Opened banner ad link: $link');
+        } else {
+          print('❌ Cannot launch URL: $link');
+
+          // Show error to user
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Unable to open link'),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 2),
+              ),
+            );
           }
         }
       } else {

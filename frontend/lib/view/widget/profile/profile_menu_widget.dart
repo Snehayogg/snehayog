@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:snehayog/core/managers/profile_state_manager.dart';
 import 'package:snehayog/core/services/auto_scroll_settings.dart';
 import 'package:snehayog/view/screens/creator_payout_dashboard.dart';
+import 'package:snehayog/view/screens/creator_payment_setup_screen.dart';
 
 class ProfileMenuWidget extends StatelessWidget {
   final ProfileStateManager stateManager;
@@ -139,6 +140,23 @@ class ProfileMenuWidget extends StatelessWidget {
                           MaterialPageRoute(
                             builder: (context) =>
                                 const CreatorPayoutDashboard(),
+                          ),
+                        );
+                      },
+                    });
+
+                    // Payment Setup
+                    menuItems.add({
+                      'title': 'Payment Setup',
+                      'icon': Icons.payment,
+                      'color': Colors.green,
+                      'onTap': () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                const CreatorPaymentSetupScreen(),
                           ),
                         );
                       },

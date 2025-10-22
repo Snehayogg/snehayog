@@ -18,6 +18,10 @@ class CreatorPaymentSetupScreen extends StatefulWidget {
 class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
+  bool _isEditMode = false;
+  bool _hasExistingProfile = false;
+  bool _isInitializing = true;
+  bool _isRefreshing = false;
   String _selectedCountry = 'IN';
   String _selectedCurrency = 'INR';
   String _selectedPaymentMethod = 'upi';
@@ -76,18 +80,69 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
   @override
   void initState() {
     super.initState();
-    _loadCachedPaymentProfile();
-    _loadExistingProfile();
+    _initializeData();
+  }
+
+  /// Initialize data with instant cache loading and background refresh
+  Future<void> _initializeData() async {
+    setState(() => _isInitializing = true);
+
+    try {
+      // First, load cached data instantly for immediate display
+      await _loadCachedPaymentProfile();
+
+      // Set initializing to false so UI can render with cached data
+      setState(() => _isInitializing = false);
+
+      // Then fetch fresh data in the background
+      await _loadExistingProfile();
+    } catch (e) {
+      print('❌ Error initializing data: $e');
+      setState(() => _isInitializing = false);
+    }
+  }
+
+  /// Refresh data from server
+  Future<void> _refreshData() async {
+    setState(() => _isRefreshing = true);
+
+    try {
+      await _loadExistingProfile();
+    } catch (e) {
+      print('❌ Error refreshing data: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to refresh data: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() => _isRefreshing = false);
+    }
   }
 
   /// **FIX: Load cached payment profile with user-specific cache key**
   Future<void> _loadCachedPaymentProfile() async {
     try {
-      final userData = await _authService.getUserData();
+      // Try to get user data with retry logic
+      Map<String, dynamic>? userData;
+      int attempts = 0;
+      const maxAttempts = 3;
+
+      while (attempts < maxAttempts && userData == null) {
+        userData = await _authService.getUserData();
+        if (userData == null) {
+          attempts++;
+          print('⏳ Waiting for user data... attempt $attempts');
+          await Future.delayed(const Duration(milliseconds: 200));
+        }
+      }
+
       final userId = userData?['googleId'] ?? userData?['id'];
 
       if (userId == null) {
-        print('⚠️ No user ID available for cache lookup');
+        print(
+            '⚠️ No user ID available for cache lookup after $maxAttempts attempts');
         return;
       }
 
@@ -146,8 +201,12 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
       final userData = await _authService.getUserData();
       final token = userData?['token'];
 
-      if (token == null) return;
+      if (token == null) {
+        print('⚠️ No token available for profile loading');
+        return;
+      }
 
+      print('🔄 Fetching fresh profile data from server...');
       final response = await http.get(
         Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/profile'),
         headers: {
@@ -158,7 +217,10 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        print('✅ Fresh profile data received from server');
+
         setState(() {
+          _hasExistingProfile = true;
           _selectedCountry = data['creator']['country'] ?? 'IN';
           _selectedCurrency = data['creator']['currency'] ?? 'INR';
           _selectedPaymentMethod =
@@ -195,7 +257,6 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
         // **FIX: Cache for instant prefill next time with user-specific key**
         try {
           final prefs = await SharedPreferences.getInstance();
-          final userData = await _authService.getUserData();
           final userId = userData?['googleId'] ?? userData?['id'];
 
           if (userId != null) {
@@ -219,9 +280,40 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
         } catch (e) {
           print('❌ Error caching payment profile: $e');
         }
+
+        // Show success message if this was a refresh
+        if (_isRefreshing) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Profile data refreshed successfully'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } else {
+        print('⚠️ Server returned status: ${response.statusCode}');
+        if (_isRefreshing) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('⚠️ Failed to refresh: ${response.statusCode}'),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
       }
     } catch (e) {
-      print('Error loading profile: $e');
+      print('❌ Error loading profile: $e');
+      if (_isRefreshing) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error refreshing data: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
     }
   }
 
@@ -411,6 +503,20 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
     }
   }
 
+  void _toggleEditMode() {
+    setState(() {
+      _isEditMode = !_isEditMode;
+    });
+  }
+
+  void _cancelEdit() {
+    setState(() {
+      _isEditMode = false;
+    });
+    // Reload existing profile to reset form
+    _loadExistingProfile();
+  }
+
   void _showSuccessDialog() {
     final currencySymbol = _currencySymbols[_selectedCurrency] ?? '₹';
     final thresholdAmount = _selectedCurrency == 'INR'
@@ -466,277 +572,685 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
       backgroundColor:
           Colors.grey[100], // Changed from AppTheme.backgroundColor
       appBar: AppBar(
-        title: const Text('💰 Payment Profile Setup'),
+        title: Text(_hasExistingProfile && !_isEditMode
+            ? '💰 Payment Profile Review'
+            : '💰 Payment Profile Setup'),
         backgroundColor: Colors.grey[700], // Changed from Colors.blue
         foregroundColor: Colors.white, // Changed from AppTheme.white
+        actions: [
+          if (_hasExistingProfile && !_isEditMode)
+            IconButton(
+              icon: const Icon(Icons.edit),
+              onPressed: _toggleEditMode,
+              tooltip: 'Edit Payment Details',
+            ),
+          IconButton(
+            icon: _isRefreshing
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.refresh),
+            onPressed: _isRefreshing ? null : _refreshData,
+            tooltip: 'Refresh Data',
+          ),
+        ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
+      body: _isInitializing
+          ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Loading your payment profile...'),
+                ],
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _refreshData,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                child: _hasExistingProfile && !_isEditMode
+                    ? _buildReviewMode()
+                    : Form(
+                        key: _formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Header Info
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[
+                                    200], // Changed from Colors.blue.withOpacity(0.1)
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                    color: Colors.grey[
+                                        400]!), // Changed from Colors.blue.withOpacity(0.3)
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(Icons.info_outline,
+                                          color: Colors.grey[
+                                              700]), // Changed from Colors.blue
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Setup Once, Get Paid Monthly!',
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.grey[
+                                              700], // Changed from Colors.blue
+                                        ),
+                                      ),
+                                      if (_isRefreshing) ...[
+                                        const SizedBox(width: 8),
+                                        const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    _isRefreshing
+                                        ? 'Refreshing your payment details...'
+                                        : 'Enter your payment details once, and we\'ll automatically transfer 80% of your ad revenue every month on the 1st.',
+                                    style: TextStyle(
+                                        color: Colors.grey[
+                                            700]), // Changed from Colors.blue
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            const SizedBox(height: 24),
+
+                            // Country Selection
+                            Text(
+                              '🌍 Select Your Country',
+                              style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey[
+                                      800]), // Changed from AppTheme.subheadingStyle
+                            ),
+                            const SizedBox(height: 8),
+                            DropdownButtonFormField<String>(
+                              initialValue: _selectedCountry,
+                              decoration: const InputDecoration(
+                                labelText: 'Country',
+                                border: OutlineInputBorder(),
+                              ),
+                              items: _countryNames.entries.map((entry) {
+                                return DropdownMenuItem(
+                                  value: entry.key,
+                                  child: Text(entry.value),
+                                );
+                              }).toList(),
+                              onChanged: (value) {
+                                setState(() {
+                                  _selectedCountry = value!;
+                                  // Reset payment method to first available for selected country
+                                  _selectedPaymentMethod =
+                                      _countryPaymentMethods[value]?.first ??
+                                          'paypal';
+                                });
+                              },
+                              validator: (value) => value == null
+                                  ? 'Please select a country'
+                                  : null,
+                            ),
+
+                            const SizedBox(height: 16),
+
+                            // Currency Selection
+                            Text(
+                              '💱 Select Your Preferred Currency',
+                              style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey[
+                                      800]), // Changed from AppTheme.subheadingStyle
+                            ),
+                            const SizedBox(height: 8),
+                            DropdownButtonFormField<String>(
+                              initialValue: _selectedCurrency,
+                              decoration: const InputDecoration(
+                                labelText: 'Currency',
+                                border: OutlineInputBorder(),
+                              ),
+                              items: _currencySymbols.entries.map((entry) {
+                                return DropdownMenuItem(
+                                  value: entry.key,
+                                  child: Text('${entry.value} $entry.key'),
+                                );
+                              }).toList(),
+                              onChanged: (value) {
+                                setState(() {
+                                  _selectedCurrency = value!;
+                                });
+                              },
+                              validator: (value) => value == null
+                                  ? 'Please select a currency'
+                                  : null,
+                            ),
+
+                            const SizedBox(height: 16),
+
+                            // Payment Method Selection
+                            Text(
+                              '💳 Select Payment Method',
+                              style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey[
+                                      800]), // Changed from AppTheme.subheadingStyle
+                            ),
+                            const SizedBox(height: 8),
+                            DropdownButtonFormField<String>(
+                              initialValue: _selectedPaymentMethod,
+                              decoration: const InputDecoration(
+                                labelText: 'Payment Method',
+                                border: OutlineInputBorder(),
+                              ),
+                              items:
+                                  (_countryPaymentMethods[_selectedCountry] ??
+                                          _countryPaymentMethods['default']!)
+                                      .map((method) {
+                                return DropdownMenuItem(
+                                  value: method,
+                                  child: Text(
+                                      _getPaymentMethodDisplayName(method)),
+                                );
+                              }).toList(),
+                              onChanged: (value) {
+                                setState(() {
+                                  _selectedPaymentMethod = value!;
+                                });
+                              },
+                              validator: (value) => value == null
+                                  ? 'Please select a payment method'
+                                  : null,
+                            ),
+
+                            const SizedBox(height: 24),
+
+                            // Payment Details Form
+                            Text(
+                              '📝 Enter Payment Details',
+                              style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey[
+                                      800]), // Changed from AppTheme.subheadingStyle
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Dynamic form fields based on payment method
+                            _buildPaymentMethodFields(),
+
+                            const SizedBox(height: 24),
+
+                            // Tax Information
+                            Text(
+                              '📋 Tax Information (Optional)',
+                              style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey[
+                                      800]), // Changed from AppTheme.subheadingStyle
+                            ),
+                            const SizedBox(height: 16),
+
+                            if (_selectedCountry == 'IN') ...[
+                              TextFormField(
+                                controller: _panNumberController,
+                                decoration: const InputDecoration(
+                                  labelText: 'PAN Number',
+                                  border: OutlineInputBorder(),
+                                  hintText: 'ABCDE1234F',
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              TextFormField(
+                                controller: _gstNumberController,
+                                decoration: const InputDecoration(
+                                  labelText: 'GST Number (Optional)',
+                                  border: OutlineInputBorder(),
+                                  hintText: '22AAAAA0000A1Z5',
+                                ),
+                              ),
+                            ],
+
+                            const SizedBox(height: 32),
+
+                            // Action Buttons
+                            if (_hasExistingProfile && _isEditMode) ...[
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton(
+                                      onPressed: _cancelEdit,
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 14),
+                                      ),
+                                      child: const Text('Cancel'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      onPressed: _isLoading
+                                          ? null
+                                          : _savePaymentProfile,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 14),
+                                      ),
+                                      child: _isLoading
+                                          ? const CircularProgressIndicator(
+                                              color: Colors.white)
+                                          : const Text('Update Profile'),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ] else ...[
+                              // Save Button for new profiles
+                              SizedBox(
+                                width: double.infinity,
+                                height: 50,
+                                child: ElevatedButton(
+                                  onPressed:
+                                      _isLoading ? null : _savePaymentProfile,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors
+                                        .grey[700], // Changed from Colors.blue
+                                    foregroundColor: Colors
+                                        .white, // Changed from AppTheme.white
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: _isLoading
+                                      ? const CircularProgressIndicator(
+                                          color: Colors.white)
+                                      : const Text(
+                                          '💾 Save Payment Profile',
+                                          style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold),
+                                        ),
+                                ),
+                              ),
+                            ],
+
+                            const SizedBox(height: 24),
+
+                            // Info Box
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.green[50],
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.green[200]!),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(Icons.check_circle,
+                                          color: Colors.green[600]),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Automatic Monthly Payouts',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.green[800],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Once saved, your payment details will be used automatically every month. You\'ll receive 80% of your ad revenue on the 1st of every month.',
+                                    style: TextStyle(
+                                        color: Colors.green[700], fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+              ),
+            ),
+    );
+  }
+
+  Widget _buildReviewMode() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header Info
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.green[50],
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.green[200]!),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header Info
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors
-                      .grey[200], // Changed from Colors.blue.withOpacity(0.1)
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: Colors.grey[
-                          400]!), // Changed from Colors.blue.withOpacity(0.3)
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.info_outline,
-                            color:
-                                Colors.grey[700]), // Changed from Colors.blue
-                        const SizedBox(width: 8),
-                        Text(
-                          'Setup Once, Get Paid Monthly!',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey[700], // Changed from Colors.blue
-                          ),
-                        ),
-                      ],
+              Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green[600]),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Payment Profile Complete',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green[800],
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Enter your payment details once, and we\'ll automatically transfer 80% of your ad revenue every month on the 1st.',
-                      style: TextStyle(
-                          color: Colors.grey[700]), // Changed from Colors.blue
+                  ),
+                  if (_isRefreshing) ...[
+                    const SizedBox(width: 8),
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.green,
+                      ),
                     ),
                   ],
-                ),
+                ],
               ),
-
-              const SizedBox(height: 24),
-
-              // Country Selection
+              const SizedBox(height: 12),
               Text(
-                '🌍 Select Your Country',
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors
-                        .grey[800]), // Changed from AppTheme.subheadingStyle
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                initialValue: _selectedCountry,
-                decoration: const InputDecoration(
-                  labelText: 'Country',
-                  border: OutlineInputBorder(),
-                ),
-                items: _countryNames.entries.map((entry) {
-                  return DropdownMenuItem(
-                    value: entry.key,
-                    child: Text(entry.value),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedCountry = value!;
-                    // Reset payment method to first available for selected country
-                    _selectedPaymentMethod =
-                        _countryPaymentMethods[value]?.first ?? 'paypal';
-                  });
-                },
-                validator: (value) =>
-                    value == null ? 'Please select a country' : null,
-              ),
-
-              const SizedBox(height: 16),
-
-              // Currency Selection
-              Text(
-                '💱 Select Your Preferred Currency',
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors
-                        .grey[800]), // Changed from AppTheme.subheadingStyle
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                initialValue: _selectedCurrency,
-                decoration: const InputDecoration(
-                  labelText: 'Currency',
-                  border: OutlineInputBorder(),
-                ),
-                items: _currencySymbols.entries.map((entry) {
-                  return DropdownMenuItem(
-                    value: entry.key,
-                    child: Text('${entry.value} $entry.key'),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedCurrency = value!;
-                  });
-                },
-                validator: (value) =>
-                    value == null ? 'Please select a currency' : null,
-              ),
-
-              const SizedBox(height: 16),
-
-              // Payment Method Selection
-              Text(
-                '💳 Select Payment Method',
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors
-                        .grey[800]), // Changed from AppTheme.subheadingStyle
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                initialValue: _selectedPaymentMethod,
-                decoration: const InputDecoration(
-                  labelText: 'Payment Method',
-                  border: OutlineInputBorder(),
-                ),
-                items: (_countryPaymentMethods[_selectedCountry] ??
-                        _countryPaymentMethods['default']!)
-                    .map((method) {
-                  return DropdownMenuItem(
-                    value: method,
-                    child: Text(_getPaymentMethodDisplayName(method)),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedPaymentMethod = value!;
-                  });
-                },
-                validator: (value) =>
-                    value == null ? 'Please select a payment method' : null,
-              ),
-
-              const SizedBox(height: 24),
-
-              // Payment Details Form
-              Text(
-                '📝 Enter Payment Details',
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors
-                        .grey[800]), // Changed from AppTheme.subheadingStyle
-              ),
-              const SizedBox(height: 16),
-
-              // Dynamic form fields based on payment method
-              _buildPaymentMethodFields(),
-
-              const SizedBox(height: 24),
-
-              // Tax Information
-              Text(
-                '📋 Tax Information (Optional)',
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors
-                        .grey[800]), // Changed from AppTheme.subheadingStyle
-              ),
-              const SizedBox(height: 16),
-
-              if (_selectedCountry == 'IN') ...[
-                TextFormField(
-                  controller: _panNumberController,
-                  decoration: const InputDecoration(
-                    labelText: 'PAN Number',
-                    border: OutlineInputBorder(),
-                    hintText: 'ABCDE1234F',
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _gstNumberController,
-                  decoration: const InputDecoration(
-                    labelText: 'GST Number (Optional)',
-                    border: OutlineInputBorder(),
-                    hintText: '22AAAAA0000A1Z5',
-                  ),
-                ),
-              ],
-
-              const SizedBox(height: 32),
-
-              // Save Button
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _savePaymentProfile,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        Colors.grey[700], // Changed from Colors.blue
-                    foregroundColor:
-                        Colors.white, // Changed from AppTheme.white
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text(
-                          '💾 Save Payment Profile',
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Info Box
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.green[50],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.green[200]!),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.check_circle, color: Colors.green[600]),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Automatic Monthly Payouts',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green[800],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Once saved, your payment details will be used automatically every month. You\'ll receive 80% of your ad revenue on the 1st of every month.',
-                      style: TextStyle(color: Colors.green[700], fontSize: 12),
-                    ),
-                  ],
-                ),
+                _isRefreshing
+                    ? 'Refreshing your payment details...'
+                    : 'Your payment details are set up and ready for automatic monthly payouts.',
+                style: TextStyle(color: Colors.green[700]),
               ),
             ],
           ),
         ),
+
+        const SizedBox(height: 24),
+
+        // Country & Currency Review
+        _buildReviewSection(
+          title: 'Country & Currency',
+          children: [
+            _buildReviewItem(
+                'Country', _countryNames[_selectedCountry] ?? _selectedCountry),
+            _buildReviewItem('Currency',
+                '${_currencySymbols[_selectedCurrency]} $_selectedCurrency'),
+          ],
+        ),
+
+        const SizedBox(height: 16),
+
+        // Payment Method Review
+        _buildReviewSection(
+          title: 'Payment Method',
+          children: [
+            _buildReviewItem(
+                'Method', _getPaymentMethodDisplayName(_selectedPaymentMethod)),
+            ..._buildPaymentMethodReview(),
+          ],
+        ),
+
+        const SizedBox(height: 16),
+
+        // Tax Information Review
+        if (_panNumberController.text.isNotEmpty ||
+            _gstNumberController.text.isNotEmpty)
+          _buildReviewSection(
+            title: 'Tax Information',
+            children: [
+              if (_panNumberController.text.isNotEmpty)
+                _buildReviewItem('PAN Number', _panNumberController.text),
+              if (_gstNumberController.text.isNotEmpty)
+                _buildReviewItem('GST Number', _gstNumberController.text),
+            ],
+          ),
+
+        const SizedBox(height: 32),
+
+        // Action Buttons
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _toggleEditMode,
+                icon: const Icon(Icons.edit),
+                label: const Text('Edit Details'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.check),
+                label: const Text('Done'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 24),
+
+        // Info Box
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.blue[50],
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.blue[200]!),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.blue[600]),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Automatic Monthly Payouts',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue[800],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Your payment details will be used automatically every month. You\'ll receive 80% of your ad revenue on the 1st of every month.',
+                style: TextStyle(color: Colors.blue[700], fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildReviewSection(
+      {required String title, required List<Widget> children}) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...children,
+        ],
       ),
     );
+  }
+
+  Widget _buildReviewItem(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              '$label:',
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 14,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: Colors.black87,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildPaymentMethodReview() {
+    List<Widget> items = [];
+
+    switch (_selectedPaymentMethod) {
+      case 'upi':
+        if (_upiIdController.text.isNotEmpty) {
+          items.add(_buildReviewItem('UPI ID', _upiIdController.text));
+        }
+        break;
+      case 'bank_transfer':
+        if (_accountNumberController.text.isNotEmpty) {
+          items.add(_buildReviewItem(
+              'Account Number', _accountNumberController.text));
+        }
+        if (_ifscCodeController.text.isNotEmpty) {
+          items.add(_buildReviewItem('IFSC Code', _ifscCodeController.text));
+        }
+        if (_bankNameController.text.isNotEmpty) {
+          items.add(_buildReviewItem('Bank Name', _bankNameController.text));
+        }
+        if (_accountHolderNameController.text.isNotEmpty) {
+          items.add(_buildReviewItem(
+              'Account Holder', _accountHolderNameController.text));
+        }
+        break;
+      case 'card_payment':
+        if (_cardNumberController.text.isNotEmpty) {
+          items.add(_buildReviewItem(
+              'Card Number', _maskCardNumber(_cardNumberController.text)));
+        }
+        if (_cardExpiryController.text.isNotEmpty) {
+          items
+              .add(_buildReviewItem('Expiry Date', _cardExpiryController.text));
+        }
+        if (_cardholderNameController.text.isNotEmpty) {
+          items.add(_buildReviewItem(
+              'Cardholder Name', _cardholderNameController.text));
+        }
+        break;
+      case 'paypal':
+        if (_paypalEmailController.text.isNotEmpty) {
+          items.add(
+              _buildReviewItem('PayPal Email', _paypalEmailController.text));
+        }
+        break;
+      case 'stripe':
+        if (_stripeAccountIdController.text.isNotEmpty) {
+          items.add(_buildReviewItem(
+              'Stripe Account ID', _stripeAccountIdController.text));
+        }
+        break;
+      case 'wise':
+        if (_wiseEmailController.text.isNotEmpty) {
+          items.add(_buildReviewItem('Wise Email', _wiseEmailController.text));
+        }
+        break;
+      case 'bank_wire':
+        if (_accountNumberController.text.isNotEmpty) {
+          items.add(_buildReviewItem(
+              'Account Number', _accountNumberController.text));
+        }
+        if (_swiftCodeController.text.isNotEmpty) {
+          items.add(_buildReviewItem('SWIFT Code', _swiftCodeController.text));
+        }
+        if (_routingNumberController.text.isNotEmpty) {
+          items.add(_buildReviewItem(
+              'Routing Number', _routingNumberController.text));
+        }
+        if (_bankNameController.text.isNotEmpty) {
+          items.add(_buildReviewItem('Bank Name', _bankNameController.text));
+        }
+        if (_accountHolderNameController.text.isNotEmpty) {
+          items.add(_buildReviewItem(
+              'Account Holder', _accountHolderNameController.text));
+        }
+        break;
+    }
+
+    return items;
+  }
+
+  String _maskCardNumber(String cardNumber) {
+    if (cardNumber.length < 8) return cardNumber;
+    return '${cardNumber.substring(0, 4)} **** **** ${cardNumber.substring(cardNumber.length - 4)}';
   }
 
   Widget _buildPaymentMethodFields() {

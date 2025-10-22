@@ -142,6 +142,7 @@ class AdService {
       campaignId: campaign._id,
       adType: adType === 'banner' ? 'banner' : adType === 'carousel' ? 'carousel' : 'video feed ad',
       type: mediaType,
+      title: title, // **FIX: Add title field for banner ads**
       callToAction: {
         label: callToActionLabel,
         url: callToActionUrl

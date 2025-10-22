@@ -4,6 +4,7 @@ import 'package:snehayog/model/video_model.dart';
 import 'package:snehayog/controller/google_sign_in_controller.dart';
 import 'package:snehayog/core/constants/app_constants.dart';
 import 'package:snehayog/services/video_service.dart';
+import 'package:snehayog/services/comments/video_comments_data_source.dart';
 import 'package:snehayog/view/widget/comments_sheet_widget.dart';
 import 'package:snehayog/view/widget/custom_share_widget.dart';
 
@@ -101,6 +102,10 @@ class VideoActionsWidget extends StatelessWidget {
       builder: (context) => CommentsSheetWidget(
         video: video,
         videoService: videoService,
+        dataSource: VideoCommentsDataSource(
+          videoId: video.id,
+          videoService: videoService,
+        ),
         onCommentsUpdated: (List<Comment> updatedComments) {
           // Update comments in the video model
           video.comments = updatedComments;

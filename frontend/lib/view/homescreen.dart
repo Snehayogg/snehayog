@@ -375,8 +375,8 @@ class _MainScreenState extends State<MainScreen>
             body: IndexedStack(
               index: mainController.currentIndex,
               children: [
-                const VideoScreen(
-                  key: PageStorageKey('videoScreen'),
+                VideoScreen(
+                  key: _videoScreenKey,
                 ),
                 const VayuScreen(key: PageStorageKey('vayuScreen')),
                 UploadScreen(

@@ -631,7 +631,7 @@ class ProfileDialogsWidget {
                   _buildHowToEarnPoint(
                     title: '1. Upload quality videos',
                     body:
-                        'Create engaging Yog or Sneha content. Use clear titles and relevant categories/tags for better reach.',
+                        'Create engaging Yog content. Use clear titles and relevant categories/tags for better reach.',
                   ),
                   _buildHowToEarnPoint(
                     title: '2. Earn from ad revenue',

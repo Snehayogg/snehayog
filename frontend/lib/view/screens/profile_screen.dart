@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:snehayog/utils/responsive_helper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:snehayog/view/screens/creator_payment_setup_screen.dart';
 import 'package:snehayog/view/screens/creator_revenue_screen.dart';
 import 'dart:convert';
 import 'package:snehayog/config/app_config.dart';
@@ -531,7 +530,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         if (_authRetryAttempts < 3) {
           _authRetryAttempts++;
           print(
-              '🔄 ProfileScreen: No auth data found, retrying in ${_authRetryAttempts} seconds (attempt $_authRetryAttempts/3)');
+              '🔄 ProfileScreen: No auth data found, retrying in $_authRetryAttempts seconds (attempt $_authRetryAttempts/3)');
 
           Future.delayed(Duration(seconds: _authRetryAttempts), () {
             if (mounted) _loadBasicProfileData();
@@ -1804,26 +1803,13 @@ class _ProfileScreenState extends State<ProfileScreen>
               }
             },
             onEarningsTap: () async {
-              // Check if user has completed payment setup
-              final hasPaymentSetup = await _checkPaymentSetupStatus();
-
-              if (hasPaymentSetup) {
-                // Navigate to revenue screen if payment setup is complete
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const CreatorRevenueScreen(),
-                  ),
-                );
-              } else {
-                // Navigate to payment setup screen if not complete
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const CreatorPaymentSetupScreen(),
-                  ),
-                );
-              }
+              // Navigate directly to revenue screen
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const CreatorRevenueScreen(),
+                ),
+              );
             },
           ),
 

@@ -11,6 +11,10 @@ class CarouselAdModel {
   final DateTime createdAt;
   final int impressions;
   final int clicks;
+  final int likes;
+  final int comments;
+  final int shares;
+  final List<String> likedBy;
 
   CarouselAdModel({
     required this.id,
@@ -24,6 +28,10 @@ class CarouselAdModel {
     required this.createdAt,
     this.impressions = 0,
     this.clicks = 0,
+    this.likes = 0,
+    this.comments = 0,
+    this.shares = 0,
+    this.likedBy = const [],
   });
 
   factory CarouselAdModel.fromJson(Map<String, dynamic> json) {
@@ -44,6 +52,13 @@ class CarouselAdModel {
           : DateTime.now(),
       impressions: json['impressions'] ?? 0,
       clicks: json['clicks'] ?? 0,
+      likes: json['likes'] ?? 0,
+      comments: json['comments'] ?? 0,
+      shares: json['shares'] ?? 0,
+      likedBy: (json['likedBy'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
     );
   }
 
@@ -60,6 +75,10 @@ class CarouselAdModel {
       'createdAt': createdAt.toIso8601String(),
       'impressions': impressions,
       'clicks': clicks,
+      'likes': likes,
+      'comments': comments,
+      'shares': shares,
+      'likedBy': likedBy,
     };
   }
 
@@ -75,6 +94,10 @@ class CarouselAdModel {
     DateTime? createdAt,
     int? impressions,
     int? clicks,
+    int? likes,
+    int? comments,
+    int? shares,
+    List<String>? likedBy,
   }) {
     return CarouselAdModel(
       id: id ?? this.id,
@@ -88,6 +111,10 @@ class CarouselAdModel {
       createdAt: createdAt ?? this.createdAt,
       impressions: impressions ?? this.impressions,
       clicks: clicks ?? this.clicks,
+      likes: likes ?? this.likes,
+      comments: comments ?? this.comments,
+      shares: shares ?? this.shares,
+      likedBy: likedBy ?? this.likedBy,
     );
   }
 }
