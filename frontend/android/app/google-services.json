@@ -30,6 +30,14 @@
           }
         },
         {
+          "client_id": "406195883653-t80s7avi7v093sdrr5oeqm6upk2268dc.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.snehayog.app",
+            "certificate_hash": "a7ac3e9a50c8a2f740b7d0ce35c07807869c01b2"
+          }
+        },
+        {
           "client_id": "406195883653-qp49f9nauq4t428ndscuu3nr9jb10g4h.apps.googleusercontent.com",
           "client_type": 3
         }

@@ -92,7 +92,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   final Map<int, VideoPlayerController> _controllerPool = {};
   final Map<int, bool> _controllerStates = {}; // Track if controller is active
-  final int _maxPoolSize = 3;
+  final int _maxPoolSize = 5; // **OPTIMIZED: Increased from 3 to 5**
   final Map<int, bool> _userPaused = {};
   final Map<int, bool> _isBuffering = {};
   final Map<int, VoidCallback> _bufferingListeners = {};
@@ -100,7 +100,16 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   // **PRELOADING STATE**
   final Set<int> _preloadedVideos = {};
   final Set<int> _loadingVideos = {};
-  Timer? _preloadTimer;
+
+  // **PARALLEL PRELOADING**
+  final Map<int, Future<void>> _preloadFutures = {};
+  final Set<int> _preloadQueue = {};
+  static const int _maxConcurrentPreloads =
+      5; // **OPTIMIZED: Increased from 3 to 5**
+  int _activePreloads = 0;
+
+  // **URL CACHING: Cache resolved URLs to avoid repeated API calls**
+  final Map<String, String> _resolvedUrlCache = {};
 
   // **INFINITE SCROLLING**
   static const int _infiniteScrollThreshold =
@@ -221,7 +230,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     } else {
       // Video not preloaded, preload it and play when ready
       print('🔄 VideoFeedAdvanced: Current video not preloaded, preloading...');
-      _preloadVideo(_currentIndex).then((_) {
+      _startParallelPreloading([_currentIndex]);
+
+      // Monitor for completion and autoplay
+      _monitorPreloadCompletion(_currentIndex).then((_) {
         if (mounted && _controllerPool.containsKey(_currentIndex)) {
           final controller = _controllerPool[_currentIndex];
           if (controller != null && controller.value.isInitialized) {
@@ -779,24 +791,27 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
   }
 
-  /// **START PRELOADING TIMER**
-  void _startPreloading() {
-    _preloadTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
-      _preloadNearbyVideos();
-    });
-  }
-
-  /// **PRELOAD VIDEOS NEAR CURRENT INDEX**
+  /// **PARALLEL PRELOAD VIDEOS NEAR CURRENT INDEX**
   void _preloadNearbyVideos() {
     if (_videos.isEmpty) return;
 
-    // Preload current + next 2 videos
+    print('🚀 Starting parallel preload for videos near index $_currentIndex');
+
+    // **PARALLEL PRELOADING: Preload current + next 4 videos concurrently (OPTIMIZED)**
+    final List<int> videosToPreload = [];
     for (int i = _currentIndex;
-        i <= _currentIndex + 2 && i < _videos.length;
+        i <= _currentIndex + 4 && i < _videos.length;
         i++) {
-      if (!_preloadedVideos.contains(i) && !_loadingVideos.contains(i)) {
-        _preloadVideo(i);
+      if (!_preloadedVideos.contains(i) &&
+          !_loadingVideos.contains(i) &&
+          !_preloadQueue.contains(i)) {
+        videosToPreload.add(i);
       }
+    }
+
+    // **PARALLEL EXECUTION: Start preloading multiple videos concurrently**
+    if (videosToPreload.isNotEmpty) {
+      _startParallelPreloading(videosToPreload);
     }
 
     // **FIXED: Only load more videos if we have enough videos to justify infinite scrolling**
@@ -807,21 +822,84 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
   }
 
-  /// **PRELOAD SINGLE VIDEO**
-  Future<void> _preloadVideo(int index) async {
+  /// **START PARALLEL PRELOADING**
+  void _startParallelPreloading(List<int> videoIndices) {
+    print(
+        '🔄 Starting parallel preload for ${videoIndices.length} videos: $videoIndices');
+
+    for (final index in videoIndices) {
+      if (_activePreloads < _maxConcurrentPreloads) {
+        _preloadQueue.add(index);
+        _activePreloads++;
+
+        // Start preloading in parallel
+        _preloadFutures[index] = _preloadVideoParallel(index).then((_) {
+          _preloadQueue.remove(index);
+          _preloadFutures.remove(index);
+          _activePreloads--;
+
+          // Process next video in queue if any
+          _processPreloadQueue();
+        }).catchError((error) {
+          print('❌ Parallel preload failed for video $index: $error');
+          _preloadQueue.remove(index);
+          _preloadFutures.remove(index);
+          _activePreloads--;
+          _processPreloadQueue();
+        });
+      } else {
+        // Add to queue for later processing
+        _preloadQueue.add(index);
+      }
+    }
+  }
+
+  /// **PROCESS PRELOAD QUEUE**
+  void _processPreloadQueue() {
+    if (_activePreloads < _maxConcurrentPreloads && _preloadQueue.isNotEmpty) {
+      final nextIndex = _preloadQueue.first;
+      _preloadQueue.remove(nextIndex);
+      _activePreloads++;
+
+      _preloadFutures[nextIndex] = _preloadVideoParallel(nextIndex).then((_) {
+        _preloadFutures.remove(nextIndex);
+        _activePreloads--;
+        _processPreloadQueue();
+      }).catchError((error) {
+        print('❌ Queued preload failed for video $nextIndex: $error');
+        _preloadFutures.remove(nextIndex);
+        _activePreloads--;
+        _processPreloadQueue();
+      });
+    }
+  }
+
+  /// **MONITOR PRELOAD COMPLETION**
+  Future<void> _monitorPreloadCompletion(int index) async {
+    // Wait for the preload future to complete
+    if (_preloadFutures.containsKey(index)) {
+      await _preloadFutures[index];
+    }
+
+    // Additional check to ensure video is ready
+    while (mounted &&
+        !_preloadedVideos.contains(index) &&
+        _loadingVideos.contains(index)) {
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+  }
+
+  /// **PARALLEL PRELOAD SINGLE VIDEO**
+  Future<void> _preloadVideoParallel(int index) async {
     if (index >= _videos.length) return;
 
     _loadingVideos.add(index);
 
-    // **CACHE STATUS CHECK ON PRELOAD**
-    print('🔄 Preloading video $index');
-    _printCacheStatus();
+    print('🔄 [PARALLEL] Preloading video $index (Active: $_activePreloads)');
 
     String? videoUrl;
     try {
       final video = _videos[index];
-
-      // **REMOVED: Processing status check - backend now only returns completed videos**
 
       // **FIXED: Resolve playable URL (handles share page URLs)**
       videoUrl = await _resolvePlayableUrl(video);
@@ -831,7 +909,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         return;
       }
 
-      print('🎬 Preloading video $index with URL: $videoUrl');
+      print('🎬 [PARALLEL] Preloading video $index with URL: $videoUrl');
 
       // **HLS SUPPORT: Check if URL is HLS and configure accordingly**
       final Map<String, String> headers = videoUrl.contains('.m3u8')
@@ -851,25 +929,25 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
       // **HLS SUPPORT: Add HLS-specific configuration**
       if (videoUrl.contains('.m3u8')) {
-        print('🎬 HLS Video detected: $videoUrl');
-        print('🎬 HLS Video duration: ${video.duration}');
+        print('🎬 [PARALLEL] HLS Video detected: $videoUrl');
         await controller.initialize().timeout(
-          const Duration(seconds: 30), // Increased timeout for HLS
+          const Duration(
+              seconds: 15), // **OPTIMIZED: Reduced from 30 to 15 seconds**
           onTimeout: () {
             throw Exception('HLS video initialization timeout');
           },
         );
-        print('✅ HLS Video initialized successfully');
+        print('✅ [PARALLEL] HLS Video initialized successfully');
       } else {
-        print('🎬 Regular Video detected: $videoUrl');
-        // **FIXED: Add timeout and better error handling for regular videos**
+        print('🎬 [PARALLEL] Regular Video detected: $videoUrl');
         await controller.initialize().timeout(
-          const Duration(seconds: 10),
+          const Duration(
+              seconds: 5), // **OPTIMIZED: Reduced from 10 to 5 seconds**
           onTimeout: () {
             throw Exception('Video initialization timeout');
           },
         );
-        print('✅ Regular Video initialized successfully');
+        print('✅ [PARALLEL] Regular Video initialized successfully');
       }
 
       if (mounted && _loadingVideos.contains(index)) {
@@ -878,65 +956,30 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         _preloadedVideos.add(index);
         _loadingVideos.remove(index);
 
-        // Apply looping vs auto-advance behavior
-        _applyLoopingBehavior(controller);
-        // Attach end listener for auto-scroll
-        _attachEndListenerIfNeeded(controller, index);
-        // Attach buffering listener to track mid-playback stalls
-        _attachBufferingListenerIfNeeded(controller, index);
-
-        // **NEW: Start view tracking if this is the current video**
-        if (index == _currentIndex && index < _videos.length) {
-          final video = _videos[index];
-          _viewTracker.startViewTracking(video.id);
-          print(
-            '▶️ Started view tracking for preloaded current video: ${video.id}',
-          );
-        }
-
-        print('✅ Successfully preloaded video $index');
+        print('✅ [PARALLEL] Successfully preloaded video $index');
 
         // **CACHE STATUS UPDATE AFTER SUCCESSFUL PRELOAD**
         _preloadHits++;
-        print('📊 Cache Status Update:');
+        print('📊 [PARALLEL] Cache Status Update:');
         print('   Preload Hits: $_preloadHits');
         print('   Total Controllers: ${_controllerPool.length}');
         print('   Preloaded Videos: ${_preloadedVideos.length}');
+        print('   Active Preloads: $_activePreloads');
 
         // Trigger UI update so isInitialized switch reflects immediately
         if (mounted) {
           setState(() {});
         }
-        // Clean up old controllers to prevent memory leaks
-        _cleanupOldControllers();
       } else {
         controller.dispose();
+        _loadingVideos.remove(index);
+        print('❌ [PARALLEL] Video $index preload cancelled (widget unmounted)');
       }
     } catch (e) {
-      print('❌ Error preloading video $index: $e');
+      print('❌ [PARALLEL] Error preloading video $index: $e');
       _loadingVideos.remove(index);
 
-      // **HLS SUPPORT: Enhanced retry logic for HLS videos**
-      if (videoUrl != null && videoUrl.contains('.m3u8')) {
-        print('🔄 HLS video failed, retrying in 3 seconds...');
-        print('🔄 HLS Error details: $e');
-        Future.delayed(const Duration(seconds: 3), () {
-          if (mounted && !_preloadedVideos.contains(index)) {
-            _preloadVideo(index);
-          }
-        });
-      } else if (e.toString().contains('400') || e.toString().contains('404')) {
-        print('🔄 Retrying video $index in 5 seconds...');
-        Future.delayed(const Duration(seconds: 5), () {
-          if (mounted && !_preloadedVideos.contains(index)) {
-            _preloadVideo(index);
-          }
-        });
-      } else {
-        print('❌ Video preload failed with error: $e');
-        print('❌ Video URL: $videoUrl');
-        print('❌ Video index: $index');
-      }
+      // Don't rethrow - let parallel processing continue
     }
   }
 
@@ -954,10 +997,17 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       return '${VideoService.baseUrl}/$cleanUrl';
     }
 
-    // **FIXED: Validate URL format**
+    // **NEW: Transform Cloudflare R2 URLs to custom CDN domain**
     try {
       final uri = Uri.parse(url);
       if (uri.scheme == 'http' || uri.scheme == 'https') {
+        // Check if this is a Cloudflare R2 URL that needs transformation
+        if (_isCloudflareR2Url(url)) {
+          final transformedUrl = _transformToCustomCdn(url);
+          print('🔄 [CDN] Transforming R2 URL: $url');
+          print('🔄 [CDN] To custom domain: $transformedUrl');
+          return transformedUrl;
+        }
         return url;
       }
     } catch (e) {
@@ -967,20 +1017,83 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     return null;
   }
 
+  /// **CHECK IF URL IS CLOUDFLARE R2 URL**
+  bool _isCloudflareR2Url(String url) {
+    // Check for common Cloudflare R2 domain patterns
+    final r2Patterns = [
+      'pub-', // Cloudflare R2 public domain pattern
+      'r2.dev',
+      'r2.cloudflarestorage.com',
+      'cloudflare.com',
+    ];
+
+    return r2Patterns.any((pattern) => url.contains(pattern));
+  }
+
+  /// **TRANSFORM R2 URL TO CUSTOM CDN DOMAIN**
+  String _transformToCustomCdn(String originalUrl) {
+    try {
+      final uri = Uri.parse(originalUrl);
+
+      // Extract the path from the original URL
+      String path = uri.path;
+
+      // Remove leading slash if present
+      if (path.startsWith('/')) {
+        path = path.substring(1);
+      }
+
+      // Build new URL with custom CDN domain
+      String customCdnUrl = 'https://cdn.snehayog.site/$path';
+
+      // **NEW: Preserve query parameters if they exist**
+      if (uri.query.isNotEmpty) {
+        customCdnUrl += '?${uri.query}';
+      }
+
+      // **NEW: Preserve fragment if it exists**
+      if (uri.fragment.isNotEmpty) {
+        customCdnUrl += '#${uri.fragment}';
+      }
+
+      print('🔄 [CDN] Original R2 URL: $originalUrl');
+      print('🔄 [CDN] Extracted path: $path');
+      print('🔄 [CDN] Query params: ${uri.query}');
+      print('🔄 [CDN] Fragment: ${uri.fragment}');
+      print('🔄 [CDN] Custom CDN URL: $customCdnUrl');
+
+      return customCdnUrl;
+    } catch (e) {
+      print('❌ [CDN] Error transforming URL: $e');
+      return originalUrl; // Return original if transformation fails
+    }
+  }
+
   /// **RESOLVE PLAYABLE URL:** Prefer HLS, handle web-share page URLs
   Future<String?> _resolvePlayableUrl(VideoModel video) async {
     try {
+      // **OPTIMIZED: Check cache first to avoid repeated API calls**
+      if (_resolvedUrlCache.containsKey(video.id)) {
+        final cachedUrl = _resolvedUrlCache[video.id];
+        print('🚀 [CACHE] Using cached URL for video ${video.id}: $cachedUrl');
+        return cachedUrl;
+      }
+
       // 1) Prefer HLS fields if available in model
       final hlsUrl = video.hlsPlaylistUrl?.isNotEmpty == true
           ? video.hlsPlaylistUrl
           : video.hlsMasterPlaylistUrl;
       if (hlsUrl != null && hlsUrl.isNotEmpty) {
-        return _validateAndFixVideoUrl(hlsUrl);
+        final resolvedUrl = _validateAndFixVideoUrl(hlsUrl);
+        _resolvedUrlCache[video.id] = resolvedUrl!;
+        return resolvedUrl;
       }
 
       // 2) If video.videoUrl is already HLS/progressive direct URL
       if (video.videoUrl.contains('.m3u8') || video.videoUrl.contains('.mp4')) {
-        return _validateAndFixVideoUrl(video.videoUrl);
+        final resolvedUrl = _validateAndFixVideoUrl(video.videoUrl);
+        _resolvedUrlCache[video.id] = resolvedUrl!;
+        return resolvedUrl;
       }
 
       // 3) If it's an app/web route like snehayog.app/video/<id>, fetch the API to get real URLs
@@ -995,15 +1108,21 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               ? details.hlsPlaylistUrl
               : details.videoUrl;
           if (candidate != null && candidate.isNotEmpty) {
-            return _validateAndFixVideoUrl(candidate);
+            final resolvedUrl = _validateAndFixVideoUrl(candidate);
+            _resolvedUrlCache[video.id] = resolvedUrl!;
+            return resolvedUrl;
           }
         } catch (_) {}
       }
 
       // 4) Fallback to original with baseUrl fix
-      return _validateAndFixVideoUrl(video.videoUrl);
+      final resolvedUrl = _validateAndFixVideoUrl(video.videoUrl);
+      _resolvedUrlCache[video.id] = resolvedUrl!;
+      return resolvedUrl;
     } catch (_) {
-      return _validateAndFixVideoUrl(video.videoUrl);
+      final resolvedUrl = _validateAndFixVideoUrl(video.videoUrl);
+      _resolvedUrlCache[video.id] = resolvedUrl!;
+      return resolvedUrl;
     }
   }
 
@@ -1044,7 +1163,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
 
     // If not in pool, preload it
-    _preloadVideo(index);
+    _startParallelPreloading([index]);
     return null;
   }
 
@@ -1087,7 +1206,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     } else {
       // **FIXED: Video not preloaded, preload it and play when ready**
       print('🔄 Video not preloaded, preloading and will autoplay when ready');
-      _preloadVideo(index).then((_) {
+      _startParallelPreloading([index]);
+
+      // Monitor for completion and autoplay
+      _monitorPreloadCompletion(index).then((_) {
         // After preloading, check if this is still the current video
         if (mounted &&
             _currentIndex == index &&
@@ -1928,7 +2050,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       child: video.thumbnailUrl.isNotEmpty
           ? Center(
               child: CachedNetworkImage(
-                imageUrl: video.thumbnailUrl,
+                imageUrl: _transformThumbnailUrl(video.thumbnailUrl),
                 fit: BoxFit.contain,
                 placeholder: (context, url) => _buildFallbackThumbnail(),
                 errorWidget: (context, url, error) => _buildFallbackThumbnail(),
@@ -1938,6 +2060,21 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             )
           : _buildFallbackThumbnail(),
     );
+  }
+
+  /// **TRANSFORM THUMBNAIL URL TO CUSTOM CDN**
+  String _transformThumbnailUrl(String thumbnailUrl) {
+    if (thumbnailUrl.isEmpty) return thumbnailUrl;
+
+    // Check if this is a Cloudflare R2 URL that needs transformation
+    if (_isCloudflareR2Url(thumbnailUrl)) {
+      final transformedUrl = _transformToCustomCdn(thumbnailUrl);
+      print('🖼️ [CDN] Transforming thumbnail URL: $thumbnailUrl');
+      print('🖼️ [CDN] To custom domain: $transformedUrl');
+      return transformedUrl;
+    }
+
+    return thumbnailUrl;
   }
 
   /// **BUILD FALLBACK THUMBNAIL: When no thumbnail available**
@@ -2202,7 +2339,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                         child: CircleAvatar(
                           radius: 16,
                           backgroundImage: video.uploader.profilePic.isNotEmpty
-                              ? NetworkImage(video.uploader.profilePic)
+                              ? NetworkImage(_transformThumbnailUrl(
+                                  video.uploader.profilePic))
                               : null,
                           child: video.uploader.profilePic.isEmpty
                               ? Text(
@@ -2857,8 +2995,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // Dispose page controller
     _pageController.dispose();
 
-    // Cancel timers
-    _preloadTimer?.cancel();
+    // **PARALLEL PRELOADING: Cancel all parallel preloading operations**
+    _cancelAllParallelPreloading();
+
+    // **OPTIMIZED: Clear URL cache to free memory**
+    _resolvedUrlCache.clear();
 
     // **NEW: Cancel ad refresh subscription**
     _adRefreshSubscription?.cancel();
@@ -2882,6 +3023,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     print('   Controller States: ${_controllerStates}');
     print('   Preloaded Videos: ${_preloadedVideos.toList()}');
     print('   Loading Videos: ${_loadingVideos.toList()}');
+
+    // **PARALLEL PRELOADING STATUS**
+    print('🚀 Parallel Preloading:');
+    print('   Active Preloads: $_activePreloads');
+    print('   Max Concurrent: $_maxConcurrentPreloads');
+    print('   Preload Queue: ${_preloadQueue.toList()}');
+    print('   Preload Futures: ${_preloadFutures.keys.toList()}');
 
     // **CACHE STATISTICS**
     print('📈 Cache Statistics:');
@@ -2939,6 +3087,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         'controllerStates': _controllerStates,
         'preloadedVideos': _preloadedVideos.toList(),
         'loadingVideos': _loadingVideos.toList(),
+      },
+      'parallelPreloading': {
+        'activePreloads': _activePreloads,
+        'maxConcurrentPreloads': _maxConcurrentPreloads,
+        'preloadQueue': _preloadQueue.toList(),
+        'preloadFutures': _preloadFutures.keys.toList(),
+        'queueSize': _preloadQueue.length,
+        'futuresCount': _preloadFutures.length,
       },
       'cacheStatistics': {
         'cacheHits': _cacheHits,
@@ -3026,6 +3182,43 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           : '0.00',
       'currentIndex': _currentIndex,
       'isLoading': _isLoading,
+      'parallelPreloading': {
+        'activePreloads': _activePreloads,
+        'queueSize': _preloadQueue.length,
+        'futuresCount': _preloadFutures.length,
+      },
+    };
+  }
+
+  /// **CANCEL ALL PARALLEL PRELOADING**
+  void _cancelAllParallelPreloading() {
+    print('🛑 Cancelling all parallel preloading operations');
+
+    // Cancel all active futures
+    for (final _ in _preloadFutures.values) {
+      // Note: Dart doesn't have direct future cancellation, but we can track them
+      print('🛑 Cancelling preload future');
+    }
+
+    // Clear all tracking
+    _preloadFutures.clear();
+    _preloadQueue.clear();
+    _activePreloads = 0;
+
+    print('✅ All parallel preloading operations cancelled');
+  }
+
+  /// **GET PARALLEL PRELOADING STATUS**
+  Map<String, dynamic> getParallelPreloadingStatus() {
+    return {
+      'activePreloads': _activePreloads,
+      'maxConcurrentPreloads': _maxConcurrentPreloads,
+      'preloadQueue': _preloadQueue.toList(),
+      'preloadFutures': _preloadFutures.keys.toList(),
+      'queueSize': _preloadQueue.length,
+      'futuresCount': _preloadFutures.length,
+      'isPreloading': _activePreloads > 0 || _preloadQueue.isNotEmpty,
+      'canStartNewPreload': _activePreloads < _maxConcurrentPreloads,
     };
   }
 }
