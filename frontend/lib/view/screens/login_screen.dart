@@ -380,10 +380,6 @@ class LoginScreen extends StatelessWidget {
                                           '❌ User denied location permission');
                                     }
 
-                                    // **DEBUG: If dialog didn't show, force show it**
-                                    // Uncomment the line below to force show location dialog
-                                    // await LocationOnboardingService.forceShowLocationOnboarding(context);
-
                                     Navigator.pushReplacementNamed(
                                         context, '/home');
                                   }
@@ -400,7 +396,7 @@ class LoginScreen extends StatelessWidget {
                                   ),
                                 ),
                                 label: const Text(
-                                  'Sign in with Google',
+                                  'Continue with Google',
                                   maxLines: 1,
                                   softWrap: false,
                                   overflow: TextOverflow.ellipsis,

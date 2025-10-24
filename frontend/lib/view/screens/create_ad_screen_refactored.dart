@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/view/widget/create_ad/ad_type_selector_widget.dart';
 import 'package:vayu/view/widget/create_ad/media_uploader_widget.dart';
 import 'package:vayu/view/widget/create_ad/ad_details_form_widget.dart';
@@ -98,6 +99,11 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
       _pauseBackgroundVideos();
     });
 
+    // **NEW: Restore form state if user had previously minimized the app**
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _restoreFormState();
+    });
+
     try {
       PaymentHandlerWidget.initialize();
     } catch (e) {
@@ -124,14 +130,17 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
 
     print('🔍 CreateAdScreen: App lifecycle changed to $state');
 
-    // **FIX: Pause videos when app goes to background from create ad screen**
+    // **FIX: Handle app lifecycle properly to maintain state**
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached) {
-      print('🛑 CreateAdScreen: App backgrounded - pausing videos');
+      print(
+          '🛑 CreateAdScreen: App backgrounded - pausing videos and saving state');
       _pauseBackgroundVideos();
+      _saveFormState();
     } else if (state == AppLifecycleState.resumed) {
-      print('▶️ CreateAdScreen: App resumed - videos should stay paused');
+      print('▶️ CreateAdScreen: App resumed - restoring state');
+      _restoreFormState();
       // Don't resume videos automatically - let user navigate back to video feed
     }
   }
@@ -146,6 +155,169 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
       print('✅ CreateAdScreen: Background videos paused successfully');
     } catch (e) {
       print('❌ CreateAdScreen: Error pausing background videos: $e');
+    }
+  }
+
+  /// **NEW: Save form state when app is minimized**
+  void _saveFormState() {
+    try {
+      print('💾 CreateAdScreen: Saving form state...');
+
+      // Save form data to SharedPreferences
+      _saveFormData();
+
+      print('✅ CreateAdScreen: Form state saved successfully');
+    } catch (e) {
+      print('❌ CreateAdScreen: Error saving form state: $e');
+    }
+  }
+
+  /// **NEW: Restore form state when app is resumed**
+  void _restoreFormState() {
+    try {
+      print('🔄 CreateAdScreen: Restoring form state...');
+
+      // Restore form data from SharedPreferences
+      _restoreFormData();
+
+      print('✅ CreateAdScreen: Form state restored successfully');
+    } catch (e) {
+      print('❌ CreateAdScreen: Error restoring form state: $e');
+    }
+  }
+
+  /// **NEW: Save form data to SharedPreferences**
+  void _saveFormData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // Save all form fields
+      await prefs.setString('create_ad_title', _titleController.text);
+      await prefs.setString(
+          'create_ad_description', _descriptionController.text);
+      await prefs.setString('create_ad_link', _linkController.text);
+      await prefs.setString('create_ad_budget', _budgetController.text);
+      await prefs.setString(
+          'create_ad_target_audience', _targetAudienceController.text);
+      await prefs.setString('create_ad_keywords', _keywordsController.text);
+      await prefs.setString('create_ad_type', _selectedAdType);
+
+      // Save dates
+      if (_startDate != null) {
+        await prefs.setString('create_ad_start_date',
+            _startDate!.millisecondsSinceEpoch.toString());
+      }
+      if (_endDate != null) {
+        await prefs.setString(
+            'create_ad_end_date', _endDate!.millisecondsSinceEpoch.toString());
+      }
+
+      // Save targeting data
+      await prefs.setString('create_ad_min_age', _minAge?.toString() ?? '');
+      await prefs.setString('create_ad_max_age', _maxAge?.toString() ?? '');
+      await prefs.setString('create_ad_gender', _selectedGender);
+      await prefs.setStringList('create_ad_locations', _selectedLocations);
+      await prefs.setStringList('create_ad_interests', _selectedInterests);
+      await prefs.setStringList('create_ad_platforms', _selectedPlatforms);
+
+      // Save additional targeting
+      await prefs.setString('create_ad_device_type', _deviceType);
+      await prefs.setString(
+          'create_ad_optimization_goal', _optimizationGoal ?? '');
+      await prefs.setString(
+          'create_ad_frequency_cap', _frequencyCap?.toString() ?? '');
+      await prefs.setString('create_ad_timezone', _timeZone ?? '');
+
+      // Save day parting
+      final dayPartingKeys = _dayParting.keys.toList();
+      final dayPartingValues =
+          _dayParting.values.map((v) => v.toString()).toList();
+      await prefs.setStringList('create_ad_day_parting_keys', dayPartingKeys);
+      await prefs.setStringList(
+          'create_ad_day_parting_values', dayPartingValues);
+
+      print('✅ CreateAdScreen: Form data saved to SharedPreferences');
+    } catch (e) {
+      print('❌ CreateAdScreen: Error saving form data: $e');
+    }
+  }
+
+  /// **NEW: Restore form data from SharedPreferences**
+  void _restoreFormData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // Restore all form fields
+      _titleController.text = prefs.getString('create_ad_title') ?? '';
+      _descriptionController.text =
+          prefs.getString('create_ad_description') ?? '';
+      _linkController.text = prefs.getString('create_ad_link') ?? '';
+      _budgetController.text = prefs.getString('create_ad_budget') ?? '100.00';
+      _targetAudienceController.text =
+          prefs.getString('create_ad_target_audience') ?? 'all';
+      _keywordsController.text = prefs.getString('create_ad_keywords') ?? '';
+      _selectedAdType = prefs.getString('create_ad_type') ?? 'banner';
+
+      // Restore dates
+      final startDateStr = prefs.getString('create_ad_start_date');
+      if (startDateStr != null && startDateStr.isNotEmpty) {
+        _startDate =
+            DateTime.fromMillisecondsSinceEpoch(int.parse(startDateStr));
+      }
+      final endDateStr = prefs.getString('create_ad_end_date');
+      if (endDateStr != null && endDateStr.isNotEmpty) {
+        _endDate = DateTime.fromMillisecondsSinceEpoch(int.parse(endDateStr));
+      }
+
+      // Restore targeting data
+      final minAgeStr = prefs.getString('create_ad_min_age');
+      _minAge = minAgeStr != null && minAgeStr.isNotEmpty
+          ? int.parse(minAgeStr)
+          : null;
+      final maxAgeStr = prefs.getString('create_ad_max_age');
+      _maxAge = maxAgeStr != null && maxAgeStr.isNotEmpty
+          ? int.parse(maxAgeStr)
+          : null;
+      _selectedGender = prefs.getString('create_ad_gender') ?? 'all';
+      _selectedLocations.clear();
+      _selectedLocations
+          .addAll(prefs.getStringList('create_ad_locations') ?? []);
+      _selectedInterests.clear();
+      _selectedInterests
+          .addAll(prefs.getStringList('create_ad_interests') ?? []);
+      _selectedPlatforms.clear();
+      _selectedPlatforms
+          .addAll(prefs.getStringList('create_ad_platforms') ?? []);
+
+      // Restore additional targeting
+      _deviceType = prefs.getString('create_ad_device_type') ?? 'all';
+      _optimizationGoal = prefs.getString('create_ad_optimization_goal');
+      final frequencyCapStr = prefs.getString('create_ad_frequency_cap');
+      _frequencyCap = frequencyCapStr != null && frequencyCapStr.isNotEmpty
+          ? int.parse(frequencyCapStr)
+          : 3;
+      _timeZone = prefs.getString('create_ad_timezone') ?? 'Asia/Kolkata';
+
+      // Restore day parting
+      _dayParting.clear();
+      final dayPartingKeys =
+          prefs.getStringList('create_ad_day_parting_keys') ?? [];
+      final dayPartingValues =
+          prefs.getStringList('create_ad_day_parting_values') ?? [];
+      for (int i = 0;
+          i < dayPartingKeys.length && i < dayPartingValues.length;
+          i++) {
+        _dayParting[dayPartingKeys[i]] = dayPartingValues[i] == 'true';
+      }
+
+      // Trigger UI update
+      if (mounted) {
+        setState(() {});
+      }
+
+      print('✅ CreateAdScreen: Form data restored from SharedPreferences');
+    } catch (e) {
+      print('❌ CreateAdScreen: Error restoring form data: $e');
     }
   }
 
@@ -1425,5 +1597,42 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
       _dateError = null;
       _mediaError = null;
     });
+
+    // **NEW: Clear saved form state**
+    _clearSavedFormState();
+  }
+
+  /// **NEW: Clear saved form state from SharedPreferences**
+  void _clearSavedFormState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // Clear all saved form data
+      await prefs.remove('create_ad_title');
+      await prefs.remove('create_ad_description');
+      await prefs.remove('create_ad_link');
+      await prefs.remove('create_ad_budget');
+      await prefs.remove('create_ad_target_audience');
+      await prefs.remove('create_ad_keywords');
+      await prefs.remove('create_ad_type');
+      await prefs.remove('create_ad_start_date');
+      await prefs.remove('create_ad_end_date');
+      await prefs.remove('create_ad_min_age');
+      await prefs.remove('create_ad_max_age');
+      await prefs.remove('create_ad_gender');
+      await prefs.remove('create_ad_locations');
+      await prefs.remove('create_ad_interests');
+      await prefs.remove('create_ad_platforms');
+      await prefs.remove('create_ad_device_type');
+      await prefs.remove('create_ad_optimization_goal');
+      await prefs.remove('create_ad_frequency_cap');
+      await prefs.remove('create_ad_timezone');
+      await prefs.remove('create_ad_day_parting_keys');
+      await prefs.remove('create_ad_day_parting_values');
+
+      print('✅ CreateAdScreen: Saved form state cleared');
+    } catch (e) {
+      print('❌ CreateAdScreen: Error clearing saved form state: $e');
+    }
   }
 }

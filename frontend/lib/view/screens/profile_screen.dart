@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:vayu/utils/responsive_helper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,7 +10,6 @@ import 'package:provider/provider.dart';
 import 'package:vayu/core/providers/user_provider.dart';
 import 'package:vayu/model/usermodel.dart';
 import 'package:vayu/core/services/profile_screen_logger.dart';
-import 'package:vayu/services/background_profile_preloader.dart';
 import 'dart:async';
 import 'package:share_plus/share_plus.dart';
 import 'package:http/http.dart' as http;
@@ -20,6 +18,8 @@ import 'package:vayu/view/widget/profile/profile_stats_widget.dart';
 import 'package:vayu/view/widget/profile/profile_videos_widget.dart';
 import 'package:vayu/view/widget/profile/profile_menu_widget.dart';
 import 'package:vayu/view/widget/profile/profile_dialogs_widget.dart';
+import 'package:vayu/controller/main_controller.dart';
+import 'package:vayu/model/video_model.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -42,22 +42,14 @@ class _ProfileScreenState extends State<ProfileScreen>
   final ImagePicker _imagePicker = ImagePicker();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  // Progressive loading states
-  bool _isProfileDataLoaded = false;
-  bool _isVideosLoaded = false;
-  bool _isFollowersLoaded = false;
+  // Simplified loading states
   bool _isLoading = true;
   String? _error;
-  int _authRetryAttempts = 0;
 
   // Referral tracking
   int _invitedCount = 0;
   int _verifiedInstalled = 0;
   int _verifiedSignedUp = 0;
-
-  // Progressive loading timers
-  Timer? _progressiveLoadTimer;
-  int _currentLoadStep = 0;
 
   @override
   void initState() {
@@ -72,8 +64,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (mounted) _stateManager.setContext(context);
     });
 
-    // **ENHANCED: Start loading with multiple fallback mechanisms**
-    _startEnhancedLoading();
+    // **SIMPLIFIED: Simple cache-first loading**
+    _loadData();
     // Load referral stats
     _loadReferralStats();
     _fetchVerifiedReferralStats();
@@ -84,94 +76,59 @@ class _ProfileScreenState extends State<ProfileScreen>
   void onProfileTabSelected() {
     print('🔄 ProfileScreen: Profile tab selected, ensuring data is loaded');
 
-    // **ENHANCED: Better tab selection handling with multiple checks**
-    if (!_isProfileDataLoaded || _stateManager.userData == null) {
-      print('📡 ProfileScreen: Data not loaded, forcing immediate load');
-      _forceImmediateLoad();
+    // **SIMPLIFIED: Just reload data if needed**
+    if (_stateManager.userData == null) {
+      print('📡 ProfileScreen: Data not loaded, loading now');
+      _loadData();
     } else {
-      print('✅ ProfileScreen: Data already loaded, checking if refresh needed');
-
-      // **ENHANCED: Check if data is stale and needs refresh**
-      _checkAndRefreshStaleData();
+      print('✅ ProfileScreen: Data already loaded');
     }
   }
 
-  /// **NEW: Check if data is stale and needs refresh**
-  Future<void> _checkAndRefreshStaleData() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cacheKey = _getProfileCacheKey();
-      final cacheTimestamp = prefs.getInt('profile_cache_timestamp_$cacheKey');
-
-      if (cacheTimestamp != null) {
-        final cacheAge = DateTime.now().millisecondsSinceEpoch - cacheTimestamp;
-        const staleThreshold = 10 * 60 * 1000; // 10 minutes
-
-        if (cacheAge > staleThreshold) {
-          print('🔄 ProfileScreen: Data is stale, refreshing in background');
-          // Trigger background refresh
-          final preloader = BackgroundProfilePreloader();
-          preloader.startBackgroundPreloading();
-        } else {
-          print('✅ ProfileScreen: Data is fresh, no refresh needed');
-        }
-      } else {
-        print(
-            '🔄 ProfileScreen: No cache timestamp, triggering background refresh');
-        final preloader = BackgroundProfilePreloader();
-        preloader.startBackgroundPreloading();
-      }
-    } catch (e) {
-      print('❌ ProfileScreen: Error checking stale data: $e');
-    }
-  }
-
-  /// **FORCE IMMEDIATE LOAD: Load data immediately without progressive loading**
-  Future<void> _forceImmediateLoad() async {
+  /// **SIMPLIFIED: Simple cache-first data loading**
+  Future<void> _loadData() async {
     try {
       setState(() {
         _isLoading = true;
         _error = null;
       });
 
-      // Try to load from background preloader first
-      final preloader = BackgroundProfilePreloader();
-      final preloadedData = await preloader.getPreloadedProfileData();
+      print('🔄 ProfileScreen: Starting simple cache-first loading');
 
-      if (preloadedData != null) {
-        print('⚡ ProfileScreen: Using preloaded data for immediate load');
-        _stateManager.setUserData(preloadedData);
-
+      // Step 1: Try cache first
+      final cachedData = await _loadCachedProfileData();
+      if (cachedData != null) {
+        print('⚡ ProfileScreen: Using cached data');
+        _stateManager.setUserData(cachedData);
+        await _loadVideosFromCache();
         setState(() {
-          _isProfileDataLoaded = true;
           _isLoading = false;
         });
-
-        // Load videos and followers in background
-        _loadVideosProgressive();
-        _loadFollowersProgressive();
         return;
       }
 
-      // If no preloaded data, force load from server
-      print('📡 ProfileScreen: Force loading from server');
+      // Step 2: Load from server if no cache
+      print('📡 ProfileScreen: No cache, loading from server');
       await _stateManager.loadUserData(widget.userId);
 
       if (_stateManager.userData != null) {
-        setState(() {
-          _isProfileDataLoaded = true;
-          _isLoading = false;
-        });
-
         // Cache the loaded data
         await _cacheProfileData(_stateManager.userData!);
 
-        // Load videos and followers
-        _loadVideosProgressive();
-        _loadFollowersProgressive();
+        // Load videos
+        await _loadVideos();
+
+        setState(() {
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _error = 'Failed to load profile data';
+          _isLoading = false;
+        });
       }
     } catch (e) {
-      print('❌ ProfileScreen: Error in force immediate load: $e');
+      print('❌ ProfileScreen: Error loading data: $e');
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -179,590 +136,82 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  /// **ENHANCED: Multi-layered loading approach with fallbacks**
-  void _startEnhancedLoading() {
-    print(
-        '🚀 ProfileScreen: Starting enhanced loading with multiple fallbacks');
-
-    // **LAYER 1: Immediate cache check (fastest)**
-    _loadFromCacheFirst();
-
-    // **LAYER 2: Progressive loading with improved reliability**
-    _startProgressiveLoading();
-
-    // **LAYER 3: Aggressive backup loading (if progressive fails)**
-    Timer(const Duration(milliseconds: 1500), () {
-      if (!_isProfileDataLoaded && mounted) {
-        print(
-            '⚠️ ProfileScreen: Progressive loading taking too long, starting aggressive backup load');
-        _startAggressiveBackupLoading();
-      }
-    });
-
-    // **LAYER 4: Final aggressive fallback (if everything else fails)**
-    Timer(const Duration(seconds: 3), () {
-      if (!_isProfileDataLoaded && mounted) {
-        print(
-            '🆘 ProfileScreen: All loading methods failed, starting final aggressive load');
-        _startFinalAggressiveLoad();
-      }
-    });
-
-    // **LAYER 5: Background continuous retry (silent)**
-    Timer(const Duration(seconds: 5), () {
-      if (!_isProfileDataLoaded && mounted) {
-        print('🔄 ProfileScreen: Starting background continuous retry');
-        _startBackgroundContinuousRetry();
-      }
-    });
-  }
-
-  /// **NEW: Load from cache first for instant response**
-  Future<void> _loadFromCacheFirst() async {
+  /// **SIMPLIFIED: Load videos from cache**
+  Future<void> _loadVideosFromCache() async {
     try {
-      print('⚡ ProfileScreen: Checking cache first for instant load');
-
-      // Check background preloaded data first
-      final preloader = BackgroundProfilePreloader();
-      final preloadedData = await preloader.getPreloadedProfileData();
-
-      if (preloadedData != null) {
-        print('⚡ ProfileScreen: Using preloaded data (instant!)');
-        _stateManager.setUserData(preloadedData);
-        setState(() {
-          _isProfileDataLoaded = true;
-          _isLoading = false;
-        });
-
-        // Load videos and followers in background
-        _loadVideosProgressive();
-        _loadFollowersProgressive();
-        return;
-      }
-
-      // Check SharedPreferences cache
-      final cachedData = await _loadCachedProfileData();
-      if (cachedData != null) {
-        print('⚡ ProfileScreen: Using cached data (instant!)');
-        _stateManager.setUserData(cachedData);
-        setState(() {
-          _isProfileDataLoaded = true;
-          _isLoading = false;
-        });
-
-        // Load videos and followers in background
-        _loadVideosProgressive();
-        _loadFollowersProgressive();
-        return;
-      }
-
-      print('📡 ProfileScreen: No cache available, will load from server');
-    } catch (e) {
-      print('❌ ProfileScreen: Cache loading failed: $e');
-    }
-  }
-
-  /// **NEW: Aggressive backup loading with multiple strategies**
-  Future<void> _startAggressiveBackupLoading() async {
-    try {
-      print('🔥 ProfileScreen: Starting aggressive backup loading');
-
-      // Strategy 1: Try direct server load with timeout
-      try {
-        await _stateManager.loadUserData(widget.userId).timeout(
-          const Duration(seconds: 3),
-          onTimeout: () {
-            print('⏰ ProfileScreen: Direct server load timed out');
-            throw TimeoutException('Direct server load timeout');
-          },
-        );
-
-        if (_stateManager.userData != null) {
-          print('✅ ProfileScreen: Aggressive backup loading successful');
-          setState(() {
-            _isProfileDataLoaded = true;
-            _isLoading = false;
-          });
-          return;
-        }
-      } catch (e) {
-        print('❌ ProfileScreen: Aggressive backup loading failed: $e');
-      }
-
-      // Strategy 2: Try with different user ID combinations
-      await _tryAlternativeUserIds();
-    } catch (e) {
-      print('❌ ProfileScreen: Aggressive backup loading completely failed: $e');
-    }
-  }
-
-  /// **NEW: Final aggressive load with all possible methods**
-  Future<void> _startFinalAggressiveLoad() async {
-    try {
-      print('🚀 ProfileScreen: Starting final aggressive load');
-
-      // Clear all caches first
-      await _clearProfileCache();
-
-      // Try multiple loading strategies in parallel
-      final futures = [
-        _stateManager.loadUserData(widget.userId),
-        _loadFromAlternativeSources(),
-        _loadFromBackgroundPreloader(),
-      ];
-
-      // Wait for any one to succeed
-      await Future.wait(
-        futures.map((f) => f.catchError((e) => null)),
-        eagerError: false,
-      );
-
-      // Check if any succeeded
-      bool anySucceeded = _stateManager.userData != null;
-
-      if (anySucceeded) {
-        print('✅ ProfileScreen: Final aggressive load succeeded');
-        setState(() {
-          _isProfileDataLoaded = true;
-          _isLoading = false;
-        });
-      } else {
-        print('❌ ProfileScreen: Final aggressive load failed');
-        setState(() {
-          _error = 'Unable to load profile data. Please check your connection.';
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      print('❌ ProfileScreen: Final aggressive load error: $e');
-      setState(() {
-        _error = 'Failed to load profile data: $e';
-        _isLoading = false;
-      });
-    }
-  }
-
-  /// **NEW: Background continuous retry (silent)**
-  void _startBackgroundContinuousRetry() {
-    print('🔄 ProfileScreen: Starting background continuous retry');
-
-    Timer.periodic(const Duration(seconds: 10), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-
-      if (_isProfileDataLoaded) {
-        print('✅ ProfileScreen: Data loaded, stopping background retry');
-        timer.cancel();
-        return;
-      }
-
-      print('🔄 ProfileScreen: Background retry attempt');
-      _silentBackgroundLoad();
-    });
-  }
-
-  /// **NEW: Silent background load (no UI changes)**
-  Future<void> _silentBackgroundLoad() async {
-    try {
-      print('🔇 ProfileScreen: Silent background load attempt');
-
-      // Try to load without affecting UI state
-      await _stateManager.loadUserData(widget.userId);
-
-      if (_stateManager.userData != null && mounted) {
-        print('✅ ProfileScreen: Silent background load succeeded');
-        setState(() {
-          _isProfileDataLoaded = true;
-          _isLoading = false;
-        });
-
-        // Load additional data
-        _loadVideosProgressive();
-        _loadFollowersProgressive();
-      }
-    } catch (e) {
-      print('❌ ProfileScreen: Silent background load failed: $e');
-    }
-  }
-
-  /// **NEW: Try alternative user ID combinations**
-  Future<void> _tryAlternativeUserIds() async {
-    try {
-      print('🔄 ProfileScreen: Trying alternative user ID combinations');
-
-      // Get current user data to try different ID formats
       final prefs = await SharedPreferences.getInstance();
-      final fallbackUser = prefs.getString('fallback_user');
+      final cacheKey = _getProfileCacheKey();
+      final cachedVideosJson =
+          prefs.getString('profile_videos_cache_$cacheKey');
 
-      if (fallbackUser != null) {
-        final userData = jsonDecode(fallbackUser);
-        final alternativeIds = [
-          userData['id'],
-          userData['googleId'],
-          widget.userId,
-        ].where((id) => id != null).toList();
-
-        for (final altId in alternativeIds) {
-          try {
-            await _stateManager.loadUserData(altId);
-            if (_stateManager.userData != null) {
-              print('✅ ProfileScreen: Alternative ID $altId worked');
-              setState(() {
-                _isProfileDataLoaded = true;
-                _isLoading = false;
-              });
-              return;
-            }
-          } catch (e) {
-            print('❌ ProfileScreen: Alternative ID $altId failed: $e');
-          }
-        }
-      }
-    } catch (e) {
-      print('❌ ProfileScreen: Alternative user ID strategy failed: $e');
-    }
-  }
-
-  /// **NEW: Load from alternative sources**
-  Future<void> _loadFromAlternativeSources() async {
-    try {
-      print('🔄 ProfileScreen: Loading from alternative sources');
-
-      // Try to get user data from different sources
-      final cachedData = await _loadCachedProfileData();
-
-      if (cachedData != null) {
-        _stateManager.setUserData(cachedData);
-        print('✅ ProfileScreen: Loaded from alternative source (cache)');
-        return;
-      }
-
-      // Try background preloader
-      final preloader = BackgroundProfilePreloader();
-      final preloadedData = await preloader.getPreloadedProfileData();
-
-      if (preloadedData != null) {
-        _stateManager.setUserData(preloadedData);
-        print('✅ ProfileScreen: Loaded from alternative source (preloader)');
-        return;
-      }
-
-      print('❌ ProfileScreen: No alternative sources available');
-    } catch (e) {
-      print('❌ ProfileScreen: Alternative source loading failed: $e');
-    }
-  }
-
-  /// **NEW: Load from background preloader**
-  Future<void> _loadFromBackgroundPreloader() async {
-    try {
-      print('🔄 ProfileScreen: Loading from background preloader');
-
-      final preloader = BackgroundProfilePreloader();
-      final preloadedData = await preloader.getPreloadedProfileData();
-
-      if (preloadedData != null) {
-        _stateManager.setUserData(preloadedData);
-        print('✅ ProfileScreen: Loaded from background preloader');
+      if (cachedVideosJson != null) {
+        final cachedVideos = json.decode(cachedVideosJson) as List;
+        final videos = cachedVideos.map((v) => VideoModel.fromJson(v)).toList();
+        _stateManager.setVideos(videos);
+        print('⚡ ProfileScreen: Loaded ${videos.length} videos from cache');
       } else {
-        print('❌ ProfileScreen: No preloaded data available');
+        // No cached videos, load from server
+        await _loadVideos();
       }
     } catch (e) {
-      print('❌ ProfileScreen: Background preloader loading failed: $e');
+      print('❌ ProfileScreen: Error loading videos from cache: $e');
+      await _loadVideos();
     }
   }
 
-  void _startProgressiveLoading() {
-    // Step 1: Load basic profile data first (fastest)
-    _loadBasicProfileData();
-
-    // Step 2: Start progressive loading timer for other data
-    _progressiveLoadTimer =
-        Timer.periodic(const Duration(milliseconds: 300), (timer) {
-      if (_currentLoadStep < 3) {
-        _executeNextLoadStep();
-      } else {
-        timer.cancel();
-      }
-    });
-  }
-
-  void _executeNextLoadStep() {
-    switch (_currentLoadStep) {
-      case 0:
-        // Step 1: Load videos (after profile data)
-        if (_isProfileDataLoaded && !_isVideosLoaded) {
-          _loadVideosProgressive();
-        }
-        break;
-      case 1:
-        // Step 2: Load followers data (do not depend on videos)
-        if (_isProfileDataLoaded && !_isFollowersLoaded) {
-          _loadFollowersProgressive();
-        }
-        break;
-      case 2:
-        // Step 3: Load additional user data
-        if (_isFollowersLoaded) {
-          _loadAdditionalUserData();
-        }
-        break;
-    }
-    _currentLoadStep++;
-  }
-
-  Future<void> _loadBasicProfileData() async {
+  /// **SIMPLIFIED: Load videos from server**
+  Future<void> _loadVideos() async {
     try {
-      ProfileScreenLogger.logProfileLoad();
+      if (_stateManager.userData == null) return;
 
-      // **ENHANCED: Improved authentication check with better retry logic**
-      final prefs = await SharedPreferences.getInstance();
-      final hasJwtToken = prefs.getString('jwt_token') != null;
-      final hasFallbackUser = prefs.getString('fallback_user') != null;
-
-      print(
-          '🔐 ProfileScreen: Auth check - JWT: $hasJwtToken, Fallback: $hasFallbackUser');
-
-      if (!hasJwtToken && !hasFallbackUser) {
-        // **ENHANCED: Better retry mechanism with exponential backoff**
-        if (_authRetryAttempts < 3) {
-          _authRetryAttempts++;
-          print(
-              '🔄 ProfileScreen: No auth data found, retrying in $_authRetryAttempts seconds (attempt $_authRetryAttempts/3)');
-
-          Future.delayed(Duration(seconds: _authRetryAttempts), () {
-            if (mounted) _loadBasicProfileData();
-          });
-          return; // keep showing loading spinner
-        } else {
-          print('❌ ProfileScreen: Authentication retry limit reached');
-          setState(() {
-            _error = 'No authentication data found. Please sign in again.';
-            _isLoading = false;
-          });
-          return;
-        }
-      }
-
-      // **NEW: Check background preloaded data first (HIGHEST PRIORITY)**
-      final preloader = BackgroundProfilePreloader();
-      final preloadedProfileData = await preloader.getPreloadedProfileData();
-
-      if (preloadedProfileData != null) {
-        print('⚡ ProfileScreen: Using PRELOADED profile data (instant load!)');
-        ProfileScreenLogger.logProfileLoadSuccess(userId: widget.userId);
-        setState(() {
-          _isProfileDataLoaded = true;
-          _isLoading = false;
-        });
-
-        // Load from preloaded data instantly
-        _stateManager.setUserData(preloadedProfileData);
-
-        // Schedule background refresh if needed
-        _scheduleBackgroundProfileRefresh();
-        // Ensure payment setup flag is synced from backend/cache
-        unawaited(_ensurePaymentSetupFlag());
-        return;
-      }
-
-      // **ENHANCED: Check SharedPreferences cache first for instant loading**
-      final cachedProfileData = await _loadCachedProfileData();
-      if (cachedProfileData != null) {
-        print('⚡ ProfileScreen: Using cached profile data');
-        ProfileScreenLogger.logProfileLoadSuccess(userId: widget.userId);
-        setState(() {
-          _isProfileDataLoaded = true;
-          _isLoading = false;
-        });
-
-        // Load from cache instantly, then refresh in background if needed
-        _stateManager.setUserData(cachedProfileData);
-
-        // Schedule background refresh if cache is stale
-        _scheduleBackgroundProfileRefresh();
-        // Ensure payment setup flag is synced from backend/cache
-        unawaited(_ensurePaymentSetupFlag());
-        return;
-      }
-
-      // Load basic profile data only if no cache available
-      print('📡 ProfileScreen: Loading profile data from server...');
-      await _stateManager.loadUserData(widget.userId);
-
-      if (_stateManager.userData != null) {
-        // **ENHANCED: Cache the loaded profile data**
-        await _cacheProfileData(_stateManager.userData!);
-
-        setState(() {
-          _isProfileDataLoaded = true;
-          _isLoading = false;
-        });
-
-        ProfileScreenLogger.logProfileLoadSuccess(userId: widget.userId);
-        // Ensure payment setup flag is synced from backend
-        unawaited(_ensurePaymentSetupFlag());
-      }
-    } catch (e) {
-      ProfileScreenLogger.logProfileLoadError(e.toString());
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _loadVideosProgressive() async {
-    if (_stateManager.userData == null) return;
-
-    try {
       final currentUserId = _stateManager.userData!['googleId'] ??
           _stateManager.userData!['_id'] ??
           _stateManager.userData!['id'];
+
       if (currentUserId != null) {
-        ProfileScreenLogger.logVideoLoad(userId: currentUserId);
-
-        // **NEW: Check background preloaded videos first (HIGHEST PRIORITY)**
-        final preloader = BackgroundProfilePreloader();
-        final preloadedVideos = await preloader.getPreloadedUserVideos();
-
-        if (preloadedVideos != null && preloadedVideos.isNotEmpty) {
-          print(
-              '⚡ ProfileScreen: Using PRELOADED videos (instant load!) - ${preloadedVideos.length} videos');
-          _stateManager.setVideos(preloadedVideos);
-
-          setState(() {
-            _isVideosLoaded = true;
-          });
-
-          ProfileScreenLogger.logVideoLoadSuccess(
-              count: preloadedVideos.length);
-          return;
-        }
-
-        if (_stateManager.userVideos.isNotEmpty) {
-          ProfileScreenLogger.logVideoLoadSuccess(
-              count: _stateManager.userVideos.length);
-          setState(() {
-            _isVideosLoaded = true;
-          });
-          return;
-        }
-
-        print('📡 ProfileScreen: Loading videos from server...');
+        print(
+            '📡 ProfileScreen: Loading videos from server for user: $currentUserId');
         await _stateManager.loadUserVideos(currentUserId);
 
-        setState(() {
-          _isVideosLoaded = true;
-        });
+        // Cache the videos
+        await _cacheVideos();
 
-        ProfileScreenLogger.logVideoLoadSuccess(
-            count: _stateManager.userVideos.length);
+        print(
+            '✅ ProfileScreen: Loaded ${_stateManager.userVideos.length} videos');
       }
     } catch (e) {
-      ProfileScreenLogger.logVideoLoadError(e.toString());
-      setState(() {
-        _isVideosLoaded = true;
-      });
+      print('❌ ProfileScreen: Error loading videos: $e');
     }
   }
 
-  Future<void> _loadFollowersProgressive() async {
+  /// **SIMPLIFIED: Cache videos to SharedPreferences**
+  Future<void> _cacheVideos() async {
     try {
-      // Build candidate IDs: prefer googleId, then Mongo _id/id, then widget.userId
-      final List<String> idsToTry = <String?>[
-        _stateManager.userData?['googleId'],
-        _stateManager.userData?['_id'] ?? _stateManager.userData?['id'],
-        widget.userId,
-      ]
-          .where((e) => e != null && (e).isNotEmpty)
-          .map((e) => e as String)
-          .toList()
-          .toSet()
-          .toList();
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = _getProfileCacheKey();
 
-      if (idsToTry.isEmpty) {
-        ProfileScreenLogger.logWarning(
-            'No user ID available for followers load');
-        setState(() {
-          _isFollowersLoaded = true;
-        });
-        return;
-      }
+      final videosJson =
+          _stateManager.userVideos.map((v) => v.toJson()).toList();
+      await prefs.setString(
+          'profile_videos_cache_$cacheKey', json.encode(videosJson));
+      await prefs.setInt('profile_videos_cache_timestamp_$cacheKey',
+          DateTime.now().millisecondsSinceEpoch);
 
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
-      bool loadedAny = false;
-
-      // **ENHANCED: Check cache first before making API calls**
-      for (final candidateId in idsToTry) {
-        final cachedUserData = userProvider.getUserData(candidateId);
-        if (cachedUserData != null) {
-          ProfileScreenLogger.logDebugInfo(
-              'Using cached followers data for user: $candidateId');
-          loadedAny = true;
-          break;
-        }
-      }
-
-      // Only make API calls if no cached data is available
-      if (!loadedAny) {
-        for (final candidateId in idsToTry) {
-          try {
-            ProfileScreenLogger.logDebugInfo(
-                'Loading followers for user: $candidateId');
-            await userProvider.getUserDataWithFollowers(candidateId);
-
-            final model = userProvider.getUserData(candidateId);
-            final followersCount = model?.followersCount ??
-                (_stateManager.userData != null
-                    ? (_stateManager.userData!['followers'] ??
-                        _stateManager.userData!['followersCount'] ??
-                        0)
-                    : 0);
-            if (model != null || followersCount > 0) {
-              loadedAny = true;
-              break;
-            }
-          } catch (e) {
-            ProfileScreenLogger.logWarning(
-                'Followers load failed for $candidateId: $e');
-          }
-        }
-      }
-
-      setState(() {
-        _isFollowersLoaded = true;
-      });
-
-      if (!loadedAny) {
-        ProfileScreenLogger.logWarning(
-            'Followers data not found for any candidate ID');
-      }
+      print('✅ ProfileScreen: Videos cached successfully');
     } catch (e) {
-      ProfileScreenLogger.logWarning('Followers load failed: $e');
-      // Mark as loaded to avoid infinite loading
-      setState(() {
-        _isFollowersLoaded = true;
-      });
+      print('❌ ProfileScreen: Error caching videos: $e');
     }
   }
 
-  Future<void> _loadAdditionalUserData() async {
-    try {
-      if (widget.userId == null && _stateManager.userData != null) {
-        final currentUserId =
-            _stateManager.userData!['_id'] ?? _stateManager.userData!['id'];
-        if (currentUserId != null) {
-          final userProvider =
-              Provider.of<UserProvider>(context, listen: false);
-          await userProvider.getUserDataWithFollowers(currentUserId);
-        }
-      }
-    } catch (e) {
-      ProfileScreenLogger.logWarning('Additional user data load failed: $e');
-    }
+  /// **SIMPLIFIED: Refresh data when user pulls to refresh**
+  Future<void> _refreshData() async {
+    print('🔄 ProfileScreen: Refreshing data');
+
+    // Clear cache to force fresh load
+    await _clearProfileCache();
+
+    // Reload data
+    await _loadData();
   }
 
   @override
@@ -773,7 +222,6 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   @override
   void dispose() {
-    _progressiveLoadTimer?.cancel();
     ProfileScreenLogger.logProfileScreenDispose();
     _stateManager.dispose();
     super.dispose();
@@ -833,7 +281,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       ProfileScreenLogger.logGoogleSignIn();
       final userData = await _stateManager.handleGoogleSignIn();
       if (userData != null) {
-        _restartProgressiveLoading();
+        _refreshData();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -866,33 +314,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         );
       }
     }
-  }
-
-  void _restartProgressiveLoading() {
-    print('🔄 ProfileScreen: Restarting progressive loading (manual refresh)');
-
-    setState(() {
-      _isProfileDataLoaded = false;
-      _isVideosLoaded = false;
-      _isFollowersLoaded = false;
-      _isLoading = true;
-      _error = null;
-      _currentLoadStep = 0;
-      _authRetryAttempts = 0; // Reset auth retry attempts
-    });
-
-    // Clear all caches to force fresh data load
-    _clearProfileCache();
-
-    // **ENHANCED: Also trigger background preloading to refresh cache**
-    final preloader = BackgroundProfilePreloader();
-    preloader.clearCache(); // Clear old cache
-    preloader.forcePreload(); // Trigger fresh preload
-
-    _progressiveLoadTimer?.cancel();
-
-    // **ENHANCED: Use the new enhanced loading approach**
-    _startEnhancedLoading();
   }
 
   /// Share app referral message
@@ -1173,6 +594,10 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Future<void> _handleProfilePhotoChange() async {
     try {
+      // **FIX: Pause all video controllers to prevent audio leak**
+      print('🔇 ProfileScreen: Pausing all videos before profile photo change');
+      _pauseAllVideoControllers();
+
       ProfileScreenLogger.logProfilePhotoChange();
       final XFile? image = await showDialog<XFile>(
         context: context,
@@ -1238,6 +663,23 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
         );
       }
+    }
+  }
+
+  /// **FIX: Pause all video controllers to prevent audio leak**
+  void _pauseAllVideoControllers() {
+    try {
+      // Get the main controller from the app
+      final mainController =
+          Provider.of<MainController>(context, listen: false);
+      print('🔇 ProfileScreen: Pausing all videos via MainController');
+      mainController.forcePauseVideos();
+
+      // Also try to pause any background videos
+      print('🔇 ProfileScreen: Attempting to pause background videos');
+      // This will help prevent audio leaks during profile photo changes
+    } catch (e) {
+      print('⚠️ ProfileScreen: Error pausing videos: $e');
     }
   }
 
@@ -1346,8 +788,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Widget _buildBody(UserProvider userProvider, UserModel? userModel) {
-    // Show loading indicator only for initial profile data
-    if (_isLoading && !_isProfileDataLoaded) {
+    // Show loading indicator
+    if (_isLoading) {
       return RepaintBoundary(
         child: _buildSkeletonLoading(),
       );
@@ -1393,46 +835,15 @@ class _ProfileScreenState extends State<ProfileScreen>
                 ),
                 const SizedBox(height: 24),
 
-                // **AUTOMATIC: Auto-retry loading without manual buttons**
+                // **SIMPLIFIED: Simple retry button**
                 TextButton.icon(
-                  onPressed: _handleGoogleSignIn,
-                  icon: const Icon(Icons.login),
-                  label: const Text('Sign In Again'),
+                  onPressed: _loadData,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry'),
                   style: TextButton.styleFrom(
                     foregroundColor: Colors.blue,
                   ),
                 ),
-
-                const SizedBox(height: 16),
-
-                // **NEW: Debug information for troubleshooting**
-                if (kDebugMode) ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Debug Info:',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey[700],
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text('Auth Retry Attempts: $_authRetryAttempts'),
-                        Text('Profile Data Loaded: $_isProfileDataLoaded'),
-                        Text('Videos Loaded: $_isVideosLoaded'),
-                        Text('Followers Loaded: $_isFollowersLoaded'),
-                        Text('Error: $_error'),
-                      ],
-                    ),
-                  ),
-                ],
               ],
             ),
           ),
@@ -1447,12 +858,9 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     // If we reach here, we have user data and can show the profile
     return RefreshIndicator(
-      onRefresh: () async {
-        _restartProgressiveLoading();
-      },
+      onRefresh: _refreshData,
       child: SingleChildScrollView(
-        physics:
-            const AlwaysScrollableScrollPhysics(), // Enable pull-to-refresh
+        physics: const AlwaysScrollableScrollPhysics(),
         child: Column(
           children: [
             ProfileHeaderWidget(
@@ -1465,10 +873,6 @@ class _ProfileScreenState extends State<ProfileScreen>
               onShowHowToEarn: _showHowToEarnDialog,
             ),
             _buildProfileContent(userProvider, userModel),
-            // Show loading indicators for progressive loading
-            if (!_isVideosLoaded) _buildVideosLoadingIndicator(),
-            if (!_isFollowersLoaded && _isVideosLoaded)
-              _buildFollowersLoadingIndicator(),
           ],
         ),
       ),
@@ -1742,65 +1146,11 @@ class _ProfileScreenState extends State<ProfileScreen>
           ProfileStatsWidget(
             stateManager: _stateManager,
             userId: widget.userId,
-            isVideosLoaded: _isVideosLoaded,
-            isFollowersLoaded: _isFollowersLoaded,
+            isVideosLoaded: true,
+            isFollowersLoaded: true,
             onFollowersTap: () {
-              // **NEW: Debug followers loading**
-              ProfileScreenLogger.logDebugInfo('=== FOLLOWERS DEBUG ===');
-              ProfileScreenLogger.logDebugInfo(
-                  '_isFollowersLoaded: $_isFollowersLoaded');
-              ProfileScreenLogger.logDebugInfo(
-                  'widget.userId: ${widget.userId}');
-              ProfileScreenLogger.logDebugInfo(
-                  '_stateManager.userData: ${_stateManager.userData != null}');
-              if (_stateManager.userData != null) {
-                ProfileScreenLogger.logDebugInfo(
-                    'Current user ID: ${_stateManager.userData!['_id'] ?? _stateManager.userData!['id']}');
-              }
-
-              // Show debug info
-              if (mounted) {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Followers Debug Info'),
-                    content: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Followers Loaded: $_isFollowersLoaded'),
-                        Text('User ID: ${widget.userId ?? "Own Profile"}'),
-                        Text('Followers Count: ${_getFollowersCount()}'),
-                        Text(
-                            'User Data Available: ${_stateManager.userData != null}'),
-                        if (_stateManager.userData != null) ...[
-                          Text(
-                              'ObjectID: ${_stateManager.userData!['_id'] ?? "Not Set"}'),
-                          Text(
-                              'ID: ${_stateManager.userData!['id'] ?? "Not Set"}'),
-                        ],
-                      ],
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Close'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          // Force reload followers
-                          setState(() {
-                            _isFollowersLoaded = false;
-                          });
-                          _loadFollowersProgressive();
-                        },
-                        child: const Text('Reload Followers'),
-                      ),
-                    ],
-                  ),
-                );
-              }
+              // **SIMPLIFIED: Simple followers tap**
+              print('🔄 ProfileScreen: Followers tapped');
             },
             onEarningsTap: () async {
               // Navigate directly to revenue screen
@@ -1879,72 +1229,11 @@ class _ProfileScreenState extends State<ProfileScreen>
           // Videos Section
           ProfileVideosWidget(
             stateManager: _stateManager,
-            isVideosLoaded: _isVideosLoaded,
+            isVideosLoaded: true,
           ),
         ],
       ),
     );
-  }
-
-  // **NEW: Helper method to get followers count using MongoDB ObjectID**
-  int _getFollowersCount() {
-    ProfileScreenLogger.logDebugInfo('=== GETTING FOLLOWERS COUNT ===');
-    ProfileScreenLogger.logDebugInfo('widget.userId: ${widget.userId}');
-    ProfileScreenLogger.logDebugInfo(
-        '_stateManager.userData: ${_stateManager.userData != null}');
-
-    // Build candidate IDs to query provider with
-    final List<String> idsToTry = <String?>[
-      widget.userId,
-      _stateManager.userData?['googleId'],
-      _stateManager.userData?['_id'] ?? _stateManager.userData?['id'],
-    ]
-        .where((e) => e != null && (e).isNotEmpty)
-        .map((e) => e as String)
-        .toList()
-        .toSet()
-        .toList();
-
-    if (idsToTry.isNotEmpty) {
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
-      for (final candidateId in idsToTry) {
-        final userModel = userProvider.getUserData(candidateId);
-        if (userModel?.followersCount != null) {
-          ProfileScreenLogger.logDebugInfo(
-              'Using followers count from UserProvider for $candidateId: ${userModel!.followersCount}');
-          return userModel.followersCount;
-        }
-      }
-    }
-
-    // **NEW: Check if we're viewing own profile**
-    if (widget.userId == null && _stateManager.userData != null) {
-      ProfileScreenLogger.logDebugInfo('Viewing own profile');
-
-      // Prefer counts available in userData
-      final followersCount = _stateManager.userData!['followers'] ??
-          _stateManager.userData!['followersCount'] ??
-          0;
-      if (followersCount != 0) {
-        ProfileScreenLogger.logDebugInfo(
-            'Using followers count from ProfileStateManager: $followersCount');
-        return followersCount;
-      }
-    }
-
-    // Fall back to ProfileStateManager data
-    if (_stateManager.userData != null &&
-        _stateManager.userData!['followersCount'] != null) {
-      final followersCount = _stateManager.userData!['followersCount'];
-      ProfileScreenLogger.logDebugInfo(
-          'Using followers count from ProfileStateManager: $followersCount');
-      return followersCount;
-    }
-
-    // Final fallback
-    ProfileScreenLogger.logDebugInfo(
-        'No followers count available, using default: 0');
-    return 0;
   }
 
   Future<bool> _checkPaymentSetupStatus() async {
@@ -2000,41 +1289,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     } catch (e) {
       ProfileScreenLogger.logPaymentSetupCheckError(e.toString());
       return false;
-    }
-  }
-
-  /// **FIX: Sync user-specific payment setup flag from backend**
-  Future<void> _ensurePaymentSetupFlag() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final userData = _stateManager.getUserData();
-      final userId = userData?['googleId'] ?? userData?['id'];
-
-      // **FIX: Check user-specific flag**
-      if (userId != null) {
-        final already = prefs.getBool('has_payment_setup_$userId') ?? false;
-        if (already) {
-          print(
-              '✅ User-specific payment setup flag already exists for user: $userId');
-          return;
-        }
-      }
-
-      if (_stateManager.userData != null &&
-          _stateManager.userData!['_id'] != null) {
-        final backendHas = await _checkBackendPaymentSetup();
-        if (backendHas) {
-          // **FIX: Set both user-specific and global flags**
-          if (userId != null) {
-            await prefs.setBool('has_payment_setup_$userId', true);
-            print('✅ Set user-specific payment setup flag for user: $userId');
-          }
-          await prefs.setBool('has_payment_setup', true);
-          ProfileScreenLogger.logPaymentSetupFound();
-        }
-      }
-    } catch (e) {
-      ProfileScreenLogger.logWarning('ensurePaymentSetupFlag failed: $e');
     }
   }
 
@@ -2101,54 +1355,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       );
       return false;
     }
-  }
-
-  Widget _buildFollowersLoadingIndicator() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            'Loading followers data...',
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: 14,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVideosLoadingIndicator() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            'Loading videos...',
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: 14,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   // **NEW: Enhanced caching methods for profile data**
@@ -2221,36 +1427,5 @@ class _ProfileScreenState extends State<ProfileScreen>
     } catch (e) {
       ProfileScreenLogger.logWarning('Error clearing profile cache: $e');
     }
-  }
-
-  /// Schedule background refresh if cache is getting stale
-  void _scheduleBackgroundProfileRefresh() {
-    // Only refresh if cache is older than 15 minutes
-    Timer(const Duration(seconds: 5), () async {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final cacheKey = _getProfileCacheKey();
-        final cacheTimestamp =
-            prefs.getInt('profile_cache_timestamp_$cacheKey');
-
-        if (cacheTimestamp != null) {
-          final cacheAge =
-              DateTime.now().millisecondsSinceEpoch - cacheTimestamp;
-          const staleThreshold = 15 * 60 * 1000; // 15 minutes in milliseconds
-
-          if (cacheAge > staleThreshold) {
-            ProfileScreenLogger.logDebugInfo(
-                'Background refreshing stale profile data');
-            await _stateManager.loadUserData(widget.userId);
-
-            if (_stateManager.userData != null) {
-              await _cacheProfileData(_stateManager.userData!);
-            }
-          }
-        }
-      } catch (e) {
-        ProfileScreenLogger.logWarning('Background profile refresh failed: $e');
-      }
-    });
   }
 }
