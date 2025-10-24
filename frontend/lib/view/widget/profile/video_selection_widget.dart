@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/core/constants/profile_constants.dart';
+import 'package:vayu/core/constants/profile_constants.dart';
 
 class VideoSelectionWidget extends StatelessWidget {
   final bool isVisible;

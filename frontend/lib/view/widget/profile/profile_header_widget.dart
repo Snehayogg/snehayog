@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:snehayog/core/managers/profile_state_manager.dart';
-import 'package:snehayog/core/providers/user_provider.dart';
-import 'package:snehayog/core/services/profile_screen_logger.dart';
+import 'package:vayu/core/managers/profile_state_manager.dart';
+import 'package:vayu/core/providers/user_provider.dart';
+import 'package:vayu/core/services/profile_screen_logger.dart';
 import 'dart:io';
 
 class ProfileHeaderWidget extends StatelessWidget {

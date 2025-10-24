@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/core/constants/app_constants.dart';
-import 'package:snehayog/view/screens/profile_screen.dart';
-import 'package:snehayog/view/widget/follow_button_widget.dart';
+import 'package:vayu/model/video_model.dart';
+import 'package:vayu/core/constants/app_constants.dart';
+import 'package:vayu/view/screens/profile_screen.dart';
+import 'package:vayu/view/widget/follow_button_widget.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class VideoInfoWidget extends StatelessWidget {

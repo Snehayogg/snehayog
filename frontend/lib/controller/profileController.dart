@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
-import 'package:snehayog/model/usermodel.dart';
-import 'package:snehayog/config/app_config.dart';
+import 'package:vayu/model/usermodel.dart';
+import 'package:vayu/config/app_config.dart';
 
 class ProfileController extends ChangeNotifier {
   final GoogleSignIn _googleSignIn = GoogleSignIn(

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:snehayog/services/active_ads_service.dart';
-import 'package:snehayog/config/app_config.dart';
+import 'package:vayu/services/active_ads_service.dart';
+import 'package:vayu/config/app_config.dart';
 
 /// Widget to display banner ads at the top of video feed
 class BannerAdWidget extends StatelessWidget {

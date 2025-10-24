@@ -1,5 +1,5 @@
-import 'package:snehayog/services/comments/comments_data_source.dart';
-import 'package:snehayog/services/ad_comment_service.dart';
+import 'package:vayu/services/comments/comments_data_source.dart';
+import 'package:vayu/services/ad_comment_service.dart';
 
 class AdCommentsDataSource implements CommentsDataSource {
   final String adId;

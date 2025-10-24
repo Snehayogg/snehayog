@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
-import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/services/video_service.dart';
-import 'package:snehayog/core/enums/video_state.dart';
-import 'package:snehayog/core/constants/app_constants.dart';
-import 'package:snehayog/core/managers/smart_cache_manager.dart';
+import 'package:vayu/model/video_model.dart';
+import 'package:vayu/services/video_service.dart';
+import 'package:vayu/core/enums/video_state.dart';
+import 'package:vayu/core/constants/app_constants.dart';
+import 'package:vayu/core/managers/smart_cache_manager.dart';
 
 class VideoProvider extends ChangeNotifier {
   final VideoService _videoService = VideoService();

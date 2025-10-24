@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:snehayog/core/providers/user_provider.dart';
-import 'package:snehayog/services/authservices.dart';
+import 'package:vayu/core/providers/user_provider.dart';
+import 'package:vayu/services/authservices.dart';
 
 class FollowButtonWidget extends StatefulWidget {
   final String uploaderId;

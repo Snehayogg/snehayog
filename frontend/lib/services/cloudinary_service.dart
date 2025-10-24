@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:snehayog/config/app_config.dart';
-import 'package:snehayog/services/authservices.dart';
+import 'package:vayu/config/app_config.dart';
+import 'package:vayu/services/authservices.dart';
 import 'package:http_parser/http_parser.dart';
 
 class CloudinaryService {

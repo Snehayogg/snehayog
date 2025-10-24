@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-// Removed: import 'package:snehayog/core/managers/video_manager.dart';
+// Removed: import 'package:vayu/core/managers/video_manager.dart';
 
 class MainController extends ChangeNotifier {
   int _currentIndex = 0;

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/services/payment_setup_service.dart';
+import 'package:vayu/services/payment_setup_service.dart';
 
 /// Widget to display payment setup status
 class PaymentStatusIndicator extends StatefulWidget {

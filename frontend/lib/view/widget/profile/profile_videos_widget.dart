@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:snehayog/core/managers/profile_state_manager.dart';
-import 'package:snehayog/core/services/profile_screen_logger.dart';
-import 'package:snehayog/view/screens/video_screen.dart';
+import 'package:vayu/core/managers/profile_state_manager.dart';
+import 'package:vayu/core/services/profile_screen_logger.dart';
+import 'package:vayu/view/screens/video_screen.dart';
 
 class ProfileVideosWidget extends StatelessWidget {
   final ProfileStateManager stateManager;

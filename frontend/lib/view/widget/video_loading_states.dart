@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/core/enums/video_state.dart';
+import 'package:vayu/core/enums/video_state.dart';
 
 class VideoLoadingStates extends StatelessWidget {
   final VideoLoadState loadState;

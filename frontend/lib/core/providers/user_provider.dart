@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
-import 'package:snehayog/services/user_service.dart';
-import 'package:snehayog/services/authservices.dart';
-import 'package:snehayog/model/usermodel.dart';
+import 'package:vayu/services/user_service.dart';
+import 'package:vayu/services/authservices.dart';
+import 'package:vayu/model/usermodel.dart';
 
 class UserProvider extends ChangeNotifier {
   final UserService _userService = UserService();

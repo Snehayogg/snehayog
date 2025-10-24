@@ -1,4 +1,4 @@
-import 'package:snehayog/model/video_model.dart';
+import 'package:vayu/model/video_model.dart';
 
 /// Utility class to check and analyze video URLs
 class VideoUrlChecker {

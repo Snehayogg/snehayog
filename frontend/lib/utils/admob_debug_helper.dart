@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/services/admob_service.dart';
+import 'package:vayu/services/admob_service.dart';
 
 /// Helper class for debugging AdMob issues
 class AdMobDebugHelper {

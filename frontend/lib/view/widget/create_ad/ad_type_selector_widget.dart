@@ -88,7 +88,7 @@ class AdTypeSelectorWidget extends StatelessWidget {
                 onPressed: onShowBenefits,
                 icon: const Icon(Icons.info_outline, size: 20),
                 label: const Text(
-                  'Why Advertise on Snehayog?',
+                  'Why Advertise on Vayu?',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,

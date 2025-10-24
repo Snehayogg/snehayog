@@ -1,7 +1,7 @@
 @echo off
 echo.
 echo ========================================
-echo 🚀 Snehayog Flutter Quick Setup
+echo 🚀 Vayu Flutter Quick Setup
 echo ========================================
 echo.
 

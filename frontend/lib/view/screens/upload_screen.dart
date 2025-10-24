@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'dart:async';
-import 'package:snehayog/services/video_service.dart';
-import 'package:snehayog/services/authservices.dart';
-import 'package:snehayog/view/screens/create_ad_screen_refactored.dart';
-import 'package:snehayog/view/screens/ad_management_screen.dart';
-import 'package:snehayog/core/constants/interests.dart';
+import 'package:vayu/services/video_service.dart';
+import 'package:vayu/services/authservices.dart';
+import 'package:vayu/view/screens/create_ad_screen_refactored.dart';
+import 'package:vayu/view/screens/ad_management_screen.dart';
+import 'package:vayu/core/constants/interests.dart';
 
 class UploadScreen extends StatefulWidget {
   final VoidCallback? onVideoUploaded; // Add callback for video upload success
@@ -353,7 +353,7 @@ class _UploadScreenState extends State<UploadScreen> {
                       const SizedBox(width: 12),
                       const Expanded(
                         child: Text(
-                          'What to Upload? \nSnehayog Terms & Conditions (Copyright Policy)',
+                          'What to Upload? \nVayu Terms & Conditions (Copyright Policy)',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
@@ -375,12 +375,12 @@ class _UploadScreenState extends State<UploadScreen> {
                   _buildNoticePoint(
                     title: '2. Copyright Infringement',
                     body:
-                        'If you upload content belonging to someone else without permission, you (the uploader) will be fully responsible for any legal consequences. Snehayog acts only as a platform and does not own or endorse user-uploaded content.',
+                        'If you upload content belonging to someone else without permission, you (the uploader) will be fully responsible for any legal consequences. Vayu acts only as a platform and does not own or endorse user-uploaded content.',
                   ),
                   _buildNoticePoint(
                     title: '3. Reporting Copyright Violation',
                     body:
-                        'Copyright owners may submit a takedown request by emailing: copyright@snehayog.com with proof of ownership. Upon receiving a valid request, Snehayog will remove the infringing content within 48 hours.',
+                        'Copyright owners may submit a takedown request by emailing: copyright@vayu.app with proof of ownership. Upon receiving a valid request, Vayu will remove the infringing content within 48 hours.',
                   ),
                   _buildNoticePoint(
                     title: '4. Payment & Revenue Sharing',
@@ -395,7 +395,7 @@ class _UploadScreenState extends State<UploadScreen> {
                   _buildNoticePoint(
                     title: '6. Limitation of Liability',
                     body:
-                        'Snehayog, as an intermediary platform, is not liable for user-uploaded content under the IT Act 2000 (India) and DMCA (international). All responsibility for copyright compliance lies with the content uploader.',
+                        'Vayu, as an intermediary platform, is not liable for user-uploaded content under the IT Act 2000 (India) and DMCA (international). All responsibility for copyright compliance lies with the content uploader.',
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
@@ -537,7 +537,7 @@ class _UploadScreenState extends State<UploadScreen> {
       // **FIX: Handle correct response structure from VideoService**
       print('🔄 Processing status: ${uploadedVideo['processingStatus']}');
       print('🆔 Video ID: ${uploadedVideo['id']}');
-    
+
       // Update to validation phase
       _updateProgressPhase('validation');
 
@@ -551,7 +551,7 @@ class _UploadScreenState extends State<UploadScreen> {
         // Wait for processing to complete
         String? videoId;
         videoId = uploadedVideo['id']?.toString();
-      
+
         if (videoId == null) {
           throw Exception('Video ID not found in upload response');
         }

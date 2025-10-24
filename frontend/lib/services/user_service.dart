@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:snehayog/services/authservices.dart';
-import 'package:snehayog/services/video_service.dart';
-import 'package:snehayog/model/usermodel.dart';
+import 'package:vayu/services/authservices.dart';
+import 'package:vayu/services/video_service.dart';
+import 'package:vayu/model/usermodel.dart';
 
 class UserService {
   final AuthService _authService = AuthService();

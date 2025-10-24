@@ -1,6 +1,6 @@
 @echo off
 echo.
-echo 🔍 Verifying Snehayog Flutter Setup...
+echo 🔍 Verifying Vayu Flutter Setup...
 echo.
 
 REM Check if we're in the frontend directory

@@ -3,11 +3,11 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:snehayog/config/app_config.dart';
+import 'package:vayu/config/app_config.dart';
 // **NEW: Import JWT decoder**
 import 'package:jwt_decoder/jwt_decoder.dart';
-import 'package:snehayog/config/google_sign_in_config.dart';
-import 'package:snehayog/services/location_onboarding_service.dart';
+import 'package:vayu/config/google_sign_in_config.dart';
+import 'package:vayu/services/location_onboarding_service.dart';
 
 class AuthService {
   // ✅ Use platform-specific client ID

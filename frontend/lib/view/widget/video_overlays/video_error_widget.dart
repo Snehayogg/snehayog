@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/core/constants/video_constants.dart';
+import 'package:vayu/core/constants/video_constants.dart';
 
 class VideoErrorWidget extends StatelessWidget {
   final String errorMessage;

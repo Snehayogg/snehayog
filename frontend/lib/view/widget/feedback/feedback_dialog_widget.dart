@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:snehayog/config/app_config.dart';
-import 'package:snehayog/services/authservices.dart';
+import 'package:vayu/config/app_config.dart';
+import 'package:vayu/services/authservices.dart';
 
 class FeedbackDialogWidget extends StatefulWidget {
   const FeedbackDialogWidget({super.key});

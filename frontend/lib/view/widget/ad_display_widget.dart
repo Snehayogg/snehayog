@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/model/ad_model.dart';
-import 'package:snehayog/services/ad_service.dart';
-import 'package:snehayog/services/authservices.dart';
+import 'package:vayu/model/ad_model.dart';
+import 'package:vayu/services/ad_service.dart';
+import 'package:vayu/services/authservices.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class AdDisplayWidget extends StatefulWidget {

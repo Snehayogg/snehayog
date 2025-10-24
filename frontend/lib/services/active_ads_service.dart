@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:snehayog/config/app_config.dart';
-import 'package:snehayog/core/managers/smart_cache_manager.dart';
+import 'package:vayu/config/app_config.dart';
+import 'package:vayu/core/managers/smart_cache_manager.dart';
 
 /// Service to fetch all types of active ads (banner, carousel, video feed)
 class ActiveAdsService {

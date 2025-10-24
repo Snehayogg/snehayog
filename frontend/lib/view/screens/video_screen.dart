@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/view/screens/video_feed_advanced.dart';
+import 'package:vayu/model/video_model.dart';
+import 'package:vayu/view/screens/video_feed_advanced.dart';
 
 class VideoScreen extends StatefulWidget {
   final int? initialIndex;

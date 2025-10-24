@@ -2,30 +2,27 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:snehayog/view/homescreen.dart';
+import 'package:vayu/view/homescreen.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:snehayog/controller/google_sign_in_controller.dart';
-import 'package:snehayog/controller/main_controller.dart';
-import 'package:snehayog/core/providers/video_provider.dart';
-import 'package:snehayog/core/providers/user_provider.dart';
-import 'package:snehayog/view/screens/login_screen.dart';
-import 'package:snehayog/view/screens/video_screen.dart';
+import 'package:vayu/controller/google_sign_in_controller.dart';
+import 'package:vayu/controller/main_controller.dart';
+import 'package:vayu/core/providers/video_provider.dart';
+import 'package:vayu/core/providers/user_provider.dart';
+import 'package:vayu/view/screens/login_screen.dart';
+import 'package:vayu/view/screens/video_screen.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'package:snehayog/core/services/error_logging_service.dart';
-import 'package:snehayog/core/managers/hot_ui_state_manager.dart';
-import 'package:snehayog/core/theme/app_theme.dart';
-import 'package:snehayog_monetization/services/razorpay_service.dart';
-import 'package:snehayog/config/app_config.dart';
+import 'package:vayu/core/services/error_logging_service.dart';
+import 'package:vayu/core/managers/hot_ui_state_manager.dart';
+import 'package:vayu/core/theme/app_theme.dart';
+import 'package:vayu/config/app_config.dart';
 import 'package:app_links/app_links.dart';
-import 'package:snehayog/services/video_service.dart' as vsvc;
-import 'package:snehayog/core/services/hls_warmup_service.dart';
-import 'package:snehayog/core/managers/smart_cache_manager.dart';
-import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/services/authservices.dart';
-import 'package:snehayog/services/background_profile_preloader.dart';
-import 'package:snehayog/services/location_onboarding_service.dart';
-
-final RazorpayService razorpayService = RazorpayService();
+import 'package:vayu/services/video_service.dart' as vsvc;
+import 'package:vayu/core/services/hls_warmup_service.dart';
+import 'package:vayu/core/managers/smart_cache_manager.dart';
+import 'package:vayu/model/video_model.dart';
+import 'package:vayu/services/authservices.dart';
+import 'package:vayu/services/background_profile_preloader.dart';
+import 'package:vayu/services/location_onboarding_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -75,13 +72,7 @@ void _initializeServicesInBackground() async {
     await MobileAds.instance.initialize();
     ErrorLoggingService.logServiceInitialization('AdMob');
 
-    // Initialize Razorpay in background
-    razorpayService.initialize(
-      keyId: AppConfig.razorpayKeyId,
-      keySecret: AppConfig.razorpayKeySecret,
-      webhookSecret: AppConfig.razorpayWebhookSecret,
-      baseUrl: AppConfig.baseUrl,
-    );
+    // Razorpay initialization removed - service not available
 
     // Set orientation in background
     SystemChrome.setPreferredOrientations([
@@ -242,30 +233,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         return;
       }
 
-      try {
-        final result = await razorpayService.verifyPaymentWithBackend(
-          orderId: orderId,
-          paymentId: paymentId,
-          signature: signature,
+      // Razorpay payment verification removed - service not available
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Payment verification not available'),
+            backgroundColor: Colors.orange,
+          ),
         );
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result['message'] ?? 'Payment verified'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Verification failed: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
       }
     }
     // Handle video deep links
@@ -308,7 +283,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     return MaterialApp(
       navigatorKey: AuthService.navigatorKey,
       debugShowCheckedModeBanner: false,
-      title: 'Snehayog',
+      title: 'Vayu',
       theme: AppTheme.lightTheme,
       builder: (context, child) {
         return MediaQuery(

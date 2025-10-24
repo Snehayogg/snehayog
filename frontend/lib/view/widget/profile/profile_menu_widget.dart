@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:snehayog/core/managers/profile_state_manager.dart';
-import 'package:snehayog/core/services/auto_scroll_settings.dart';
-import 'package:snehayog/view/screens/creator_payout_dashboard.dart';
-import 'package:snehayog/view/screens/creator_payment_setup_screen.dart';
+import 'package:vayu/core/managers/profile_state_manager.dart';
+import 'package:vayu/core/services/auto_scroll_settings.dart';
+import 'package:vayu/view/screens/creator_payout_dashboard.dart';
+import 'package:vayu/view/screens/creator_payment_setup_screen.dart';
 
 class ProfileMenuWidget extends StatelessWidget {
   final ProfileStateManager stateManager;

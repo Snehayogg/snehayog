@@ -1,6 +1,6 @@
-import 'package:snehayog/services/comments/comments_data_source.dart';
-import 'package:snehayog/services/video_service.dart';
-import 'package:snehayog/services/authservices.dart';
+import 'package:vayu/services/comments/comments_data_source.dart';
+import 'package:vayu/services/video_service.dart';
+import 'package:vayu/services/authservices.dart';
 
 class VideoCommentsDataSource implements CommentsDataSource {
   final String videoId;

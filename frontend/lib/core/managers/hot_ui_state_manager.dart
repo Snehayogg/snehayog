@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
-import 'package:snehayog/model/video_model.dart';
+import 'package:vayu/model/video_model.dart';
 
 /// **WhatsApp-Style Hot UI State Manager**
 /// Maintains UI state during background/foreground transitions

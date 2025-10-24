@@ -1,6 +1,6 @@
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
-/// Simplified AdMob Service for managing banner ads in Snehayog app
+/// Simplified AdMob Service for managing banner ads in Vayu app
 class AdMobService {
   static final AdMobService _instance = AdMobService._internal();
   factory AdMobService() => _instance;

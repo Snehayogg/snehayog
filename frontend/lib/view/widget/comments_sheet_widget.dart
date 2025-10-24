@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/services/video_service.dart';
-import 'package:snehayog/services/comments/comments_data_source.dart';
+import 'package:vayu/model/video_model.dart';
+import 'package:vayu/services/video_service.dart';
+import 'package:vayu/services/comments/comments_data_source.dart';
 import 'package:provider/provider.dart';
-import 'package:snehayog/controller/google_sign_in_controller.dart';
+import 'package:vayu/controller/google_sign_in_controller.dart';
 
 class CommentsSheetWidget extends StatefulWidget {
   final VideoModel? video;

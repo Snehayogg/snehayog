@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:snehayog/services/authservices.dart';
-import 'package:snehayog/services/user_service.dart';
-import 'package:snehayog/services/video_service.dart';
-import 'package:snehayog/model/video_model.dart';
+import 'package:vayu/services/authservices.dart';
+import 'package:vayu/services/user_service.dart';
+import 'package:vayu/services/video_service.dart';
+import 'package:vayu/model/video_model.dart';
 
 /// **BACKGROUND PROFILE PRELOADER**
 /// Preloads profile data in the background while user is on video feed (Yog tab)

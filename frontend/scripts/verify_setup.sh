@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🔍 Verifying Snehayog Flutter Setup..."
+echo "🔍 Verifying Vayu Flutter Setup..."
 echo ""
 
 # Check if we're in the frontend directory

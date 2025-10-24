@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:snehayog/controller/google_sign_in_controller.dart';
-import 'package:snehayog/services/location_onboarding_service.dart';
+import 'package:vayu/controller/google_sign_in_controller.dart';
+import 'package:vayu/services/location_onboarding_service.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
@@ -56,7 +56,7 @@ class LoginScreen extends StatelessWidget {
 
                   // Welcome Text
                   const Text(
-                    'Welcome to Snehayog',
+                    'Welcome to Vayu',
                     style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,

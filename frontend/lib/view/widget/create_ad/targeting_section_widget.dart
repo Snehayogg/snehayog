@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:snehayog/services/city_search_service.dart';
-import 'package:snehayog/core/constants/interests.dart';
+import 'package:vayu/services/city_search_service.dart';
+import 'package:vayu/core/constants/interests.dart';
 
 /// **TargetingSectionWidget - Handles advanced targeting options**
 class TargetingSectionWidget extends StatefulWidget {

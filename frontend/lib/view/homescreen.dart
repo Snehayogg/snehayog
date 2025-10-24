@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:snehayog/controller/main_controller.dart';
-import 'package:snehayog/view/screens/profile_screen.dart';
-import 'package:snehayog/view/screens/upload_screen.dart';
-import 'package:snehayog/view/screens/vayu_screen.dart';
-import 'package:snehayog/view/screens/video_screen.dart';
-import 'package:snehayog/services/authservices.dart';
-import 'package:snehayog/services/background_profile_preloader.dart';
-import 'package:snehayog/services/location_onboarding_service.dart';
+import 'package:vayu/controller/main_controller.dart';
+import 'package:vayu/view/screens/profile_screen.dart';
+import 'package:vayu/view/screens/upload_screen.dart';
+import 'package:vayu/view/screens/vayu_screen.dart';
+import 'package:vayu/view/screens/video_screen.dart';
+import 'package:vayu/services/authservices.dart';
+import 'package:vayu/services/background_profile_preloader.dart';
+import 'package:vayu/services/location_onboarding_service.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});

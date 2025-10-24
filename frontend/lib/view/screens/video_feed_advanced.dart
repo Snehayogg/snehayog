@@ -2,29 +2,29 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
-import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/model/carousel_ad_model.dart';
-import 'package:snehayog/services/video_service.dart';
-import 'package:snehayog/services/authservices.dart';
-import 'package:snehayog/services/user_service.dart';
-import 'package:snehayog/core/managers/carousel_ad_manager.dart';
-import 'package:snehayog/view/widget/comments_sheet_widget.dart';
-import 'package:snehayog/services/active_ads_service.dart';
-import 'package:snehayog/services/video_view_tracker.dart';
-import 'package:snehayog/services/ad_refresh_notifier.dart';
-import 'package:snehayog/services/background_profile_preloader.dart';
-import 'package:snehayog/services/ad_targeting_service.dart';
-import 'package:snehayog/view/widget/ads/banner_ad_widget.dart';
-import 'package:snehayog/view/widget/ads/carousel_ad_widget.dart';
-import 'package:snehayog/config/app_config.dart';
+import 'package:vayu/model/video_model.dart';
+import 'package:vayu/model/carousel_ad_model.dart';
+import 'package:vayu/services/video_service.dart';
+import 'package:vayu/services/authservices.dart';
+import 'package:vayu/services/user_service.dart';
+import 'package:vayu/core/managers/carousel_ad_manager.dart';
+import 'package:vayu/view/widget/comments_sheet_widget.dart';
+import 'package:vayu/services/active_ads_service.dart';
+import 'package:vayu/services/video_view_tracker.dart';
+import 'package:vayu/services/ad_refresh_notifier.dart';
+import 'package:vayu/services/background_profile_preloader.dart';
+import 'package:vayu/services/ad_targeting_service.dart';
+import 'package:vayu/view/widget/ads/banner_ad_widget.dart';
+import 'package:vayu/view/widget/ads/carousel_ad_widget.dart';
+import 'package:vayu/config/app_config.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:snehayog/controller/main_controller.dart';
-import 'package:snehayog/core/managers/video_controller_manager.dart';
-import 'package:snehayog/view/widget/report/report_dialog_widget.dart';
-import 'package:snehayog/core/managers/smart_cache_manager.dart';
+import 'package:vayu/controller/main_controller.dart';
+import 'package:vayu/core/managers/video_controller_manager.dart';
+import 'package:vayu/view/widget/report/report_dialog_widget.dart';
+import 'package:vayu/core/managers/smart_cache_manager.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:http/http.dart' as http;
-import 'package:snehayog/view/widget/custom_share_widget.dart';
+import 'package:vayu/view/widget/custom_share_widget.dart';
 
 class VideoFeedAdvanced extends StatefulWidget {
   final int? initialIndex;
@@ -2969,11 +2969,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   void _printDetailedCacheInfo() {
     final info = _getDetailedCacheInfo();
 
-    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    print('📊 DETAILED CACHE INFORMATION');
-    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
-    print('🎬 Video Controller Pool:');
     final poolInfo = info['videoControllerPool'] as Map<String, dynamic>;
     poolInfo.forEach((key, value) {
       print('   $key: $value');

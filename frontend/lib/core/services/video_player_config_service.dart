@@ -12,7 +12,7 @@ class VideoPlayerConfigService {
       maxBitrate: 800000,
       bufferSize: 1, // seconds
       preloadDistance: 3,
-      compressionLevel: 0.8, 
+      compressionLevel: 0.8,
     ),
   };
 
@@ -83,7 +83,7 @@ class VideoPlayerConfigService {
   /// Get HTTP headers optimized for video streaming
   static Map<String, String> getOptimizedHeaders(String videoUrl) {
     final headers = <String, String>{
-      'User-Agent': 'Snehayog-App/1.0',
+      'User-Agent': 'Vayu-App/1.0',
       'Accept': 'video/*,application/x-mpegURL,application/vnd.apple.mpegurl',
       'Accept-Encoding': 'gzip, deflate',
       'Connection': 'keep-alive',
@@ -179,7 +179,7 @@ class BufferingConfig {
     required this.bufferForPlaybackAfterRebufferMs,
   });
 }
-  
+
 class PreloadingConfig {
   final int preloadDistance;
   final int maxPreloadSize;

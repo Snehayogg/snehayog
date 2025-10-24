@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/core/managers/video_controller_manager.dart';
-import 'package:snehayog/model/video_model.dart';
+import 'package:vayu/core/managers/video_controller_manager.dart';
+import 'package:vayu/model/video_model.dart';
 
 /// **Mixin for easy Hot UI State integration in video screens**
 /// Add this to your video screen widgets for WhatsApp-style state preservation

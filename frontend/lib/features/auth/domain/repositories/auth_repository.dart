@@ -1,4 +1,4 @@
-import 'package:snehayog/features/auth/domain/entities/user_entity.dart';
+import 'package:vayu/features/auth/domain/entities/user_entity.dart';
 
 abstract class AuthRepository {
   /// Sign in with Google

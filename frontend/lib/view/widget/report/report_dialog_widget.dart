@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/services/report_service.dart';
+import 'package:vayu/services/report_service.dart';
 
 class ReportDialogWidget extends StatefulWidget {
   final String targetType;

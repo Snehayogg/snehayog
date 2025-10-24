@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:snehayog/controller/google_sign_in_controller.dart';
-import 'package:snehayog/controller/main_controller.dart';
-import 'package:snehayog/core/providers/user_provider.dart';
-import 'package:snehayog/core/providers/video_provider.dart';
-import 'package:snehayog/core/managers/profile_state_manager.dart';
-import 'package:snehayog/services/authservices.dart';
+import 'package:vayu/controller/google_sign_in_controller.dart';
+import 'package:vayu/controller/main_controller.dart';
+import 'package:vayu/core/providers/user_provider.dart';
+import 'package:vayu/core/providers/video_provider.dart';
+import 'package:vayu/core/managers/profile_state_manager.dart';
+import 'package:vayu/services/authservices.dart';
 
 /// **FIXED: Centralized logout service to coordinate all state managers**
 class LogoutService {

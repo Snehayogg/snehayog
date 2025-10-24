@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:snehayog/view/widget/create_ad/ad_type_selector_widget.dart';
-import 'package:snehayog/view/widget/create_ad/media_uploader_widget.dart';
-import 'package:snehayog/view/widget/create_ad/ad_details_form_widget.dart';
-import 'package:snehayog/view/widget/create_ad/targeting_section_widget.dart';
-import 'package:snehayog/view/widget/create_ad/campaign_settings_widget.dart';
-import 'package:snehayog/view/widget/create_ad/campaign_preview_widget.dart';
-import 'package:snehayog/view/widget/create_ad/payment_handler_widget.dart';
-import 'package:snehayog/services/ad_service.dart';
-import 'package:snehayog/services/authservices.dart';
-import 'package:snehayog/services/cloudinary_service.dart';
-import 'package:snehayog/services/ad_refresh_notifier.dart';
-import 'package:snehayog/model/ad_model.dart';
-import 'package:snehayog/controller/main_controller.dart';
+import 'package:vayu/view/widget/create_ad/ad_type_selector_widget.dart';
+import 'package:vayu/view/widget/create_ad/media_uploader_widget.dart';
+import 'package:vayu/view/widget/create_ad/ad_details_form_widget.dart';
+import 'package:vayu/view/widget/create_ad/targeting_section_widget.dart';
+import 'package:vayu/view/widget/create_ad/campaign_settings_widget.dart';
+import 'package:vayu/view/widget/create_ad/campaign_preview_widget.dart';
+import 'package:vayu/view/widget/create_ad/payment_handler_widget.dart';
+import 'package:vayu/services/ad_service.dart';
+import 'package:vayu/services/authservices.dart';
+import 'package:vayu/services/cloudinary_service.dart';
+import 'package:vayu/services/ad_refresh_notifier.dart';
+import 'package:vayu/model/ad_model.dart';
+import 'package:vayu/controller/main_controller.dart';
 import 'dart:io';
 
 class CreateAdScreenRefactored extends StatefulWidget {

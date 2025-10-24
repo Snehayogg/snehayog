@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:http/http.dart' as http;
-import 'package:snehayog/config/app_config.dart';
-import 'package:snehayog/services/authservices.dart';
+import 'package:vayu/config/app_config.dart';
+import 'package:vayu/services/authservices.dart';
 
 class SignedUrlService {
   static final SignedUrlService _instance = SignedUrlService._internal();

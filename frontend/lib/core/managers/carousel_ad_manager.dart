@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/model/carousel_ad_model.dart';
-import 'package:snehayog/services/carousel_ad_service.dart';
+import 'package:vayu/model/carousel_ad_model.dart';
+import 'package:vayu/services/carousel_ad_service.dart';
 
 /// **CarouselAdManager - Handles all carousel ad logic**
 /// Separated from VideoScreen for better maintainability

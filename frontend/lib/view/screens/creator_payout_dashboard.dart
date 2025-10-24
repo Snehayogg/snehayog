@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/config/app_config.dart';
-import 'package:snehayog/services/authservices.dart';
+import 'package:vayu/config/app_config.dart';
+import 'package:vayu/services/authservices.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 

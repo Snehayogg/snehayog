@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/services/feedback_service.dart';
+import 'package:vayu/services/feedback_service.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 

@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:snehayog/utils/banner_image_processor.dart';
+import 'package:vayu/utils/banner_image_processor.dart';
 
 /// **MediaUploaderWidget - Handles media file uploads for ads**
 class MediaUploaderWidget extends StatefulWidget {

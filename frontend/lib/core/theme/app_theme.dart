@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Professional theme system for Snehayog app
+/// Professional theme system for Vayu app
 /// Implements a minimal but sharp design with teal accent guiding actions
 class AppTheme {
   // ===========================================================================
@@ -623,8 +623,7 @@ class AppTheme {
   }) {
     return ButtonStyle(
       backgroundColor: WidgetStateProperty.all(backgroundColor ?? primary),
-      foregroundColor:
-          WidgetStateProperty.all(foregroundColor ?? textInverse),
+      foregroundColor: WidgetStateProperty.all(foregroundColor ?? textInverse),
       elevation: WidgetStateProperty.all(elevation ?? 0),
       padding: WidgetStateProperty.all(padding ??
           const EdgeInsets.symmetric(

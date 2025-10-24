@@ -1,13 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:snehayog/model/ad_model.dart';
-import 'package:snehayog/services/authservices.dart';
-import 'package:snehayog/services/cloudinary_service.dart';
-import 'package:snehayog/config/app_config.dart';
-import 'package:snehayog/core/managers/smart_cache_manager.dart';
-import 'package:snehayog/services/active_ads_service.dart';
-import 'package:snehayog/services/ad_refresh_notifier.dart';
+import 'package:vayu/model/ad_model.dart';
+import 'package:vayu/services/authservices.dart';
+import 'package:vayu/services/cloudinary_service.dart';
+import 'package:vayu/config/app_config.dart';
+import 'package:vayu/core/managers/smart_cache_manager.dart';
+import 'package:vayu/services/active_ads_service.dart';
+import 'package:vayu/services/ad_refresh_notifier.dart';
 
 class AdService {
   static final AdService _instance = AdService._internal();

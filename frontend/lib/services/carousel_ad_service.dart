@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:snehayog/model/carousel_ad_model.dart';
-import 'package:snehayog/config/app_config.dart';
+import 'package:vayu/model/carousel_ad_model.dart';
+import 'package:vayu/config/app_config.dart';
 
 class CarouselAdService {
   static String get _baseUrl => AppConfig.baseUrl;

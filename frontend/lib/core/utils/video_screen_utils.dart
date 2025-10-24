@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/core/services/video_screen_logger.dart';
+import 'package:vayu/model/video_model.dart';
+import 'package:vayu/core/services/video_screen_logger.dart';
 
 /// Utility class for video screen helper methods
 class VideoScreenUtils {

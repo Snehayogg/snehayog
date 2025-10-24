@@ -2,14 +2,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:snehayog/core/providers/video_provider.dart';
-import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/services/authservices.dart';
-import 'package:snehayog/services/user_service.dart';
-import 'package:snehayog/services/video_service.dart';
-import 'package:snehayog/utils/feature_flags.dart';
-import 'package:snehayog/core/constants/profile_constants.dart';
-import 'package:snehayog/core/managers/smart_cache_manager.dart';
+import 'package:vayu/core/providers/video_provider.dart';
+import 'package:vayu/model/video_model.dart';
+import 'package:vayu/services/authservices.dart';
+import 'package:vayu/services/user_service.dart';
+import 'package:vayu/services/video_service.dart';
+import 'package:vayu/utils/feature_flags.dart';
+import 'package:vayu/core/constants/profile_constants.dart';
+import 'package:vayu/core/managers/smart_cache_manager.dart';
 
 // Import for unawaited
 

@@ -1,6 +1,6 @@
-# Snehayog App - Modular Architecture
+# Vayu App - Modular Architecture
 
-This document describes the new modular + layered architecture implemented in the Snehayog Flutter application.
+This document describes the new modular + layered architecture implemented in the Vayu Flutter application.
 
 ## Architecture Overview
 

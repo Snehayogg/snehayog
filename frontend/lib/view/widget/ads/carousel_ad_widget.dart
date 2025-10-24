@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:snehayog/model/carousel_ad_model.dart';
-import 'package:snehayog/services/carousel_ad_service.dart';
-import 'package:snehayog/services/authservices.dart';
-import 'package:snehayog/services/video_service.dart';
-import 'package:snehayog/view/widget/comments_sheet_widget.dart';
-import 'package:snehayog/services/comments/ad_comments_data_source.dart';
-import 'package:snehayog/services/ad_comment_service.dart';
+import 'package:vayu/model/carousel_ad_model.dart';
+import 'package:vayu/services/carousel_ad_service.dart';
+import 'package:vayu/services/authservices.dart';
+import 'package:vayu/services/video_service.dart';
+import 'package:vayu/view/widget/comments_sheet_widget.dart';
+import 'package:vayu/services/comments/ad_comments_data_source.dart';
+import 'package:vayu/services/ad_comment_service.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:snehayog/view/widget/custom_share_widget.dart';
+import 'package:vayu/view/widget/custom_share_widget.dart';
 
 /// **Professional Carousel Ad Widget**
 class CarouselAdWidget extends StatefulWidget {

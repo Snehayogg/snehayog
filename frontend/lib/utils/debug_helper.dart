@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/config/app_config.dart';
+import 'package:vayu/config/app_config.dart';
 import 'package:http/http.dart' as http;
 
 class DebugHelper {

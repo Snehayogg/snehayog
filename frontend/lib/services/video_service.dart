@@ -8,11 +8,11 @@ import 'package:flutter/material.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:video_compress/video_compress.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/model/ad_model.dart';
-import 'package:snehayog/services/authservices.dart';
-import 'package:snehayog/services/ad_service.dart';
-import 'package:snehayog/config/app_config.dart';
+import 'package:vayu/model/video_model.dart';
+import 'package:vayu/model/ad_model.dart';
+import 'package:vayu/services/authservices.dart';
+import 'package:vayu/services/ad_service.dart';
+import 'package:vayu/config/app_config.dart';
 
 /// **OPTIMIZED VideoService - Single source of truth for all video operations**
 /// Merged from VideoService, BaseVideoService, and InstagramVideoService
@@ -786,8 +786,8 @@ class VideoService {
 
       // **Share using platform dialog**
       await Share.share(
-        '🎬 Check out this video on Snehayog!\n\n📹 $description\n\n🔗 Watch on Snehayog: $shareUrl\n🌐 Web version: https://snehayog.app/video/$videoId\n\n#Snehayog #Video',
-        subject: 'Snehayog Video',
+        '🎬 Check out this video on Vayu!\n\n📹 $description\n\n🔗 Watch on Vayu: $shareUrl\n🌐 Web version: https://vayu.app/video/$videoId\n\n#Vayu #Video',
+        subject: 'Vayu Video',
       );
 
       // **Update share count on server**

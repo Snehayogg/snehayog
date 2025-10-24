@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/services/ad_comment_service.dart';
-import 'package:snehayog/model/carousel_ad_model.dart';
+import 'package:vayu/services/ad_comment_service.dart';
+import 'package:vayu/model/carousel_ad_model.dart';
 
 class AdCommentsSheetWidget extends StatefulWidget {
   final CarouselAdModel carouselAd;

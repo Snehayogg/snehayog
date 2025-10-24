@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/services/authservices.dart';
+import 'package:vayu/services/authservices.dart';
 
 class GoogleSignInController extends ChangeNotifier {
   final AuthService _authService = AuthService();

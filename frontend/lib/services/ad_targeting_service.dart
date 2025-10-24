@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/config/app_config.dart';
+import 'package:vayu/model/video_model.dart';
+import 'package:vayu/config/app_config.dart';
 
 /// **AD TARGETING SERVICE**
 /// Handles intelligent ad-video matching based on interests and categories

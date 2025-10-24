@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/services/video_service.dart';
+import 'package:vayu/model/video_model.dart';
+import 'package:vayu/services/video_service.dart';
 
 class CustomShareWidget extends StatefulWidget {
   final VideoModel video;
@@ -433,10 +433,10 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
   }
 
   String _generateShareText() {
-    return 'Upload your videos on Snehayog and start earning from day one! 💰\n'
+    return 'Upload your videos on Vayu and start earning from day one! 💰\n'
         'No 1000 subs or long watch hours\n\n'
         '🎯 Example video: ${widget.video.videoName} ⬇️\n'
-        'https://snehayog.app/video/${widget.video.id}\n\n'
+        'https://vayu.app/video/${widget.video.id}\n\n'
         'Only First 1000 early creators — grab 80% ad revenue';
   }
 

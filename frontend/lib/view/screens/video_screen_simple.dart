@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/services/video_service.dart';
-import 'package:snehayog/services/authservices.dart';
+import 'package:vayu/model/video_model.dart';
+import 'package:vayu/services/video_service.dart';
+import 'package:vayu/services/authservices.dart';
 
 /// **SIMPLE VIDEO SCREEN: No complex managers, no freezing**
 class VideoScreenSimple extends StatefulWidget {

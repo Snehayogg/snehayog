@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:geocoding/geocoding.dart';
-import 'package:snehayog/services/authservices.dart';
+import 'package:vayu/services/authservices.dart';
 
 class LocationOnboardingService {
   static const String _locationPermissionKey = 'location_permission_granted';

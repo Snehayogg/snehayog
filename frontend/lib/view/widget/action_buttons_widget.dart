@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/core/constants/app_constants.dart';
+import 'package:vayu/model/video_model.dart';
+import 'package:vayu/core/constants/app_constants.dart';
 
 class ActionButtonsWidget extends StatelessWidget {
   final VideoModel video;

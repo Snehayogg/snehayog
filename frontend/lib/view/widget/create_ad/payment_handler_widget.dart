@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:snehayog/model/ad_model.dart';
+import 'package:vayu/model/ad_model.dart';
 import 'package:snehayog_monetization/snehayog_monetization.dart';
-import 'package:snehayog/services/authservices.dart';
+import 'package:vayu/services/authservices.dart';
 
 /// **PaymentHandlerWidget - Handles payment processing and dialogs**
 class PaymentHandlerWidget {
@@ -112,7 +112,7 @@ class PaymentHandlerWidget {
       await _razorpayService.makePayment(
         amount: totalAmount,
         currency: 'INR',
-        name: 'Snehayog Ad Campaign',
+        name: 'Vayu Ad Campaign',
         description: 'Advertisement campaign payment',
         email: userData['email'] ?? 'user@example.com',
         contact: userData['phone'] ?? '9999999999',
@@ -169,7 +169,7 @@ class PaymentHandlerWidget {
             Icon(Icons.star, color: Colors.amber.shade600, size: 24),
             const SizedBox(width: 12),
             const Text(
-              'Why Advertise on Snehayog?',
+              'Why Advertise on Vayu?',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -184,7 +184,7 @@ class PaymentHandlerWidget {
             children: [
               _buildBenefitItem(
                 'Guaranteed Ad Impressions',
-                'Unlike other platforms where ad reach is uncertain, Snehayog ensures advertisers get guaranteed impressions, providing clear ROI visibility.',
+                'Unlike other platforms where ad reach is uncertain, Vayu ensures advertisers get guaranteed impressions, providing clear ROI visibility.',
                 Icons.visibility,
                 Colors.blue.shade600,
               ),
@@ -205,7 +205,7 @@ class PaymentHandlerWidget {
               const SizedBox(height: 16),
               _buildBenefitItem(
                 'Less Competition, More Attention',
-                'Unlike crowded platforms (YouTube, Instagram, etc.), Snehayog offers advertisers a space with lower competition for user attention, increasing ad visibility and impact.',
+                'Unlike crowded platforms (YouTube, Instagram, etc.), Vayu offers advertisers a space with lower competition for user attention, increasing ad visibility and impact.',
                 Icons.psychology,
                 Colors.purple.shade600,
               ),
@@ -226,7 +226,7 @@ class PaymentHandlerWidget {
               const SizedBox(height: 16),
               _buildBenefitItem(
                 'Emerging Market Advantage',
-                'Early advertisers on Snehayog benefit from first-mover advantage, capturing audience attention before the platform scales massively.',
+                'Early advertisers on Vayu benefit from first-mover advantage, capturing audience attention before the platform scales massively.',
                 Icons.rocket_launch,
                 Colors.red.shade600,
               ),

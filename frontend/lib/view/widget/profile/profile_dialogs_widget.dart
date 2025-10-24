@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:snehayog/core/managers/profile_state_manager.dart';
-import 'package:snehayog/core/services/auto_scroll_settings.dart';
-import 'package:snehayog/view/screens/creator_payment_setup_screen.dart';
-import 'package:snehayog/view/screens/creator_revenue_screen.dart';
-import 'package:snehayog/view/screens/creator_payout_dashboard.dart';
-import 'package:snehayog/view/widget/feedback/feedback_dialog_widget.dart';
-import 'package:snehayog/view/widget/report/report_dialog_widget.dart';
+import 'package:vayu/core/managers/profile_state_manager.dart';
+import 'package:vayu/core/services/auto_scroll_settings.dart';
+import 'package:vayu/view/screens/creator_payment_setup_screen.dart';
+import 'package:vayu/view/screens/creator_revenue_screen.dart';
+import 'package:vayu/view/screens/creator_payout_dashboard.dart';
+import 'package:vayu/view/widget/feedback/feedback_dialog_widget.dart';
+import 'package:vayu/view/widget/report/report_dialog_widget.dart';
 
 class ProfileDialogsWidget {
   static void showSettingsBottomSheet(
@@ -396,7 +396,7 @@ class ProfileDialogsWidget {
                         ),
                         SizedBox(height: 4),
                         Text(
-                          'Everything you need to know about Snehayog',
+                          'Everything you need to know about Vayu',
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey,
@@ -421,24 +421,23 @@ class ProfileDialogsWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildFAQItem(
-                        question:
-                            "Why should I use Snehayog instead of Instagram?",
+                        question: "Why should I use Vayu instead of Instagram?",
                         answer:
-                            "Because on Snehayog, you can start earning from day one, not after months of growth. And unlike Instagram, you'll see relevant, meaningful content, not adult or sexual material. It's a platform built to reward real creators and protect genuine viewers.",
+                            "Because on Vayu, you can start earning from day one, not after months of growth. And unlike Instagram, you'll see relevant, meaningful content, not adult or sexual material. It's a platform built to reward real creators and protect genuine viewers.",
                         icon: Icons.compare_arrows,
                         color: Colors.green,
                       ),
                       _buildFAQItem(
                         question:
-                            "YouTube already lets creators earn money. Why switch to Snehayog?",
+                            "YouTube already lets creators earn money. Why switch to Vayu?",
                         answer:
-                            "YouTube has strict monetization rules — you need 1,000 subscribers and 4,000 watch hours. On Snehayog, there's no barrier — creators start earning from the first upload. It's a platform that values your effort, not your follower count.",
+                            "YouTube has strict monetization rules — you need 1,000 subscribers and 4,000 watch hours. On Vayu, there's no barrier — creators start earning from the first upload. It's a platform that values your effort, not your follower count.",
                         icon: Icons.video_library,
                         color: Colors.red,
                       ),
                       _buildFAQItem(
                         question:
-                            "Does Snehayog really give 80% ad revenue? Sounds too good to be true.",
+                            "Does Vayu really give 80% ad revenue? Sounds too good to be true.",
                         answer:
                             "Yes — creators get 80% of ad revenue directly. The system automatically credits it to your bank account based on your views and engagement. Our goal is to make creators financially independent, not exploit their content.",
                         icon: Icons.account_balance_wallet,
@@ -448,13 +447,13 @@ class ProfileDialogsWidget {
                         question:
                             "What's the point of joining a new app if my followers are on Instagram and YouTube?",
                         answer:
-                            "That's exactly why now is the best time — you can be an early creator on a growing platform. Early creators get more reach, visibility, and partnership opportunities. On Snehayog, you're not lost in the crowd — your content actually gets discovered.",
+                            "That's exactly why now is the best time — you can be an early creator on a growing platform. Early creators get more reach, visibility, and partnership opportunities. On Vayu, you're not lost in the crowd — your content actually gets discovered.",
                         icon: Icons.trending_up,
                         color: Colors.purple,
                       ),
                       _buildFAQItem(
                         question:
-                            "How will I get views or reach on Snehayog? New platforms usually have low traffic.",
+                            "How will I get views or reach on Vayu? New platforms usually have low traffic.",
                         answer:
                             "We're actively promoting creators through in-app boosts and personalized recommendations. Because fewer creators are competing right now, your chances to go viral are much higher. Early users always benefit the most — just like YouTubers who started in 2010.",
                         icon: Icons.visibility,
@@ -611,7 +610,7 @@ class ProfileDialogsWidget {
                       const SizedBox(width: 12),
                       const Expanded(
                         child: Text(
-                          'How to earn on Snehayog',
+                          'How to earn on Vayu',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,

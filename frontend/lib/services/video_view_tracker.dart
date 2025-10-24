@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:snehayog/config/app_config.dart';
-import 'package:snehayog/services/authservices.dart';
+import 'package:vayu/config/app_config.dart';
+import 'package:vayu/services/authservices.dart';
 
 /// Service for managing video view tracking with Instagram Reels-style behavior
 /// Handles 4-second view threshold, repeat views (max 10 per user), and API integration

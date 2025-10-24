@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:snehayog/model/feedback_model.dart';
-import 'package:snehayog/services/authservices.dart';
-import 'package:snehayog/config/app_config.dart';
+import 'package:vayu/model/feedback_model.dart';
+import 'package:vayu/services/authservices.dart';
+import 'package:vayu/config/app_config.dart';
 
 class FeedbackService {
   final AuthService _authService = AuthService();

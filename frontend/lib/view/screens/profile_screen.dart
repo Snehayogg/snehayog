@@ -1,25 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:snehayog/utils/responsive_helper.dart';
+import 'package:vayu/utils/responsive_helper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:snehayog/view/screens/creator_revenue_screen.dart';
+import 'package:vayu/view/screens/creator_revenue_screen.dart';
 import 'dart:convert';
-import 'package:snehayog/config/app_config.dart';
-import 'package:snehayog/core/managers/profile_state_manager.dart';
+import 'package:vayu/config/app_config.dart';
+import 'package:vayu/core/managers/profile_state_manager.dart';
 import 'package:provider/provider.dart';
-import 'package:snehayog/core/providers/user_provider.dart';
-import 'package:snehayog/model/usermodel.dart';
-import 'package:snehayog/core/services/profile_screen_logger.dart';
-import 'package:snehayog/services/background_profile_preloader.dart';
+import 'package:vayu/core/providers/user_provider.dart';
+import 'package:vayu/model/usermodel.dart';
+import 'package:vayu/core/services/profile_screen_logger.dart';
+import 'package:vayu/services/background_profile_preloader.dart';
 import 'dart:async';
 import 'package:share_plus/share_plus.dart';
 import 'package:http/http.dart' as http;
-import 'package:snehayog/view/widget/profile/profile_header_widget.dart';
-import 'package:snehayog/view/widget/profile/profile_stats_widget.dart';
-import 'package:snehayog/view/widget/profile/profile_videos_widget.dart';
-import 'package:snehayog/view/widget/profile/profile_menu_widget.dart';
-import 'package:snehayog/view/widget/profile/profile_dialogs_widget.dart';
+import 'package:vayu/view/widget/profile/profile_header_widget.dart';
+import 'package:vayu/view/widget/profile/profile_stats_widget.dart';
+import 'package:vayu/view/widget/profile/profile_videos_widget.dart';
+import 'package:vayu/view/widget/profile/profile_menu_widget.dart';
+import 'package:vayu/view/widget/profile/profile_dialogs_widget.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -918,10 +918,10 @@ class _ProfileScreenState extends State<ProfileScreen>
       final String referralLink =
           referralCode.isNotEmpty ? '$base/?ref=$referralCode' : base;
       final String message =
-          'I am using Snehayog! Refer 2 friends and get full access. Join now: $referralLink';
+          'I am using Vayu! Refer 2 friends and get full access. Join now: $referralLink';
       await Share.share(
         message,
-        subject: 'Snehayog – Refer 2 friends and get full access',
+        subject: 'Vayu – Refer 2 friends and get full access',
       );
 
       // Optimistically increment invite counter

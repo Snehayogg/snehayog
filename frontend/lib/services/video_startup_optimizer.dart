@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/core/managers/video_controller_manager.dart';
+import 'package:vayu/model/video_model.dart';
+import 'package:vayu/core/managers/video_controller_manager.dart';
 
 /// Service to optimize video startup and auto-play after app clear
 class VideoStartupOptimizer {

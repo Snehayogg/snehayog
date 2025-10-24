@@ -1,5 +1,5 @@
-import 'package:snehayog/features/auth/domain/entities/user_entity.dart';
-import 'package:snehayog/features/auth/domain/repositories/auth_repository.dart';
+import 'package:vayu/features/auth/domain/entities/user_entity.dart';
+import 'package:vayu/features/auth/domain/repositories/auth_repository.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
   UserEntity? _currentUser;

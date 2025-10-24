@@ -1,9 +1,9 @@
 import 'package:video_player/video_player.dart';
-import 'package:snehayog/core/managers/video_position_cache_manager.dart';
-import 'package:snehayog/core/managers/hot_ui_state_manager.dart';
-import 'package:snehayog/core/factories/video_controller_factory.dart';
-import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/core/utils/video_disposal_utils.dart';
+import 'package:vayu/core/managers/video_position_cache_manager.dart';
+import 'package:vayu/core/managers/hot_ui_state_manager.dart';
+import 'package:vayu/core/factories/video_controller_factory.dart';
+import 'package:vayu/model/video_model.dart';
+import 'package:vayu/core/utils/video_disposal_utils.dart';
 import 'dart:collection';
 import 'dart:async';
 

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:snehayog/model/video_model.dart';
-import 'package:snehayog/controller/google_sign_in_controller.dart';
-import 'package:snehayog/core/constants/app_constants.dart';
-import 'package:snehayog/services/video_service.dart';
-import 'package:snehayog/services/comments/video_comments_data_source.dart';
-import 'package:snehayog/view/widget/comments_sheet_widget.dart';
-import 'package:snehayog/view/widget/custom_share_widget.dart';
+import 'package:vayu/model/video_model.dart';
+import 'package:vayu/controller/google_sign_in_controller.dart';
+import 'package:vayu/core/constants/app_constants.dart';
+import 'package:vayu/services/video_service.dart';
+import 'package:vayu/services/comments/video_comments_data_source.dart';
+import 'package:vayu/view/widget/comments_sheet_widget.dart';
+import 'package:vayu/view/widget/custom_share_widget.dart';
 
 class VideoActionsWidget extends StatelessWidget {
   final VideoModel video;
