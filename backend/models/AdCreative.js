@@ -117,12 +117,13 @@ const AdCreativeSchema = new mongoose.Schema({
     },
     url: {
       type: String,
-      required: true,
+      required: false, // **FIX: Make URL optional - not all ads need links**
       validate: {
         validator: function(v) {
-          return /^https?:\/\/.+/.test(v);
+          // Allow empty URLs or valid HTTP/HTTPS URLs
+          return !v || /^https?:\/\/.+/.test(v);
         },
-        message: 'URL must be a valid HTTP/HTTPS URL'
+        message: 'URL must be empty or a valid HTTP/HTTPS URL'
       }
     }
   },

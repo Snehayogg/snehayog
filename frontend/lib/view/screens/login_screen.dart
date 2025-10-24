@@ -10,15 +10,8 @@ class LoginScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.grey[300]!,
-              Colors.grey[400]!,
-            ],
-          ),
+        decoration: const BoxDecoration(
+          color: Colors.white,
         ),
         child: SafeArea(
           child: Center(
@@ -60,7 +53,7 @@ class LoginScreen extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: Colors.black87,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -73,7 +66,7 @@ class LoginScreen extends StatelessWidget {
                         'Create • Video • Earn',
                         style: TextStyle(
                           fontSize: 16,
-                          color: Colors.white70,
+                          color: Colors.grey,
                           fontWeight: FontWeight.w500,
                           letterSpacing: 0.5,
                         ),
@@ -100,11 +93,11 @@ class LoginScreen extends StatelessWidget {
                               size: 16,
                             ),
                             const SizedBox(width: 6),
-                            const Text(
+                            Text(
                               'No Monetization Criteria',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.white,
+                                color: Colors.green[800],
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -213,7 +206,7 @@ class LoginScreen extends StatelessWidget {
                                         flex: 2,
                                         child: SizedBox(
                                           height: 50,
-                                          child: TextButton.icon(
+                                          child: ElevatedButton.icon(
                                             onPressed: () {
                                               // Skip sign-in and go to home even during error
                                               Navigator.pushReplacementNamed(
@@ -232,13 +225,13 @@ class LoginScreen extends StatelessWidget {
                                                 color: Colors.white,
                                               ),
                                             ),
-                                            style: TextButton.styleFrom(
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor:
+                                                  Colors.orange[600],
                                               foregroundColor: Colors.white,
-                                              side: BorderSide(
-                                                color: Colors.white
-                                                    .withOpacity(0.3),
-                                                width: 1.5,
-                                              ),
+                                              elevation: 4,
+                                              shadowColor: Colors.orange
+                                                  .withOpacity(0.3),
                                               shape: RoundedRectangleBorder(
                                                 borderRadius:
                                                     BorderRadius.circular(12),
@@ -332,7 +325,7 @@ class LoginScreen extends StatelessWidget {
                             flex: 2,
                             child: SizedBox(
                               height: 64,
-                              child: TextButton.icon(
+                              child: ElevatedButton.icon(
                                 onPressed: () {
                                   // Skip sign-in and go to home
                                   Navigator.pushReplacementNamed(
@@ -351,12 +344,11 @@ class LoginScreen extends StatelessWidget {
                                     color: Colors.white,
                                   ),
                                 ),
-                                style: TextButton.styleFrom(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.orange[600],
                                   foregroundColor: Colors.white,
-                                  side: BorderSide(
-                                    color: Colors.white.withOpacity(0.3),
-                                    width: 1.5,
-                                  ),
+                                  elevation: 4,
+                                  shadowColor: Colors.orange.withOpacity(0.3),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
@@ -442,7 +434,7 @@ class LoginScreen extends StatelessWidget {
                     'By signing in, you agree to our Terms of Service and Privacy Policy',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.white60,
+                      color: Colors.grey,
                     ),
                     textAlign: TextAlign.center,
                   ),

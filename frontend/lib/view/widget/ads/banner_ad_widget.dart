@@ -47,8 +47,11 @@ class BannerAdWidget extends StatelessWidget {
     print('   Ad ID: ${adData['_id'] ?? adData['id']}');
     print('   Title: ${adData['title']}');
     print('   Link: ${adData['link']}');
+    print('   URL: ${adData['url']}');
+    print('   CTA URL: ${adData['ctaUrl']}');
     print('   CallToAction: ${adData['callToAction']}');
     print('   AdType: ${adData['adType']}');
+    print('   All values: ${adData.toString()}');
 
     return Container(
       width: double.infinity,
@@ -225,7 +228,6 @@ class BannerAdWidget extends StatelessWidget {
     try {
       final adId = adData['_id'] ?? adData['id'];
 
-
       // Resolve link from multiple keys and ensure absolute URL
       String link = (adData['link'] ??
               adData['url'] ??
@@ -330,13 +332,18 @@ class BannerAdWidget extends StatelessWidget {
         }
       } else {
         print('🔍 No link provided for banner ad');
+        print('   Available fields: ${adData.keys.toList()}');
+        print('   Link field value: ${adData['link']}');
+        print('   URL field value: ${adData['url']}');
+        print('   CallToAction field value: ${adData['callToAction']}');
 
-        // Show info to user
+        // Show simple message to user
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('This ad has no link to open'),
-              duration: Duration(seconds: 2),
+              content: Text('The ads has no link to open'),
+              duration: Duration(seconds: 3),
+              backgroundColor: Colors.black,
             ),
           );
         }
@@ -424,13 +431,18 @@ class BannerAdWidget extends StatelessWidget {
         }
       } else {
         print('🔍 No link provided for banner ad');
+        print('   Available fields: ${adData.keys.toList()}');
+        print('   Link field value: ${adData['link']}');
+        print('   URL field value: ${adData['url']}');
+        print('   CallToAction field value: ${adData['callToAction']}');
 
-        // Show info to user
+        // Show simple message to user
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('This ad has no link to open'),
-              duration: Duration(seconds: 2),
+              content: Text('The ads has no link to open'),
+              duration: Duration(seconds: 3),
+              backgroundColor: Colors.orange,
             ),
           );
         }

@@ -443,6 +443,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           print('     CloudinaryUrl: ${ad['cloudinaryUrl']}');
           print('     Thumbnail: ${ad['thumbnail']}');
           print('     Link: ${ad['link']}');
+          print('     URL: ${ad['url']}');
           print('     CallToAction: ${ad['callToAction']}');
         }
       }

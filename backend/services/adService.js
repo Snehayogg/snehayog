@@ -119,7 +119,7 @@ class AdService {
     
     // **NEW: Determine call to action label and URL**
     let callToActionLabel = 'Learn More';
-    let callToActionUrl = 'https://example.com'; // Default URL
+    let callToActionUrl = ''; // **FIX: Don't set default URL - let it be empty if no link provided**
     
     // Only use link if it's a valid URL
     if (link && link.trim().startsWith('http')) {
@@ -133,8 +133,9 @@ class AdService {
         callToActionLabel = 'Sign Up';
       }
     } else {
-      // If link is not a valid URL, use default
-      console.log('⚠️ AdService: Link is not a valid URL, using default:', link);
+      // If link is not a valid URL, keep it empty
+      console.log('⚠️ AdService: Link is not a valid URL, keeping empty:', link);
+      callToActionUrl = '';
     }
 
     // **NEW: Create AdCreative with correct field mapping**

@@ -425,12 +425,12 @@ class _MainScreenState extends State<MainScreen>
               child: SafeArea(
                 bottom: true, // Ensure bottom safe area is respected
                 child: Container(
-                  height: 60, // Reduced height for more compact design
+                  height: 70, // Increased height to prevent overflow
                   padding: const EdgeInsets.only(
                     left: 8,
                     right: 8,
-                    top: 4,
-                    bottom: 4, // Minimal bottom padding to prevent text cutoff
+                    top: 6,
+                    bottom: 8, // Increased bottom padding
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -510,8 +510,8 @@ class _MainScreenState extends State<MainScreen>
                   child: RotationTransition(
                     turns: _refreshAnimationController,
                     child: Container(
-                      width: 32,
-                      height: 32,
+                      width: 28,
+                      height: 28,
                       decoration: BoxDecoration(
                         color: isSelected
                             ? const Color(0xFF2196F3).withOpacity(0.2)
@@ -521,8 +521,8 @@ class _MainScreenState extends State<MainScreen>
                       child: Icon(
                         Icons.refresh,
                         size: isSelected
-                            ? 22
-                            : 20, // Smaller icons for compact design
+                            ? 20
+                            : 18, // Smaller icons to prevent overflow
                         color: isSelected
                             ? const Color(0xFF2196F3)
                             : (mainController.currentIndex == 0
@@ -535,8 +535,8 @@ class _MainScreenState extends State<MainScreen>
               else
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
-                  width: 32,
-                  height: 32,
+                  width: 28,
+                  height: 28,
                   decoration: BoxDecoration(
                     color: isSelected
                         ? const Color(0xFF2196F3).withOpacity(0.2)
@@ -546,8 +546,8 @@ class _MainScreenState extends State<MainScreen>
                   child: Icon(
                     icon,
                     size: isSelected
-                        ? 22
-                        : 20, // Smaller icons for compact design
+                        ? 20
+                        : 18, // Smaller icons to prevent overflow
                     color: isSelected
                         ? const Color(0xFF2196F3)
                         : (mainController.currentIndex == 0
@@ -556,13 +556,13 @@ class _MainScreenState extends State<MainScreen>
                   ),
                 ),
 
-              const SizedBox(height: 2), // Reduced spacing for compact design
+              const SizedBox(height: 1), // Minimal spacing to prevent overflow
 
               // Label always visible below icon
               AnimatedDefaultTextStyle(
                 duration: const Duration(milliseconds: 200),
                 style: TextStyle(
-                  fontSize: 10, // Reduced for compact design
+                  fontSize: 9, // Smaller font size to prevent overflow
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                   color: isSelected
                       ? const Color(0xFF2196F3)

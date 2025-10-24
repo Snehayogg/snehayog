@@ -137,9 +137,20 @@ class ActiveAdsService {
 
         for (final ad in ads) {
           if (ad is Map<String, dynamic>) {
+            final originalAdType = ad['adType'];
             final adType = normalizeType(ad['adType']);
+
+            // **DEBUG: Log ad type processing**
+            print('🔍 ActiveAdsService: Processing ad:');
+            print('   Original adType: $originalAdType');
+            print('   Normalized adType: $adType');
+            print('   Ad keys: ${ad.keys.toList()}');
+
             if (categorizedAds.containsKey(adType)) {
               categorizedAds[adType]!.add(normalizeAd(ad));
+              print('   ✅ Added to $adType category');
+            } else {
+              print('   ❌ Unknown ad type: $adType');
             }
           }
         }

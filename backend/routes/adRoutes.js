@@ -289,38 +289,7 @@ router.post('/process-payment', async (req, res) => {
   }
 });
 
-// **FIXED: Get active ads for serving using service method**
-router.get('/serve', async (req, res) => {
-  try {
-    const { userId, platform, location, adType } = req.query;
-
-    console.log('🎯 Serving ads request:', { userId, platform, location, adType });
-
-    // Use the service method for consistent logic
-    const targetingCriteria = { userId, platform, location };
-    const activeAds = await adService.getActiveAds(targetingCriteria);
-
-    // Filter by ad type if specified
-    let filteredAds = activeAds;
-    if (adType) {
-      filteredAds = activeAds.filter(ad => 
-        ad.adType && ad.adType.toLowerCase().includes(adType.toLowerCase())
-      );
-      console.log(`   Filtered by type: ${adType} -> ${filteredAds.length} ads`);
-    }
-
-    console.log(`✅ Found ${filteredAds.length} active ads (${activeAds.length} total found)`);
-
-    res.json({
-      ads: filteredAds,
-      count: filteredAds.length
-    });
-
-  } catch (error) {
-    console.error('Error serving ads:', error);
-    res.status(500).json({ error: 'Failed to serve ads' });
-  }
-});
+// **REMOVED: Duplicate endpoint - using the second one below**
 
 // **NEW: Track ad clicks**
 router.post('/track-click/:adId', async (req, res) => {
@@ -1081,6 +1050,20 @@ router.get('/serve', async (req, res) => {
     // Convert to ad format for frontend
     const ads = validCampaigns.map(campaign => {
       const creative = campaign.creative;
+      
+      // **DEBUG: Log banner ad details**
+      if (creative.adType === 'banner') {
+        console.log('🔍 Banner Ad Debug:');
+        console.log('   Campaign ID:', campaign._id);
+        console.log('   Creative ID:', creative._id);
+        console.log('   Title:', creative.title);
+        console.log('   CloudinaryUrl:', creative.cloudinaryUrl);
+        console.log('   CallToAction:', creative.callToAction);
+        console.log('   CallToAction URL:', creative.callToAction?.url);
+        console.log('   IsActive:', creative.isActive);
+        console.log('   ReviewStatus:', creative.reviewStatus);
+      }
+      
       return {
         id: campaign._id,
         campaignId: campaign._id,
@@ -1098,6 +1081,20 @@ router.get('/serve', async (req, res) => {
         clicks: creative.clicks || 0,
         createdAt: campaign.createdAt
       };
+    });
+    
+    // **DEBUG: Log final response**
+    console.log('🔍 Final ads response:');
+    console.log('   Total ads:', ads.length);
+    ads.forEach((ad, index) => {
+      console.log(`   Ad ${index}:`, {
+        id: ad.id,
+        adType: ad.adType,
+        title: ad.title,
+        imageUrl: ad.imageUrl,
+        link: ad.link,
+        callToAction: ad.callToAction
+      });
     });
     
     res.json(ads);
