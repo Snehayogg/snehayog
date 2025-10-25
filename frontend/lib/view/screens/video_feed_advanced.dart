@@ -13,7 +13,6 @@ import 'package:vayu/services/active_ads_service.dart';
 import 'package:vayu/services/video_view_tracker.dart';
 import 'package:vayu/services/ad_refresh_notifier.dart';
 import 'package:vayu/services/background_profile_preloader.dart';
-import 'package:vayu/services/ad_targeting_service.dart';
 import 'package:vayu/services/ad_impression_service.dart';
 import 'package:vayu/view/widget/ads/banner_ad_widget.dart';
 import 'package:vayu/view/widget/ads/carousel_ad_widget.dart';
@@ -70,7 +69,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   final AdRefreshNotifier _adRefreshNotifier = AdRefreshNotifier();
   final BackgroundProfilePreloader _profilePreloader =
       BackgroundProfilePreloader();
-  final AdTargetingService _adTargetingService = AdTargetingService();
   final AdImpressionService _adImpressionService = AdImpressionService();
   StreamSubscription? _adRefreshSubscription;
 
@@ -422,8 +420,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   /// **OPTIMIZED: Load active ads in background without blocking videos**
   Future<void> _loadActiveAds() async {
     try {
-      print('🎯 VideoFeedAdvanced: Loading active ads in background...');
+      print('🎯 VideoFeedAdvanced: Loading fallback ads in background...');
 
+      // Load fallback ads for general use (when no specific video context)
       final allAds = await _activeAdsService.fetchActiveAds();
 
       if (mounted) {
@@ -432,7 +431,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           _adsLoaded = true;
         });
 
-        print('✅ VideoFeedAdvanced: Ads loaded and displayed:');
+        print('✅ VideoFeedAdvanced: Fallback ads loaded:');
         print('   Banner ads: ${_bannerAds.length}');
 
         // **NEW: Debug banner ad details**
@@ -441,13 +440,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           print(
             '   Banner Ad $i: ${ad['title']} (${ad['adType']}) - Active: ${ad['isActive']}',
           );
-          print('     Keys: ${ad.keys.toList()}');
-          print('     ImageUrl: ${ad['imageUrl']}');
-          print('     CloudinaryUrl: ${ad['cloudinaryUrl']}');
-          print('     Thumbnail: ${ad['thumbnail']}');
-          print('     Link: ${ad['link']}');
-          print('     URL: ${ad['url']}');
-          print('     CallToAction: ${ad['callToAction']}');
         }
       }
 
@@ -457,13 +449,47 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         await _loadCarouselAds();
       }
     } catch (e) {
-      print('❌ Error loading active ads: $e');
+      print('❌ Error loading fallback ads: $e');
       if (mounted) {
         setState(() {
           _adsLoaded =
               true; // Mark as loaded even on error to prevent infinite loading
         });
       }
+    }
+  }
+
+  /// **NEW: Load targeted ads for a specific video**
+  Future<List<Map<String, dynamic>>> _loadTargetedAdsForVideo(
+      VideoModel video) async {
+    try {
+      print(
+          '🎯 VideoFeedAdvanced: Loading targeted ads for video: ${video.videoName}');
+
+      // Use ActiveAdsService with video context for intelligent targeting
+      final targetedAds = await _activeAdsService.fetchActiveAds(
+        videoData: video, // Pass video context for targeting
+      );
+
+      final bannerAds = targetedAds['banner'] ?? [];
+
+      print(
+          '✅ VideoFeedAdvanced: Found ${bannerAds.length} targeted banner ads for video: ${video.videoName}');
+
+      // Log targeting insights
+      for (int i = 0; i < bannerAds.length; i++) {
+        final ad = bannerAds[i];
+        print(
+            '   Targeted Banner Ad $i: ${ad['title']} (${ad['adType']}) - Score: ${ad['targetingScore'] ?? 'N/A'}');
+      }
+
+      return bannerAds;
+    } catch (e) {
+      print('❌ Error loading targeted ads for video ${video.id}: $e');
+
+      // Fall back to general banner ads
+      print('🔄 Falling back to general banner ads...');
+      return _bannerAds;
     }
   }
 
@@ -709,61 +735,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
   }
 
-  /// **NEW: Load targeted ads for current video**
-  Future<void> _loadTargetedAds() async {
-    if (_videos.isEmpty || _currentIndex >= _videos.length) {
-      print('⚠️ VideoFeedAdvanced: No videos available for ad targeting');
-      return;
-    }
-
-    final currentVideo = _videos[_currentIndex];
-
-    try {
-      print(
-          '🎯 VideoFeedAdvanced: Loading targeted ads for video: ${currentVideo.videoName}');
-
-      final targetedAds = await _adTargetingService.getTargetedAdsForVideo(
-        currentVideo,
-        limit: 3,
-        useFallback: true,
-      );
-
-      if (mounted) {
-        setState(() {
-          _bannerAds = targetedAds;
-          _adsLoaded = true;
-        });
-
-        print(
-            '✅ VideoFeedAdvanced: Loaded ${targetedAds.length} targeted ads for video: ${currentVideo.videoName}');
-
-        // Log targeting insights
-        if (targetedAds.isNotEmpty) {
-          final insights = _adTargetingService.getTargetingInsights(
-              targetedAds, currentVideo);
-          print('📊 Targeting insights: $insights');
-        }
-      }
-    } catch (e) {
-      print('❌ VideoFeedAdvanced: Error loading targeted ads: $e');
-
-      // Fallback to loading any available ads
-      if (mounted) {
-        setState(() {
-          _bannerAds = [];
-          _adsLoaded = false;
-        });
-      }
-    }
-  }
-
   /// **NEW: Load targeted ads when video changes**
   void _onVideoChanged(int newIndex) {
     if (_currentIndex != newIndex) {
       setState(() => _currentIndex = newIndex);
 
-      // Load new targeted ads for the new video
-      _loadTargetedAds();
+      // Targeted ads are now loaded per video in the UI
 
       print('🔄 VideoFeedAdvanced: Video changed to index $newIndex');
     }
@@ -1434,15 +1411,35 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             child: Material(
               elevation: 12, // Ensure on top
               color: Colors.transparent,
-              child: BannerAdWidget(
-                adData: (_adsLoaded && _bannerAds.isNotEmpty)
-                    ? _bannerAds[index % _bannerAds.length]
-                    : {
-                        'imageUrl': '',
-                        'title': 'Sponsored Content',
-                      },
-                onAdClick: () {
-                  print('🖱️ Banner ad clicked on video $index');
+              child: FutureBuilder<List<Map<String, dynamic>>>(
+                future: _loadTargetedAdsForVideo(video),
+                builder: (context, snapshot) {
+                  Map<String, dynamic> adData;
+
+                  if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+                    // Use targeted ads for this video
+                    adData = snapshot.data![index % snapshot.data!.length];
+                    print(
+                        '🎯 Using targeted ad for video $index: ${adData['title']}');
+                  } else if (_adsLoaded && _bannerAds.isNotEmpty) {
+                    // Fall back to general ads
+                    adData = _bannerAds[index % _bannerAds.length];
+                    print(
+                        '🔄 Using fallback ad for video $index: ${adData['title']}');
+                  } else {
+                    // Default placeholder
+                    adData = {
+                      'imageUrl': '',
+                      'title': 'Sponsored Content',
+                    };
+                  }
+
+                  return BannerAdWidget(
+                    adData: adData,
+                    onAdClick: () {
+                      print('🖱️ Banner ad clicked on video $index');
+                    },
+                  );
                 },
               ),
             ),
@@ -1604,24 +1601,23 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           onTapDown: (details) => _seekToPosition(controller, details),
           onPanUpdate: (details) => _seekToPosition(controller, details),
           child: Container(
-            height: 8, // Increased height for better touch target
-            color: Colors.black.withOpacity(0.4),
+            height: 4,
+            color: Colors.black.withOpacity(0.2),
             child: Stack(
               children: [
-                // Progress bar background
                 Container(
-                  height: 4,
+                  height: 2,
                   margin: const EdgeInsets.only(
-                    top: 2,
+                    top: 1,
                   ), // Center the progress bar
-                  color: Colors.grey.withOpacity(0.3),
+                  color: Colors.grey.withOpacity(0.2),
                 ),
                 // Progress bar filled portion
                 Positioned(
-                  top: 2,
+                  top: 1,
                   left: 0,
                   child: Container(
-                    height: 4,
+                    height: 2,
                     width: MediaQuery.of(context).size.width * progress,
                     color: Colors.green[400],
                   ),
@@ -1630,13 +1626,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                 if (progress > 0)
                   Positioned(
                     top: 0,
-                    left: (MediaQuery.of(context).size.width * progress) - 6,
+                    left: (MediaQuery.of(context).size.width * progress) - 4,
                     child: Container(
-                      width: 12,
-                      height: 8,
+                      width: 8,
+                      height: 6,
                       decoration: BoxDecoration(
                         color: Colors.green[400],
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(4),
                       ),
                     ),
                   ),
@@ -2030,31 +2026,20 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.5), // Reduced opacity to 0.6
+        color: Colors.black.withOpacity(0.3), // Further reduced opacity
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Colors.green.withOpacity(0.8),
+          color: Colors.green.withOpacity(0.6), // Reduced border opacity
           width: 1,
         ),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.attach_money,
-            color: Colors.green[400],
-            size: 12,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            '₹${video.earnings.toStringAsFixed(2)}',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
+      child: Text(
+        '₹${video.earnings.toStringAsFixed(2)}',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 9,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -2278,19 +2263,16 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           child: _buildEarningsLabel(video),
         ),
 
-        // Bottom info section
         Positioned(
-          bottom: 0, // Remove the gap - make content flush with bottom
+          bottom: 12, // Increased spacing from progress bar
           left: 0,
           right: 80, // Leave space for vertical action buttons
           child: Container(
-            padding: const EdgeInsets.fromLTRB(
-                16, 16, 16, 8), // Adjust bottom padding
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Uploader info with follow button (moved above title)
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () => _navigateToCreatorProfile(video.uploader.id),
@@ -2354,13 +2336,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 16),
-
+                const SizedBox(height: 6),
                 if (video.link?.isNotEmpty == true)
                   GestureDetector(
                     onTap: () => _handleVisitNow(video),
                     child: Container(
-                      // **UPDATED: Increased width significantly while keeping height same**
                       width: MediaQuery.of(context).size.width *
                           0.75, // 50% of screen width
                       padding: const EdgeInsets.symmetric(
@@ -2400,6 +2380,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                       ),
                     ),
                   ),
+
+                // **FIXED: Remove spacing to eliminate black empty space**
               ],
             ),
           ),
@@ -2699,10 +2681,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     return GestureDetector(
       onTap: () => _handleFollow(video),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
           color: isFollowing ? Colors.grey[800] : Colors.blue[600],
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isFollowing ? Colors.grey[600]! : Colors.blue[600]!,
             width: 1,
@@ -2712,9 +2694,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           isFollowing ? 'Following' : 'Follow',
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 14,
+            fontSize: 11,
             fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
+            letterSpacing: 0.3,
           ),
         ),
       ),
@@ -3000,38 +2982,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       final hitRate = (_cacheHits / _totalRequests * 100).toStringAsFixed(2);
       print('   Hit Rate: $hitRate%');
     }
-
-    // **SMART CACHE MANAGER STATUS**
-    try {
-      final cacheStats = _cacheManager.getStats();
-      print('🧠 Smart Cache Manager:');
-      print('   Memory Cache Size: ${cacheStats['memoryCacheSize']}');
-      print('   Cache Hits: ${cacheStats['cacheHits']}');
-      print('   Cache Misses: ${cacheStats['cacheMisses']}');
-      print('   Hit Rate: ${cacheStats['hitRate']}%');
-      print('   ETag Hit Rate: ${cacheStats['etagHitRate']}%');
-      print('   Background Refreshes: ${cacheStats['backgroundRefreshes']}');
-      print('   Stale Responses: ${cacheStats['staleResponses']}');
-      print('   Currently Preloading: ${cacheStats['currentlyPreloading']}');
-    } catch (e) {
-      print('❌ Error getting cache stats: $e');
-    }
-
-    // **VIDEO LOADING STATUS**
-    print('🎥 Video Loading Status:');
-    print('   Current Index: $_currentIndex');
-    print('   Total Videos: ${_videos.length}');
-    print('   Max Pool Size: $_maxPoolSize');
-    print('   Is Loading: $_isLoading');
-    print('   Is Screen Visible: $_isScreenVisible');
-
-    // **MEMORY USAGE**
-    print('💾 Memory Usage:');
-    print('   Controller Pool Size: ${_controllerPool.length}');
-    print('   Preloaded Videos Count: ${_preloadedVideos.length}');
-    print('   Loading Videos Count: ${_loadingVideos.length}');
-
-    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   }
 
   /// **GET DETAILED CACHE INFO: Comprehensive cache information**

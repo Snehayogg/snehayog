@@ -83,7 +83,7 @@ class ProfileVideosWidget extends StatelessWidget {
                             'Loading your videos...',
                             style: TextStyle(
                               color: Colors.grey[600],
-                              fontSize: 16,
+                              fontSize: 14,
                             ),
                           ),
                         ],
@@ -125,7 +125,7 @@ class ProfileVideosWidget extends StatelessWidget {
                             'Upload your first video to get started!',
                             style: TextStyle(
                               color: Color(0xFF9CA3AF),
-                              fontSize: 16,
+                              fontSize: 14,
                             ),
                             textAlign: TextAlign.center,
                           ),

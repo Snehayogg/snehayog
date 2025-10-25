@@ -1,512 +1,622 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:vayu/model/video_model.dart';
 import 'package:vayu/config/app_config.dart';
+import 'package:vayu/core/managers/smart_cache_manager.dart';
+import 'package:vayu/model/video_model.dart';
 
-/// **AD TARGETING SERVICE**
-/// Handles intelligent ad-video matching based on interests and categories
-/// with fallback system for limited content
+/// Service for intelligent ad targeting based on video content
 class AdTargetingService {
-  final String _baseUrl = AppConfig.baseUrl;
+  static String get _baseUrl => AppConfig.baseUrl;
+  final SmartCacheManager _cacheManager = SmartCacheManager();
 
-  // **TARGETING CATEGORIES**
-  static const Map<String, List<String>> _categoryMapping = {
-    'yoga': [
-      'yoga',
-      'meditation',
-      'wellness',
-      'fitness',
-      'mindfulness',
-      'spiritual',
-      'health'
-    ],
-    'fitness': [
-      'fitness',
-      'workout',
-      'exercise',
-      'gym',
-      'training',
-      'strength',
-      'cardio'
-    ],
-    'cooking': [
-      'cooking',
-      'recipe',
-      'food',
-      'kitchen',
-      'chef',
-      'baking',
-      'nutrition'
-    ],
-    'education': [
-      'education',
-      'learning',
-      'tutorial',
-      'course',
-      'study',
-      'knowledge',
-      'skill'
-    ],
-    'entertainment': [
-      'entertainment',
-      'fun',
-      'comedy',
-      'music',
-      'dance',
-      'art',
-      'creative'
-    ],
-    'lifestyle': [
-      'lifestyle',
-      'fashion',
-      'beauty',
-      'travel',
-      'home',
-      'decor',
-      'tips'
-    ],
-    'technology': [
-      'technology',
-      'tech',
-      'gadgets',
-      'software',
-      'programming',
-      'innovation'
-    ],
-    'business': [
-      'business',
-      'entrepreneur',
-      'finance',
-      'marketing',
-      'startup',
-      'career'
-    ],
-    'sports': [
-      'sports',
-      'football',
-      'cricket',
-      'basketball',
-      'tennis',
-      'athletics'
-    ],
-    'travel': [
-      'travel',
-      'tourism',
-      'adventure',
-      'exploration',
-      'vacation',
-      'places'
-    ],
-  };
-
-  // **INTEREST KEYWORDS**
-  static const Map<String, List<String>> _interestKeywords = {
-    'health_wellness': [
-      'health',
-      'wellness',
-      'medical',
-      'doctor',
-      'hospital',
-      'medicine',
-      'therapy'
-    ],
-    'fitness_sports': [
-      'fitness',
-      'sports',
-      'gym',
-      'workout',
-      'training',
-      'athlete',
-      'exercise'
-    ],
-    'food_cooking': [
-      'food',
-      'cooking',
-      'recipe',
-      'restaurant',
-      'chef',
-      'kitchen',
-      'nutrition'
-    ],
-    'education_learning': [
-      'education',
-      'school',
-      'college',
-      'university',
-      'learning',
-      'study',
-      'course'
-    ],
-    'entertainment_media': [
-      'entertainment',
-      'movie',
-      'music',
-      'dance',
-      'comedy',
-      'fun',
-      'party'
-    ],
-    'technology_gadgets': [
-      'technology',
-      'tech',
-      'gadgets',
-      'smartphone',
-      'computer',
-      'software'
-    ],
-    'fashion_beauty': [
-      'fashion',
-      'beauty',
-      'style',
-      'makeup',
-      'clothing',
-      'shopping',
-      'trends'
-    ],
-    'travel_tourism': [
-      'travel',
-      'tourism',
-      'vacation',
-      'adventure',
-      'exploration',
-      'places'
-    ],
-    'business_finance': [
-      'business',
-      'finance',
-      'money',
-      'investment',
-      'entrepreneur',
-      'startup'
-    ],
-    'lifestyle_home': [
-      'lifestyle',
-      'home',
-      'decor',
-      'interior',
-      'family',
-      'parenting',
-      'tips'
-    ],
-  };
-
-  /// **GET TARGETED ADS FOR VIDEO**
-  /// Returns ads that match the video's category and interests
-  Future<List<Map<String, dynamic>>> getTargetedAdsForVideo(
-    VideoModel video, {
+  /// Get targeted ads for a specific video
+  /// Analyzes video content and returns best-matching ads
+  Future<Map<String, dynamic>> getTargetedAdsForVideo({
+    required VideoModel video,
     int limit = 3,
     bool useFallback = true,
+    String adType = 'banner',
   }) async {
     try {
       print(
           '🎯 AdTargetingService: Getting targeted ads for video: ${video.id}');
+      print('🎯 Video name: ${video.videoName}');
+      print('🎯 Video description: ${video.description}');
 
-      // Extract video categories and interests
-      final videoCategories = _extractVideoCategories(video);
-      final videoInterests = _extractVideoInterests(video);
+      // Create cache key for this video
+      final cacheKey = 'targeted_ads_${video.id}_${adType}';
 
-      print('🎯 Video categories: $videoCategories');
-      print('🎯 Video interests: $videoInterests');
-
-      // Try to get targeted ads first
-      final targetedAds = await _getTargetedAds(
-        categories: videoCategories,
-        interests: videoInterests,
-        limit: limit,
+      // Try to get from cache first
+      final cachedResult = await _cacheManager.get(
+        cacheKey,
+        fetchFn: () async => null,
+        cacheType: 'targeting',
+        maxAge: const Duration(minutes: 10),
+        forceRefresh: false,
       );
 
-      if (targetedAds.isNotEmpty) {
-        print('✅ Found ${targetedAds.length} targeted ads');
-        return targetedAds;
+      if (cachedResult != null) {
+        print(
+            '✅ AdTargetingService: Using cached targeted ads for video ${video.id}');
+        return cachedResult as Map<String, dynamic>;
       }
 
-      // Fallback: Get any available ads if no targeted ads found
-      if (useFallback) {
-        print('🔄 No targeted ads found, using fallback system');
-        final fallbackAds = await _getFallbackAds(limit: limit);
-        print('✅ Found ${fallbackAds.length} fallback ads');
-        return fallbackAds;
-      }
+      // Prepare video data for backend using available fields
+      final videoData = {
+        'id': video.id,
+        'videoName': video.videoName,
+        'description':
+            video.description ?? '', // Keep for backward compatibility
+        'videoType': video.videoType,
+        'category': _extractCategoryFromVideo(video),
+        'tags': _extractTagsFromVideo(video),
+        'keywords': _extractKeywordsFromVideo(video),
+      };
 
-      return [];
+      // Call backend targeting endpoint
+      final response = await http.post(
+        Uri.parse('$_baseUrl/api/ads/targeting/targeted-for-video'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'videoData': videoData,
+          'limit': limit,
+          'useFallback': useFallback,
+          'adType': adType,
+        }),
+      );
+
+      print('🔍 AdTargetingService: Response status: ${response.statusCode}');
+      print('🔍 AdTargetingService: Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final result = json.decode(response.body) as Map<String, dynamic>;
+
+        // Cache the result
+        await _cacheManager.get(
+          cacheKey,
+          fetchFn: () async => result,
+          cacheType: 'targeting',
+          maxAge: const Duration(minutes: 10),
+        );
+
+        print(
+            '✅ AdTargetingService: Found ${result['ads']?.length ?? 0} targeted ads');
+        print('🎯 Targeting insights: ${result['insights']}');
+
+        return result;
+      } else {
+        print(
+            '❌ AdTargetingService: Backend error ${response.statusCode}: ${response.body}');
+        throw Exception('Failed to get targeted ads: ${response.statusCode}');
+      }
     } catch (e) {
-      print('❌ Error getting targeted ads: $e');
-      return [];
+      print('❌ AdTargetingService: Error getting targeted ads: $e');
+
+      // Return fallback result
+      return {
+        'success': false,
+        'ads': [],
+        'insights': {
+          'videoCategories': [],
+          'videoInterests': [],
+          'targetedAds': 0,
+          'fallbackAds': 0,
+          'error': e.toString(),
+        },
+        'isFallback': true,
+      };
     }
   }
 
-  /// **GET TARGETED ADS BY CATEGORY**
-  /// Returns ads that match specific categories
-  Future<List<Map<String, dynamic>>> getTargetedAdsByCategory(
-    List<String> categories, {
-    int limit = 5,
+  /// Get targeted ads by categories and interests
+  Future<Map<String, dynamic>> getTargetedAdsByCategory({
+    required List<String> categories,
+    int limit = 3,
+    String adType = 'banner',
   }) async {
     try {
-      print('🎯 Getting targeted ads for categories: $categories');
+      print(
+          '🎯 AdTargetingService: Getting targeted ads for categories: $categories');
 
       final response = await http.post(
-        Uri.parse('$_baseUrl/api/ads/targeted'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
+        Uri.parse('$_baseUrl/api/ads/targeting/targeted'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
           'categories': categories,
           'limit': limit,
           'targetingType': 'category',
+          'adType': adType,
+          'useFallback': true,
         }),
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return List<Map<String, dynamic>>.from(data['ads'] ?? []);
+        final result = json.decode(response.body) as Map<String, dynamic>;
+        print(
+            '✅ AdTargetingService: Found ${result['ads']?.length ?? 0} category-targeted ads');
+        return result;
+      } else {
+        throw Exception(
+            'Failed to get category-targeted ads: ${response.statusCode}');
       }
-
-      return [];
     } catch (e) {
-      print('❌ Error getting targeted ads by category: $e');
-      return [];
+      print('❌ AdTargetingService: Error getting category-targeted ads: $e');
+      return {
+        'success': false,
+        'ads': [],
+        'totalAds': 0,
+        'isFallback': true,
+      };
     }
   }
 
-  /// **GET TARGETED ADS BY INTERESTS**
-  /// Returns ads that match specific interests
-  Future<List<Map<String, dynamic>>> getTargetedAdsByInterests(
-    List<String> interests, {
-    int limit = 5,
+  /// Get targeted ads by interests
+  Future<Map<String, dynamic>> getTargetedAdsByInterests({
+    required List<String> interests,
+    int limit = 3,
+    String adType = 'banner',
   }) async {
     try {
-      print('🎯 Getting targeted ads for interests: $interests');
+      print(
+          '🎯 AdTargetingService: Getting targeted ads for interests: $interests');
 
       final response = await http.post(
-        Uri.parse('$_baseUrl/api/ads/targeted'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
+        Uri.parse('$_baseUrl/api/ads/targeting/targeted'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
           'interests': interests,
           'limit': limit,
           'targetingType': 'interest',
+          'adType': adType,
+          'useFallback': true,
         }),
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return List<Map<String, dynamic>>.from(data['ads'] ?? []);
+        final result = json.decode(response.body) as Map<String, dynamic>;
+        print(
+            '✅ AdTargetingService: Found ${result['ads']?.length ?? 0} interest-targeted ads');
+        return result;
+      } else {
+        throw Exception(
+            'Failed to get interest-targeted ads: ${response.statusCode}');
       }
-
-      return [];
     } catch (e) {
-      print('❌ Error getting targeted ads by interests: $e');
-      return [];
+      print('❌ AdTargetingService: Error getting interest-targeted ads: $e');
+      return {
+        'success': false,
+        'ads': [],
+        'totalAds': 0,
+        'isFallback': true,
+      };
     }
   }
 
-  /// **EXTRACT VIDEO CATEGORIES**
-  /// Analyzes video content to determine categories
-  List<String> _extractVideoCategories(VideoModel video) {
-    final categories = <String>[];
-
-    // Analyze video name
-    final videoName = video.videoName.toLowerCase();
-    for (final category in _categoryMapping.keys) {
-      if (_categoryMapping[category]!
-          .any((keyword) => videoName.contains(keyword.toLowerCase()))) {
-        categories.add(category);
-      }
-    }
-
-    // Analyze description
-    if (video.description != null) {
-      final description = video.description!.toLowerCase();
-      for (final category in _categoryMapping.keys) {
-        if (_categoryMapping[category]!
-            .any((keyword) => description.contains(keyword.toLowerCase()))) {
-          if (!categories.contains(category)) {
-            categories.add(category);
-          }
-        }
-      }
-    }
-
-    // Default to 'entertainment' if no categories found
-    if (categories.isEmpty) {
-      categories.add('entertainment');
-    }
-
-    return categories;
-  }
-
-  /// **EXTRACT VIDEO INTERESTS**
-  /// Analyzes video content to determine interests
-  List<String> _extractVideoInterests(VideoModel video) {
-    final interests = <String>[];
-
-    // Analyze video name
-    final videoName = video.videoName.toLowerCase();
-    for (final interest in _interestKeywords.keys) {
-      if (_interestKeywords[interest]!
-          .any((keyword) => videoName.contains(keyword.toLowerCase()))) {
-        interests.add(interest);
-      }
-    }
-
-    // Analyze description
-    if (video.description != null) {
-      final description = video.description!.toLowerCase();
-      for (final interest in _interestKeywords.keys) {
-        if (_interestKeywords[interest]!
-            .any((keyword) => description.contains(keyword.toLowerCase()))) {
-          if (!interests.contains(interest)) {
-            interests.add(interest);
-          }
-        }
-      }
-    }
-
-    // Default to 'entertainment_media' if no interests found
-    if (interests.isEmpty) {
-      interests.add('entertainment_media');
-    }
-
-    return interests;
-  }
-
-  /// **GET TARGETED ADS**
-  /// Fetches ads that match the specified categories and interests
-  Future<List<Map<String, dynamic>>> _getTargetedAds({
-    required List<String> categories,
-    required List<String> interests,
-    required int limit,
+  /// Get fallback ads when targeting fails
+  Future<Map<String, dynamic>> getFallbackAds({
+    int limit = 3,
+    String adType = 'banner',
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/api/ads/targeted'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'categories': categories,
-          'interests': interests,
-          'limit': limit,
-          'targetingType': 'both',
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return List<Map<String, dynamic>>.from(data['ads'] ?? []);
-      }
-
-      return [];
-    } catch (e) {
-      print('❌ Error getting targeted ads: $e');
-      return [];
-    }
-  }
-
-  /// **GET FALLBACK ADS**
-  /// Returns any available ads when no targeted ads are found
-  Future<List<Map<String, dynamic>>> _getFallbackAds({
-    required int limit,
-  }) async {
-    try {
-      print('🔄 Getting fallback ads...');
+      print('🔄 AdTargetingService: Getting fallback ads...');
 
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/ads/fallback?limit=$limit'),
-        headers: {'Content-Type': 'application/json'},
+        Uri.parse(
+            '$_baseUrl/api/ads/targeting/fallback?limit=$limit&adType=$adType'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return List<Map<String, dynamic>>.from(data['ads'] ?? []);
+        final result = json.decode(response.body) as Map<String, dynamic>;
+        print(
+            '✅ AdTargetingService: Found ${result['ads']?.length ?? 0} fallback ads');
+        return result;
+      } else {
+        throw Exception('Failed to get fallback ads: ${response.statusCode}');
       }
-
-      return [];
     } catch (e) {
-      print('❌ Error getting fallback ads: $e');
+      print('❌ AdTargetingService: Error getting fallback ads: $e');
+      return {
+        'success': false,
+        'ads': [],
+        'totalAds': 0,
+        'isFallback': true,
+      };
+    }
+  }
+
+  /// Get targeting categories available in the system
+  Future<List<String>> getTargetingCategories() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/api/ads/targeting/categories'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final result = json.decode(response.body) as Map<String, dynamic>;
+        final categories =
+            (result['categories'] as List<dynamic>?)?.cast<String>() ?? [];
+        print(
+            '✅ AdTargetingService: Found ${categories.length} targeting categories');
+        return categories;
+      } else {
+        throw Exception(
+            'Failed to get targeting categories: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('❌ AdTargetingService: Error getting targeting categories: $e');
       return [];
     }
   }
 
-  /// **GET AD TARGETING SCORE**
-  /// Calculates how well an ad matches a video (0-100)
-  double getTargetingScore(
-    Map<String, dynamic> ad,
-    VideoModel video,
-  ) {
-    final videoCategories = _extractVideoCategories(video);
-    final videoInterests = _extractVideoInterests(video);
+  /// Get targeting interests available in the system
+  Future<List<String>> getTargetingInterests() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/api/ads/targeting/interests'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      );
 
-    double score = 0.0;
-
-    // Check category match (40% weight)
-    final adCategories = List<String>.from(ad['categories'] ?? []);
-    final categoryMatches =
-        videoCategories.where((cat) => adCategories.contains(cat)).length;
-    score += (categoryMatches / videoCategories.length) * 40;
-
-    // Check interest match (40% weight)
-    final adInterests = List<String>.from(ad['interests'] ?? []);
-    final interestMatches = videoInterests
-        .where((interest) => adInterests.contains(interest))
-        .length;
-    score += (interestMatches / videoInterests.length) * 40;
-
-    // Check ad performance (20% weight)
-    final impressions = ad['impressions'] ?? 0;
-    final clicks = ad['clicks'] ?? 0;
-    final ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
-    score += (ctr / 10) * 20; // Normalize CTR to 0-20
-
-    return score.clamp(0.0, 100.0);
+      if (response.statusCode == 200) {
+        final result = json.decode(response.body) as Map<String, dynamic>;
+        final interests =
+            (result['interests'] as List<dynamic>?)?.cast<String>() ?? [];
+        print(
+            '✅ AdTargetingService: Found ${interests.length} targeting interests');
+        return interests;
+      } else {
+        throw Exception(
+            'Failed to get targeting interests: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('❌ AdTargetingService: Error getting targeting interests: $e');
+      return [];
+    }
   }
 
-  /// **GET TARGETING INSIGHTS**
-  /// Returns insights about ad-video matching
-  Map<String, dynamic> getTargetingInsights(
-    List<Map<String, dynamic>> ads,
-    VideoModel video,
-  ) {
-    final videoCategories = _extractVideoCategories(video);
-    final videoInterests = _extractVideoInterests(video);
+  /// Clear targeting cache for a specific video
+  Future<void> clearTargetingCache(String videoId) async {
+    try {
+      print(
+          '🧹 AdTargetingService: Clearing targeting cache for video: $videoId');
 
-    final insights = <String, dynamic>{
-      'videoCategories': videoCategories,
-      'videoInterests': videoInterests,
-      'totalAds': ads.length,
-      'targetedAds': 0,
-      'fallbackAds': 0,
-      'averageScore': 0.0,
-      'topCategories': <String, int>{},
-      'topInterests': <String, int>{},
+      final cacheKeys = [
+        'targeted_ads_${videoId}_banner',
+        'targeted_ads_${videoId}_carousel',
+        'targeted_ads_${videoId}_video feed ad',
+      ];
+
+      for (final key in cacheKeys) {
+        await _cacheManager.get(
+          key,
+          fetchFn: () async => null as dynamic,
+          cacheType: 'targeting',
+          maxAge: Duration.zero,
+          forceRefresh: true,
+        );
+      }
+
+      print(
+          '✅ AdTargetingService: Cleared targeting cache for video: $videoId');
+    } catch (e) {
+      print('⚠️ AdTargetingService: Error clearing targeting cache: $e');
+    }
+  }
+
+  /// Clear all targeting cache
+  Future<void> clearAllTargetingCache() async {
+    try {
+      print('🧹 AdTargetingService: Clearing all targeting cache...');
+
+      // Clear all targeting-related cache entries
+      final cacheKeys = [
+        'targeting_categories',
+        'targeting_interests',
+        'targeted_ads_',
+      ];
+
+      for (final key in cacheKeys) {
+        await _cacheManager.get(
+          key,
+          fetchFn: () async => null as dynamic,
+          cacheType: 'targeting',
+          maxAge: Duration.zero,
+          forceRefresh: true,
+        );
+      }
+
+      print('✅ AdTargetingService: Cleared all targeting cache');
+    } catch (e) {
+      print('⚠️ AdTargetingService: Error clearing all targeting cache: $e');
+    }
+  }
+
+  /// **NEW: Extract category from video data**
+  String _extractCategoryFromVideo(VideoModel video) {
+    // Try to extract category from video name and type
+    final videoName = video.videoName.toLowerCase();
+    final videoType = video.videoType.toLowerCase();
+
+    // Category mapping based on video name keywords
+    if (videoName.contains('yoga') ||
+        videoName.contains('meditation') ||
+        videoName.contains('stretch') ||
+        videoName.contains('breath')) {
+      return 'yoga';
+    }
+    if (videoName.contains('fitness') ||
+        videoName.contains('workout') ||
+        videoName.contains('exercise') ||
+        videoName.contains('gym')) {
+      return 'fitness';
+    }
+    if (videoName.contains('cook') ||
+        videoName.contains('recipe') ||
+        videoName.contains('food') ||
+        videoName.contains('kitchen')) {
+      return 'cooking';
+    }
+    if (videoName.contains('dance') ||
+        videoName.contains('music') ||
+        videoName.contains('song') ||
+        videoName.contains('dance')) {
+      return 'entertainment';
+    }
+    // **UPDATED: Consolidated education category includes all academic subjects**
+    if (videoName.contains('education') ||
+        videoName.contains('learn') ||
+        videoName.contains('tutorial') ||
+        videoName.contains('course') ||
+        videoName.contains('physics') ||
+        videoName.contains('chemistry') ||
+        videoName.contains('biology') ||
+        videoName.contains('math') ||
+        videoName.contains('science') ||
+        videoName.contains('history') ||
+        videoName.contains('geography') ||
+        videoName.contains('english') ||
+        videoName.contains('language') ||
+        videoName.contains('study') ||
+        videoName.contains('academic') ||
+        videoName.contains('school') ||
+        videoName.contains('college') ||
+        videoName.contains('university')) {
+      return 'education';
+    }
+    if (videoName.contains('travel') ||
+        videoName.contains('tourism') ||
+        videoName.contains('place') ||
+        videoName.contains('visit')) {
+      return 'travel';
+    }
+    if (videoName.contains('fashion') ||
+        videoName.contains('beauty') ||
+        videoName.contains('style') ||
+        videoName.contains('makeup')) {
+      return 'lifestyle';
+    }
+    if (videoName.contains('tech') ||
+        videoName.contains('gadget') ||
+        videoName.contains('phone') ||
+        videoName.contains('computer')) {
+      return 'technology';
+    }
+    if (videoName.contains('business') ||
+        videoName.contains('money') ||
+        videoName.contains('finance') ||
+        videoName.contains('career')) {
+      return 'business';
+    }
+    if (videoName.contains('sport') ||
+        videoName.contains('game') ||
+        videoName.contains('football') ||
+        videoName.contains('cricket')) {
+      return 'sports';
+    }
+
+    // Default based on video type
+    if (videoType == 'yog') return 'yoga';
+    if (videoType == 'fitness') return 'fitness';
+    if (videoType == 'cooking') return 'cooking';
+
+    return 'others'; // Default fallback
+  }
+
+  /// **NEW: Extract tags from video data**
+  List<String> _extractTagsFromVideo(VideoModel video) {
+    final tags = <String>[];
+    final videoName = video.videoName.toLowerCase();
+
+    // Extract tags based on video name keywords
+    final tagKeywords = {
+      'yoga': ['yoga', 'meditation', 'stretch', 'breath', 'mindfulness', 'zen'],
+      'fitness': [
+        'fitness',
+        'workout',
+        'exercise',
+        'gym',
+        'cardio',
+        'strength'
+      ],
+      'cooking': ['cook', 'recipe', 'food', 'kitchen', 'chef', 'baking'],
+      'entertainment': ['dance', 'music', 'song', 'fun', 'comedy', 'party'],
+      'education': ['learn', 'tutorial', 'course', 'study', 'knowledge'],
+      'travel': ['travel', 'tourism', 'place', 'visit', 'adventure'],
+      'lifestyle': ['fashion', 'beauty', 'style', 'makeup', 'tips'],
+      'technology': ['tech', 'gadget', 'phone', 'computer', 'app'],
+      'business': ['business', 'money', 'finance', 'career', 'startup'],
+      'sports': ['sport', 'game', 'football', 'cricket', 'athlete'],
     };
 
-    if (ads.isEmpty) return insights;
-
-    double totalScore = 0.0;
-
-    for (final ad in ads) {
-      final score = getTargetingScore(ad, video);
-      totalScore += score;
-
-      if (score > 50) {
-        insights['targetedAds']++;
-      } else {
-        insights['fallbackAds']++;
-      }
-
-      // Count categories and interests
-      final adCategories = List<String>.from(ad['categories'] ?? []);
-      final adInterests = List<String>.from(ad['interests'] ?? []);
-
-      for (final category in adCategories) {
-        insights['topCategories'][category] =
-            (insights['topCategories'][category] ?? 0) + 1;
-      }
-
-      for (final interest in adInterests) {
-        insights['topInterests'][interest] =
-            (insights['topInterests'][interest] ?? 0) + 1;
+    for (final category in tagKeywords.keys) {
+      for (final keyword in tagKeywords[category]!) {
+        if (videoName.contains(keyword)) {
+          tags.add(category);
+          break; // Add category only once
+        }
       }
     }
 
-    insights['averageScore'] = totalScore / ads.length;
+    // Add video type as tag
+    if (video.videoType.isNotEmpty) {
+      tags.add(video.videoType.toLowerCase());
+    }
 
-    return insights;
+    return tags.toSet().toList(); // Remove duplicates
+  }
+
+  /// **NEW: Extract keywords from video data**
+  List<String> _extractKeywordsFromVideo(VideoModel video) {
+    final keywords = <String>[];
+    final videoName = video.videoName.toLowerCase();
+
+    // Split video name into words and filter meaningful keywords
+    final words = videoName
+        .split(RegExp(r'[\s\-_]+'))
+        .where((word) => word.length > 2) // Filter out short words
+        .where((word) => !_isCommonWord(word)) // Filter out common words
+        .toList();
+
+    keywords.addAll(words);
+
+    // Add video type as keyword
+    if (video.videoType.isNotEmpty) {
+      keywords.add(video.videoType.toLowerCase());
+    }
+
+    return keywords.toSet().toList(); // Remove duplicates
+  }
+
+  /// **NEW: Check if word is a common word (to filter out)**
+  bool _isCommonWord(String word) {
+    const commonWords = {
+      'the',
+      'and',
+      'or',
+      'but',
+      'in',
+      'on',
+      'at',
+      'to',
+      'for',
+      'of',
+      'with',
+      'by',
+      'from',
+      'up',
+      'about',
+      'into',
+      'through',
+      'during',
+      'before',
+      'after',
+      'above',
+      'below',
+      'between',
+      'among',
+      'this',
+      'that',
+      'these',
+      'those',
+      'i',
+      'you',
+      'he',
+      'she',
+      'it',
+      'we',
+      'they',
+      'me',
+      'him',
+      'her',
+      'us',
+      'them',
+      'my',
+      'your',
+      'his',
+      'its',
+      'our',
+      'their',
+      'a',
+      'an',
+      'is',
+      'are',
+      'was',
+      'were',
+      'be',
+      'been',
+      'being',
+      'have',
+      'has',
+      'had',
+      'do',
+      'does',
+      'did',
+      'will',
+      'would',
+      'could',
+      'should',
+      'may',
+      'might',
+      'must',
+      'can',
+      'shall',
+      'how',
+      'what',
+      'when',
+      'where',
+      'why',
+      'who',
+      'which',
+      'all',
+      'any',
+      'both',
+      'each',
+      'few',
+      'more',
+      'most',
+      'other',
+      'some',
+      'such',
+      'no',
+      'nor',
+      'not',
+      'only',
+      'own',
+      'same',
+      'so',
+      'than',
+      'too',
+      'very',
+      'just',
+      'now',
+      'here',
+      'there',
+      'then',
+      'also',
+      'back',
+      'down',
+      'off',
+      'out',
+      'over',
+      'under',
+      'again',
+      'further',
+      'once'
+    };
+
+    return commonWords.contains(word.toLowerCase());
   }
 }

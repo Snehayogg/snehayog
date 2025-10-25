@@ -27,7 +27,7 @@ class ProfileStatsWidget extends StatelessWidget {
     return RepaintBoundary(
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 24),
-        padding: const EdgeInsets.symmetric(vertical: 24),
+        padding: const EdgeInsets.symmetric(vertical: 20),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
@@ -111,7 +111,7 @@ class ProfileStatsWidget extends StatelessWidget {
               label,
               style: const TextStyle(
                 color: Color(0xFF6B7280),
-                fontSize: 14,
+                fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),
             ),

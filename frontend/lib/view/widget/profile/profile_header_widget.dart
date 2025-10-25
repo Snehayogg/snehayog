@@ -43,8 +43,8 @@ class ProfileHeaderWidget extends StatelessWidget {
                       Consumer<ProfileStateManager>(
                         builder: (context, stateManager, child) {
                           return Container(
-                            width: 96,
-                            height: 96,
+                            width: 80,
+                            height: 80,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               border: Border.all(
@@ -170,7 +170,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                                 _getUserName(context),
                                 style: const TextStyle(
                                   color: Color(0xFF1A1A1A),
-                                  fontSize: 22,
+                                  fontSize: 18,
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: -0.4,
                                 ),
@@ -181,18 +181,21 @@ class ProfileHeaderWidget extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       SizedBox(
-                        height: 36,
+                        height: 32,
                         child: OutlinedButton.icon(
                           onPressed: onShowHowToEarn,
-                          icon: const Icon(Icons.info_outline, size: 18),
-                          label: const Text('How to earn'),
+                          icon: const Icon(Icons.info_outline, size: 16),
+                          label: const Text(
+                            'How to earn',
+                            style: TextStyle(fontSize: 12),
+                          ),
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
+                                horizontal: 10, vertical: 6),
                             side: const BorderSide(color: Color(0xFF3B82F6)),
                             foregroundColor: const Color(0xFF3B82F6),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(6),
                             ),
                           ),
                         ),
@@ -220,9 +223,9 @@ class ProfileHeaderWidget extends StatelessWidget {
                               foregroundColor: const Color(0xFF6B7280),
                               elevation: 0,
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 24, vertical: 12),
+                                  horizontal: 20, vertical: 10),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(6),
                                 side: BorderSide.none,
                               ),
                             ),
@@ -230,10 +233,11 @@ class ProfileHeaderWidget extends StatelessWidget {
                               'Cancel',
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
+                                fontSize: 12,
                               ),
                             ),
                           ),
-                          const SizedBox(width: 16),
+                          const SizedBox(width: 8),
                           ElevatedButton(
                             onPressed: onSaveProfile,
                             style: ElevatedButton.styleFrom(
@@ -241,9 +245,9 @@ class ProfileHeaderWidget extends StatelessWidget {
                               foregroundColor: Colors.white,
                               elevation: 0,
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 24, vertical: 12),
+                                  horizontal: 20, vertical: 10),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(6),
                                 side: BorderSide.none,
                               ),
                             ),
@@ -251,6 +255,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                               'Save',
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
+                                fontSize: 12,
                               ),
                             ),
                           ),

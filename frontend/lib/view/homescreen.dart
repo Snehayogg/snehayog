@@ -425,12 +425,12 @@ class _MainScreenState extends State<MainScreen>
               child: SafeArea(
                 bottom: true, // Ensure bottom safe area is respected
                 child: Container(
-                  height: 60, // Reduced height for more compact design
+                  height: 60, // Keep same height but optimize spacing
                   padding: const EdgeInsets.only(
-                    left: 8,
-                    right: 8,
-                    top: 4, // Reduced top padding
-                    bottom: 4, // Reduced bottom padding
+                    left: 4, // Reduced from 8 to 4
+                    right: 4, // Reduced from 8 to 4
+                    top: 2, // Reduced from 4 to 2
+                    bottom: 2, // Reduced from 4 to 2
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -500,9 +500,8 @@ class _MainScreenState extends State<MainScreen>
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeInOut,
           padding: const EdgeInsets.symmetric(
-              horizontal: 4,
-              vertical:
-                  1), // Reduced horizontal padding, minimal vertical padding
+              horizontal: 2, // Reduced from 4 to 2
+              vertical: 0), // Reduced from 1 to 0 for tighter spacing
           child: Column(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -513,8 +512,8 @@ class _MainScreenState extends State<MainScreen>
                   child: RotationTransition(
                     turns: _refreshAnimationController,
                     child: Container(
-                      width: 24, // Reduced icon container size
-                      height: 24, // Reduced icon container size
+                      width: 32, // Same size for all icons
+                      height: 32, // Same size for all icons
                       decoration: BoxDecoration(
                         color: isSelected
                             ? const Color(0xFF2196F3).withOpacity(0.2)
@@ -523,9 +522,7 @@ class _MainScreenState extends State<MainScreen>
                       ),
                       child: Icon(
                         Icons.refresh,
-                        size: isSelected
-                            ? 22 // Increased icon size
-                            : 20, // Increased icon size
+                        size: isSelected ? 30 : 28, // Same size for all icons
                         color: isSelected
                             ? const Color(0xFF2196F3)
                             : (mainController.currentIndex == 0
@@ -538,8 +535,8 @@ class _MainScreenState extends State<MainScreen>
               else
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
-                  width: 24, // Reduced icon container size
-                  height: 24, // Reduced icon container size
+                  width: 32, // Same size for all icons
+                  height: 32, // Same size for all icons
                   decoration: BoxDecoration(
                     color: isSelected
                         ? const Color(0xFF2196F3).withOpacity(0.2)
@@ -548,9 +545,7 @@ class _MainScreenState extends State<MainScreen>
                   ),
                   child: Icon(
                     icon,
-                    size: isSelected
-                        ? 22 // Increased icon size
-                        : 20, // Increased icon size
+                    size: isSelected ? 30 : 28, // Same size for all icons
                     color: isSelected
                         ? const Color(0xFF2196F3)
                         : (mainController.currentIndex == 0
@@ -559,20 +554,18 @@ class _MainScreenState extends State<MainScreen>
                   ),
                 ),
 
-              const SizedBox(height: 0), // Removed spacing for tighter design
-
-              // Label always visible below icon
+              // Label always visible below icon (removed SizedBox completely)
               AnimatedDefaultTextStyle(
                 duration: const Duration(milliseconds: 200),
                 style: TextStyle(
-                  fontSize: 8,
+                  fontSize: 9, // Increased from 7 to 9 for better readability
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                   color: isSelected
                       ? const Color(0xFF2196F3)
                       : (mainController.currentIndex == 0
                           ? Colors.grey[400]
                           : Colors.grey[600]),
-                  letterSpacing: 0.2, // Better readability
+                  letterSpacing: 0.2,
                 ),
                 child: Text(isRefreshingYog ? 'Refreshing...' : label),
               ),

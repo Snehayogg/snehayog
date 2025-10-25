@@ -71,9 +71,6 @@ const List<String> kInterestOptions = [
   '3D Modeling',
   'Creative Writing',
   'Content Creation',
-  'YouTube',
-  'TikTok',
-  'Instagram',
   'Social Media',
 
   // Health & Wellness
