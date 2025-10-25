@@ -17,6 +17,7 @@ import 'package:vayu/services/ad_targeting_service.dart';
 import 'package:vayu/view/widget/ads/banner_ad_widget.dart';
 import 'package:vayu/view/widget/ads/carousel_ad_widget.dart';
 import 'package:vayu/config/app_config.dart';
+import 'package:vayu/view/screens/profile_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:vayu/controller/main_controller.dart';
 import 'package:vayu/core/managers/video_controller_manager.dart';
@@ -2221,14 +2222,18 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(
-                          video.uploader.name,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
+                        child: GestureDetector(
+                          onTap: () =>
+                              _navigateToCreatorProfile(video.uploader.id),
+                          child: Text(
+                            video.uploader.name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -2244,7 +2249,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                   video.videoName,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 16,
+                    fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
                   maxLines: 2,
@@ -2379,12 +2384,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: Colors.black.withOpacity(0.6),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: color, size: 24),
+            child: Icon(icon, color: color, size: 19),
           ),
           if (count != null) ...[
             const SizedBox(height: 4),
@@ -2685,10 +2690,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     print('🔗 Navigating to creator profile: $userId');
 
     // Navigate to profile screen
-    Navigator.pushNamed(
+    Navigator.push(
       context,
-      '/profile',
-      arguments: {'userId': userId},
+      MaterialPageRoute(
+        builder: (context) => ProfileScreen(userId: userId),
+      ),
     ).catchError((error) {
       print('❌ Error navigating to profile: $error');
       _showSnackBar('Failed to open profile', isError: true);
