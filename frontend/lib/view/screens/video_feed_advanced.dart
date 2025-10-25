@@ -14,6 +14,7 @@ import 'package:vayu/services/video_view_tracker.dart';
 import 'package:vayu/services/ad_refresh_notifier.dart';
 import 'package:vayu/services/background_profile_preloader.dart';
 import 'package:vayu/services/ad_targeting_service.dart';
+import 'package:vayu/services/ad_impression_service.dart';
 import 'package:vayu/view/widget/ads/banner_ad_widget.dart';
 import 'package:vayu/view/widget/ads/carousel_ad_widget.dart';
 import 'package:vayu/config/app_config.dart';
@@ -70,6 +71,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   final BackgroundProfilePreloader _profilePreloader =
       BackgroundProfilePreloader();
   final AdTargetingService _adTargetingService = AdTargetingService();
+  final AdImpressionService _adImpressionService = AdImpressionService();
   StreamSubscription? _adRefreshSubscription;
 
   // Cache manager for instant loading
@@ -549,6 +551,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         // Load following users after videos are loaded
         await _loadFollowingUsers();
 
+        // **NEW: Calculate earnings for each video**
+        await _calculateEarningsForVideos();
+
         // **FIXED: Trigger autoplay after videos are loaded**
         if (mounted) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -761,6 +766,62 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       _loadTargetedAds();
 
       print('🔄 VideoFeedAdvanced: Video changed to index $newIndex');
+    }
+  }
+
+  /// **REUSED: Calculate video revenue using same logic as creator_revenue_screen.dart**
+  Future<double> _calculateVideoRevenue(VideoModel video) async {
+    try {
+      // Get real ad impressions by type for this video
+      final bannerImpressions =
+          await _adImpressionService.getBannerAdImpressions(video.id);
+      final carouselImpressions =
+          await _adImpressionService.getCarouselAdImpressions(video.id);
+
+      // Calculate revenue using different CPM values
+      // Banner ads: ₹10 per 1000 impressions, Carousel ads: ₹30 per 1000 impressions
+      const bannerCpm = 10.0; // ₹10 per 1000 banner ad impressions
+      const carouselCpm = 30.0; // ₹30 per 1000 carousel ad impressions
+
+      final bannerRevenue = (bannerImpressions / 1000) * bannerCpm;
+      final carouselRevenue = (carouselImpressions / 1000) * carouselCpm;
+      final totalRevenue = bannerRevenue + carouselRevenue;
+
+      print('💰 Video: ${video.videoName}');
+      print(
+          '💰 Banner Impressions: $bannerImpressions (₹${bannerRevenue.toStringAsFixed(2)})');
+      print(
+          '💰 Carousel Impressions: $carouselImpressions (₹${carouselRevenue.toStringAsFixed(2)})');
+      print('💰 Total Revenue: ₹${totalRevenue.toStringAsFixed(2)}');
+
+      return totalRevenue;
+    } catch (e) {
+      print('❌ Error calculating video revenue: $e');
+      return 0.0;
+    }
+  }
+
+  /// **REUSED: Calculate earnings for all videos using same logic as creator_revenue_screen.dart**
+  Future<void> _calculateEarningsForVideos() async {
+    try {
+      print('💰 Calculating earnings for ${_videos.length} videos...');
+
+      for (int i = 0; i < _videos.length; i++) {
+        final video = _videos[i];
+        final earnings = await _calculateVideoRevenue(video);
+
+        // Update the video with calculated earnings
+        _videos[i] = video.copyWith(earnings: earnings);
+      }
+
+      // Trigger UI update to show earnings
+      if (mounted) {
+        setState(() {});
+      }
+
+      print('✅ Earnings calculated for all videos');
+    } catch (e) {
+      print('❌ Error calculating earnings for videos: $e');
     }
   }
 
@@ -1364,29 +1425,25 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             ),
           ),
 
-          // **Banner ads - Full-width at top of screen**
+          // **Banner ads - Full-width at top of screen (no margin)**
           // Always try to show when loaded; rotate using modulo
           Positioned(
             top: 0, // Flush to top of screen
             left: 0, // No horizontal margin
             right: 0, // No horizontal margin
-            child: SafeArea(
-              top: true,
-              bottom: false,
-              child: Material(
-                elevation: 12, // Ensure on top
-                color: Colors.transparent,
-                child: BannerAdWidget(
-                  adData: (_adsLoaded && _bannerAds.isNotEmpty)
-                      ? _bannerAds[index % _bannerAds.length]
-                      : {
-                          'imageUrl': '',
-                          'title': 'Sponsored Content',
-                        },
-                  onAdClick: () {
-                    print('🖱️ Banner ad clicked on video $index');
-                  },
-                ),
+            child: Material(
+              elevation: 12, // Ensure on top
+              color: Colors.transparent,
+              child: BannerAdWidget(
+                adData: (_adsLoaded && _bannerAds.isNotEmpty)
+                    ? _bannerAds[index % _bannerAds.length]
+                    : {
+                        'imageUrl': '',
+                        'title': 'Sponsored Content',
+                      },
+                onAdClick: () {
+                  print('🖱️ Banner ad clicked on video $index');
+                },
               ),
             ),
           ),
@@ -1968,6 +2025,40 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     );
   }
 
+  /// **NEW: Build earnings label for each video**
+  Widget _buildEarningsLabel(VideoModel video) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.5), // Reduced opacity to 0.6
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.green.withOpacity(0.8),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.attach_money,
+            color: Colors.green[400],
+            size: 12,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '₹${video.earnings.toStringAsFixed(2)}',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildProcessingIndicator(VideoModel video, int index) {
     return Container(
       width: double.infinity,
@@ -2180,13 +2271,21 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   Widget _buildVideoOverlay(VideoModel video, int index) {
     return Stack(
       children: [
+        // **NEW: Earnings label just below banner, top-right corner**
+        Positioned(
+          top: 62, // Added 2px margin from top
+          right: 8,
+          child: _buildEarningsLabel(video),
+        ),
+
         // Bottom info section
         Positioned(
-          bottom: 8, // Leave space for interactive progress bar (8px height)
+          bottom: 0, // Remove the gap - make content flush with bottom
           left: 0,
           right: 80, // Leave space for vertical action buttons
           child: Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(
+                16, 16, 16, 8), // Adjust bottom padding
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,

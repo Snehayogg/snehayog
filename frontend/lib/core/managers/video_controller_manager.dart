@@ -329,18 +329,65 @@ class VideoControllerManager {
     }
   }
 
-  /// Pause all videos
+  /// **FIXED: Enhanced pause all videos with proper cleanup**
   Future<void> pauseAllVideos() async {
+    print('🛑 VideoControllerManager: Pausing all videos and clearing audio');
+
     for (final index in _controllers.keys) {
       try {
         final controller = _controllers[index];
         if (controller != null) {
+          // **FIX: Force pause and mute immediately**
           await controller.pause();
           controller.setVolume(0.0);
           _intentionallyPaused.add(index);
+          print(
+              '🔇 VideoControllerManager: Paused and muted controller at index $index');
         }
-      } catch (_) {}
+      } catch (e) {
+        print(
+            '⚠️ VideoControllerManager: Error pausing controller at index $index: $e');
+      }
     }
+
+    // **FIX: Clear all controller states to prevent audio overlap**
+    _intentionallyPaused.clear();
+    print('✅ VideoControllerManager: All videos paused and states cleared');
+  }
+
+  /// **ENHANCED: Force clear all controllers to ensure single video playback**
+  Future<void> forceClearAllControllers() async {
+    print(
+        '🧹 VideoControllerManager: Force clearing all controllers for single video playback');
+
+    // **CRITICAL: Pause and dispose all controllers immediately**
+    for (final index in _controllers.keys) {
+      try {
+        final controller = _controllers[index];
+        if (controller != null) {
+          // **ENHANCED: Force pause and mute before disposal**
+          await controller.pause();
+          controller.setVolume(0.0);
+          await controller.dispose();
+          print(
+              '🗑️ VideoControllerManager: Disposed and muted controller at index $index');
+        }
+      } catch (e) {
+        print(
+            '⚠️ VideoControllerManager: Error disposing controller at index $index: $e');
+      }
+    }
+
+    // **CRITICAL: Clear all maps and sets to prevent any video overlap**
+    _controllers.clear();
+    _order.clear();
+    _pinned.clear();
+    _intentionallyPaused.clear();
+    _controllerSourceUrl.clear();
+    _controllerVideoIds.clear();
+
+    print(
+        '✅ VideoControllerManager: All controllers cleared - single video playback ensured');
   }
 
   /// Check if video is intentionally paused

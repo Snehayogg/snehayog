@@ -85,7 +85,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  /// **SIMPLIFIED: Simple cache-first data loading**
+  /// **SIMPLIFIED: Simple cache-first rule with parallel loading**
   Future<void> _loadData() async {
     try {
       setState(() {
@@ -100,14 +100,17 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (cachedData != null) {
         print('⚡ ProfileScreen: Using cached data');
         _stateManager.setUserData(cachedData);
-        await _loadVideosFromCache();
+
+        // Load videos from cache in parallel
+        _loadVideosFromCache();
+
         setState(() {
           _isLoading = false;
         });
         return;
       }
 
-      // Step 2: Load from server if no cache
+      // Step 2: No cache - load from server
       print('📡 ProfileScreen: No cache, loading from server');
       await _stateManager.loadUserData(widget.userId);
 
@@ -115,8 +118,8 @@ class _ProfileScreenState extends State<ProfileScreen>
         // Cache the loaded data
         await _cacheProfileData(_stateManager.userData!);
 
-        // Load videos
-        await _loadVideos();
+        // Load videos in parallel
+        _loadVideos();
 
         setState(() {
           _isLoading = false;
@@ -136,7 +139,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  /// **SIMPLIFIED: Load videos from cache**
+  /// **SIMPLIFIED: Simple video loading from cache**
   Future<void> _loadVideosFromCache() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -159,7 +162,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  /// **SIMPLIFIED: Load videos from server**
+  /// **SIMPLIFIED: Simple video loading from server**
   Future<void> _loadVideos() async {
     try {
       if (_stateManager.userData == null) return;
@@ -203,14 +206,14 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  /// **SIMPLIFIED: Refresh data when user pulls to refresh**
+  /// **SIMPLIFIED: Simple refresh data**
   Future<void> _refreshData() async {
     print('🔄 ProfileScreen: Refreshing data');
 
     // Clear cache to force fresh load
     await _clearProfileCache();
 
-    // Reload data
+    // Reload data using simple rule
     await _loadData();
   }
 

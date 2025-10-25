@@ -15,6 +15,7 @@ class VideoModel {
   final Duration duration;
   List<Comment> comments;
   final String? link;
+  final double earnings;
   // HLS Streaming fields
   final String? hlsMasterPlaylistUrl;
   final String? hlsPlaylistUrl;
@@ -47,6 +48,7 @@ class VideoModel {
     required this.duration,
     required List<Comment> comments, // **FIXED: Explicit type annotation**
     this.link,
+    this.earnings = 0.0, // **NEW: Default earnings to 0.0**
     this.hlsMasterPlaylistUrl,
     this.hlsPlaylistUrl,
     this.hlsVariants,
@@ -225,6 +227,10 @@ class VideoModel {
           print('🔗 VideoModel: Available fields: ${json.keys.toList()}');
           return null;
         }(),
+        // **NEW: Parse earnings field**
+        earnings: (json['earnings'] is num)
+            ? json['earnings'].toDouble()
+            : double.tryParse(json['earnings']?.toString() ?? '0.0') ?? 0.0,
         // Parse HLS streaming fields
         hlsMasterPlaylistUrl: json['hlsMasterPlaylistUrl']?.toString(),
         hlsPlaylistUrl: json['hlsPlaylistUrl']?.toString(),
@@ -299,6 +305,7 @@ class VideoModel {
       'duration': duration.inSeconds,
       'comments': comments.map((comment) => comment.toJson()).toList(),
       'link': link,
+      'earnings': earnings, // **NEW: Include earnings in JSON**
       'hlsMasterPlaylistUrl': hlsMasterPlaylistUrl,
       'hlsPlaylistUrl': hlsPlaylistUrl,
       'hlsVariants': hlsVariants,
@@ -324,6 +331,7 @@ class VideoModel {
     Duration? duration,
     List<Comment>? comments,
     String? link,
+    double? earnings, // **NEW: Add earnings to copyWith**
     // **CRITICAL FIX: Add HLS fields to copyWith**
     String? hlsMasterPlaylistUrl,
     String? hlsPlaylistUrl,
@@ -349,6 +357,8 @@ class VideoModel {
       duration: duration ?? this.duration,
       comments: comments ?? this.comments,
       link: link ?? this.link,
+      earnings:
+          earnings ?? this.earnings, // **NEW: Handle earnings in copyWith**
       // **CRITICAL FIX: Handle HLS fields in copyWith**
       hlsMasterPlaylistUrl: hlsMasterPlaylistUrl ?? this.hlsMasterPlaylistUrl,
       hlsPlaylistUrl: hlsPlaylistUrl ?? this.hlsPlaylistUrl,

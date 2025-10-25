@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:vayu/core/managers/profile_state_manager.dart';
 import 'package:vayu/core/services/profile_screen_logger.dart';
 import 'package:vayu/view/screens/video_screen.dart';
+import 'package:vayu/core/managers/video_controller_manager.dart';
+import 'package:vayu/controller/main_controller.dart';
+import 'package:vayu/model/video_model.dart';
 
 class ProfileVideosWidget extends StatelessWidget {
   final ProfileStateManager stateManager;
@@ -20,8 +23,32 @@ class ProfileVideosWidget extends StatelessWidget {
     this.onVideoSelection,
   });
 
+  /// **NEW: Preload video thumbnails for faster loading**
+  void _preloadVideoThumbnails(BuildContext context, List<VideoModel> videos) {
+    // Preload thumbnails in background for better performance
+    Future.microtask(() async {
+      for (final video in videos.take(5)) {
+        // Preload first 5 videos
+        if (video.thumbnailUrl.isNotEmpty) {
+          try {
+            await precacheImage(NetworkImage(video.thumbnailUrl), context);
+            print(
+                '🖼️ ProfileVideosWidget: Preloaded thumbnail for ${video.videoName}');
+          } catch (e) {
+            print('⚠️ ProfileVideosWidget: Failed to preload thumbnail: $e');
+          }
+        }
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    // **OPTIMIZED: Preload video thumbnails for better performance**
+    if (stateManager.userVideos.isNotEmpty) {
+      _preloadVideoThumbnails(context, stateManager.userVideos);
+    }
+
     return RepaintBoundary(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -130,8 +157,12 @@ class ProfileVideosWidget extends StatelessWidget {
                           stateManager.userData != null;
                       return RepaintBoundary(
                         child: GestureDetector(
-                          onTap: () {
+                          onTap: () async {
                             if (!stateManager.isSelecting) {
+                              // **OPTIMIZED: Start navigation immediately for faster loading**
+                              print(
+                                  '🚀 ProfileVideosWidget: Opening video immediately');
+
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -141,6 +172,32 @@ class ProfileVideosWidget extends StatelessWidget {
                                   ),
                                 ),
                               );
+
+                              // **BACKGROUND: Clear controllers after navigation to prevent blocking**
+                              Future.microtask(() async {
+                                try {
+                                  print(
+                                      '🔇 ProfileVideosWidget: Clearing controllers in background');
+
+                                  // Get MainController and force pause all videos
+                                  final mainController =
+                                      Provider.of<MainController>(context,
+                                          listen: false);
+                                  mainController.forcePauseVideos();
+
+                                  // Also clear VideoControllerManager directly
+                                  final videoControllerManager =
+                                      VideoControllerManager();
+                                  await videoControllerManager
+                                      .forceClearAllControllers();
+
+                                  print(
+                                      '✅ ProfileVideosWidget: Background controller cleanup completed');
+                                } catch (e) {
+                                  print(
+                                      '⚠️ ProfileVideosWidget: Background controller cleanup failed: $e');
+                                }
+                              });
                             } else if (stateManager.isSelecting &&
                                 canSelectVideo) {
                               // Use proper logic for video selection
@@ -264,6 +321,8 @@ class ProfileVideosWidget extends StatelessWidget {
                                       ),
                                     ),
                                   ),
+
+                                  // **REMOVED: Earnings Overlay - Only show in Yog tab, not in Profile**
 
                                   // Selection Overlay
                                   if (isSelected)

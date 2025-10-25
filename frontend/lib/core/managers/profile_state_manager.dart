@@ -782,6 +782,16 @@ class ProfileStateManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// **NEW: Public method to get logged in user data for fallback loading**
+  Future<Map<String, dynamic>?> getLoggedInUserData() async {
+    try {
+      return await _authService.getUserData();
+    } catch (e) {
+      print('❌ ProfileStateManager: Error getting logged in user data: $e');
+      return null;
+    }
+  }
+
   /// **NEW: Setter for user videos (for background preloading)**
   void setVideos(List<VideoModel> videos) {
     _userVideos = videos;

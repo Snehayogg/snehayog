@@ -425,12 +425,12 @@ class _MainScreenState extends State<MainScreen>
               child: SafeArea(
                 bottom: true, // Ensure bottom safe area is respected
                 child: Container(
-                  height: 70, // Increased height to prevent overflow
+                  height: 60, // Reduced height for more compact design
                   padding: const EdgeInsets.only(
                     left: 8,
                     right: 8,
-                    top: 6,
-                    bottom: 8, // Increased bottom padding
+                    top: 4, // Reduced top padding
+                    bottom: 4, // Reduced bottom padding
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -499,7 +499,10 @@ class _MainScreenState extends State<MainScreen>
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeInOut,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          padding: const EdgeInsets.symmetric(
+              horizontal: 4,
+              vertical:
+                  1), // Reduced horizontal padding, minimal vertical padding
           child: Column(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -510,8 +513,8 @@ class _MainScreenState extends State<MainScreen>
                   child: RotationTransition(
                     turns: _refreshAnimationController,
                     child: Container(
-                      width: 28,
-                      height: 28,
+                      width: 24, // Reduced icon container size
+                      height: 24, // Reduced icon container size
                       decoration: BoxDecoration(
                         color: isSelected
                             ? const Color(0xFF2196F3).withOpacity(0.2)
@@ -521,8 +524,8 @@ class _MainScreenState extends State<MainScreen>
                       child: Icon(
                         Icons.refresh,
                         size: isSelected
-                            ? 20
-                            : 18, // Smaller icons to prevent overflow
+                            ? 22 // Increased icon size
+                            : 20, // Increased icon size
                         color: isSelected
                             ? const Color(0xFF2196F3)
                             : (mainController.currentIndex == 0
@@ -535,8 +538,8 @@ class _MainScreenState extends State<MainScreen>
               else
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
-                  width: 28,
-                  height: 28,
+                  width: 24, // Reduced icon container size
+                  height: 24, // Reduced icon container size
                   decoration: BoxDecoration(
                     color: isSelected
                         ? const Color(0xFF2196F3).withOpacity(0.2)
@@ -546,8 +549,8 @@ class _MainScreenState extends State<MainScreen>
                   child: Icon(
                     icon,
                     size: isSelected
-                        ? 20
-                        : 18, // Smaller icons to prevent overflow
+                        ? 22 // Increased icon size
+                        : 20, // Increased icon size
                     color: isSelected
                         ? const Color(0xFF2196F3)
                         : (mainController.currentIndex == 0
@@ -556,13 +559,13 @@ class _MainScreenState extends State<MainScreen>
                   ),
                 ),
 
-              const SizedBox(height: 1), // Minimal spacing to prevent overflow
+              const SizedBox(height: 0), // Removed spacing for tighter design
 
               // Label always visible below icon
               AnimatedDefaultTextStyle(
                 duration: const Duration(milliseconds: 200),
                 style: TextStyle(
-                  fontSize: 9, // Smaller font size to prevent overflow
+                  fontSize: 8,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                   color: isSelected
                       ? const Color(0xFF2196F3)
