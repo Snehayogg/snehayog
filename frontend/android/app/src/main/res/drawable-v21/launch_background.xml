@@ -1,15 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Professional splash screen for Vayu app (API 21+) -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Background gradient -->
+    <!-- Black background -->
     <item>
         <shape>
-            <gradient
-                android:angle="135"
-                android:startColor="#E0E0E0"
-                android:centerColor="#BDBDBD"
-                android:endColor="#BDBDBD"
-                android:type="linear" />
+            <solid android:color="#000000" />
         </shape>
     </item>
     

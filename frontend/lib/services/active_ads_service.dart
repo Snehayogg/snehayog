@@ -349,7 +349,7 @@ class ActiveAdsService {
       return [];
     }
 
-    return (adsData as List)
+    return (adsData)
         .map((ad) {
           if (ad is Map<String, dynamic>) {
             return _normalizeAd(ad);
@@ -501,8 +501,9 @@ class ActiveAdsService {
     final normalized = adType.toLowerCase().trim();
 
     if (normalized.contains('carousel')) return 'carousel';
-    if (normalized.contains('video') && normalized.contains('feed'))
+    if (normalized.contains('video') && normalized.contains('feed')) {
       return 'video feed ad';
+    }
     if (normalized.contains('banner')) return 'banner';
 
     return normalized;

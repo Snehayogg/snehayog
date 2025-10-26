@@ -133,15 +133,19 @@ class ProfileMenuWidget extends StatelessWidget {
                       'title': 'Dashboard',
                       'icon': Icons.dashboard,
                       'color': Colors.purple,
-                      'onTap': () {
+                      'onTap': () async {
                         Navigator.pop(context);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                const CreatorPayoutDashboard(),
-                          ),
-                        );
+                        // Add a small delay to ensure drawer closes completely
+                        await Future.delayed(const Duration(milliseconds: 300));
+                        if (context.mounted) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  const CreatorPayoutDashboard(),
+                            ),
+                          );
+                        }
                       },
                     });
 

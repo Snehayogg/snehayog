@@ -1,10 +1,13 @@
 import AdCreative from '../models/AdCreative.js';
 import AdCampaign from '../models/AdCampaign.js';
+import aiSemanticService from './aiSemanticService.js';
 
 /**
  * **AD TARGETING SERVICE**
  * Handles intelligent ad-video matching based on interests and categories
  * with fallback system for limited content
+ * 
+ * **ENHANCED: Now includes free AI-powered semantic matching**
  */
 class AdTargetingService {
   
@@ -19,7 +22,7 @@ class AdTargetingService {
     'entertainment': ['entertainment', 'fun', 'comedy', 'music', 'dance', 'art', 'creative'],
     'lifestyle': ['lifestyle', 'fashion', 'beauty', 'travel', 'home', 'decor', 'tips'],
     'technology': ['technology', 'tech', 'gadgets', 'software', 'programming', 'innovation'],
-    'business': ['business', 'entrepreneur', 'finance', 'marketing', 'startup', 'career'],
+    'business': ['business', 'entrepreneur', 'finance', 'marketing', 'startup', 'career', 'trading', 'stock', 'investment', 'crypto', 'money'],
     'sports': ['sports', 'football', 'cricket', 'basketball', 'tennis', 'athletics'],
     'travel': ['travel', 'tourism', 'adventure', 'exploration', 'vacation', 'places'],
     // **NEW: Others category for uncategorized content**
@@ -39,13 +42,18 @@ class AdTargetingService {
     'technology_gadgets': ['technology', 'tech', 'gadgets', 'smartphone', 'computer', 'software'],
     'fashion_beauty': ['fashion', 'beauty', 'style', 'makeup', 'clothing', 'shopping', 'trends'],
     'travel_tourism': ['travel', 'tourism', 'vacation', 'adventure', 'exploration', 'places'],
-    'business_finance': ['business', 'finance', 'money', 'investment', 'entrepreneur', 'startup'],
+    'business_finance': ['business', 'finance', 'money', 'investment', 'entrepreneur', 'startup', 'trading', 'stock', 'crypto'],
     'lifestyle_home': ['lifestyle', 'home', 'decor', 'interior', 'family', 'parenting', 'tips'],
   };
 
   /**
    * **GET TARGETED ADS FOR VIDEO**
    * Returns ads that match the video's category and interests
+   * 
+   * **NEW: Hybrid approach with AI semantic matching**
+   * 1. Try AI semantic matching first (free, no manual rules)
+   * 2. Fallback to keyword-based matching (existing system)
+   * 3. Final fallback to any available ads
    */
   static async getTargetedAdsForVideo(videoData, options = {}) {
     const {
@@ -57,14 +65,42 @@ class AdTargetingService {
     try {
       console.log('🎯 AdTargetingService: Getting targeted ads for video:', videoData.id);
       
-      // Extract video categories and interests
+      // **NEW: Try AI semantic matching first**
+      try {
+        // Get all available ads for AI to choose from
+        const allAds = await AdCreative.find({
+          adType: adType,
+          isActive: true,
+          reviewStatus: 'approved'
+        }).limit(20).lean(); // limit 20 for AI selection
+        
+        if (allAds.length > 0) {
+          console.log('🤖 Attempting AI semantic matching...');
+          const aiMatchedAds = await aiSemanticService.matchSemantically(
+            videoData,
+            allAds
+          );
+          
+          if (aiMatchedAds && aiMatchedAds.length > 0) {
+            console.log(`✅ AI found ${aiMatchedAds.length} semantically matched ads`);
+            return aiMatchedAds.slice(0, limit);
+          } else {
+            console.log('⚠️ AI matching returned no results, trying keyword-based approach');
+          }
+        }
+      } catch (aiError) {
+        // AI failed, continue to fallback
+        console.log('⚠️ AI matching failed, using keyword-based fallback:', aiError.message);
+      }
+      
+      // **EXISTING: Fallback to keyword-based targeting**
       const videoCategories = this.extractVideoCategories(videoData);
       const videoInterests = this.extractVideoInterests(videoData);
       
       console.log('🎯 Video categories:', videoCategories);
       console.log('🎯 Video interests:', videoInterests);
       
-      // Try to get targeted ads first
+      // Try to get targeted ads with keywords
       const targetedAds = await this.getTargetedAds({
         categories: videoCategories,
         interests: videoInterests,
@@ -73,13 +109,13 @@ class AdTargetingService {
       });
       
       if (targetedAds.length > 0) {
-        console.log(`✅ Found ${targetedAds.length} targeted ads`);
+        console.log(`✅ Found ${targetedAds.length} targeted ads (keyword-based)`);
         return targetedAds;
       }
       
-      // Fallback: Get any available ads if no targeted ads found
+      // **FINAL FALLBACK: Get any available ads**
       if (useFallback) {
-        console.log('🔄 No targeted ads found, using fallback system');
+        console.log('🔄 No targeted ads found, using general fallback system');
         const fallbackAds = await this.getFallbackAds({ limit, adType });
         console.log(`✅ Found ${fallbackAds.length} fallback ads`);
         return fallbackAds;
@@ -372,9 +408,18 @@ class AdTargetingService {
   static extractVideoCategories(videoData) {
     const categories = [];
     
+    console.log('🎯 extractVideoCategories: Processing video:', {
+      id: videoData.id,
+      name: videoData.videoName,
+      category: videoData.category,
+      tags: videoData.tags,
+      keywords: videoData.keywords
+    });
+    
     // **NEW: Use provided category if available**
     if (videoData.category && videoData.category.trim()) {
       categories.push(videoData.category.toLowerCase());
+      console.log('✅ Added category from videoData:', videoData.category.toLowerCase());
     }
     
     // **NEW: Use tags for category extraction**
@@ -435,6 +480,7 @@ class AdTargetingService {
       categories.push('others');
     }
     
+    console.log('✅ Final categories extracted:', categories);
     return categories;
   }
 

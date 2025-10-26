@@ -5,6 +5,8 @@ import paymentRoutes from './paymentRoutes.js';
 import analyticsRoutes from './analyticsRoutes.js';
 import userRoutes from './userRoutes.js';
 import validationRoutes from './validationRoutes.js';
+import impressionRoutes from './impressionRoutes.js';
+import adTargetingRoutes from '../adTargetingRoutes.js';
 
 const router = express.Router();
 
@@ -15,5 +17,7 @@ router.use('/', paymentRoutes);
 router.use('/', analyticsRoutes);
 router.use('/', userRoutes);
 router.use('/', validationRoutes);
+router.use('/', impressionRoutes);
+router.use('/targeting', adTargetingRoutes);
 
 export default router;

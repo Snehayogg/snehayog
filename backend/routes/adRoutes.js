@@ -10,6 +10,7 @@ import { verifyToken } from '../utils/verifytoken.js';
 import adService from '../services/adService.js';
 import adTargetingRoutes from './adTargetingRoutes.js';
 import adCommentRoutes from './adCommentRoutes.js';
+import adCleanupService from '../services/adCleanupService.js';
 
 const router = express.Router();
 
@@ -1189,5 +1190,21 @@ router.use('/targeting', adTargetingRoutes);
 
 // **AD COMMENTS ROUTES**
 router.use('/comments', adCommentRoutes);
+
+// **NEW: Cleanup expired ads (manual trigger)**
+router.post('/cleanup/expired', async (req, res) => {
+  try {
+    console.log('🧹 Manual cleanup triggered');
+    const result = await adCleanupService.runCleanup();
+    res.json({
+      success: true,
+      message: 'Cleanup completed successfully',
+      result
+    });
+  } catch (error) {
+    console.error('❌ Error in manual cleanup:', error);
+    res.status(500).json({ error: 'Failed to cleanup expired ads' });
+  }
+});
 
 export default router;

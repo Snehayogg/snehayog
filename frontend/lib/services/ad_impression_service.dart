@@ -17,8 +17,16 @@ class AdImpressionService {
     required String userId,
   }) async {
     try {
+      print('📊 AdImpressionService: Tracking banner ad impression:');
+      print('   Video ID: $videoId');
+      print('   Ad ID: $adId');
+      print('   User ID: $userId');
+
+      final url = '${AppConfig.baseUrl}/api/ads/impressions/banner';
+      print('📊 AdImpressionService: Tracking API URL: $url');
+
       final response = await http.post(
-        Uri.parse('${AppConfig.baseUrl}/api/ad-impressions/banner'),
+        Uri.parse(url),
         headers: {
           'Content-Type': 'application/json',
           'Authorization':
@@ -34,13 +42,20 @@ class AdImpressionService {
         }),
       );
 
+      print(
+          '📊 AdImpressionService: Tracking API response status: ${response.statusCode}');
+      print(
+          '📊 AdImpressionService: Tracking API response body: ${response.body}');
+
       if (response.statusCode == 201 || response.statusCode == 200) {
-        print('📊 Banner ad impression tracked: Video $videoId, Ad $adId');
+        print(
+            '✅ AdImpressionService: Banner ad impression tracked successfully: Video $videoId, Ad $adId');
       } else {
-        print('❌ Failed to track banner ad impression: ${response.body}');
+        print(
+            '❌ AdImpressionService: Failed to track banner ad impression: ${response.body}');
       }
     } catch (e) {
-      print('❌ Error tracking banner ad impression: $e');
+      print('❌ AdImpressionService: Error tracking banner ad impression: $e');
     }
   }
 
@@ -53,7 +68,7 @@ class AdImpressionService {
   }) async {
     try {
       final response = await http.post(
-        Uri.parse('${AppConfig.baseUrl}/api/ad-impressions/carousel'),
+        Uri.parse('${AppConfig.baseUrl}/api/ads/impressions/carousel'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization':
@@ -88,7 +103,7 @@ class AdImpressionService {
       if (userData == null) return {'banner': 0, 'carousel': 0, 'total': 0};
 
       final response = await http.get(
-        Uri.parse('${AppConfig.baseUrl}/api/ad-impressions/video/$videoId'),
+        Uri.parse('${AppConfig.baseUrl}/api/ads/impressions/video/$videoId'),
         headers: {
           'Authorization': 'Bearer ${userData['token']}',
         },
@@ -113,25 +128,42 @@ class AdImpressionService {
   /// Get banner ad impressions for a video (real API call)
   Future<int> getBannerAdImpressions(String videoId) async {
     try {
+      print(
+          '📊 AdImpressionService: Getting banner ad impressions for video: $videoId');
+
       final userData = await _authService.getUserData();
-      if (userData == null) return 0;
+      if (userData == null) {
+        print('❌ AdImpressionService: No authenticated user found');
+        return 0;
+      }
+
+      final url =
+          '${AppConfig.baseUrl}/api/ads/impressions/video/$videoId/banner';
+      print('📊 AdImpressionService: API URL: $url');
 
       final response = await http.get(
-        Uri.parse(
-            '${AppConfig.baseUrl}/api/ad-impressions/video/$videoId/banner'),
+        Uri.parse(url),
         headers: {
           'Authorization': 'Bearer ${userData['token']}',
         },
       );
 
+      print(
+          '📊 AdImpressionService: API response status: ${response.statusCode}');
+      print('📊 AdImpressionService: API response body: ${response.body}');
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return data['count'] ?? 0;
+        final count = data['count'] ?? 0;
+        print('📊 AdImpressionService: Banner impressions count: $count');
+        return count;
+      } else {
+        print(
+            '❌ AdImpressionService: Failed to get banner impressions - Status: ${response.statusCode}');
+        return 0;
       }
-
-      return 0;
     } catch (e) {
-      print('❌ Error getting banner ad impressions: $e');
+      print('❌ AdImpressionService: Error getting banner ad impressions: $e');
       return 0;
     }
   }
@@ -144,7 +176,7 @@ class AdImpressionService {
 
       final response = await http.get(
         Uri.parse(
-            '${AppConfig.baseUrl}/api/ad-impressions/video/$videoId/carousel'),
+            '${AppConfig.baseUrl}/api/ads/impressions/video/$videoId/carousel'),
         headers: {
           'Authorization': 'Bearer ${userData['token']}',
         },

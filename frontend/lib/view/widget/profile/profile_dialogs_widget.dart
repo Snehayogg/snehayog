@@ -104,15 +104,20 @@ class ProfileDialogsWidget {
                         icon: Icons.dashboard,
                         title: 'Creator Dashboard',
                         subtitle: 'View earnings and analytics',
-                        onTap: () {
+                        onTap: () async {
                           Navigator.pop(context);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  const CreatorPayoutDashboard(),
-                            ),
-                          );
+                          // Add a small delay to ensure modal closes completely
+                          await Future.delayed(
+                              const Duration(milliseconds: 300));
+                          if (context.mounted) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const CreatorPayoutDashboard(),
+                              ),
+                            );
+                          }
                         },
                       ),
                       _buildSettingsTile(

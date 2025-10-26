@@ -5,6 +5,7 @@ import cors from 'cors';
 import path from 'path';
 import compression from 'compression';
 import { fileURLToPath } from 'url';
+import cron from 'node-cron';
 
 // Import database manager
 import databaseManager from './config/database.js';
@@ -24,6 +25,7 @@ import referralRoutes from './routes/referralRoutes.js';
 
 // Import services
 import automatedPayoutService from './services/automatedPayoutService.js';
+import adCleanupService from './services/adCleanupService.js';
 
 // Import middleware
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
@@ -223,6 +225,18 @@ const startServer = async () => {
     
     // Start automated payout service
     automatedPayoutService.startScheduler();
+    
+    // Start ad cleanup cron job (run every hour at minute 0)
+    cron.schedule('0 * * * *', async () => {
+      console.log('🧹 Running scheduled ad cleanup...');
+      try {
+        await adCleanupService.runCleanup();
+        console.log('✅ Scheduled ad cleanup completed');
+      } catch (error) {
+        console.error('❌ Error in scheduled ad cleanup:', error);
+      }
+    });
+    console.log('📅 Ad cleanup cron job scheduled (runs every hour)');
     
     // Start HTTP server
     app.listen(PORT, HOST, () => {

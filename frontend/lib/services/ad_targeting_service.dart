@@ -18,28 +18,22 @@ class AdTargetingService {
     String adType = 'banner',
   }) async {
     try {
+      print('==================================================');
+      print('🎯🎯🎯 AD TARGETING REQUEST 🎯🎯🎯');
+      print('==================================================');
       print(
           '🎯 AdTargetingService: Getting targeted ads for video: ${video.id}');
       print('🎯 Video name: ${video.videoName}');
       print('🎯 Video description: ${video.description}');
 
       // Create cache key for this video
-      final cacheKey = 'targeted_ads_${video.id}_${adType}';
+      final cacheKey = 'targeted_ads_${video.id}_$adType';
 
-      // Try to get from cache first
-      final cachedResult = await _cacheManager.get(
-        cacheKey,
-        fetchFn: () async => null,
-        cacheType: 'targeting',
-        maxAge: const Duration(minutes: 10),
-        forceRefresh: false,
-      );
-
-      if (cachedResult != null) {
-        print(
-            '✅ AdTargetingService: Using cached targeted ads for video ${video.id}');
-        return cachedResult as Map<String, dynamic>;
-      }
+      // **FIX: Force refresh to prevent stale targeting**
+      // Always fetch fresh ads to ensure proper per-video targeting
+      // Cache was causing sequential ad display instead of targeted ads
+      print(
+          '🔄 AdTargetingService: Force refreshing targeted ads for video ${video.id}');
 
       // Prepare video data for backend using available fields
       final videoData = {
@@ -54,8 +48,17 @@ class AdTargetingService {
       };
 
       // Call backend targeting endpoint
+      print('🎯 AdTargetingService: Sending targeting request:');
+      print('   Video: ${video.videoName}');
+      print('   Category: ${videoData['category']}');
+      print('   Tags: ${videoData['tags']}');
+      print('   Keywords: ${videoData['keywords']}');
+
+      final url = '$_baseUrl/api/ads/targeting/targeted-for-video';
+      print('📡 Calling API: $url');
+
       final response = await http.post(
-        Uri.parse('$_baseUrl/api/ads/targeting/targeted-for-video'),
+        Uri.parse(url),
         headers: {
           'Content-Type': 'application/json',
         },
@@ -67,23 +70,28 @@ class AdTargetingService {
         }),
       );
 
+      print('📡 API Response received');
+
       print('🔍 AdTargetingService: Response status: ${response.statusCode}');
       print('🔍 AdTargetingService: Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final result = json.decode(response.body) as Map<String, dynamic>;
 
-        // Cache the result
-        await _cacheManager.get(
-          cacheKey,
-          fetchFn: () async => result,
-          cacheType: 'targeting',
-          maxAge: const Duration(minutes: 10),
-        );
-
+        // **FIX: Don't cache targeted ads to prevent stale targeting**
+        // Caching was causing ads to not refresh based on video content
         print(
-            '✅ AdTargetingService: Found ${result['ads']?.length ?? 0} targeted ads');
+            '✅ AdTargetingService: Found ${result['ads']?.length ?? 0} targeted ads for video: ${video.videoName}');
         print('🎯 Targeting insights: ${result['insights']}');
+
+        // Log which ads were returned for debugging
+        if (result['ads'] != null && (result['ads'] as List).isNotEmpty) {
+          for (int i = 0; i < (result['ads'] as List).length; i++) {
+            final ad = (result['ads'] as List)[i];
+            print(
+                '   Ad $i: ${ad['title']} - Targeting Score: ${ad['targetingScore'] ?? 'N/A'}');
+          }
+        }
 
         return result;
       } else {
@@ -417,7 +425,11 @@ class AdTargetingService {
     if (videoName.contains('business') ||
         videoName.contains('money') ||
         videoName.contains('finance') ||
-        videoName.contains('career')) {
+        videoName.contains('career') ||
+        videoName.contains('trading') ||
+        videoName.contains('stock') ||
+        videoName.contains('investment') ||
+        videoName.contains('crypto')) {
       return 'business';
     }
     if (videoName.contains('sport') ||
@@ -457,7 +469,17 @@ class AdTargetingService {
       'travel': ['travel', 'tourism', 'place', 'visit', 'adventure'],
       'lifestyle': ['fashion', 'beauty', 'style', 'makeup', 'tips'],
       'technology': ['tech', 'gadget', 'phone', 'computer', 'app'],
-      'business': ['business', 'money', 'finance', 'career', 'startup'],
+      'business': [
+        'business',
+        'money',
+        'finance',
+        'career',
+        'startup',
+        'trading',
+        'stock',
+        'investment',
+        'crypto'
+      ],
       'sports': ['sport', 'game', 'football', 'cricket', 'athlete'],
     };
 

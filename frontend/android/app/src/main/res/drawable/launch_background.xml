@@ -1,41 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Professional splash screen for Vayu app -->
+<!-- Clean black splash screen for Vayu app -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Background gradient -->
+    <!-- Black background -->
     <item>
         <shape>
-            <gradient
-                android:angle="135"
-                android:startColor="#E0E0E0"
-                android:centerColor="#BDBDBD"
-                android:endColor="#BDBDBD"
-                android:type="linear" />
+            <solid android:color="#000000" />
         </shape>
     </item>
     
-    <!-- App logo container -->
-    <item android:gravity="center">
-        <shape android:shape="oval">
-            <solid android:color="#FFFFFF" />
-            <size 
-                android:width="120dp" 
-                android:height="120dp" />
-        </shape>
-    </item>
-    
-    <!-- App icon -->
+    <!-- App icon centered -->
     <item android:gravity="center">
         <bitmap
             android:src="@mipmap/app_icon"
             android:gravity="center"
-            android:width="80dp"
-            android:height="80dp" />
-    </item>
-    
-    <!-- App name text -->
-    <item android:gravity="center|bottom" android:bottom="120dp">
-        <bitmap
-            android:src="@drawable/splash_text"
-            android:gravity="center" />
+            android:width="100dp"
+            android:height="100dp" />
     </item>
 </layer-list>

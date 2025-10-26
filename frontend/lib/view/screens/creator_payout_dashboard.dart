@@ -21,7 +21,12 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
   @override
   void initState() {
     super.initState();
-    _loadDashboardData();
+    // Add a small delay to prevent any overlay issues
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted) {
+        _loadDashboardData();
+      }
+    });
   }
 
   Future<void> _loadDashboardData() async {
@@ -111,9 +116,8 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
             },
             'paymentMethods': ['upi', 'bank_transfer', 'paytm']
           };
-          _isLoading = false;
         });
-        return;
+        // Don't set _isLoading = false here, let it continue to load history
       } else {
         print('❌ Profile data failed: ${profileResponse.statusCode}');
         setState(() {
@@ -355,6 +359,21 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
 
   @override
   Widget build(BuildContext context) {
+    print(
+        '🔍 CreatorPayoutDashboard: Building widget - isLoading: $_isLoading, error: $_error, profileData: ${_profileData != null}');
+
+    Widget bodyWidget;
+    try {
+      bodyWidget = _isLoading
+          ? _buildLoadingWidget()
+          : _error != null
+              ? _buildErrorWidget()
+              : _buildDashboardContent();
+    } catch (e) {
+      print('❌ CreatorPayoutDashboard: Error in build method: $e');
+      bodyWidget = _buildErrorWidget();
+    }
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -374,11 +393,7 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
           ),
         ],
       ),
-      body: _isLoading
-          ? _buildLoadingWidget()
-          : _error != null
-              ? _buildErrorWidget()
-              : _buildDashboardContent(),
+      body: bodyWidget,
     );
   }
 
@@ -475,91 +490,46 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
   }
 
   Widget _buildDashboardContent() {
+    print(
+        '🔍 CreatorPayoutDashboard: Building dashboard content - profileData: ${_profileData != null}');
+
+    // If profile data is null, show loading or error state instead of placeholder
     if (_profileData == null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.info_outline, size: 64, color: Colors.orange),
-              const SizedBox(height: 16),
-              const Text(
-                'Creator Dashboard',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Welcome to your creator dashboard! Here you can track your earnings, manage payouts, and view your creator statistics.',
-                style: TextStyle(fontSize: 14, color: Colors.grey),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: _loadDashboardData,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Load Data'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  ElevatedButton.icon(
-                    onPressed: _testBackendConnection,
-                    icon: const Icon(Icons.bug_report),
-                    label: const Text('Test API'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  ElevatedButton.icon(
-                    onPressed: _testAuthentication,
-                    icon: const Icon(Icons.key),
-                    label: const Text('Test Auth'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.purple,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      );
+      print(
+          '⚠️ CreatorPayoutDashboard: Profile data is null, showing loading widget');
+      return _buildLoadingWidget();
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Profile Summary Card
-          _buildProfileSummaryCard(),
+    try {
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Profile Summary Card
+            _buildProfileSummaryCard(),
 
-          const SizedBox(height: 24),
+            const SizedBox(height: 24),
 
-          // Payment Method Card
-          _buildPaymentMethodCard(),
+            // Payment Method Card
+            _buildPaymentMethodCard(),
 
-          const SizedBox(height: 24),
+            const SizedBox(height: 24),
 
-          // Payout History
-          _buildPayoutHistorySection(),
+            // Payout History
+            _buildPayoutHistorySection(),
 
-          const SizedBox(height: 24),
+            const SizedBox(height: 24),
 
-          // Setup Payment Profile Button
-          _buildSetupPaymentButton(),
-        ],
-      ),
-    );
+            // Setup Payment Profile Button
+            _buildSetupPaymentButton(),
+          ],
+        ),
+      );
+    } catch (e) {
+      print('❌ CreatorPayoutDashboard: Error building dashboard content: $e');
+      return _buildErrorWidget();
+    }
   }
 
   Widget _buildProfileSummaryCard() {

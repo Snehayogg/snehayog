@@ -4,8 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/services/authservices.dart';
 
-/// Service for managing video view tracking with Instagram Reels-style behavior
-/// Handles 4-second view threshold, repeat views (max 10 per user), and API integration
+/// Handles 4-second view threshold, repeat views (max 10 per user), self-view prevention, and API integration
 class VideoViewTracker {
   static String get _baseUrl => AppConfig.baseUrl;
   final AuthService _authService = AuthService();
@@ -15,9 +14,15 @@ class VideoViewTracker {
   final Map<String, Timer> _viewTimers = <String, Timer>{};
   final Map<String, int> _userViewCounts = <String, int>{};
 
+  // **NEW: Track recent views to prevent rapid repeat spam**
+  final Map<String, DateTime> _recentViews = <String, DateTime>{};
+  static const Duration _minViewInterval =
+      Duration(minutes: 1); // Minimum 1 minute between views
+
   /// Increment view count for a video after 4 seconds of playback
   /// Returns true if view was counted, false if already at max or error
-  Future<bool> incrementView(String videoId, {int duration = 4}) async {
+  Future<bool> incrementView(String videoId,
+      {int duration = 4, String? videoUploaderId}) async {
     try {
       print(
           '🎯 VideoViewTracker: Attempting to increment view for video $videoId');
@@ -31,6 +36,29 @@ class VideoViewTracker {
 
       final userId = userData['id'];
       print('🎯 VideoViewTracker: User ID: $userId');
+
+      // **NEW: Prevent self-view counting**
+      if (videoUploaderId != null && videoUploaderId == userId) {
+        print(
+            '🚫 VideoViewTracker: User is viewing their own video - view not counted');
+        print(
+            '🚫 VideoViewTracker: Video uploader: $videoUploaderId, Current user: $userId');
+        return false;
+      }
+
+      // **NEW: Check for rapid repeat spam**
+      final viewKey = '${videoId}_$userId';
+      final lastViewTime = _recentViews[viewKey];
+      if (lastViewTime != null) {
+        final timeSinceLastView = DateTime.now().difference(lastViewTime);
+        if (timeSinceLastView < _minViewInterval) {
+          print(
+              '🚫 VideoViewTracker: Rapid repeat view detected - too soon since last view');
+          print(
+              '🚫 VideoViewTracker: Time since last view: ${timeSinceLastView.inSeconds}s, minimum: ${_minViewInterval.inSeconds}s');
+          return false;
+        }
+      }
 
       // Check if user has already reached max views for this video
       final userViewCount = _userViewCounts['${videoId}_$userId'] ?? 0;
@@ -63,6 +91,9 @@ class VideoViewTracker {
         _userViewCounts['${videoId}_$userId'] =
             responseData['userViewCount'] ?? 0;
 
+        // **NEW: Update recent view time to prevent rapid repeat spam**
+        _recentViews[viewKey] = DateTime.now();
+
         print('✅ VideoViewTracker: View incremented successfully');
         print('   Total views: ${responseData['totalViews']}');
         print('   User view count: ${responseData['userViewCount']}');
@@ -82,7 +113,7 @@ class VideoViewTracker {
   }
 
   /// Start tracking view for a video - will increment after 4 seconds
-  void startViewTracking(String videoId) {
+  void startViewTracking(String videoId, {String? videoUploaderId}) {
     print('🎯 VideoViewTracker: Starting view tracking for video $videoId');
 
     // Cancel any existing timer for this video
@@ -96,13 +127,14 @@ class VideoViewTracker {
       // Check if this video hasn't been counted yet in this session
       final viewKey = '${videoId}_current_session';
       if (!_viewedVideos.contains(viewKey)) {
-        final success = await incrementView(videoId);
+        final success =
+            await incrementView(videoId, videoUploaderId: videoUploaderId);
         if (success) {
           _viewedVideos.add(viewKey);
           print('✅ VideoViewTracker: View counted for video $videoId');
         } else {
           print(
-              '⚠️ VideoViewTracker: View not counted for video $videoId (max reached or error)');
+              '⚠️ VideoViewTracker: View not counted for video $videoId (self-view, max reached or error)');
         }
       } else {
         print(
@@ -140,6 +172,21 @@ class VideoViewTracker {
     return getUserViewCount(videoId, userId) >= 10;
   }
 
+  /// **NEW: Check if user is viewing their own video**
+  bool isViewingOwnVideo(String videoUploaderId, String userId) {
+    return videoUploaderId == userId;
+  }
+
+  /// **NEW: Check if view is too soon (rapid repeat spam)**
+  bool isViewTooSoon(String videoId, String userId) {
+    final viewKey = '${videoId}_$userId';
+    final lastViewTime = _recentViews[viewKey];
+    if (lastViewTime == null) return false;
+
+    final timeSinceLastView = DateTime.now().difference(lastViewTime);
+    return timeSinceLastView < _minViewInterval;
+  }
+
   /// Clear all view tracking data
   void clearViewTracking() {
     print('🎯 VideoViewTracker: Clearing all view tracking data');
@@ -152,6 +199,7 @@ class VideoViewTracker {
     _viewTimers.clear();
     _viewedVideos.clear();
     _userViewCounts.clear();
+    _recentViews.clear(); // **NEW: Clear recent views tracking**
   }
 
   /// Dispose of the service and clean up resources

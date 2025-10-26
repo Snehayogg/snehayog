@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 class AppConfig {
   // **MANUAL: Development mode control**
   static const bool _isDevelopment =
-      false; // Set to true for local development, false for production
+      true; // Set to true for local development, false for production
 
   // **NEW: Smart URL selection with fallback**
   static String? _cachedBaseUrl;

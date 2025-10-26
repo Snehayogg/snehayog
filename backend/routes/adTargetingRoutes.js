@@ -84,6 +84,11 @@ router.post('/targeted', async (req, res) => {
  */
 router.post('/targeted-for-video', async (req, res) => {
   try {
+    console.log('==================================================');
+    console.log('🎯🎯🎯 TARGETING ENDPOINT CALLED 🎯🎯🎯');
+    console.log('==================================================');
+    console.log('📦 Request body:', JSON.stringify(req.body, null, 2));
+    
     const {
       videoData,
       limit = 3,
@@ -91,7 +96,14 @@ router.post('/targeted-for-video', async (req, res) => {
       adType = 'banner'
     } = req.body;
 
+    console.log('🔍 Extracted data:');
+    console.log('   videoData:', videoData);
+    console.log('   limit:', limit);
+    console.log('   useFallback:', useFallback);
+    console.log('   adType:', adType);
+
     if (!videoData) {
+      console.log('❌ Error: videoData is missing');
       return res.status(400).json({
         success: false,
         error: 'Video data is required'
@@ -99,26 +111,47 @@ router.post('/targeted-for-video', async (req, res) => {
     }
 
     console.log('🎯 Getting targeted ads for video:', videoData.id);
+    console.log('🎯 Video name:', videoData.videoName);
+    console.log('🎯 Video description:', videoData.description);
 
+    console.log('📞 Calling AdTargetingService.getTargetedAdsForVideo...');
     const ads = await AdTargetingService.getTargetedAdsForVideo(videoData, {
       limit,
       useFallback,
       adType
     });
+    
+    console.log(`✅ AdTargetingService returned ${ads.length} ads`);
+    console.log('📊 Ads returned:', ads.map(ad => ({
+      id: ad._id || ad.id,
+      title: ad.title,
+      type: ad.adType
+    })));
 
     // Get targeting insights
+    console.log('📈 Getting targeting insights...');
     const insights = AdTargetingService.getTargetingInsights(ads, videoData);
+    console.log('📈 Insights:', JSON.stringify(insights, null, 2));
 
-    res.json({
+    const response = {
       success: true,
       ads,
       insights,
       totalAds: ads.length,
       isFallback: insights.fallbackAds > 0
-    });
+    };
+    
+    console.log('✅ Sending response to frontend');
+    res.json(response);
 
   } catch (error) {
-    console.error('❌ Error getting targeted ads for video:', error);
+    console.error('==================================================');
+    console.error('❌❌❌ ERROR IN TARGETING ENDPOINT ❌❌❌');
+    console.error('==================================================');
+    console.error('❌ Error:', error.message);
+    console.error('❌ Stack:', error.stack);
+    console.error('❌ Full error:', error);
+    
     res.status(500).json({
       success: false,
       error: 'Failed to get targeted ads for video',

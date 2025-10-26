@@ -7,11 +7,13 @@ import 'package:vayu/config/app_config.dart';
 class BannerAdWidget extends StatelessWidget {
   final Map<String, dynamic> adData;
   final VoidCallback? onAdClick;
+  final VoidCallback? onAdImpression;
 
   const BannerAdWidget({
     Key? key,
     required this.adData,
     this.onAdClick,
+    this.onAdImpression,
   }) : super(key: key);
 
   // Ensure absolute URL (adds scheme or base URL if needed)
@@ -29,6 +31,11 @@ class BannerAdWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // **NEW: Track ad impression when widget is built**
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      onAdImpression?.call();
+    });
+
     // Resolve image URL from multiple possible keys and ensure absolute URL
     final dynamic rawImage = adData['imageUrl'] ??
         adData['image'] ??
