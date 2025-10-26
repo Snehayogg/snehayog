@@ -21,6 +21,7 @@ import 'package:vayu/view/screens/profile_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:vayu/controller/main_controller.dart';
 import 'package:vayu/core/managers/video_controller_manager.dart';
+import 'package:vayu/core/managers/shared_video_controller_pool.dart';
 import 'package:vayu/view/widget/report/report_dialog_widget.dart';
 import 'package:vayu/core/managers/smart_cache_manager.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -98,6 +99,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   final Map<int, bool> _isBuffering = {};
   final Map<int, VoidCallback> _bufferingListeners = {};
 
+  // **NEW: Track if video was playing before navigation (for resume on return)**
+  final Map<int, bool> _wasPlayingBeforeNavigation = {};
+
   // **PRELOADING STATE**
   final Set<int> _preloadedVideos = {};
   final Set<int> _loadingVideos = {};
@@ -140,11 +144,28 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // Reset cached URL to ensure local server is tried first
     AppConfig.resetCachedUrl();
     print(
-        '🔄 VideoFeedAdvanced: Reset cached URL, will try local server first');
+      '🔄 VideoFeedAdvanced: Reset cached URL, will try local server first',
+    );
 
-    // Initialize page controller first
-    _pageController = PageController(initialPage: widget.initialIndex ?? 0);
-    print('🚀 VideoFeedAdvanced: PageController initialized');
+    // **FIXED: Calculate correct initial page from initialVideoId if provided**
+    int initialPage = widget.initialIndex ?? 0;
+    if (widget.initialVideoId != null && widget.initialVideos != null) {
+      // Find the index of the video with the given ID in initialVideos
+      final videoIndex = widget.initialVideos!.indexWhere(
+        (v) => v.id == widget.initialVideoId,
+      );
+      if (videoIndex != -1) {
+        initialPage = videoIndex;
+        _currentIndex = videoIndex;
+        print('🎯 Calculated initial page from initialVideoId: $initialPage');
+      }
+    }
+
+    // Initialize page controller with correct initial page
+    _pageController = PageController(initialPage: initialPage);
+    print(
+      '🚀 VideoFeedAdvanced: PageController initialized with initialPage: $initialPage',
+    );
 
     // Initialize services
     _videoService = VideoService();
@@ -179,6 +200,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       case AppLifecycleState.resumed:
         print('▶️ VideoFeedAdvanced: App resumed');
         _videoControllerManager.onAppResumed();
+
+        // **FIX: Trigger autoplay after app resumes to fix grey screen**
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          print('🔄 VideoFeedAdvanced: App resumed, triggering autoplay');
+          _tryAutoplayCurrent();
+        });
         break;
       case AppLifecycleState.detached:
         print('🔌 VideoFeedAdvanced: App detached - disposing all controllers');
@@ -206,7 +233,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     if (_videos.isEmpty || _isLoading) return;
 
     print(
-        '🔄 VideoFeedAdvanced: Trying to autoplay current video at index $_currentIndex');
+      '🔄 VideoFeedAdvanced: Trying to autoplay current video at index $_currentIndex',
+    );
 
     // Check if current video is preloaded
     if (_controllerPool.containsKey(_currentIndex)) {
@@ -230,7 +258,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             _controllerStates[_currentIndex] = true;
             _userPaused[_currentIndex] = false;
             print(
-                '✅ VideoFeedAdvanced: Current video autoplay started after preloading');
+              '✅ VideoFeedAdvanced: Current video autoplay started after preloading',
+            );
           }
         }
       });
@@ -347,27 +376,66 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   Future<void> _loadInitialData() async {
     try {
       print('🚀 VideoFeedAdvanced: Starting _loadInitialData');
+      print(
+        '🔍 initialIndex: ${widget.initialIndex}, initialVideoId: ${widget.initialVideoId}',
+      );
+      print(
+        '🔍 initialVideos: ${widget.initialVideos?.length ?? 0} videos provided',
+      );
       setState(() => _isLoading = true);
 
-      // Load videos and user ID first (critical path for instant video display)
-      print('🚀 VideoFeedAdvanced: Loading videos...');
-      await _loadVideos(page: 1);
-      print('🚀 VideoFeedAdvanced: Videos loaded, count: ${_videos.length}');
+      // **CRITICAL FIX: Use initialVideos if provided, otherwise load from API**
+      if (widget.initialVideos != null && widget.initialVideos!.isNotEmpty) {
+        // Use provided videos instead of API call
+        _videos = List.from(widget.initialVideos!);
+        print('📦 Using initialVideos: ${_videos.length} videos provided');
+      } else {
+        // Load from API
+        print('🚀 VideoFeedAdvanced: Loading videos from API...');
+        await _loadVideos(page: 1);
+        print('🚀 VideoFeedAdvanced: Videos loaded, count: ${_videos.length}');
+      }
 
       print('🚀 VideoFeedAdvanced: Loading user ID...');
       await _loadCurrentUserId();
       print('🚀 VideoFeedAdvanced: User ID loaded: $_currentUserId');
 
+      // **CRITICAL FIX: Verify the current index is correct with the loaded videos**
+      // _currentIndex is already set correctly in _initializeServices
+      // Just verify that the video at _currentIndex matches initialVideoId
+      if (widget.initialVideoId != null && _videos.isNotEmpty) {
+        final videoAtCurrentIndex = _videos[_currentIndex];
+        if (videoAtCurrentIndex.id != widget.initialVideoId) {
+          // Video mismatch detected, find correct index
+          final correctIndex = _videos.indexWhere(
+            (v) => v.id == widget.initialVideoId,
+          );
+          if (correctIndex != -1) {
+            print(
+              '⚠️ Video mismatch detected! Current: ${videoAtCurrentIndex.id}, Expected: ${widget.initialVideoId}',
+            );
+            print(
+              '🔧 Correcting _currentIndex from $_currentIndex to $correctIndex',
+            );
+            _currentIndex = correctIndex;
+            // Also update PageController to correct page
+            _pageController.jumpToPage(correctIndex);
+          }
+        }
+      }
+
       // **OPTIMIZED: Show videos immediately without waiting for ads**
       if (mounted) {
         setState(() => _isLoading = false);
         print(
-            '🚀 VideoFeedAdvanced: Set loading to false, videos count: ${_videos.length}');
+          '🚀 VideoFeedAdvanced: Set loading to false, videos count: ${_videos.length}',
+        );
 
-        // **NEW: Trigger autoplay immediately after videos load**
+        // **FIXED: Trigger autoplay immediately after videos load**
+        // PageController is already initialized with correct page, so no jump needed
         WidgetsBinding.instance.addPostFrameCallback((_) {
           print(
-            '🚀 VideoFeedAdvanced: Triggering instant autoplay after video load',
+            '🚀 VideoFeedAdvanced: Triggering instant autoplay after video load at index $_currentIndex',
           );
           _tryAutoplayCurrent();
         });
@@ -376,21 +444,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       // **OPTIMIZED: Load ads in background (non-blocking)**
       // Ads will appear when ready, but won't delay video display
       _loadActiveAds(); // No 'await' - runs in background
-
-      // Navigate to specific video if provided
-      if (widget.initialVideoId != null) {
-        final videoIndex = _videos.indexWhere(
-          (v) => v.id == widget.initialVideoId,
-        );
-        if (videoIndex != -1) {
-          _currentIndex = videoIndex;
-          _pageController.animateToPage(
-            videoIndex,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-          );
-        }
-      }
     } catch (e) {
       print('❌ Error loading initial data: $e');
       if (mounted) {
@@ -461,10 +514,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   /// **NEW: Load targeted ads for a specific video**
   Future<List<Map<String, dynamic>>> _loadTargetedAdsForVideo(
-      VideoModel video) async {
+    VideoModel video,
+  ) async {
     try {
       print(
-          '🎯 VideoFeedAdvanced: Loading targeted ads for video: ${video.videoName}');
+        '🎯 VideoFeedAdvanced: Loading targeted ads for video: ${video.videoName}',
+      );
 
       // Use ActiveAdsService with video context for intelligent targeting
       final targetedAds = await _activeAdsService.fetchActiveAds(
@@ -474,13 +529,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       final bannerAds = targetedAds['banner'] ?? [];
 
       print(
-          '✅ VideoFeedAdvanced: Found ${bannerAds.length} targeted banner ads for video: ${video.videoName}');
+        '✅ VideoFeedAdvanced: Found ${bannerAds.length} targeted banner ads for video: ${video.videoName}',
+      );
 
       // Log targeting insights
       for (int i = 0; i < bannerAds.length; i++) {
         final ad = bannerAds[i];
         print(
-            '   Targeted Banner Ad $i: ${ad['title']} (${ad['adType']}) - Score: ${ad['targetingScore'] ?? 'N/A'}');
+          '   Targeted Banner Ad $i: ${ad['title']} (${ad['adType']}) - Score: ${ad['targetingScore'] ?? 'N/A'}',
+        );
       }
 
       return bannerAds;
@@ -539,16 +596,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
       // **TEMPORARY FIX: Direct API call to bypass cache issues**
       print(
-          '🔍 VideoFeedAdvanced: Loading videos directly from API (bypassing cache)');
+        '🔍 VideoFeedAdvanced: Loading videos directly from API (bypassing cache)',
+      );
       final response = await _videoService.getVideos(
         page: page,
         limit: _videosPerPage,
         videoType: widget.videoType,
       );
 
-      print(
-        '✅ VideoFeedAdvanced: Successfully loaded videos from API',
-      );
+      print('✅ VideoFeedAdvanced: Successfully loaded videos from API');
       print('🔍 VideoFeedAdvanced: Response keys: ${response.keys.toList()}');
 
       final newVideos = response['videos'] as List<VideoModel>;
@@ -565,11 +621,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           if (append) {
             _videos.addAll(newVideos);
             print(
-                '🔍 VideoFeedAdvanced: Appended videos, total count: ${_videos.length}');
+              '🔍 VideoFeedAdvanced: Appended videos, total count: ${_videos.length}',
+            );
           } else {
             _videos = newVideos;
             print(
-                '🔍 VideoFeedAdvanced: Set videos, total count: ${_videos.length}');
+              '🔍 VideoFeedAdvanced: Set videos, total count: ${_videos.length}',
+            );
           }
           _currentPage = page;
         });
@@ -640,7 +698,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
       // **MANUAL REFRESH: Reload carousel ads when user refreshes**
       print(
-          '🔄 VideoFeedAdvanced: Reloading carousel ads after manual refresh...');
+        '🔄 VideoFeedAdvanced: Reloading carousel ads after manual refresh...',
+      );
       await _carouselAdManager.loadCarouselAds();
     } catch (e) {
       print('❌ VideoFeedAdvanced: Error refreshing videos: $e');
@@ -728,7 +787,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           _carouselAds = carouselAds;
         });
         print(
-            '✅ VideoFeedAdvanced: Loaded ${_carouselAds.length} carousel ads');
+          '✅ VideoFeedAdvanced: Loaded ${_carouselAds.length} carousel ads',
+        );
       }
     } catch (e) {
       print('❌ Error loading carousel ads: $e');
@@ -766,9 +826,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
       print('💰 Video: ${video.videoName}');
       print(
-          '💰 Banner Impressions: $bannerImpressions (₹${bannerRevenue.toStringAsFixed(2)})');
+        '💰 Banner Impressions: $bannerImpressions (₹${bannerRevenue.toStringAsFixed(2)})',
+      );
       print(
-          '💰 Carousel Impressions: $carouselImpressions (₹${carouselRevenue.toStringAsFixed(2)})');
+        '💰 Carousel Impressions: $carouselImpressions (₹${carouselRevenue.toStringAsFixed(2)})',
+      );
       print('💰 Total Revenue: ₹${totalRevenue.toStringAsFixed(2)}');
 
       return totalRevenue;
@@ -873,43 +935,63 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
       print('🎬 Preloading video $index with URL: $videoUrl');
 
-      // **HLS SUPPORT: Check if URL is HLS and configure accordingly**
-      final Map<String, String> headers = videoUrl.contains('.m3u8')
-          ? const {
-              'Accept': 'application/vnd.apple.mpegurl,application/x-mpegURL',
-            }
-          : const {};
+      // **INSTAGRAM-STYLE: Check shared pool first for instant playback**
+      final sharedPool = SharedVideoControllerPool();
+      VideoPlayerController? controller;
+      bool isReused = false;
 
-      final controller = VideoPlayerController.networkUrl(
-        Uri.parse(videoUrl),
-        videoPlayerOptions: VideoPlayerOptions(
-          mixWithOthers: true,
-          allowBackgroundPlayback: false,
-        ),
-        httpHeaders: headers,
-      );
+      if (sharedPool.isVideoLoaded(video.id)) {
+        // Reuse controller from shared pool
+        controller = sharedPool.getController(video.id);
+        isReused = true;
+        print('♻️ Reusing controller from shared pool for video: ${video.id}');
+      }
 
-      // **HLS SUPPORT: Add HLS-specific configuration**
-      if (videoUrl.contains('.m3u8')) {
-        print('🎬 HLS Video detected: $videoUrl');
-        print('🎬 HLS Video duration: ${video.duration}');
-        await controller.initialize().timeout(
-          const Duration(seconds: 30), // Increased timeout for HLS
-          onTimeout: () {
-            throw Exception('HLS video initialization timeout');
-          },
+      // If no controller in shared pool, create new one
+      if (controller == null) {
+        // **HLS SUPPORT: Check if URL is HLS and configure accordingly**
+        final Map<String, String> headers = videoUrl.contains('.m3u8')
+            ? const {
+                'Accept': 'application/vnd.apple.mpegurl,application/x-mpegURL',
+              }
+            : const {};
+
+        controller = VideoPlayerController.networkUrl(
+          Uri.parse(videoUrl),
+          videoPlayerOptions: VideoPlayerOptions(
+            mixWithOthers: true,
+            allowBackgroundPlayback: false,
+          ),
+          httpHeaders: headers,
         );
-        print('✅ HLS Video initialized successfully');
+      }
+
+      // **SKIP INITIALIZATION: If reusing from shared pool, controller is already initialized**
+      if (!isReused) {
+        // **HLS SUPPORT: Add HLS-specific configuration**
+        if (videoUrl.contains('.m3u8')) {
+          print('🎬 HLS Video detected: $videoUrl');
+          print('🎬 HLS Video duration: ${video.duration}');
+          await controller.initialize().timeout(
+            const Duration(seconds: 30), // Increased timeout for HLS
+            onTimeout: () {
+              throw Exception('HLS video initialization timeout');
+            },
+          );
+          print('✅ HLS Video initialized successfully');
+        } else {
+          print('🎬 Regular Video detected: $videoUrl');
+          // **FIXED: Add timeout and better error handling for regular videos**
+          await controller.initialize().timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              throw Exception('Video initialization timeout');
+            },
+          );
+          print('✅ Regular Video initialized successfully');
+        }
       } else {
-        print('🎬 Regular Video detected: $videoUrl');
-        // **FIXED: Add timeout and better error handling for regular videos**
-        await controller.initialize().timeout(
-          const Duration(seconds: 10),
-          onTimeout: () {
-            throw Exception('Video initialization timeout');
-          },
-        );
-        print('✅ Regular Video initialized successfully');
+        print('♻️ Skipping initialization - reusing initialized controller');
       }
 
       if (mounted && _loadingVideos.contains(index)) {
@@ -917,6 +999,16 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         _controllerStates[index] = false; // Not playing initially
         _preloadedVideos.add(index);
         _loadingVideos.remove(index);
+
+        // **NEW: Add controller to shared pool for reuse across screens (only if not reused)**
+        if (!isReused) {
+          final sharedPool = SharedVideoControllerPool();
+          final video = _videos[index];
+          sharedPool.addController(video.id, controller);
+          print('✅ Added video controller to shared pool: ${video.id}');
+        } else {
+          print('♻️ Skipping shared pool add - controller already in pool');
+        }
 
         // Apply looping vs auto-advance behavior
         _applyLoopingBehavior(controller);
@@ -927,11 +1019,32 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
         // **NEW: Start view tracking if this is the current video**
         if (index == _currentIndex && index < _videos.length) {
-          final video = _videos[index];
           _viewTracker.startViewTracking(video.id);
           print(
             '▶️ Started view tracking for preloaded current video: ${video.id}',
           );
+
+          // **CRITICAL FIX: If reused controller for current video, start playing immediately**
+          if (isReused &&
+              controller.value.isInitialized &&
+              !controller.value.isPlaying) {
+            controller.play();
+            _controllerStates[index] = true;
+            _userPaused[index] = false;
+            print('✅ Started playback for reused controller at current index');
+          }
+
+          // **NEW: Resume video if it was playing before navigation (better UX)**
+          if (_wasPlayingBeforeNavigation[index] == true &&
+              controller.value.isInitialized &&
+              !controller.value.isPlaying) {
+            controller.play();
+            _controllerStates[index] = true;
+            _userPaused[index] = false;
+            _wasPlayingBeforeNavigation[index] = false; // Clear the flag
+            print(
+                '▶️ Resumed video ${video.id} that was playing before navigation');
+          }
         }
 
         print('✅ Successfully preloaded video $index');
@@ -950,7 +1063,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         // Clean up old controllers to prevent memory leaks
         _cleanupOldControllers();
       } else {
-        controller.dispose();
+        // **CRITICAL: Only dispose if not reused from shared pool**
+        if (!isReused) {
+          controller.dispose();
+        }
       }
     } catch (e) {
       print('❌ Error preloading video $index: $e');
@@ -1079,11 +1195,39 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   /// **GET OR CREATE CONTROLLER: Instagram-style recycling**
   VideoPlayerController? _getController(int index) {
+    // **OPTIMIZED: Check local pool first**
     if (_controllerPool.containsKey(index)) {
       return _controllerPool[index];
     }
 
-    // If not in pool, preload it
+    // **NEW: Check shared pool for reusable controllers**
+    if (index < _videos.length) {
+      final video = _videos[index];
+      final sharedPool = SharedVideoControllerPool();
+
+      if (sharedPool.isVideoLoaded(video.id)) {
+        // **CACHE HIT: Reuse controller from shared pool**
+        final sharedController = sharedPool.getController(video.id);
+        if (sharedController != null && sharedController.value.isInitialized) {
+          print(
+            '⚡ VideoFeedAdvanced: Reusing controller from shared pool for video ${video.id}',
+          );
+
+          // Add to local pool for tracking
+          _controllerPool[index] = sharedController;
+          _controllerStates[index] = false;
+          _preloadedVideos.add(index);
+
+          sharedPool.trackCacheHit();
+
+          return sharedController;
+        }
+      } else {
+        sharedPool.trackCacheMiss();
+      }
+    }
+
+    // If not in any pool, preload it
     _preloadVideo(index);
     return null;
   }
@@ -1146,7 +1290,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               final currentVideo = _videos[index];
               _viewTracker.startViewTracking(currentVideo.id);
               print(
-                  '▶️ Started view tracking for current video: ${currentVideo.id}');
+                '▶️ Started view tracking for current video: ${currentVideo.id}',
+              );
             }
 
             print('✅ Video autoplay started after preloading');
@@ -1420,18 +1565,17 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                     // Use targeted ads for this video
                     adData = snapshot.data![index % snapshot.data!.length];
                     print(
-                        '🎯 Using targeted ad for video $index: ${adData['title']}');
+                      '🎯 Using targeted ad for video $index: ${adData['title']}',
+                    );
                   } else if (_adsLoaded && _bannerAds.isNotEmpty) {
                     // Fall back to general ads
                     adData = _bannerAds[index % _bannerAds.length];
                     print(
-                        '🔄 Using fallback ad for video $index: ${adData['title']}');
+                      '🔄 Using fallback ad for video $index: ${adData['title']}',
+                    );
                   } else {
                     // Default placeholder
-                    adData = {
-                      'imageUrl': '',
-                      'title': 'Sponsored Content',
-                    };
+                    adData = {'imageUrl': '', 'title': 'Sponsored Content'};
                   }
 
                   return BannerAdWidget(
@@ -1525,11 +1669,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                   color: Colors.black.withOpacity(0.3),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
-                  Icons.favorite,
-                  color: Colors.red,
-                  size: 48,
-                ),
+                child: const Icon(Icons.favorite, color: Colors.red, size: 48),
               ),
             ),
           ),
@@ -2075,8 +2215,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                     child: CircularProgressIndicator(
                       strokeWidth: 4,
                       value: video.processingProgress / 100,
-                      valueColor:
-                          const AlwaysStoppedAnimation<Color>(Colors.green),
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        Colors.green,
+                      ),
                     ),
                   ),
                   // Center icon
@@ -2110,10 +2251,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             if (video.processingStatus == 'processing')
               Text(
                 '${video.processingProgress}% complete',
-                style: const TextStyle(
-                  color: Colors.white54,
-                  fontSize: 14,
-                ),
+                style: const TextStyle(color: Colors.white54, fontSize: 14),
               ),
 
             // Error message if failed
@@ -2123,10 +2261,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                 padding: const EdgeInsets.symmetric(horizontal: 32),
                 child: Text(
                   video.processingError!,
-                  style: const TextStyle(
-                    color: Colors.red,
-                    fontSize: 12,
-                  ),
+                  style: const TextStyle(color: Colors.red, fontSize: 12),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -2142,8 +2277,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red,
                   foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                 ),
               ),
           ],
@@ -2206,7 +2343,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       // Call backend to retry processing
       final response = await http.post(
         Uri.parse(
-            '${VideoService.baseUrl}/api/videos/$videoId/retry-processing'),
+          '${VideoService.baseUrl}/api/videos/$videoId/retry-processing',
+        ),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ${await _getUserToken()}',
@@ -2773,9 +2911,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // Navigate to profile screen
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => ProfileScreen(userId: userId),
-      ),
+      MaterialPageRoute(builder: (context) => ProfileScreen(userId: userId)),
     ).catchError((error) {
       print('❌ Error navigating to profile: $error');
       _showSnackBar('Failed to open profile', isError: true);
@@ -2926,17 +3062,71 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     _profilePreloader.dispose();
     print('🚀 VideoFeedAdvanced: Disposed BackgroundProfilePreloader');
 
-    // **SIMPLE: Clean up all video controllers**
+    // **INSTAGRAM-STYLE: Save controllers to shared pool instead of disposing**
+    // This prevents grey screen when returning to the same video
+    final sharedPool = SharedVideoControllerPool();
+    int savedControllers = 0;
+
     _controllerPool.forEach((index, controller) {
-      controller.removeListener(_bufferingListeners[index] ?? () {});
-      controller.removeListener(_videoEndListeners[index] ?? () {});
-      controller.dispose();
+      if (index < _videos.length) {
+        final video = _videos[index];
+        try {
+          // **NEW: Track if video was playing before navigation**
+          final wasPlaying = _controllerStates[index] == true &&
+              !(_userPaused[index] ?? false);
+          _wasPlayingBeforeNavigation[index] = wasPlaying;
+          print(
+              '💾 VideoFeedAdvanced: Video ${video.id} was ${wasPlaying ? "playing" : "paused"} before navigation');
+
+          // **NEW: Pause video if it was playing (user didn't pause it)**
+          if (wasPlaying &&
+              controller.value.isInitialized &&
+              controller.value.isPlaying) {
+            controller.pause();
+            _controllerStates[index] = false;
+            print(
+                '⏸️ VideoFeedAdvanced: Paused video ${video.id} before saving to shared pool');
+          }
+
+          // Remove listeners to avoid memory leaks
+          controller.removeListener(_bufferingListeners[index] ?? () {});
+          controller.removeListener(_videoEndListeners[index] ?? () {});
+
+          // **CRITICAL FIX: Use skipDisposeOld=true to prevent disposing the controller we're trying to save**
+          sharedPool.addController(video.id, controller, skipDisposeOld: true);
+          savedControllers++;
+          print(
+            '💾 VideoFeedAdvanced: Saved controller for video ${video.id} to shared pool',
+          );
+        } catch (e) {
+          print('⚠️ Error saving controller for video ${video.id}: $e');
+          controller.dispose();
+        }
+      } else {
+        // Dispose orphaned controllers (no corresponding video)
+        controller.dispose();
+      }
     });
+
+    print(
+      '💾 VideoFeedAdvanced: Saved $savedControllers controllers to shared pool',
+    );
+
+    // **MEMORY MANAGEMENT: Keep only recent controllers in shared pool**
+    if (savedControllers > 2) {
+      print(
+        '🧹 VideoFeedAdvanced: Triggering memory management (keeping only 2 controllers)',
+      );
+      sharedPool.disposeControllersForMemoryManagement();
+    }
+
+    // Clear local pools but controllers remain in shared pool for reuse
     _controllerPool.clear();
     _controllerStates.clear();
     _isBuffering.clear();
     _bufferingListeners.clear();
     _videoEndListeners.clear();
+    _wasPlayingBeforeNavigation.clear();
 
     // **NEW: Dispose VideoControllerManager**
     _videoControllerManager.dispose();

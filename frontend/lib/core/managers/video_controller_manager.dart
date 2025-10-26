@@ -329,9 +329,34 @@ class VideoControllerManager {
     }
   }
 
-  /// **FIXED: Enhanced pause all videos with proper cleanup**
+  /// **IMPROVED: Pause all videos but keep controllers in memory (better UX)**
   Future<void> pauseAllVideos() async {
-    print('🛑 VideoControllerManager: Pausing all videos and clearing audio');
+    print(
+        '⏸️ VideoControllerManager: Pausing all videos (keeping controllers)');
+
+    for (final index in _controllers.keys) {
+      try {
+        final controller = _controllers[index];
+        if (controller != null &&
+            controller.value.isInitialized &&
+            controller.value.isPlaying) {
+          await controller.pause();
+          _intentionallyPaused.add(index);
+          print('⏸️ VideoControllerManager: Paused video at index $index');
+        }
+      } catch (e) {
+        print('⚠️ VideoControllerManager: Error pausing video $index: $e');
+      }
+    }
+
+    print(
+        '✅ VideoControllerManager: All videos paused (controllers kept in memory)');
+  }
+
+  /// **LEGACY: Force pause all videos with volume muting (for critical situations)**
+  Future<void> forcePauseAllVideos() async {
+    print(
+        '🛑 VideoControllerManager: Force pausing all videos and clearing audio');
 
     for (final index in _controllers.keys) {
       try {
@@ -681,7 +706,7 @@ class VideoControllerManager {
   }
 
   /// **TAB CHANGE DETECTION: Force pause all videos immediately (for critical situations)**
-  void forcePauseAllVideos() {
+  void forcePauseAllVideosSync() {
     print('🛑 VideoControllerManager: Force pausing all videos immediately');
 
     for (final index in _controllers.keys) {

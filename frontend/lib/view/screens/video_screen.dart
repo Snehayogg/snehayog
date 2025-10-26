@@ -52,11 +52,8 @@ class _VideoScreenState extends State<VideoScreen> {
             Provider.of<MainController>(context, listen: false);
         mainController.forcePauseVideos();
 
-        // **CRITICAL: Clear all controllers to ensure only current video plays**
+        // **IMPROVED: Pause all controllers instead of disposing (better UX)**
         final videoControllerManager = VideoControllerManager();
-        await videoControllerManager.forceClearAllControllers();
-
-        // **ADDITIONAL: Set volume to 0 for all background videos**
         await videoControllerManager.pauseAllVideos();
 
         print(
@@ -78,7 +75,7 @@ class _VideoScreenState extends State<VideoScreen> {
       mainController.forcePauseVideos();
 
       final videoControllerManager = VideoControllerManager();
-      videoControllerManager.forceClearAllControllers();
+      videoControllerManager.forcePauseAllVideosSync(); // Use sync version
 
       print('🔇 VideoScreen: All videos paused on dispose');
     } catch (e) {

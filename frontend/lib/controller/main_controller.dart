@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:vayu/core/managers/shared_video_controller_pool.dart';
 // Removed: import 'package:vayu/core/managers/video_manager.dart';
 
 class MainController extends ChangeNotifier {
@@ -143,6 +144,14 @@ class MainController extends ChangeNotifier {
   /// Force pause all videos (called from external sources)
   void forcePauseVideos() {
     print('🛑 MainController: Force pausing all videos');
+
+    // **IMPROVED: Pause controllers instead of disposing for better UX**
+    try {
+      final sharedPool = SharedVideoControllerPool();
+      sharedPool.pauseAllControllers();
+    } catch (e) {
+      print('⚠️ MainController: Error pausing shared pool: $e');
+    }
 
     // **SIMPLIFIED: Use callback since VideoManager was removed**
     _pauseVideosCallback?.call();

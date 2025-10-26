@@ -20,6 +20,7 @@ import 'package:vayu/view/widget/profile/profile_menu_widget.dart';
 import 'package:vayu/view/widget/profile/profile_dialogs_widget.dart';
 import 'package:vayu/controller/main_controller.dart';
 import 'package:vayu/model/video_model.dart';
+import 'package:vayu/core/managers/shared_video_controller_pool.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -221,7 +222,131 @@ class _ProfileScreenState extends State<ProfileScreen>
   void didChangeDependencies() {
     super.didChangeDependencies();
     _stateManager.setContext(context);
+
+    // **DISABLED: Preload profile videos to prevent video playback conflicts**
+    // _preloadProfileVideos();
   }
+
+  /// **DISABLED: Preload profile videos to prevent video playback conflicts**
+  // Future<void> _preloadProfileVideos() async {
+  //   // Only preload if videos are loaded and not already preloading
+  //   if (_stateManager.userVideos.isEmpty) {
+  //     return;
+  //   }
+
+  //   // Get shared pool
+  //   final sharedPool = SharedVideoControllerPool();
+
+  //   // Check which videos are already loaded
+  //   final videosToPreload = <VideoModel>[];
+  //   for (final video in _stateManager.userVideos.take(3)) {
+  //     if (!sharedPool.isVideoLoaded(video.id)) {
+  //       videosToPreload.add(video);
+  //     }
+  //   }
+
+  //   if (videosToPreload.isEmpty) {
+  //     print('✅ ProfileScreen: All profile videos already preloaded');
+  //     return;
+  //   }
+
+  //   print(
+  //       '🚀 ProfileScreen: Preloading ${videosToPreload.length} profile videos in background...');
+
+  //   // Preload videos in background
+  //   Future.microtask(() async {
+  //     for (final video in videosToPreload) {
+  //       try {
+  //         await _preloadVideo(video);
+  //         print('✅ ProfileScreen: Preloaded video: ${video.videoName}');
+  //       } catch (e) {
+  //         print(
+  //             '⚠️ ProfileScreen: Failed to preload video ${video.videoName}: $e');
+  //       }
+  //     }
+
+  //     print('✅ ProfileScreen: Profile video preloading completed');
+  //     sharedPool.printStatus();
+  //   });
+  // }
+
+  /// **DISABLED: PRELOAD SINGLE VIDEO: Helper method to preload a video**
+  // Future<void> _preloadVideo(VideoModel video) async {
+  //   try {
+  //     // **CHECK: Skip if video is already loaded in shared pool**
+  //     final sharedPool = SharedVideoControllerPool();
+  //     if (sharedPool.isVideoLoaded(video.id)) {
+  //       print(
+  //           '✅ ProfileScreen: Video already loaded, skipping: ${video.videoName}');
+  //       return;
+  //     }
+
+  //     // Get video URL
+  //     String? videoUrl;
+
+  //     // Resolve playable URL
+  //     if (video.hlsPlaylistUrl?.isNotEmpty == true) {
+  //       videoUrl = video.hlsPlaylistUrl;
+  //     } else if (video.videoUrl.contains('.m3u8') ||
+  //         video.videoUrl.contains('.mp4')) {
+  //       videoUrl = video.videoUrl;
+  //     } else {
+  //       // Skip if URL is not valid
+  //       print('⚠️ ProfileScreen: Invalid video URL for ${video.videoName}');
+  //       return;
+  //     }
+
+  //     if (videoUrl == null || videoUrl.isEmpty) {
+  //       print('⚠️ ProfileScreen: Empty video URL for ${video.videoName}');
+  //       return;
+  //     }
+
+  //     print(
+  //         '🎬 ProfileScreen: Initializing controller for video: ${video.videoName}');
+
+  //     // **HLS SUPPORT: Configure headers for HLS videos**
+  //     final Map<String, String> headers = videoUrl.contains('.m3u8')
+  //         ? const {
+  //             'Accept': 'application/vnd.apple.mpegurl,application/x-mpegURL',
+  //           }
+  //         : const {};
+
+  //     // Create controller
+  //     final controller = VideoPlayerController.networkUrl(
+  //       Uri.parse(videoUrl),
+  //       videoPlayerOptions: VideoPlayerOptions(
+  //         mixWithOthers: true,
+  //         allowBackgroundPlayback: false,
+  //       ),
+  //       httpHeaders: headers,
+  //     );
+
+  //     // Initialize controller
+  //     if (videoUrl.contains('.m3u8')) {
+  //       await controller.initialize().timeout(
+  //         const Duration(seconds: 30),
+  //         onTimeout: () {
+  //           throw Exception('HLS video initialization timeout');
+  //         },
+  //       );
+  //     } else {
+  //       await controller.initialize().timeout(
+  //         const Duration(seconds: 10),
+  //         onTimeout: () {
+  //           throw Exception('Video initialization timeout');
+  //         },
+  //       );
+  //     }
+
+  //     // Add to shared pool
+  //     sharedPool.addController(video.id, controller);
+
+  //     print(
+  //         '✅ ProfileScreen: Successfully preloaded video: ${video.videoName}');
+  //   } catch (e) {
+  //     print('❌ ProfileScreen: Error preloading video ${video.videoName}: $e');
+  //   }
+  // }
 
   @override
   void dispose() {
@@ -669,7 +794,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  /// **FIX: Pause all video controllers to prevent audio leak**
+  /// **IMPROVED: Pause all video controllers to prevent audio leak (better UX)**
   void _pauseAllVideoControllers() {
     try {
       // Get the main controller from the app
@@ -678,9 +803,11 @@ class _ProfileScreenState extends State<ProfileScreen>
       print('🔇 ProfileScreen: Pausing all videos via MainController');
       mainController.forcePauseVideos();
 
-      // Also try to pause any background videos
-      print('🔇 ProfileScreen: Attempting to pause background videos');
-      // This will help prevent audio leaks during profile photo changes
+      // **IMPROVED: Also pause shared pool controllers**
+      final sharedPool = SharedVideoControllerPool();
+      sharedPool.pauseAllControllers();
+
+      print('🔇 ProfileScreen: All video controllers paused (kept in memory)');
     } catch (e) {
       print('⚠️ ProfileScreen: Error pausing videos: $e');
     }

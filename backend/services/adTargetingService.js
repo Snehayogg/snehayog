@@ -13,13 +13,17 @@ class AdTargetingService {
     'yoga': ['yoga', 'meditation', 'wellness', 'fitness', 'mindfulness', 'spiritual', 'health'],
     'fitness': ['fitness', 'workout', 'exercise', 'gym', 'training', 'strength', 'cardio'],
     'cooking': ['cooking', 'recipe', 'food', 'kitchen', 'chef', 'baking', 'nutrition'],
-    'education': ['education', 'learning', 'tutorial', 'course', 'study', 'knowledge', 'skill'],
+    'education': ['education', 'learning', 'tutorial', 'course', 'study', 'knowledge', 'skill', 
+                  'physics', 'chemistry', 'biology', 'math', 'mathematics', 'science', 'history', 
+                  'geography', 'english', 'language', 'academic', 'school', 'college', 'university'],
     'entertainment': ['entertainment', 'fun', 'comedy', 'music', 'dance', 'art', 'creative'],
     'lifestyle': ['lifestyle', 'fashion', 'beauty', 'travel', 'home', 'decor', 'tips'],
     'technology': ['technology', 'tech', 'gadgets', 'software', 'programming', 'innovation'],
     'business': ['business', 'entrepreneur', 'finance', 'marketing', 'startup', 'career'],
     'sports': ['sports', 'football', 'cricket', 'basketball', 'tennis', 'athletics'],
     'travel': ['travel', 'tourism', 'adventure', 'exploration', 'vacation', 'places'],
+    // **NEW: Others category for uncategorized content**
+    'others': ['misc', 'general', 'random', 'various', 'mixed', 'other', 'unknown'],
   };
 
   // **INTEREST KEYWORDS**
@@ -27,7 +31,10 @@ class AdTargetingService {
     'health_wellness': ['health', 'wellness', 'medical', 'doctor', 'hospital', 'medicine', 'therapy'],
     'fitness_sports': ['fitness', 'sports', 'gym', 'workout', 'training', 'athlete', 'exercise'],
     'food_cooking': ['food', 'cooking', 'recipe', 'restaurant', 'chef', 'kitchen', 'nutrition'],
-    'education_learning': ['education', 'school', 'college', 'university', 'learning', 'study', 'course'],
+    // **UPDATED: Consolidated education interests include all academic subjects**
+    'education_learning': ['education', 'school', 'college', 'university', 'learning', 'study', 'course',
+                           'physics', 'chemistry', 'biology', 'math', 'mathematics', 'science', 'history',
+                           'geography', 'english', 'language', 'academic', 'tutorial', 'knowledge'],
     'entertainment_media': ['entertainment', 'movie', 'music', 'dance', 'comedy', 'fun', 'party'],
     'technology_gadgets': ['technology', 'tech', 'gadgets', 'smartphone', 'computer', 'software'],
     'fashion_beauty': ['fashion', 'beauty', 'style', 'makeup', 'clothing', 'shopping', 'trends'],
@@ -365,16 +372,52 @@ class AdTargetingService {
   static extractVideoCategories(videoData) {
     const categories = [];
     
-    // Analyze video name
+    // **NEW: Use provided category if available**
+    if (videoData.category && videoData.category.trim()) {
+      categories.push(videoData.category.toLowerCase());
+    }
+    
+    // **NEW: Use tags for category extraction**
+    if (videoData.tags && Array.isArray(videoData.tags)) {
+      for (const tag of videoData.tags) {
+        if (tag && tag.trim()) {
+          const normalizedTag = tag.toLowerCase().trim();
+          if (this.CATEGORY_MAPPING[normalizedTag]) {
+            categories.push(normalizedTag);
+          }
+        }
+      }
+    }
+    
+    // **NEW: Use keywords for category extraction**
+    if (videoData.keywords && Array.isArray(videoData.keywords)) {
+      for (const keyword of videoData.keywords) {
+        if (keyword && keyword.trim()) {
+          const normalizedKeyword = keyword.toLowerCase().trim();
+          for (const category in this.CATEGORY_MAPPING) {
+            if (this.CATEGORY_MAPPING[category].some(catKeyword => 
+                normalizedKeyword.includes(catKeyword.toLowerCase()))) {
+              if (!categories.includes(category)) {
+                categories.push(category);
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // Analyze video name (fallback)
     const videoName = (videoData.videoName || '').toLowerCase();
     for (const category in this.CATEGORY_MAPPING) {
       if (this.CATEGORY_MAPPING[category].some(keyword => 
           videoName.includes(keyword.toLowerCase()))) {
-        categories.push(category);
+        if (!categories.includes(category)) {
+          categories.push(category);
+        }
       }
     }
     
-    // Analyze description
+    // Analyze description (fallback)
     if (videoData.description) {
       const description = videoData.description.toLowerCase();
       for (const category in this.CATEGORY_MAPPING) {
@@ -387,9 +430,9 @@ class AdTargetingService {
       }
     }
     
-    // Default to 'entertainment' if no categories found
+    // Default to 'others' if no categories found
     if (categories.length === 0) {
-      categories.push('entertainment');
+      categories.push('others');
     }
     
     return categories;
@@ -402,16 +445,52 @@ class AdTargetingService {
   static extractVideoInterests(videoData) {
     const interests = [];
     
-    // Analyze video name
+    // **NEW: Use tags for interest extraction**
+    if (videoData.tags && Array.isArray(videoData.tags)) {
+      for (const tag of videoData.tags) {
+        if (tag && tag.trim()) {
+          const normalizedTag = tag.toLowerCase().trim();
+          for (const interest in this.INTEREST_KEYWORDS) {
+            if (this.INTEREST_KEYWORDS[interest].some(interestKeyword => 
+                normalizedTag.includes(interestKeyword.toLowerCase()))) {
+              if (!interests.includes(interest)) {
+                interests.push(interest);
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // **NEW: Use keywords for interest extraction**
+    if (videoData.keywords && Array.isArray(videoData.keywords)) {
+      for (const keyword of videoData.keywords) {
+        if (keyword && keyword.trim()) {
+          const normalizedKeyword = keyword.toLowerCase().trim();
+          for (const interest in this.INTEREST_KEYWORDS) {
+            if (this.INTEREST_KEYWORDS[interest].some(interestKeyword => 
+                normalizedKeyword.includes(interestKeyword.toLowerCase()))) {
+              if (!interests.includes(interest)) {
+                interests.push(interest);
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // Analyze video name (fallback)
     const videoName = (videoData.videoName || '').toLowerCase();
     for (const interest in this.INTEREST_KEYWORDS) {
       if (this.INTEREST_KEYWORDS[interest].some(keyword => 
           videoName.includes(keyword.toLowerCase()))) {
-        interests.push(interest);
+        if (!interests.includes(interest)) {
+          interests.push(interest);
+        }
       }
     }
     
-    // Analyze description
+    // Analyze description (fallback)
     if (videoData.description) {
       const description = videoData.description.toLowerCase();
       for (const interest in this.INTEREST_KEYWORDS) {
@@ -424,7 +503,7 @@ class AdTargetingService {
       }
     }
     
-    // Default to 'entertainment_media' if no interests found
+    // Default to 'entertainment_media' if no interests found (keeping this as it's more specific)
     if (interests.length === 0) {
       interests.push('entertainment_media');
     }

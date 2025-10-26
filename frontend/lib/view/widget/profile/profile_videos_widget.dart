@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:vayu/core/managers/profile_state_manager.dart';
 import 'package:vayu/core/services/profile_screen_logger.dart';
 import 'package:vayu/view/screens/video_screen.dart';
-import 'package:vayu/core/managers/video_controller_manager.dart';
+import 'package:vayu/core/managers/shared_video_controller_pool.dart';
 import 'package:vayu/controller/main_controller.dart';
 import 'package:vayu/model/video_model.dart';
 
@@ -159,25 +159,47 @@ class ProfileVideosWidget extends StatelessWidget {
                         child: GestureDetector(
                           onTap: () async {
                             if (!stateManager.isSelecting) {
-                              // **OPTIMIZED: Start navigation immediately for faster loading**
+                              // **FIXED: Ensure correct video plays by pausing all others first**
                               print(
-                                  '🚀 ProfileVideosWidget: Opening video immediately');
+                                  '🎬 ProfileVideosWidget: Navigating to video at index $index');
+                              print('📊 Video ID: ${video.id}');
+                              print('📊 Video Name: ${video.videoName}');
 
+                              // **IMPROVED: Smart controller management**
+                              final sharedPool = SharedVideoControllerPool();
+
+                              // Pause all other controllers but keep current one ready
+                              sharedPool.pauseAllControllers();
+
+                              // If this video is already loaded, use smart resume
+                              if (sharedPool.isVideoLoaded(video.id)) {
+                                print(
+                                    '⚡ ProfileVideosWidget: Video already loaded, using smart resume');
+                                sharedPool.smartResumeController(video.id);
+                              }
+
+                              // **FIXED: Use video ID instead of index for correct video identification**
+                              print(
+                                  '🎯 Navigating to video with ID: ${video.id} at index: $index');
+                              print('📊 Video name: ${video.videoName}');
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder: (context) => VideoScreen(
-                                    initialIndex: index,
+                                    // **CRITICAL: Don't pass initialIndex to avoid wrong video playback**
+                                    // Only pass initialVideoId to ensure correct video is identified
                                     initialVideos: stateManager.userVideos,
+                                    initialVideoId: video
+                                        .id, // **Use video ID for accurate video identification**
                                   ),
                                 ),
                               );
 
-                              // **BACKGROUND: Clear controllers after navigation to prevent blocking**
+                              // **BACKGROUND: Ensure single video playback**
                               Future.microtask(() async {
                                 try {
                                   print(
-                                      '🔇 ProfileVideosWidget: Clearing controllers in background');
+                                      '🔇 ProfileVideosWidget: Ensuring single video playback');
 
                                   // Get MainController and force pause all videos
                                   final mainController =
@@ -185,17 +207,11 @@ class ProfileVideosWidget extends StatelessWidget {
                                           listen: false);
                                   mainController.forcePauseVideos();
 
-                                  // Also clear VideoControllerManager directly
-                                  final videoControllerManager =
-                                      VideoControllerManager();
-                                  await videoControllerManager
-                                      .forceClearAllControllers();
-
                                   print(
-                                      '✅ ProfileVideosWidget: Background controller cleanup completed');
+                                      '✅ ProfileVideosWidget: Single video playback ensured');
                                 } catch (e) {
                                   print(
-                                      '⚠️ ProfileVideosWidget: Background controller cleanup failed: $e');
+                                      '⚠️ ProfileVideosWidget: Error ensuring single playback: $e');
                                 }
                               });
                             } else if (stateManager.isSelecting &&
