@@ -12,11 +12,7 @@ class AISemanticService {
     this.initialized = false;
   }
 
-  /**
-   * Initialize AI model (lazy loading)
-   * Model downloads automatically on first use (~200MB)
-   * UPDATED: Now supports multilingual (Hindi + 100+ languages)
-   */
+
   async initialize() {
     if (this.initialized && this.model) return;
     
