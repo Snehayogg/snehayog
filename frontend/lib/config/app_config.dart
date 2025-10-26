@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 class AppConfig {
   // **MANUAL: Development mode control**
   static const bool _isDevelopment =
-      true; // Set to true for local development, false for production
+      false; // Set to true for local development, false for production
 
   // **NEW: Smart URL selection with fallback**
   static String? _cachedBaseUrl;
@@ -34,14 +34,22 @@ class AppConfig {
       return _cachedBaseUrl!;
     }
 
-    // Try local server first, then Railway fallback
-    final urlsToTry = [
-      'http://192.168.0.199:5001', // Your laptop IP (for phone testing)
-      'http://localhost:5001', // Localhost (for emulator)
-      'http://127.0.0.1:5001', // Localhost alternative
-      'http://10.0.2.2:5001', // Android emulator
-      'https://snehayog-production.up.railway.app', // Railway server as fallback
-    ];
+    // Try Railway first for production, then local fallback for development
+    final urlsToTry = _isDevelopment
+        ? [
+            'http://192.168.0.199:5001', // Your laptop IP (for phone testing)
+            'http://localhost:5001', // Localhost (for emulator)
+            'http://127.0.0.1:5001', // Localhost alternative
+            'http://10.0.2.2:5001', // Android emulator
+            'https://snehayog-production.up.railway.app', // Railway server as fallback
+          ]
+        : [
+            'https://snehayog-production.up.railway.app', // Railway server first for production
+            'http://192.168.0.199:5001', // Local fallback for development
+            'http://localhost:5001', // Localhost (for emulator)
+            'http://127.0.0.1:5001', // Localhost alternative
+            'http://10.0.2.2:5001', // Android emulator
+          ];
 
     for (final url in urlsToTry) {
       try {
@@ -50,7 +58,7 @@ class AppConfig {
         final response = await http.get(
           Uri.parse('$url/api/health'),
           headers: {'Content-Type': 'application/json'},
-        ).timeout(const Duration(seconds: 3));
+        ).timeout(const Duration(seconds: 30));
 
         if (response.statusCode == 200) {
           print('✅ AppConfig: Server is accessible at $url');
@@ -74,14 +82,22 @@ class AppConfig {
     print('🔍 AppConfig: Checking server connectivity...');
     print('🔍 AppConfig: Development mode: $_isDevelopment');
 
-    // Priority order: Local server first, then Railway fallback
-    final urlsToTry = [
-      'http://192.168.0.199:5001', // Your laptop IP (for phone testing)
-      'http://localhost:5001', // Localhost (for emulator)
-      'http://127.0.0.1:5001', // Localhost alternative
-      'http://10.0.2.2:5001', // Android emulator
-      'https://snehayog-production.up.railway.app', // Railway server as fallback
-    ];
+    // Priority order: Railway first for production, local fallback for development
+    final urlsToTry = _isDevelopment
+        ? [
+            'http://192.168.0.199:5001', // Your laptop IP (for phone testing)
+            'http://localhost:5001', // Localhost (for emulator)
+            'http://127.0.0.1:5001', // Localhost alternative
+            'http://10.0.2.2:5001', // Android emulator
+            'https://snehayog-production.up.railway.app', // Railway server as fallback
+          ]
+        : [
+            'https://snehayog-production.up.railway.app', // Railway server first for production
+            'http://192.168.0.199:5001', // Local fallback for development
+            'http://localhost:5001', // Localhost (for emulator)
+            'http://127.0.0.1:5001', // Localhost alternative
+            'http://10.0.2.2:5001', // Android emulator
+          ];
 
     for (final url in urlsToTry) {
       try {
@@ -90,7 +106,7 @@ class AppConfig {
         final response = await http.get(
           Uri.parse('$url/api/health'),
           headers: {'Content-Type': 'application/json'},
-        ).timeout(const Duration(seconds: 3));
+        ).timeout(const Duration(seconds: 30));
 
         if (response.statusCode == 200) {
           print('✅ AppConfig: Server is accessible at $url');
@@ -115,18 +131,18 @@ class AppConfig {
     print('🔄 AppConfig: Cached URL reset, will recheck on next request');
   }
 
-  // **NEW: Fallback URLs for development**
+  // **NEW: Fallback URLs - Railway first for production**
   static const List<String> fallbackUrls = [
+    'https://snehayog-production.up.railway.app', // Railway server first for production
     'http://192.168.0.199:5001', // Your laptop IP (for phone testing)
     'http://localhost:5001', // Localhost (for emulator)
     'http://127.0.0.1:5001', // Localhost alternative
     'http://10.0.2.2:5001', // Android emulator
-    'https://snehayog-production.up.railway.app', // Railway server as fallback
   ];
 
   // **NEW: Network timeout configurations**
   static const Duration authTimeout = Duration(seconds: 30);
-  static const Duration apiTimeout = Duration(seconds: 45);
+  static const Duration apiTimeout = Duration(seconds: 30);
   static const Duration uploadTimeout = Duration(minutes: 10);
 
   static const int maxRetries = 3;
@@ -439,14 +455,14 @@ class NetworkHelper {
   static String get authEndpoint => '$apiBaseUrl/auth';
   static String get usersEndpoint => '$apiBaseUrl/users';
 
-  /// Network timeout configurations
-  static const Duration defaultTimeout = Duration(seconds: 15);
+  /// Network timeout configurations - Increased for better remote connectivity
+  static const Duration defaultTimeout = Duration(seconds: 30);
   static const Duration uploadTimeout = Duration(minutes: 5);
-  static const Duration shortTimeout = Duration(seconds: 5);
+  static const Duration shortTimeout = Duration(seconds: 30);
 
-  /// Retry configurations
-  static const int defaultMaxRetries = 2;
-  static const Duration defaultRetryDelay = Duration(seconds: 1);
+  /// Retry configurations - Enhanced for better reliability
+  static const int defaultMaxRetries = 3;
+  static const Duration defaultRetryDelay = Duration(seconds: 2);
 
   /// File size limits
   static const int maxVideoFileSize = 100 * 1024 * 1024; // 100MB
@@ -493,5 +509,39 @@ class NetworkHelper {
   static bool isFileSizeValid(int fileSize, {bool isVideo = true}) {
     final maxSize = isVideo ? maxVideoFileSize : maxImageFileSize;
     return fileSize <= maxSize;
+  }
+
+  /// **NEW: Check if Railway server is accessible**
+  static Future<bool> isRailwayAccessible() async {
+    try {
+      print('🔍 NetworkHelper: Checking Railway server accessibility...');
+      final response = await http.get(
+        Uri.parse('https://snehayog-production.up.railway.app/api/health'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 30));
+
+      final isAccessible = response.statusCode == 200;
+      print('🔍 NetworkHelper: Railway server accessible: $isAccessible');
+      return isAccessible;
+    } catch (e) {
+      print('❌ NetworkHelper: Railway server not accessible: $e');
+      return false;
+    }
+  }
+
+  /// **NEW: Get best available server URL**
+  static Future<String> getBestServerUrl() async {
+    print('🔍 NetworkHelper: Finding best server URL...');
+
+    // Check Railway first for production
+    if (!AppConfig._isDevelopment) {
+      if (await isRailwayAccessible()) {
+        print('✅ NetworkHelper: Using Railway server');
+        return 'https://snehayog-production.up.railway.app';
+      }
+    }
+
+    // Fallback to AppConfig logic
+    return await AppConfig.getBaseUrlWithFallback();
   }
 }

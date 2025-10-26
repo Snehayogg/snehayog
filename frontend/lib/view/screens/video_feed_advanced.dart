@@ -112,7 +112,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       5; // Load more when 5 videos from end
   bool _isLoadingMore = false;
   int _currentPage = 1;
-  static const int _videosPerPage = 10;
+  static const int _videosPerPage = 5;
 
   // **CAROUSEL AD STATE**
   List<CarouselAdModel> _carouselAds = []; // Store loaded carousel ads
@@ -892,9 +892,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   void _preloadNearbyVideos() {
     if (_videos.isEmpty) return;
 
-    // Preload current + next 2 videos
+    // Preload current + next 1 video
     for (int i = _currentIndex;
-        i <= _currentIndex + 2 && i < _videos.length;
+        i <= _currentIndex + 1 && i < _videos.length;
         i++) {
       if (!_preloadedVideos.contains(i) && !_loadingVideos.contains(i)) {
         _preloadVideo(i);
@@ -3062,8 +3062,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     _profilePreloader.dispose();
     print('🚀 VideoFeedAdvanced: Disposed BackgroundProfilePreloader');
 
-    // **INSTAGRAM-STYLE: Save controllers to shared pool instead of disposing**
-    // This prevents grey screen when returning to the same video
     final sharedPool = SharedVideoControllerPool();
     int savedControllers = 0;
 
