@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 class AppConfig {
   // **MANUAL: Development mode control**
   static const bool _isDevelopment =
-      true; // Set to true for local development, false for production
+      false; // Set to true for local development, false for production (Play Store builds)
 
   // **NEW: Smart URL selection with fallback**
   static String? _cachedBaseUrl;
@@ -21,10 +21,9 @@ class AppConfig {
       return _cachedBaseUrl!;
     }
 
-    // Default to local server first, but will be updated by checkAndUpdateServerUrl()
-    print(
-        '🔍 AppConfig: Default to local server, will check connectivity on first API call');
-    return 'http://192.168.0.199:5001';
+    // Default to Railway for production builds (Play Store)
+    print('🔍 AppConfig: Using Railway server for production');
+    return 'https://snehayog-production.up.railway.app';
   }
 
   // **NEW: Get base URL with local server first, Railway fallback**
