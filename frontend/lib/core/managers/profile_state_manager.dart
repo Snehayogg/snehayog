@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/core/providers/video_provider.dart';
 import 'package:vayu/model/video_model.dart';
 import 'package:vayu/services/authservices.dart';
+import 'package:vayu/services/cloudinary_service.dart';
 import 'package:vayu/services/user_service.dart';
 import 'package:vayu/services/video_service.dart';
 import 'package:vayu/utils/feature_flags.dart';
@@ -147,11 +150,8 @@ class ProfileStateManager extends ChangeNotifier {
           userData = loggedInUser;
         }
 
-        // Apply locally saved avatar if any (do not override backend name)
-        final savedProfilePic = await _loadSavedProfilePic();
-        if (savedProfilePic != null && savedProfilePic.isNotEmpty) {
-          userData['profilePic'] = savedProfilePic;
-        }
+        // **REMOVED: Do not apply locally saved avatar - backend is source of truth**
+        // The profile picture from backend should always be used to ensure permanent changes persist
       } else {
         // Fetch profile data for another user
         print(
@@ -453,12 +453,43 @@ class ProfileStateManager extends ChangeNotifier {
     }
   }
 
-  Future<void> updateProfilePhoto(String? profilePic) async {
-    if (_userData != null) {
-      await _saveProfileData(_userData!['name'], profilePic);
-      _userData!['profilePic'] = profilePic;
-      notifyListeners();
-      notifyListeners();
+  Future<void> updateProfilePhoto(String? profilePicPath) async {
+    if (_userData != null && profilePicPath != null) {
+      try {
+        print('📸 ProfileStateManager: Starting profile photo upload...');
+
+        // Check if it's already a URL (http/https)
+        if (profilePicPath.startsWith('http')) {
+          // Already a URL, just save it
+          print(
+              '✅ ProfileStateManager: Photo is already a URL, saving directly');
+          await _saveProfileData(_userData!['name'], profilePicPath);
+          _userData!['profilePic'] = profilePicPath;
+          notifyListeners();
+          return;
+        }
+
+        // It's a local file path, need to upload it first
+        print(
+            '📤 ProfileStateManager: Uploading local file to cloud storage...');
+        final cloudinaryService = CloudinaryService();
+        final uploadedUrl = await cloudinaryService.uploadImage(
+          File(profilePicPath),
+          folder: 'snehayog/profile',
+        );
+
+        print(
+            '✅ ProfileStateManager: Photo uploaded successfully: $uploadedUrl');
+
+        // Now save the URL to backend
+        await _saveProfileData(_userData!['name'], uploadedUrl);
+        _userData!['profilePic'] = uploadedUrl;
+        notifyListeners();
+        print('✅ ProfileStateManager: Profile photo updated successfully');
+      } catch (e) {
+        print('❌ ProfileStateManager: Error uploading profile photo: $e');
+        rethrow;
+      }
     }
   }
 
@@ -689,22 +720,72 @@ class ProfileStateManager extends ChangeNotifier {
     }
   }
 
-  // Utility methods
-  Future<String?> _loadSavedName() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('user_name');
-  }
-
-  Future<String?> _loadSavedProfilePic() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('user_profile_pic');
-  }
+  // **REMOVED: Utility methods for loading saved name/profilePic**
+  // These were removed because backend is now the source of truth and
+  // we don't want to override backend data with old SharedPreferences values
 
   Future<void> _saveProfileData(String name, String? profilePic) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('user_name', name);
-    if (profilePic != null) {
-      await prefs.setString('user_profile_pic', profilePic);
+    try {
+      print('💾 ProfileStateManager: Saving profile data to backend...');
+
+      // Get googleId from user data (with fallback to 'id')
+      final googleId = _userData?['googleId'] ?? _userData?['id'];
+      if (googleId == null) {
+        print(
+            '❌ ProfileStateManager: No user ID found in user data: $_userData');
+        throw Exception('User ID not found');
+      }
+
+      print('✅ ProfileStateManager: Using googleId: $googleId');
+
+      // Save to backend via API
+      final success = await _userService.updateProfile(
+        googleId: googleId,
+        name: name,
+        profilePic: profilePic,
+      );
+
+      if (success) {
+        print('✅ ProfileStateManager: Profile saved to backend successfully');
+
+        // **FIXED: Update SharedPreferences fallback_user with new profile data**
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final updatedFallbackData = {
+            'id': googleId,
+            'googleId': googleId,
+            'name': name,
+            'email': _userData?['email'] ?? '',
+            'profilePic': profilePic ?? _userData?['profilePic'] ?? '',
+          };
+          await prefs.setString(
+              'fallback_user', jsonEncode(updatedFallbackData));
+          print(
+              '✅ ProfileStateManager: Updated fallback_user with new profile data');
+        } catch (e) {
+          print('⚠️ ProfileStateManager: Failed to update fallback_user: $e');
+        }
+
+        // Clear cache to force fresh data fetch
+        final cacheKey = 'user_profile_$googleId';
+        _cache.remove(cacheKey);
+        _cacheTimestamps.remove(cacheKey);
+        _cacheEtags.remove(cacheKey);
+        print('🧹 ProfileStateManager: Cleared cache after profile update');
+
+        // Update local state immediately
+        _userData?['name'] = name;
+        if (profilePic != null) {
+          _userData?['profilePic'] = profilePic;
+        }
+        notifyListeners();
+        print('✅ ProfileStateManager: Local state updated');
+      } else {
+        throw Exception('Failed to update profile on server');
+      }
+    } catch (e) {
+      print('❌ ProfileStateManager: Error saving profile data: $e');
+      rethrow;
     }
   }
 

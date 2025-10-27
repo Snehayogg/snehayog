@@ -110,10 +110,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   // **INFINITE SCROLLING**
   static const int _infiniteScrollThreshold =
-      5; // Load more when 5 videos from end
+      4; // Load more when 4 videos from end (optimized for batch loading)
   bool _isLoadingMore = false;
   int _currentPage = 1;
-  static const int _videosPerPage = 5;
+  static const int _videosPerPage = 5; // Load 5 videos at a time for better UX
+  bool _hasMore = true; // Track if more videos are available
+  int? _totalVideos; // Total video count from backend
 
   // **CAROUSEL AD STATE**
   List<CarouselAdModel> _carouselAds = []; // Store loaded carousel ads
@@ -508,14 +510,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   /// **LOAD VIDEOS WITH PAGINATION AND CACHING**
   Future<void> _loadVideos({int page = 1, bool append = false}) async {
     try {
-      // **CACHE STATUS CHECK ON VIDEO LOADING**
       print('🔄 Loading videos - Page: $page, Append: $append');
       _printCacheStatus();
 
-      // **TEMPORARY FIX: Direct API call to bypass cache issues**
-      print(
-        '🔍 VideoFeedAdvanced: Loading videos directly from API (bypassing cache)',
-      );
+      print('🔍 VideoFeedAdvanced: Loading videos directly from API');
       final response = await _videoService.getVideos(
         page: page,
         limit: _videosPerPage,
@@ -526,28 +524,31 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       print('🔍 VideoFeedAdvanced: Response keys: ${response.keys.toList()}');
 
       final newVideos = response['videos'] as List<VideoModel>;
-      print('🔍 VideoFeedAdvanced: New videos count: ${newVideos.length}');
 
-      // **CACHE STATUS UPDATE AFTER VIDEO LOADING**
+      // **NEW: Extract pagination metadata from backend**
+      final hasMore = response['hasMore'] as bool? ?? false;
+      final total = response['total'] as int? ?? 0;
+      final currentPage = response['currentPage'] as int? ?? page;
+      final totalPages = response['totalPages'] as int? ?? 1;
+
       print('📊 Video Loading Complete:');
       print('   New Videos Loaded: ${newVideos.length}');
-      print('   Total Videos: ${_videos.length + newVideos.length}');
-      print('   Current Page: $page');
+      print('   Page: $currentPage / $totalPages');
+      print('   Has More: $hasMore');
+      print('   Total Videos Available: $total');
 
       if (mounted) {
         setState(() {
           if (append) {
             _videos.addAll(newVideos);
-            print(
-              '🔍 VideoFeedAdvanced: Appended videos, total count: ${_videos.length}',
-            );
+            print('📝 Appended videos, total: ${_videos.length}');
           } else {
             _videos = newVideos;
-            print(
-              '🔍 VideoFeedAdvanced: Set videos, total count: ${_videos.length}',
-            );
+            print('📝 Set videos, total: ${_videos.length}');
           }
-          _currentPage = page;
+          _currentPage = currentPage;
+          _hasMore = hasMore; // **NEW: Store hasMore flag**
+          _totalVideos = total; // **NEW: Store total count**
         });
 
         // Load following users after videos are loaded
@@ -563,6 +564,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     } catch (e) {
       print('❌ Error loading videos: $e');
       print('❌ Error stack trace: ${StackTrace.current}');
+
+      // **NEW: Set hasMore to false on error to prevent infinite retries**
+      if (mounted) {
+        setState(() {
+          _hasMore = false;
+        });
+      }
     }
   }
 
@@ -802,14 +810,31 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   /// **LOAD MORE VIDEOS FOR INFINITE SCROLLING**
   Future<void> _loadMoreVideos() async {
-    if (_isLoadingMore) return;
+    // **NEW: Check if more videos are available**
+    if (!_hasMore) {
+      print('✅ All videos loaded (hasMore: false)');
+      return;
+    }
 
+    if (_isLoadingMore) {
+      print('⏳ Already loading more videos');
+      return;
+    }
+
+    print('📡 Loading more videos: Page ${_currentPage + 1}');
     setState(() => _isLoadingMore = true);
 
     try {
       await _loadVideos(page: _currentPage + 1, append: true);
+      print('✅ Loaded more videos successfully');
     } catch (e) {
       print('❌ Error loading more videos: $e');
+      // Set hasMore to false on error to prevent infinite retries
+      if (mounted) {
+        setState(() {
+          _hasMore = false;
+        });
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoadingMore = false);
@@ -837,11 +862,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       }
     }
 
-    // **FIXED: Only load more videos if we have enough videos to justify infinite scrolling**
-    // Don't trigger infinite scrolling if we have less than 5 videos total
-    if (_videos.length >= 5 &&
+    // **OPTIMIZED: Load more videos only if more are available and user is near the end**
+    if (_hasMore &&
+        !_isLoadingMore &&
         _currentIndex >= _videos.length - _infiniteScrollThreshold) {
+      print(
+          '📡 Triggering load more: index=$_currentIndex, total=${_videos.length}, hasMore=$_hasMore');
       _loadMoreVideos();
+    } else if (!_hasMore) {
+      print('✅ All videos loaded, no more to load');
     }
   }
 
@@ -1520,8 +1549,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                       '🔄 Using fallback ad for video ${video.videoName}: ${adData['title']} (index $adIndex of ${_bannerAds.length})',
                     );
                   } else {
-                    // Default placeholder
-                    adData = {'imageUrl': '', 'title': 'Sponsored Content'};
+                    // **FIX: Don't show placeholder, just return empty widget**
+                    return const SizedBox.shrink();
                   }
 
                   return BannerAdWidget(

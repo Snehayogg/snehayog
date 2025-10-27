@@ -42,6 +42,12 @@ class ProfileHeaderWidget extends StatelessWidget {
                     children: [
                       Consumer<ProfileStateManager>(
                         builder: (context, stateManager, child) {
+                          final profileImage = _getProfileImage(context);
+                          final profilePic =
+                              stateManager.userData?['profilePic'];
+                          final hasProfilePic =
+                              profilePic != null && profilePic.isNotEmpty;
+
                           return Container(
                             width: 80,
                             height: 80,
@@ -59,21 +65,33 @@ class ProfileHeaderWidget extends StatelessWidget {
                                 ),
                               ],
                             ),
-                            child: CircleAvatar(
-                              radius: 45,
-                              backgroundColor: const Color(0xFFF3F4F6),
-                              backgroundImage: _getProfileImage(context),
-                              onBackgroundImageError: (exception, stackTrace) {
-                                ProfileScreenLogger.logError(
-                                    'Error loading profile image: $exception');
-                              },
-                              child: _getProfileImage(context) == null
-                                  ? const Icon(
-                                      Icons.person,
-                                      size: 40,
-                                      color: Color(0xFF9CA3AF),
-                                    )
-                                  : null,
+                            child: Stack(
+                              children: [
+                                CircleAvatar(
+                                  radius: 45,
+                                  backgroundColor: const Color(0xFFF3F4F6),
+                                  backgroundImage: profileImage,
+                                  onBackgroundImageError:
+                                      (exception, stackTrace) {
+                                    ProfileScreenLogger.logError(
+                                        'Error loading profile image: $exception');
+                                  },
+                                  child: profileImage == null
+                                      ? const Icon(
+                                          Icons.person,
+                                          size: 40,
+                                          color: Color(0xFF9CA3AF),
+                                        )
+                                      : null,
+                                ),
+                                // Show loading indicator when image is being loaded
+                                if (hasProfilePic &&
+                                    profilePic.startsWith('http'))
+                                  Positioned.fill(
+                                    child: _ProfileImageLoader(
+                                        imageUrl: profilePic),
+                                  ),
+                              ],
                             ),
                           );
                         },
@@ -345,5 +363,68 @@ class ProfileHeaderWidget extends StatelessWidget {
     // Final fallback
     ProfileScreenLogger.logDebugInfo('No name available, using default');
     return 'User';
+  }
+}
+
+/// Widget that shows a loading indicator while the profile image is being loaded
+/// This uses Image.network to detect when the image is loading/loaded
+class _ProfileImageLoader extends StatefulWidget {
+  final String imageUrl;
+
+  const _ProfileImageLoader({required this.imageUrl});
+
+  @override
+  State<_ProfileImageLoader> createState() => _ProfileImageLoaderState();
+}
+
+class _ProfileImageLoaderState extends State<_ProfileImageLoader> {
+  bool _isLoading = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Image.network(
+        widget.imageUrl,
+        fit: BoxFit.cover,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) {
+            // Image loaded successfully
+            if (mounted && _isLoading) {
+              setState(() {
+                _isLoading = false;
+              });
+            }
+            return const SizedBox.shrink();
+          }
+
+          // Still loading - show spinner overlay
+          return Container(
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: const Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2.5,
+                ),
+              ),
+            ),
+          );
+        },
+        errorBuilder: (context, error, stackTrace) {
+          // Image failed to load
+          if (mounted && _isLoading) {
+            setState(() {
+              _isLoading = false;
+            });
+          }
+          return const SizedBox.shrink();
+        },
+      ),
+    );
   }
 }

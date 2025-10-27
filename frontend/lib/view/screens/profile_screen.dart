@@ -530,6 +530,10 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       await _stateManager.saveProfile();
 
+      // **ENHANCED: Clear profile cache to force fresh data on next load**
+      await _clearProfileCache();
+      print('🧹 ProfileScreen: Cleared profile cache after name update');
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -770,6 +774,10 @@ class _ProfileScreenState extends State<ProfileScreen>
         }
 
         await _stateManager.updateProfilePhoto(image.path);
+
+        // **ENHANCED: Clear profile cache to force fresh data on next load**
+        await _clearProfileCache();
+        print('🧹 ProfileScreen: Cleared profile cache after photo update');
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

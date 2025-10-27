@@ -31,11 +31,6 @@ class BannerAdWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // **NEW: Track ad impression when widget is built**
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      onAdImpression?.call();
-    });
-
     // Resolve image URL from multiple possible keys and ensure absolute URL
     final dynamic rawImage = adData['imageUrl'] ??
         adData['image'] ??
@@ -46,6 +41,17 @@ class BannerAdWidget extends StatelessWidget {
         '';
     final String imageUrl = _ensureAbsoluteUrl(
         rawImage is String ? rawImage : rawImage?.toString() ?? '');
+
+    // **FIX: Don't show ad widget at all if no image URL**
+    if (imageUrl.isEmpty || imageUrl.trim() == '') {
+      print('⚠️ BannerAdWidget: No image URL available, hiding ad widget');
+      return const SizedBox.shrink();
+    }
+
+    // **NEW: Track ad impression when widget is built**
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      onAdImpression?.call();
+    });
 
     // Debug logging for banner ad data
     print('🎯 BannerAdWidget: Building banner ad with data:');
@@ -105,11 +111,11 @@ class BannerAdWidget extends StatelessWidget {
                             loadingBuilder: (context, child, loadingProgress) {
                               if (loadingProgress == null) return child;
                               return Container(
-                                color: Colors.grey[300],
+                                color: Colors.transparent,
                                 child: const Center(
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    color: Colors.grey,
+                                    color: Colors.white54,
                                   ),
                                 ),
                               );
@@ -118,26 +124,14 @@ class BannerAdWidget extends StatelessWidget {
                               print(
                                   '❌ BannerAdWidget: Failed to load image: $imageUrl, Error: $error');
                               return Container(
-                                color: Colors.grey[300],
-                                child: const Center(
-                                  child: Icon(
-                                    Icons.image_not_supported,
-                                    color: Colors.grey,
-                                    size: 32,
-                                  ),
-                                ),
+                                color: Colors.transparent,
+                                child: const SizedBox.shrink(),
                               );
                             },
                           )
                         : Container(
-                            color: Colors.grey[300],
-                            child: const Center(
-                              child: Icon(
-                                Icons.image_not_supported,
-                                color: Colors.grey,
-                                size: 32,
-                              ),
-                            ),
+                            color: Colors.transparent,
+                            child: const SizedBox.shrink(),
                           ),
                   ),
                 ),

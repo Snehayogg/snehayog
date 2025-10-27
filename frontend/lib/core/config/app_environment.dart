@@ -1,6 +1,5 @@
 enum AppEnvironment { development, staging, production }
 
-/// Centralized environment configuration for the Vayu app
 class AppEnvironmentConfig {
   static AppEnvironment _currentEnvironment = AppEnvironment.development;
 

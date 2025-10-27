@@ -10,7 +10,8 @@ router.post('/register', async (req, res) => {
     console.log('🔍 User registration API: Request received');
     console.log('🔍 User registration API: Body:', req.body);
     
-    const { googleId, name, email, profilePicture } = req.body;
+    const { googleId, name, email, profilePicture, profilePic } = req.body;
+    const profilePictureUrl = profilePicture || profilePic || '';
     
     if (!googleId || !name || !email) {
       return res.status(400).json({ 
@@ -21,7 +22,25 @@ router.post('/register', async (req, res) => {
     // Check if user already exists
     const existingUser = await User.findOne({ googleId });
     if (existingUser) {
-      console.log('✅ User already exists, returning existing user');
+      console.log('✅ User already exists, checking for missing data...');
+      
+      // **FIXED: Update user profile data if it's missing**
+      let needsUpdate = false;
+      if (!existingUser.name || existingUser.name.trim() === '') {
+        console.log('📝 Updating missing name from Google account');
+        existingUser.name = name;
+        needsUpdate = true;
+      }
+      if (!existingUser.profilePic || existingUser.profilePic.trim() === '') {
+        console.log('📸 Updating missing profile picture from Google account');
+        existingUser.profilePic = profilePictureUrl;
+        needsUpdate = true;
+      }
+      if (needsUpdate) {
+        await existingUser.save();
+        console.log('✅ User profile updated with Google account data');
+      }
+      
       return res.json({
         success: true,
         user: {
@@ -29,7 +48,8 @@ router.post('/register', async (req, res) => {
           googleId: existingUser.googleId,
           name: existingUser.name,
           email: existingUser.email,
-          profilePicture: existingUser.profilePicture,
+          profilePic: existingUser.profilePic,
+          profilePicture: existingUser.profilePic, // Keep for backwards compatibility
           isNewUser: false
         }
       });
@@ -40,7 +60,7 @@ router.post('/register', async (req, res) => {
       googleId,
       name,
       email,
-      profilePicture: profilePicture || '',
+      profilePic: profilePictureUrl, // Use extracted value
       isActive: true
     });
     
@@ -54,7 +74,7 @@ router.post('/register', async (req, res) => {
         googleId: newUser.googleId,
         name: newUser.name,
         email: newUser.email,
-        profilePicture: newUser.profilePicture,
+        profilePicture: newUser.profilePic, // **FIXED: Use correct field name**
         isNewUser: true
       }
     });

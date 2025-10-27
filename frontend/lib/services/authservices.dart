@@ -103,7 +103,10 @@ class AuthService {
             'name': googleUser.displayName ?? 'User',
             'email': googleUser.email,
             'profilePic': googleUser.photoUrl,
+            'profilePicture': googleUser.photoUrl, // For backend compatibility
           };
+
+          Map<String, dynamic>? registeredUserData;
 
           try {
             final registerResponse = await http
@@ -120,6 +123,8 @@ class AuthService {
             if (registerResponse.statusCode == 200 ||
                 registerResponse.statusCode == 201) {
               print('✅ User registration successful');
+              final regData = jsonDecode(registerResponse.body);
+              registeredUserData = regData['user'];
 
               // Show location onboarding for new users
               // Add small delay to ensure context is available
@@ -133,13 +138,32 @@ class AuthService {
             print('⚠️ User registration error (non-critical): $e');
           }
 
+          // **FIXED: Use Google account data if backend data is missing**
+          // Priority: 1) Backend registered data, 2) Google account data
+          final finalName =
+              registeredUserData?['name'] ?? googleUser.displayName ?? 'User';
+          final finalProfilePic = registeredUserData?['profilePic'] ??
+              registeredUserData?['profilePicture'] ??
+              googleUser.photoUrl;
+
+          // Save to SharedPreferences with fresh Google data
+          final fallbackData = {
+            'id': googleUser.id,
+            'googleId': googleUser.id,
+            'name': finalName,
+            'email': googleUser.email,
+            'profilePic': finalProfilePic,
+          };
+          await prefs.setString('fallback_user', jsonEncode(fallbackData));
+          print('✅ Saved fallback_user with Google account data');
+
           // Return combined user data
           return {
             'id': googleUser.id,
             'googleId': googleUser.id,
-            'name': googleUser.displayName ?? 'User',
+            'name': finalName,
             'email': googleUser.email,
-            'profilePic': googleUser.photoUrl,
+            'profilePic': finalProfilePic,
             'token': authData['token'],
           };
         } else {
@@ -483,20 +507,12 @@ class AuthService {
         }
       }
 
-      // Check if we have fallback user data
+      // **FIXED: Always check backend FIRST for fresh data, fallback is only for offline scenarios**
+      Map<String, dynamic>? fallbackDataMap;
       if (fallbackUser != null) {
-        print('🔄 Found fallback user data, using it');
-        final userData = jsonDecode(fallbackUser);
-        return {
-          'id': userData['id'],
-          'googleId': userData['googleId'] ??
-              userData['id'], // Add googleId if available
-          'name': userData['name'],
-          'email': userData['email'],
-          'profilePic': userData['profilePic'],
-          'token': token,
-          'isFallback': true,
-        };
+        print(
+            '🔄 Found fallback user data available (will use if backend fails)');
+        fallbackDataMap = jsonDecode(fallbackUser);
       }
 
       // Try to verify token with backend and get actual user data
@@ -521,7 +537,7 @@ class AuthService {
           final userData = jsonDecode(response.body);
           print('✅ Retrieved user profile from backend');
 
-          // Save this as fallback data for future use
+          // **FIXED: Always update fallback with fresh backend data**
           final fallbackData = {
             'id': userData['googleId'] ?? userData['id'],
             'googleId':
@@ -531,6 +547,7 @@ class AuthService {
             'profilePic': userData['profilePic'],
           };
           await prefs.setString('fallback_user', jsonEncode(fallbackData));
+          print('✅ Updated fallback_user with fresh backend data');
 
           return {
             'id': userData['googleId'] ?? userData['id'],
@@ -545,8 +562,8 @@ class AuthService {
           print('⚠️ Backend returned status: ${response.statusCode}');
           // If backend returns error, still try to use fallback if available
           print('🔄 Backend error, using fallback user data');
-          if (fallbackUser != null) {
-            final userData = jsonDecode(fallbackUser);
+          if (fallbackDataMap != null) {
+            final userData = fallbackDataMap;
             return {
               'id': userData['id'],
               'googleId': userData['googleId'] ??
@@ -563,8 +580,8 @@ class AuthService {
         print('⚠️ Error fetching user profile from backend: $e');
         // If backend is unreachable, use fallback data if available
         print('🔄 Backend unreachable, using fallback user data');
-        if (fallbackUser != null) {
-          final userData = jsonDecode(fallbackUser);
+        if (fallbackDataMap != null) {
+          final userData = fallbackDataMap;
           return {
             'id': userData['id'],
             'googleId': userData['googleId'] ??
