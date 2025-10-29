@@ -263,13 +263,27 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   void didChangeDependencies() {
     super.didChangeDependencies();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _tryAutoplayCurrent();
+      final mainController =
+          Provider.of<MainController>(context, listen: false);
+      // Only attempt autoplay if we're on the Yug tab and not returning from picker
+      if (mainController.currentIndex == 0 &&
+          !mainController.isMediaPickerActive &&
+          !mainController.recentlyReturnedFromPicker) {
+        _tryAutoplayCurrent();
+      }
     });
   }
 
   /// **TRY AUTOPLAY CURRENT: Ensure current video starts playing**
   void _tryAutoplayCurrent() {
     if (_videos.isEmpty || _isLoading) return;
+    // Safety: ensure we're on the visible video tab and not in a picker cooldown
+    final mainController = Provider.of<MainController>(context, listen: false);
+    if (mainController.currentIndex != 0 ||
+        mainController.isMediaPickerActive ||
+        mainController.recentlyReturnedFromPicker) {
+      return;
+    }
 
     // Check if current video is preloaded
     if (_controllerPool.containsKey(_currentIndex)) {
