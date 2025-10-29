@@ -85,6 +85,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   // **AD STATE - DISABLED**
   List<Map<String, dynamic>> _bannerAds = [];
+  final Map<String, Map<String, dynamic>> _lockedBannerAdByVideoId = {};
   bool _adsLoaded = false;
 
   // **PAGE CONTROLLER**
@@ -95,9 +96,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   final Map<int, VideoPlayerController> _controllerPool = {};
   final Map<int, bool> _controllerStates = {}; // Track if controller is active
-  final int _maxPoolSize = 3;
+  final int _maxPoolSize = 5; // Increased from 3 to 5 for smoother scrolling
   final Map<int, bool> _userPaused = {};
   final Map<int, bool> _isBuffering = {};
+
+  // **LRU TRACKING FOR LOCAL POOL**
+  final Map<int, DateTime> _lastAccessedLocal =
+      {}; // Track when each video was last accessed
   final Map<int, VoidCallback> _bufferingListeners = {};
 
   // **NEW: Track if video was playing before navigation (for resume on return)**
@@ -432,44 +437,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
   }
 
-  /// **NEW: Load targeted ads for a specific video**
-  Future<List<Map<String, dynamic>>> _loadTargetedAdsForVideo(
-    VideoModel video,
-  ) async {
-    try {
-      print(
-        '🎯 VideoFeedAdvanced: Loading targeted ads for video: ${video.videoName}',
-      );
-
-      // Use ActiveAdsService with video context for intelligent targeting
-      final targetedAds = await _activeAdsService.fetchActiveAds(
-        videoData: video, // Pass video context for targeting
-      );
-
-      final bannerAds = targetedAds['banner'] ?? [];
-
-      print(
-        '✅ VideoFeedAdvanced: Found ${bannerAds.length} targeted banner ads for video: ${video.videoName}',
-      );
-
-      // Log targeting insights
-      for (int i = 0; i < bannerAds.length; i++) {
-        final ad = bannerAds[i];
-        print(
-          '   Targeted Banner Ad $i: ${ad['title']} (${ad['adType']}) - Score: ${ad['targetingScore'] ?? 'N/A'}',
-        );
-      }
-
-      return bannerAds;
-    } catch (e) {
-      print('❌ Error loading targeted ads for video ${video.id}: $e');
-
-      // Fall back to general banner ads
-      print('🔄 Falling back to general banner ads...');
-      return _bannerAds;
-    }
-  }
-
   /// **LOAD FOLLOWING USERS: Check follow status for each video uploader**
   Future<void> _loadFollowingUsers() async {
     if (_currentUserId == null || _videos.isEmpty) return;
@@ -564,7 +531,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     } catch (e) {
       print('❌ Error loading videos: $e');
       print('❌ Error stack trace: ${StackTrace.current}');
-
       // **NEW: Set hasMore to false on error to prevent infinite retries**
       if (mounted) {
         setState(() {
@@ -964,6 +930,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         _controllerStates[index] = false; // Not playing initially
         _preloadedVideos.add(index);
         _loadingVideos.remove(index);
+        // **LRU: Track access time when controller is added**
+        _lastAccessedLocal[index] = DateTime.now();
 
         // **NEW: Add controller to shared pool for reuse across screens (only if not reused)**
         if (!isReused) {
@@ -1132,30 +1100,77 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   void _cleanupOldControllers() {
     if (_controllerPool.length <= _maxPoolSize) return;
 
-    // Find controllers that are far from current index
-    final currentIndex = _currentIndex;
+    final sharedPool = SharedVideoControllerPool();
     final controllersToRemove = <int>[];
 
+    // **NEW: Build list of controllers with access time**
+    final controllerAccessTimes = <int, DateTime>{};
     for (final index in _controllerPool.keys) {
-      if ((index - currentIndex).abs() > _maxPoolSize) {
-        controllersToRemove.add(index);
-      }
+      controllerAccessTimes[index] =
+          _lastAccessedLocal[index] ?? DateTime.fromMillisecondsSinceEpoch(0);
     }
 
-    // Remove old controllers
+    // **Sort by access time (oldest first) and distance from current**
+    final sortedIndices = controllerAccessTimes.keys.toList()
+      ..sort((a, b) {
+        final aTime = controllerAccessTimes[a]!;
+        final bTime = controllerAccessTimes[b]!;
+        final aDist = (a - _currentIndex).abs();
+        final bDist = (b - _currentIndex).abs();
+
+        // Prioritize removing: 1) Far away AND 2) Old access time
+        if (aDist > _maxPoolSize && bDist <= _maxPoolSize) return -1;
+        if (aDist <= _maxPoolSize && bDist > _maxPoolSize) return 1;
+        return aTime.compareTo(bTime); // Oldest first
+      });
+
+    // **Remove oldest/distant controllers beyond limit**
+    final toRemove = _controllerPool.length - _maxPoolSize;
+    for (int i = 0; i < toRemove && i < sortedIndices.length; i++) {
+      final index = sortedIndices[i];
+
+      // Don't remove if in shared pool (keep for instant playback)
+      if (index < _videos.length) {
+        final videoId = _videos[index].id;
+        if (sharedPool.isVideoLoaded(videoId)) {
+          // Keep in shared pool, just remove from local pool tracking
+          controllersToRemove.add(index);
+          continue;
+        }
+      }
+
+      controllersToRemove.add(index);
+    }
+
+    // **Dispose and remove**
     for (final index in controllersToRemove) {
       final ctrl = _controllerPool[index];
-      if (ctrl != null) {
+
+      if (index < _videos.length) {
+        final videoId = _videos[index].id;
+        if (!sharedPool.isVideoLoaded(videoId) && ctrl != null) {
+          ctrl.removeListener(_bufferingListeners[index] ?? () {});
+          ctrl.removeListener(_videoEndListeners[index] ?? () {});
+          ctrl.dispose();
+        }
+      } else if (ctrl != null) {
         ctrl.removeListener(_bufferingListeners[index] ?? () {});
         ctrl.removeListener(_videoEndListeners[index] ?? () {});
         ctrl.dispose();
       }
+
       _controllerPool.remove(index);
       _controllerStates.remove(index);
       _preloadedVideos.remove(index);
       _isBuffering.remove(index);
       _bufferingListeners.remove(index);
       _videoEndListeners.remove(index);
+      _lastAccessedLocal.remove(index); // Remove LRU tracking
+    }
+
+    if (controllersToRemove.isNotEmpty) {
+      print(
+          '🧹 Cleaned up ${controllersToRemove.length} old controllers (LRU)');
     }
   }
 
@@ -1163,6 +1178,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   VideoPlayerController? _getController(int index) {
     // **OPTIMIZED: Check local pool first**
     if (_controllerPool.containsKey(index)) {
+      // **LRU: Track access time**
+      _lastAccessedLocal[index] = DateTime.now();
       return _controllerPool[index];
     }
 
@@ -1183,6 +1200,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           _controllerPool[index] = sharedController;
           _controllerStates[index] = false;
           _preloadedVideos.add(index);
+          // **LRU: Track access time**
+          _lastAccessedLocal[index] = DateTime.now();
 
           sharedPool.trackCacheHit();
 
@@ -1202,6 +1221,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   void _onPageChanged(int index) {
     if (index == _currentIndex) return;
 
+    // **LRU: Track access time for previous index**
+    _lastAccessedLocal[_currentIndex] = DateTime.now();
+
     // **NEW: Stop view tracking for previous video**
     if (_currentIndex < _videos.length) {
       final previousVideo = _videos[_currentIndex];
@@ -1217,16 +1239,63 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     _currentIndex = index;
 
-    // **FIXED: Play current video if preloaded, otherwise preload and play**
-    if (_controllerPool.containsKey(index)) {
-      // Video is already preloaded, play it immediately
-      _controllerPool[index]?.play();
+    // **CRITICAL FIX: Check shared pool FIRST before local pool (Reels-style instant playback)**
+    final sharedPool = SharedVideoControllerPool();
+    VideoPlayerController? controllerToUse;
+
+    if (index < _videos.length) {
+      final video = _videos[index];
+
+      // Always check shared pool first (Reels-style instant playback)
+      if (sharedPool.isVideoLoaded(video.id)) {
+        controllerToUse = sharedPool.getController(video.id);
+        if (controllerToUse != null && controllerToUse.value.isInitialized) {
+          print(
+              '⚡ Reels-style: Reusing controller from shared pool for video ${video.id}');
+
+          // Add to local pool for tracking
+          _controllerPool[index] = controllerToUse;
+          _controllerStates[index] = false;
+          _preloadedVideos.add(index);
+          // **LRU: Track access time**
+          _lastAccessedLocal[index] = DateTime.now();
+          sharedPool.trackCacheHit();
+        }
+      }
+    }
+
+    // If not in shared pool, check local pool
+    if (controllerToUse == null && _controllerPool.containsKey(index)) {
+      controllerToUse = _controllerPool[index];
+      if (controllerToUse != null && !controllerToUse.value.isInitialized) {
+        // Controller exists but not initialized - dispose and recreate
+        print(
+            '⚠️ Controller exists but not initialized, disposing and recreating...');
+        try {
+          controllerToUse.dispose();
+        } catch (e) {
+          print('Error disposing controller: $e');
+        }
+        _controllerPool.remove(index);
+        _controllerStates.remove(index);
+        _preloadedVideos.remove(index);
+        _lastAccessedLocal.remove(index);
+        controllerToUse = null;
+      } else if (controllerToUse != null) {
+        // **LRU: Track access time**
+        _lastAccessedLocal[index] = DateTime.now();
+      }
+    }
+
+    // **FIXED: Play current video if we have a valid controller**
+    if (controllerToUse != null && controllerToUse.value.isInitialized) {
+      // Controller is ready, play immediately
+      controllerToUse.play();
       _controllerStates[index] = true;
       _userPaused[index] = false;
-      final ctrl = _controllerPool[index]!;
-      _applyLoopingBehavior(ctrl);
-      _attachEndListenerIfNeeded(ctrl, index);
-      _attachBufferingListenerIfNeeded(ctrl, index);
+      _applyLoopingBehavior(controllerToUse);
+      _attachEndListenerIfNeeded(controllerToUse, index);
+      _attachBufferingListenerIfNeeded(controllerToUse, index);
 
       // **NEW: Start view tracking for current video**
       if (index < _videos.length) {
@@ -1235,22 +1304,38 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             videoUploaderId: currentVideo.uploader.id);
         print('▶️ Started view tracking for current video: ${currentVideo.id}');
       }
-    } else {
-      // **FIXED: Video not preloaded, preload it and play when ready**
+
+      // Preload nearby videos for smooth scrolling
+      _preloadNearbyVideos();
+      return; // Exit early - video is ready!
+    }
+
+    // **FIX: If still no controller, preload and mark as loading immediately**
+    if (!_controllerPool.containsKey(index)) {
       print('🔄 Video not preloaded, preloading and will autoplay when ready');
+      // Mark as loading immediately so UI shows thumbnail/loading instead of grey
+      if (mounted) {
+        setState(() {
+          // This triggers UI rebuild to show loading state
+        });
+      }
       _preloadVideo(index).then((_) {
         // After preloading, check if this is still the current video
         if (mounted &&
             _currentIndex == index &&
             _controllerPool.containsKey(index)) {
-          final controller = _controllerPool[index];
-          if (controller != null && controller.value.isInitialized) {
-            controller.play();
+          final loadedController = _controllerPool[index];
+          if (loadedController != null &&
+              loadedController.value.isInitialized) {
+            // **LRU: Track access time**
+            _lastAccessedLocal[index] = DateTime.now();
+
+            loadedController.play();
             _controllerStates[index] = true;
             _userPaused[index] = false;
-            _applyLoopingBehavior(controller);
-            _attachEndListenerIfNeeded(controller, index);
-            _attachBufferingListenerIfNeeded(controller, index);
+            _applyLoopingBehavior(loadedController);
+            _attachEndListenerIfNeeded(loadedController, index);
+            _attachBufferingListenerIfNeeded(loadedController, index);
 
             // **NEW: Start view tracking for current video**
             if (index < _videos.length) {
@@ -1258,8 +1343,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               _viewTracker.startViewTracking(currentVideo.id,
                   videoUploaderId: currentVideo.uploader.id);
               print(
-                '▶️ Started view tracking for current video: ${currentVideo.id}',
-              );
+                  '▶️ Started view tracking for current video: ${currentVideo.id}');
             }
 
             print('✅ Video autoplay started after preloading');
@@ -1515,86 +1599,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             ),
           ),
 
-          // **Banner ads - Full-width at top of screen (no margin)**
-          // Always try to show when loaded; rotate using modulo
-          Positioned(
-            top: 0, // Flush to top of screen
-            left: 0, // No horizontal margin
-            right: 0, // No horizontal margin
-            child: Material(
-              elevation: 12, // Ensure on top
-              color: Colors.transparent,
-              child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: _loadTargetedAdsForVideo(video),
-                builder: (context, snapshot) {
-                  Map<String, dynamic> adData;
-
-                  if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-                    // Use targeted ads for this video - randomize to avoid sequence
-                    final targetedAds = snapshot.data!;
-                    // Use video ID or index to deterministically pick from targeted ads
-                    // This ensures same video always gets same targeted ad
-                    final adIndex =
-                        (video.id.hashCode.abs()) % targetedAds.length;
-                    adData = targetedAds[adIndex];
-                    print(
-                      '🎯 Using targeted ad for video ${video.videoName}: ${adData['title']} (index $adIndex of ${targetedAds.length})',
-                    );
-                  } else if (_adsLoaded && _bannerAds.isNotEmpty) {
-                    // Fall back to general ads - use video ID to avoid sequence
-                    final adIndex =
-                        (video.id.hashCode.abs()) % _bannerAds.length;
-                    adData = _bannerAds[adIndex];
-                    print(
-                      '🔄 Using fallback ad for video ${video.videoName}: ${adData['title']} (index $adIndex of ${_bannerAds.length})',
-                    );
-                  } else {
-                    // **FIX: Don't show placeholder, just return empty widget**
-                    return const SizedBox.shrink();
-                  }
-
-                  return BannerAdWidget(
-                    adData: adData,
-                    onAdClick: () {
-                      print('🖱️ Banner ad clicked on video $index');
-                    },
-                    onAdImpression: () async {
-                      // Track banner ad impression for revenue calculation
-                      if (index < _videos.length) {
-                        final video = _videos[index];
-                        final adId = adData['_id'] ?? adData['id'];
-                        final userData = await _authService.getUserData();
-
-                        print('📊 Banner Ad Impression Tracking:');
-                        print('   Video ID: ${video.id}');
-                        print('   Video Name: ${video.videoName}');
-                        print('   Ad ID: $adId');
-                        print('   User ID: ${userData?['id']}');
-
-                        if (adId != null && userData != null) {
-                          try {
-                            await _adImpressionService.trackBannerAdImpression(
-                              videoId: video.id,
-                              adId: adId.toString(),
-                              userId: userData['id'],
-                            );
-                            // Note: trackBannerAdImpression logs the result internally
-                          } catch (e) {
-                            print('❌ Error tracking banner ad impression: $e');
-                          }
-                        } else {
-                          print(
-                              '⚠️ Cannot track banner ad impression - missing adId or userData');
-                          print('   AdId: $adId');
-                          print('   UserData: ${userData != null}');
-                        }
-                      }
-                    },
-                  );
-                },
-              ),
-            ),
-          ),
+          // **FIX: Banner ad OUTSIDE AnimatedBuilder - prevents rebuild on video frame updates**
+          // This prevents grey overlay when video ends/loops (AnimatedBuilder rebuilds frequently)
+          _buildBannerAd(video, index),
 
           // Center play indicator (only when user paused)
           Positioned.fill(
@@ -1720,6 +1727,97 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// **CRITICAL FIX: Build banner ad separately to prevent rebuilds from AnimatedBuilder**
+  /// **SIMPLIFIED: Only use fallback ads - no targeted ads to prevent grey overlay**
+  Widget _buildBannerAd(VideoModel video, int index) {
+    Map<String, dynamic>? adData;
+
+    // **CRITICAL FIX: Check locked ad first - prevents switching/disappearance**
+    // Once an ad is shown, it's locked and won't change (prevents grey overlay)
+    if (_lockedBannerAdByVideoId.containsKey(video.id)) {
+      adData = _lockedBannerAdByVideoId[video.id];
+      if (adData != null) {
+        print(
+          '🔒 Using locked ad for video ${video.videoName}: ${adData['title']} (preventing grey overlay)',
+        );
+      }
+    } else if (_adsLoaded && _bannerAds.isNotEmpty) {
+      // **SIMPLE: Only use fallback ads - no targeted ads complexity**
+      final adIndex = (video.id.hashCode.abs()) % _bannerAds.length;
+      adData = _bannerAds[adIndex];
+      print(
+        '🔄 Showing fallback ad for video ${video.videoName}: ${adData['title']}',
+      );
+      // Lock this ad so it doesn't switch
+      _lockedBannerAdByVideoId[video.id] = adData;
+    } else {
+      // **CRITICAL: No ads available - show placeholder to prevent grey overlay**
+      // This prevents Stack recomposition grey overlay during video initialization
+      return Positioned(
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 60,
+        child: Container(color: Colors.black), // Temporary placeholder
+      );
+    }
+
+    // **CRITICAL: Only render when we have ad data**
+    if (adData == null) {
+      // Show placeholder instead of empty space
+      return Positioned(
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 60,
+        child: Container(color: Colors.black), // Temporary placeholder
+      );
+    }
+
+    // Store non-nullable reference for null safety
+    final adDataNonNull = adData;
+
+    return Positioned(
+      top: 0, // Flush to top of screen
+      left: 0, // No horizontal margin
+      right: 0, // No horizontal margin
+      child: BannerAdWidget(
+        key: ValueKey(
+            'banner_${video.id}'), // Stable key prevents widget recreation
+        adData: adDataNonNull,
+        onAdClick: () {
+          print('🖱️ Banner ad clicked on video $index');
+        },
+        onAdImpression: () async {
+          // Track banner ad impression for revenue calculation
+          if (index < _videos.length) {
+            final video = _videos[index];
+            final adId = adDataNonNull['_id'] ?? adDataNonNull['id'];
+            final userData = await _authService.getUserData();
+
+            print('📊 Banner Ad Impression Tracking:');
+            print('   Video ID: ${video.id}');
+            print('   Video Name: ${video.videoName}');
+            print('   Ad ID: $adId');
+            print('   User ID: ${userData?['id']}');
+
+            if (adId != null && userData != null) {
+              try {
+                await _adImpressionService.trackBannerAdImpression(
+                  videoId: video.id,
+                  adId: adId.toString(),
+                  userId: userData['id'],
+                );
+              } catch (e) {
+                print('❌ Error tracking banner ad impression: $e');
+              }
+            }
+          }
+        },
       ),
     );
   }

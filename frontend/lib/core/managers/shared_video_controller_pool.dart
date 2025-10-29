@@ -16,26 +16,45 @@ class SharedVideoControllerPool {
       {}; // Track if controller is active
   final Map<String, VoidCallback> _listeners = {};
 
+  // **LRU TRACKING**
+  final Map<String, DateTime> _lastAccessed =
+      {}; // Track when each video was last accessed
+  static const int _maxSharedPoolSize =
+      15; // Max controllers in shared pool (Reels-style)
+
   // **CACHE STATISTICS**
   int _cacheHits = 0;
   int _cacheMisses = 0;
   int _totalRequests = 0;
 
-  /// **Check if video controller is already loaded**
+  /// **Check if video controller is already loaded (updates LRU)**
   bool isVideoLoaded(String videoId) {
-    return _controllerPool.containsKey(videoId) &&
-        _controllerPool[videoId]!.value.isInitialized;
+    if (_controllerPool.containsKey(videoId) &&
+        _controllerPool[videoId]!.value.isInitialized) {
+      // **LRU: Update access time when checked**
+      _lastAccessed[videoId] = DateTime.now();
+      return true;
+    }
+    return false;
   }
 
-  /// **Get existing controller for a video**
+  /// **Get existing controller for a video (updates LRU)**
   VideoPlayerController? getController(String videoId) {
-    return _controllerPool[videoId];
+    if (_controllerPool.containsKey(videoId)) {
+      // **LRU: Update access time**
+      _lastAccessed[videoId] = DateTime.now();
+      return _controllerPool[videoId];
+    }
+    return null;
   }
 
-  /// **Add controller to pool**
+  /// **Add controller to pool with LRU eviction**
   void addController(String videoId, VideoPlayerController controller,
       {bool skipDisposeOld = false}) {
     print('📥 SharedPool: Adding controller for video: $videoId');
+
+    // **LRU: Update access time**
+    _lastAccessed[videoId] = DateTime.now();
 
     // Dispose old controller if exists (unless we're explicitly replacing with the same controller)
     if (_controllerPool.containsKey(videoId)) {
@@ -51,6 +70,9 @@ class SharedVideoControllerPool {
         print(
             '♻️ SharedPool: Skipping dispose - same controller instance or skipDisposeOld=true');
       }
+    } else {
+      // **NEW: LRU Eviction - Remove least recently used if pool is full**
+      _evictLRUIfNeeded(excluding: videoId);
     }
 
     _controllerPool[videoId] = controller;
@@ -68,8 +90,38 @@ class SharedVideoControllerPool {
       _controllerPool.remove(videoId);
       _controllerStates.remove(videoId);
       _listeners.remove(videoId);
+      _lastAccessed.remove(videoId); // Remove LRU tracking
 
       print('🗑️ SharedPool: Removed controller for video: $videoId');
+    }
+  }
+
+  /// **LRU Eviction: Remove least recently used controllers**
+  void _evictLRUIfNeeded({String? excluding}) {
+    if (_controllerPool.length < _maxSharedPoolSize) return;
+
+    // Sort by last accessed time (oldest first)
+    final sortedEntries = _lastAccessed.entries.toList()
+      ..sort((a, b) => a.value.compareTo(b.value));
+
+    // Calculate how many to remove
+    final toRemove = _controllerPool.length -
+        _maxSharedPoolSize +
+        1; // +1 for new controller
+
+    int removed = 0;
+    for (final entry in sortedEntries) {
+      if (removed >= toRemove) break;
+      if (entry.key == excluding) continue; // Don't remove the one we're adding
+
+      if (_controllerPool.containsKey(entry.key)) {
+        disposeController(entry.key);
+        removed++;
+      }
+    }
+
+    if (removed > 0) {
+      print('🧹 SharedPool: LRU evicted $removed old controllers');
     }
   }
 
@@ -82,6 +134,7 @@ class SharedVideoControllerPool {
       _controllerPool.remove(videoId);
       _controllerStates.remove(videoId);
       _listeners.remove(videoId);
+      _lastAccessed.remove(videoId); // Remove LRU tracking
 
       print('🗑️ SharedPool: Disposed controller for video: $videoId');
     }
@@ -245,6 +298,7 @@ class SharedVideoControllerPool {
     _controllerPool.clear();
     _controllerStates.clear();
     _listeners.clear();
+    _lastAccessed.clear(); // Clear LRU tracking
 
     print('✅ SharedPool: All controllers cleared');
   }
