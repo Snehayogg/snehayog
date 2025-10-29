@@ -4,8 +4,10 @@ import 'package:vayu/core/managers/shared_video_controller_pool.dart';
 
 class MainController extends ChangeNotifier {
   int _currentIndex = 0;
-  final List<String> _routes = ['/yog', '/vayu', '/upload', '/profile'];
+  final List<String> _routes = ['/yug', '/vayu', '/upload', '/profile'];
   bool _isAppInForeground = true;
+  bool _isMediaPickerActive = false;
+  DateTime? _lastPickerReturnAt;
 
   // Add a callback function to pause videos
   VoidCallback? _pauseVideosCallback;
@@ -26,6 +28,7 @@ class MainController extends ChangeNotifier {
   int get currentIndex => _currentIndex;
   String get currentRoute => _routes[_currentIndex];
   bool get isAppInForeground => _isAppInForeground;
+  bool get isMediaPickerActive => _isMediaPickerActive;
 
   /// Change the current index and handle video control
   void changeIndex(int index) {
@@ -95,6 +98,22 @@ class MainController extends ChangeNotifier {
   void navigateToProfile() {
     _currentIndex = 3; // Profile index
     notifyListeners();
+  }
+
+  /// Mark media picker active/inactive and record return time
+  void setMediaPickerActive(bool active) {
+    _isMediaPickerActive = active;
+    if (!active) {
+      _lastPickerReturnAt = DateTime.now();
+    }
+    notifyListeners();
+  }
+
+  /// Cooldown check after picker returns to avoid autoplay leak
+  bool get recentlyReturnedFromPicker {
+    if (_lastPickerReturnAt == null) return false;
+    return DateTime.now().difference(_lastPickerReturnAt!).inMilliseconds <
+        1200;
   }
 
   void setAppInForeground(bool inForeground) {

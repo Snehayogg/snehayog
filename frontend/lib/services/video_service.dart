@@ -137,8 +137,11 @@ class VideoService {
       print('🔍 VideoService: Using base URL: $baseUrl');
 
       String url = '$baseUrl/api/videos?page=$page&limit=$limit';
-      if (videoType != null && (videoType == 'yog' || videoType == 'sneha')) {
-        url += '&videoType=$videoType';
+      // Map 'yug' (app label) to backend 'yog' filter
+      final normalizedType = (videoType == 'yug') ? 'yog' : videoType;
+      if (normalizedType != null &&
+          (normalizedType == 'yog' || normalizedType == 'sneha')) {
+        url += '&videoType=$normalizedType';
         print('🔍 VideoService: Filtering by videoType: $videoType');
       }
       final response = await _makeRequest(

@@ -71,7 +71,7 @@ class _MainScreenState extends State<MainScreen>
   }
 
   /// **NEW: Handle double-tap refresh with visual feedback and error handling**
-  Future<void> _handleYogTabDoubleTap() async {
+  Future<void> _handleYugTabDoubleTap() async {
     if (_isRefreshing) {
       print('🔄 MainScreen: Already refreshing, ignoring double-tap');
       return;
@@ -89,14 +89,14 @@ class _MainScreenState extends State<MainScreen>
       // Start refresh animation
       _refreshAnimationController.repeat();
 
-      print('🔄 MainScreen: Double-tap on Yog tab detected - starting refresh');
+      print('🔄 MainScreen: Double-tap on Yug tab detected - starting refresh');
 
       // Get the video screen state
       final videoScreenState = _videoScreenKey.currentState;
       if (videoScreenState != null) {
         // Call refresh method with await
         await (videoScreenState as dynamic).refreshVideos();
-        print('✅ MainScreen: Video refresh completed via Yog tab double-tap');
+        print('✅ MainScreen: Video refresh completed via Yug tab double-tap');
 
         // Show success feedback
         if (mounted) {
@@ -186,7 +186,7 @@ class _MainScreenState extends State<MainScreen>
 
     _checkTokenValidity();
 
-    // **BACKGROUND PRELOADING: Start preloading profile data when app opens (user starts on Yog tab)**
+    // **BACKGROUND PRELOADING: Start preloading profile data when app opens (user starts on Yug tab)**
     WidgetsBinding.instance.addPostFrameCallback((_) {
       print(
           '🚀 MainScreen: Starting background profile preloading on app start');
@@ -323,16 +323,16 @@ class _MainScreenState extends State<MainScreen>
         print('Homescreen: Leaving video tab, pausing videos immediately');
         mainController.forcePauseVideos();
 
-        // **BACKGROUND PRELOADING: Stop preloading when leaving Yog tab**
+        // **BACKGROUND PRELOADING: Stop preloading when leaving Yug tab**
         print(
-            '⏸️ MainScreen: Stopping background profile preloading (leaving Yog tab)');
+            '⏸️ MainScreen: Stopping background profile preloading (leaving Yug tab)');
         _profilePreloader.stopBackgroundPreloading();
       }
 
-      // **BACKGROUND PRELOADING: Start preloading when switching TO Yog tab**
+      // **BACKGROUND PRELOADING: Start preloading when switching TO Yug tab**
       if (index == 0) {
         print(
-            '🚀 MainScreen: Starting background profile preloading (switching to Yog tab)');
+            '🚀 MainScreen: Starting background profile preloading (switching to Yug tab)');
         _profilePreloader.startBackgroundPreloading();
       }
 
@@ -439,7 +439,7 @@ class _MainScreenState extends State<MainScreen>
                         index: 0,
                         currentIndex: mainController.currentIndex,
                         icon: Icons.play_circle_filled,
-                        label: 'Yog',
+                        label: 'Yug',
                         onTap: () => _handleNavTap(0, mainController),
                         mainController: mainController,
                       ),
@@ -478,7 +478,7 @@ class _MainScreenState extends State<MainScreen>
     );
   }
 
-  /// Build navigation item with double-tap support for Yog tab
+  /// Build navigation item with double-tap support for Yug tab
   Widget _buildNavItem({
     required int index,
     required int currentIndex,
@@ -488,13 +488,13 @@ class _MainScreenState extends State<MainScreen>
     required MainController mainController,
   }) {
     final isSelected = currentIndex == index;
-    final isYogTab = index == 0; // Yog tab is at index 0
-    final isRefreshingYog = isYogTab && _isRefreshing;
+    final isYugTab = index == 0; // Yug tab is at index 0
+    final isRefreshingYug = isYugTab && _isRefreshing;
 
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
-        onDoubleTap: isYogTab ? _handleYogTabDoubleTap : null,
+        onDoubleTap: isYugTab ? _handleYugTabDoubleTap : null,
         behavior: HitTestBehavior.opaque, // **FIX: Make entire area tappable**
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
@@ -506,7 +506,7 @@ class _MainScreenState extends State<MainScreen>
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              if (isRefreshingYog)
+              if (isRefreshingYug)
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   child: RotationTransition(
@@ -567,7 +567,7 @@ class _MainScreenState extends State<MainScreen>
                           : Colors.grey[600]),
                   letterSpacing: 0.2,
                 ),
-                child: Text(isRefreshingYog ? 'Refreshing...' : label),
+                child: Text(isRefreshingYug ? 'Refreshing...' : label),
               ),
             ],
           ),

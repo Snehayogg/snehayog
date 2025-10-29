@@ -27,6 +27,7 @@ import 'package:vayu/core/managers/smart_cache_manager.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:http/http.dart' as http;
 import 'package:vayu/view/widget/custom_share_widget.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class VideoFeedAdvanced extends StatefulWidget {
   final int? initialIndex;
@@ -132,6 +133,45 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   // **DOUBLE TAP LIKE ANIMATION**
   final Map<int, bool> _showHeartAnimation = {};
 
+  // Persisted state keys
+  static const String _kSavedFeedIndexKey = 'video_feed_saved_index';
+  static const String _kSavedFeedTypeKey = 'video_feed_saved_type';
+
+  // Track cold start to avoid restoring saved index on first app launch
+  bool _isColdStart = true;
+
+  // Save current feed state when app backgrounds
+  Future<void> _saveBackgroundState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_kSavedFeedIndexKey, _currentIndex);
+      if (widget.videoType != null) {
+        await prefs.setString(_kSavedFeedTypeKey, widget.videoType!);
+      }
+    } catch (_) {}
+  }
+
+  // Restore saved state after data loads
+  Future<void> _restoreBackgroundStateIfAny() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedIndex = prefs.getInt(_kSavedFeedIndexKey);
+      final savedType = prefs.getString(_kSavedFeedTypeKey);
+
+      if (savedIndex != null &&
+          savedIndex >= 0 &&
+          savedIndex < _videos.length &&
+          (savedType == null || savedType == widget.videoType)) {
+        _currentIndex = savedIndex;
+        if (_pageController.hasClients) {
+          _pageController.jumpToPage(_currentIndex);
+        }
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => _tryAutoplayCurrent());
+      }
+    } catch (_) {}
+  }
+
   @override
   void initState() {
     super.initState();
@@ -186,21 +226,28 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     super.didChangeAppLifecycleState(state);
     switch (state) {
       case AppLifecycleState.paused:
+        _saveBackgroundState();
         _videoControllerManager.pauseAllVideos();
         _videoControllerManager.onAppPaused();
         break;
+      case AppLifecycleState.inactive:
+        _saveBackgroundState();
+        break;
       case AppLifecycleState.resumed:
         _videoControllerManager.onAppResumed();
-
-        // **FIX: Only trigger autoplay if we're on the video tab (index 0)**
-        // This prevents audio leak when image picker closes in ad creation screen
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          final mainController =
-              Provider.of<MainController>(context, listen: false);
-          if (mainController.currentIndex == 0) {
-            // Only autoplay if on video feed tab
-            _tryAutoplayCurrent();
-          }
+        // Try restoring state after resume
+        _restoreBackgroundStateIfAny().then((_) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final mainController =
+                Provider.of<MainController>(context, listen: false);
+            // Suppress autoplay if media picker is active or just returned
+            if (mainController.currentIndex == 0 &&
+                !mainController.isMediaPickerActive &&
+                !mainController.recentlyReturnedFromPicker) {
+              // Only autoplay if on video feed tab
+              _tryAutoplayCurrent();
+            }
+          });
         });
         break;
       case AppLifecycleState.detached:
@@ -349,6 +396,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         }
       }
 
+      // Attempt to restore background state now that videos are available
+      // Skip on cold start so the first video plays by default
+      if (!_isColdStart) {
+        await _restoreBackgroundStateIfAny();
+      }
+
       // **OPTIMIZED: Show videos immediately without waiting for ads**
       if (mounted) {
         setState(() => _isLoading = false);
@@ -359,6 +412,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         // **FIXED: Trigger autoplay immediately after videos load**
         // PageController is already initialized with correct page, so no jump needed
         WidgetsBinding.instance.addPostFrameCallback((_) {
+          // Mark cold start complete after first frame renders
+          _isColdStart = false;
           print(
             '🚀 VideoFeedAdvanced: Triggering instant autoplay after video load at index $_currentIndex',
           );
@@ -422,8 +477,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       }
 
       await _carouselAdManager.loadCarouselAds();
-      // Load carousel ads only for Yog tab
-      if (widget.videoType == 'yog') {
+      // Load carousel ads only for Yug/Yog tab
+      if (widget.videoType == 'yug' || widget.videoType == 'yog') {
         await _loadCarouselAds();
       }
     } catch (e) {
