@@ -83,154 +83,155 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
 
     // **FIX: Isolate banner with RepaintBoundary to prevent compositing over video texture**
     return RepaintBoundary(
-      child: Container(
-        width: double.infinity,
-        height: 60, // Compact professional height
-        margin: const EdgeInsets.only(
-          top: 1,
-          left: 5, // Thin margin from left side
-          right: 8, // Thin margin from right side
-        ),
-        decoration: BoxDecoration(
-          color: Colors
-              .black, // **FIX: Fully opaque background (no transparency)**
-          borderRadius: BorderRadius.circular(12), // Rounded corners
-          // **FIX: Removed blur shadow to prevent compositing issues**
-        ),
-        child: Material(
-          color: Colors.transparent,
-          borderRadius:
-              BorderRadius.circular(12), // Match container rounded corners
-          child: InkWell(
-            borderRadius:
-                BorderRadius.circular(12), // Match container rounded corners
-            onTap: () => _handleAdClickWithDialog(context),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12), // Rounded corners
-              clipBehavior:
-                  Clip.hardEdge, // **FIX: Hard-edge clipping for isolation**
-              child: Row(
-                children: [
-                  // 40% space for banner image
-                  Expanded(
-                    flex: 2,
-                    child: SizedBox(
-                      height: 60,
-                      child: imageUrl.isNotEmpty
-                          ? RepaintBoundary(
-                              // **FIX: Isolate image with RepaintBoundary**
-                              child: Image(
-                                image: _getCachedImageProvider(imageUrl),
-                                fit: BoxFit.cover,
-                                filterQuality: FilterQuality.low,
-                                gaplessPlayback:
-                                    true, // **FIX: Gapless image to prevent flicker**
-                                errorBuilder: (context, error, stackTrace) {
-                                  print(
-                                      '❌ BannerAdWidget: Failed to load image: $imageUrl, Error: $error');
-                                  // **FIX: Hide entire widget when image fails to prevent grey overlay**
-                                  if (mounted) {
-                                    WidgetsBinding.instance
-                                        .addPostFrameCallback((_) {
+      child: SafeArea(
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Container(
+            width: MediaQuery.of(context).size.width * 0.8, // 20% narrower
+            height: 60, // keep height unchanged
+            margin: const EdgeInsets.only(top: 1, left: 16), // left margin
+            decoration: BoxDecoration(
+              color: Colors.black, // opaque background
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Material(
+              color: Colors.transparent,
+              borderRadius:
+                  BorderRadius.circular(12), // Match container rounded corners
+              child: InkWell(
+                borderRadius: BorderRadius.circular(
+                    12), // Match container rounded corners
+                onTap: () => _handleAdClickWithDialog(context),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12), // Rounded corners
+                  clipBehavior: Clip
+                      .hardEdge, // **FIX: Hard-edge clipping for isolation**
+                  child: Row(
+                    children: [
+                      // 40% space for banner image
+                      Expanded(
+                        flex: 2,
+                        child: SizedBox(
+                          height: 60,
+                          child: imageUrl.isNotEmpty
+                              ? RepaintBoundary(
+                                  // **FIX: Isolate image with RepaintBoundary**
+                                  child: Image(
+                                    image: _getCachedImageProvider(imageUrl),
+                                    fit: BoxFit.cover,
+                                    filterQuality: FilterQuality.low,
+                                    gaplessPlayback:
+                                        true, // **FIX: Gapless image to prevent flicker**
+                                    errorBuilder: (context, error, stackTrace) {
+                                      print(
+                                          '❌ BannerAdWidget: Failed to load image: $imageUrl, Error: $error');
+                                      // **FIX: Hide entire widget when image fails to prevent grey overlay**
                                       if (mounted) {
-                                        setState(() {
-                                          _imageLoadFailed = true;
+                                        WidgetsBinding.instance
+                                            .addPostFrameCallback((_) {
+                                          if (mounted) {
+                                            setState(() {
+                                              _imageLoadFailed = true;
+                                            });
+                                          }
                                         });
                                       }
-                                    });
-                                  }
-                                  return const SizedBox.shrink();
-                                },
-                              ),
-                            )
-                          : Container(
-                              color: Colors.black,
-                              child: const SizedBox.shrink(),
-                            ),
-                    ),
-                  ),
+                                      return const SizedBox.shrink();
+                                    },
+                                  ),
+                                )
+                              : Container(
+                                  color: Colors.black,
+                                  child: const SizedBox.shrink(),
+                                ),
+                        ),
+                      ),
 
-                  // 60% space for title and CTA
-                  Expanded(
-                    flex: 3,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          // Ad title
-                          Expanded(
-                            child: Text(
-                              widget.adData['title'] ?? 'Sponsored Content',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11, // Reduced from 14 to fit 30 words
-                                fontWeight: FontWeight.w600,
-                                height: 1.1, // Reduced line height
-                              ),
-                              maxLines:
-                                  3, // Increased from 2 to 3 to accommodate more text
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-
-                          const SizedBox(height: 4),
-
-                          // Call to action button
-                          Row(
+                      // 60% space for title and CTA
+                      Expanded(
+                        flex: 3,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6), // more compact
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              GestureDetector(
-                                onTap: () => _handleAdClick(context),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
+                              // Ad title
+                              Expanded(
+                                child: Text(
+                                  widget.adData['title'] ?? 'Sponsored Content',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10, // compact text
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.1, // Reduced line height
                                   ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue.shade600,
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    widget.adData['callToAction']?['label'] ??
-                                        'Learn More',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w500,
+                                  maxLines:
+                                      3, // Increased from 2 to 3 to accommodate more text
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+
+                              const SizedBox(height: 3),
+
+                              // Call to action button
+                              Row(
+                                children: [
+                                  GestureDetector(
+                                    onTap: () => _handleAdClick(context),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue.shade600,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        widget.adData['callToAction']
+                                                ?['label'] ??
+                                            'Learn More',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ),
-                              const Spacer(),
-                              // Small "Sponsored" label
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.black, // **FIX: Fully opaque**
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: const Text(
-                                  'Sponsored',
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w500,
-                                    letterSpacing: 0.3,
+                                  const Spacer(),
+                                  // Small "Sponsored" label
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 5,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          Colors.black, // **FIX: Fully opaque**
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Text(
+                                      'Sponsored',
+                                      style: TextStyle(
+                                        fontSize: 8,
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w500,
+                                        letterSpacing: 0.3,
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                ],
                               ),
                             ],
                           ),
-                        ],
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),

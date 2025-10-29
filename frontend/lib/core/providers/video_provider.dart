@@ -299,9 +299,10 @@ class VideoProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Filter videos by type (yog or sneha)
+  /// Filter videos by type (yug/yog or sneha)
   Future<void> filterVideosByType(String videoType) async {
-    if (videoType != 'yog' && videoType != 'sneha') {
+    // Accept 'yug' as app label; backend mapping handled by VideoService
+    if (videoType != 'yug' && videoType != 'yog' && videoType != 'sneha') {
       print('⚠️ VideoProvider: Invalid videoType: $videoType');
       return;
     }
@@ -310,16 +311,20 @@ class VideoProvider extends ChangeNotifier {
     await loadVideos(isInitialLoad: true, videoType: videoType);
   }
 
-  /// Get yog videos only
+  /// Get yug videos only (alias for legacy yog)
+  Future<void> loadYugVideos() async {
+    await filterVideosByType('yug');
+  }
+
+  /// Legacy alias maintained for compatibility
   Future<void> loadYogVideos() async {
-    await filterVideosByType('yog');
+    await filterVideosByType('yug');
   }
 
   /// Load all videos (no filter)
   Future<void> loadAllVideos() async {
     print('🔍 VideoProvider: Loading all videos (no filter)');
     await loadVideos(isInitialLoad: true, videoType: null);
-    
   }
 
   void _setLoadState(VideoLoadState state) {

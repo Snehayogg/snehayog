@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:provider/provider.dart';
+import 'package:vayu/controller/main_controller.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:vayu/services/video_service.dart';
@@ -918,11 +920,19 @@ class _UploadScreenState extends State<UploadScreen> {
     }
 
     try {
+      if (mounted) {
+        Provider.of<MainController>(context, listen: false)
+            .setMediaPickerActive(true);
+      }
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowMultiple: false,
         allowedExtensions: ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm'],
       );
+      if (mounted) {
+        Provider.of<MainController>(context, listen: false)
+            .setMediaPickerActive(false);
+      }
 
       if (result != null) {
         setState(() {

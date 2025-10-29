@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
+import 'package:vayu/controller/main_controller.dart';
 import 'package:vayu/utils/banner_image_processor.dart';
 
 /// **MediaUploaderWidget - Handles media file uploads for ads**
@@ -435,12 +437,21 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
 
   Future<void> _pickSingleImage() async {
     final ImagePicker picker = ImagePicker();
+    // prevent autoplay on resume
+    if (mounted) {
+      Provider.of<MainController>(context, listen: false)
+          .setMediaPickerActive(true);
+    }
     final XFile? image = await picker.pickImage(
       source: ImageSource.gallery,
       maxWidth: 1920,
       maxHeight: 1080,
       imageQuality: 85,
     );
+    if (mounted) {
+      Provider.of<MainController>(context, listen: false)
+          .setMediaPickerActive(false);
+    }
 
     if (image != null) {
       final file = File(image.path);
@@ -578,11 +589,19 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
     }
 
     final ImagePicker picker = ImagePicker();
+    if (mounted) {
+      Provider.of<MainController>(context, listen: false)
+          .setMediaPickerActive(true);
+    }
     final List<XFile> images = await picker.pickMultiImage(
       maxWidth: 1920,
       maxHeight: 1080,
       imageQuality: 85,
     );
+    if (mounted) {
+      Provider.of<MainController>(context, listen: false)
+          .setMediaPickerActive(false);
+    }
 
     if (images.isNotEmpty) {
       final List<File> validImages = [];
@@ -615,10 +634,18 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
 
     // Restrict to gallery videos only
     final ImagePicker picker = ImagePicker();
+    if (mounted) {
+      Provider.of<MainController>(context, listen: false)
+          .setMediaPickerActive(true);
+    }
     final XFile? picked = await picker.pickVideo(
       source: ImageSource.gallery,
       maxDuration: const Duration(minutes: 5),
     );
+    if (mounted) {
+      Provider.of<MainController>(context, listen: false)
+          .setMediaPickerActive(false);
+    }
 
     if (picked != null) {
       final file = File(picked.path);
