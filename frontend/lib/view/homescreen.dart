@@ -232,7 +232,7 @@ class _MainScreenState extends State<MainScreen>
               Navigator.of(context).pop();
               await _authService.signInWithGoogle();
             },
-            child: const Text('Sign In Again'),
+            child: const Text('Login Again'),
           ),
         ],
       ),

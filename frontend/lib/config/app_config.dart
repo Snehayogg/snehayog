@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 class AppConfig {
   // **MANUAL: Development mode control**
   static const bool _isDevelopment =
-      false; // Set to true for local development, false for production (Play Store builds)
+      false; // Always keep false for consistent Railway usage
 
   // **NEW: Smart URL selection with fallback**
   static String? _cachedBaseUrl;
@@ -26,29 +26,17 @@ class AppConfig {
     return 'https://snehayog-production.up.railway.app';
   }
 
-  // **NEW: Get base URL with local server first, Railway fallback**
+  // **NEW: Always use Railway base URL**
   static Future<String> getBaseUrlWithFallback() async {
     if (_cachedBaseUrl != null) {
       print('🔍 AppConfig: Using cached URL: $_cachedBaseUrl');
       return _cachedBaseUrl!;
     }
 
-    // Try Railway first for production, then local fallback for development
-    final urlsToTry = _isDevelopment
-        ? [
-            'http://192.168.0.199:5001', // Your laptop IP (for phone testing)
-            'http://localhost:5001', // Localhost (for emulator)
-            'http://127.0.0.1:5001', // Localhost alternative
-            'http://10.0.2.2:5001', // Android emulator
-            'https://snehayog-production.up.railway.app', // Railway server as fallback
-          ]
-        : [
-            'https://snehayog-production.up.railway.app', // Railway server first for production
-            'http://192.168.0.199:5001', // Local fallback for development
-            'http://localhost:5001', // Localhost (for emulator)
-            'http://127.0.0.1:5001', // Localhost alternative
-            'http://10.0.2.2:5001', // Android emulator
-          ];
+    // Only check Railway and use it
+    final urlsToTry = [
+      'https://snehayog-production.up.railway.app',
+    ];
 
     for (final url in urlsToTry) {
       try {
@@ -70,7 +58,7 @@ class AppConfig {
       }
     }
 
-    // If all fail, default to Railway
+    // If health check fails, still default to Railway
     print('⚠️ AppConfig: All servers failed, using Railway as final fallback');
     _cachedBaseUrl = 'https://snehayog-production.up.railway.app';
     return _cachedBaseUrl!;
@@ -81,22 +69,10 @@ class AppConfig {
     print('🔍 AppConfig: Checking server connectivity...');
     print('🔍 AppConfig: Development mode: $_isDevelopment');
 
-    // Priority order: Railway first for production, local fallback for development
-    final urlsToTry = _isDevelopment
-        ? [
-            'http://192.168.0.199:5001', // Your laptop IP (for phone testing)
-            'http://localhost:5001', // Localhost (for emulator)
-            'http://127.0.0.1:5001', // Localhost alternative
-            'http://10.0.2.2:5001', // Android emulator
-            'https://snehayog-production.up.railway.app', // Railway server as fallback
-          ]
-        : [
-            'https://snehayog-production.up.railway.app', // Railway server first for production
-            'http://192.168.0.199:5001', // Local fallback for development
-            'http://localhost:5001', // Localhost (for emulator)
-            'http://127.0.0.1:5001', // Localhost alternative
-            'http://10.0.2.2:5001', // Android emulator
-          ];
+    // Only check Railway
+    final urlsToTry = [
+      'https://snehayog-production.up.railway.app',
+    ];
 
     for (final url in urlsToTry) {
       try {
@@ -118,7 +94,7 @@ class AppConfig {
       }
     }
 
-    // If all fail, default to Railway
+    // If health check fails, still default to Railway
     print('⚠️ AppConfig: All servers failed, using Railway as final fallback');
     _cachedBaseUrl = 'https://snehayog-production.up.railway.app';
     return _cachedBaseUrl!;
@@ -132,11 +108,7 @@ class AppConfig {
 
   // **NEW: Fallback URLs - Railway first for production**
   static const List<String> fallbackUrls = [
-    'https://snehayog-production.up.railway.app', // Railway server first for production
-    'http://192.168.0.199:5001', // Your laptop IP (for phone testing)
-    'http://localhost:5001', // Localhost (for emulator)
-    'http://127.0.0.1:5001', // Localhost alternative
-    'http://10.0.2.2:5001', // Android emulator
+    'https://snehayog-production.up.railway.app',
   ];
 
   // **NEW: Network timeout configurations**
@@ -449,7 +421,7 @@ class NetworkHelper {
   /// API endpoints
   static String get apiBaseUrl => '${AppConfig.baseUrl}/api';
   static String get healthEndpoint =>
-      '${AppConfig.baseUrl}/health'; // Use correct endpoint
+      '${AppConfig.baseUrl}/api/health'; // Consistent API health endpoint
   static String get videosEndpoint => '$apiBaseUrl/videos';
   static String get authEndpoint => '$apiBaseUrl/auth';
   static String get usersEndpoint => '$apiBaseUrl/users';

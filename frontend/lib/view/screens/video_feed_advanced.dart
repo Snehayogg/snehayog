@@ -18,6 +18,7 @@ import 'package:vayu/view/widget/ads/banner_ad_widget.dart';
 import 'package:vayu/view/widget/ads/carousel_ad_widget.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/view/screens/profile_screen.dart';
+import 'package:vayu/view/screens/login_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:vayu/controller/main_controller.dart';
 import 'package:vayu/core/managers/video_controller_manager.dart';
@@ -335,6 +336,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
   }
 
+  // (Reverted: removed _autoplayWhenReady helper)
+
   /// **HANDLE VISIBILITY CHANGES: Pause/resume videos based on tab visibility**
   void _handleVisibilityChange(bool isVisible) {
     if (_isScreenVisible != isVisible) {
@@ -616,6 +619,26 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             _tryAutoplayCurrent();
           });
         }
+
+        // Preload current and nearby videos to avoid grey frames
+        // Ensure index is valid after reload
+        if (_currentIndex >= _videos.length) {
+          _currentIndex = 0;
+        }
+        await _preloadVideo(_currentIndex);
+        _preloadNearbyVideos();
+        _tryAutoplayCurrent();
+
+        // Pre-cache thumbnails for the first few items so an image shows instantly
+        for (final v in _videos.take(5)) {
+          if (v.thumbnailUrl.isNotEmpty) {
+            try {
+              // ignore: use_build_context_synchronously
+              await precacheImage(
+                  CachedNetworkImageProvider(v.thumbnailUrl), context);
+            } catch (_) {}
+          }
+        }
       }
     } catch (e) {
       print('❌ Error loading videos: $e');
@@ -693,6 +716,27 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         '🔄 VideoFeedAdvanced: Reloading carousel ads after manual refresh...',
       );
       await _carouselAdManager.loadCarouselAds();
+
+      // After a manual refresh, proactively preload current and nearby videos
+      if (mounted && _videos.isNotEmpty) {
+        if (_currentIndex >= _videos.length) {
+          _currentIndex = 0;
+        }
+        await _preloadVideo(_currentIndex);
+        _preloadNearbyVideos();
+        _tryAutoplayCurrent();
+
+        // Pre-cache thumbnails for the first few refreshed items
+        for (final v in _videos.take(5)) {
+          if (v.thumbnailUrl.isNotEmpty) {
+            try {
+              // ignore: use_build_context_synchronously
+              await precacheImage(
+                  CachedNetworkImageProvider(v.thumbnailUrl), context);
+            } catch (_) {}
+          }
+        }
+      }
     } catch (e) {
       print('❌ VideoFeedAdvanced: Error refreshing videos: $e');
 
@@ -856,9 +900,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   void _onVideoChanged(int newIndex) {
     if (_currentIndex != newIndex) {
       setState(() => _currentIndex = newIndex);
-
-      // Targeted ads are now loaded per video in the UI
-
       print('🔄 VideoFeedAdvanced: Video changed to index $newIndex');
     }
   }
@@ -1038,6 +1079,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         _attachEndListenerIfNeeded(controller, index);
         // Attach buffering listener to track mid-playback stalls
         _attachBufferingListenerIfNeeded(controller, index);
+
+        // (Reverted: removed first-frame priming)
 
         // **NEW: Start view tracking if this is the current video**
         if (index == _currentIndex && index < _videos.length) {
@@ -2302,6 +2345,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     controller.addListener(listener);
     _bufferingListeners[index] = listener;
+
+    // (Removed first-frame tracking listener per revert)
   }
 
   final Map<int, VoidCallback> _videoEndListeners = {};
@@ -2913,7 +2958,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   /// **HANDLE LIKE: With API integration**
   Future<void> _handleLike(VideoModel video, int index) async {
     if (_currentUserId == null) {
-      _showSnackBar('Please sign in to like videos', isError: true);
+      _showSignInPrompt();
       return;
     }
 
@@ -2951,6 +2996,37 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
       _showSnackBar('Failed to update like', isError: true);
     }
+  }
+
+  /// Prompt unauthenticated users to sign in with actionable UI
+  void _showSignInPrompt() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Sign in required'),
+          content:
+              const Text('Please sign in to like videos and use this feature.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Not now'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const LoginScreen(),
+                  ),
+                );
+              },
+              child: const Text('Sign in'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   /// **HANDLE COMMENT: Open comment sheet**
