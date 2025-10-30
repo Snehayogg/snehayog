@@ -1271,6 +1271,8 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  // Removed banner helper to revert to original UI
+
   /// **NEW: Show Professional FAQ Dialog**
   void _showFAQDialog() {
     ProfileDialogsWidget.showFAQDialog(context);
