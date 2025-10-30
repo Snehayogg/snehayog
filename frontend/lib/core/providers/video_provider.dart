@@ -1,9 +1,11 @@
 import 'package:flutter/foundation.dart';
+import 'dart:async';
 import 'package:vayu/model/video_model.dart';
 import 'package:vayu/services/video_service.dart';
 import 'package:vayu/core/enums/video_state.dart';
 import 'package:vayu/core/constants/app_constants.dart';
 import 'package:vayu/core/managers/smart_cache_manager.dart';
+import 'package:vayu/core/managers/video_controller_manager.dart';
 
 class VideoProvider extends ChangeNotifier {
   final VideoService _videoService = VideoService();
@@ -55,6 +57,60 @@ class VideoProvider extends ChangeNotifier {
     try {
       print(
           '🔄 VideoProvider: Loading videos, page: $_currentPage, videoType: $videoType');
+
+      // 1) Try instant render from SmartCacheManager (cache-first on initial load)
+      if (isInitialLoad) {
+        try {
+          final smartCache = SmartCacheManager();
+          if (!smartCache.isInitialized) {
+            await smartCache.initialize();
+          }
+
+          // Normalize yug->yog to match splash prefetch cache key
+          final normalizedType =
+              (videoType == 'yug') ? 'yog' : (videoType ?? 'yog');
+          final cacheKey = 'videos_page_1_$normalizedType';
+
+          final cached = await smartCache.get<Map<String, dynamic>>(
+            cacheKey,
+            // Do not fetch here; only return if present for instant UI
+            fetchFn: () async => throw Exception('cache-only read'),
+            cacheType: 'videos',
+            maxAge: const Duration(minutes: 15),
+            forceRefresh: false,
+          );
+
+          if (cached != null) {
+            final List<VideoModel> cachedVideos =
+                (cached['videos'] as List<dynamic>).cast<VideoModel>();
+            if (cachedVideos.isNotEmpty) {
+              print(
+                  '⚡ VideoProvider: Instant render from cache: ${cachedVideos.length} videos');
+              _videos = cachedVideos;
+              _hasMore = cached['hasMore'] ?? true;
+              notifyListeners();
+              // Pre-create first controller for zero-wait playback
+              try {
+                final firstVideo = _videos.first;
+                unawaited(
+                    VideoControllerManager().preloadController(0, firstVideo));
+                VideoControllerManager().pinIndices({0});
+                print(
+                    '🚀 VideoProvider: Precreating first VideoPlayerController');
+              } catch (e) {
+                print(
+                    '⚠️ VideoProvider: Failed to precreate first controller: $e');
+              }
+              // Keep loadState as loading while fresh data fetches below
+            }
+          }
+        } catch (e) {
+          print(
+              '⚠️ VideoProvider: Cache-first read failed (continuing with network): $e');
+        }
+      }
+
+      // 2) Network fetch for fresh data
       final response = await _videoService.getVideos(
           page: _currentPage, videoType: videoType);
       final List<VideoModel> fetchedVideos = response['videos'];

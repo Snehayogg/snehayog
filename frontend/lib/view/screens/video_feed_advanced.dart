@@ -133,6 +133,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   // **DOUBLE TAP LIKE ANIMATION**
   final Map<int, bool> _showHeartAnimation = {};
 
+  // **EARNINGS CACHE**
+  final Map<String, double> _earningsCache = {};
+
   // Persisted state keys
   static const String _kSavedFeedIndexKey = 'video_feed_saved_index';
   static const String _kSavedFeedTypeKey = 'video_feed_saved_type';
@@ -291,6 +294,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       if (controller != null &&
           controller.value.isInitialized &&
           !controller.value.isPlaying) {
+        // Re-check tab/screen visibility just before playing
+        final mainController =
+            Provider.of<MainController>(context, listen: false);
+        if (mainController.currentIndex != 0 || !_isScreenVisible) {
+          print('⏸️ Autoplay suppressed: not on Yug tab or screen not visible');
+          return;
+        }
+
         controller.play();
         _controllerStates[_currentIndex] = true;
         _userPaused[_currentIndex] = false;
@@ -301,6 +312,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       print('🔄 VideoFeedAdvanced: Current video not preloaded, preloading...');
       _preloadVideo(_currentIndex).then((_) {
         if (mounted && _controllerPool.containsKey(_currentIndex)) {
+          // Re-check tab/screen visibility before playing after preload
+          final mainController =
+              Provider.of<MainController>(context, listen: false);
+          if (mainController.currentIndex != 0 || !_isScreenVisible) {
+            print(
+                '⏸️ Autoplay suppressed after preload: not on Yug tab or screen not visible');
+            return;
+          }
+
           final controller = _controllerPool[_currentIndex];
           if (controller != null && controller.value.isInitialized) {
             controller.play();
@@ -2336,8 +2356,39 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     );
   }
 
+  /// **Calculate earnings based on video views**
+  /// Note: Since banner ads are shown on ALL videos, ad views = video views
+  double _calculateEarningsFromViews(VideoModel video) {
+    // Check cache first
+    if (_earningsCache.containsKey(video.id)) {
+      return _earningsCache[video.id]!;
+    }
+
+    try {
+      // Calculate earnings based on video views
+      // Banner ads: ₹10 per 1000 impressions (views)
+      // Since banner ads are shown on all videos, earnings = (views / 1000) * 10
+      const bannerCpm = 10.0;
+      final totalEarnings = (video.views / 1000) * bannerCpm;
+
+      // Cache the result
+      _earningsCache[video.id] = totalEarnings;
+
+      print(
+          '💰 Video: ${video.videoName} - Views: ${video.views}, Earnings: ₹${totalEarnings.toStringAsFixed(2)}');
+
+      return totalEarnings;
+    } catch (e) {
+      print('❌ Error calculating earnings for video ${video.id}: $e');
+      return 0.0;
+    }
+  }
+
   /// **Build earnings label**
   Widget _buildEarningsLabel(VideoModel video) {
+    // Calculate earnings directly from views (no async needed)
+    final earnings = _calculateEarningsFromViews(video) * 0.8;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -2349,7 +2400,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         ),
       ),
       child: Text(
-        '₹${video.earnings.toStringAsFixed(2)}',
+        '₹${earnings.toStringAsFixed(2)}',
         style: const TextStyle(
           color: Colors.white,
           fontSize: 9,

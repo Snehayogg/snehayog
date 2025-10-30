@@ -318,102 +318,95 @@ class LoginScreen extends StatelessWidget {
                         ]);
                       }
 
-                      return Row(
+                      return Column(
                         children: [
-                          // Skip Button
-                          Expanded(
-                            flex: 2,
-                            child: SizedBox(
-                              height: 64,
-                              child: ElevatedButton.icon(
-                                onPressed: () {
-                                  // Skip sign-in and go to home
-                                  Navigator.pushReplacementNamed(
-                                      context, '/home');
-                                },
-                                icon: const Icon(
-                                  Icons.arrow_forward_ios,
+                          // Skip Button (30% smaller, vertical layout)
+                          SizedBox(
+                            width: double.infinity,
+                            height: 45,
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                // Skip sign-in and go to home
+                                Navigator.pushReplacementNamed(
+                                    context, '/home');
+                              },
+                              icon: const Icon(
+                                Icons.arrow_forward_ios,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                              label: const Text(
+                                'Skip',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
                                   color: Colors.white,
-                                  size: 16,
                                 ),
-                                label: const Text(
-                                  'Skip',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.orange[600],
-                                  foregroundColor: Colors.white,
-                                  elevation: 4,
-                                  shadowColor: Colors.orange.withOpacity(0.3),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.orange[600],
+                                foregroundColor: Colors.white,
+                                elevation: 4,
+                                shadowColor: Colors.orange.withOpacity(0.3),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
                             ),
                           ),
 
-                          const SizedBox(width: 12),
+                          const SizedBox(height: 12),
 
-                          // Google Sign-In Button
-                          Expanded(
-                            flex: 3,
-                            child: SizedBox(
-                              height: 64,
-                              child: ElevatedButton.icon(
-                                onPressed: () async {
-                                  final user = await authController.signIn();
-                                  if (user != null && context.mounted) {
-                                    // Show location permission dialog for new user
-                                    final result =
-                                        await LocationOnboardingService
-                                            .showLocationOnboarding(context);
-                                    if (result) {
-                                      print(
-                                          '✅ User granted location permission');
-                                    } else {
-                                      print(
-                                          '❌ User denied location permission');
-                                    }
-
-                                    Navigator.pushReplacementNamed(
-                                        context, '/home');
+                          // Google Sign-In Button (30% smaller, vertical layout)
+                          SizedBox(
+                            width: double.infinity,
+                            height: 45,
+                            child: ElevatedButton.icon(
+                              onPressed: () async {
+                                final user = await authController.signIn();
+                                if (user != null && context.mounted) {
+                                  // Show location permission dialog for new user
+                                  final result = await LocationOnboardingService
+                                      .showLocationOnboarding(context);
+                                  if (result) {
+                                    print('✅ User granted location permission');
+                                  } else {
+                                    print('❌ User denied location permission');
                                   }
-                                },
-                                icon: Image.asset(
-                                  'assets/icons/google_logo.png',
-                                  width: 20,
-                                  height: 20,
-                                  errorBuilder: (context, error, stackTrace) =>
-                                      const Icon(
-                                    Icons.login,
-                                    color: Colors.white,
-                                    size: 20,
-                                  ),
+
+                                  Navigator.pushReplacementNamed(
+                                      context, '/home');
+                                }
+                              },
+                              icon: Image.asset(
+                                'assets/icons/google_logo.png',
+                                width: 20,
+                                height: 20,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    const Icon(
+                                  Icons.login,
+                                  color: Colors.white,
+                                  size: 20,
                                 ),
-                                label: const Text(
-                                  'Continue with Google',
-                                  maxLines: 1,
-                                  softWrap: false,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white,
-                                  ),
+                              ),
+                              label: const Text(
+                                'Continue with Google',
+                                maxLines: 1,
+                                softWrap: false,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
                                 ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green[600],
-                                  foregroundColor: Colors.white,
-                                  elevation: 6,
-                                  shadowColor: Colors.green.withOpacity(0.3),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green[600],
+                                foregroundColor: Colors.white,
+                                elevation: 6,
+                                shadowColor: Colors.green.withOpacity(0.3),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
                             ),

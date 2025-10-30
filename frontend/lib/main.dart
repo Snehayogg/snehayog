@@ -23,6 +23,7 @@ import 'package:vayu/model/video_model.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/background_profile_preloader.dart';
 import 'package:vayu/services/location_onboarding_service.dart';
+import 'package:http/http.dart' as http;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -96,6 +97,17 @@ Future<void> _splashPrefetch() async {
     final videoService = vsvc.VideoService();
     final cacheManager = SmartCacheManager();
     await cacheManager.initialize();
+
+    // Warm up TLS/DNS with a lightweight health ping (best-effort)
+    unawaited(() async {
+      try {
+        final base = await vsvc.VideoService.getBaseUrlWithFallback();
+        await http
+            .get(Uri.parse('$base/api/health'))
+            .timeout(const Duration(seconds: 3));
+        print('✅ TLS warmup ok');
+      } catch (_) {}
+    }());
 
     // Cache the first page in SmartCacheManager for instant loading
     const cacheKey = 'videos_page_1_yog';
