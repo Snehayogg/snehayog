@@ -140,23 +140,37 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  /// **SIMPLIFIED: Simple video loading from cache**
+  /// **IMPROVED: Load videos from cache with freshness and empty-cache guard**
   Future<void> _loadVideosFromCache() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final cacheKey = _getProfileCacheKey();
       final cachedVideosJson =
           prefs.getString('profile_videos_cache_$cacheKey');
+      final cacheTimestamp =
+          prefs.getInt('profile_videos_cache_timestamp_$cacheKey');
 
-      if (cachedVideosJson != null) {
-        final cachedVideos = json.decode(cachedVideosJson) as List;
-        final videos = cachedVideos.map((v) => VideoModel.fromJson(v)).toList();
-        _stateManager.setVideos(videos);
-        print('⚡ ProfileScreen: Loaded ${videos.length} videos from cache');
-      } else {
-        // No cached videos, load from server
-        await _loadVideos();
+      // Consider stale after 10 minutes
+      const int maxAgeMs = 10 * 60 * 1000;
+      final bool isStale = cacheTimestamp == null ||
+          (DateTime.now().millisecondsSinceEpoch - cacheTimestamp) > maxAgeMs;
+
+      if (cachedVideosJson != null && !isStale) {
+        final List<dynamic> cached = json.decode(cachedVideosJson) as List;
+        if (cached.isNotEmpty) {
+          final videos = cached.map((v) => VideoModel.fromJson(v)).toList();
+          _stateManager.setVideos(videos);
+          print('⚡ ProfileScreen: Loaded ${videos.length} videos from cache');
+          return;
+        } else {
+          print('ℹ️ ProfileScreen: Cached videos empty; fetching from server');
+        }
+      } else if (isStale && cachedVideosJson != null) {
+        print('ℹ️ ProfileScreen: Video cache stale; fetching fresh data');
       }
+
+      // No cache, empty cache, or stale → load from server
+      await _loadVideos();
     } catch (e) {
       print('❌ ProfileScreen: Error loading videos from cache: $e');
       await _loadVideos();
@@ -1122,25 +1136,22 @@ class _ProfileScreenState extends State<ProfileScreen>
                     ),
                     const SizedBox(height: 16),
 
-                    // Video grid skeleton
+                    // Video grid skeleton (Instagram-like 3-column, tighter spacing)
                     GridView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount:
-                            ResponsiveHelper.isMobile(context) ? 2 : 3,
-                        crossAxisSpacing:
-                            ResponsiveHelper.isMobile(context) ? 16 : 24,
-                        mainAxisSpacing:
-                            ResponsiveHelper.isMobile(context) ? 16 : 24,
-                        childAspectRatio:
-                            ResponsiveHelper.isMobile(context) ? 0.75 : 0.8,
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        crossAxisSpacing: 1,
+                        mainAxisSpacing: 1,
+                        childAspectRatio: 0.5,
                       ),
                       itemCount: 6,
                       itemBuilder: (context, index) => Container(
                         decoration: BoxDecoration(
                           color: Colors.grey[300],
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.zero,
                         ),
                       ),
                     ),

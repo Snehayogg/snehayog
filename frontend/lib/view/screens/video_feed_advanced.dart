@@ -115,6 +115,16 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   final Set<int> _loadingVideos = {};
   Timer? _preloadTimer;
 
+  // Track whether the first frame has rendered for each index (prevents grey texture)
+  final Map<int, bool> _firstFrameReady = {};
+
+  // Fallback to force mount player if first frame is slow (top items)
+  final Map<int, bool> _forceMountPlayer = {};
+
+  // Retention across refresh: keep visible controllers
+  final Map<String, VideoPlayerController> _retainedByVideoId = {};
+  final Set<int> _retainedIndices = {};
+
   // **INFINITE SCROLLING**
   static const int _infiniteScrollThreshold =
       4; // Load more when 4 videos from end (optimized for batch loading)
@@ -153,6 +163,34 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         await prefs.setString(_kSavedFeedTypeKey, widget.videoType!);
       }
     } catch (_) {}
+  }
+
+  /// Restore retained controllers (by videoId) to their new indices after refresh
+  void _restoreRetainedControllersAfterRefresh() {
+    if (_retainedByVideoId.isEmpty) return;
+    print('🔁 Restoring retained controllers after refresh...');
+    final Map<String, int> idToIndex = {};
+    for (int i = 0; i < _videos.length; i++) {
+      idToIndex[_videos[i].id] = i;
+    }
+    _retainedByVideoId.forEach((videoId, controller) {
+      final newIndex = idToIndex[videoId];
+      if (newIndex != null) {
+        // Attach back to pools
+        _controllerPool[newIndex] = controller;
+        _controllerStates[newIndex] = false;
+        _preloadedVideos.add(newIndex);
+        _firstFrameReady[newIndex] = true; // already had a frame
+        print('✅ Restored controller for video $videoId at index $newIndex');
+      } else {
+        try {
+          controller.dispose();
+          print('🗑️ Disposed retained controller for old video $videoId');
+        } catch (_) {}
+      }
+    });
+    _retainedByVideoId.clear();
+    _retainedIndices.clear();
   }
 
   // Restore saved state after data loads
@@ -281,11 +319,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   /// **TRY AUTOPLAY CURRENT: Ensure current video starts playing**
   void _tryAutoplayCurrent() {
     if (_videos.isEmpty || _isLoading) return;
-    // Safety: ensure we're on the visible video tab and not in a picker cooldown
+    // Only require the Yug tab to be visible; remove extra pickers cooldowns
     final mainController = Provider.of<MainController>(context, listen: false);
-    if (mainController.currentIndex != 0 ||
-        mainController.isMediaPickerActive ||
-        mainController.recentlyReturnedFromPicker) {
+    if (mainController.currentIndex != 0) {
       return;
     }
 
@@ -709,6 +745,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       }
 
       print('✅ VideoFeedAdvanced: Videos refreshed successfully');
+      // After data loads, try to restore retained controllers by videoId
+      _restoreRetainedControllersAfterRefresh();
       _loadActiveAds();
 
       // **MANUAL REFRESH: Reload carousel ads when user refreshes**
@@ -786,6 +824,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   Future<void> _stopAllVideosAndClearControllers() async {
     print('🛑 _stopAllVideosAndClearControllers: Starting cleanup...');
 
+    // Decide which indices to retain (current and adjacent)
+    _retainedByVideoId.clear();
+    _retainedIndices.clear();
+    final toRetain = <int>{
+      if (_currentIndex >= 0) _currentIndex,
+      if (_currentIndex - 1 >= 0) _currentIndex - 1,
+      if (_currentIndex + 1 < _videos.length) _currentIndex + 1,
+    };
+
     // Step 1: Pause all active controllers
     _controllerPool.forEach((index, controller) {
       try {
@@ -798,9 +845,16 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         controller.removeListener(_bufferingListeners[index] ?? () {});
         controller.removeListener(_videoEndListeners[index] ?? () {});
 
-        // Dispose the controller
-        controller.dispose();
-        print('🗑️ Disposed controller at index $index');
+        // Retain visible controllers; dispose others
+        if (toRetain.contains(index) && index < _videos.length) {
+          final vid = _videos[index].id;
+          _retainedByVideoId[vid] = controller;
+          _retainedIndices.add(index);
+          print('🔒 Retaining controller at index $index for video $vid');
+        } else {
+          controller.dispose();
+          print('🗑️ Disposed controller at index $index');
+        }
       } catch (e) {
         print('⚠️ Error stopping video at index $index: $e');
       }
@@ -816,6 +870,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     _bufferingListeners.clear();
     _videoEndListeners.clear();
     _wasPlayingBeforeNavigation.clear();
+    _firstFrameReady.clear();
+    _forceMountPlayer.clear();
 
     // Step 3: Stop view tracking
     try {
@@ -1080,7 +1136,53 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         // Attach buffering listener to track mid-playback stalls
         _attachBufferingListenerIfNeeded(controller, index);
 
-        // (Reverted: removed first-frame priming)
+        // First-frame priming: play muted off-screen to obtain first frame, then pause
+        _firstFrameReady[index] = false;
+        // Fallback force-mount for top items if first frame is slow
+        if (index <= 1) {
+          _forceMountPlayer[index] = false;
+          Future.delayed(const Duration(milliseconds: 700), () {
+            if (mounted && _firstFrameReady[index] != true) {
+              _forceMountPlayer[index] = true;
+              setState(() {});
+            }
+          });
+        }
+        try {
+          await controller?.setVolume(0.0);
+          // Tiny seek helps codecs surface a real frame
+          await controller?.seekTo(const Duration(milliseconds: 1));
+          await controller?.play();
+        } catch (_) {}
+
+        // Listen until first frame appears, then pause and mark ready
+        void markReadyIfNeeded() async {
+          if (_firstFrameReady[index] == true) return;
+          final v = controller!.value;
+          if (v.isInitialized && v.position > Duration.zero && !v.isBuffering) {
+            _firstFrameReady[index] = true;
+            try {
+              await controller?.pause();
+              await controller?.setVolume(1.0);
+            } catch (_) {}
+            if (mounted) setState(() {});
+
+            // If this is the active cell and visible, start playback now
+            if (index == _currentIndex) {
+              final mainController =
+                  Provider.of<MainController>(context, listen: false);
+              if (mainController.currentIndex == 0 && _isScreenVisible) {
+                try {
+                  await controller?.play();
+                  _controllerStates[_currentIndex] = true;
+                  _userPaused[_currentIndex] = false;
+                } catch (_) {}
+              }
+            }
+          }
+        }
+
+        controller.addListener(markReadyIfNeeded);
 
         // **NEW: Start view tracking if this is the current video**
         if (index == _currentIndex && index < _videos.length) {
@@ -1709,18 +1811,17 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       color: Colors.black,
       child: Stack(
         children: [
-          Positioned.fill(
-            child: controller != null
-                ? AnimatedBuilder(
-                    animation: controller,
-                    builder: (context, _) {
-                      return controller.value.isInitialized
-                          ? _buildVideoPlayer(controller, isActive, index)
-                          : _buildVideoThumbnail(video);
-                    },
-                  )
-                : _buildVideoThumbnail(video),
-          ),
+          // Always keep thumbnail underneath to avoid grey texture
+          Positioned.fill(child: _buildVideoThumbnail(video)),
+
+          // Mount VideoPlayer after first frame ready, or force-mount for top items fallback
+          if (controller != null &&
+              controller.value.isInitialized &&
+              (_firstFrameReady[index] == true ||
+                  (_forceMountPlayer[index] == true)))
+            Positioned.fill(
+              child: _buildVideoPlayer(controller, isActive, index),
+            ),
           Positioned.fill(
             child: GestureDetector(
               behavior: HitTestBehavior.translucent,
