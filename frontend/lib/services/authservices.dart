@@ -1,4 +1,6 @@
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter/foundation.dart';
+import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
@@ -64,9 +66,22 @@ class AuthService {
 
       print('✅ Google Sign-In successful for: ${googleUser.email}');
 
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-      final idToken = googleAuth.idToken;
+      // Acquire ID token; on web, prefer platform getTokens as authentication.idToken can be null
+      String? idToken;
+      try {
+        if (kIsWeb) {
+          final tokens = await GoogleSignInPlatform.instance
+              .getTokens(email: googleUser.email);
+          idToken = tokens.idToken;
+        } else {
+          final GoogleSignInAuthentication googleAuth =
+              await googleUser.authentication;
+          idToken = googleAuth.idToken;
+        }
+      } catch (e) {
+        print('❌ Error obtaining Google tokens: $e');
+      }
+
       if (idToken == null) {
         print('❌ Failed to get ID token from Google');
         throw Exception('Failed to get authentication token from Google');
