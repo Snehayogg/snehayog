@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
 import 'package:http/http.dart' as http;
 import 'package:vayu/model/usermodel.dart';
 import 'package:vayu/config/app_config.dart';
@@ -57,8 +59,15 @@ class ProfileController extends ChangeNotifier {
   Future<void> _fetchUserData(GoogleSignInAccount account) async {
     try {
       print('Fetching authentication token...');
-      final auth = await account.authentication;
-      final idToken = auth.idToken;
+      String? idToken;
+      if (kIsWeb) {
+        final tokens = await GoogleSignInPlatform.instance
+            .getTokens(email: account.email);
+        idToken = tokens.idToken;
+      } else {
+        final auth = await account.authentication;
+        idToken = auth.idToken;
+      }
 
       if (idToken == null) {
         error =
