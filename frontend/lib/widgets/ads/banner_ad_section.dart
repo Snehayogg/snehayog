@@ -8,9 +8,7 @@ class BannerAdSection extends StatelessWidget {
   final bool adsLoaded;
   final void Function(Map<String, dynamic> adData) onImpression;
   final void Function(Map<String, dynamic> adData) onTap;
-  // If provided, use this ad directly (prevents disappearance on rebuild)
   final Map<String, dynamic>? cachedAdData;
-  // Notify caller which ad was resolved so it can be cached
   final void Function(Map<String, dynamic> adData)? onResolved;
 
   const BannerAdSection({
@@ -27,7 +25,6 @@ class BannerAdSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // If caller provided a cached ad, render it directly and skip async churn
     if (cachedAdData != null) {
       return RepaintBoundary(
         child: BannerAdWidget(
@@ -54,7 +51,6 @@ class BannerAdSection extends StatelessWidget {
           return const SizedBox.shrink();
         }
 
-        // Isolate the banner from the video texture to prevent shared compositing
         onResolved?.call(adData);
         return RepaintBoundary(
           child: BannerAdWidget(

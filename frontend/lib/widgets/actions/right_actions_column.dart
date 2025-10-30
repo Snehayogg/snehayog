@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/view/widgets/vertical_action_button.dart';
+import 'package:vayu/widgets/actions/vertical_action_button.dart';
 
 class RightActionsColumn extends StatelessWidget {
   final bool isLiked;

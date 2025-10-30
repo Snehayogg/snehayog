@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/model/video_model.dart';
-import 'package:vayu/view/widgets/earnings_label.dart';
+import 'package:vayu/widgets/indicators/earnings_label.dart';
 
 class VideoOverlay extends StatelessWidget {
   final VideoModel video;
@@ -27,13 +27,11 @@ class VideoOverlay extends StatelessWidget {
     return Stack(
       children: [
         if (banner != null) banner!,
-
         Positioned(
           top: 62,
           right: 8,
           child: EarningsLabel(video: video),
         ),
-
         if (showPlayOverlay)
           Positioned.fill(
             child: IgnorePointer(
@@ -54,7 +52,6 @@ class VideoOverlay extends StatelessWidget {
               ),
             ),
           ),
-
         if (showBuffering)
           const Positioned.fill(
             child: IgnorePointer(
@@ -63,7 +60,6 @@ class VideoOverlay extends StatelessWidget {
               ),
             ),
           ),
-
         Positioned(
           right: 16,
           top: MediaQuery.of(context).size.height * 0.5 - 20,
@@ -93,8 +89,6 @@ class VideoOverlay extends StatelessWidget {
             ),
           ),
         ),
-
-        // Bottom info and CTA area remains customized by the caller
         actionButtons,
       ],
     );

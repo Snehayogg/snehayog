@@ -24,7 +24,7 @@ class HlsWarmupService {
 
   /// Public API: Warm up a playlist URL
   Future<void> warmUp(String manifestUrl,
-      {int segmentPrefetchCount = 3}) async {
+      {int segmentPrefetchCount = 5}) async {
     try {
       if (!manifestUrl.toLowerCase().contains('.m3u8')) {
         print('⚠️ HlsWarmupService: Not an HLS URL, skipping: $manifestUrl');
