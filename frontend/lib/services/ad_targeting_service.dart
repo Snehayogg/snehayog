@@ -48,14 +48,8 @@ class AdTargetingService {
       };
 
       // Call backend targeting endpoint
-      print('🎯 AdTargetingService: Sending targeting request:');
-      print('   Video: ${video.videoName}');
-      print('   Category: ${videoData['category']}');
-      print('   Tags: ${videoData['tags']}');
-      print('   Keywords: ${videoData['keywords']}');
 
       final url = '$_baseUrl/api/ads/targeting/targeted-for-video';
-      print('📡 Calling API: $url');
 
       final response = await http.post(
         Uri.parse(url),
