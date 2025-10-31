@@ -873,6 +873,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     _firstFrameReady.clear();
     _forceMountPlayer.clear();
 
+    // Also clear the shared pool to avoid reusing disposed/invalid controllers
+    try {
+      final sharedPool = SharedVideoControllerPool();
+      sharedPool.clearAll();
+      print('🗑️ Cleared SharedVideoControllerPool during refresh');
+    } catch (e) {
+      print('⚠️ Error clearing SharedVideoControllerPool: $e');
+    }
+
     // Step 3: Stop view tracking
     try {
       _viewTracker.dispose();
