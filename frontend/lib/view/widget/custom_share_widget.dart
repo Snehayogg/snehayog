@@ -274,7 +274,7 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
   Future<void> _handleShare(ShareOption option) async {
     try {
       final shareText = _generateShareText();
-      final videoUrl = 'https://snehayog.app/video/${widget.video.id}';
+      final videoUrl = 'https://snehayog.site/video/${widget.video.id}';
 
       // Close the bottom sheet first
       Navigator.of(context).pop();
@@ -367,7 +367,7 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
     try {
       // Extract URL from text since it's already included
       final urlMatch = RegExp(r'https://[^\s]+').firstMatch(text);
-      final videoUrl = urlMatch?.group(0) ?? 'https://snehayog.app';
+      final videoUrl = urlMatch?.group(0) ?? 'https://snehayog.site';
       final encodedUrl = Uri.encodeComponent(videoUrl);
       final facebookUrl = 'fb://share?link=$encodedUrl';
 
@@ -404,7 +404,7 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
 
       // Extract URL from text since it's already included
       final urlMatch = RegExp(r'https://[^\s]+').firstMatch(text);
-      final videoUrl = urlMatch?.group(0) ?? 'https://snehayog.app';
+      final videoUrl = urlMatch?.group(0) ?? 'https://snehayog.site';
       final encodedUrl = Uri.encodeComponent(videoUrl);
 
       if (option.name == 'WhatsApp') {

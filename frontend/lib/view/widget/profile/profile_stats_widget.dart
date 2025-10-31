@@ -182,10 +182,24 @@ class ProfileStatsWidget extends StatelessWidget {
     return 0;
   }
 
-  // Get current month's revenue (placeholder for now)
+  // Calculate earnings the same way as Yug tab (sum across creator videos)
   double _getCurrentMonthRevenue() {
-    // TODO: Implement actual revenue calculation from backend
-    // For now, return 0.00
-    return 0.00;
+    try {
+      // Use the same simplified model as in Yug/video feed:
+      // Banner ads show on all videos at ₹10 CPM; creator share = 80%
+      const double bannerCpm = 10.0;
+      const double creatorShare = 0.80;
+
+      double total = 0.0;
+      for (final video in stateManager.userVideos) {
+        final int views = video.views;
+        final double earnings = (views / 1000.0) * bannerCpm;
+        total += earnings;
+      }
+
+      return total * creatorShare;
+    } catch (_) {
+      return 0.0;
+    }
   }
 }

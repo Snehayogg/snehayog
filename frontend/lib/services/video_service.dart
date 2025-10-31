@@ -779,7 +779,7 @@ class VideoService {
 
       // If it's a custom scheme URL, convert it to web URL
       if (videoUrl.startsWith('snehayog://')) {
-        shareUrl = 'https://snehayog.app/video/$videoId';
+        shareUrl = 'https://snehayog.site/video/$videoId';
       }
 
       // If it's an HLS URL, use it directly

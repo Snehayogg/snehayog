@@ -467,7 +467,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   Future<void> _handleReferFriends() async {
     try {
       // Build a referral link with user code if available
-      String base = 'https://snehayog.app';
+      String base = 'https://snehayog.site';
       String referralCode = '';
       final userData = _stateManager.getUserData();
       final token = userData?['token'];

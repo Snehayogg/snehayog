@@ -1447,7 +1447,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       // 3) If it's an app/web route like snehayog.app/video/<id>, fetch the API to get real URLs
       final uri = Uri.tryParse(video.videoUrl);
       if (uri != null &&
-          uri.host.contains('snehayog.app') &&
+          uri.host.contains('snehayog.site') &&
           uri.pathSegments.isNotEmpty &&
           uri.pathSegments.first == 'video') {
         try {

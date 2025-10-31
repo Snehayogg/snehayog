@@ -71,15 +71,26 @@
                     android:host="video" />
             </intent-filter>
             
-            <!-- Deep link for web video sharing (fallback) -->
+            <!-- App Link for web video sharing (verified) -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:scheme="https"
-                    android:host="snehayog.app"
+                    android:host="snehayog.site"
                     android:pathPrefix="/video" />
+            </intent-filter>
+
+            <!-- App Link for referral root with query (?ref=) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="snehayog.site"
+                    android:pathPrefix="/" />
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

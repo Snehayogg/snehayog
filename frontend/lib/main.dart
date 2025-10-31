@@ -258,23 +258,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     // Handle video deep links
     else if ((uri.scheme == 'snehayog' && uri.host == 'video') ||
         (uri.scheme == 'https' &&
-            uri.host == 'snehayog.app' &&
-            uri.path.startsWith('/video'))) {
+            uri.host == 'snehayog.site' &&
+            (uri.path.startsWith('/video') || uri.path == '/'))) {
       final videoId = uri.queryParameters['id'] ?? uri.pathSegments.last;
 
       if (videoId.isNotEmpty) {
         print('🎬 Opening video with ID: $videoId');
         _navigateToVideo(videoId);
       } else {
-        print('❌ No video ID found in deep link');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Invalid video link'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+        // If it's a referral root link without a specific video, just open home
+        print('ℹ️ Referral/root link received, opening home');
+        if (mounted) Navigator.pushNamed(context, '/home');
       }
     }
   }
