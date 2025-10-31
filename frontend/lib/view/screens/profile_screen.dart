@@ -52,6 +52,11 @@ class _ProfileScreenState extends State<ProfileScreen>
   int _verifiedInstalled = 0;
   int _verifiedSignedUp = 0;
 
+  // Local tab state for content section
+  // 0 => Your Videos, 1 => My Recommendations
+  int _activeProfileTabIndex = 0;
+  final List<Map<String, dynamic>> _recommendations = [];
+
   @override
   void initState() {
     super.initState();
@@ -1323,7 +1328,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                 Container(
                   margin: const EdgeInsets.symmetric(horizontal: 24),
                   child: Container(
-                    height: 48,
+                    // Reduced by ~40%
+                    height: 29,
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
@@ -1342,47 +1348,229 @@ class _ProfileScreenState extends State<ProfileScreen>
                       icon: const Icon(
                         Icons.share,
                         color: Color(0xFF10B981),
-                        size: 20,
+                        size: 10,
                       ),
-                      label: const Text(
-                        'Refer 2 friends and get full access',
-                        style: TextStyle(
-                          color: Color(0xFF10B981),
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
+                      label: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          'Refer 2 friends and get full access',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.white,
                         elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: const Size.fromHeight(29),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                           side: BorderSide.none,
+                        ),
+                        textStyle: const TextStyle(
+                          color: Color(0xFF10B981),
+                          fontSize: 8,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: -0.2,
                         ),
                       ),
                     ),
                   ),
                 ),
-                if (_invitedCount > 0 ||
-                    _verifiedInstalled > 0 ||
-                    _verifiedSignedUp > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      'Invited: $_invitedCount • Installed: $_verifiedInstalled • Signed up: $_verifiedSignedUp',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                    ),
-                  ),
               ],
             ),
           ),
 
+          // Content Tabs: Your Videos | My Recommendations (icon-based)
+          _ProfileTabs(
+            activeIndex: _activeProfileTabIndex,
+            onSelect: (i) => setState(() => _activeProfileTabIndex = i),
+          ),
+
           // Videos Section
-          ProfileVideosWidget(
-            stateManager: _stateManager,
-            isVideosLoaded: true,
+          // Swipe horizontally across content area to switch tabs
+          GestureDetector(
+            onHorizontalDragEnd: (details) {
+              final velocity = details.primaryVelocity ?? 0;
+              if (velocity < 0 && _activeProfileTabIndex == 0) {
+                setState(() => _activeProfileTabIndex = 1);
+              } else if (velocity > 0 && _activeProfileTabIndex == 1) {
+                setState(() => _activeProfileTabIndex = 0);
+              }
+            },
+            child: _activeProfileTabIndex == 0
+                ? ProfileVideosWidget(
+                    stateManager: _stateManager,
+                    isVideosLoaded: true,
+                    showHeader: false,
+                  )
+                : _buildRecommendationsSection(),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Compact icon-only tabs
+  Widget _ProfileTabs(
+      {required int activeIndex, required ValueChanged<int> onSelect}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () => onSelect(0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color:
+                      activeIndex == 0 ? const Color(0xFF111827) : Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                ),
+                child: Icon(
+                  Icons.video_library,
+                  size: 18,
+                  color:
+                      activeIndex == 0 ? Colors.white : const Color(0xFF111827),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => onSelect(1),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color:
+                      activeIndex == 1 ? const Color(0xFF111827) : Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                ),
+                child: Icon(
+                  Icons.shopping_bag,
+                  size: 18,
+                  color:
+                      activeIndex == 1 ? Colors.white : const Color(0xFF111827),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Simple Recommendations placeholder grid (creator suggested products)
+  Widget _buildRecommendationsSection() {
+    return RepaintBoundary(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (_recommendations.isEmpty)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.symmetric(vertical: 32),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                ),
+                child: const Center(
+                  child: Text(
+                    'No Recommendations',
+                    style: TextStyle(
+                      color: Color(0xFF6B7280),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              )
+            else
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                  childAspectRatio: 0.9,
+                ),
+                itemCount: _recommendations.length,
+                itemBuilder: (context, index) {
+                  final item = _recommendations[index];
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFE5E7EB)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.03),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(12),
+                              topRight: Radius.circular(12),
+                            ),
+                            child: Container(
+                              color: const Color(0xFFF3F4F6),
+                              child: const Center(
+                                child: Icon(Icons.shopping_bag,
+                                    color: Color(0xFF9CA3AF)),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 8),
+                          child: Text(
+                            item['title'] ?? 'Recommended product',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFF111827),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const Padding(
+                          padding:
+                              EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                          child: Text(
+                            'Creator suggested',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Color(0xFF6B7280),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                    ),
+                  );
+                },
+              ),
+          ],
+        ),
       ),
     );
   }

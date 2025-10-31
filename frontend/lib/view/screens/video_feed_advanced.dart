@@ -70,6 +70,46 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   final VideoControllerManager _videoControllerManager =
       VideoControllerManager();
 
+  // Decoder-budgeted priming: only allow a small number of actively playing
+  // controllers during preload to avoid exhausting hardware decoders.
+  static const int _decoderPrimeBudget = 2; // current + next
+  int _primedStartIndex = -1;
+
+  bool _canPrimeIndex(int index) {
+    // Only prime when Yug tab is visible
+    final mainController = Provider.of<MainController>(context, listen: false);
+    final bool isYugVisible =
+        mainController.currentIndex == 0 && _isScreenVisible;
+    if (!isYugVisible) return false;
+
+    final int start = _currentIndex;
+    final int end =
+        (_currentIndex + _decoderPrimeBudget - 1).clamp(0, _videos.length - 1);
+    return index >= start && index <= end;
+  }
+
+  void _reprimeWindowIfNeeded() {
+    final int start = _currentIndex;
+    final int end =
+        (_currentIndex + _decoderPrimeBudget - 1).clamp(0, _videos.length - 1);
+
+    if (_primedStartIndex == start) return;
+
+    // Pause anything outside the new prime window to free decoders
+    _controllerPool.forEach((idx, controller) {
+      if (idx < start || idx > end) {
+        if (controller.value.isInitialized && controller.value.isPlaying) {
+          try {
+            controller.pause();
+            _controllerStates[idx] = false;
+          } catch (_) {}
+        }
+      }
+    });
+
+    _primedStartIndex = start;
+  }
+
   /// Force play the current video regardless of tab/visibility checks.
   /// Used when navigating from Profile so the tapped video always starts.
   void forcePlayCurrent() {
@@ -128,7 +168,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   final Map<int, VideoPlayerController> _controllerPool = {};
   final Map<int, bool> _controllerStates = {}; // Track if controller is active
-  final int _maxPoolSize = 5; // Increased from 3 to 5 for smoother scrolling
+  final int _maxPoolSize = 7; // Increased to reduce re-inits while scrolling
   final Map<int, bool> _userPaused = {};
   final Map<int, bool> _isBuffering = {};
 
@@ -916,13 +956,27 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     _firstFrameReady.clear();
     _forceMountPlayer.clear();
 
-    // Also clear the shared pool to avoid reusing disposed/invalid controllers
+    // Prefer to retain visible controllers in shared pool to keep them warm
     try {
       final sharedPool = SharedVideoControllerPool();
-      sharedPool.clearAll();
-      print('🗑️ Cleared SharedVideoControllerPool during refresh');
+      final keep = <String>[];
+      if (_controllerPool.containsKey(_currentIndex) &&
+          _currentIndex < _videos.length) {
+        keep.add(_videos[_currentIndex].id);
+      }
+      if (_controllerPool.containsKey(_currentIndex + 1) &&
+          _currentIndex + 1 < _videos.length) {
+        keep.add(_videos[_currentIndex + 1].id);
+      }
+      if (keep.isEmpty) {
+        sharedPool.clearAll();
+      } else {
+        sharedPool.clearExcept(keep);
+      }
+      print(
+          '🗑️ Refreshed SharedVideoControllerPool, kept warm: ${keep.length}');
     } catch (e) {
-      print('⚠️ Error clearing SharedVideoControllerPool: $e');
+      print('⚠️ Error refreshing SharedVideoControllerPool: $e');
     }
 
     // Step 3: Stop view tracking
@@ -1200,12 +1254,16 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             }
           });
         }
-        try {
-          await controller?.setVolume(0.0);
-          // Tiny seek helps codecs surface a real frame
-          await controller?.seekTo(const Duration(milliseconds: 1));
-          await controller?.play();
-        } catch (_) {}
+        // Prime only within decoder budget (current + next), and only when visible
+        final bool shouldPrime = _canPrimeIndex(index);
+        if (shouldPrime) {
+          try {
+            await controller?.setVolume(0.0);
+            // Tiny seek helps codecs surface a real frame
+            await controller?.seekTo(const Duration(milliseconds: 1));
+            await controller?.play();
+          } catch (_) {}
+        }
 
         // Listen until first frame appears, then pause and mark ready
         void markReadyIfNeeded() async {
@@ -1245,25 +1303,52 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           );
 
           // **CRITICAL FIX: If reused controller for current video, start playing immediately**
+          final bool openedFromProfile =
+              widget.initialVideos != null && widget.initialVideos!.isNotEmpty;
           if (isReused &&
               controller.value.isInitialized &&
               !controller.value.isPlaying) {
-            controller.play();
-            _controllerStates[index] = true;
-            _userPaused[index] = false;
-            print('✅ Started playback for reused controller at current index');
+            if (openedFromProfile) {
+              controller.play();
+              _controllerStates[index] = true;
+              _userPaused[index] = false;
+              print('✅ Started playback for reused controller (from Profile)');
+            } else {
+              final mainController =
+                  Provider.of<MainController>(context, listen: false);
+              if (mainController.currentIndex == 0 && _isScreenVisible) {
+                controller.play();
+                _controllerStates[index] = true;
+                _userPaused[index] = false;
+                print(
+                    '✅ Started playback for reused controller at current index');
+              }
+            }
           }
 
           // **NEW: Resume video if it was playing before navigation (better UX)**
           if (_wasPlayingBeforeNavigation[index] == true &&
               controller.value.isInitialized &&
               !controller.value.isPlaying) {
-            controller.play();
-            _controllerStates[index] = true;
-            _userPaused[index] = false;
-            _wasPlayingBeforeNavigation[index] = false; // Clear the flag
-            print(
-                '▶️ Resumed video ${video.id} that was playing before navigation');
+            if (openedFromProfile) {
+              controller.play();
+              _controllerStates[index] = true;
+              _userPaused[index] = false;
+              _wasPlayingBeforeNavigation[index] = false; // Clear the flag
+              print(
+                  '▶️ Resumed video ${video.id} that was playing before navigation (from Profile)');
+            } else {
+              final mainController =
+                  Provider.of<MainController>(context, listen: false);
+              if (mainController.currentIndex == 0 && _isScreenVisible) {
+                controller.play();
+                _controllerStates[index] = true;
+                _userPaused[index] = false;
+                _wasPlayingBeforeNavigation[index] = false; // Clear the flag
+                print(
+                    '▶️ Resumed video ${video.id} that was playing before navigation');
+              }
+            }
           }
         }
 
@@ -1524,6 +1609,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
 
     _currentIndex = index;
+    _reprimeWindowIfNeeded();
 
     // **CRITICAL FIX: Check shared pool FIRST before local pool (Reels-style instant playback)**
     final sharedPool = SharedVideoControllerPool();

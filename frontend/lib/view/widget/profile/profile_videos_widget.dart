@@ -12,6 +12,7 @@ class ProfileVideosWidget extends StatelessWidget {
   final VoidCallback? onVideoTap;
   final VoidCallback? onVideoLongPress;
   final VoidCallback? onVideoSelection;
+  final bool showHeader;
 
   const ProfileVideosWidget({
     super.key,
@@ -20,6 +21,7 @@ class ProfileVideosWidget extends StatelessWidget {
     this.onVideoTap,
     this.onVideoLongPress,
     this.onVideoSelection,
+    this.showHeader = true,
   });
 
   /// **NEW: Preload video thumbnails for faster loading**
@@ -52,19 +54,21 @@ class ProfileVideosWidget extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12),
-            child: Text(
-              'Your Videos',
-              style: TextStyle(
-                color: Color(0xFF1A1A1A),
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.5,
+          if (showHeader) ...[
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: Text(
+                'Your Videos',
+                style: TextStyle(
+                  color: Color(0xFF1A1A1A),
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.5,
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
+          ],
           Consumer<ProfileStateManager>(
             builder: (context, stateManager, child) {
               if (!isVideosLoaded) {
