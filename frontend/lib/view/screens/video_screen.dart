@@ -41,26 +41,22 @@ class _VideoScreenState extends State<VideoScreen> {
   void initState() {
     super.initState();
     print('🎬 VideoScreen: Initializing VideoScreen');
-
-    // **OPTIMIZED: Immediate video controller cleanup for single video playback**
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      try {
-        print('🔇 VideoScreen: Ensuring single video playback');
-
-        // **CRITICAL: Force pause ALL videos immediately**
-        final mainController =
-            Provider.of<MainController>(context, listen: false);
-        mainController.forcePauseVideos();
-
-        // **IMPROVED: Pause all controllers instead of disposing (better UX)**
-        final videoControllerManager = VideoControllerManager();
-        await videoControllerManager.pauseAllVideos();
-
-        print(
-            '✅ VideoScreen: Single video playback ensured - all background videos paused');
-      } catch (e) {
-        print('⚠️ VideoScreen: Error ensuring single video playback: $e');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final state = _videoFeedKey.currentState;
+      if (state != null) {
+        try {
+          (state as dynamic).forcePlayCurrent();
+        } catch (_) {}
       }
+      // Some devices need a short delay for the first frame to attach
+      Future.delayed(const Duration(milliseconds: 120), () {
+        final s = _videoFeedKey.currentState;
+        if (s != null) {
+          try {
+            (s as dynamic).forcePlayCurrent();
+          } catch (_) {}
+        }
+      });
     });
   }
 
