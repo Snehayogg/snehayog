@@ -4,7 +4,6 @@ import 'package:vayu/core/managers/profile_state_manager.dart';
 import 'package:vayu/core/services/profile_screen_logger.dart';
 import 'package:vayu/view/screens/video_screen.dart';
 import 'package:vayu/core/managers/shared_video_controller_pool.dart';
-import 'package:vayu/controller/main_controller.dart';
 import 'package:vayu/model/video_model.dart';
 
 class ProfileVideosWidget extends StatelessWidget {
@@ -165,18 +164,9 @@ class ProfileVideosWidget extends StatelessWidget {
                             print('📊 Video ID: ${video.id}');
                             print('📊 Video Name: ${video.videoName}');
 
-                            // **IMPROVED: Smart controller management**
+                            // Keep it simple: do not pre-play here; VideoScreen will handle playback
                             final sharedPool = SharedVideoControllerPool();
-
-                            // Pause all other controllers but keep current one ready
                             sharedPool.pauseAllControllers();
-
-                            // If this video is already loaded, use smart resume
-                            if (sharedPool.isVideoLoaded(video.id)) {
-                              print(
-                                  '⚡ ProfileVideosWidget: Video already loaded, using smart resume');
-                              sharedPool.smartResumeController(video.id);
-                            }
 
                             // **FIXED: Use video ID instead of index for correct video identification**
                             print(
@@ -194,26 +184,7 @@ class ProfileVideosWidget extends StatelessWidget {
                                 ),
                               ),
                             );
-
-                            // **BACKGROUND: Ensure single video playback**
-                            Future.microtask(() async {
-                              try {
-                                print(
-                                    '🔇 ProfileVideosWidget: Ensuring single video playback');
-
-                                // Get MainController and force pause all videos
-                                final mainController =
-                                    Provider.of<MainController>(context,
-                                        listen: false);
-                                mainController.forcePauseVideos();
-
-                                print(
-                                    '✅ ProfileVideosWidget: Single video playback ensured');
-                              } catch (e) {
-                                print(
-                                    '⚠️ ProfileVideosWidget: Error ensuring single playback: $e');
-                              }
-                            });
+                            // Do not force-pause after navigating; avoids pausing the new screen's controller
                           } else if (stateManager.isSelecting &&
                               canSelectVideo) {
                             // Use proper logic for video selection

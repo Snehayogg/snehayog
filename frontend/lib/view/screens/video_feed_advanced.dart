@@ -35,6 +35,7 @@ class VideoFeedAdvanced extends StatefulWidget {
   final List<VideoModel>? initialVideos;
   final String? initialVideoId;
   final String? videoType;
+  // Removed forceAutoplay; we'll infer autoplay from initialVideos presence
 
   const VideoFeedAdvanced({
     Key? key,
@@ -68,6 +69,35 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   late CarouselAdManager _carouselAdManager;
   final VideoControllerManager _videoControllerManager =
       VideoControllerManager();
+
+  /// Force play the current video regardless of tab/visibility checks.
+  /// Used when navigating from Profile so the tapped video always starts.
+  void forcePlayCurrent() {
+    if (_videos.isEmpty ||
+        _currentIndex < 0 ||
+        _currentIndex >= _videos.length) {
+      return;
+    }
+
+    final controller = _controllerPool[_currentIndex];
+    if (controller != null && controller.value.isInitialized) {
+      controller.play();
+      _controllerStates[_currentIndex] = true;
+      _userPaused[_currentIndex] = false;
+      return;
+    }
+
+    _preloadVideo(_currentIndex).then((_) {
+      if (!mounted) return;
+      final c = _controllerPool[_currentIndex];
+      if (c != null && c.value.isInitialized) {
+        c.play();
+        _controllerStates[_currentIndex] = true;
+        _userPaused[_currentIndex] = false;
+      }
+    });
+  }
+
   final ActiveAdsService _activeAdsService = ActiveAdsService();
   final VideoViewTracker _viewTracker = VideoViewTracker();
   final AdRefreshNotifier _adRefreshNotifier = AdRefreshNotifier();
@@ -280,13 +310,17 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         // Try restoring state after resume
         _restoreBackgroundStateIfAny().then((_) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
+            final openedFromProfile = widget.initialVideos != null &&
+                widget.initialVideos!.isNotEmpty;
+            if (openedFromProfile) {
+              _tryAutoplayCurrent();
+              return;
+            }
             final mainController =
                 Provider.of<MainController>(context, listen: false);
-            // Suppress autoplay if media picker is active or just returned
             if (mainController.currentIndex == 0 &&
                 !mainController.isMediaPickerActive &&
                 !mainController.recentlyReturnedFromPicker) {
-              // Only autoplay if on video feed tab
               _tryAutoplayCurrent();
             }
           });
@@ -319,10 +353,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   /// **TRY AUTOPLAY CURRENT: Ensure current video starts playing**
   void _tryAutoplayCurrent() {
     if (_videos.isEmpty || _isLoading) return;
-    // Only require the Yug tab to be visible; remove extra pickers cooldowns
-    final mainController = Provider.of<MainController>(context, listen: false);
-    if (mainController.currentIndex != 0) {
-      return;
+    // Simple rule: if opened with a provided list (from ProfileScreen), autoplay
+    final openedFromProfile =
+        widget.initialVideos != null && widget.initialVideos!.isNotEmpty;
+    if (!openedFromProfile) {
+      // Only autoplay on Yug tab when not opened from Profile
+      final mainController =
+          Provider.of<MainController>(context, listen: false);
+      if (mainController.currentIndex != 0) return;
     }
 
     // Check if current video is preloaded
@@ -331,12 +369,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       if (controller != null &&
           controller.value.isInitialized &&
           !controller.value.isPlaying) {
-        // Re-check tab/screen visibility just before playing
-        final mainController =
-            Provider.of<MainController>(context, listen: false);
-        if (mainController.currentIndex != 0 || !_isScreenVisible) {
-          print('⏸️ Autoplay suppressed: not on Yug tab or screen not visible');
-          return;
+        // If opened from Profile, bypass tab/screen visibility guard
+        if (!openedFromProfile) {
+          final mainController =
+              Provider.of<MainController>(context, listen: false);
+          if (mainController.currentIndex != 0 || !_isScreenVisible) {
+            print(
+                '⏸️ Autoplay suppressed: not on Yug tab or screen not visible');
+            return;
+          }
         }
 
         controller.play();
@@ -349,13 +390,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       print('🔄 VideoFeedAdvanced: Current video not preloaded, preloading...');
       _preloadVideo(_currentIndex).then((_) {
         if (mounted && _controllerPool.containsKey(_currentIndex)) {
-          // Re-check tab/screen visibility before playing after preload
-          final mainController =
-              Provider.of<MainController>(context, listen: false);
-          if (mainController.currentIndex != 0 || !_isScreenVisible) {
-            print(
-                '⏸️ Autoplay suppressed after preload: not on Yug tab or screen not visible');
-            return;
+          // If opened from Profile, bypass tab/screen visibility guard
+          if (!openedFromProfile) {
+            final mainController =
+                Provider.of<MainController>(context, listen: false);
+            if (mainController.currentIndex != 0 || !_isScreenVisible) {
+              print(
+                  '⏸️ Autoplay suppressed after preload: not on Yug tab or screen not visible');
+              return;
+            }
           }
 
           final controller = _controllerPool[_currentIndex];
