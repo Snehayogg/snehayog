@@ -789,11 +789,10 @@ class VideoService {
     try {
       // Prefer opening the app via deep link; include web fallback below
       final String appDeepLink = 'snehayog://video/$videoId';
-      final String webFallbackLink = 'https://snehayog.site/video/$videoId';
 
       // **Share using platform dialog**
       await Share.share(
-        '🎬 Check out this video on Vayu!\n\n📹 $description\n\n🔗 Open in app: $appDeepLink\n🌐 Web version: $webFallbackLink\n\n#Vayu #Video',
+        '🎬 Check out this video on Vayu!\n\n🔗 Open in app: $appDeepLink\n',
         subject: 'Vayu Video',
       );
 
