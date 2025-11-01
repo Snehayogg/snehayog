@@ -274,7 +274,7 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
   Future<void> _handleShare(ShareOption option) async {
     try {
       final shareText = _generateShareText();
-      final videoUrl = 'https://snehayog.site/video/${widget.video.id}';
+      final webLink = 'https://snehayog.site/video/${widget.video.id}';
 
       // Close the bottom sheet first
       Navigator.of(context).pop();
@@ -300,12 +300,12 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
 
       // If app didn't launch, try web fallback
       if (!appLaunched) {
-        await _launchWebFallback(option, shareText, '');
+        await _launchWebFallback(option, shareText, webLink);
       }
 
       // Update share count on server after successful share
       try {
-        await _updateShareCount(videoUrl);
+        await _updateShareCount();
       } catch (e) {
         print('⚠️ CustomShareWidget: Failed to update share count: $e');
         // Don't show error to user as sharing still worked
@@ -321,12 +321,10 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
   }
 
   /// **UPDATE SHARE COUNT: Call backend to update share count**
-  Future<void> _updateShareCount(String videoUrl) async {
+  Future<void> _updateShareCount() async {
     try {
-      // Import VideoService to update share count
       final videoService = VideoService();
-      await videoService.shareVideo(
-          widget.video.id, videoUrl, widget.video.videoName);
+      await videoService.incrementShares(widget.video.id);
       print('✅ Share count updated for video: ${widget.video.id}');
     } catch (e) {
       print('❌ Error updating share count: $e');
@@ -402,9 +400,11 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
       String webUrl;
       final encodedText = Uri.encodeComponent(text);
 
-      // Extract URL from text since it's already included
-      final urlMatch = RegExp(r'https://[^\s]+').firstMatch(text);
-      final videoUrl = urlMatch?.group(0) ?? 'https://snehayog.site';
+      // Prefer provided url; fall back to first https URL in text, else homepage
+      String videoUrl = url.isNotEmpty
+          ? url
+          : (RegExp(r'https://[^\s]+').firstMatch(text)?.group(0) ??
+              'https://snehayog.site');
       final encodedUrl = Uri.encodeComponent(videoUrl);
 
       if (option.name == 'WhatsApp') {
@@ -433,10 +433,13 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
   }
 
   String _generateShareText() {
+    final appDeepLink = 'snehayog://video/${widget.video.id}';
+    final webLink = 'https://snehayog.site/video/${widget.video.id}';
     return 'Upload your videos on Vayu and start earning from day one! 💰\n'
         'No 1000 subs or long watch hours\n\n'
         '🎯 Example video: ${widget.video.videoName} ⬇️\n'
-        'https://vayu.app/video/${widget.video.id}\n\n'
+        'Open in app: $appDeepLink\n'
+        'Web: $webLink\n\n'
         'Only First 1000 early creators — grab 80% ad revenue';
   }
 

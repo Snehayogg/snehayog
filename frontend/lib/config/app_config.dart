@@ -4,10 +4,13 @@ import 'package:http/http.dart' as http;
 class AppConfig {
   // **MANUAL: Development mode control**
   static const bool _isDevelopment =
-      false; // Always keep false for consistent Railway usage
+      true; // Always keep false for consistent Railway usage
 
   // **NEW: Smart URL selection with fallback**
   static String? _cachedBaseUrl;
+
+  // Local development server (Wi‑Fi/LAN)
+  static const String _localIpBaseUrl = 'http://192.168.0.199:5001';
 
   // **NEW: Clear cache method for development**
   static void clearCache() {
@@ -19,6 +22,12 @@ class AppConfig {
     if (_cachedBaseUrl != null) {
       print('🔍 AppConfig: Using cached URL: $_cachedBaseUrl');
       return _cachedBaseUrl!;
+    }
+
+    // Prefer local IP in development for easy LAN testing
+    if (_isDevelopment) {
+      print('🔍 AppConfig: Development mode - defaulting to local IP');
+      return _localIpBaseUrl;
     }
 
     // Default to Railway for production builds (Play Store)
@@ -33,10 +42,15 @@ class AppConfig {
       return _cachedBaseUrl!;
     }
 
-    // Only check Railway and use it
-    final urlsToTry = [
-      'https://snehayog-production.up.railway.app',
-    ];
+    // Prefer local IP first in development; Railway otherwise
+    final urlsToTry = _isDevelopment
+        ? [
+            _localIpBaseUrl,
+            'https://snehayog-production.up.railway.app',
+          ]
+        : [
+            'https://snehayog-production.up.railway.app',
+          ];
 
     for (final url in urlsToTry) {
       try {
@@ -58,9 +72,15 @@ class AppConfig {
       }
     }
 
-    // If health check fails, still default to Railway
-    print('⚠️ AppConfig: All servers failed, using Railway as final fallback');
-    _cachedBaseUrl = 'https://snehayog-production.up.railway.app';
+    // If health check fails, pick sensible default based on environment
+    if (_isDevelopment) {
+      print('⚠️ AppConfig: All servers failed, using local IP as fallback');
+      _cachedBaseUrl = _localIpBaseUrl;
+    } else {
+      print(
+          '⚠️ AppConfig: All servers failed, using Railway as final fallback');
+      _cachedBaseUrl = 'https://snehayog-production.up.railway.app';
+    }
     return _cachedBaseUrl!;
   }
 
@@ -69,10 +89,15 @@ class AppConfig {
     print('🔍 AppConfig: Checking server connectivity...');
     print('🔍 AppConfig: Development mode: $_isDevelopment');
 
-    // Only check Railway
-    final urlsToTry = [
-      'https://snehayog-production.up.railway.app',
-    ];
+    // Prefer local IP first in development; Railway otherwise
+    final urlsToTry = _isDevelopment
+        ? [
+            _localIpBaseUrl,
+            'https://snehayog-production.up.railway.app',
+          ]
+        : [
+            'https://snehayog-production.up.railway.app',
+          ];
 
     for (final url in urlsToTry) {
       try {
@@ -94,9 +119,15 @@ class AppConfig {
       }
     }
 
-    // If health check fails, still default to Railway
-    print('⚠️ AppConfig: All servers failed, using Railway as final fallback');
-    _cachedBaseUrl = 'https://snehayog-production.up.railway.app';
+    // If health check fails, pick sensible default based on environment
+    if (_isDevelopment) {
+      print('⚠️ AppConfig: All servers failed, using local IP as fallback');
+      _cachedBaseUrl = _localIpBaseUrl;
+    } else {
+      print(
+          '⚠️ AppConfig: All servers failed, using Railway as final fallback');
+      _cachedBaseUrl = 'https://snehayog-production.up.railway.app';
+    }
     return _cachedBaseUrl!;
   }
 

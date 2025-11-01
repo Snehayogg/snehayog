@@ -382,7 +382,7 @@ class _UploadScreenState extends State<UploadScreen> {
                   _buildNoticePoint(
                     title: '3. Reporting Copyright Violation',
                     body:
-                        'Copyright owners may submit a takedown request by emailing: copyright@vayu.app with proof of ownership. Upon receiving a valid request, Vayu will remove the infringing content within 48 hours.',
+                        'Copyright owners may submit a takedown request by emailing: copyright@snehayog.site with proof of ownership. Upon receiving a valid request, Vayu will remove the infringing content within 48 hours.',
                   ),
                   _buildNoticePoint(
                     title: '4. Payment & Revenue Sharing',

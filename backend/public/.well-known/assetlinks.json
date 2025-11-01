@@ -1,13 +1,14 @@
 [
-    {
-      "relation": ["delegate_permission/common.handle_all_urls"],
-      "target": {
-        "namespace": "android_app",
-        "package_name": "com.snehayog.app",
-        "sha256_cert_fingerprints": [
-          "B1:46:91:E0:4B:96:55:B0:E9:E5:3F:88:C1:D8:B0:74:91:AC:4E:AE:5A:B9:FB:23:24:E8:E1:63:8E:9E:EE:A8"
-        ]
-      }
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.snehayog.app",
+      "sha256_cert_fingerprints": [
+        "11:75:DF:E9:73:27:F4:DD:4F:AD:14:2C:F4:3F:D6:9D:7E:B1:86:85:A8:C3:48:BE:80:B7:06:A5:E7:E5:13:DC",
+        "B1:46:91:E0:4B:96:55:B0:E9:E5:3F:88:C1:D8:B0:74:91:AC:4E:AE:5A:B9:FB:23:24:E8:E1:63:8E:9E:EE:A8"
+      ]
     }
-  ]
+  }
+]
   

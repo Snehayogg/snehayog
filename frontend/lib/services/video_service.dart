@@ -181,7 +181,6 @@ class VideoService {
               json['hlsMasterPlaylistUrl'].toString().isNotEmpty) {
             String masterUrl = json['hlsMasterPlaylistUrl'].toString();
             if (!masterUrl.startsWith('http')) {
-              // Remove leading slash if present to avoid double slash
               if (masterUrl.startsWith('/')) {
                 masterUrl = masterUrl.substring(1);
               }
@@ -224,7 +223,8 @@ class VideoService {
   /// **Get video by ID**
   Future<VideoModel> getVideoById(String id) async {
     try {
-      final res = await http.get(Uri.parse('$baseUrl/api/videos/$id'));
+      final resolvedBaseUrl = await getBaseUrlWithFallback();
+      final res = await http.get(Uri.parse('$resolvedBaseUrl/api/videos/$id'));
       if (res.statusCode == 200) {
         return VideoModel.fromJson(json.decode(res.body));
       } else {
@@ -245,9 +245,10 @@ class VideoService {
       final headers = await _getAuthHeaders();
       headers['Content-Type'] = 'application/json';
 
+      final resolvedBaseUrl = await getBaseUrlWithFallback();
       final res = await http
           .post(
-            Uri.parse('$baseUrl/api/videos/$videoId/like'),
+            Uri.parse('$resolvedBaseUrl/api/videos/$videoId/like'),
             headers: headers,
             body: json.encode({}),
           )
@@ -289,9 +290,10 @@ class VideoService {
   ) async {
     try {
       final headers = await _getAuthHeaders();
+      final resolvedBaseUrl = await getBaseUrlWithFallback();
       final res = await http
           .post(
-            Uri.parse('$baseUrl/api/videos/$videoId/comments'),
+            Uri.parse('$resolvedBaseUrl/api/videos/$videoId/comments'),
             headers: headers,
             body: json.encode({'userId': userId, 'text': text}),
           )
@@ -322,10 +324,11 @@ class VideoService {
   }) async {
     try {
       final headers = await _getAuthHeaders();
+      final resolvedBaseUrl = await getBaseUrlWithFallback();
       final res = await http
           .get(
             Uri.parse(
-                '$baseUrl/api/videos/$videoId/comments?page=$page&limit=$limit'),
+                '$resolvedBaseUrl/api/videos/$videoId/comments?page=$page&limit=$limit'),
             headers: headers,
           )
           .timeout(const Duration(seconds: 10));
@@ -358,9 +361,11 @@ class VideoService {
         throw Exception('User not authenticated');
       }
 
+      final resolvedBaseUrl = await getBaseUrlWithFallback();
       final res = await http
           .delete(
-            Uri.parse('$baseUrl/api/videos/$videoId/comments/$commentId'),
+            Uri.parse(
+                '$resolvedBaseUrl/api/videos/$videoId/comments/$commentId'),
             headers: headers,
             body: json.encode({'userId': userData['googleId']}),
           )
@@ -392,9 +397,11 @@ class VideoService {
   Future<Comment> likeComment(String videoId, String commentId) async {
     try {
       final headers = await _getAuthHeaders();
+      final resolvedBaseUrl = await getBaseUrlWithFallback();
       final res = await http
           .post(
-            Uri.parse('$baseUrl/api/videos/$videoId/comments/$commentId/like'),
+            Uri.parse(
+                '$resolvedBaseUrl/api/videos/$videoId/comments/$commentId/like'),
             headers: headers,
             body: json.encode({}),
           )
@@ -422,7 +429,8 @@ class VideoService {
   /// **Get user videos**
   Future<List<VideoModel>> getUserVideos(String userId) async {
     try {
-      final url = '$baseUrl/api/videos/user/$userId';
+      final resolvedBaseUrl = await getBaseUrlWithFallback();
+      final url = '$resolvedBaseUrl/api/videos/user/$userId';
       final headers = await _getAuthHeaders();
 
       final response = await http
@@ -441,7 +449,7 @@ class VideoService {
               if (hlsUrl.startsWith('/')) {
                 hlsUrl = hlsUrl.substring(1);
               }
-              json['videoUrl'] = '$baseUrl/$hlsUrl';
+              json['videoUrl'] = '$resolvedBaseUrl/$hlsUrl';
             } else {
               json['videoUrl'] = hlsUrl;
             }
@@ -454,7 +462,7 @@ class VideoService {
               if (masterUrl.startsWith('/')) {
                 masterUrl = masterUrl.substring(1);
               }
-              json['videoUrl'] = '$baseUrl/$masterUrl';
+              json['videoUrl'] = '$resolvedBaseUrl/$masterUrl';
             } else {
               json['videoUrl'] = masterUrl;
             }
@@ -467,7 +475,7 @@ class VideoService {
               if (videoUrl.startsWith('/')) {
                 videoUrl = videoUrl.substring(1);
               }
-              json['videoUrl'] = '$baseUrl/$videoUrl';
+              json['videoUrl'] = '$resolvedBaseUrl/$videoUrl';
             }
           }
 
@@ -478,7 +486,7 @@ class VideoService {
             if (originalUrl.startsWith('/')) {
               originalUrl = originalUrl.substring(1);
             }
-            json['originalVideoUrl'] = '$baseUrl/$originalUrl';
+            json['originalVideoUrl'] = '$resolvedBaseUrl/$originalUrl';
           }
           if (json['thumbnailUrl'] != null &&
               !json['thumbnailUrl'].toString().startsWith('http')) {
@@ -486,7 +494,7 @@ class VideoService {
             if (thumbnailUrl.startsWith('/')) {
               thumbnailUrl = thumbnailUrl.substring(1);
             }
-            json['thumbnailUrl'] = '$baseUrl/$thumbnailUrl';
+            json['thumbnailUrl'] = '$resolvedBaseUrl/$thumbnailUrl';
           }
 
           return VideoModel.fromJson(json);
@@ -556,9 +564,10 @@ class VideoService {
       }
 
       // **Create multipart request**
+      final resolvedBaseUrl = await getBaseUrlWithFallback();
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('$baseUrl/api/upload/video'),
+        Uri.parse('$resolvedBaseUrl/api/upload/video'),
       );
 
       final headers = await _getAuthHeaders();
@@ -694,8 +703,10 @@ class VideoService {
       }
 
       final headers = await _getAuthHeaders();
+      final resolvedBaseUrl = await getBaseUrlWithFallback();
       final res = await http
-          .delete(Uri.parse('$baseUrl/api/videos/$videoId'), headers: headers)
+          .delete(Uri.parse('$resolvedBaseUrl/api/videos/$videoId'),
+              headers: headers)
           .timeout(const Duration(seconds: 10));
 
       if (res.statusCode == 200 || res.statusCode == 204) {
@@ -724,8 +735,9 @@ class VideoService {
   Future<void> incrementShares(String videoId) async {
     try {
       final headers = await _getAuthHeaders();
+      final resolvedBaseUrl = await getBaseUrlWithFallback();
       final res = await http.post(
-        Uri.parse('$baseUrl/api/videos/$videoId/share'),
+        Uri.parse('$resolvedBaseUrl/api/videos/$videoId/share'),
         headers: headers,
       );
 
@@ -744,8 +756,9 @@ class VideoService {
       print('🔄 VideoService: Getting processing status for video: $videoId');
 
       final headers = await _getAuthHeaders();
+      final resolvedBaseUrl = await getBaseUrlWithFallback();
       final res = await http
-          .get(Uri.parse('$baseUrl/api/upload/video/$videoId/status'),
+          .get(Uri.parse('$resolvedBaseUrl/api/upload/video/$videoId/status'),
               headers: headers)
           .timeout(const Duration(seconds: 10));
 
@@ -774,29 +787,21 @@ class VideoService {
     String description,
   ) async {
     try {
-      // Get the proper URL for sharing
-      String shareUrl = videoUrl;
-
-      // If it's a custom scheme URL, convert it to web URL
-      if (videoUrl.startsWith('snehayog://')) {
-        shareUrl = 'https://snehayog.site/video/$videoId';
-      }
-
-      // If it's an HLS URL, use it directly
-      if (videoUrl.contains('.m3u8')) {
-        shareUrl = videoUrl;
-      }
+      // Prefer opening the app via deep link; include web fallback below
+      final String appDeepLink = 'snehayog://video/$videoId';
+      final String webFallbackLink = 'https://snehayog.site/video/$videoId';
 
       // **Share using platform dialog**
       await Share.share(
-        '🎬 Check out this video on Vayu!\n\n📹 $description\n\n🔗 Watch on Vayu: $shareUrl\n🌐 Web version: https://vayu.app/video/$videoId\n\n#Vayu #Video',
+        '🎬 Check out this video on Vayu!\n\n📹 $description\n\n🔗 Open in app: $appDeepLink\n🌐 Web version: $webFallbackLink\n\n#Vayu #Video',
         subject: 'Vayu Video',
       );
 
       // **Update share count on server**
       final headers = await _getAuthHeaders();
+      final resolvedBaseUrl = await getBaseUrlWithFallback();
       final res = await http.post(
-        Uri.parse('$baseUrl/api/videos/$videoId/share'),
+        Uri.parse('$resolvedBaseUrl/api/videos/$videoId/share'),
         headers: headers,
       );
 
@@ -818,9 +823,10 @@ class VideoService {
   /// **Check server health**
   Future<bool> checkServerHealth() async {
     try {
-      // Use the configured health endpoint from NetworkHelper
+      // Resolve base URL with local-first fallback
+      final resolvedBaseUrl = await getBaseUrlWithFallback();
       final response = await http
-          .get(Uri.parse(NetworkHelper.healthEndpoint))
+          .get(Uri.parse('$resolvedBaseUrl/api/health'))
           .timeout(const Duration(seconds: 5));
       return response.statusCode == 200;
     } catch (e) {
@@ -1040,9 +1046,10 @@ class VideoService {
       final headers = await _getAuthHeaders();
 
       // Create multipart request
+      final resolvedBaseUrl = await getBaseUrlWithFallback();
       final request = http.MultipartRequest(
         'POST',
-        Uri.parse('$baseUrl/api/videos/upload'),
+        Uri.parse('$resolvedBaseUrl/api/videos/upload'),
       );
 
       // Add headers

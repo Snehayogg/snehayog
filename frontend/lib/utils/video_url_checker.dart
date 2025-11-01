@@ -24,7 +24,7 @@ class VideoUrlChecker {
   /// Check if URL is from CDN
   static bool isCDNUrl(String url) {
     final lower = url.toLowerCase();
-    return lower.contains('cdn.snehayog.com') ||
+    return lower.contains('cdn.snehayog.site') ||
         lower.contains('cdn.') ||
         isR2Url(url);
   }

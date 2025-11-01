@@ -21,6 +21,6 @@ if (!config.cloud_name || !config.api_key || !config.api_secret) {
 }
 
 console.log('☁️ Cloudinary configured for video processing only');
-console.log('📦 Storage: Cloudflare R2, CDN: cdn.snehayog.com');
+console.log('📦 Storage: Cloudflare R2, CDN: cdn.snehayog.site');
 
 export default cloudinary;

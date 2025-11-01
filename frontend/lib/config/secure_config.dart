@@ -4,8 +4,7 @@ import 'package:flutter/foundation.dart';
 /// Secure configuration loader for Flutter
 /// This class handles loading configuration from environment variables or secure storage
 class SecureConfig {
-  static const String _defaultBaseUrl =
-      'https://snehayog-production.up.railway.app';
+  static const String _defaultBaseUrl = 'https://snehayog.site';
 
   // **NEW: Environment-based configuration**
   static String get baseUrl {

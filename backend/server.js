@@ -7,6 +7,12 @@ import compression from 'compression';
 import { fileURLToPath } from 'url';
 import cron from 'node-cron';
 
+// Disable noisy console.log in production
+if (process.env.NODE_ENV === 'production') {
+  // eslint-disable-next-line no-console
+  console.log = () => {};
+}
+
 // Import database manager
 import databaseManager from './config/database.js';
 import './models/index.js';
@@ -50,20 +56,14 @@ process.env.MONGO_URI = mongoUri;
 const PORT = process.env.PORT || 5001;
 const HOST = process.env.HOST || '0.0.0.0'; // Railway requires 0.0.0.0
 
-console.log('🔧 Server Configuration:');
-console.log(`   📍 Port: ${PORT}`);
-console.log(`   🌐 Host: ${HOST}`);
-console.log(`   🔗 URL: http://${HOST}:${PORT}`);
-console.log(`   🌍 Railway URL: https://snehayog-production.up.railway.app`);
-console.log('');
-
 // Middleware
 app.use(compression()); // Enable gzip compression
 app.use('/.well-known', express.static(path.join(__dirname, 'public/.well-known')))
 // **ENHANCED: CORS Configuration for Flutter app and Railway**
 app.use(cors({
   origin: [
-    'https://snehayog-production.up.railway.app', // Railway production URL
+    'https://snehayog.site', // Production web app
+    'https://vayu.app',      // Public site that embeds/uses API
     'http://192.168.0.188:5001', // Local development
     'http://localhost:5001',      // Local development
     'http://10.0.2.2:5001',      // Android emulator
@@ -87,12 +87,6 @@ app.use(cors({
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-
-// Request logging middleware
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  next();
-});
 
 // Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -200,11 +194,9 @@ app.use(errorHandler);
 
 // Graceful shutdown
 const gracefulShutdown = async (signal) => {
-  console.log(`\n🔄 Received ${signal}. Starting graceful shutdown...`);
   
   try {
     await databaseManager.disconnect();
-    console.log('✅ Database connection closed');
     
     process.exit(0);
   } catch (error) {
@@ -228,20 +220,16 @@ const startServer = async () => {
     
     // Start ad cleanup cron job (run every hour at minute 0)
     cron.schedule('0 * * * *', async () => {
-      console.log('🧹 Running scheduled ad cleanup...');
       try {
         await adCleanupService.runCleanup();
-        console.log('✅ Scheduled ad cleanup completed');
       } catch (error) {
         console.error('❌ Error in scheduled ad cleanup:', error);
       }
     });
-    console.log('📅 Ad cleanup cron job scheduled (runs every hour)');
     
     // Start HTTP server
     app.listen(PORT, HOST, () => {
-      console.log(`🚀 Server running on http://${HOST}:${PORT}`);
-      console.log('✅ All services initialized successfully');
+      
     });
     
   } catch (error) {

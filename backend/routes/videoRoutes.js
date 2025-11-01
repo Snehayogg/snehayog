@@ -1846,7 +1846,7 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
         // Try to create a fallback URL using the local file
         const isProduction = process.env.NODE_ENV === 'production';
         const baseUrl = isProduction 
-          ? 'https://snehayog-production.up.railway.app'
+          ? 'https://snehayog.site'
           : (process.env.SERVER_URL || 'http://192.168.0.199:5001');
         
         // Create fallback URL for the uploaded file

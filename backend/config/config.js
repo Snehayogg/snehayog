@@ -78,7 +78,7 @@ export const config = {
   server: {
     port: process.env.PORT || 5001,
     nodeEnv: process.env.NODE_ENV || 'development',
-    corsOrigin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000', 'https://snehayog-production.up.railway.app'],
+    corsOrigin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000', 'https://snehayog.site'],
   },
 
   // Database configuration - support both MONGODB_URI and MONGO_URI

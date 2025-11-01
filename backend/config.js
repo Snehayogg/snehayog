@@ -33,7 +33,7 @@ export const config = {
 
   // CORS Configuration
   cors: {
-    origin: process.env.CORS_ORIGIN || ['http://localhost:3000', 'https://snehayog-production.up.railway.app'],
+    origin: process.env.CORS_ORIGIN || ['http://localhost:3000', 'https://snehayog.site'],
     credentials: true
   },
 
