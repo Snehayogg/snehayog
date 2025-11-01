@@ -59,7 +59,7 @@ console.log('');
 
 // Middleware
 app.use(compression()); // Enable gzip compression
-app.use('/.well-known', express.static(path.join(__dirname, 'public/.well-known')))
+app.use('/.well-known', express.static(path.join(__dirname, 'backend/public/.well-known')))
 // **ENHANCED: CORS Configuration for Flutter app and Railway**
 app.use(cors({
   origin: [
