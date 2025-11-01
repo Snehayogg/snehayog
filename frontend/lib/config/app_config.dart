@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 class AppConfig {
   // **MANUAL: Development mode control**
   static const bool _isDevelopment =
-      true; // Always keep false for consistent Railway usage
+      false; // Always keep false for consistent Railway usage
 
   // **NEW: Smart URL selection with fallback**
   static String? _cachedBaseUrl;
@@ -30,9 +30,9 @@ class AppConfig {
       return _localIpBaseUrl;
     }
 
-    // Default to Railway for production builds (Play Store)
-    print('🔍 AppConfig: Using Railway server for production');
-    return 'https://snehayog-production.up.railway.app';
+    // Default to custom domain for production builds (Play Store)
+    print('🔍 AppConfig: Using custom domain for production');
+    return 'https://snehayog.site';
   }
 
   // **NEW: Always use Railway base URL**
@@ -42,13 +42,15 @@ class AppConfig {
       return _cachedBaseUrl!;
     }
 
-    // Prefer local IP first in development; Railway otherwise
+    // Prefer local IP first in development; custom domain otherwise
     final urlsToTry = _isDevelopment
         ? [
             _localIpBaseUrl,
+            'https://snehayog.site',
             'https://snehayog-production.up.railway.app',
           ]
         : [
+            'https://snehayog.site',
             'https://snehayog-production.up.railway.app',
           ];
 
@@ -78,8 +80,8 @@ class AppConfig {
       _cachedBaseUrl = _localIpBaseUrl;
     } else {
       print(
-          '⚠️ AppConfig: All servers failed, using Railway as final fallback');
-      _cachedBaseUrl = 'https://snehayog-production.up.railway.app';
+          '⚠️ AppConfig: All servers failed, using custom domain as fallback');
+      _cachedBaseUrl = 'https://snehayog.site';
     }
     return _cachedBaseUrl!;
   }
@@ -89,13 +91,15 @@ class AppConfig {
     print('🔍 AppConfig: Checking server connectivity...');
     print('🔍 AppConfig: Development mode: $_isDevelopment');
 
-    // Prefer local IP first in development; Railway otherwise
+    // Prefer local IP first in development; custom domain otherwise
     final urlsToTry = _isDevelopment
         ? [
             _localIpBaseUrl,
+            'https://snehayog.site',
             'https://snehayog-production.up.railway.app',
           ]
         : [
+            'https://snehayog.site',
             'https://snehayog-production.up.railway.app',
           ];
 
@@ -125,8 +129,8 @@ class AppConfig {
       _cachedBaseUrl = _localIpBaseUrl;
     } else {
       print(
-          '⚠️ AppConfig: All servers failed, using Railway as final fallback');
-      _cachedBaseUrl = 'https://snehayog-production.up.railway.app';
+          '⚠️ AppConfig: All servers failed, using custom domain as fallback');
+      _cachedBaseUrl = 'https://snehayog.site';
     }
     return _cachedBaseUrl!;
   }
@@ -137,8 +141,9 @@ class AppConfig {
     print('🔄 AppConfig: Cached URL reset, will recheck on next request');
   }
 
-  // **NEW: Fallback URLs - Railway first for production**
+  // **NEW: Fallback URLs - custom domain first for production**
   static const List<String> fallbackUrls = [
+    'https://snehayog.site',
     'https://snehayog-production.up.railway.app',
   ];
 

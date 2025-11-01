@@ -141,6 +141,76 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/referrals', referralRoutes);
 
+// Lightweight web fallback for shared links: https://snehayog.site/video/:id
+// This lets non-app users see a clean page and tries to open the app when installed
+app.get('/video/:id', (req, res) => {
+  const { id } = req.params;
+  const appSchemeUrl = `snehayog://video/${id}`;
+  const webUrl = `https://snehayog.site/video/${id}`;
+  const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.snehayog.app';
+
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Open in Vayu</title>
+  <meta name="robots" content="noindex" />
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; padding: 24px; background:#fff; color:#111; }
+    .card { max-width: 560px; margin: 0 auto; border:1px solid #eee; border-radius: 12px; padding: 20px; box-shadow: 0 8px 24px rgba(0,0,0,.06); }
+    h1 { font-size: 20px; margin: 0 0 8px; }
+    p { margin: 8px 0 16px; color:#444; }
+    .actions { display:flex; gap:12px; flex-wrap:wrap; }
+    .btn { padding: 12px 16px; border-radius: 10px; text-decoration:none; display:inline-block; font-weight:600; }
+    .primary { background:#2563eb; color:#fff; }
+    .secondary { background:#f3f4f6; color:#111; }
+    .hint { font-size: 12px; color:#666; margin-top:12px; }
+  </style>
+  <script>
+    // Try deep link first; after a short delay, fall back to Play Store
+    function openApp() {
+      const now = Date.now();
+      const timeout = setTimeout(function() {
+        // If the app didn't take focus within ~1s, go to Play Store
+        if (Date.now() - now < 1600) {
+          window.location.href = '${playStoreUrl}';
+        }
+      }, 1200);
+      window.location.href = '${appSchemeUrl}';
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+      // Auto-attempt deep link on load for convenience
+      openApp();
+    });
+  </script>
+  <link rel="canonical" href="${webUrl}" />
+  <meta property="og:title" content="Watch on Vayu" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="${webUrl}" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Watch on Vayu" />
+  <meta name="theme-color" content="#2563eb" />
+  <meta http-equiv="refresh" content="0; url=${appSchemeUrl}" />
+  <!-- For Android intent handler (in some browsers) -->
+  <meta http-equiv="Refresh" content="0; url=intent://video/${id}#Intent;scheme=snehayog;package=com.snehayog.app;end"> 
+</head>
+<body>
+  <div class="card">
+    <h1>Open in Vayu</h1>
+    <p>If the app doesn't open automatically, use the buttons below.</p>
+    <div class="actions">
+      <a class="btn primary" href="${appSchemeUrl}">Open App</a>
+      <a class="btn secondary" href="${playStoreUrl}">Get the App</a>
+    </div>
+    <p class="hint">Link: ${webUrl}</p>
+  </div>
+</body>
+</html>`;
+
+  res.status(200).send(html);
+});
+
 // Admin Dashboard route
 app.get('/admin/dashboard', (req, res) => {
   res.sendFile(path.join(__dirname, 'admin', 'admin_dashboard.html'));
