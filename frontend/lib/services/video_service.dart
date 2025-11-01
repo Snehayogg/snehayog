@@ -779,46 +779,6 @@ class VideoService {
       return null;
     }
   }
-
-  /// **Share video**
-  Future<VideoModel> shareVideo(
-    String videoId,
-    String videoUrl,
-    String description,
-  ) async {
-    try {
-      // Prefer opening the app via deep link; include web fallback below
-      final String appDeepLink = 'snehayog://video/$videoId';
-
-      // **Share using platform dialog**
-      await Share.share(
-        '🎬 Check out this video on Vayu!\n\n🔗 Open in app: $appDeepLink\n',
-        subject: 'Vayu Video',
-      );
-
-      // **Update share count on server**
-      final headers = await _getAuthHeaders();
-      final resolvedBaseUrl = await getBaseUrlWithFallback();
-      final res = await http.post(
-        Uri.parse('$resolvedBaseUrl/api/videos/$videoId/share'),
-        headers: headers,
-      );
-
-      if (res.statusCode == 200) {
-        final data = json.decode(res.body);
-        return VideoModel.fromJson(data);
-      } else {
-        final error = json.decode(res.body);
-        throw Exception(error['error'] ?? 'Failed to share video');
-      }
-    } catch (e) {
-      if (e is Exception) rethrow;
-      throw Exception('Network error: $e');
-    }
-  }
-
-  // **UTILITY METHODS - Merged from BaseVideoService**
-
   /// **Check server health**
   Future<bool> checkServerHealth() async {
     try {

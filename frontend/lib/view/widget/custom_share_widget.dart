@@ -437,7 +437,7 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
     return 'Upload your videos on Vayu and start earning from day one! 💰\n'
         'Only First 1000 early creators — grab 80% ad revenue\n'
         'No 1000 subs or long watch hours\n\n'
-        'Open in app: $appDeepLink\n\n';
+        '$appDeepLink\n\n';
   }
 
   void _showLoadingDialog() {
