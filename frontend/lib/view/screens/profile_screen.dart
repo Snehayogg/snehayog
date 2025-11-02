@@ -1310,8 +1310,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // Removed banner helper to revert to original UI
-
   /// **NEW: Show Professional FAQ Dialog**
   void _showFAQDialog() {
     ProfileDialogsWidget.showFAQDialog(context);
@@ -1351,7 +1349,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                 Container(
                   margin: const EdgeInsets.symmetric(horizontal: 24),
                   child: Container(
-                    // Reduced by ~40%
                     height: 29,
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -1371,30 +1368,28 @@ class _ProfileScreenState extends State<ProfileScreen>
                       icon: const Icon(
                         Icons.share,
                         color: Color(0xFF10B981),
-                        size: 10,
+                        size: 12,
                       ),
-                      label: const FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          'Refer 2 friends and get full access',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                      label: const Text(
+                        'Refer 2 friends and get full access',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Color(0xFF10B981),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: -0.1,
                         ),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.white,
                         elevation: 0,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 0),
                         minimumSize: const Size.fromHeight(29),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                           side: BorderSide.none,
-                        ),
-                        textStyle: const TextStyle(
-                          color: Color(0xFF10B981),
-                          fontSize: 8,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: -0.2,
                         ),
                       ),
                     ),
