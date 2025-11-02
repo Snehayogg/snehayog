@@ -143,6 +143,52 @@ class AuthService {
               final regData = jsonDecode(registerResponse.body);
               registeredUserData = regData['user'];
 
+              // **FIX: Track referral code if present (for new users)**
+              final isNewUser = regData['user']?['isNewUser'] ?? false;
+              if (isNewUser) {
+                try {
+                  final prefs = await SharedPreferences.getInstance();
+                  final pendingRefCode =
+                      prefs.getString('pending_referral_code');
+
+                  if (pendingRefCode != null && pendingRefCode.isNotEmpty) {
+                    AppLogger.log('🎁 Tracking referral code: $pendingRefCode');
+
+                    // Track signup with referral code
+                    try {
+                      final trackResponse = await http
+                          .post(
+                            Uri.parse(
+                                '${AppConfig.baseUrl}/api/referrals/track'),
+                            headers: {'Content-Type': 'application/json'},
+                            body: jsonEncode({
+                              'code': pendingRefCode,
+                              'event': 'signup',
+                            }),
+                          )
+                          .timeout(const Duration(seconds: 5));
+
+                      if (trackResponse.statusCode == 200) {
+                        AppLogger.log('✅ Referral signup tracked successfully');
+                        // Clear the pending referral code after successful tracking
+                        await prefs.remove('pending_referral_code');
+                      } else {
+                        AppLogger.log(
+                          '⚠️ Referral tracking failed: ${trackResponse.statusCode}',
+                        );
+                      }
+                    } catch (trackError) {
+                      AppLogger.log(
+                        '⚠️ Error tracking referral: $trackError',
+                      );
+                      // Don't block sign-in if referral tracking fails
+                    }
+                  }
+                } catch (e) {
+                  AppLogger.log('⚠️ Error checking referral code: $e');
+                }
+              }
+
               // Show location onboarding for new users
               // Add small delay to ensure context is available
               Future.delayed(const Duration(milliseconds: 500), () {

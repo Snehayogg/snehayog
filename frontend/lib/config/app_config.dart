@@ -4,13 +4,13 @@ import 'package:http/http.dart' as http;
 class AppConfig {
   // **MANUAL: Development mode control**
   static const bool _isDevelopment =
-      false; // Always keep false for consistent Railway usage
+      false; // Always keep true for consistent Railway usage
 
   // **NEW: Smart URL selection with fallback**
   static String? _cachedBaseUrl;
 
   // Local development server (Wi‑Fi/LAN)
-  static const String _localIpBaseUrl = 'http://192.168.0.199:5001';
+  static const String _localIpBaseUrl = 'http://192.168.0.198:5001';
 
   // **NEW: Clear cache method for development**
   static void clearCache() {
@@ -24,14 +24,8 @@ class AppConfig {
       return _cachedBaseUrl!;
     }
 
-    // Prefer local IP in development for easy LAN testing
-    if (_isDevelopment) {
-      print('🔍 AppConfig: Development mode - defaulting to local IP');
-      return _localIpBaseUrl;
-    }
-
-    // Default to custom domain for production builds (Play Store)
-    print('🔍 AppConfig: Using custom domain for production');
+    // **FIX: Always default to Railway first, fallback to local in development**
+    print('🔍 AppConfig: Defaulting to Railway (snehayog.site)');
     return 'https://snehayog.site';
   }
 
@@ -42,17 +36,12 @@ class AppConfig {
       return _cachedBaseUrl!;
     }
 
-    // Prefer local IP first in development; custom domain otherwise
-    final urlsToTry = _isDevelopment
-        ? [
-            _localIpBaseUrl,
-            'https://snehayog.site',
-            'https://snehayog-production.up.railway.app',
-          ]
-        : [
-            'https://snehayog.site',
-            'https://snehayog-production.up.railway.app',
-          ];
+    // **FIX: Always try Railway first (snehayog.site), then fallback to local**
+    final urlsToTry = [
+      'https://snehayog.site', // Railway production - try first
+      'https://snehayog-production.up.railway.app', // Railway fallback
+      ...(_isDevelopment ? [_localIpBaseUrl] : []), // Local only in development
+    ];
 
     for (final url in urlsToTry) {
       try {
@@ -91,17 +80,12 @@ class AppConfig {
     print('🔍 AppConfig: Checking server connectivity...');
     print('🔍 AppConfig: Development mode: $_isDevelopment');
 
-    // Prefer local IP first in development; custom domain otherwise
-    final urlsToTry = _isDevelopment
-        ? [
-            _localIpBaseUrl,
-            'https://snehayog.site',
-            'https://snehayog-production.up.railway.app',
-          ]
-        : [
-            'https://snehayog.site',
-            'https://snehayog-production.up.railway.app',
-          ];
+    // **FIX: Always try Railway first (snehayog.site), then fallback to local**
+    final urlsToTry = [
+      'https://snehayog.site', // Railway production - try first
+      'https://snehayog-production.up.railway.app', // Railway fallback
+      ...(_isDevelopment ? [_localIpBaseUrl] : []), // Local only in development
+    ];
 
     for (final url in urlsToTry) {
       try {

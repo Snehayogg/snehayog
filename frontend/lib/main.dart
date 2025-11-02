@@ -24,6 +24,7 @@ import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/background_profile_preloader.dart';
 import 'package:vayu/services/location_onboarding_service.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -72,9 +73,7 @@ void _initializeServicesInBackground() async {
     // Initialize AdMob in background
     await MobileAds.instance.initialize();
     ErrorLoggingService.logServiceInitialization('AdMob');
-
-    // Razorpay initialization removed - service not available
-
+    
     // Set orientation in background
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
@@ -227,6 +226,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Future<void> _handleIncomingUri(Uri uri) async {
     print('🔗 Deep link received: $uri');
 
+    // **FIX: Handle referral code from query parameters**
+    final referralCode = uri.queryParameters['ref'];
+    if (referralCode != null && referralCode.isNotEmpty) {
+      print('🎁 Referral code detected: $referralCode');
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('pending_referral_code', referralCode);
+        print('✅ Referral code saved to SharedPreferences');
+      } catch (e) {
+        print('❌ Error saving referral code: $e');
+      }
+    }
+
     // Handle payment callback
     if (uri.scheme == 'snehayog' && uri.host == 'payment-callback') {
       final orderId = uri.queryParameters['razorpay_order_id'] ?? '';
@@ -262,7 +274,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             (uri.path.startsWith('/video') || uri.path == '/'))) {
       final videoId = uri.queryParameters['id'] ?? uri.pathSegments.last;
 
-      if (videoId.isNotEmpty) {
+      if (videoId.isNotEmpty && videoId != '/') {
         print('🎬 Opening video with ID: $videoId');
         _navigateToVideo(videoId);
       } else {
@@ -270,6 +282,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         print('ℹ️ Referral/root link received, opening home');
         if (mounted) Navigator.pushNamed(context, '/home');
       }
+    }
+    // **FIX: Handle root URL with referral code**
+    else if (uri.scheme == 'https' &&
+        uri.host == 'snehayog.site' &&
+        (uri.path == '/' || uri.path.isEmpty) &&
+        referralCode != null) {
+      print('ℹ️ Root referral link received, opening home');
+      if (mounted) Navigator.pushNamed(context, '/home');
     }
   }
 

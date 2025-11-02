@@ -155,7 +155,16 @@ class VideoService {
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = json.decode(response.body);
-        final List<dynamic> videoList = responseData['videos'];
+        final List<dynamic> videoList = responseData['videos'] ?? [];
+
+        // **FIX: Validate video list exists and log if empty**
+        if (videoList.isEmpty) {
+          AppLogger.log(
+            '⚠️ VideoService: Empty video list received from API (page: $page, videoType: $videoType)',
+          );
+          AppLogger.log(
+              '⚠️ VideoService: Response data keys: ${responseData.keys.toList()}');
+        }
 
         final videos = videoList.map((json) {
           // **DEBUG: Log all video data for debugging**
@@ -218,11 +227,22 @@ class VideoService {
         return {
           'videos': List<VideoModel>.from(videos),
           'hasMore': responseData['hasMore'] ?? false,
+          'total': responseData['total'] ?? videos.length,
+          'currentPage': responseData['currentPage'] ?? page,
+          'totalPages': responseData['totalPages'] ?? 1,
         };
       } else {
+        AppLogger.log(
+          '❌ VideoService: API returned status ${response.statusCode}',
+        );
         throw Exception('Failed to load videos: ${response.statusCode}');
       }
     } catch (e) {
+      AppLogger.log('❌ VideoService: Error in getVideos: $e');
+      // **FIX: Add device info for debugging**
+      AppLogger.log(
+        '❌ VideoService: Error details - page: $page, videoType: $videoType, limit: $limit',
+      );
       rethrow;
     }
   }

@@ -434,10 +434,12 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
 
   String _generateShareText() {
     final appDeepLink = 'snehayog://video/${widget.video.id}';
+    final webLink = 'https://snehayog.site/video/${widget.video.id}';
     return 'Upload your videos on Vayu and start earning from day one! 💰\n'
         'Only First 1000 early creators — grab 80% ad revenue\n'
         'No 1000 subs or long watch hours\n\n'
-        '$appDeepLink\n\n';
+        'Watch: $webLink\n'
+        'Open in app: $appDeepLink\n\n';
   }
 
   void _showLoadingDialog() {

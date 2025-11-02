@@ -558,6 +558,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         // Use provided videos instead of API call
         _videos = List.from(widget.initialVideos!);
       } else {
+        // **FIX: Clear cache before initial load to ensure fresh data**
+        try {
+          final cacheManager = SmartCacheManager();
+          await cacheManager.invalidateVideoCache(videoType: widget.videoType);
+        } catch (e) {
+          AppLogger.log('⚠️ VideoFeedAdvanced: Error invalidating cache: $e');
+        }
+
         // Load from API
         await _loadVideos(page: 1);
       }
@@ -747,6 +755,44 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       AppLogger.log('   Page: $currentPage / $totalPages');
       AppLogger.log('   Has More: $hasMore');
       AppLogger.log('   Total Videos Available: $total');
+
+      // **FIX: Invalidate cache if empty videos returned (prevents stale empty cache)**
+      if (newVideos.isEmpty && page == 1) {
+        AppLogger.log(
+          '⚠️ VideoFeedAdvanced: Empty videos received, invalidating cache to prevent stale data',
+        );
+        try {
+          final cacheManager = SmartCacheManager();
+          await cacheManager.invalidateVideoCache(videoType: widget.videoType);
+
+          // **FIX: Retry once with force refresh if empty on first page**
+          AppLogger.log('🔄 VideoFeedAdvanced: Retrying with force refresh...');
+          final retryResponse = await _videoService.getVideos(
+            page: page,
+            limit: _videosPerPage,
+            videoType: widget.videoType,
+          );
+          final retryVideos = retryResponse['videos'] as List<VideoModel>;
+
+          if (retryVideos.isNotEmpty) {
+            AppLogger.log(
+              '✅ VideoFeedAdvanced: Retry successful, got ${retryVideos.length} videos',
+            );
+            // Use retry videos instead
+            if (mounted) {
+              setState(() {
+                _videos = retryVideos;
+                _currentPage = retryResponse['currentPage'] as int? ?? page;
+                _hasMore = retryResponse['hasMore'] as bool? ?? false;
+                _totalVideos = retryResponse['total'] as int? ?? 0;
+              });
+              return; // Exit early with retry data
+            }
+          }
+        } catch (retryError) {
+          AppLogger.log('❌ VideoFeedAdvanced: Retry failed: $retryError');
+        }
+      }
 
       if (mounted) {
         setState(() {

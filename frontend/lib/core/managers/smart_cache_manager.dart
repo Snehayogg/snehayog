@@ -185,13 +185,13 @@ class SmartCacheManager {
   int _totalPredictions = 0;
   int _preloadHits = 0;
 
-  // ===== CONFIGURATION =====
-
   static const int maxHistorySize = 20;
   static const int maxPreloadItems = 5;
   static const Duration predictionWindow = Duration(minutes: 5);
 
-  // ===== INITIALIZATION =====
+  // **NEW: Cache size limits**
+  static const int maxMemoryCacheSize = 50; // Limit memory cache entries
+  static const int maxDiskCacheMB = 100; // Limit disk cache to 100 MB
 
   /// Initialize consolidated smart cache manager
   Future<void> initialize() async {
@@ -335,7 +335,28 @@ class SmartCacheManager {
       );
 
       final freshData = await fetchFn();
+
+      // **FIX: Don't cache empty video lists (prevents stale empty cache)**
       if (freshData != null) {
+        // Check if this is a video list that's empty
+        if (cacheType == 'videos' && freshData is Map) {
+          final videos = freshData['videos'];
+          if (videos is List && videos.isEmpty) {
+            AppLogger.log(
+              '⚠️ SmartCacheManager: Empty video list received, NOT caching to prevent stale empty data',
+            );
+            // Invalidate any existing cache for this key
+            _memoryCache.remove(key);
+            try {
+              final file = File('${_cacheDir.path}/$key.json');
+              if (await file.exists()) {
+                await file.delete();
+              }
+            } catch (_) {}
+            return freshData; // Return but don't cache
+          }
+        }
+
         await _cacheData(key, freshData, cacheType, maxAge, currentEtag);
       }
 
@@ -780,17 +801,15 @@ class SmartCacheManager {
 
   /// Add entry to memory cache with size management
   void _addToMemoryCache<T>(String key, InstagramCacheEntry<T> entry) {
-    final config =
-        _cacheConfigs[_getCacheTypeFromKey(key)] ?? _cacheConfigs['default']!;
-
-    if (_memoryCache.length >= config.maxEntries) {
+    // **FIX: Enforce strict memory cache size limit**
+    if (_memoryCache.length >= maxMemoryCacheSize) {
       _evictLeastUsedEntries();
     }
 
     _memoryCache[key] = entry;
   }
 
-  /// Evict least used cache entries
+  /// Evict least used cache entries (more aggressive - 30% instead of 20%)
   void _evictLeastUsedEntries() {
     if (_memoryCache.isEmpty) return;
 
@@ -805,13 +824,14 @@ class SmartCacheManager {
         return aEntry.lastAccessed.compareTo(bEntry.lastAccessed);
       });
 
-    final entriesToRemove = (sortedEntries.length * 0.2).ceil();
+    // **FIX: Evict 30% instead of 20% for more aggressive cleanup**
+    final entriesToRemove = (sortedEntries.length * 0.3).ceil();
     for (int i = 0; i < entriesToRemove; i++) {
       _memoryCache.remove(sortedEntries[i].key);
     }
 
     AppLogger.log(
-        '🧹 SmartCacheManager: Evicted $entriesToRemove least used entries');
+        '🧹 SmartCacheManager: Evicted $entriesToRemove least used entries (30% aggressive eviction)');
   }
 
   /// Cache data with ETag and timestamp
@@ -844,17 +864,79 @@ class SmartCacheManager {
     }
   }
 
-  /// Persist cache entry to disk
+  /// Persist cache entry to disk with size limit enforcement
   Future<void> _persistToDiskCache<T>(
     String key,
     InstagramCacheEntry<T> entry,
   ) async {
     try {
+      // **FIX: Check disk cache size before persisting**
+      await _enforceDiskCacheLimit();
+
       final file = File('${_cacheDir.path}/$key.json');
       await file.writeAsString(jsonEncode(entry.toJson()));
     } catch (e) {
       AppLogger.log(
           '❌ SmartCacheManager: Error persisting to disk cache for $key: $e');
+    }
+  }
+
+  /// Enforce disk cache size limit (100 MB)
+  Future<void> _enforceDiskCacheLimit() async {
+    try {
+      if (!await _cacheDir.exists()) return;
+
+      // Calculate current disk cache size
+      int totalSizeBytes = 0;
+      final fileInfos = <MapEntry<File, int>>[];
+
+      await for (final entity in _cacheDir.list()) {
+        if (entity is File && entity.path.endsWith('.json')) {
+          final size = await entity.length();
+          totalSizeBytes += size;
+          fileInfos.add(MapEntry(entity, size));
+        }
+      }
+
+      final totalSizeMB = totalSizeBytes / (1024 * 1024);
+
+      // If over limit, evict oldest files first
+      if (totalSizeMB > maxDiskCacheMB) {
+        AppLogger.log(
+          '⚠️ SmartCacheManager: Disk cache size (${totalSizeMB.toStringAsFixed(2)} MB) exceeds limit ($maxDiskCacheMB MB), evicting...',
+        );
+
+        // Sort files by modification time (oldest first)
+        fileInfos.sort((a, b) {
+          final aStat = a.key.statSync();
+          final bStat = b.key.statSync();
+          return aStat.modified.compareTo(bStat.modified);
+        });
+
+        // Remove oldest files until under limit
+        int removedSize = 0;
+        int removedCount = 0;
+        for (final entry in fileInfos) {
+          if ((totalSizeMB - (removedSize / (1024 * 1024))) <= maxDiskCacheMB) {
+            break;
+          }
+          try {
+            await entry.key.delete();
+            removedSize += entry.value;
+            removedCount++;
+          } catch (e) {
+            AppLogger.log(
+                '⚠️ SmartCacheManager: Error deleting cache file: $e');
+          }
+        }
+
+        AppLogger.log(
+          '🧹 SmartCacheManager: Evicted $removedCount disk cache files (${(removedSize / (1024 * 1024)).toStringAsFixed(2)} MB)',
+        );
+      }
+    } catch (e) {
+      AppLogger.log(
+          '❌ SmartCacheManager: Error enforcing disk cache limit: $e');
     }
   }
 
