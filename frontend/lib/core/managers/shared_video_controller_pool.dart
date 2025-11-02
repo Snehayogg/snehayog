@@ -19,8 +19,10 @@ class SharedVideoControllerPool {
   // **LRU TRACKING**
   final Map<String, DateTime> _lastAccessed =
       {}; // Track when each video was last accessed
+  final Map<String, int> _videoIndices =
+      {}; // Track video indices for smart cleanup
   static const int _maxSharedPoolSize =
-      15; // Max controllers in shared pool (Reels-style)
+      7; // Max controllers in shared pool (optimized for memory)
 
   // **CACHE STATISTICS**
   int _cacheHits = 0;
@@ -43,18 +45,48 @@ class SharedVideoControllerPool {
     if (_controllerPool.containsKey(videoId)) {
       // **LRU: Update access time**
       _lastAccessed[videoId] = DateTime.now();
-      return _controllerPool[videoId];
+      final controller = _controllerPool[videoId]!;
+
+      // **NEW: Return only if initialized and valid**
+      if (controller.value.isInitialized && !controller.value.hasError) {
+        trackCacheHit();
+        return controller;
+      } else {
+        // **AUTO-CLEANUP: Remove invalid controllers**
+        disposeController(videoId);
+        trackCacheMiss();
+        return null;
+      }
     }
+    trackCacheMiss();
     return null;
+  }
+
+  /// **Get controller with instant playback guarantee (for cached videos)**
+  VideoPlayerController? getControllerForInstantPlay(String videoId) {
+    final controller = getController(videoId);
+    if (controller != null && controller.value.isInitialized) {
+      // **INSTANT PLAYBACK: Ensure first frame is ready**
+      if (controller.value.position > Duration.zero ||
+          !controller.value.isBuffering) {
+        return controller;
+      }
+    }
+    return controller;
   }
 
   /// **Add controller to pool with LRU eviction**
   void addController(String videoId, VideoPlayerController controller,
-      {bool skipDisposeOld = false}) {
+      {bool skipDisposeOld = false, int? index}) {
     print('📥 SharedPool: Adding controller for video: $videoId');
 
     // **LRU: Update access time**
     _lastAccessed[videoId] = DateTime.now();
+
+    // **NEW: Track video index for smart cleanup**
+    if (index != null) {
+      _videoIndices[videoId] = index;
+    }
 
     // Dispose old controller if exists (unless we're explicitly replacing with the same controller)
     if (_controllerPool.containsKey(videoId)) {
@@ -82,6 +114,30 @@ class SharedVideoControllerPool {
         '✅ SharedPool: Controller added, total controllers: ${_controllerPool.length}');
   }
 
+  /// **NEW: Cleanup controllers far from current index**
+  void cleanupDistantControllers(int currentIndex, {int keepRange = 3}) {
+    final toRemove = <String>[];
+
+    for (final entry in _videoIndices.entries) {
+      final videoId = entry.key;
+      final index = entry.value;
+      final distance = (index - currentIndex).abs();
+
+      // Remove controllers more than keepRange away
+      if (distance > keepRange) {
+        toRemove.add(videoId);
+      }
+    }
+
+    for (final videoId in toRemove) {
+      disposeController(videoId);
+    }
+
+    if (toRemove.isNotEmpty) {
+      print('🧹 SharedPool: Cleaned up ${toRemove.length} distant controllers');
+    }
+  }
+
   /// **Remove controller from pool (but keep it initialized)**
   void removeController(String videoId) {
     if (_controllerPool.containsKey(videoId)) {
@@ -91,6 +147,7 @@ class SharedVideoControllerPool {
       _controllerStates.remove(videoId);
       _listeners.remove(videoId);
       _lastAccessed.remove(videoId); // Remove LRU tracking
+      _videoIndices.remove(videoId); // Remove index tracking
 
       print('🗑️ SharedPool: Removed controller for video: $videoId');
     }
@@ -129,12 +186,23 @@ class SharedVideoControllerPool {
   void disposeController(String videoId) {
     if (_controllerPool.containsKey(videoId)) {
       final controller = _controllerPool[videoId]!;
-      controller.removeListener(_listeners[videoId] ?? () {});
-      controller.dispose();
+      try {
+        // **PROPER CLEANUP: Pause and mute before disposal**
+        if (controller.value.isInitialized) {
+          controller.pause();
+          controller.setVolume(0.0);
+        }
+        controller.removeListener(_listeners[videoId] ?? () {});
+        controller.dispose();
+      } catch (e) {
+        print('⚠️ SharedPool: Error disposing controller $videoId: $e');
+      }
+
       _controllerPool.remove(videoId);
       _controllerStates.remove(videoId);
       _listeners.remove(videoId);
       _lastAccessed.remove(videoId); // Remove LRU tracking
+      _videoIndices.remove(videoId); // Remove index tracking
 
       print('🗑️ SharedPool: Disposed controller for video: $videoId');
     }
@@ -299,6 +367,7 @@ class SharedVideoControllerPool {
     _controllerStates.clear();
     _listeners.clear();
     _lastAccessed.clear(); // Clear LRU tracking
+    _videoIndices.clear(); // Clear index tracking
 
     print('✅ SharedPool: All controllers cleared');
   }

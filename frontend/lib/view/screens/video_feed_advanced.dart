@@ -183,6 +183,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   // **PRELOADING STATE**
   final Set<int> _preloadedVideos = {};
   final Set<int> _loadingVideos = {};
+  final Set<int> _initializingVideos =
+      {}; // Track videos currently initializing
+  static const int _maxConcurrentInitializations =
+      2; // Limit concurrent decoder usage
+  final Map<int, int> _preloadRetryCount = {}; // Track retry attempts per video
+  static const int _maxRetryAttempts = 2; // Maximum retry attempts
   Timer? _preloadTimer;
 
   // Track whether the first frame has rendered for each index (prevents grey texture)
@@ -943,7 +949,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       }
     });
 
-    // Step 2: Clear all controller-related state
+    // Step 2: Clear all controller-related state and initialization tracking
+    _initializingVideos.clear();
+    _preloadRetryCount.clear();
     _controllerPool.clear();
     _controllerStates.clear();
     _userPaused.clear();
@@ -1107,18 +1115,33 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     });
   }
 
-  /// **PRELOAD VIDEOS NEAR CURRENT INDEX**
+  /// **PRELOAD VIDEOS NEAR CURRENT INDEX (Smart: Current + Next 2)**
   void _preloadNearbyVideos() {
     if (_videos.isEmpty) return;
 
-    // Preload current + next 1 video
+    final sharedPool = SharedVideoControllerPool();
+
+    // **SMART PRELOADING: Preload current + next 2 videos (total 3)**
+    final preloadWindow = 2; // Next 2 videos
     for (int i = _currentIndex;
-        i <= _currentIndex + 1 && i < _videos.length;
+        i <= _currentIndex + preloadWindow && i < _videos.length;
         i++) {
+      final video = _videos[i];
+
+      // **INSTANT LOADING: Skip if already in shared pool**
+      if (sharedPool.isVideoLoaded(video.id)) {
+        _preloadedVideos.add(i);
+        continue;
+      }
+
+      // Preload if not already loading/preloaded
       if (!_preloadedVideos.contains(i) && !_loadingVideos.contains(i)) {
         _preloadVideo(i);
       }
     }
+
+    // **MEMORY MANAGEMENT: Cleanup distant controllers**
+    sharedPool.cleanupDistantControllers(_currentIndex, keepRange: 3);
 
     // **OPTIMIZED: Load more videos only if more are available and user is near the end**
     if (_hasMore &&
@@ -1136,6 +1159,20 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   Future<void> _preloadVideo(int index) async {
     if (index >= _videos.length) return;
 
+    // **NEW: Check if we're already at max concurrent initializations**
+    if (_initializingVideos.length >= _maxConcurrentInitializations &&
+        !_preloadedVideos.contains(index) &&
+        !_loadingVideos.contains(index)) {
+      // Queue this video for later initialization
+      print('⏳ Max concurrent initializations reached, deferring video $index');
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted && !_preloadedVideos.contains(index)) {
+          _preloadVideo(index);
+        }
+      });
+      return;
+    }
+
     _loadingVideos.add(index);
 
     // **CACHE STATUS CHECK ON PRELOAD**
@@ -1143,6 +1180,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     _printCacheStatus();
 
     String? videoUrl;
+    VideoPlayerController? controller;
+    bool isReused = false;
+
     try {
       final video = _videos[index];
 
@@ -1158,16 +1198,31 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
       print('🎬 Preloading video $index with URL: $videoUrl');
 
-      // **INSTAGRAM-STYLE: Check shared pool first for instant playback**
+      // **UNIFIED STRATEGY: Check shared pool FIRST for instant playback**
       final sharedPool = SharedVideoControllerPool();
-      VideoPlayerController? controller;
-      bool isReused = false;
 
-      if (sharedPool.isVideoLoaded(video.id)) {
-        // Reuse controller from shared pool
-        controller = sharedPool.getController(video.id);
+      // **INSTANT LOADING: Try to get controller with instant playback guarantee**
+      final instantController =
+          sharedPool.getControllerForInstantPlay(video.id);
+      if (instantController != null) {
+        controller = instantController;
         isReused = true;
-        print('♻️ Reusing controller from shared pool for video: ${video.id}');
+        print(
+            '⚡ INSTANT: Reusing controller from shared pool for video: ${video.id}');
+        // **CRITICAL: Add to local tracking for UI updates**
+        _controllerPool[index] = controller;
+        _lastAccessedLocal[index] = DateTime.now();
+      } else if (sharedPool.isVideoLoaded(video.id)) {
+        // Fallback: Get any controller from shared pool
+        final fallbackController = sharedPool.getController(video.id);
+        if (fallbackController != null) {
+          controller = fallbackController;
+          isReused = true;
+          print(
+              '♻️ Reusing controller from shared pool for video: ${video.id}');
+          _controllerPool[index] = controller;
+          _lastAccessedLocal[index] = DateTime.now();
+        }
       }
 
       // If no controller in shared pool, create new one
@@ -1191,27 +1246,35 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
       // **SKIP INITIALIZATION: If reusing from shared pool, controller is already initialized**
       if (!isReused) {
-        // **HLS SUPPORT: Add HLS-specific configuration**
-        if (videoUrl.contains('.m3u8')) {
-          print('🎬 HLS Video detected: $videoUrl');
-          print('🎬 HLS Video duration: ${video.duration}');
-          await controller.initialize().timeout(
-            const Duration(seconds: 30), // Increased timeout for HLS
-            onTimeout: () {
-              throw Exception('HLS video initialization timeout');
-            },
-          );
-          print('✅ HLS Video initialized successfully');
-        } else {
-          print('🎬 Regular Video detected: $videoUrl');
-          // **FIXED: Add timeout and better error handling for regular videos**
-          await controller.initialize().timeout(
-            const Duration(seconds: 10),
-            onTimeout: () {
-              throw Exception('Video initialization timeout');
-            },
-          );
-          print('✅ Regular Video initialized successfully');
+        // **NEW: Track concurrent initializations**
+        _initializingVideos.add(index);
+
+        try {
+          // **HLS SUPPORT: Add HLS-specific configuration**
+          if (videoUrl.contains('.m3u8')) {
+            print('🎬 HLS Video detected: $videoUrl');
+            print('🎬 HLS Video duration: ${video.duration}');
+            await controller.initialize().timeout(
+              const Duration(seconds: 30), // Increased timeout for HLS
+              onTimeout: () {
+                throw Exception('HLS video initialization timeout');
+              },
+            );
+            print('✅ HLS Video initialized successfully');
+          } else {
+            print('🎬 Regular Video detected: $videoUrl');
+            // **FIXED: Add timeout and better error handling for regular videos**
+            await controller.initialize().timeout(
+              const Duration(seconds: 10),
+              onTimeout: () {
+                throw Exception('Video initialization timeout');
+              },
+            );
+            print('✅ Regular Video initialized successfully');
+          }
+        } finally {
+          // **NEW: Always remove from initializing set**
+          _initializingVideos.remove(index);
         }
       } else {
         print('♻️ Skipping initialization - reusing initialized controller');
@@ -1225,15 +1288,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         // **LRU: Track access time when controller is added**
         _lastAccessedLocal[index] = DateTime.now();
 
-        // **NEW: Add controller to shared pool for reuse across screens (only if not reused)**
-        if (!isReused) {
-          final sharedPool = SharedVideoControllerPool();
-          final video = _videos[index];
-          sharedPool.addController(video.id, controller);
-          print('✅ Added video controller to shared pool: ${video.id}');
-        } else {
-          print('♻️ Skipping shared pool add - controller already in pool');
-        }
+        // **UNIFIED STRATEGY: Always add to shared pool with index tracking**
+        final sharedPool = SharedVideoControllerPool();
+        final video = _videos[index];
+        sharedPool.addController(video.id, controller, index: index);
+        print(
+            '✅ Added video controller to shared pool: ${video.id} (index: $index)');
 
         // Apply looping vs auto-advance behavior
         _applyLoopingBehavior(controller);
@@ -1376,27 +1436,92 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     } catch (e) {
       print('❌ Error preloading video $index: $e');
       _loadingVideos.remove(index);
+      _initializingVideos.remove(index);
 
-      // **HLS SUPPORT: Enhanced retry logic for HLS videos**
-      if (videoUrl != null && videoUrl.contains('.m3u8')) {
-        print('🔄 HLS video failed, retrying in 3 seconds...');
-        print('🔄 HLS Error details: $e');
-        Future.delayed(const Duration(seconds: 3), () {
-          if (mounted && !_preloadedVideos.contains(index)) {
-            _preloadVideo(index);
+      // **NEW: Always dispose failed controllers to free decoder resources**
+      if (controller != null && !isReused) {
+        try {
+          if (controller.value.isInitialized) {
+            await controller.pause();
           }
-        });
+          controller.dispose();
+          print('🗑️ Disposed failed controller for video $index');
+        } catch (disposeError) {
+          print('⚠️ Error disposing failed controller: $disposeError');
+        }
+      }
+
+      // **NEW: Detect NO_MEMORY errors specifically**
+      final errorString = e.toString().toLowerCase();
+      final isNoMemoryError = errorString.contains('no_memory') ||
+          errorString.contains('0xfffffff4') ||
+          errorString.contains('error 12') ||
+          (errorString.contains('failed to initialize') &&
+              errorString.contains('no_memory')) ||
+          (errorString.contains('mediacodec') &&
+              errorString.contains('memory')) ||
+          (errorString.contains('videoplayer') &&
+              errorString.contains('exoplaybackexception') &&
+              errorString.contains('mediacodec'));
+
+      // **NEW: Check retry count**
+      final retryCount = _preloadRetryCount[index] ?? 0;
+
+      if (isNoMemoryError) {
+        print('⚠️ NO_MEMORY error detected for video $index');
+
+        // **NEW: Clean up old controllers first when out of memory**
+        _cleanupOldControllers();
+
+        // **NEW: Wait longer and reduce concurrent load for NO_MEMORY errors**
+        if (retryCount < _maxRetryAttempts) {
+          _preloadRetryCount[index] = retryCount + 1;
+          final retryDelay =
+              Duration(seconds: 10 + (retryCount * 5)); // Exponential backoff
+          print(
+              '🔄 Retrying video $index after ${retryDelay.inSeconds} seconds (attempt ${retryCount + 1}/$_maxRetryAttempts)...');
+          Future.delayed(retryDelay, () {
+            if (mounted && !_preloadedVideos.contains(index)) {
+              _preloadVideo(index);
+            }
+          });
+        } else {
+          print('❌ Max retry attempts reached for video $index (NO_MEMORY)');
+          _preloadRetryCount.remove(index);
+        }
+      } else if (videoUrl != null && videoUrl.contains('.m3u8')) {
+        // **HLS SUPPORT: Enhanced retry logic for HLS videos**
+        if (retryCount < _maxRetryAttempts) {
+          _preloadRetryCount[index] = retryCount + 1;
+          print('🔄 HLS video failed, retrying in 3 seconds...');
+          print('🔄 HLS Error details: $e');
+          Future.delayed(const Duration(seconds: 3), () {
+            if (mounted && !_preloadedVideos.contains(index)) {
+              _preloadVideo(index);
+            }
+          });
+        } else {
+          print('❌ Max retry attempts reached for HLS video $index');
+          _preloadRetryCount.remove(index);
+        }
       } else if (e.toString().contains('400') || e.toString().contains('404')) {
-        print('🔄 Retrying video $index in 5 seconds...');
-        Future.delayed(const Duration(seconds: 5), () {
-          if (mounted && !_preloadedVideos.contains(index)) {
-            _preloadVideo(index);
-          }
-        });
+        if (retryCount < _maxRetryAttempts) {
+          _preloadRetryCount[index] = retryCount + 1;
+          print('🔄 Retrying video $index in 5 seconds...');
+          Future.delayed(const Duration(seconds: 5), () {
+            if (mounted && !_preloadedVideos.contains(index)) {
+              _preloadVideo(index);
+            }
+          });
+        } else {
+          print('❌ Max retry attempts reached for video $index');
+          _preloadRetryCount.remove(index);
+        }
       } else {
         print('❌ Video preload failed with error: $e');
         print('❌ Video URL: $videoUrl');
         print('❌ Video index: $index');
+        _preloadRetryCount.remove(index);
       }
     }
   }
@@ -1469,121 +1594,104 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   }
 
   void _cleanupOldControllers() {
-    if (_controllerPool.length <= _maxPoolSize) return;
-
     final sharedPool = SharedVideoControllerPool();
+
+    // **UNIFIED STRATEGY: Let shared pool handle cleanup based on distance**
+    sharedPool.cleanupDistantControllers(_currentIndex, keepRange: 3);
+
+    // **LOCAL CLEANUP: Only remove local tracking for controllers not in shared pool**
     final controllersToRemove = <int>[];
 
-    // **NEW: Build list of controllers with access time**
-    final controllerAccessTimes = <int, DateTime>{};
-    for (final index in _controllerPool.keys) {
-      controllerAccessTimes[index] =
-          _lastAccessedLocal[index] ?? DateTime.fromMillisecondsSinceEpoch(0);
-    }
-
-    // **Sort by access time (oldest first) and distance from current**
-    final sortedIndices = controllerAccessTimes.keys.toList()
-      ..sort((a, b) {
-        final aTime = controllerAccessTimes[a]!;
-        final bTime = controllerAccessTimes[b]!;
-        final aDist = (a - _currentIndex).abs();
-        final bDist = (b - _currentIndex).abs();
-
-        // Prioritize removing: 1) Far away AND 2) Old access time
-        if (aDist > _maxPoolSize && bDist <= _maxPoolSize) return -1;
-        if (aDist <= _maxPoolSize && bDist > _maxPoolSize) return 1;
-        return aTime.compareTo(bTime); // Oldest first
-      });
-
-    // **Remove oldest/distant controllers beyond limit**
-    final toRemove = _controllerPool.length - _maxPoolSize;
-    for (int i = 0; i < toRemove && i < sortedIndices.length; i++) {
-      final index = sortedIndices[i];
-
-      // Don't remove if in shared pool (keep for instant playback)
+    for (final index in _controllerPool.keys.toList()) {
+      // Keep controllers that are in shared pool (they're managed there)
       if (index < _videos.length) {
         final videoId = _videos[index].id;
         if (sharedPool.isVideoLoaded(videoId)) {
-          // Keep in shared pool, just remove from local pool tracking
+          // Controller is in shared pool, just remove from local tracking
           controllersToRemove.add(index);
           continue;
         }
       }
 
-      controllersToRemove.add(index);
+      // Remove local tracking for distant or invalid controllers
+      final distance = (index - _currentIndex).abs();
+      if (distance > 3 || _controllerPool.length > 5) {
+        controllersToRemove.add(index);
+      }
     }
 
-    // **Dispose and remove**
+    // **CLEANUP: Remove only local tracking (controllers are in shared pool)**
     for (final index in controllersToRemove) {
       final ctrl = _controllerPool[index];
 
+      // **CRITICAL: Only dispose if NOT in shared pool**
       if (index < _videos.length) {
         final videoId = _videos[index].id;
         if (!sharedPool.isVideoLoaded(videoId) && ctrl != null) {
-          ctrl.removeListener(_bufferingListeners[index] ?? () {});
-          ctrl.removeListener(_videoEndListeners[index] ?? () {});
-          ctrl.dispose();
+          // Controller not in shared pool, dispose it
+          try {
+            ctrl.removeListener(_bufferingListeners[index] ?? () {});
+            ctrl.removeListener(_videoEndListeners[index] ?? () {});
+            ctrl.dispose();
+          } catch (e) {
+            print('⚠️ Error disposing controller at index $index: $e');
+          }
         }
-      } else if (ctrl != null) {
-        ctrl.removeListener(_bufferingListeners[index] ?? () {});
-        ctrl.removeListener(_videoEndListeners[index] ?? () {});
-        ctrl.dispose();
       }
 
+      // Remove local tracking
       _controllerPool.remove(index);
       _controllerStates.remove(index);
       _preloadedVideos.remove(index);
       _isBuffering.remove(index);
       _bufferingListeners.remove(index);
       _videoEndListeners.remove(index);
-      _lastAccessedLocal.remove(index); // Remove LRU tracking
+      _lastAccessedLocal.remove(index);
+      _initializingVideos.remove(index);
+      _preloadRetryCount.remove(index);
     }
 
     if (controllersToRemove.isNotEmpty) {
       print(
-          '🧹 Cleaned up ${controllersToRemove.length} old controllers (LRU)');
+          '🧹 Cleaned up ${controllersToRemove.length} local controller trackings');
     }
   }
 
-  /// **GET OR CREATE CONTROLLER: Instagram-style recycling**
+  /// **GET OR CREATE CONTROLLER: Unified shared pool strategy**
   VideoPlayerController? _getController(int index) {
-    // **OPTIMIZED: Check local pool first**
-    if (_controllerPool.containsKey(index)) {
-      // **LRU: Track access time**
+    if (index >= _videos.length) return null;
+
+    final video = _videos[index];
+    final sharedPool = SharedVideoControllerPool();
+
+    // **PRIMARY: Check shared pool first (guaranteed instant playback)**
+    VideoPlayerController? controller =
+        sharedPool.getControllerForInstantPlay(video.id);
+
+    if (controller != null && controller.value.isInitialized) {
+      // **CACHE HIT: Reuse from shared pool**
+      print(
+          '⚡ INSTANT: Reusing controller from shared pool for video ${video.id}');
+
+      // Add to local pool for UI tracking only
+      _controllerPool[index] = controller;
+      _controllerStates[index] = false;
+      _preloadedVideos.add(index);
       _lastAccessedLocal[index] = DateTime.now();
-      return _controllerPool[index];
+
+      return controller;
     }
 
-    // **NEW: Check shared pool for reusable controllers**
-    if (index < _videos.length) {
-      final video = _videos[index];
-      final sharedPool = SharedVideoControllerPool();
-
-      if (sharedPool.isVideoLoaded(video.id)) {
-        // **CACHE HIT: Reuse controller from shared pool**
-        final sharedController = sharedPool.getController(video.id);
-        if (sharedController != null && sharedController.value.isInitialized) {
-          print(
-            '⚡ VideoFeedAdvanced: Reusing controller from shared pool for video ${video.id}',
-          );
-
-          // Add to local pool for tracking
-          _controllerPool[index] = sharedController;
-          _controllerStates[index] = false;
-          _preloadedVideos.add(index);
-          // **LRU: Track access time**
-          _lastAccessedLocal[index] = DateTime.now();
-
-          sharedPool.trackCacheHit();
-
-          return sharedController;
-        }
-      } else {
-        sharedPool.trackCacheMiss();
+    // **FALLBACK: Check local pool**
+    if (_controllerPool.containsKey(index)) {
+      controller = _controllerPool[index];
+      if (controller != null && controller.value.isInitialized) {
+        _lastAccessedLocal[index] = DateTime.now();
+        return controller;
       }
     }
 
-    // If not in any pool, preload it
+    // **PRELOAD: If not in any pool, preload it**
     _preloadVideo(index);
     return null;
   }
@@ -1611,38 +1719,46 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     _currentIndex = index;
     _reprimeWindowIfNeeded();
 
-    // **CRITICAL FIX: Check shared pool FIRST before local pool (Reels-style instant playback)**
+    // **UNIFIED STRATEGY: Use shared pool as primary source (Instant playback)**
     final sharedPool = SharedVideoControllerPool();
     VideoPlayerController? controllerToUse;
 
     if (index < _videos.length) {
       final video = _videos[index];
 
-      // Always check shared pool first (Reels-style instant playback)
-      if (sharedPool.isVideoLoaded(video.id)) {
-        controllerToUse = sharedPool.getController(video.id);
-        if (controllerToUse != null && controllerToUse.value.isInitialized) {
-          print(
-              '⚡ Reels-style: Reusing controller from shared pool for video ${video.id}');
+      // **INSTANT LOADING: Try to get controller with instant playback guarantee**
+      controllerToUse = sharedPool.getControllerForInstantPlay(video.id);
 
-          // Add to local pool for tracking
+      if (controllerToUse != null && controllerToUse.value.isInitialized) {
+        print(
+            '⚡ INSTANT: Reusing controller from shared pool for video ${video.id}');
+
+        // Add to local pool for tracking only
+        _controllerPool[index] = controllerToUse;
+        _controllerStates[index] = false;
+        _preloadedVideos.add(index);
+        _lastAccessedLocal[index] = DateTime.now();
+
+        // **MEMORY MANAGEMENT: Cleanup distant controllers**
+        sharedPool.cleanupDistantControllers(index, keepRange: 3);
+      } else if (sharedPool.isVideoLoaded(video.id)) {
+        // Fallback: Get any available controller
+        controllerToUse = sharedPool.getController(video.id);
+        if (controllerToUse != null) {
           _controllerPool[index] = controllerToUse;
           _controllerStates[index] = false;
           _preloadedVideos.add(index);
-          // **LRU: Track access time**
           _lastAccessedLocal[index] = DateTime.now();
-          sharedPool.trackCacheHit();
         }
       }
     }
 
-    // If not in shared pool, check local pool
+    // **FALLBACK: Check local pool only if shared pool doesn't have it**
     if (controllerToUse == null && _controllerPool.containsKey(index)) {
       controllerToUse = _controllerPool[index];
       if (controllerToUse != null && !controllerToUse.value.isInitialized) {
-        // Controller exists but not initialized - dispose and recreate
-        print(
-            '⚠️ Controller exists but not initialized, disposing and recreating...');
+        // **AUTO-CLEANUP: Remove invalid controllers**
+        print('⚠️ Controller exists but not initialized, disposing...');
         try {
           controllerToUse.dispose();
         } catch (e) {
@@ -1654,7 +1770,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         _lastAccessedLocal.remove(index);
         controllerToUse = null;
       } else if (controllerToUse != null) {
-        // **LRU: Track access time**
         _lastAccessedLocal[index] = DateTime.now();
       }
     }
@@ -3666,6 +3781,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     _bufferingListeners.clear();
     _videoEndListeners.clear();
     _wasPlayingBeforeNavigation.clear();
+    _loadingVideos.clear();
+    _initializingVideos.clear();
+    _preloadRetryCount.clear();
+    _preloadedVideos.clear();
 
     // **NEW: Dispose VideoControllerManager**
     _videoControllerManager.dispose();
