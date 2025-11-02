@@ -470,14 +470,34 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   /// **HANDLE VISIBILITY CHANGES: Pause/resume videos based on tab visibility**
   void _handleVisibilityChange(bool isVisible) {
     if (_isScreenVisible != isVisible) {
+      final wasVisible = _isScreenVisible;
       _isScreenVisible = isVisible;
 
       if (isVisible) {
-        // Screen became visible - resume current video
-        _tryAutoplayCurrent();
+        // **FIX: When returning to Yug tab, ensure video player is displayed**
+        // Check if current video controller is initialized and mark first frame as ready
+        if (_currentIndex < _videos.length) {
+          final controller = _controllerPool[_currentIndex];
+          if (controller != null && controller.value.isInitialized) {
+            // **FIX: Mark first frame as ready to ensure video player displays**
+            _firstFrameReady[_currentIndex] = true;
+            if (mounted) {
+              setState(() {});
+            }
+          }
+        }
+
+        // **FIX: When returning to Yug tab, pause videos first instead of auto-resuming**
+        // This prevents videos from playing automatically when user returns to tab
+        AppLogger.log(
+            '🔄 VideoFeedAdvanced: Returning to Yug tab - pausing videos first');
+        _pauseCurrentVideo();
 
         // **NEW: Start background profile preloading**
         _profilePreloader.startBackgroundPreloading();
+
+        // **IMPORTANT: Don't auto-resume - let user manually start playback if they want**
+        // This fixes the issue where videos would auto-play when returning to tab
       } else {
         // Screen became hidden - pause current video
         _pauseCurrentVideo();
@@ -1693,6 +1713,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       _preloadedVideos.add(index);
       _lastAccessedLocal[index] = DateTime.now();
 
+      // **FIX: Mark first frame as ready since controller is already initialized**
+      _firstFrameReady[index] = true;
+
       return controller;
     }
 
@@ -1701,6 +1724,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       controller = _controllerPool[index];
       if (controller != null && controller.value.isInitialized) {
         _lastAccessedLocal[index] = DateTime.now();
+        // **FIX: Mark first frame as ready since controller is already initialized**
+        _firstFrameReady[index] = true;
         return controller;
       }
     }
@@ -1754,16 +1779,21 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         _preloadedVideos.add(index);
         _lastAccessedLocal[index] = DateTime.now();
 
+        // **FIX: Mark first frame as ready since controller is already initialized**
+        _firstFrameReady[index] = true;
+
         // **MEMORY MANAGEMENT: Cleanup distant controllers**
         sharedPool.cleanupDistantControllers(index, keepRange: 3);
       } else if (sharedPool.isVideoLoaded(video.id)) {
         // Fallback: Get any available controller
         controllerToUse = sharedPool.getController(video.id);
-        if (controllerToUse != null) {
+        if (controllerToUse != null && controllerToUse.value.isInitialized) {
           _controllerPool[index] = controllerToUse;
           _controllerStates[index] = false;
           _preloadedVideos.add(index);
           _lastAccessedLocal[index] = DateTime.now();
+          // **FIX: Mark first frame as ready since controller is already initialized**
+          _firstFrameReady[index] = true;
         }
       }
     }
@@ -1784,8 +1814,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         _preloadedVideos.remove(index);
         _lastAccessedLocal.remove(index);
         controllerToUse = null;
-      } else if (controllerToUse != null) {
+      } else if (controllerToUse != null &&
+          controllerToUse.value.isInitialized) {
         _lastAccessedLocal[index] = DateTime.now();
+        // **FIX: Mark first frame as ready since controller is already initialized**
+        _firstFrameReady[index] = true;
       }
     }
 
@@ -2423,38 +2456,59 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   void _togglePlayPause(int index) {
     final controller = _controllerPool[index];
-    if (controller == null || !controller.value.isInitialized) return;
+    if (controller == null || !controller.value.isInitialized) {
+      AppLogger.log(
+          '⚠️ _togglePlayPause: Controller not available or not initialized for index $index');
+      return;
+    }
 
-    if (_controllerStates[index] == true) {
-      // Pausing video
-      controller.pause();
-      setState(() {
-        _controllerStates[index] = false;
-        _userPaused[index] = true;
-      });
+    // **FIX: Check actual controller state instead of relying on _controllerStates map**
+    // This ensures we always have the correct state, even if map is out of sync
+    final isCurrentlyPlaying = controller.value.isPlaying;
 
-      // **NEW: Stop view tracking when user pauses**
-      if (index < _videos.length) {
-        final video = _videos[index];
-        _viewTracker.stopViewTracking(video.id);
-        AppLogger.log(
-            '⏸️ User paused video: ${video.id}, stopped view tracking');
+    AppLogger.log(
+        '🔄 _togglePlayPause: Video $index - Current state: ${isCurrentlyPlaying ? "playing" : "paused"}');
+
+    if (isCurrentlyPlaying) {
+      // **FIX: Video is playing, so pause it**
+      try {
+        controller.pause();
+        setState(() {
+          _controllerStates[index] = false;
+          _userPaused[index] = true;
+        });
+        AppLogger.log('⏸️ Successfully paused video at index $index');
+
+        // **NEW: Stop view tracking when user pauses**
+        if (index < _videos.length) {
+          final video = _videos[index];
+          _viewTracker.stopViewTracking(video.id);
+          AppLogger.log(
+              '⏸️ User paused video: ${video.id}, stopped view tracking');
+        }
+      } catch (e) {
+        AppLogger.log('❌ Error pausing video at index $index: $e');
       }
     } else {
-      // Playing video
-      controller.play();
-      setState(() {
-        _controllerStates[index] = true;
-        _userPaused[index] = false; // hide when playing
-      });
+      // **FIX: Video is paused, so play it**
+      try {
+        controller.play();
+        setState(() {
+          _controllerStates[index] = true;
+          _userPaused[index] = false; // hide when playing
+        });
+        AppLogger.log('▶️ Successfully played video at index $index');
 
-      // **NEW: Start view tracking when user plays**
-      if (index < _videos.length) {
-        final video = _videos[index];
-        _viewTracker.startViewTracking(video.id,
-            videoUploaderId: video.uploader.id);
-        AppLogger.log(
-            '▶️ User played video: ${video.id}, started view tracking');
+        // **NEW: Start view tracking when user plays**
+        if (index < _videos.length) {
+          final video = _videos[index];
+          _viewTracker.startViewTracking(video.id,
+              videoUploaderId: video.uploader.id);
+          AppLogger.log(
+              '▶️ User played video: ${video.id}, started view tracking');
+        }
+      } catch (e) {
+        AppLogger.log('❌ Error playing video at index $index: $e');
       }
     }
   }
@@ -3043,17 +3097,20 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       children: [
         // **NEW: Earnings label just below banner, top-right corner**
         Positioned(
-          top: 62, // Added 2px margin from top
+          top:
+              52, // **REDUCED from 62 to account for smaller banner (50px + 2px margin)**
           right: 8,
           child: _buildEarningsLabel(video),
         ),
 
         Positioned(
-          bottom: 12, // Increased spacing from progress bar
+          bottom:
+              8, // **REDUCED from 12 - moves content closer to progress bar**
           left: 0,
-          right: 80, // Leave space for vertical action buttons
+          right: 75, // **REDUCED from 80 - gives more width to video info**
           child: Container(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            padding: const EdgeInsets.fromLTRB(
+                12, 8, 12, 0), // **REDUCED padding for more space**
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -3068,7 +3125,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                         onTap: () =>
                             _navigateToCreatorProfile(video.uploader.id),
                         child: CircleAvatar(
-                          radius: 16,
+                          radius:
+                              12, // **REDUCED from 16 for more compact look**
                           backgroundImage: video.uploader.profilePic.isNotEmpty
                               ? NetworkImage(video.uploader.profilePic)
                               : null,
@@ -3080,13 +3138,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 12,
+                                    fontSize:
+                                        10, // **REDUCED from 12 to match smaller avatar**
                                   ),
                                 )
                               : null,
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6), // **REDUCED from 8**
                       Expanded(
                         child: GestureDetector(
                           onTap: () =>
@@ -3095,33 +3154,33 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                             video.uploader.name,
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 14,
+                              fontSize: 12, // **REDUCED from 14**
                               fontWeight: FontWeight.w600,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6), // **REDUCED from 8**
                       // Professional follow/unfollow button
                       _buildFollowTextButton(video),
                     ],
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6), // **REDUCED from 8**
 
                 // Video title (moved below uploader name)
                 Text(
                   video.videoName,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 12,
+                    fontSize: 11, // **REDUCED from 12**
                     fontWeight: FontWeight.bold,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4), // **REDUCED from 6**
                 if (video.link?.isNotEmpty == true)
                   GestureDetector(
                     onTap: () => _handleVisitNow(video),
@@ -3129,8 +3188,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                       width: MediaQuery.of(context).size.width *
                           0.75, // 50% of screen width
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 8,
+                        horizontal: 16, // **REDUCED from 20**
+                        vertical: 6, // **REDUCED from 8**
                       ),
                       decoration: BoxDecoration(
                         color: Colors.black.withOpacity(0.6),
@@ -3150,14 +3209,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                           Icon(
                             Icons.open_in_new,
                             color: Colors.white,
-                            size: 16,
+                            size: 14, // **REDUCED from 16**
                           ),
-                          SizedBox(width: 8),
+                          SizedBox(width: 6), // **REDUCED from 8**
                           Text(
                             'Visit Now',
                             style: TextStyle(
                               color: Colors.white,
-                              fontSize: 14,
+                              fontSize: 12, // **REDUCED from 14**
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -3174,8 +3233,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
         // Vertical action buttons on the right
         Positioned(
-          right: 16,
-          bottom: 20, // **REDUCED: From 80 to 40**
+          right: 12, // **REDUCED from 16**
+          bottom: 12, // **REDUCED from 20 - moves buttons up for more space**
           child: Column(
             children: [
               // Like button with count
@@ -3185,7 +3244,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                 count: video.likes,
                 onTap: () => _handleLike(video, index),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10), // **REDUCED from 12**
 
               // Comment button with count
               _buildVerticalActionButton(
@@ -3193,14 +3252,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                 count: video.comments.length,
                 onTap: () => _handleComment(video),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10), // **REDUCED from 12**
 
               // Share button
               _buildVerticalActionButton(
                 icon: Icons.share,
                 onTap: () => _handleShare(video),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10), // **REDUCED from 12**
 
               // **NEW: Carousel ad navigation - swipe indicator**
               // Always show the arrow indicator (per requirement)
@@ -3209,15 +3268,16 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                 child: Column(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(10), // **REDUCED from 12**
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.6),
+                        color: Colors.black
+                            .withOpacity(0.5), // **REDUCED opacity from 0.6**
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
                         Icons.arrow_forward_ios,
                         color: Colors.white,
-                        size: 20,
+                        size: 18, // **REDUCED from 20**
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -3250,12 +3310,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(8), // **REDUCED from 10**
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.6),
+              color:
+                  Colors.black.withOpacity(0.5), // **REDUCED opacity from 0.6**
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: color, size: 19),
+            child: Icon(icon, color: color, size: 18), // **REDUCED from 19**
           ),
           if (count != null) ...[
             const SizedBox(height: 4),

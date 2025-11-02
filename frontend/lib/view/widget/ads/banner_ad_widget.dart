@@ -77,7 +77,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
           alignment: Alignment.centerLeft,
           child: Container(
             width: MediaQuery.of(context).size.width * 0.8, // 20% narrower
-            height: 60, // keep height unchanged
+            height: 50, // **REDUCED from 60 for more video space**
             margin: const EdgeInsets.only(top: 1, left: 16), // left margin
             decoration: BoxDecoration(
               color: Colors.black, // opaque background
@@ -101,7 +101,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
                       Expanded(
                         flex: 2,
                         child: SizedBox(
-                          height: 60,
+                          height: 50, // **REDUCED from 60 to match container**
                           child: imageUrl.isNotEmpty
                               ? RepaintBoundary(
                                   // **FIX: Isolate image with RepaintBoundary**

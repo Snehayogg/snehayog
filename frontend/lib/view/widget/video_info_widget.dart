@@ -4,7 +4,6 @@ import 'package:vayu/core/constants/app_constants.dart';
 import 'package:vayu/view/screens/profile_screen.dart';
 import 'package:vayu/view/widget/follow_button_widget.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:vayu/utils/app_logger.dart';
 
 class VideoInfoWidget extends StatelessWidget {
   final VideoModel video;
@@ -45,7 +44,7 @@ class VideoInfoWidget extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           // **REDUCED spacing from 8 to 4**
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
 
           // Uploader information (tappable to go to profile)
           _UploaderInfoSection(video: video),
@@ -57,7 +56,7 @@ class VideoInfoWidget extends StatelessWidget {
               if (video.link != null && video.link!.isNotEmpty) {
                 return Column(
                   children: [
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 2),
                     _VisitNowButton(link: video.link!),
                   ],
                 );
@@ -97,7 +96,7 @@ class _UploaderInfoSection extends StatelessWidget {
             child: Row(
               children: [
                 _UploaderAvatar(uploader: video.uploader),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     video.uploader.name,
@@ -116,7 +115,7 @@ class _UploaderInfoSection extends StatelessWidget {
         ),
 
         // Follow button
-        const SizedBox(width: 6),
+        const SizedBox(width: 4),
         FollowButtonWidget(
           uploaderId: video.uploader.id,
           uploaderName: video.uploader.name,
@@ -242,8 +241,8 @@ class _VisitNowButton extends StatelessWidget {
           surfaceTintColor:
               Colors.transparent, // Remove Material 3 surface tint
           shadowColor: Colors.transparent, // Remove shadow
-          // **KEEPING same height - only vertical padding unchanged**
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          // **REDUCED padding for more compact button**
+          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(6),
           ),
