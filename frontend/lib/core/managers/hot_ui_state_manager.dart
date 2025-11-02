@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:vayu/model/video_model.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 /// **WhatsApp-Style Hot UI State Manager**
 /// Maintains UI state during background/foreground transitions
@@ -33,7 +34,7 @@ class HotUIStateManager {
     required Map<int, VideoPlayerController> controllers,
     required Map<int, VideoModel> videos,
   }) {
-    print('💾 HotUIStateManager: Saving UI state before background');
+    AppLogger.log('💾 HotUIStateManager: Saving UI state before background');
 
     _lastActiveIndex = currentIndex;
     _lastScrollPosition = scrollPosition;
@@ -60,7 +61,7 @@ class HotUIStateManager {
 
   /// **Restore UI state when coming to foreground**
   Map<String, dynamic> restoreUIState() {
-    print('🔄 HotUIStateManager: Restoring UI state from background');
+    AppLogger.log('🔄 HotUIStateManager: Restoring UI state from background');
 
     _isInBackground = false;
     _isStateRestored = true;
@@ -96,7 +97,7 @@ class HotUIStateManager {
 
   /// **Pause all preserved controllers (WhatsApp-style)**
   Future<void> pausePreservedControllers() async {
-    print(
+    AppLogger.log(
         '⏸️ HotUIStateManager: Pausing preserved controllers (WhatsApp-style)');
 
     for (final controller in _preservedControllers.values) {
@@ -107,14 +108,15 @@ class HotUIStateManager {
           controller.setVolume(0.0); // Mute audio
         }
       } catch (e) {
-        print('⚠️ HotUIStateManager: Error pausing preserved controller: $e');
+        AppLogger.log(
+            '⚠️ HotUIStateManager: Error pausing preserved controller: $e');
       }
     }
   }
 
   /// **Resume preserved controllers (WhatsApp-style)**
   Future<void> resumePreservedControllers() async {
-    print(
+    AppLogger.log(
         '▶️ HotUIStateManager: Resuming preserved controllers (WhatsApp-style)');
 
     for (final controller in _preservedControllers.values) {
@@ -125,7 +127,8 @@ class HotUIStateManager {
           controller.setVolume(1.0); // Restore audio
         }
       } catch (e) {
-        print('⚠️ HotUIStateManager: Error resuming preserved controller: $e');
+        AppLogger.log(
+            '⚠️ HotUIStateManager: Error resuming preserved controller: $e');
       }
     }
   }
@@ -135,7 +138,7 @@ class HotUIStateManager {
     _backgroundCleanupTimer?.cancel();
     _backgroundCleanupTimer = Timer(_backgroundCleanupDelay, () {
       if (_isInBackground) {
-        print(
+        AppLogger.log(
             '🧹 HotUIStateManager: Performing background cleanup after delay');
         _performBackgroundCleanup();
       }
@@ -144,7 +147,7 @@ class HotUIStateManager {
 
   /// **Perform background cleanup (like WhatsApp)**
   void _performBackgroundCleanup() {
-    print('🧹 HotUIStateManager: Cleaning up background resources');
+    AppLogger.log('🧹 HotUIStateManager: Cleaning up background resources');
 
     // **Clean up old controllers (keep only active one)**
     final activeIndex = _lastActiveIndex;
@@ -173,16 +176,16 @@ class HotUIStateManager {
     switch (state) {
       case AppLifecycleState.paused:
       case AppLifecycleState.inactive:
-        print(
+        AppLogger.log(
             '📱 HotUIStateManager: App going to background - preserving state');
         pausePreservedControllers();
         break;
       case AppLifecycleState.resumed:
-        print('📱 HotUIStateManager: App resuming - restoring state');
+        AppLogger.log('📱 HotUIStateManager: App resuming - restoring state');
         resumePreservedControllers();
         break;
       case AppLifecycleState.detached:
-        print('📱 HotUIStateManager: App detached - cleaning up');
+        AppLogger.log('📱 HotUIStateManager: App detached - cleaning up');
         _performBackgroundCleanup();
         break;
       default:
@@ -192,7 +195,7 @@ class HotUIStateManager {
 
   /// **Clear all preserved state**
   void clearPreservedState() {
-    print('🧹 HotUIStateManager: Clearing all preserved state');
+    AppLogger.log('🧹 HotUIStateManager: Clearing all preserved state');
 
     for (final controller in _preservedControllers.values) {
       controller.dispose();
@@ -222,7 +225,7 @@ class HotUIStateManager {
 
   /// **Dispose and cleanup all resources**
   void dispose() {
-    print('🗑️ HotUIStateManager: Disposing all resources');
+    AppLogger.log('🗑️ HotUIStateManager: Disposing all resources');
     clearPreservedState();
   }
 }

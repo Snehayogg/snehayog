@@ -3,6 +3,7 @@ import 'package:vayu/config/app_config.dart';
 import 'package:vayu/services/authservices.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:vayu/utils/app_logger.dart';
 
 class CreatorPayoutDashboard extends StatefulWidget {
   const CreatorPayoutDashboard({Key? key}) : super(key: key);
@@ -36,27 +37,30 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
         _error = null; // Clear previous errors
       });
 
-      print('🔍 CreatorPayoutDashboard: Starting data load...');
-      print('🔍 Base URL: ${AppConfig.baseUrl}');
+      AppLogger.log('🔍 CreatorPayoutDashboard: Starting data load...');
+      AppLogger.log('🔍 Base URL: ${AppConfig.baseUrl}');
 
       final userData = await _authService.getUserData();
-      print('🔍 CreatorPayoutDashboard: User data loaded: ${userData != null}');
+      AppLogger.log(
+          '🔍 CreatorPayoutDashboard: User data loaded: ${userData != null}');
 
       if (userData != null) {
-        print('🔍 User data keys: ${userData.keys.toList()}');
-        print('🔍 User ID: ${userData['id']}');
-        print('🔍 User email: ${userData['email']}');
+        AppLogger.log('🔍 User data keys: ${userData.keys.toList()}');
+        AppLogger.log('🔍 User ID: ${userData['id']}');
+        AppLogger.log('🔍 User email: ${userData['email']}');
       }
 
       final token = userData?['token'];
-      print('🔍 CreatorPayoutDashboard: Token available: ${token != null}');
+      AppLogger.log(
+          '🔍 CreatorPayoutDashboard: Token available: ${token != null}');
       if (token != null) {
-        print('🔍 Token length: ${token.toString().length}');
-        print('🔍 Token starts with: ${token.toString().substring(0, 20)}...');
+        AppLogger.log('🔍 Token length: ${token.toString().length}');
+        AppLogger.log(
+            '🔍 Token starts with: ${token.toString().substring(0, 20)}...');
       }
 
       if (token == null) {
-        print('❌ CreatorPayoutDashboard: No token found');
+        AppLogger.log('❌ CreatorPayoutDashboard: No token found');
         setState(() {
           _error = 'Please login first to view payout dashboard';
           _isLoading = false;
@@ -64,12 +68,12 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
         return;
       }
 
-      print('🔍 Token found, making API calls...');
-      print('🔍 Base URL: ${AppConfig.baseUrl}');
+      AppLogger.log('🔍 Token found, making API calls...');
+      AppLogger.log('🔍 Base URL: ${AppConfig.baseUrl}');
 
       // Load profile data
       final profileUrl = '${AppConfig.baseUrl}/api/creator-payouts/profile';
-      print('🔍 CreatorPayoutDashboard: Profile URL: $profileUrl');
+      AppLogger.log('🔍 CreatorPayoutDashboard: Profile URL: $profileUrl');
 
       final profileResponse = await http.get(
         Uri.parse(profileUrl),
@@ -83,23 +87,24 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
           throw Exception('Profile API request timed out');
         },
       ).catchError((error) {
-        print('❌ HTTP Request Error: $error');
+        AppLogger.log('❌ HTTP Request Error: $error');
         throw Exception('Network error: $error');
       });
 
-      print('🔍 Profile response status: ${profileResponse.statusCode}');
-      print('🔍 Profile response body: ${profileResponse.body}');
+      AppLogger.log(
+          '🔍 Profile response status: ${profileResponse.statusCode}');
+      AppLogger.log('🔍 Profile response body: ${profileResponse.body}');
 
       if (profileResponse.statusCode == 200) {
         setState(() {
           _profileData = json.decode(profileResponse.body);
         });
-        print('✅ Profile data loaded successfully');
-        print('🔍 Profile data keys: ${_profileData?.keys.toList()}');
-        print('🔍 Creator info: ${_profileData?['creator']}');
+        AppLogger.log('✅ Profile data loaded successfully');
+        AppLogger.log('🔍 Profile data keys: ${_profileData?.keys.toList()}');
+        AppLogger.log('🔍 Creator info: ${_profileData?['creator']}');
       } else if (profileResponse.statusCode == 404) {
         // User doesn't have creator profile yet - show setup message
-        print(
+        AppLogger.log(
             '⚠️ Creator profile not found - user needs to set up creator account');
         setState(() {
           _profileData = {
@@ -119,7 +124,7 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
         });
         // Don't set _isLoading = false here, let it continue to load history
       } else {
-        print('❌ Profile data failed: ${profileResponse.statusCode}');
+        AppLogger.log('❌ Profile data failed: ${profileResponse.statusCode}');
         setState(() {
           _error =
               'Failed to load profile data (${profileResponse.statusCode}): ${profileResponse.body}';
@@ -130,7 +135,7 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
 
       // Load payout history
       final historyUrl = '${AppConfig.baseUrl}/api/creator-payouts/monthly';
-      print('🔍 History URL: $historyUrl');
+      AppLogger.log('🔍 History URL: $historyUrl');
 
       final historyResponse = await http.get(
         Uri.parse(historyUrl),
@@ -140,8 +145,9 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
         },
       );
 
-      print('🔍 History response status: ${historyResponse.statusCode}');
-      print('🔍 History response body: ${historyResponse.body}');
+      AppLogger.log(
+          '🔍 History response status: ${historyResponse.statusCode}');
+      AppLogger.log('🔍 History response body: ${historyResponse.body}');
 
       if (historyResponse.statusCode == 200) {
         final historyData = json.decode(historyResponse.body);
@@ -149,10 +155,11 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
           _payoutHistory =
               List<Map<String, dynamic>>.from(historyData['payouts'] ?? []);
         });
-        print('✅ Payout history loaded: ${_payoutHistory.length} records');
+        AppLogger.log(
+            '✅ Payout history loaded: ${_payoutHistory.length} records');
       } else {
         // Don't fail completely if history fails, just log it
-        print(
+        AppLogger.log(
             '⚠️ Warning: Failed to load payout history (${historyResponse.statusCode}): ${historyResponse.body}');
         setState(() {
           _payoutHistory = []; // Initialize empty list
@@ -162,9 +169,10 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
       setState(() {
         _isLoading = false;
       });
-      print('✅ Dashboard data loading completed');
+      AppLogger.log('✅ Dashboard data loading completed');
     } catch (e) {
-      print('❌ CreatorPayoutDashboard: Error loading dashboard data: $e');
+      AppLogger.log(
+          '❌ CreatorPayoutDashboard: Error loading dashboard data: $e');
       setState(() {
         _error = 'Failed to load dashboard: ${e.toString()}';
         _isLoading = false;
@@ -190,12 +198,12 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
 
   Future<void> _testBackendConnection() async {
     try {
-      print('🔍 Testing backend connection...');
-      print('🔍 Base URL: ${AppConfig.baseUrl}');
+      AppLogger.log('🔍 Testing backend connection...');
+      AppLogger.log('🔍 Base URL: ${AppConfig.baseUrl}');
 
       // Test the health endpoint first (no auth required)
       final healthUrl = '${AppConfig.baseUrl}/api/creator-payouts/health';
-      print('🔍 Testing health endpoint: $healthUrl');
+      AppLogger.log('🔍 Testing health endpoint: $healthUrl');
 
       final healthResponse = await http.get(Uri.parse(healthUrl)).timeout(
         const Duration(seconds: 5),
@@ -203,17 +211,17 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
           throw Exception('Health check timed out - backend may be down');
         },
       );
-      print('🔍 Health response status: ${healthResponse.statusCode}');
-      print('🔍 Health response body: ${healthResponse.body}');
+      AppLogger.log('🔍 Health response status: ${healthResponse.statusCode}');
+      AppLogger.log('🔍 Health response body: ${healthResponse.body}');
 
       if (healthResponse.statusCode == 200) {
         // Test the test endpoint
         final testUrl = '${AppConfig.baseUrl}/api/creator-payouts/test';
-        print('🔍 Testing test endpoint: $testUrl');
+        AppLogger.log('🔍 Testing test endpoint: $testUrl');
 
         final testResponse = await http.get(Uri.parse(testUrl));
-        print('🔍 Test response status: ${testResponse.statusCode}');
-        print('🔍 Test response body: ${testResponse.body}');
+        AppLogger.log('🔍 Test response status: ${testResponse.statusCode}');
+        AppLogger.log('🔍 Test response body: ${testResponse.body}');
 
         if (testResponse.statusCode == 200) {
           if (mounted) {
@@ -250,7 +258,7 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
         }
       }
     } catch (e) {
-      print('❌ Backend connection test failed: $e');
+      AppLogger.log('❌ Backend connection test failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -265,10 +273,10 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
 
   Future<void> _testAuthentication() async {
     try {
-      print('🔍 Testing authentication...');
+      AppLogger.log('🔍 Testing authentication...');
 
       final userData = await _authService.getUserData();
-      print('🔍 User data available: ${userData != null}');
+      AppLogger.log('🔍 User data available: ${userData != null}');
 
       if (userData == null) {
         if (mounted) {
@@ -284,7 +292,7 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
       }
 
       final token = userData['token'];
-      print('🔍 Token available: ${token != null}');
+      AppLogger.log('🔍 Token available: ${token != null}');
 
       if (token == null) {
         if (mounted) {
@@ -302,7 +310,7 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
 
       // Test authenticated endpoint
       final profileUrl = '${AppConfig.baseUrl}/api/creator-payouts/profile';
-      print('🔍 Testing authenticated endpoint: $profileUrl');
+      AppLogger.log('🔍 Testing authenticated endpoint: $profileUrl');
 
       final response = await http.get(
         Uri.parse(profileUrl),
@@ -312,8 +320,8 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
         },
       ).timeout(const Duration(seconds: 5));
 
-      print('🔍 Auth test response status: ${response.statusCode}');
-      print('🔍 Auth test response body: ${response.body}');
+      AppLogger.log('🔍 Auth test response status: ${response.statusCode}');
+      AppLogger.log('🔍 Auth test response body: ${response.body}');
 
       if (mounted) {
         if (response.statusCode == 200) {
@@ -344,7 +352,7 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
         }
       }
     } catch (e) {
-      print('❌ Authentication test failed: $e');
+      AppLogger.log('❌ Authentication test failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -359,7 +367,7 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    print(
+    AppLogger.log(
         '🔍 CreatorPayoutDashboard: Building widget - isLoading: $_isLoading, error: $_error, profileData: ${_profileData != null}');
 
     Widget bodyWidget;
@@ -370,7 +378,7 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
               ? _buildErrorWidget()
               : _buildDashboardContent();
     } catch (e) {
-      print('❌ CreatorPayoutDashboard: Error in build method: $e');
+      AppLogger.log('❌ CreatorPayoutDashboard: Error in build method: $e');
       bodyWidget = _buildErrorWidget();
     }
 
@@ -490,12 +498,12 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
   }
 
   Widget _buildDashboardContent() {
-    print(
+    AppLogger.log(
         '🔍 CreatorPayoutDashboard: Building dashboard content - profileData: ${_profileData != null}');
 
     // If profile data is null, show loading or error state instead of placeholder
     if (_profileData == null) {
-      print(
+      AppLogger.log(
           '⚠️ CreatorPayoutDashboard: Profile data is null, showing loading widget');
       return _buildLoadingWidget();
     }
@@ -527,7 +535,8 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
         ),
       );
     } catch (e) {
-      print('❌ CreatorPayoutDashboard: Error building dashboard content: $e');
+      AppLogger.log(
+          '❌ CreatorPayoutDashboard: Error building dashboard content: $e');
       return _buildErrorWidget();
     }
   }

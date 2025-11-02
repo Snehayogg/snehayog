@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/services/authservices.dart';
+import 'package:vayu/utils/app_logger.dart';
+import 'package:vayu/core/services/http_client_service.dart';
 
 class AdImpressionService {
   static final AdImpressionService _instance = AdImpressionService._internal();
@@ -17,15 +19,15 @@ class AdImpressionService {
     required String userId,
   }) async {
     try {
-      print('📊 AdImpressionService: Tracking banner ad impression:');
-      print('   Video ID: $videoId');
-      print('   Ad ID: $adId');
-      print('   User ID: $userId');
+      AppLogger.log('📊 AdImpressionService: Tracking banner ad impression:');
+      AppLogger.log('   Video ID: $videoId');
+      AppLogger.log('   Ad ID: $adId');
+      AppLogger.log('   User ID: $userId');
 
       final url = '${AppConfig.baseUrl}/api/ads/impressions/banner';
-      print('📊 AdImpressionService: Tracking API URL: $url');
+      AppLogger.log('📊 AdImpressionService: Tracking API URL: $url');
 
-      final response = await http.post(
+      final response = await httpClientService.post(
         Uri.parse(url),
         headers: {
           'Content-Type': 'application/json',
@@ -42,20 +44,21 @@ class AdImpressionService {
         }),
       );
 
-      print(
+      AppLogger.log(
           '📊 AdImpressionService: Tracking API response status: ${response.statusCode}');
-      print(
+      AppLogger.log(
           '📊 AdImpressionService: Tracking API response body: ${response.body}');
 
       if (response.statusCode == 201 || response.statusCode == 200) {
-        print(
+        AppLogger.log(
             '✅ AdImpressionService: Banner ad impression tracked successfully: Video $videoId, Ad $adId');
       } else {
-        print(
+        AppLogger.log(
             '❌ AdImpressionService: Failed to track banner ad impression: ${response.body}');
       }
     } catch (e) {
-      print('❌ AdImpressionService: Error tracking banner ad impression: $e');
+      AppLogger.log(
+          '❌ AdImpressionService: Error tracking banner ad impression: $e');
     }
   }
 
@@ -67,7 +70,7 @@ class AdImpressionService {
     required int scrollPosition,
   }) async {
     try {
-      final response = await http.post(
+      final response = await httpClientService.post(
         Uri.parse('${AppConfig.baseUrl}/api/ads/impressions/carousel'),
         headers: {
           'Content-Type': 'application/json',
@@ -86,13 +89,14 @@ class AdImpressionService {
       );
 
       if (response.statusCode == 201 || response.statusCode == 200) {
-        print(
+        AppLogger.log(
             '📊 Carousel ad impression tracked: Video $videoId, Ad $adId, Position: $scrollPosition');
       } else {
-        print('❌ Failed to track carousel ad impression: ${response.body}');
+        AppLogger.log(
+            '❌ Failed to track carousel ad impression: ${response.body}');
       }
     } catch (e) {
-      print('❌ Error tracking carousel ad impression: $e');
+      AppLogger.log('❌ Error tracking carousel ad impression: $e');
     }
   }
 
@@ -102,7 +106,7 @@ class AdImpressionService {
       final userData = await _authService.getUserData();
       if (userData == null) return {'banner': 0, 'carousel': 0, 'total': 0};
 
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('${AppConfig.baseUrl}/api/ads/impressions/video/$videoId'),
         headers: {
           'Authorization': 'Bearer ${userData['token']}',
@@ -120,7 +124,7 @@ class AdImpressionService {
 
       return {'banner': 0, 'carousel': 0, 'total': 0};
     } catch (e) {
-      print('❌ Error getting ad impressions: $e');
+      AppLogger.log('❌ Error getting ad impressions: $e');
       return {'banner': 0, 'carousel': 0, 'total': 0};
     }
   }
@@ -128,42 +132,45 @@ class AdImpressionService {
   /// Get banner ad impressions for a video (real API call)
   Future<int> getBannerAdImpressions(String videoId) async {
     try {
-      print(
+      AppLogger.log(
           '📊 AdImpressionService: Getting banner ad impressions for video: $videoId');
 
       final userData = await _authService.getUserData();
       if (userData == null) {
-        print('❌ AdImpressionService: No authenticated user found');
+        AppLogger.log('❌ AdImpressionService: No authenticated user found');
         return 0;
       }
 
       final url =
           '${AppConfig.baseUrl}/api/ads/impressions/video/$videoId/banner';
-      print('📊 AdImpressionService: API URL: $url');
+      AppLogger.log('📊 AdImpressionService: API URL: $url');
 
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse(url),
         headers: {
           'Authorization': 'Bearer ${userData['token']}',
         },
       );
 
-      print(
+      AppLogger.log(
           '📊 AdImpressionService: API response status: ${response.statusCode}');
-      print('📊 AdImpressionService: API response body: ${response.body}');
+      AppLogger.log(
+          '📊 AdImpressionService: API response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final count = data['count'] ?? 0;
-        print('📊 AdImpressionService: Banner impressions count: $count');
+        AppLogger.log(
+            '📊 AdImpressionService: Banner impressions count: $count');
         return count;
       } else {
-        print(
+        AppLogger.log(
             '❌ AdImpressionService: Failed to get banner impressions - Status: ${response.statusCode}');
         return 0;
       }
     } catch (e) {
-      print('❌ AdImpressionService: Error getting banner ad impressions: $e');
+      AppLogger.log(
+          '❌ AdImpressionService: Error getting banner ad impressions: $e');
       return 0;
     }
   }
@@ -174,7 +181,7 @@ class AdImpressionService {
       final userData = await _authService.getUserData();
       if (userData == null) return 0;
 
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse(
             '${AppConfig.baseUrl}/api/ads/impressions/video/$videoId/carousel'),
         headers: {
@@ -189,7 +196,7 @@ class AdImpressionService {
 
       return 0;
     } catch (e) {
-      print('❌ Error getting carousel ad impressions: $e');
+      AppLogger.log('❌ Error getting carousel ad impressions: $e');
       return 0;
     }
   }

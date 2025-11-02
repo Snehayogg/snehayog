@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:http/http.dart' as http;
+import 'package:vayu/utils/app_logger.dart';
 
 class DebugHelper {
   static void showDebugInfo(BuildContext context) {
@@ -78,16 +79,17 @@ class DebugHelper {
 
   static void logSignInAttempt(String step, {String? details}) {
     final timestamp = DateTime.now().toIso8601String();
-    print('🔐 [$timestamp] $step${details != null ? ': $details' : ''}');
+    AppLogger.log(
+        '🔐 [$timestamp] $step${details != null ? ': $details' : ''}');
   }
 
   static void logError(String step, String error) {
     final timestamp = DateTime.now().toIso8601String();
-    print('❌ [$timestamp] $step - Error: $error');
+    AppLogger.log('❌ [$timestamp] $step - Error: $error');
   }
 
   static void logSuccess(String step, {String? details}) {
     final timestamp = DateTime.now().toIso8601String();
-    print('✅ [$timestamp] $step${details != null ? ': $details' : ''}');
+    AppLogger.log('✅ [$timestamp] $step${details != null ? ': $details' : ''}');
   }
 }

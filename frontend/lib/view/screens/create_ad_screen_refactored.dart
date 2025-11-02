@@ -15,6 +15,7 @@ import 'package:vayu/services/ad_refresh_notifier.dart';
 import 'package:vayu/model/ad_model.dart';
 import 'package:vayu/controller/main_controller.dart';
 import 'dart:io';
+import 'package:vayu/utils/app_logger.dart';
 
 class CreateAdScreenRefactored extends StatefulWidget {
   const CreateAdScreenRefactored({super.key});
@@ -128,18 +129,18 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
 
-    print('🔍 CreateAdScreen: App lifecycle changed to $state');
+    AppLogger.log('🔍 CreateAdScreen: App lifecycle changed to $state');
 
     // **FIX: Handle app lifecycle properly to maintain state**
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached) {
-      print(
+      AppLogger.log(
           '🛑 CreateAdScreen: App backgrounded - pausing videos and saving state');
       _pauseBackgroundVideos();
       _saveFormState();
     } else if (state == AppLifecycleState.resumed) {
-      print('▶️ CreateAdScreen: App resumed - restoring state');
+      AppLogger.log('▶️ CreateAdScreen: App resumed - restoring state');
       _restoreFormState();
       // Don't resume videos automatically - let user navigate back to video feed
     }
@@ -152,37 +153,37 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
       final mainController =
           Provider.of<MainController>(context, listen: false);
       mainController.forcePauseVideos();
-      print('✅ CreateAdScreen: Background videos paused successfully');
+      AppLogger.log('✅ CreateAdScreen: Background videos paused successfully');
     } catch (e) {
-      print('❌ CreateAdScreen: Error pausing background videos: $e');
+      AppLogger.log('❌ CreateAdScreen: Error pausing background videos: $e');
     }
   }
 
   /// **NEW: Save form state when app is minimized**
   void _saveFormState() {
     try {
-      print('💾 CreateAdScreen: Saving form state...');
+      AppLogger.log('💾 CreateAdScreen: Saving form state...');
 
       // Save form data to SharedPreferences
       _saveFormData();
 
-      print('✅ CreateAdScreen: Form state saved successfully');
+      AppLogger.log('✅ CreateAdScreen: Form state saved successfully');
     } catch (e) {
-      print('❌ CreateAdScreen: Error saving form state: $e');
+      AppLogger.log('❌ CreateAdScreen: Error saving form state: $e');
     }
   }
 
   /// **NEW: Restore form state when app is resumed**
   void _restoreFormState() {
     try {
-      print('🔄 CreateAdScreen: Restoring form state...');
+      AppLogger.log('🔄 CreateAdScreen: Restoring form state...');
 
       // Restore form data from SharedPreferences
       _restoreFormData();
 
-      print('✅ CreateAdScreen: Form state restored successfully');
+      AppLogger.log('✅ CreateAdScreen: Form state restored successfully');
     } catch (e) {
-      print('❌ CreateAdScreen: Error restoring form state: $e');
+      AppLogger.log('❌ CreateAdScreen: Error restoring form state: $e');
     }
   }
 
@@ -236,9 +237,9 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
       await prefs.setStringList(
           'create_ad_day_parting_values', dayPartingValues);
 
-      print('✅ CreateAdScreen: Form data saved to SharedPreferences');
+      AppLogger.log('✅ CreateAdScreen: Form data saved to SharedPreferences');
     } catch (e) {
-      print('❌ CreateAdScreen: Error saving form data: $e');
+      AppLogger.log('❌ CreateAdScreen: Error saving form data: $e');
     }
   }
 
@@ -315,9 +316,10 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
         setState(() {});
       }
 
-      print('✅ CreateAdScreen: Form data restored from SharedPreferences');
+      AppLogger.log(
+          '✅ CreateAdScreen: Form data restored from SharedPreferences');
     } catch (e) {
-      print('❌ CreateAdScreen: Error restoring form data: $e');
+      AppLogger.log('❌ CreateAdScreen: Error restoring form data: $e');
     }
   }
 
@@ -1174,11 +1176,11 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
   /// **NEW: Notify video feed to refresh ads**
   void _notifyVideoFeedRefresh() {
     try {
-      print('🔄 CreateAdScreen: Notifying video feed to refresh ads');
+      AppLogger.log('🔄 CreateAdScreen: Notifying video feed to refresh ads');
       AdRefreshNotifier().notifyRefresh();
-      print('✅ CreateAdScreen: Video feed notification sent');
+      AppLogger.log('✅ CreateAdScreen: Video feed notification sent');
     } catch (e) {
-      print('❌ Error notifying video feed refresh: $e');
+      AppLogger.log('❌ Error notifying video feed refresh: $e');
     }
   }
 
@@ -1496,33 +1498,34 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
 
     try {
       if (_selectedAdType == 'banner' && _selectedImage != null) {
-        print('🔄 CreateAdScreen: Uploading banner image...');
+        AppLogger.log('🔄 CreateAdScreen: Uploading banner image...');
         final imageUrl = await _cloudinaryService.uploadImage(_selectedImage!);
         mediaUrls.add(imageUrl);
-        print('✅ CreateAdScreen: Banner image uploaded: $imageUrl');
+        AppLogger.log('✅ CreateAdScreen: Banner image uploaded: $imageUrl');
       } else if (_selectedAdType == 'carousel') {
         if (_selectedImages.isNotEmpty) {
-          print(
+          AppLogger.log(
               '🔄 CreateAdScreen: Uploading ${_selectedImages.length} carousel images...');
           for (int i = 0; i < _selectedImages.length; i++) {
             final image = _selectedImages[i];
-            print(
+            AppLogger.log(
                 '🔄 CreateAdScreen: Uploading carousel image ${i + 1}/${_selectedImages.length}...');
             final imageUrl = await _cloudinaryService.uploadImage(image);
             mediaUrls.add(imageUrl);
-            print(
+            AppLogger.log(
                 '✅ CreateAdScreen: Carousel image ${i + 1} uploaded: $imageUrl');
           }
         }
         if (_selectedVideo != null) {
-          print('🔄 CreateAdScreen: Uploading carousel video...');
-          print('🔄 CreateAdScreen: Video file path: ${_selectedVideo!.path}');
-          print(
+          AppLogger.log('🔄 CreateAdScreen: Uploading carousel video...');
+          AppLogger.log(
+              '🔄 CreateAdScreen: Video file path: ${_selectedVideo!.path}');
+          AppLogger.log(
               '🔄 CreateAdScreen: Video file size: ${await _selectedVideo!.length()} bytes');
 
           final result =
               await _cloudinaryService.uploadVideoForAd(_selectedVideo!);
-          print('🔄 CreateAdScreen: Video upload result: $result');
+          AppLogger.log('🔄 CreateAdScreen: Video upload result: $result');
 
           final videoUrl =
               result['url'] ?? result['hls_urls']?['hls_stream'] ?? '';
@@ -1531,15 +1534,15 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                 'Video upload succeeded but no URL returned. Result: $result');
           }
           mediaUrls.add(videoUrl);
-          print('✅ CreateAdScreen: Carousel video uploaded: $videoUrl');
+          AppLogger.log('✅ CreateAdScreen: Carousel video uploaded: $videoUrl');
         }
       }
 
-      print(
+      AppLogger.log(
           '✅ CreateAdScreen: All media files uploaded successfully. Total URLs: ${mediaUrls.length}');
       return mediaUrls;
     } catch (e) {
-      print('❌ CreateAdScreen: Error uploading media files: $e');
+      AppLogger.log('❌ CreateAdScreen: Error uploading media files: $e');
       rethrow;
     }
   }
@@ -1630,9 +1633,9 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
       await prefs.remove('create_ad_day_parting_keys');
       await prefs.remove('create_ad_day_parting_values');
 
-      print('✅ CreateAdScreen: Saved form state cleared');
+      AppLogger.log('✅ CreateAdScreen: Saved form state cleared');
     } catch (e) {
-      print('❌ CreateAdScreen: Error clearing saved form state: $e');
+      AppLogger.log('❌ CreateAdScreen: Error clearing saved form state: $e');
     }
   }
 }

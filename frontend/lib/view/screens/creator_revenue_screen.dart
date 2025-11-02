@@ -4,6 +4,7 @@ import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/video_service.dart';
 import 'package:vayu/model/video_model.dart';
 import 'package:vayu/services/ad_impression_service.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 class CreatorRevenueScreen extends StatefulWidget {
   const CreatorRevenueScreen({super.key});
@@ -82,16 +83,16 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
       final carouselRevenue = (carouselImpressions / 1000) * carouselCpm;
       final totalRevenue = bannerRevenue + carouselRevenue;
 
-      print('💰 Video: ${video.videoName}');
-      print(
+      AppLogger.log('💰 Video: ${video.videoName}');
+      AppLogger.log(
           '💰 Banner Impressions: $bannerImpressions (₹${bannerRevenue.toStringAsFixed(2)})');
-      print(
+      AppLogger.log(
           '💰 Carousel Impressions: $carouselImpressions (₹${carouselRevenue.toStringAsFixed(2)})');
-      print('💰 Total Revenue: ₹${totalRevenue.toStringAsFixed(2)}');
+      AppLogger.log('💰 Total Revenue: ₹${totalRevenue.toStringAsFixed(2)}');
 
       return totalRevenue;
     } catch (e) {
-      print('❌ Error calculating video revenue: $e');
+      AppLogger.log('❌ Error calculating video revenue: $e');
       return 0.0;
     }
   }
@@ -110,12 +111,12 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
       // Total impressions = Banner + Carousel
       final totalImpressions = bannerImpressions + carouselImpressions;
 
-      print(
+      AppLogger.log(
           '📊 Video $videoId: Banner: $bannerImpressions, Carousel: $carouselImpressions, Total: $totalImpressions');
 
       return totalImpressions;
     } catch (e) {
-      print('❌ Error getting ad impressions: $e');
+      AppLogger.log('❌ Error getting ad impressions: $e');
       return 0;
     }
   }
@@ -136,12 +137,12 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         _totalRevenue = totalRevenue;
       });
 
-      print(
+      AppLogger.log(
           '💰 CreatorRevenueScreen: Total revenue calculated: ₹${totalRevenue.toStringAsFixed(2)}');
-      print(
+      AppLogger.log(
           '💰 CreatorRevenueScreen: Video revenue breakdown: $_videoRevenueMap');
     } catch (e) {
-      print('❌ Error calculating total revenue: $e');
+      AppLogger.log('❌ Error calculating total revenue: $e');
     }
   }
 
@@ -170,7 +171,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         'calculation_timestamp': DateTime.now().toIso8601String(),
       };
     } catch (e) {
-      print('❌ Error getting revenue analytics: $e');
+      AppLogger.log('❌ Error getting revenue analytics: $e');
       return {};
     }
   }

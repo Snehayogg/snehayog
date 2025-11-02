@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:vayu/services/ad_service.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/model/ad_model.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 /// **ENHANCED AD MANAGEMENT SCREEN**
 /// Complete ad management with advanced targeting, performance analytics, and bulk operations
@@ -54,16 +55,17 @@ class _AdManagementScreenState extends State<AdManagementScreen>
     });
 
     try {
-      print('🔍 AdManagementScreen: Loading user ads...');
+      AppLogger.log('🔍 AdManagementScreen: Loading user ads...');
       final ads = await _adService.getUserAds();
-      print('✅ AdManagementScreen: Successfully loaded ${ads.length} ads');
+      AppLogger.log(
+          '✅ AdManagementScreen: Successfully loaded ${ads.length} ads');
 
       setState(() {
         _ads = ads;
         _isLoading = false;
       });
     } catch (e) {
-      print('❌ AdManagementScreen: Error loading ads: $e');
+      AppLogger.log('❌ AdManagementScreen: Error loading ads: $e');
       setState(() {
         _errorMessage = 'Error loading ads: $e';
         _isLoading = false;
@@ -122,14 +124,15 @@ class _AdManagementScreenState extends State<AdManagementScreen>
 
     if (confirmed == true) {
       try {
-        print(
+        AppLogger.log(
             '🗑️ AdManagementScreen: Starting delete for ad: ${ad.id} - ${ad.title}');
 
         final success = await _adService.deleteAd(ad.id);
-        print('🔍 AdManagementScreen: Delete result: $success');
+        AppLogger.log('🔍 AdManagementScreen: Delete result: $success');
 
         if (success) {
-          print('✅ AdManagementScreen: Delete successful, reloading ads...');
+          AppLogger.log(
+              '✅ AdManagementScreen: Delete successful, reloading ads...');
           await _loadAds(); // Reload ads
 
           if (mounted) {
@@ -141,11 +144,11 @@ class _AdManagementScreenState extends State<AdManagementScreen>
             );
           }
         } else {
-          print('❌ AdManagementScreen: Delete returned false');
+          AppLogger.log('❌ AdManagementScreen: Delete returned false');
           throw Exception('Delete operation failed');
         }
       } catch (e) {
-        print('❌ AdManagementScreen: Delete error: $e');
+        AppLogger.log('❌ AdManagementScreen: Delete error: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(

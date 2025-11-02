@@ -5,6 +5,7 @@ import 'package:vayu/core/services/profile_screen_logger.dart';
 import 'package:vayu/view/screens/video_screen.dart';
 import 'package:vayu/core/managers/shared_video_controller_pool.dart';
 import 'package:vayu/model/video_model.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 class ProfileVideosWidget extends StatelessWidget {
   final ProfileStateManager stateManager;
@@ -33,10 +34,9 @@ class ProfileVideosWidget extends StatelessWidget {
         if (video.thumbnailUrl.isNotEmpty) {
           try {
             await precacheImage(NetworkImage(video.thumbnailUrl), context);
-            print(
-                '🖼️ ProfileVideosWidget: Preloaded thumbnail for ${video.videoName}');
           } catch (e) {
-            print('⚠️ ProfileVideosWidget: Failed to preload thumbnail: $e');
+            AppLogger.log(
+                '⚠️ ProfileVideosWidget: Failed to preload thumbnail: $e');
           }
         }
       }

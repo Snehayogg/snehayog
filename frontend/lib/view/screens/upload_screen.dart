@@ -9,6 +9,7 @@ import 'package:vayu/services/authservices.dart';
 import 'package:vayu/view/screens/create_ad_screen_refactored.dart';
 import 'package:vayu/view/screens/ad_management_screen.dart';
 import 'package:vayu/core/constants/interests.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 class UploadScreen extends StatefulWidget {
   final VoidCallback? onVideoUploaded; // Add callback for video upload success
@@ -482,13 +483,13 @@ class _UploadScreenState extends State<UploadScreen> {
     }
 
     try {
-      print('🚀 Starting HLS video upload...');
-      print('📁 Video path: ${_selectedVideo.value?.path}');
-      print('📝 Title: ${_titleController.text}');
-      print(
+      AppLogger.log('🚀 Starting HLS video upload...');
+      AppLogger.log('📁 Video path: ${_selectedVideo.value?.path}');
+      AppLogger.log('📝 Title: ${_titleController.text}');
+      AppLogger.log(
         '🔗 Link: ${_linkController.text.isNotEmpty ? _linkController.text : 'None'}',
       );
-      print(
+      AppLogger.log(
         '🎬 Note: Video will be converted to HLS (.m3u8) format for optimal streaming',
       );
 
@@ -505,7 +506,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
       // Check file size
       final fileSize = await _selectedVideo.value!.length();
-      print(
+      AppLogger.log(
         'File size: $fileSize bytes (${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB)',
       );
       if (fileSize > 100 * 1024 * 1024) {
@@ -551,12 +552,13 @@ class _UploadScreenState extends State<UploadScreen> {
         },
       );
 
-      print('✅ Video upload started successfully!');
-      print('🎬 Uploaded video details: $uploadedVideo');
+      AppLogger.log('✅ Video upload started successfully!');
+      AppLogger.log('🎬 Uploaded video details: $uploadedVideo');
 
       // **FIX: Handle correct response structure from VideoService**
-      print('🔄 Processing status: ${uploadedVideo['processingStatus']}');
-      print('🆔 Video ID: ${uploadedVideo['id']}');
+      AppLogger.log(
+          '🔄 Processing status: ${uploadedVideo['processingStatus']}');
+      AppLogger.log('🆔 Video ID: ${uploadedVideo['id']}');
 
       // Update to validation phase
       _updateProgressPhase('validation');
@@ -578,17 +580,18 @@ class _UploadScreenState extends State<UploadScreen> {
         // Update to finalizing phase
         _updateProgressPhase('finalizing');
 
-        print('✅ Video processing completed successfully!');
-        print('🔗 HLS Playlist URL: ${completedVideo['videoUrl']}');
-        print('🖼️ Thumbnail URL: ${completedVideo['thumbnailUrl']}');
+        AppLogger.log('✅ Video processing completed successfully!');
+        AppLogger.log('🔗 HLS Playlist URL: ${completedVideo['videoUrl']}');
+        AppLogger.log('🖼️ Thumbnail URL: ${completedVideo['thumbnailUrl']}');
 
         // Call the callback to refresh video list first
-        print('🔄 UploadScreen: Calling onVideoUploaded callback');
+        AppLogger.log('🔄 UploadScreen: Calling onVideoUploaded callback');
         if (widget.onVideoUploaded != null) {
           widget.onVideoUploaded!();
-          print('✅ UploadScreen: onVideoUploaded callback called successfully');
+          AppLogger.log(
+              '✅ UploadScreen: onVideoUploaded callback called successfully');
         } else {
-          print('❌ UploadScreen: onVideoUploaded callback is null');
+          AppLogger.log('❌ UploadScreen: onVideoUploaded callback is null');
         }
 
         // **BATCHED UPDATE: Clear form using ValueNotifiers**
@@ -606,25 +609,26 @@ class _UploadScreenState extends State<UploadScreen> {
 
         // **NEW: Trigger video feed refresh after successful upload**
         if (widget.onVideoUploaded != null) {
-          print('🔄 Triggering video feed refresh after upload completion');
+          AppLogger.log(
+              '🔄 Triggering video feed refresh after upload completion');
           widget.onVideoUploaded!();
         }
       } else {
         throw Exception('Video processing failed or timed out');
       }
     } on TimeoutException catch (e) {
-      print('Upload timeout error: $e');
+      AppLogger.log('Upload timeout error: $e');
       // **NO setState: Use ValueNotifier**
       _errorMessage.value =
           'Upload timed out. Please check your internet connection and try again.';
     } on FileSystemException catch (e) {
-      print('File system error: $e');
+      AppLogger.log('File system error: $e');
       // **NO setState: Use ValueNotifier**
       _errorMessage.value =
           'Error accessing video file. Please try selecting the video again.';
     } catch (e, stackTrace) {
-      print('Error uploading video: $e');
-      print('Stack trace: $stackTrace');
+      AppLogger.log('Error uploading video: $e');
+      AppLogger.log('Stack trace: $stackTrace');
 
       // Handle specific error types
       String userFriendlyError;
@@ -668,8 +672,8 @@ class _UploadScreenState extends State<UploadScreen> {
     const checkInterval = Duration(seconds: 3); // Poll faster to avoid UI stall
     final startTime = DateTime.now();
 
-    print('🔄 Waiting for video processing to complete...');
-    print('📹 Video ID: $videoId');
+    AppLogger.log('🔄 Waiting for video processing to complete...');
+    AppLogger.log('📹 Video ID: $videoId');
 
     while (DateTime.now().difference(startTime) < maxWaitTime) {
       try {
@@ -684,9 +688,9 @@ class _UploadScreenState extends State<UploadScreen> {
               (videoData?['processingProgress'] ?? 0) as int;
           final videoUrl = (videoData?['videoUrl'] ?? '').toString();
 
-          print(
+          AppLogger.log(
               '🔄 Processing status: $processingStatus ($processingProgress%)');
-          print('🔗 Current videoUrl: $videoUrl');
+          AppLogger.log('🔗 Current videoUrl: $videoUrl');
 
           // **NO setState: Update progress using ValueNotifier**
           if (mounted) {
@@ -698,7 +702,7 @@ class _UploadScreenState extends State<UploadScreen> {
               videoUrl.startsWith('http://') || videoUrl.startsWith('https://');
 
           if (processingStatus == 'completed' || hasAbsoluteUrl) {
-            print('✅ Processing complete signal received');
+            AppLogger.log('✅ Processing complete signal received');
 
             // **BATCHED UPDATE: Update all progress values at once**
             if (mounted) {
@@ -717,24 +721,24 @@ class _UploadScreenState extends State<UploadScreen> {
               'processingProgress': 100,
             };
           } else if (processingStatus == 'failed') {
-            print(
+            AppLogger.log(
                 '❌ Video processing failed: ${videoData?['processingError']}');
             return null;
           }
         } else {
-          print(
+          AppLogger.log(
               '❌ Failed to get processing status: ${response?['error'] ?? 'Unknown error'}');
         }
 
         // Wait before checking again
         await Future.delayed(checkInterval);
       } catch (e) {
-        print('⚠️ Error checking processing status: $e');
+        AppLogger.log('⚠️ Error checking processing status: $e');
         await Future.delayed(checkInterval);
       }
     }
 
-    print('⏰ Processing timeout - maximum wait time exceeded');
+    AppLogger.log('⏰ Processing timeout - maximum wait time exceeded');
     return null;
   }
 
@@ -959,8 +963,8 @@ class _UploadScreenState extends State<UploadScreen> {
         _selectedVideo.value = videoFile;
         _isProcessing.value = false;
 
-        print('✅ Video selected: ${videoFile.path}');
-        print(
+        AppLogger.log('✅ Video selected: ${videoFile.path}');
+        AppLogger.log(
           '📏 File size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB',
         );
       }

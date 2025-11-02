@@ -4,6 +4,8 @@ import 'package:http/http.dart' as http;
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:http_parser/http_parser.dart';
+import 'package:vayu/utils/app_logger.dart';
+import 'package:vayu/core/services/http_client_service.dart';
 
 class CloudinaryService {
   static final CloudinaryService _instance = CloudinaryService._internal();
@@ -15,29 +17,29 @@ class CloudinaryService {
     try {
       // Check if file exists and is readable
       if (!await file.exists()) {
-        print('❌ CloudinaryService: File does not exist: ${file.path}');
+        AppLogger.log('❌ CloudinaryService: File does not exist: ${file.path}');
         return false;
       }
 
       // Check file size
       final fileSize = await file.length();
       if (fileSize == 0) {
-        print('❌ CloudinaryService: File is empty: ${file.path}');
+        AppLogger.log('❌ CloudinaryService: File is empty: ${file.path}');
         return false;
       }
 
       // Try to read first few bytes to ensure file is accessible
       final bytes = await file.openRead(0, 1).first;
       if (bytes.isEmpty) {
-        print('❌ CloudinaryService: Cannot read file: ${file.path}');
+        AppLogger.log('❌ CloudinaryService: Cannot read file: ${file.path}');
         return false;
       }
 
-      print(
+      AppLogger.log(
           '✅ CloudinaryService: File test passed - size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
       return true;
     } catch (e) {
-      print('❌ CloudinaryService: File test failed: $e');
+      AppLogger.log('❌ CloudinaryService: File test failed: $e');
       return false;
     }
   }
@@ -71,11 +73,12 @@ class CloudinaryService {
             'Invalid image file type. Only JPG, PNG, GIF, and WebP are supported');
       }
 
-      print('🔍 CloudinaryService: Starting image upload...');
-      print('   File path: ${imageFile.path}');
-      print('   File name: $fileName');
-      print('   File size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
-      print('   Folder: ${folder ?? 'snehayog/ads/images'}');
+      AppLogger.log('🔍 CloudinaryService: Starting image upload...');
+      AppLogger.log('   File path: ${imageFile.path}');
+      AppLogger.log('   File name: $fileName');
+      AppLogger.log(
+          '   File size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
+      AppLogger.log('   Folder: ${folder ?? 'snehayog/ads/images'}');
 
       if (!await _testFileBeforeUpload(imageFile)) {
         throw Exception(
@@ -109,7 +112,7 @@ class CloudinaryService {
         mimeType = 'image/jpeg';
       }
 
-      print('🔍 CloudinaryService: Using MIME type: $mimeType');
+      AppLogger.log('🔍 CloudinaryService: Using MIME type: $mimeType');
 
       // **NEW: Add the image file with proper MIME type**
       final multipartFile = await http.MultipartFile.fromPath(
@@ -118,11 +121,11 @@ class CloudinaryService {
         contentType: MediaType.parse(mimeType),
       );
 
-      print('🔍 CloudinaryService: MultipartFile details:');
-      print('   Field name: ${multipartFile.field}');
-      print('   File path: ${multipartFile.filename}');
-      print('   Content type: ${multipartFile.contentType}');
-      print('   File length: ${multipartFile.length}');
+      AppLogger.log('🔍 CloudinaryService: MultipartFile details:');
+      AppLogger.log('   Field name: ${multipartFile.field}');
+      AppLogger.log('   File path: ${multipartFile.filename}');
+      AppLogger.log('   Content type: ${multipartFile.contentType}');
+      AppLogger.log('   File length: ${multipartFile.length}');
 
       // **NEW: Verify the multipart file was created correctly**
       request.files.add(multipartFile);
@@ -130,14 +133,15 @@ class CloudinaryService {
       // **NEW: Alternative fallback - try simple multipart file creation**
       try {
         if (request.files.isEmpty) {
-          print(
+          AppLogger.log(
               '⚠️ CloudinaryService: No files added, trying simple multipart file creation');
           final simpleFile =
               await http.MultipartFile.fromPath('image', imageFile.path);
           request.files.add(simpleFile);
         }
       } catch (e) {
-        print('❌ CloudinaryService: Simple multipart file creation failed: $e');
+        AppLogger.log(
+            '❌ CloudinaryService: Simple multipart file creation failed: $e');
         throw Exception('Failed to create multipart file: $e');
       }
 
@@ -146,19 +150,20 @@ class CloudinaryService {
         request.fields['folder'] = folder;
       }
 
-      print('🔍 CloudinaryService: Sending request to backend...');
-      final streamedResponse = await request.send();
+      AppLogger.log('🔍 CloudinaryService: Sending request to backend...');
+      final streamedResponse = await httpClientService.send(request);
       final response = await http.Response.fromStream(streamedResponse);
 
-      print(
+      AppLogger.log(
           '🔍 CloudinaryService: Backend response status: ${response.statusCode}');
-      print('🔍 CloudinaryService: Backend response body: ${response.body}');
+      AppLogger.log(
+          '🔍 CloudinaryService: Backend response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
-          print('✅ CloudinaryService: Image uploaded successfully');
-          print('   URL: ${data['url']}');
+          AppLogger.log('✅ CloudinaryService: Image uploaded successfully');
+          AppLogger.log('   URL: ${data['url']}');
           return data['url'] ?? '';
         } else {
           throw Exception('Upload failed: ${data['error'] ?? 'Unknown error'}');
@@ -190,11 +195,11 @@ class CloudinaryService {
           userFriendlyError = 'Failed to upload image. Please try again.';
         }
 
-        print('❌ CloudinaryService: Backend error: $errorMessage');
+        AppLogger.log('❌ CloudinaryService: Backend error: $errorMessage');
         throw Exception(userFriendlyError);
       }
     } catch (e) {
-      print('❌ CloudinaryService: Error uploading image: $e');
+      AppLogger.log('❌ CloudinaryService: Error uploading image: $e');
       throw Exception('Error uploading image: $e');
     }
   }
@@ -244,7 +249,7 @@ class CloudinaryService {
         mimeType = 'video/mp4';
       }
 
-      print('🔍 CloudinaryService: Using video MIME type: $mimeType');
+      AppLogger.log('🔍 CloudinaryService: Using video MIME type: $mimeType');
 
       // **NEW: Add the video file with proper MIME type**
       request.files.add(
@@ -265,7 +270,7 @@ class CloudinaryService {
         request.fields['profile'] = profile;
       }
 
-      final streamedResponse = await request.send();
+      final streamedResponse = await httpClientService.send(request);
       final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -340,7 +345,8 @@ class CloudinaryService {
         mimeType = 'video/mp4';
       }
 
-      print('🔍 CloudinaryService: Using video MIME type for ad: $mimeType');
+      AppLogger.log(
+          '🔍 CloudinaryService: Using video MIME type for ad: $mimeType');
 
       // **NEW: Add the video file with proper MIME type**
       request.files.add(
@@ -361,28 +367,30 @@ class CloudinaryService {
         request.fields['profile'] = profile;
       }
 
-      final streamedResponse = await request.send();
+      final streamedResponse = await httpClientService.send(request);
       final response = await http.Response.fromStream(streamedResponse);
 
-      print(
+      AppLogger.log(
           '🔍 CloudinaryService: Video upload response status: ${response.statusCode}');
-      print(
+      AppLogger.log(
           '🔍 CloudinaryService: Video upload response body: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
-          print('✅ CloudinaryService: Video uploaded successfully for ad');
+          AppLogger.log(
+              '✅ CloudinaryService: Video uploaded successfully for ad');
           return data;
         } else {
           final errorMsg = data['error'] ?? 'Unknown error';
-          print('❌ CloudinaryService: Video upload failed: $errorMsg');
+          AppLogger.log('❌ CloudinaryService: Video upload failed: $errorMsg');
           throw Exception('Video upload failed: $errorMsg');
         }
       } else {
         final errorData = json.decode(response.body);
         final errorMsg = errorData['error'] ?? response.body;
-        print('❌ CloudinaryService: Video upload HTTP error: $errorMsg');
+        AppLogger.log(
+            '❌ CloudinaryService: Video upload HTTP error: $errorMsg');
 
         // Provide user-friendly error messages
         String userFriendlyError;
@@ -406,7 +414,7 @@ class CloudinaryService {
         throw Exception(userFriendlyError);
       }
     } catch (e) {
-      print('❌ CloudinaryService: Error uploading video for ad: $e');
+      AppLogger.log('❌ CloudinaryService: Error uploading video for ad: $e');
       throw Exception('Error uploading video for ad: $e');
     }
   }
@@ -425,7 +433,7 @@ class CloudinaryService {
         throw Exception('User not authenticated');
       }
 
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse(
             '${AppConfig.baseUrl}/api/upload/video-streaming-urls/$publicId?profile=$profile'),
         headers: {
@@ -455,7 +463,7 @@ class CloudinaryService {
   /// Delete media through your backend
   Future<bool> deleteMedia(String publicId, String resourceType) async {
     try {
-      final response = await http.delete(
+      final response = await httpClientService.delete(
         Uri.parse('${AppConfig.baseUrl}/api/upload/delete'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
@@ -466,7 +474,7 @@ class CloudinaryService {
 
       return response.statusCode == 200;
     } catch (e) {
-      print('Error deleting media: $e');
+      AppLogger.log('Error deleting media: $e');
       return false;
     }
   }

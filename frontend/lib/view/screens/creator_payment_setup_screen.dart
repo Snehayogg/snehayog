@@ -6,6 +6,7 @@ import 'package:vayu/services/payment_setup_service.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 class CreatorPaymentSetupScreen extends StatefulWidget {
   const CreatorPaymentSetupScreen({Key? key}) : super(key: key);
@@ -97,7 +98,7 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
       // Then fetch fresh data in the background
       await _loadExistingProfile();
     } catch (e) {
-      print('❌ Error initializing data: $e');
+      AppLogger.log('❌ Error initializing data: $e');
       setState(() => _isInitializing = false);
     }
   }
@@ -109,7 +110,7 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
     try {
       await _loadExistingProfile();
     } catch (e) {
-      print('❌ Error refreshing data: $e');
+      AppLogger.log('❌ Error refreshing data: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to refresh data: $e'),
@@ -133,7 +134,7 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
         userData = await _authService.getUserData();
         if (userData == null) {
           attempts++;
-          print('⏳ Waiting for user data... attempt $attempts');
+          AppLogger.log('⏳ Waiting for user data... attempt $attempts');
           await Future.delayed(const Duration(milliseconds: 200));
         }
       }
@@ -141,7 +142,7 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
       final userId = userData?['googleId'] ?? userData?['id'];
 
       if (userId == null) {
-        print(
+        AppLogger.log(
             '⚠️ No user ID available for cache lookup after $maxAttempts attempts');
         return;
       }
@@ -152,11 +153,11 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
       final cachedJson = prefs.getString(cacheKey);
 
       if (cachedJson == null) {
-        print('ℹ️ No cached payment profile found for user: $userId');
+        AppLogger.log('ℹ️ No cached payment profile found for user: $userId');
         return;
       }
 
-      print('✅ Loading cached payment profile for user: $userId');
+      AppLogger.log('✅ Loading cached payment profile for user: $userId');
       final data = json.decode(cachedJson) as Map<String, dynamic>;
 
       setState(() {
@@ -190,9 +191,9 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
         }
       });
 
-      print('✅ Payment profile loaded from cache successfully');
+      AppLogger.log('✅ Payment profile loaded from cache successfully');
     } catch (e) {
-      print('❌ Error loading cached payment profile: $e');
+      AppLogger.log('❌ Error loading cached payment profile: $e');
     }
   }
 
@@ -202,11 +203,11 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
       final token = userData?['token'];
 
       if (token == null) {
-        print('⚠️ No token available for profile loading');
+        AppLogger.log('⚠️ No token available for profile loading');
         return;
       }
 
-      print('🔄 Fetching fresh profile data from server...');
+      AppLogger.log('🔄 Fetching fresh profile data from server...');
       final response = await http.get(
         Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/profile'),
         headers: {
@@ -217,7 +218,7 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        print('✅ Fresh profile data received from server');
+        AppLogger.log('✅ Fresh profile data received from server');
 
         setState(() {
           _hasExistingProfile = true;
@@ -275,10 +276,10 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
             await prefs.setBool('has_payment_setup_$userId', true);
             // Keep global flag for backward compatibility
             await prefs.setBool('has_payment_setup', true);
-            print('✅ Payment profile cached for user: $userId');
+            AppLogger.log('✅ Payment profile cached for user: $userId');
           }
         } catch (e) {
-          print('❌ Error caching payment profile: $e');
+          AppLogger.log('❌ Error caching payment profile: $e');
         }
 
         // Show success message if this was a refresh
@@ -292,7 +293,7 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
           );
         }
       } else {
-        print('⚠️ Server returned status: ${response.statusCode}');
+        AppLogger.log('⚠️ Server returned status: ${response.statusCode}');
         if (_isRefreshing) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -304,7 +305,7 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
         }
       }
     } catch (e) {
-      print('❌ Error loading profile: $e');
+      AppLogger.log('❌ Error loading profile: $e');
       if (_isRefreshing) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -323,16 +324,16 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
     setState(() => _isLoading = true);
 
     try {
-      print('🔍 Starting to save payment profile...');
+      AppLogger.log('🔍 Starting to save payment profile...');
 
       final userData = await _authService.getUserData();
       final token = userData?['token'];
 
-      print(
+      AppLogger.log(
           '🔍 User data retrieved: ${userData != null ? 'Success' : 'Failed'}');
-      print('🔍 Token available: ${token != null ? 'Yes' : 'No'}');
+      AppLogger.log('🔍 Token available: ${token != null ? 'Yes' : 'No'}');
       if (token != null) {
-        print('🔍 Token type: ${token.substring(0, 20)}...');
+        AppLogger.log('🔍 Token type: ${token.substring(0, 20)}...');
       }
 
       if (token == null) {
@@ -403,10 +404,11 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
         }
       };
 
-      print('🔍 Request body prepared: $requestBody');
-      print(
+      AppLogger.log('🔍 Request body prepared: $requestBody');
+      AppLogger.log(
           '🔍 API endpoint: ${AppConfig.baseUrl}/api/creator-payouts/payment-method');
-      print('🔍 Headers: Authorization: Bearer ${token.substring(0, 20)}...');
+      AppLogger.log(
+          '🔍 Headers: Authorization: Bearer ${token.substring(0, 20)}...');
 
       final response = await http.put(
         Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/payment-method'),
@@ -417,11 +419,11 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
         body: json.encode(requestBody),
       );
 
-      print('🔍 Response status code: ${response.statusCode}');
-      print('🔍 Response body: ${response.body}');
+      AppLogger.log('🔍 Response status code: ${response.statusCode}');
+      AppLogger.log('🔍 Response body: ${response.body}');
 
       if (response.statusCode == 200) {
-        print('✅ Payment profile saved successfully!');
+        AppLogger.log('✅ Payment profile saved successfully!');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('✅ Payment profile saved successfully!'),
@@ -464,7 +466,7 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
 
           final cacheKey = 'payment_profile_cache_$userId';
           await prefs.setString(cacheKey, json.encode(sanitized));
-          print('✅ Payment profile cached for user: $userId');
+          AppLogger.log('✅ Payment profile cached for user: $userId');
         }
 
         // Show success dialog
@@ -472,8 +474,8 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
       } else {
         final errorBody = json.decode(response.body);
         final error = errorBody['error'] ?? 'Failed to save profile';
-        print('❌ Payment profile save failed: $error');
-        print('❌ Full error response: $errorBody');
+        AppLogger.log('❌ Payment profile save failed: $error');
+        AppLogger.log('❌ Full error response: $errorBody');
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -483,13 +485,13 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
         );
       }
     } catch (e) {
-      print('❌ Exception during payment profile save: $e');
-      print('❌ Exception type: ${e.runtimeType}');
+      AppLogger.log('❌ Exception during payment profile save: $e');
+      AppLogger.log('❌ Exception type: ${e.runtimeType}');
       if (e.toString().contains('SocketException')) {
-        print('❌ Network error - backend might be unreachable');
+        AppLogger.log('❌ Network error - backend might be unreachable');
       }
       if (e.toString().contains('timeout')) {
-        print('❌ Request timeout - backend might be slow');
+        AppLogger.log('❌ Request timeout - backend might be slow');
       }
 
       ScaffoldMessenger.of(context).showSnackBar(

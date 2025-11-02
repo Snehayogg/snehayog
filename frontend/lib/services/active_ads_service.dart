@@ -4,6 +4,8 @@ import 'package:vayu/config/app_config.dart';
 import 'package:vayu/core/managers/smart_cache_manager.dart';
 import 'package:vayu/services/ad_targeting_service.dart';
 import 'package:vayu/model/video_model.dart';
+import 'package:vayu/utils/app_logger.dart';
+import 'package:vayu/core/services/http_client_service.dart';
 
 /// Service to fetch all types of active ads (banner, carousel, video feed)
 class ActiveAdsService {
@@ -23,12 +25,12 @@ class ActiveAdsService {
     try {
       // NEW: If videoData is provided, use intelligent targeting
       if (videoData != null) {
-        print(
+        AppLogger.log(
             '🎯 ActiveAdsService: Using intelligent targeting for video: ${videoData.id}');
         return await _fetchTargetedAdsForVideo(videoData);
       }
 
-      print(
+      AppLogger.log(
           '🎯 ActiveAdsService: Fetching all active ads from $_baseUrl/api/ads/serve');
 
       // Include optional targeting params to match backend filters
@@ -52,12 +54,13 @@ class ActiveAdsService {
       final uri = Uri.parse('$_baseUrl/api/ads/serve')
           .replace(queryParameters: queryParams);
 
-      final response = await http.get(uri, headers: {
+      final response = await httpClientService.get(uri, headers: {
         'Content-Type': 'application/json',
       });
 
-      print('🔍 ActiveAdsService: Response status: ${response.statusCode}');
-      print('🔍 ActiveAdsService: Response body: ${response.body}');
+      AppLogger.log(
+          '🔍 ActiveAdsService: Response status: ${response.statusCode}');
+      AppLogger.log('🔍 ActiveAdsService: Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final dynamic decoded = json.decode(response.body);
@@ -132,12 +135,14 @@ class ActiveAdsService {
           }
 
           // Debug logging for ad normalization
-          print('🔍 Normalizing ad: ${ad['_id'] ?? ad['id']}');
-          print(
+          AppLogger.log('🔍 Normalizing ad: ${ad['_id'] ?? ad['id']}');
+          AppLogger.log(
               '   Original imageUrl: ${ad['imageUrl'] ?? ad['cloudinaryUrl'] ?? ad['thumbnail']}');
-          print('   Normalized imageUrl: ${ensureAbsoluteUrl(imageUrl)}');
-          print('   Original link: ${ad['link'] ?? ad['callToAction']}');
-          print('   Normalized link: ${ensureAbsoluteUrl(link)}');
+          AppLogger.log(
+              '   Normalized imageUrl: ${ensureAbsoluteUrl(imageUrl)}');
+          AppLogger.log(
+              '   Original link: ${ad['link'] ?? ad['callToAction']}');
+          AppLogger.log('   Normalized link: ${ensureAbsoluteUrl(link)}');
 
           return {
             ...ad,
@@ -152,29 +157,30 @@ class ActiveAdsService {
             final adType = normalizeType(ad['adType']);
 
             // **DEBUG: Log ad type processing**
-            print('🔍 ActiveAdsService: Processing ad:');
-            print('   Original adType: $originalAdType');
-            print('   Normalized adType: $adType');
-            print('   Ad keys: ${ad.keys.toList()}');
+            AppLogger.log('🔍 ActiveAdsService: Processing ad:');
+            AppLogger.log('   Original adType: $originalAdType');
+            AppLogger.log('   Normalized adType: $adType');
+            AppLogger.log('   Ad keys: ${ad.keys.toList()}');
 
             if (categorizedAds.containsKey(adType)) {
               categorizedAds[adType]!.add(normalizeAd(ad));
-              print('   ✅ Added to $adType category');
+              AppLogger.log('   ✅ Added to $adType category');
             } else {
-              print('   ❌ Unknown ad type: $adType');
+              AppLogger.log('   ❌ Unknown ad type: $adType');
             }
           }
         }
 
-        print('✅ ActiveAdsService: Found ads:');
-        print('   Banner ads: ${categorizedAds['banner']!.length}');
-        print('   Carousel ads: ${categorizedAds['carousel']!.length}');
-        print('   Video feed ads: ${categorizedAds['video feed ad']!.length}');
+        AppLogger.log('✅ ActiveAdsService: Found ads:');
+        AppLogger.log('   Banner ads: ${categorizedAds['banner']!.length}');
+        AppLogger.log('   Carousel ads: ${categorizedAds['carousel']!.length}');
+        AppLogger.log(
+            '   Video feed ads: ${categorizedAds['video feed ad']!.length}');
 
         return categorizedAds;
       } else {
-        print('❌ Error fetching active ads: ${response.statusCode}');
-        print('Response body: ${response.body}');
+        AppLogger.log('❌ Error fetching active ads: ${response.statusCode}');
+        AppLogger.log('Response body: ${response.body}');
         return {
           'banner': [],
           'carousel': [],
@@ -182,7 +188,7 @@ class ActiveAdsService {
         };
       }
     } catch (e) {
-      print('❌ Exception fetching active ads: $e');
+      AppLogger.log('❌ Exception fetching active ads: $e');
       return {
         'banner': [],
         'carousel': [],
@@ -212,19 +218,19 @@ class ActiveAdsService {
   /// Track ad impression
   Future<bool> trackImpression(String adId) async {
     try {
-      print('📊 ActiveAdsService: Tracking impression for ad: $adId');
+      AppLogger.log('📊 ActiveAdsService: Tracking impression for ad: $adId');
 
-      final response = await http.post(
+      final response = await httpClientService.post(
         Uri.parse('$_baseUrl/api/ads/track-impression/$adId'),
         headers: {
           'Content-Type': 'application/json',
         },
       );
 
-      print('🔍 Impression tracking response: ${response.statusCode}');
+      AppLogger.log('🔍 Impression tracking response: ${response.statusCode}');
       return response.statusCode == 200;
     } catch (e) {
-      print('❌ Exception tracking impression: $e');
+      AppLogger.log('❌ Exception tracking impression: $e');
       return false;
     }
   }
@@ -232,9 +238,9 @@ class ActiveAdsService {
   /// Track ad click
   Future<bool> trackClick(String adId, {String? userId}) async {
     try {
-      print('🖱️ ActiveAdsService: Tracking click for ad: $adId');
+      AppLogger.log('🖱️ ActiveAdsService: Tracking click for ad: $adId');
 
-      final response = await http.post(
+      final response = await httpClientService.post(
         Uri.parse('$_baseUrl/api/ads/track-click/$adId'),
         headers: {
           'Content-Type': 'application/json',
@@ -245,10 +251,10 @@ class ActiveAdsService {
         }),
       );
 
-      print('🔍 Click tracking response: ${response.statusCode}');
+      AppLogger.log('🔍 Click tracking response: ${response.statusCode}');
       return response.statusCode == 200;
     } catch (e) {
-      print('❌ Exception tracking click: $e');
+      AppLogger.log('❌ Exception tracking click: $e');
       return false;
     }
   }
@@ -256,7 +262,7 @@ class ActiveAdsService {
   /// **NEW: Clear ads cache when ads are deleted**
   Future<void> clearAdsCache() async {
     try {
-      print('🧹 ActiveAdsService: Clearing ads cache...');
+      AppLogger.log('🧹 ActiveAdsService: Clearing ads cache...');
 
       // Clear all ad-related cache keys
       final cacheKeys = [
@@ -276,12 +282,12 @@ class ActiveAdsService {
           maxAge: Duration.zero, // Force immediate expiration
           forceRefresh: true,
         );
-        print('✅ ActiveAdsService: Cleared cache for key: $key');
+        AppLogger.log('✅ ActiveAdsService: Cleared cache for key: $key');
       }
 
-      print('✅ ActiveAdsService: All ads cache cleared successfully');
+      AppLogger.log('✅ ActiveAdsService: All ads cache cleared successfully');
     } catch (e) {
-      print('⚠️ ActiveAdsService: Error clearing ads cache: $e');
+      AppLogger.log('⚠️ ActiveAdsService: Error clearing ads cache: $e');
     }
   }
 
@@ -289,7 +295,7 @@ class ActiveAdsService {
   Future<Map<String, List<Map<String, dynamic>>>> _fetchTargetedAdsForVideo(
       VideoModel video) async {
     try {
-      print(
+      AppLogger.log(
           '🎯 ActiveAdsService: Fetching targeted ads for video: ${video.id}');
 
       // Get targeted ads for banner, carousel, and video feed ad types
@@ -321,24 +327,25 @@ class ActiveAdsService {
       // Log targeting insights
       if (bannerResult['insights'] != null) {
         final insights = bannerResult['insights'] as Map<String, dynamic>;
-        print('🎯 Targeting Insights:');
-        print('   Video Categories: ${insights['videoCategories']}');
-        print('   Video Interests: ${insights['videoInterests']}');
-        print('   Targeted Ads: ${insights['targetedAds']}');
-        print('   Fallback Ads: ${insights['fallbackAds']}');
+        AppLogger.log('🎯 Targeting Insights:');
+        AppLogger.log('   Video Categories: ${insights['videoCategories']}');
+        AppLogger.log('   Video Interests: ${insights['videoInterests']}');
+        AppLogger.log('   Targeted Ads: ${insights['targetedAds']}');
+        AppLogger.log('   Fallback Ads: ${insights['fallbackAds']}');
       }
 
-      print('✅ ActiveAdsService: Found targeted ads:');
-      print('   Banner: ${categorizedAds['banner']!.length}');
-      print('   Carousel: ${categorizedAds['carousel']!.length}');
-      print('   Video Feed: ${categorizedAds['video feed ad']!.length}');
+      AppLogger.log('✅ ActiveAdsService: Found targeted ads:');
+      AppLogger.log('   Banner: ${categorizedAds['banner']!.length}');
+      AppLogger.log('   Carousel: ${categorizedAds['carousel']!.length}');
+      AppLogger.log(
+          '   Video Feed: ${categorizedAds['video feed ad']!.length}');
 
       return categorizedAds;
     } catch (e) {
-      print('❌ ActiveAdsService: Error fetching targeted ads: $e');
+      AppLogger.log('❌ ActiveAdsService: Error fetching targeted ads: $e');
 
       // Fall back to random ads if targeting fails
-      print('🔄 ActiveAdsService: Falling back to random ads...');
+      AppLogger.log('🔄 ActiveAdsService: Falling back to random ads...');
       return await _fetchFallbackAds();
     }
   }
@@ -445,9 +452,9 @@ class ActiveAdsService {
   /// **NEW: Fetch fallback ads when targeting fails**
   Future<Map<String, List<Map<String, dynamic>>>> _fetchFallbackAds() async {
     try {
-      print('🔄 ActiveAdsService: Fetching fallback ads...');
+      AppLogger.log('🔄 ActiveAdsService: Fetching fallback ads...');
 
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('$_baseUrl/api/ads/serve'),
         headers: {
           'Content-Type': 'application/json',
@@ -476,17 +483,18 @@ class ActiveAdsService {
           }
         }
 
-        print('✅ ActiveAdsService: Found fallback ads:');
-        print('   Banner: ${categorizedAds['banner']!.length}');
-        print('   Carousel: ${categorizedAds['carousel']!.length}');
-        print('   Video Feed: ${categorizedAds['video feed ad']!.length}');
+        AppLogger.log('✅ ActiveAdsService: Found fallback ads:');
+        AppLogger.log('   Banner: ${categorizedAds['banner']!.length}');
+        AppLogger.log('   Carousel: ${categorizedAds['carousel']!.length}');
+        AppLogger.log(
+            '   Video Feed: ${categorizedAds['video feed ad']!.length}');
 
         return categorizedAds;
       } else {
         throw Exception('Failed to fetch fallback ads: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ ActiveAdsService: Error fetching fallback ads: $e');
+      AppLogger.log('❌ ActiveAdsService: Error fetching fallback ads: $e');
       return {
         'banner': [],
         'carousel': [],

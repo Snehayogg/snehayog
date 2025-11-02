@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:vayu/utils/feature_flags.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 /// Instagram-like cache entry with ETag and timestamp
 class InstagramCacheEntry<T> {
@@ -195,12 +196,12 @@ class SmartCacheManager {
   /// Initialize consolidated smart cache manager
   Future<void> initialize() async {
     if (!Features.smartVideoCaching.isEnabled) {
-      print('🚫 SmartCacheManager: Smart caching disabled');
+      AppLogger.log('🚫 SmartCacheManager: Smart caching disabled');
       return;
     }
 
     try {
-      print(
+      AppLogger.log(
         '🚀 SmartCacheManager: Initializing consolidated cache & preload system...',
       );
 
@@ -214,9 +215,10 @@ class SmartCacheManager {
       _startBackgroundWorkers();
 
       _isInitialized = true;
-      print('✅ SmartCacheManager: Initialization completed successfully');
+      AppLogger.log(
+          '✅ SmartCacheManager: Initialization completed successfully');
     } catch (e) {
-      print('❌ SmartCacheManager: Initialization failed: $e');
+      AppLogger.log('❌ SmartCacheManager: Initialization failed: $e');
       _isInitialized = false;
     }
   }
@@ -273,8 +275,8 @@ class SmartCacheManager {
         if (!entry.isExpired) {
           _updateAccessInfo(key);
           _cacheHits++;
-          print('⚡ SmartCacheManager: Instant cache hit for $key');
-          print(
+          AppLogger.log('⚡ SmartCacheManager: Instant cache hit for $key');
+          AppLogger.log(
             '📊 Cache Stats - Hits: $_cacheHits, Misses: $_cacheMisses, Stale: $_staleResponses',
           );
 
@@ -288,7 +290,7 @@ class SmartCacheManager {
         } else if (entry.shouldRefresh &&
             _shouldUseStaleWhileRevalidate(cacheType)) {
           _staleResponses++;
-          print(
+          AppLogger.log(
             '🔄 SmartCacheManager: Stale cache hit for $key, refreshing in background',
           );
           _scheduleBackgroundRefresh(key, fetchFn, cacheType, currentEtag);
@@ -302,8 +304,8 @@ class SmartCacheManager {
         if (!diskEntry.isExpired) {
           _addToMemoryCache(key, diskEntry);
           _cacheHits++;
-          print('💾 SmartCacheManager: Fresh disk cache hit for $key');
-          print(
+          AppLogger.log('💾 SmartCacheManager: Fresh disk cache hit for $key');
+          AppLogger.log(
             '📊 Cache Stats - Hits: $_cacheHits, Misses: $_cacheMisses, Stale: $_staleResponses',
           );
 
@@ -316,7 +318,7 @@ class SmartCacheManager {
         } else if (diskEntry.shouldRefresh &&
             _shouldUseStaleWhileRevalidate(cacheType)) {
           _staleResponses++;
-          print(
+          AppLogger.log(
             '🔄 SmartCacheManager: Stale disk cache hit for $key, refreshing in background',
           );
           _scheduleBackgroundRefresh(key, fetchFn, cacheType, currentEtag);
@@ -326,8 +328,9 @@ class SmartCacheManager {
 
       // Cache miss - fetch fresh data
       _cacheMisses++;
-      print('❌ SmartCacheManager: Cache miss for $key, fetching fresh data');
-      print(
+      AppLogger.log(
+          '❌ SmartCacheManager: Cache miss for $key, fetching fresh data');
+      AppLogger.log(
         '📊 Cache Stats - Hits: $_cacheHits, Misses: $_cacheMisses, Stale: $_staleResponses',
       );
 
@@ -338,12 +341,13 @@ class SmartCacheManager {
 
       return freshData;
     } catch (e) {
-      print('❌ SmartCacheManager: Error in get operation for $key: $e');
+      AppLogger.log('❌ SmartCacheManager: Error in get operation for $key: $e');
 
       // On error, try to return stale cache if available
       final staleEntry = _memoryCache[key] ?? await _getFromDiskCache<T>(key);
       if (staleEntry != null && !staleEntry.isExpired) {
-        print('🔄 SmartCacheManager: Returning stale cache on error for $key');
+        AppLogger.log(
+            '🔄 SmartCacheManager: Returning stale cache on error for $key');
         return staleEntry.data;
       }
 
@@ -372,9 +376,9 @@ class SmartCacheManager {
       // Analyze pattern and predict next screens
       _analyzeNavigationPattern();
 
-      print('📱 SmartCacheManager: Tracked navigation to $screenName');
+      AppLogger.log('📱 SmartCacheManager: Tracked navigation to $screenName');
     } catch (e) {
-      print('❌ SmartCacheManager: Error tracking navigation: $e');
+      AppLogger.log('❌ SmartCacheManager: Error tracking navigation: $e');
     }
   }
 
@@ -390,12 +394,14 @@ class SmartCacheManager {
       final predictions = forcePreload ?? getPreloadPredictions(currentScreen);
 
       if (predictions.isEmpty) {
-        print('📱 SmartCacheManager: No predictions for $currentScreen');
+        AppLogger.log(
+            '📱 SmartCacheManager: No predictions for $currentScreen');
         return;
       }
 
-      print('🚀 SmartCacheManager: Starting smart preload for $currentScreen');
-      print('🎯 Predictions: ${predictions.join(', ')}');
+      AppLogger.log(
+          '🚀 SmartCacheManager: Starting smart preload for $currentScreen');
+      AppLogger.log('🎯 Predictions: ${predictions.join(', ')}');
 
       // Preload data for predicted screens
       for (final predictedScreen in predictions.take(maxPreloadItems)) {
@@ -410,7 +416,7 @@ class SmartCacheManager {
         );
       }
     } catch (e) {
-      print('❌ SmartCacheManager: Error in smart preload: $e');
+      AppLogger.log('❌ SmartCacheManager: Error in smart preload: $e');
     }
   }
 
@@ -424,13 +430,13 @@ class SmartCacheManager {
     _preloadHits++;
     _successfulPredictions++;
     _totalPredictions++;
-    print('🎯 SmartCacheManager: Prediction hit for $predictedScreen!');
+    AppLogger.log('🎯 SmartCacheManager: Prediction hit for $predictedScreen!');
   }
 
   /// Record prediction miss
   void recordPredictionMiss(String predictedScreen) {
     _totalPredictions++;
-    print('❌ SmartCacheManager: Prediction miss for $predictedScreen');
+    AppLogger.log('❌ SmartCacheManager: Prediction miss for $predictedScreen');
   }
 
   // ===== INTERNAL METHODS =====
@@ -453,18 +459,18 @@ class SmartCacheManager {
               loadedCount++;
             }
           } catch (e) {
-            print(
+            AppLogger.log(
               '⚠️ SmartCacheManager: Skipping corrupted cache file: ${file.path}',
             );
           }
         }
       }
 
-      print(
+      AppLogger.log(
         '📁 SmartCacheManager: Loaded $loadedCount entries from disk cache',
       );
     } catch (e) {
-      print('❌ SmartCacheManager: Error loading persisted cache: $e');
+      AppLogger.log('❌ SmartCacheManager: Error loading persisted cache: $e');
     }
   }
 
@@ -484,12 +490,13 @@ class SmartCacheManager {
       }
 
       if (keysToRemove.isNotEmpty) {
-        print(
+        AppLogger.log(
           '🧹 SmartCacheManager: Cleaned up ${keysToRemove.length} expired entries',
         );
       }
     } catch (e) {
-      print('❌ SmartCacheManager: Error cleaning up expired entries: $e');
+      AppLogger.log(
+          '❌ SmartCacheManager: Error cleaning up expired entries: $e');
     }
   }
 
@@ -512,12 +519,13 @@ class SmartCacheManager {
       }
 
       if (keysToRemove.isNotEmpty) {
-        print(
+        AppLogger.log(
           '🧹 SmartCacheManager: Cleaned up ${keysToRemove.length} old prediction entries',
         );
       }
     } catch (e) {
-      print('❌ SmartCacheManager: Error cleaning up old prediction data: $e');
+      AppLogger.log(
+          '❌ SmartCacheManager: Error cleaning up old prediction data: $e');
     }
   }
 
@@ -527,16 +535,16 @@ class SmartCacheManager {
       final accuracy = getPredictionAccuracy();
 
       if (accuracy < 30.0) {
-        print(
+        AppLogger.log(
           '⚠️ SmartCacheManager: Low prediction accuracy ($accuracy%), reducing preload items',
         );
       } else if (accuracy > 70.0) {
-        print(
+        AppLogger.log(
           '✅ SmartCacheManager: High prediction accuracy ($accuracy%), maintaining preload strategy',
         );
       }
     } catch (e) {
-      print('❌ SmartCacheManager: Error optimizing predictions: $e');
+      AppLogger.log('❌ SmartCacheManager: Error optimizing predictions: $e');
     }
   }
 
@@ -588,9 +596,9 @@ class SmartCacheManager {
         await _cacheDir.create();
       }
 
-      print('🗑️ SmartCacheManager: Cache cleared successfully');
+      AppLogger.log('🗑️ SmartCacheManager: Cache cleared successfully');
     } catch (e) {
-      print('❌ SmartCacheManager: Error clearing cache: $e');
+      AppLogger.log('❌ SmartCacheManager: Error clearing cache: $e');
     }
   }
 
@@ -622,12 +630,12 @@ class SmartCacheManager {
       }
 
       if (keysToRemove.isNotEmpty) {
-        print(
+        AppLogger.log(
           '🗑️ SmartCacheManager: Cleared ${keysToRemove.length} cache entries matching pattern "$pattern"',
         );
       }
     } catch (e) {
-      print(
+      AppLogger.log(
         '❌ SmartCacheManager: Error clearing cache by pattern "$pattern": $e',
       );
     }
@@ -636,7 +644,7 @@ class SmartCacheManager {
   /// **NEW: Invalidate video cache for a specific video type (used when videos are deleted)**
   Future<void> invalidateVideoCache({String? videoType}) async {
     try {
-      print(
+      AppLogger.log(
         '🗑️ SmartCacheManager: Invalidating video cache${videoType != null ? ' for type: $videoType' : ''}',
       );
 
@@ -648,9 +656,10 @@ class SmartCacheManager {
         await clearCacheByPattern('videos_page_');
       }
 
-      print('✅ SmartCacheManager: Video cache invalidated successfully');
+      AppLogger.log(
+          '✅ SmartCacheManager: Video cache invalidated successfully');
     } catch (e) {
-      print('❌ SmartCacheManager: Error invalidating video cache: $e');
+      AppLogger.log('❌ SmartCacheManager: Error invalidating video cache: $e');
     }
   }
 
@@ -664,9 +673,9 @@ class SmartCacheManager {
       _preloadPredictions.clear();
       _currentlyPreloading.clear();
 
-      print('✅ SmartCacheManager: Disposal completed');
+      AppLogger.log('✅ SmartCacheManager: Disposal completed');
     } catch (e) {
-      print('❌ SmartCacheManager: Disposal failed: $e');
+      AppLogger.log('❌ SmartCacheManager: Disposal failed: $e');
     }
   }
 
@@ -699,7 +708,8 @@ class SmartCacheManager {
     if (_refreshQueue.contains(key)) return;
 
     _refreshQueue.add(key);
-    print('🔄 SmartCacheManager: Scheduled background refresh for $key');
+    AppLogger.log(
+        '🔄 SmartCacheManager: Scheduled background refresh for $key');
 
     if (!_isRefreshing) {
       _processRefreshQueue();
@@ -719,7 +729,7 @@ class SmartCacheManager {
         await Future.delayed(const Duration(milliseconds: 100));
       }
     } catch (e) {
-      print('❌ SmartCacheManager: Error processing refresh queue: $e');
+      AppLogger.log('❌ SmartCacheManager: Error processing refresh queue: $e');
     } finally {
       _isRefreshing = false;
     }
@@ -728,7 +738,7 @@ class SmartCacheManager {
   /// Refresh a specific cache entry
   Future<void> _refreshCacheEntry(String key) async {
     try {
-      print('🔄 SmartCacheManager: Refreshing cache entry for $key');
+      AppLogger.log('🔄 SmartCacheManager: Refreshing cache entry for $key');
 
       final entry = _memoryCache[key];
       if (entry != null) {
@@ -736,9 +746,10 @@ class SmartCacheManager {
       }
 
       _backgroundRefreshes++;
-      print('✅ SmartCacheManager: Cache entry refreshed for $key');
+      AppLogger.log('✅ SmartCacheManager: Cache entry refreshed for $key');
     } catch (e) {
-      print('❌ SmartCacheManager: Error refreshing cache entry for $key: $e');
+      AppLogger.log(
+          '❌ SmartCacheManager: Error refreshing cache entry for $key: $e');
     }
   }
 
@@ -761,7 +772,8 @@ class SmartCacheManager {
         lastAccessed: DateTime.parse(json['lastAccessed']),
       );
     } catch (e) {
-      print('❌ SmartCacheManager: Error reading from disk cache for $key: $e');
+      AppLogger.log(
+          '❌ SmartCacheManager: Error reading from disk cache for $key: $e');
       return null;
     }
   }
@@ -798,7 +810,8 @@ class SmartCacheManager {
       _memoryCache.remove(sortedEntries[i].key);
     }
 
-    print('🧹 SmartCacheManager: Evicted $entriesToRemove least used entries');
+    AppLogger.log(
+        '🧹 SmartCacheManager: Evicted $entriesToRemove least used entries');
   }
 
   /// Cache data with ETag and timestamp
@@ -824,9 +837,10 @@ class SmartCacheManager {
       _addToMemoryCache(key, entry);
       await _persistToDiskCache(key, entry);
 
-      print('✅ SmartCacheManager: Cached data for $key with ETag: $etag');
+      AppLogger.log(
+          '✅ SmartCacheManager: Cached data for $key with ETag: $etag');
     } catch (e) {
-      print('❌ SmartCacheManager: Error caching data for $key: $e');
+      AppLogger.log('❌ SmartCacheManager: Error caching data for $key: $e');
     }
   }
 
@@ -839,7 +853,8 @@ class SmartCacheManager {
       final file = File('${_cacheDir.path}/$key.json');
       await file.writeAsString(jsonEncode(entry.toJson()));
     } catch (e) {
-      print('❌ SmartCacheManager: Error persisting to disk cache for $key: $e');
+      AppLogger.log(
+          '❌ SmartCacheManager: Error persisting to disk cache for $key: $e');
     }
   }
 
@@ -894,9 +909,9 @@ class SmartCacheManager {
       // Pattern 3: Time-based prediction
       _addTimeBasedPredictions(recentScreens.first);
 
-      print('🧠 SmartCacheManager: Navigation pattern analyzed');
+      AppLogger.log('🧠 SmartCacheManager: Navigation pattern analyzed');
     } catch (e) {
-      print('❌ SmartCacheManager: Error analyzing pattern: $e');
+      AppLogger.log('❌ SmartCacheManager: Error analyzing pattern: $e');
     }
   }
 
@@ -916,7 +931,8 @@ class SmartCacheManager {
         _addPrediction(currentScreen, 'stories');
       }
     } catch (e) {
-      print('❌ SmartCacheManager: Error adding time-based predictions: $e');
+      AppLogger.log(
+          '❌ SmartCacheManager: Error adding time-based predictions: $e');
     }
   }
 
@@ -937,7 +953,7 @@ class SmartCacheManager {
     Map<String, dynamic>? userContext,
   ) async {
     try {
-      print('📥 SmartCacheManager: Preloading data for $screenName');
+      AppLogger.log('📥 SmartCacheManager: Preloading data for $screenName');
 
       switch (screenName) {
         case 'profile':
@@ -959,14 +975,14 @@ class SmartCacheManager {
           await _preloadStoriesData(userContext);
           break;
         default:
-          print(
+          AppLogger.log(
             '⚠️ SmartCacheManager: Unknown screen for preload: $screenName',
           );
       }
 
-      print('✅ SmartCacheManager: Preloaded data for $screenName');
+      AppLogger.log('✅ SmartCacheManager: Preloaded data for $screenName');
     } catch (e) {
-      print('❌ SmartCacheManager: Error preloading $screenName: $e');
+      AppLogger.log('❌ SmartCacheManager: Error preloading $screenName: $e');
     }
   }
 
@@ -984,9 +1000,10 @@ class SmartCacheManager {
         fetchFn: () async => {'status': 'preloaded'},
         cacheType: 'videos',
       );
-      print('👤 SmartCacheManager: Profile data preloaded for user $userId');
+      AppLogger.log(
+          '👤 SmartCacheManager: Profile data preloaded for user $userId');
     } catch (e) {
-      print('❌ SmartCacheManager: Error preloading profile: $e');
+      AppLogger.log('❌ SmartCacheManager: Error preloading profile: $e');
     }
   }
 
@@ -999,9 +1016,9 @@ class SmartCacheManager {
           cacheType: 'videos',
         );
       }
-      print('📱 SmartCacheManager: Feed data preloaded');
+      AppLogger.log('📱 SmartCacheManager: Feed data preloaded');
     } catch (e) {
-      print('❌ SmartCacheManager: Error preloading feed: $e');
+      AppLogger.log('❌ SmartCacheManager: Error preloading feed: $e');
     }
   }
 
@@ -1017,9 +1034,9 @@ class SmartCacheManager {
         fetchFn: () async => {'status': 'preloaded'},
         cacheType: 'metadata',
       );
-      print('🔍 SmartCacheManager: Explore data preloaded');
+      AppLogger.log('🔍 SmartCacheManager: Explore data preloaded');
     } catch (e) {
-      print('❌ SmartCacheManager: Error preloading explore: $e');
+      AppLogger.log('❌ SmartCacheManager: Error preloading explore: $e');
     }
   }
 
@@ -1032,9 +1049,9 @@ class SmartCacheManager {
         fetchFn: () async => {'status': 'preloaded'},
         cacheType: 'notifications',
       );
-      print('🔔 SmartCacheManager: Notifications preloaded');
+      AppLogger.log('🔔 SmartCacheManager: Notifications preloaded');
     } catch (e) {
-      print('❌ SmartCacheManager: Error preloading notifications: $e');
+      AppLogger.log('❌ SmartCacheManager: Error preloading notifications: $e');
     }
   }
 
@@ -1045,9 +1062,9 @@ class SmartCacheManager {
         fetchFn: () async => {'status': 'preloaded'},
         cacheType: 'messages',
       );
-      print('💬 SmartCacheManager: Messages preloaded');
+      AppLogger.log('💬 SmartCacheManager: Messages preloaded');
     } catch (e) {
-      print('❌ SmartCacheManager: Error preloading messages: $e');
+      AppLogger.log('❌ SmartCacheManager: Error preloading messages: $e');
     }
   }
 
@@ -1058,9 +1075,9 @@ class SmartCacheManager {
         fetchFn: () async => {'status': 'preloaded'},
         cacheType: 'stories',
       );
-      print('📖 SmartCacheManager: Stories preloaded');
+      AppLogger.log('📖 SmartCacheManager: Stories preloaded');
     } catch (e) {
-      print('❌ SmartCacheManager: Error preloading stories: $e');
+      AppLogger.log('❌ SmartCacheManager: Error preloading stories: $e');
     }
   }
 
@@ -1135,7 +1152,7 @@ class SmartCacheManager {
       final totalControllers = _memoryCache.length;
 
       if (totalControllers > 100) {
-        print(
+        AppLogger.log(
             '⚠️ SmartCacheManager: High cache entry count ($totalControllers), potential memory leak detected');
       }
 
@@ -1147,20 +1164,20 @@ class SmartCacheManager {
             expiredEntries.add(entry.key);
           }
         } catch (e) {
-          print(
+          AppLogger.log(
               '❌ SmartCacheManager: Error checking cache entry ${entry.key}: $e');
         }
       }
 
       if (expiredEntries.isNotEmpty) {
-        print(
+        AppLogger.log(
             '🧹 SmartCacheManager: Cleaning up ${expiredEntries.length} expired entries');
         for (final key in expiredEntries) {
           _memoryCache.remove(key);
         }
       }
     } catch (e) {
-      print('❌ SmartCacheManager: Error during memory leak check: $e');
+      AppLogger.log('❌ SmartCacheManager: Error during memory leak check: $e');
     }
   }
   */

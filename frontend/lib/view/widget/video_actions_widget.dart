@@ -7,6 +7,7 @@ import 'package:vayu/services/video_service.dart';
 import 'package:vayu/services/comments/video_comments_data_source.dart';
 import 'package:vayu/view/widget/comments_sheet_widget.dart';
 import 'package:vayu/view/widget/custom_share_widget.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 class VideoActionsWidget extends StatelessWidget {
   final VideoModel video;
@@ -28,17 +29,18 @@ class VideoActionsWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<GoogleSignInController>(
-      builder: (context, controller, child) {
-        final userData = controller.userData;
-        final userId = userData?['id'];
-        final isLiked = userId != null && video.likedBy.contains(userId);
+    return RepaintBoundary(
+      child: Consumer<GoogleSignInController>(
+        builder: (context, controller, child) {
+          final userData = controller.userData;
+          final userId = userData?['id'];
+          final isLiked = userId != null && video.likedBy.contains(userId);
 
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Like button
-            _ActionButton(
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Like button
+              _ActionButton(
               icon: Icon(
                 isLiked ? Icons.favorite : Icons.favorite_border,
                 color: isLiked ? Colors.red : Colors.white,
@@ -87,7 +89,7 @@ class VideoActionsWidget extends StatelessWidget {
           ],
         );
       },
-    );
+    ));
   }
 
   // Move these methods back to VideoActionsWidget
@@ -121,7 +123,7 @@ class VideoActionsWidget extends StatelessWidget {
         await videoService.incrementShares(video.id);
         video.shares++;
       } catch (e) {
-        print('Failed to track share: $e');
+        AppLogger.log('Failed to track share: $e');
       }
 
       // Show custom share bottom sheet
@@ -132,7 +134,7 @@ class VideoActionsWidget extends StatelessWidget {
         builder: (context) => CustomShareWidget(video: video),
       );
     } catch (e) {
-      print('Failed to show share sheet: $e');
+      AppLogger.log('Failed to show share sheet: $e');
     }
   }
 }

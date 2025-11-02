@@ -21,6 +21,7 @@ import 'package:vayu/view/widget/profile/profile_dialogs_widget.dart';
 import 'package:vayu/controller/main_controller.dart';
 import 'package:vayu/model/video_model.dart';
 import 'package:vayu/core/managers/shared_video_controller_pool.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -80,14 +81,15 @@ class _ProfileScreenState extends State<ProfileScreen>
   /// **PUBLIC METHOD: Called when Profile tab is selected**
   /// Forces immediate data load if not already loaded
   void onProfileTabSelected() {
-    print('🔄 ProfileScreen: Profile tab selected, ensuring data is loaded');
+    AppLogger.log(
+        '🔄 ProfileScreen: Profile tab selected, ensuring data is loaded');
 
     // **SIMPLIFIED: Just reload data if needed**
     if (_stateManager.userData == null) {
-      print('📡 ProfileScreen: Data not loaded, loading now');
+      AppLogger.log('📡 ProfileScreen: Data not loaded, loading now');
       _loadData();
     } else {
-      print('✅ ProfileScreen: Data already loaded');
+      AppLogger.log('✅ ProfileScreen: Data already loaded');
     }
   }
 
@@ -98,12 +100,12 @@ class _ProfileScreenState extends State<ProfileScreen>
       _isLoading.value = true;
       _error.value = null;
 
-      print('🔄 ProfileScreen: Starting simple cache-first loading');
+      AppLogger.log('🔄 ProfileScreen: Starting simple cache-first loading');
 
       // Step 1: Try cache first
       final cachedData = await _loadCachedProfileData();
       if (cachedData != null) {
-        print('⚡ ProfileScreen: Using cached data');
+        AppLogger.log('⚡ ProfileScreen: Using cached data');
         _stateManager.setUserData(cachedData);
 
         // Load videos from cache in parallel
@@ -115,7 +117,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
 
       // Step 2: No cache - load from server
-      print('📡 ProfileScreen: No cache, loading from server');
+      AppLogger.log('📡 ProfileScreen: No cache, loading from server');
       await _stateManager.loadUserData(widget.userId);
 
       if (_stateManager.userData != null) {
@@ -133,7 +135,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         _isLoading.value = false;
       }
     } catch (e) {
-      print('❌ ProfileScreen: Error loading data: $e');
+      AppLogger.log('❌ ProfileScreen: Error loading data: $e');
       // **BATCHED UPDATE: Update error and loading together**
       _error.value = e.toString();
       _isLoading.value = false;
@@ -160,19 +162,22 @@ class _ProfileScreenState extends State<ProfileScreen>
         if (cached.isNotEmpty) {
           final videos = cached.map((v) => VideoModel.fromJson(v)).toList();
           _stateManager.setVideos(videos);
-          print('⚡ ProfileScreen: Loaded ${videos.length} videos from cache');
+          AppLogger.log(
+              '⚡ ProfileScreen: Loaded ${videos.length} videos from cache');
           return;
         } else {
-          print('ℹ️ ProfileScreen: Cached videos empty; fetching from server');
+          AppLogger.log(
+              'ℹ️ ProfileScreen: Cached videos empty; fetching from server');
         }
       } else if (isStale && cachedVideosJson != null) {
-        print('ℹ️ ProfileScreen: Video cache stale; fetching fresh data');
+        AppLogger.log(
+            'ℹ️ ProfileScreen: Video cache stale; fetching fresh data');
       }
 
       // No cache, empty cache, or stale → load from server
       await _loadVideos();
     } catch (e) {
-      print('❌ ProfileScreen: Error loading videos from cache: $e');
+      AppLogger.log('❌ ProfileScreen: Error loading videos from cache: $e');
       await _loadVideos();
     }
   }
@@ -187,18 +192,18 @@ class _ProfileScreenState extends State<ProfileScreen>
           _stateManager.userData!['id'];
 
       if (currentUserId != null) {
-        print(
+        AppLogger.log(
             '📡 ProfileScreen: Loading videos from server for user: $currentUserId');
         await _stateManager.loadUserVideos(currentUserId);
 
         // Cache the videos
         await _cacheVideos();
 
-        print(
+        AppLogger.log(
             '✅ ProfileScreen: Loaded ${_stateManager.userVideos.length} videos');
       }
     } catch (e) {
-      print('❌ ProfileScreen: Error loading videos: $e');
+      AppLogger.log('❌ ProfileScreen: Error loading videos: $e');
     }
   }
 
@@ -215,15 +220,15 @@ class _ProfileScreenState extends State<ProfileScreen>
       await prefs.setInt('profile_videos_cache_timestamp_$cacheKey',
           DateTime.now().millisecondsSinceEpoch);
 
-      print('✅ ProfileScreen: Videos cached successfully');
+      AppLogger.log('✅ ProfileScreen: Videos cached successfully');
     } catch (e) {
-      print('❌ ProfileScreen: Error caching videos: $e');
+      AppLogger.log('❌ ProfileScreen: Error caching videos: $e');
     }
   }
 
   /// **SIMPLIFIED: Simple refresh data**
   Future<void> _refreshData() async {
-    print('🔄 ProfileScreen: Refreshing data');
+    AppLogger.log('🔄 ProfileScreen: Refreshing data');
 
     // Clear cache to force fresh load
     await _clearProfileCache();
@@ -554,7 +559,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       // **ENHANCED: Clear profile cache to force fresh data on next load**
       await _clearProfileCache();
-      print('🧹 ProfileScreen: Cleared profile cache after name update');
+      AppLogger.log(
+          '🧹 ProfileScreen: Cleared profile cache after name update');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -749,7 +755,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   Future<void> _handleProfilePhotoChange() async {
     try {
       // **FIX: Pause all video controllers to prevent audio leak**
-      print('🔇 ProfileScreen: Pausing all videos before profile photo change');
+      AppLogger.log(
+          '🔇 ProfileScreen: Pausing all videos before profile photo change');
       _pauseAllVideoControllers();
 
       ProfileScreenLogger.logProfilePhotoChange();
@@ -799,7 +806,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
         // **ENHANCED: Clear profile cache to force fresh data on next load**
         await _clearProfileCache();
-        print('🧹 ProfileScreen: Cleared profile cache after photo update');
+        AppLogger.log(
+            '🧹 ProfileScreen: Cleared profile cache after photo update');
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -830,16 +838,17 @@ class _ProfileScreenState extends State<ProfileScreen>
       // Get the main controller from the app
       final mainController =
           Provider.of<MainController>(context, listen: false);
-      print('🔇 ProfileScreen: Pausing all videos via MainController');
+      AppLogger.log('🔇 ProfileScreen: Pausing all videos via MainController');
       mainController.forcePauseVideos();
 
       // **IMPROVED: Also pause shared pool controllers**
       final sharedPool = SharedVideoControllerPool();
       sharedPool.pauseAllControllers();
 
-      print('🔇 ProfileScreen: All video controllers paused (kept in memory)');
+      AppLogger.log(
+          '🔇 ProfileScreen: All video controllers paused (kept in memory)');
     } catch (e) {
-      print('⚠️ ProfileScreen: Error pausing videos: $e');
+      AppLogger.log('⚠️ ProfileScreen: Error pausing videos: $e');
     }
   }
 
@@ -1320,7 +1329,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             isFollowersLoaded: true,
             onFollowersTap: () {
               // **SIMPLIFIED: Simple followers tap**
-              print('🔄 ProfileScreen: Followers tapped');
+              AppLogger.log('🔄 ProfileScreen: Followers tapped');
             },
             onEarningsTap: () async {
               // Navigate directly to revenue screen
@@ -1615,7 +1624,8 @@ class _ProfileScreenState extends State<ProfileScreen>
             prefs.getBool('has_payment_setup_$userId') ?? false;
         if (hasUserSpecificSetup) {
           ProfileScreenLogger.logPaymentSetupFound();
-          print('✅ User-specific payment setup found for user: $userId');
+          AppLogger.log(
+              '✅ User-specific payment setup found for user: $userId');
           return true;
         }
       }
@@ -1624,7 +1634,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       final hasPaymentSetup = prefs.getBool('has_payment_setup') ?? false;
       if (hasPaymentSetup) {
         ProfileScreenLogger.logPaymentSetupFound();
-        print('✅ Global payment setup flag found');
+        AppLogger.log('✅ Global payment setup flag found');
         return true;
       }
 
@@ -1638,7 +1648,8 @@ class _ProfileScreenState extends State<ProfileScreen>
           // **FIX: Set both user-specific and global flags**
           if (userId != null) {
             await prefs.setBool('has_payment_setup_$userId', true);
-            print('✅ Set user-specific payment setup flag for user: $userId');
+            AppLogger.log(
+                '✅ Set user-specific payment setup flag for user: $userId');
           }
           await prefs.setBool('has_payment_setup', true);
           ProfileScreenLogger.logPaymentSetupFound();
@@ -1647,7 +1658,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
 
       ProfileScreenLogger.logPaymentSetupNotFound();
-      print('ℹ️ No payment setup found for user');
+      AppLogger.log('ℹ️ No payment setup found for user');
       return false;
     } catch (e) {
       ProfileScreenLogger.logPaymentSetupCheckError(e.toString());

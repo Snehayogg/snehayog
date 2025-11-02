@@ -9,6 +9,7 @@ import 'package:vayu/services/comments/ad_comments_data_source.dart';
 import 'package:vayu/services/ad_comment_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:vayu/view/widget/custom_share_widget.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 /// **Professional Carousel Ad Widget**
 class CarouselAdWidget extends StatefulWidget {
@@ -69,7 +70,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
         });
       }
     } catch (e) {
-      print('❌ Error loading user data: $e');
+      AppLogger.log('❌ Error loading user data: $e');
     }
   }
 
@@ -86,9 +87,8 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
     try {
       await _carouselAdService.trackImpression(widget.carouselAd.id);
       _hasTrackedImpression = true;
-      print('✅ Carousel ad impression tracked: ${widget.carouselAd.id}');
     } catch (e) {
-      print('❌ Error tracking carousel ad impression: $e');
+      AppLogger.log('❌ Error tracking carousel ad impression: $e');
     }
   }
 
@@ -98,9 +98,8 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
     try {
       await _carouselAdService.trackClick(widget.carouselAd.id);
       _hasTrackedClick = true;
-      print('✅ Carousel ad click tracked: ${widget.carouselAd.id}');
     } catch (e) {
-      print('❌ Error tracking carousel ad click: $e');
+      AppLogger.log('❌ Error tracking carousel ad click: $e');
     }
   }
 
@@ -126,10 +125,9 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
         final uri = Uri.parse(ctaUrl);
         if (await canLaunchUrl(uri)) {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
-          print('✅ Opened carousel ad link: $ctaUrl');
         }
       } catch (e) {
-        print('❌ Error launching carousel ad URL: $e');
+        AppLogger.log('❌ Error launching carousel ad URL: $e');
       }
     }
 
@@ -138,41 +136,44 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        color: Colors.black,
-        child: Stack(
-          children: [
-            // **Top Bar with Yog Title**
-            _buildTopBar(),
+    return RepaintBoundary(
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Container(
+          width: double.infinity,
+          height: double.infinity,
+          color: Colors.black,
+          child: Stack(
+            children: [
+              // **Top Bar with Yog Title**
+              _buildTopBar(),
 
-            // **Sponsored Text at Top Corner**
-            _buildSponsoredText(),
+              // **Sponsored Text at Top Corner**
+              _buildSponsoredText(),
 
-            // **Main Content Area - Dynamic Ad Section**
-            Positioned.fill(
-              child: _buildMainContentArea(),
-            ),
+              // **Main Content Area - Dynamic Ad Section**
+              Positioned.fill(
+                child: _buildMainContentArea(),
+              ),
 
-            // **Progress Indicators** (for multiple slides)
-            if (widget.carouselAd.slides.length > 1) _buildProgressIndicators(),
+              // **Progress Indicators** (for multiple slides)
+              if (widget.carouselAd.slides.length > 1)
+                _buildProgressIndicators(),
 
-            // **Right-Side Vertical Action Bar**
-            _buildRightActionBar(),
+              // **Right-Side Vertical Action Bar**
+              _buildRightActionBar(),
 
-            // **Bottom Ad Metadata Section**
-            _buildBottomAdMetadata(),
+              // **Bottom Ad Metadata Section**
+              _buildBottomAdMetadata(),
 
-            // **Back Button** (bottom corner
-            Positioned(
-              right: 16,
-              bottom: 20, // Aligned with action buttons
-              child: _buildBackButton(),
-            ),
-          ],
+              // **Back Button** (bottom corner
+              Positioned(
+                right: 16,
+                bottom: 20, // Aligned with action buttons
+                child: _buildBackButton(),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -660,10 +661,8 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
         await _carouselAdService.unlikeAd(
             widget.carouselAd.id, _currentUserId!);
       }
-
-      print('✅ Successfully toggled like for ad ${widget.carouselAd.id}');
     } catch (e) {
-      print('❌ Error handling like: $e');
+      AppLogger.log('❌ Error handling like: $e');
 
       // Revert optimistic update on error
       setState(() {

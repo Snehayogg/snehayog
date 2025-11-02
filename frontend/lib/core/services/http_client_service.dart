@@ -1,5 +1,6 @@
 import 'package:http/http.dart' as http;
 import '../../config/app_config.dart';
+import '../../utils/app_logger.dart';
 
 /// Centralized HTTP client service with connection pooling
 /// This service manages a single HTTP client instance with optimized settings
@@ -22,7 +23,7 @@ class HttpClientService {
     _client = http.Client();
     _isInitialized = true;
 
-    print('🔗 HttpClientService: Initialized with connection pooling');
+    AppLogger.log('🔗 HttpClientService: Initialized with connection pooling');
   }
 
   /// Get the shared HTTP client instance
@@ -99,14 +100,27 @@ class HttpClientService {
   Future<http.Response> delete(
     Uri url, {
     Map<String, String>? headers,
+    Object? body,
     Duration? timeout,
   }) async {
-    return await client
-        .delete(
-          url,
-          headers: headers,
-        )
-        .timeout(timeout ?? AppConfig.apiTimeout);
+    // For DELETE requests with body, we need to use send() method
+    if (body != null) {
+      final request = http.Request('DELETE', url);
+      if (headers != null) {
+        request.headers.addAll(headers);
+      }
+      request.body = body is String ? body : body.toString();
+      final streamedResponse = await client.send(request);
+      return await http.Response.fromStream(streamedResponse)
+          .timeout(timeout ?? AppConfig.apiTimeout);
+    } else {
+      return await client
+          .delete(
+            url,
+            headers: headers,
+          )
+          .timeout(timeout ?? AppConfig.apiTimeout);
+    }
   }
 
   /// Make a multipart request using the shared client
@@ -141,18 +155,18 @@ class HttpClientService {
         // For server errors (5xx), retry
         attempts++;
         if (attempts < maxRetries) {
-          print(
+          AppLogger.log(
               '🔄 HttpClientService: Retrying request (attempt $attempts/$maxRetries)');
           await Future.delayed(retryDelay * attempts);
         }
       } catch (e) {
         attempts++;
         if (attempts >= maxRetries) {
-          print(
+          AppLogger.log(
               '❌ HttpClientService: Request failed after $maxRetries attempts: $e');
           rethrow;
         }
-        print(
+        AppLogger.log(
             '🔄 HttpClientService: Retrying after error (attempt $attempts/$maxRetries): $e');
         await Future.delayed(retryDelay * attempts);
       }
@@ -175,7 +189,7 @@ class HttpClientService {
     if (_isInitialized) {
       _client.close();
       _isInitialized = false;
-      print('🔗 HttpClientService: Disposed and connections closed');
+      AppLogger.log('🔗 HttpClientService: Disposed and connections closed');
     }
   }
 

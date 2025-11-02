@@ -4,6 +4,7 @@ import 'package:vayu/core/constants/app_constants.dart';
 import 'package:vayu/view/screens/profile_screen.dart';
 import 'package:vayu/view/widget/follow_button_widget.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 class VideoInfoWidget extends StatelessWidget {
   final VideoModel video;
@@ -53,17 +54,7 @@ class VideoInfoWidget extends StatelessWidget {
           // **DEBUG: Add logging to check link status**
           Builder(
             builder: (context) {
-              print(
-                  '🔗 VideoInfoWidget: Checking link for video: ${video.videoName}');
-              print('🔗 VideoInfoWidget: video.link = ${video.link}');
-              print(
-                  '🔗 VideoInfoWidget: video.link != null = ${video.link != null}');
-              print(
-                  '🔗 VideoInfoWidget: video.link!.isNotEmpty = ${video.link?.isNotEmpty}');
-
               if (video.link != null && video.link!.isNotEmpty) {
-                print(
-                    '✅ VideoInfoWidget: Link found, showing Visit Now button');
                 return Column(
                   children: [
                     const SizedBox(height: 4),
@@ -71,8 +62,6 @@ class VideoInfoWidget extends StatelessWidget {
                   ],
                 );
               } else {
-                print(
-                    '❌ VideoInfoWidget: No link found, not showing Visit Now button');
                 return const SizedBox.shrink();
               }
             },

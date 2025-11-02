@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:vayu/model/carousel_ad_model.dart';
 import 'package:vayu/config/app_config.dart';
+import 'package:vayu/utils/app_logger.dart';
+import 'package:vayu/core/services/http_client_service.dart';
 
 class CarouselAdService {
   static String get _baseUrl => AppConfig.baseUrl;
@@ -10,11 +12,11 @@ class CarouselAdService {
   /// Try different endpoints to find carousel ads
   Future<List<CarouselAdModel>> fetchCarouselAds() async {
     try {
-      print('🎯 CarouselAdService: Fetching carousel ads...');
+      AppLogger.log('🎯 CarouselAdService: Fetching carousel ads...');
 
       // Get base URL with Railway first, local fallback
       final baseUrl = await AppConfig.getBaseUrlWithFallback();
-      print('🎯 CarouselAdService: Using base URL: $baseUrl');
+      AppLogger.log('🎯 CarouselAdService: Using base URL: $baseUrl');
 
       // Try multiple endpoints to find carousel ads
       final endpoints = [
@@ -25,18 +27,19 @@ class CarouselAdService {
 
       for (final endpoint in endpoints) {
         try {
-          print('🔍 CarouselAdService: Trying endpoint: $endpoint');
+          AppLogger.log('🔍 CarouselAdService: Trying endpoint: $endpoint');
 
-          final response = await http.get(
+          final response = await httpClientService.get(
             Uri.parse(endpoint),
             headers: {
               'Content-Type': 'application/json',
             },
           ).timeout(const Duration(seconds: 10));
 
-          print(
+          AppLogger.log(
               '🔍 CarouselAdService: Response status: ${response.statusCode}');
-          print('🔍 CarouselAdService: Response body: ${response.body}');
+          AppLogger.log(
+              '🔍 CarouselAdService: Response body: ${response.body}');
 
           if (response.statusCode == 200) {
             final dynamic decoded = json.decode(response.body);
@@ -53,7 +56,8 @@ class CarouselAdService {
               rawAds = [];
             }
 
-            print('🔍 CarouselAdService: Found ${rawAds.length} raw ads');
+            AppLogger.log(
+                '🔍 CarouselAdService: Found ${rawAds.length} raw ads');
 
             // Filter carousel by adType tolerant of casing/spacing
             // For direct carousel endpoint, all ads are carousel ads
@@ -61,7 +65,7 @@ class CarouselAdService {
             if (endpoint.contains('/carousel')) {
               filteredAds =
                   rawAds; // All ads from carousel endpoint are carousel ads
-              print(
+              AppLogger.log(
                   '🔍 CarouselAdService: Using all ads from carousel endpoint');
             } else {
               filteredAds = rawAds.where((ad) {
@@ -70,7 +74,7 @@ class CarouselAdService {
                         .toLowerCase() ??
                     '';
                 final isCarousel = type.contains('carousel');
-                print('🔍 Ad type: $type, isCarousel: $isCarousel');
+                AppLogger.log('🔍 Ad type: $type, isCarousel: $isCarousel');
                 return isCarousel;
               }).toList();
             }
@@ -81,33 +85,34 @@ class CarouselAdService {
                 .where((model) => model.slides.isNotEmpty)
                 .toList();
 
-            print(
+            AppLogger.log(
                 '✅ CarouselAdService: Found ${carouselAds.length} carousel ads from $endpoint');
 
             if (carouselAds.isNotEmpty) {
               return carouselAds;
             }
           } else {
-            print(
+            AppLogger.log(
                 '❌ Endpoint $endpoint failed with status: ${response.statusCode}');
           }
         } catch (e) {
-          print('❌ Error with endpoint $endpoint: $e');
+          AppLogger.log('❌ Error with endpoint $endpoint: $e');
           continue; // Try next endpoint
         }
       }
 
-      print('⚠️ CarouselAdService: No carousel ads found from any endpoint');
+      AppLogger.log(
+          '⚠️ CarouselAdService: No carousel ads found from any endpoint');
       return [];
     } catch (e) {
-      print('❌ Exception fetching carousel ads: $e');
+      AppLogger.log('❌ Exception fetching carousel ads: $e');
       return [];
     }
   }
 
   /// Convert AdCreative to CarouselAdModel
   CarouselAdModel _convertToCarouselAdModel(Map<String, dynamic> adJson) {
-    print(
+    AppLogger.log(
         '🔍 CarouselAdService: Converting ad to carousel model: ${adJson['title']}');
 
     // Accept either single media fields or an array of slides/media
@@ -117,7 +122,8 @@ class CarouselAdService {
     final dynamic providedSlides =
         adJson['slides'] ?? adJson['media'] ?? adJson['carouselSlides'];
     if (providedSlides is List) {
-      print('🔍 CarouselAdService: Found ${providedSlides.length} slides');
+      AppLogger.log(
+          '🔍 CarouselAdService: Found ${providedSlides.length} slides');
       for (final s in providedSlides) {
         if (s is Map<String, dynamic>) {
           final mediaUrl =
@@ -133,7 +139,8 @@ class CarouselAdService {
               durationSec:
                   s['durationSec'] is int ? s['durationSec'] as int : null,
             ));
-            print('🔍 CarouselAdService: Added slide with URL: $mediaUrl');
+            AppLogger.log(
+                '🔍 CarouselAdService: Added slide with URL: $mediaUrl');
           }
         }
       }
@@ -145,7 +152,7 @@ class CarouselAdService {
     final videoUrl = adJson['videoUrl'];
 
     if (slides.isEmpty) {
-      print(
+      AppLogger.log(
           '🔍 CarouselAdService: No slides found, trying fallback single media');
 
       if (imageUrl != null && imageUrl.toString().isNotEmpty) {
@@ -157,7 +164,8 @@ class CarouselAdService {
           title: adJson['title']?.toString(),
           description: adJson['description']?.toString(),
         ));
-        print('🔍 CarouselAdService: Added fallback image slide: $imageUrl');
+        AppLogger.log(
+            '🔍 CarouselAdService: Added fallback image slide: $imageUrl');
       }
 
       if (videoUrl != null && videoUrl.toString().isNotEmpty) {
@@ -169,11 +177,12 @@ class CarouselAdService {
           title: adJson['title']?.toString(),
           description: adJson['description']?.toString(),
         ));
-        print('🔍 CarouselAdService: Added fallback video slide: $videoUrl');
+        AppLogger.log(
+            '🔍 CarouselAdService: Added fallback video slide: $videoUrl');
       }
     }
 
-    print('🔍 CarouselAdService: Final slides count: ${slides.length}');
+    AppLogger.log('🔍 CarouselAdService: Final slides count: ${slides.length}');
 
     final carouselAd = CarouselAdModel(
       id: adJson['_id']?.toString() ?? adJson['id']?.toString() ?? 'unknown',
@@ -198,7 +207,7 @@ class CarouselAdService {
           DateTime.now(),
     );
 
-    print(
+    AppLogger.log(
         '✅ CarouselAdService: Created carousel ad: ${carouselAd.advertiserName} with ${carouselAd.slides.length} slides');
     return carouselAd;
   }
@@ -206,7 +215,7 @@ class CarouselAdService {
   /// Fetch a single carousel ad by ID
   Future<CarouselAdModel?> fetchCarouselAdById(String adId) async {
     try {
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('$_baseUrl/ads/carousel/$adId'),
         headers: {
           'Content-Type': 'application/json',
@@ -217,11 +226,12 @@ class CarouselAdService {
         final data = json.decode(response.body);
         return CarouselAdModel.fromJson(data);
       } else {
-        print('❌ Error fetching carousel ad $adId: ${response.statusCode}');
+        AppLogger.log(
+            '❌ Error fetching carousel ad $adId: ${response.statusCode}');
         return null;
       }
     } catch (e) {
-      print('❌ Exception fetching carousel ad $adId: $e');
+      AppLogger.log('❌ Exception fetching carousel ad $adId: $e');
       return null;
     }
   }
@@ -229,7 +239,7 @@ class CarouselAdService {
   /// Track ad impression
   Future<bool> trackImpression(String adId) async {
     try {
-      final response = await http.post(
+      final response = await httpClientService.post(
         Uri.parse('$_baseUrl/ads/carousel/$adId/impression'),
         headers: {
           'Content-Type': 'application/json',
@@ -238,7 +248,7 @@ class CarouselAdService {
 
       return response.statusCode == 200;
     } catch (e) {
-      print('❌ Exception tracking impression: $e');
+      AppLogger.log('❌ Exception tracking impression: $e');
       return false;
     }
   }
@@ -246,7 +256,7 @@ class CarouselAdService {
   /// Track ad click
   Future<bool> trackClick(String adId) async {
     try {
-      final response = await http.post(
+      final response = await httpClientService.post(
         Uri.parse('$_baseUrl/ads/carousel/$adId/click'),
         headers: {
           'Content-Type': 'application/json',
@@ -255,7 +265,7 @@ class CarouselAdService {
 
       return response.statusCode == 200;
     } catch (e) {
-      print('❌ Exception tracking click: $e');
+      AppLogger.log('❌ Exception tracking click: $e');
       return false;
     }
   }
@@ -263,7 +273,7 @@ class CarouselAdService {
   /// Like carousel ad
   Future<bool> likeAd(String adId, String userId) async {
     try {
-      final response = await http.post(
+      final response = await httpClientService.post(
         Uri.parse('$_baseUrl/ads/carousel/$adId/like'),
         headers: {
           'Content-Type': 'application/json',
@@ -273,7 +283,7 @@ class CarouselAdService {
 
       return response.statusCode == 200;
     } catch (e) {
-      print('❌ Exception liking ad: $e');
+      AppLogger.log('❌ Exception liking ad: $e');
       return false;
     }
   }
@@ -281,7 +291,7 @@ class CarouselAdService {
   /// Unlike carousel ad
   Future<bool> unlikeAd(String adId, String userId) async {
     try {
-      final response = await http.post(
+      final response = await httpClientService.post(
         Uri.parse('$_baseUrl/ads/carousel/$adId/unlike'),
         headers: {
           'Content-Type': 'application/json',
@@ -291,7 +301,7 @@ class CarouselAdService {
 
       return response.statusCode == 200;
     } catch (e) {
-      print('❌ Exception unliking ad: $e');
+      AppLogger.log('❌ Exception unliking ad: $e');
       return false;
     }
   }
@@ -299,7 +309,7 @@ class CarouselAdService {
   /// Share carousel ad
   Future<bool> shareAd(String adId, String userId) async {
     try {
-      final response = await http.post(
+      final response = await httpClientService.post(
         Uri.parse('$_baseUrl/ads/carousel/$adId/share'),
         headers: {
           'Content-Type': 'application/json',
@@ -309,7 +319,7 @@ class CarouselAdService {
 
       return response.statusCode == 200;
     } catch (e) {
-      print('❌ Exception sharing ad: $e');
+      AppLogger.log('❌ Exception sharing ad: $e');
       return false;
     }
   }
@@ -317,7 +327,7 @@ class CarouselAdService {
   /// Comment on carousel ad
   Future<bool> commentOnAd(String adId, String userId, String comment) async {
     try {
-      final response = await http.post(
+      final response = await httpClientService.post(
         Uri.parse('$_baseUrl/ads/carousel/$adId/comment'),
         headers: {
           'Content-Type': 'application/json',
@@ -330,7 +340,7 @@ class CarouselAdService {
 
       return response.statusCode == 200;
     } catch (e) {
-      print('❌ Exception commenting on ad: $e');
+      AppLogger.log('❌ Exception commenting on ad: $e');
       return false;
     }
   }

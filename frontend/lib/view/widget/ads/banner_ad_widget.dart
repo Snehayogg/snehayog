@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:vayu/services/active_ads_service.dart';
 import 'package:vayu/config/app_config.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 /// Widget to display banner ads at the top of video feed
 class BannerAdWidget extends StatefulWidget {
@@ -55,10 +56,11 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
     // **FIX: Don't show ad widget at all if no image URL or image load failed**
     if (imageUrl.isEmpty || imageUrl.trim() == '' || _imageLoadFailed) {
       if (_imageLoadFailed) {
-        print(
+        AppLogger.log(
             '⚠️ BannerAdWidget: Image load failed, hiding entire ad widget to prevent grey overlay');
       } else {
-        print('⚠️ BannerAdWidget: No image URL available, hiding ad widget');
+        AppLogger.log(
+            '⚠️ BannerAdWidget: No image URL available, hiding ad widget');
       }
       return const SizedBox.shrink();
     }
@@ -67,19 +69,6 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.onAdImpression?.call();
     });
-
-    // Debug logging for banner ad data
-    print('🎯 BannerAdWidget: Building banner ad with data:');
-    print('   Raw adData keys: ${widget.adData.keys.toList()}');
-    print('   Image URL: $imageUrl');
-    print('   Ad ID: ${widget.adData['_id'] ?? widget.adData['id']}');
-    print('   Title: ${widget.adData['title']}');
-    print('   Link: ${widget.adData['link']}');
-    print('   URL: ${widget.adData['url']}');
-    print('   CTA URL: ${widget.adData['ctaUrl']}');
-    print('   CallToAction: ${widget.adData['callToAction']}');
-    print('   AdType: ${widget.adData['adType']}');
-    print('   All values: ${widget.adData.toString()}');
 
     // **FIX: Isolate banner with RepaintBoundary to prevent compositing over video texture**
     return RepaintBoundary(
@@ -123,7 +112,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
                                     gaplessPlayback:
                                         true, // **FIX: Gapless image to prevent flicker**
                                     errorBuilder: (context, error, stackTrace) {
-                                      print(
+                                      AppLogger.log(
                                           '❌ BannerAdWidget: Failed to load image: $imageUrl, Error: $error');
                                       // **FIX: Hide entire widget when image fails to prevent grey overlay**
                                       if (mounted) {
@@ -269,12 +258,10 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
         final candidate = (nested['url'] ?? nested['link'])?.toString();
         if (candidate != null && candidate.trim().isNotEmpty) {
           link = candidate.trim();
-          print('   Found link in callToAction: $link');
         }
       }
 
       link = _ensureAbsoluteUrl(link);
-      print('   Final normalized link: $link');
 
       // Show confirmation dialog if link is available
       if (link.isNotEmpty) {
@@ -330,7 +317,6 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
           if (adId != null) {
             final activeAdsService = ActiveAdsService();
             await activeAdsService.trackClick(adId);
-            print('✅ Banner ad click tracked: $adId');
           }
 
           // Execute callback
@@ -340,10 +326,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
           final uri = Uri.parse(link);
           if (await canLaunchUrl(uri)) {
             await launchUrl(uri, mode: LaunchMode.externalApplication);
-            print('✅ Opened banner ad link: $link');
           } else {
-            print('❌ Cannot launch URL: $link');
-
             // Show error to user
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -357,12 +340,6 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
           }
         }
       } else {
-        print('🔍 No link provided for banner ad');
-        print('   Available fields: ${widget.adData.keys.toList()}');
-        print('   Link field value: ${widget.adData['link']}');
-        print('   URL field value: ${widget.adData['url']}');
-        print('   CallToAction field value: ${widget.adData['callToAction']}');
-
         // Show simple message to user
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -375,7 +352,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
         }
       }
     } catch (e) {
-      print('❌ Error handling banner ad click: $e');
+      AppLogger.log('❌ Error handling banner ad click: $e');
 
       // Show error to user
       if (context.mounted) {
@@ -395,13 +372,6 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
     try {
       final adId = widget.adData['_id'] ?? widget.adData['id'];
 
-      // Debug logging for click handling
-      print('🖱️ BannerAdWidget: Handling ad click');
-      print('   Ad ID: $adId');
-      print('   Available keys: ${widget.adData.keys.toList()}');
-      print('   Raw link field: ${widget.adData['link']}');
-      print('   Raw callToAction field: ${widget.adData['callToAction']}');
-
       // Resolve link from multiple keys and ensure absolute URL
       String link = (widget.adData['link'] ??
               widget.adData['url'] ??
@@ -417,12 +387,10 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
         final candidate = (nested['url'] ?? nested['link'])?.toString();
         if (candidate != null && candidate.trim().isNotEmpty) {
           link = candidate.trim();
-          print('   Found link in callToAction: $link');
         }
       }
 
       link = _ensureAbsoluteUrl(link);
-      print('   Final normalized link: $link');
 
       // Directly open link if available (no confirmation dialog)
       if (link.isNotEmpty) {
@@ -430,7 +398,6 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
         if (adId != null) {
           final activeAdsService = ActiveAdsService();
           await activeAdsService.trackClick(adId);
-          print('✅ Banner ad click tracked: $adId');
         }
 
         // Execute callback
@@ -440,10 +407,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
         final uri = Uri.parse(link);
         if (await canLaunchUrl(uri)) {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
-          print('✅ Opened banner ad link: $link');
         } else {
-          print('❌ Cannot launch URL: $link');
-
           // Show error to user
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -456,12 +420,6 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
           }
         }
       } else {
-        print('🔍 No link provided for banner ad');
-        print('   Available fields: ${widget.adData.keys.toList()}');
-        print('   Link field value: ${widget.adData['link']}');
-        print('   URL field value: ${widget.adData['url']}');
-        print('   CallToAction field value: ${widget.adData['callToAction']}');
-
         // Show simple message to user
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -474,7 +432,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
         }
       }
     } catch (e) {
-      print('❌ Error handling banner ad click: $e');
+      AppLogger.log('❌ Error handling banner ad click: $e');
 
       // Show error to user
       if (context.mounted) {

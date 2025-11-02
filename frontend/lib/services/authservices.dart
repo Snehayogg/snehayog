@@ -10,6 +10,7 @@ import 'package:vayu/config/app_config.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:vayu/config/google_sign_in_config.dart';
 import 'package:vayu/services/location_onboarding_service.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 class AuthService {
   // ✅ Use platform-specific client ID
@@ -23,11 +24,11 @@ class AuthService {
 
   Future<Map<String, dynamic>?> signInWithGoogle() async {
     try {
-      print('🔐 Starting Google Sign-In process...');
+      AppLogger.log('🔐 Starting Google Sign-In process...');
 
       // **NEW: Check configuration before proceeding**
       if (!GoogleSignInConfig.isConfigured) {
-        print('❌ Google Sign-In not properly configured!');
+        AppLogger.log('❌ Google Sign-In not properly configured!');
         GoogleSignInConfig.printConfig();
         throw Exception(
             'Google Sign-In configuration missing. Please set OAuth 2.0 Client IDs.');
@@ -36,7 +37,7 @@ class AuthService {
       // **NEW: Validate OAuth 2.0 Client ID format**
       if (!GoogleSignInConfig.isValidClientId) {
         final error = GoogleSignInConfig.getConfigurationError();
-        print('❌ OAuth 2.0 Client ID validation failed: $error');
+        AppLogger.log('❌ OAuth 2.0 Client ID validation failed: $error');
         GoogleSignInConfig.printConfig();
         throw Exception('OAuth 2.0 Client ID validation failed: $error');
       }
@@ -49,7 +50,7 @@ class AuthService {
         await _googleSignIn.signOut();
         await _googleSignIn.disconnect();
       } catch (e) {
-        print('ℹ️ Pre sign-in disconnect/signOut ignored: $e');
+        AppLogger.log('ℹ️ Pre sign-in disconnect/signOut ignored: $e');
       }
 
       // Also clear any locally cached fallback to avoid auto-restoring prior account
@@ -60,11 +61,11 @@ class AuthService {
 
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
-        print('❌ User cancelled Google Sign-In');
+        AppLogger.log('❌ User cancelled Google Sign-In');
         return null;
       }
 
-      print('✅ Google Sign-In successful for: ${googleUser.email}');
+      AppLogger.log('✅ Google Sign-In successful for: ${googleUser.email}');
 
       // Acquire ID token; on web, prefer platform getTokens as authentication.idToken can be null
       String? idToken;
@@ -79,15 +80,15 @@ class AuthService {
           idToken = googleAuth.idToken;
         }
       } catch (e) {
-        print('❌ Error obtaining Google tokens: $e');
+        AppLogger.log('❌ Error obtaining Google tokens: $e');
       }
 
       if (idToken == null) {
-        print('❌ Failed to get ID token from Google');
+        AppLogger.log('❌ Failed to get ID token from Google');
         throw Exception('Failed to get authentication token from Google');
       }
 
-      print('🔑 Got ID token, attempting backend authentication...');
+      AppLogger.log('🔑 Got ID token, attempting backend authentication...');
 
       // First, authenticate with backend to get JWT
       try {
@@ -99,13 +100,14 @@ class AuthService {
             )
             .timeout(const Duration(seconds: 10));
 
-        print('📡 Backend auth response status: ${authResponse.statusCode}');
-        print('📡 Backend auth response body: ${authResponse.body}');
+        AppLogger.log(
+            '📡 Backend auth response status: ${authResponse.statusCode}');
+        AppLogger.log('📡 Backend auth response body: ${authResponse.body}');
 
         if (authResponse.statusCode == 200) {
           final authData = jsonDecode(authResponse.body);
-          print('✅ Backend authentication successful');
-          print(
+          AppLogger.log('✅ Backend authentication successful');
+          AppLogger.log(
               '🔑 JWT Token received: ${authData['token']?.substring(0, 20)}...');
 
           // Save JWT in shared preferences
@@ -132,12 +134,12 @@ class AuthService {
                 )
                 .timeout(const Duration(seconds: 10));
 
-            print(
+            AppLogger.log(
                 '📡 User registration response status: ${registerResponse.statusCode}');
 
             if (registerResponse.statusCode == 200 ||
                 registerResponse.statusCode == 201) {
-              print('✅ User registration successful');
+              AppLogger.log('✅ User registration successful');
               final regData = jsonDecode(registerResponse.body);
               registeredUserData = regData['user'];
 
@@ -147,10 +149,11 @@ class AuthService {
                 _showLocationOnboardingAfterSignIn();
               });
             } else {
-              print('⚠️ User registration failed: ${registerResponse.body}');
+              AppLogger.log(
+                  '⚠️ User registration failed: ${registerResponse.body}');
             }
           } catch (e) {
-            print('⚠️ User registration error (non-critical): $e');
+            AppLogger.log('⚠️ User registration error (non-critical): $e');
           }
 
           // **FIXED: Use Google account data if backend data is missing**
@@ -170,7 +173,7 @@ class AuthService {
             'profilePic': finalProfilePic,
           };
           await prefs.setString('fallback_user', jsonEncode(fallbackData));
-          print('✅ Saved fallback_user with Google account data');
+          AppLogger.log('✅ Saved fallback_user with Google account data');
 
           // Return combined user data
           return {
@@ -182,7 +185,8 @@ class AuthService {
             'token': authData['token'],
           };
         } else {
-          print('❌ Backend authentication failed: ${authResponse.body}');
+          AppLogger.log(
+              '❌ Backend authentication failed: ${authResponse.body}');
 
           // **IMPROVED: Better error messages for JWT issues**
           final errorBody = jsonDecode(authResponse.body);
@@ -208,7 +212,7 @@ class AuthService {
           // Try to provide a fallback for development/testing
           if (AppConfig.baseUrl.contains('localhost') ||
               AppConfig.baseUrl.contains('192.168')) {
-            print(
+            AppLogger.log(
                 '🔄 Backend appears to be local, creating fallback session...');
             return await _createFallbackSession(googleUser);
           }
@@ -216,18 +220,19 @@ class AuthService {
           throw Exception(errorMessage);
         }
       } catch (e) {
-        print('❌ Backend communication error: $e');
+        AppLogger.log('❌ Backend communication error: $e');
 
         // If backend is unreachable, try to reconnect and retry
         if (e.toString().contains('SocketException') ||
             e.toString().contains('Connection refused') ||
             e.toString().contains('timeout')) {
-          print('🔄 Backend unreachable, checking server connectivity...');
+          AppLogger.log(
+              '🔄 Backend unreachable, checking server connectivity...');
 
           // Try to find a working server
           try {
             await AppConfig.checkAndUpdateServerUrl();
-            print('🔄 Retrying with updated server URL...');
+            AppLogger.log('🔄 Retrying with updated server URL...');
 
             // Retry the authentication with new URL
             final authResponse = await http
@@ -267,17 +272,17 @@ class AuthService {
               };
             }
           } catch (retryError) {
-            print('❌ Retry failed: $retryError');
+            AppLogger.log('❌ Retry failed: $retryError');
           }
 
-          print('🔄 All servers failed, creating fallback session...');
+          AppLogger.log('🔄 All servers failed, creating fallback session...');
           return await _createFallbackSession(googleUser);
         }
 
         throw Exception('Failed to communicate with backend: $e');
       }
     } catch (e) {
-      print('❌ Google Sign-In Error: $e');
+      AppLogger.log('❌ Google Sign-In Error: $e');
       throw Exception('Sign-in failed: $e');
     }
   }
@@ -286,7 +291,7 @@ class AuthService {
   Future<Map<String, dynamic>?> _createFallbackSession(
       GoogleSignInAccount googleUser) async {
     try {
-      print('🔄 Creating fallback session for: ${googleUser.email}');
+      AppLogger.log('🔄 Creating fallback session for: ${googleUser.email}');
 
       // Generate a temporary token for local use
       final tempToken =
@@ -306,7 +311,7 @@ class AuthService {
             'isFallback': true,
           }));
 
-      print('✅ Fallback session created successfully');
+      AppLogger.log('✅ Fallback session created successfully');
 
       // Show location onboarding for fallback users too
       Future.delayed(const Duration(milliseconds: 500), () {
@@ -323,7 +328,7 @@ class AuthService {
         'isFallback': true,
       };
     } catch (e) {
-      print('❌ Failed to create fallback session: $e');
+      AppLogger.log('❌ Failed to create fallback session: $e');
       return null;
     }
   }
@@ -331,7 +336,7 @@ class AuthService {
   // **NEW: Show location onboarding after successful sign in**
   static void _showLocationOnboardingAfterSignIn() async {
     try {
-      print(
+      AppLogger.log(
           '📍 AuthService: Checking if location onboarding should be shown...');
 
       // Check if we should show location onboarding
@@ -339,7 +344,7 @@ class AuthService {
           await LocationOnboardingService.shouldShowLocationOnboarding();
 
       if (shouldShow) {
-        print('📍 AuthService: Showing location onboarding...');
+        AppLogger.log('📍 AuthService: Showing location onboarding...');
 
         // Get the current context
         final context = navigatorKey.currentContext;
@@ -349,18 +354,19 @@ class AuthService {
               await LocationOnboardingService.showLocationOnboarding(context);
 
           if (granted) {
-            print('✅ AuthService: Location permission granted');
+            AppLogger.log('✅ AuthService: Location permission granted');
           } else {
-            print('❌ AuthService: Location permission denied');
+            AppLogger.log('❌ AuthService: Location permission denied');
           }
         } else {
-          print('❌ AuthService: No context available for location onboarding');
+          AppLogger.log(
+              '❌ AuthService: No context available for location onboarding');
         }
       } else {
-        print('📍 AuthService: Location onboarding not needed');
+        AppLogger.log('📍 AuthService: Location onboarding not needed');
       }
     } catch (e) {
-      print('❌ AuthService: Error in location onboarding: $e');
+      AppLogger.log('❌ AuthService: Error in location onboarding: $e');
     }
   }
 
@@ -373,7 +379,7 @@ class AuthService {
       // Check if it's a fallback session
       String? fallbackUser = prefs.getString('fallback_user');
       if (fallbackUser != null) {
-        print('🔄 User has fallback session');
+        AppLogger.log('🔄 User has fallback session');
         return true;
       }
 
@@ -386,18 +392,18 @@ class AuthService {
 
         return response.statusCode == 200;
       } catch (e) {
-        print('⚠️ Token verification failed, but keeping session: $e');
+        AppLogger.log('⚠️ Token verification failed, but keeping session: $e');
         return true; // Keep the session even if backend is unreachable
       }
     } catch (e) {
-      print('❌ Error checking login status: $e');
+      AppLogger.log('❌ Error checking login status: $e');
       return false;
     }
   }
 
   Future<void> signOut() async {
     try {
-      print('🚪 Signing out user...');
+      AppLogger.log('🚪 Signing out user...');
 
       // **FIXED: Sign out from Google first**
       await _googleSignIn.signOut();
@@ -405,7 +411,7 @@ class AuthService {
       try {
         await _googleSignIn.disconnect();
       } catch (e) {
-        print('ℹ️ Google disconnect failed (non-fatal): $e');
+        AppLogger.log('ℹ️ Google disconnect failed (non-fatal): $e');
       }
 
       // **FIXED: Clear ALL stored authentication data**
@@ -428,16 +434,16 @@ class AuthService {
             key.startsWith('profile_cache_timestamp_') ||
             key.startsWith('auth_')) {
           await prefs.remove(key);
-          print('🗑️ Cleared cached data: $key');
+          AppLogger.log('🗑️ Cleared cached data: $key');
         }
       }
 
       // Explicit flags
       // NOTE: Do not remove payment setup flags so user payment profile persists across sessions
 
-      print('✅ Sign out successful - All user data cleared');
+      AppLogger.log('✅ Sign out successful - All user data cleared');
     } catch (e) {
-      print('❌ Error during sign out: $e');
+      AppLogger.log('❌ Error during sign out: $e');
       throw Exception('Sign out failed: $e');
     }
   }
@@ -446,7 +452,7 @@ class AuthService {
     try {
       return await _googleSignIn.isSignedIn();
     } catch (e) {
-      print('❌ Error checking Google sign-in status: $e');
+      AppLogger.log('❌ Error checking Google sign-in status: $e');
       return false;
     }
   }
@@ -455,7 +461,7 @@ class AuthService {
   Future<Map<String, dynamic>?> getUserData(
       {bool skipTokenRefresh = false}) async {
     try {
-      print('🔍 AuthService: Getting user data...');
+      AppLogger.log('🔍 AuthService: Getting user data...');
 
       // Wait for internal retrieval with a sensible timeout; on timeout, fallback to cached user
       return await _getUserDataInternal(skipTokenRefresh: skipTokenRefresh)
@@ -480,7 +486,7 @@ class AuthService {
         return null;
       });
     } catch (e) {
-      print('❌ AuthService: Error getting user data: $e');
+      AppLogger.log('❌ AuthService: Error getting user data: $e');
       return null;
     }
   }
@@ -493,17 +499,17 @@ class AuthService {
       String? token = prefs.getString('jwt_token');
       String? fallbackUser = prefs.getString('fallback_user');
 
-      print('🔍 AuthService: Token found: ${'Yes'}');
-      print('🔍 AuthService: Fallback user found: ${'Yes'}');
+      AppLogger.log('🔍 AuthService: Token found: ${'Yes'}');
+      AppLogger.log('🔍 AuthService: Fallback user found: ${'Yes'}');
 
       // **NEW: Validate JWT token before using it**
       if (!skipTokenRefresh && !isTokenValid(token)) {
-        print('❌ AuthService: JWT token is invalid or expired');
+        AppLogger.log('❌ AuthService: JWT token is invalid or expired');
 
         // Try to refresh the token
         token = await refreshTokenIfNeeded();
         if (token == null) {
-          print(
+          AppLogger.log(
               '❌ AuthService: Failed to refresh token, clearing invalid token');
           await prefs.remove('jwt_token');
           token = null;
@@ -514,32 +520,33 @@ class AuthService {
         // **NEW: Log token information for debugging**
         final tokenInfo = getTokenInfo(token);
         if (tokenInfo != null) {
-          print('🔍 AuthService: Token info:');
-          print('   User ID: ${tokenInfo['userId']}');
-          print('   Expires: ${tokenInfo['expiryDate']}');
-          print('   Minutes until expiry: ${tokenInfo['minutesUntilExpiry']}');
-          print('   Expires soon: ${tokenInfo['expiresSoon']}');
+          AppLogger.log('🔍 AuthService: Token info:');
+          AppLogger.log('   User ID: ${tokenInfo['userId']}');
+          AppLogger.log('   Expires: ${tokenInfo['expiryDate']}');
+          AppLogger.log(
+              '   Minutes until expiry: ${tokenInfo['minutesUntilExpiry']}');
+          AppLogger.log('   Expires soon: ${tokenInfo['expiresSoon']}');
         }
       }
 
       // **FIXED: Always check backend FIRST for fresh data, fallback is only for offline scenarios**
       Map<String, dynamic>? fallbackDataMap;
       if (fallbackUser != null) {
-        print(
+        AppLogger.log(
             '🔄 Found fallback user data available (will use if backend fails)');
         fallbackDataMap = jsonDecode(fallbackUser);
       }
 
       // Try to verify token with backend and get actual user data
       try {
-        print('🔍 Attempting to verify token with backend...');
+        AppLogger.log('🔍 Attempting to verify token with backend...');
         if (token != null) {
-          print(
+          AppLogger.log(
               '🔍 Token being sent (first 20 chars): ${token.substring(0, 20)}...');
-          print('🔍 Token length: ${token.length}');
-          print('🔍 Token type: ${token.runtimeType}');
+          AppLogger.log('🔍 Token length: ${token.length}');
+          AppLogger.log('🔍 Token type: ${token.runtimeType}');
         } else {
-          print('🔍 Token is null!');
+          AppLogger.log('🔍 Token is null!');
         }
 
         final response = await http.get(
@@ -550,7 +557,7 @@ class AuthService {
 
         if (response.statusCode == 200) {
           final userData = jsonDecode(response.body);
-          print('✅ Retrieved user profile from backend');
+          AppLogger.log('✅ Retrieved user profile from backend');
 
           // **FIXED: Always update fallback with fresh backend data**
           final fallbackData = {
@@ -562,7 +569,7 @@ class AuthService {
             'profilePic': userData['profilePic'],
           };
           await prefs.setString('fallback_user', jsonEncode(fallbackData));
-          print('✅ Updated fallback_user with fresh backend data');
+          AppLogger.log('✅ Updated fallback_user with fresh backend data');
 
           return {
             'id': userData['googleId'] ?? userData['id'],
@@ -574,9 +581,9 @@ class AuthService {
             'token': token,
           };
         } else {
-          print('⚠️ Backend returned status: ${response.statusCode}');
+          AppLogger.log('⚠️ Backend returned status: ${response.statusCode}');
           // If backend returns error, still try to use fallback if available
-          print('🔄 Backend error, using fallback user data');
+          AppLogger.log('🔄 Backend error, using fallback user data');
           if (fallbackDataMap != null) {
             final userData = fallbackDataMap;
             return {
@@ -592,9 +599,9 @@ class AuthService {
           }
         }
       } catch (e) {
-        print('⚠️ Error fetching user profile from backend: $e');
+        AppLogger.log('⚠️ Error fetching user profile from backend: $e');
         // If backend is unreachable, use fallback data if available
-        print('🔄 Backend unreachable, using fallback user data');
+        AppLogger.log('🔄 Backend unreachable, using fallback user data');
         if (fallbackDataMap != null) {
           final userData = fallbackDataMap;
           return {
@@ -611,10 +618,10 @@ class AuthService {
       }
 
       // If we reach here, no valid data is available
-      print('⚠️ No valid user data available, returning null');
+      AppLogger.log('⚠️ No valid user data available, returning null');
       return null;
     } catch (e) {
-      print('❌ Error getting user data: $e');
+      AppLogger.log('❌ Error getting user data: $e');
       return null;
     }
   }
@@ -629,7 +636,7 @@ class AuthService {
 
       // Check if token has expiry
       if (!decodedToken.containsKey('exp')) {
-        print('❌ JWT Token missing expiry claim');
+        AppLogger.log('❌ JWT Token missing expiry claim');
         return false;
       }
 
@@ -639,26 +646,26 @@ class AuthService {
           DateTime.fromMillisecondsSinceEpoch(expiryTimestamp * 1000);
       DateTime now = DateTime.now();
 
-      print('🔍 JWT Token expiry: $expiryDate');
-      print('🔍 Current time: $now');
-      print(
+      AppLogger.log('🔍 JWT Token expiry: $expiryDate');
+      AppLogger.log('🔍 Current time: $now');
+      AppLogger.log(
           '🔍 Token expires in: ${expiryDate.difference(now).inMinutes} minutes');
 
       // Check if token is expired
       if (now.isAfter(expiryDate)) {
-        print('❌ JWT Token has expired');
+        AppLogger.log('❌ JWT Token has expired');
         return false;
       }
 
       // Check if token expires soon (within 5 minutes)
       if (expiryDate.difference(now).inMinutes < 5) {
-        print('⚠️ JWT Token expires soon (within 5 minutes)');
+        AppLogger.log('⚠️ JWT Token expires soon (within 5 minutes)');
       }
 
-      print('✅ JWT Token is valid');
+      AppLogger.log('✅ JWT Token is valid');
       return true;
     } catch (e) {
-      print('❌ Error validating JWT token: $e');
+      AppLogger.log('❌ Error validating JWT token: $e');
       return false;
     }
   }
@@ -689,7 +696,7 @@ class AuthService {
             : null,
       };
     } catch (e) {
-      print('❌ Error getting token info: $e');
+      AppLogger.log('❌ Error getting token info: $e');
       return null;
     }
   }
@@ -702,26 +709,27 @@ class AuthService {
 
       // Check if token is valid
       if (isTokenValid(token)) {
-        print('✅ Token is still valid, no refresh needed');
+        AppLogger.log('✅ Token is still valid, no refresh needed');
         return token;
       }
 
-      print('🔄 Token expired or invalid, attempting to refresh...');
+      AppLogger.log('🔄 Token expired or invalid, attempting to refresh...');
       // Try to get a new token by re-authenticating with Google
       try {
         final newToken = await _reauthenticateWithGoogle();
         if (newToken != null) {
-          print('✅ Successfully obtained new token through re-authentication');
+          AppLogger.log(
+              '✅ Successfully obtained new token through re-authentication');
           return newToken;
         }
       } catch (e) {
-        print('❌ Re-authentication failed: $e');
+        AppLogger.log('❌ Re-authentication failed: $e');
       }
 
-      print('❌ Failed to refresh token, user needs to re-login');
+      AppLogger.log('❌ Failed to refresh token, user needs to re-login');
       return null;
     } catch (e) {
-      print('❌ Error refreshing token: $e');
+      AppLogger.log('❌ Error refreshing token: $e');
       return null;
     }
   }
@@ -729,11 +737,12 @@ class AuthService {
   /// Re-authenticate with Google to get a fresh token
   Future<String?> _reauthenticateWithGoogle() async {
     try {
-      print('🔄 Attempting to re-authenticate with Google...');
+      AppLogger.log('🔄 Attempting to re-authenticate with Google...');
 
       // Check if user is already signed in
       if (!await _googleSignIn.isSignedIn()) {
-        print('❌ User not signed in with Google, cannot re-authenticate');
+        AppLogger.log(
+            '❌ User not signed in with Google, cannot re-authenticate');
         return null;
       }
 
@@ -741,7 +750,7 @@ class AuthService {
       final GoogleSignInAccount? googleUser =
           await _googleSignIn.signInSilently();
       if (googleUser == null) {
-        print('❌ Silent sign-in failed, user needs to re-authenticate');
+        AppLogger.log('❌ Silent sign-in failed, user needs to re-authenticate');
         return null;
       }
 
@@ -749,7 +758,7 @@ class AuthService {
           await googleUser.authentication;
       final idToken = googleAuth.idToken;
       if (idToken == null) {
-        print('❌ Failed to get fresh ID token from Google');
+        AppLogger.log('❌ Failed to get fresh ID token from Google');
         return null;
       }
 
@@ -770,14 +779,15 @@ class AuthService {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('jwt_token', newToken);
 
-        print('✅ Successfully obtained new JWT token');
+        AppLogger.log('✅ Successfully obtained new JWT token');
         return newToken;
       } else {
-        print('❌ Backend authentication failed: ${authResponse.statusCode}');
+        AppLogger.log(
+            '❌ Backend authentication failed: ${authResponse.statusCode}');
         return null;
       }
     } catch (e) {
-      print('❌ Error during re-authentication: $e');
+      AppLogger.log('❌ Error during re-authentication: $e');
       return null;
     }
   }
@@ -785,16 +795,16 @@ class AuthService {
   /// Clear expired tokens and force re-login
   Future<void> clearExpiredTokens() async {
     try {
-      print('🧹 Clearing expired tokens...');
+      AppLogger.log('🧹 Clearing expired tokens...');
       final prefs = await SharedPreferences.getInstance();
 
       // Remove JWT token
       await prefs.remove('jwt_token');
 
       // Keep fallback user data for re-authentication
-      print('✅ Expired tokens cleared, user needs to re-login');
+      AppLogger.log('✅ Expired tokens cleared, user needs to re-login');
     } catch (e) {
-      print('❌ Error clearing expired tokens: $e');
+      AppLogger.log('❌ Error clearing expired tokens: $e');
     }
   }
 
@@ -806,13 +816,13 @@ class AuthService {
 
       // Check if token is expired
       if (!isTokenValid(token)) {
-        print('⚠️ Token is expired, user needs to re-login');
+        AppLogger.log('⚠️ Token is expired, user needs to re-login');
         return true;
       }
 
       return false;
     } catch (e) {
-      print('❌ Error checking re-login status: $e');
+      AppLogger.log('❌ Error checking re-login status: $e');
       return true;
     }
   }
@@ -820,17 +830,17 @@ class AuthService {
   /// Alternative method to show location onboarding with explicit context
   static Future<void> showLocationOnboarding(BuildContext context) async {
     try {
-      print('📍 Showing location onboarding...');
+      AppLogger.log('📍 Showing location onboarding...');
 
       final result =
           await LocationOnboardingService.showLocationOnboarding(context);
       if (result) {
-        print('✅ User granted location permission');
+        AppLogger.log('✅ User granted location permission');
       } else {
-        print('❌ User denied location permission');
+        AppLogger.log('❌ User denied location permission');
       }
     } catch (e) {
-      print('❌ Error showing location onboarding: $e');
+      AppLogger.log('❌ Error showing location onboarding: $e');
     }
   }
 
@@ -840,7 +850,7 @@ class AuthService {
       final prefs = await SharedPreferences.getInstance();
       return prefs.getString('jwt_token');
     } catch (e) {
-      print('❌ Error getting token: $e');
+      AppLogger.log('❌ Error getting token: $e');
       return null;
     }
   }
@@ -851,7 +861,7 @@ class AuthService {
   /// **TESTING: Force show location dialog (ignores SharedPreferences check)**
   static Future<void> forceShowLocationDialog(BuildContext context) async {
     try {
-      print('🧪 TESTING: Force showing location permission dialog...');
+      AppLogger.log('🧪 TESTING: Force showing location permission dialog...');
 
       // Reset onboarding state first
       final prefs = await SharedPreferences.getInstance();
@@ -860,7 +870,7 @@ class AuthService {
       // Then show the dialog
       await showLocationOnboarding(context);
     } catch (e) {
-      print('❌ Error force showing location dialog: $e');
+      AppLogger.log('❌ Error force showing location dialog: $e');
     }
   }
 

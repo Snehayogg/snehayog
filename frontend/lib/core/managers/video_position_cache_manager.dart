@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 /// **VideoPositionCacheManager - Caches video positions for seamless resume**
 /// Stores video positions in SharedPreferences for persistence across app sessions
@@ -30,10 +31,10 @@ class VideoPositionCacheManager {
       _lastVideoId = prefs.getString('${_lastVideoPrefix}id');
       _lastVideoIndex = prefs.getInt('${_lastVideoPrefix}index');
 
-      print(
+      AppLogger.log(
           '🎬 VideoPositionCacheManager: Initialized - Last video: $_lastVideoId at index $_lastVideoIndex');
     } catch (e) {
-      print('❌ VideoPositionCacheManager: Error initializing: $e');
+      AppLogger.log('❌ VideoPositionCacheManager: Error initializing: $e');
     }
   }
 
@@ -47,10 +48,10 @@ class VideoPositionCacheManager {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('$_positionPrefix$videoId', position.inMilliseconds);
 
-      print(
+      AppLogger.log(
           '💾 VideoPositionCacheManager: Saved position for $videoId: ${position.inSeconds}s');
     } catch (e) {
-      print(
+      AppLogger.log(
           '❌ VideoPositionCacheManager: Error saving position for $videoId: $e');
     }
   }
@@ -75,7 +76,7 @@ class VideoPositionCacheManager {
 
       return null;
     } catch (e) {
-      print(
+      AppLogger.log(
           '❌ VideoPositionCacheManager: Error getting position for $videoId: $e');
       return null;
     }
@@ -91,10 +92,10 @@ class VideoPositionCacheManager {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('$_playbackStatePrefix$videoId', isPlaying);
 
-      print(
+      AppLogger.log(
           '💾 VideoPositionCacheManager: Saved playback state for $videoId: ${isPlaying ? "playing" : "paused"}');
     } catch (e) {
-      print(
+      AppLogger.log(
           '❌ VideoPositionCacheManager: Error saving playback state for $videoId: $e');
     }
   }
@@ -118,7 +119,7 @@ class VideoPositionCacheManager {
 
       return null;
     } catch (e) {
-      print(
+      AppLogger.log(
           '❌ VideoPositionCacheManager: Error getting playback state for $videoId: $e');
       return null;
     }
@@ -134,10 +135,10 @@ class VideoPositionCacheManager {
       await prefs.setString('${_lastVideoPrefix}id', videoId);
       await prefs.setInt('${_lastVideoPrefix}index', index);
 
-      print(
+      AppLogger.log(
           '💾 VideoPositionCacheManager: Saved last video: $videoId at index $index');
     } catch (e) {
-      print('❌ VideoPositionCacheManager: Error saving last video: $e');
+      AppLogger.log('❌ VideoPositionCacheManager: Error saving last video: $e');
     }
   }
 
@@ -150,7 +151,7 @@ class VideoPositionCacheManager {
       VideoPlayerController controller, String videoId) async {
     try {
       if (!controller.value.isInitialized) {
-        print(
+        AppLogger.log(
             '⚠️ VideoPositionCacheManager: Controller not initialized, skipping restore');
         return;
       }
@@ -160,7 +161,7 @@ class VideoPositionCacheManager {
       if (savedPosition != null && savedPosition.inMilliseconds > 0) {
         // Seek to saved position
         await controller.seekTo(savedPosition);
-        print(
+        AppLogger.log(
             '🎬 VideoPositionCacheManager: Restored position for $videoId: ${savedPosition.inSeconds}s');
       }
 
@@ -169,10 +170,11 @@ class VideoPositionCacheManager {
       if (savedPlaybackState == true) {
         // Resume playback if it was playing
         await controller.play();
-        print('▶️ VideoPositionCacheManager: Resumed playback for $videoId');
+        AppLogger.log(
+            '▶️ VideoPositionCacheManager: Resumed playback for $videoId');
       }
     } catch (e) {
-      print(
+      AppLogger.log(
           '❌ VideoPositionCacheManager: Error restoring video state for $videoId: $e');
     }
   }
@@ -228,9 +230,10 @@ class VideoPositionCacheManager {
       await prefs.remove('$_positionPrefix$videoId');
       await prefs.remove('$_playbackStatePrefix$videoId');
 
-      print('🗑️ VideoPositionCacheManager: Cleared position for $videoId');
+      AppLogger.log(
+          '🗑️ VideoPositionCacheManager: Cleared position for $videoId');
     } catch (e) {
-      print(
+      AppLogger.log(
           '❌ VideoPositionCacheManager: Error clearing position for $videoId: $e');
     }
   }
@@ -256,9 +259,10 @@ class VideoPositionCacheManager {
         await prefs.remove(key);
       }
 
-      print('🗑️ VideoPositionCacheManager: Cleared all positions');
+      AppLogger.log('🗑️ VideoPositionCacheManager: Cleared all positions');
     } catch (e) {
-      print('❌ VideoPositionCacheManager: Error clearing all positions: $e');
+      AppLogger.log(
+          '❌ VideoPositionCacheManager: Error clearing all positions: $e');
     }
   }
 
@@ -285,6 +289,6 @@ class VideoPositionCacheManager {
     _positionCache.clear();
     _playbackStateCache.clear();
 
-    print('🗑️ VideoPositionCacheManager: Disposed all resources');
+    AppLogger.log('🗑️ VideoPositionCacheManager: Disposed all resources');
   }
 }

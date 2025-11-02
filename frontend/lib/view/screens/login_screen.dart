@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'package:vayu/services/location_onboarding_service.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
@@ -20,7 +21,6 @@ class LoginScreen extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // App Logo/Icon
                   Container(
                     width: 120,
                     height: 120,
@@ -262,10 +262,10 @@ class LoginScreen extends StatelessWidget {
                                                         .showLocationOnboarding(
                                                             context);
                                                 if (result) {
-                                                  print(
+                                                  AppLogger.log(
                                                       '✅ User granted location permission');
                                                 } else {
-                                                  print(
+                                                  AppLogger.log(
                                                       '❌ User denied location permission');
                                                 }
 
@@ -369,9 +369,11 @@ class LoginScreen extends StatelessWidget {
                                   final result = await LocationOnboardingService
                                       .showLocationOnboarding(context);
                                   if (result) {
-                                    print('✅ User granted location permission');
+                                    AppLogger.log(
+                                        '✅ User granted location permission');
                                   } else {
-                                    print('❌ User denied location permission');
+                                    AppLogger.log(
+                                        '❌ User denied location permission');
                                   }
 
                                   Navigator.pushReplacementNamed(

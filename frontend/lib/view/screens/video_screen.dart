@@ -4,6 +4,7 @@ import 'package:vayu/view/screens/video_feed_advanced.dart';
 import 'package:vayu/core/managers/video_controller_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:vayu/controller/main_controller.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 class VideoScreen extends StatefulWidget {
   final int? initialIndex;
@@ -26,21 +27,21 @@ class _VideoScreenState extends State<VideoScreen> {
 
   /// **PUBLIC: Refresh video list after upload**
   Future<void> refreshVideos() async {
-    print('🔄 VideoScreen: refreshVideos() called');
+    AppLogger.log('🔄 VideoScreen: refreshVideos() called');
     final videoFeedState = _videoFeedKey.currentState;
     if (videoFeedState != null) {
       // Cast to dynamic to access the refreshVideos method
       await (videoFeedState as dynamic).refreshVideos();
-      print('✅ VideoScreen: Video refresh completed');
+      AppLogger.log('✅ VideoScreen: Video refresh completed');
     } else {
-      print('❌ VideoScreen: VideoFeedAdvanced state not found');
+      AppLogger.log('❌ VideoScreen: VideoFeedAdvanced state not found');
     }
   }
 
   @override
   void initState() {
     super.initState();
-    print('🎬 VideoScreen: Initializing VideoScreen');
+    AppLogger.log('🎬 VideoScreen: Initializing VideoScreen');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final state = _videoFeedKey.currentState;
       if (state != null) {
@@ -62,7 +63,7 @@ class _VideoScreenState extends State<VideoScreen> {
 
   @override
   void dispose() {
-    print('🗑️ VideoScreen: Disposing VideoScreen');
+    AppLogger.log('🗑️ VideoScreen: Disposing VideoScreen');
 
     // **FIX: Pause all videos when leaving VideoScreen**
     try {
@@ -73,9 +74,9 @@ class _VideoScreenState extends State<VideoScreen> {
       final videoControllerManager = VideoControllerManager();
       videoControllerManager.forcePauseAllVideosSync(); // Use sync version
 
-      print('🔇 VideoScreen: All videos paused on dispose');
+      AppLogger.log('🔇 VideoScreen: All videos paused on dispose');
     } catch (e) {
-      print('⚠️ VideoScreen: Error pausing videos on dispose: $e');
+      AppLogger.log('⚠️ VideoScreen: Error pausing videos on dispose: $e');
     }
 
     // Clean up the video feed if needed
@@ -83,10 +84,10 @@ class _VideoScreenState extends State<VideoScreen> {
     if (videoFeedState != null) {
       try {
         // The VideoFeedAdvanced dispose method will be called automatically
-        print(
+        AppLogger.log(
             '✅ VideoScreen: VideoFeedAdvanced disposal handled automatically');
       } catch (e) {
-        print('⚠️ VideoScreen: Error during disposal: $e');
+        AppLogger.log('⚠️ VideoScreen: Error during disposal: $e');
       }
     }
 

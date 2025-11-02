@@ -8,6 +8,8 @@ import 'package:vayu/config/app_config.dart';
 import 'package:vayu/core/managers/smart_cache_manager.dart';
 import 'package:vayu/services/active_ads_service.dart';
 import 'package:vayu/services/ad_refresh_notifier.dart';
+import 'package:vayu/utils/app_logger.dart';
+import 'package:vayu/core/services/http_client_service.dart';
 
 class AdService {
   static final AdService _instance = AdService._internal();
@@ -53,7 +55,7 @@ class AdService {
       // final revenueSplit =
       //     _razorpayService.calculateRevenueSplit(budget / 100.0);  // Temporarily commented
 
-      final response = await http.post(
+      final response = await httpClientService.post(
         Uri.parse('$baseUrl/api/ads'),
         headers: {
           'Content-Type': 'application/json',
@@ -133,8 +135,8 @@ class AdService {
         cpm,
       );
 
-      print('🔍 AdService: Creating ad with payment...');
-      print(
+      AppLogger.log('🔍 AdService: Creating ad with payment...');
+      AppLogger.log(
         '🔍 AdService: Budget: ₹$budget, Ad Type: $adType, CPM: ₹$cpm, Estimated impressions: $impressions',
       );
 
@@ -167,7 +169,8 @@ class AdService {
       // **NEW: Add imageUrls for carousel ads**
       if (imageUrls != null && imageUrls.isNotEmpty && adType == 'carousel') {
         requestData['imageUrls'] = imageUrls;
-        print('🔍 AdService: Sending ${imageUrls.length} carousel image URLs');
+        AppLogger.log(
+            '🔍 AdService: Sending ${imageUrls.length} carousel image URLs');
       }
 
       // **NEW: Validate required fields before sending**
@@ -219,7 +222,7 @@ class AdService {
         requestData['dayParting'] = dayParting;
       }
 
-      final response = await http.post(
+      final response = await httpClientService.post(
         Uri.parse('$baseUrl/api/ads/create-with-payment'),
         headers: {
           'Content-Type': 'application/json',
@@ -230,7 +233,8 @@ class AdService {
 
       if (response.statusCode == 201) {
         final data = json.decode(response.body);
-        print('✅ AdService: Ad created successfully with payment required');
+        AppLogger.log(
+            '✅ AdService: Ad created successfully with payment required');
 
         return {
           'success': true,
@@ -240,17 +244,17 @@ class AdService {
         };
       } else {
         // **NEW: Enhanced error logging**
-        print(
+        AppLogger.log(
             '❌ AdService: Backend returned error status: ${response.statusCode}');
-        print('❌ AdService: Response body: ${response.body}');
+        AppLogger.log('❌ AdService: Response body: ${response.body}');
 
         final error = json.decode(response.body);
-        print('❌ AdService: Parsed error: $error');
+        AppLogger.log('❌ AdService: Parsed error: $error');
 
         throw Exception(error['error'] ?? 'Failed to create ad');
       }
     } catch (e) {
-      print('❌ AdService: Error creating ad with payment: $e');
+      AppLogger.log('❌ AdService: Error creating ad with payment: $e');
       throw Exception('Error creating ad: $e');
     }
   }
@@ -268,10 +272,10 @@ class AdService {
         throw Exception('User not authenticated');
       }
 
-      print('🔍 AdService: Processing payment...');
-      print('🔍 AdService: Order ID: $orderId, Payment ID: $paymentId');
+      AppLogger.log('🔍 AdService: Processing payment...');
+      AppLogger.log('🔍 AdService: Order ID: $orderId, Payment ID: $paymentId');
 
-      final response = await http.post(
+      final response = await httpClientService.post(
         Uri.parse('$baseUrl/api/ads/process-payment'),
         headers: {
           'Content-Type': 'application/json',
@@ -287,7 +291,7 @@ class AdService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        print('✅ AdService: Payment processed successfully');
+        AppLogger.log('✅ AdService: Payment processed successfully');
 
         return {
           'success': true,
@@ -300,7 +304,7 @@ class AdService {
         throw Exception(error['error'] ?? 'Failed to process payment');
       }
     } catch (e) {
-      print('❌ AdService: Error processing payment: $e');
+      AppLogger.log('❌ AdService: Error processing payment: $e');
       throw Exception('Error processing payment: $e');
     }
   }
@@ -346,7 +350,7 @@ class AdService {
       final amount = paymentDetails['amount'] / 100.0; // Convert from paise
       // final revenueSplit = _razorpayService.calculateRevenueSplit(amount); // Temporarily commented
 
-      await http.post(
+      await httpClientService.post(
         Uri.parse('$baseUrl/api/ads/$adId/payment'),
         headers: {
           'Content-Type': 'application/json',
@@ -364,7 +368,7 @@ class AdService {
         }),
       );
     } catch (e) {
-      print('Error recording payment: $e');
+      AppLogger.log('Error recording payment: $e');
     }
   }
 
@@ -387,30 +391,30 @@ class AdService {
         throw Exception('User ID not found in user data');
       }
 
-      print('🔍 AdService: Fetching ads for user ID: $userId');
-      print('🔍 AdService: User data keys: ${userData.keys.toList()}');
+      AppLogger.log('🔍 AdService: Fetching ads for user ID: $userId');
+      AppLogger.log('🔍 AdService: User data keys: ${userData.keys.toList()}');
 
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('$baseUrl/api/ads/user/$userId'),
         headers: {'Authorization': 'Bearer ${userData['token']}'},
       );
 
-      print('🔍 AdService: Response status: ${response.statusCode}');
-      print('🔍 AdService: Response body: ${response.body}');
+      AppLogger.log('🔍 AdService: Response status: ${response.statusCode}');
+      AppLogger.log('🔍 AdService: Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         final ads = data.map((json) => AdModel.fromJson(json)).toList();
-        print('✅ AdService: Successfully fetched ${ads.length} ads');
+        AppLogger.log('✅ AdService: Successfully fetched ${ads.length} ads');
         return ads;
       } else {
-        print(
+        AppLogger.log(
           '❌ AdService: Failed to fetch ads - Status: ${response.statusCode}, Body: ${response.body}',
         );
         throw Exception('Failed to fetch ads: ${response.body}');
       }
     } catch (e) {
-      print('❌ AdService: Error in getUserAds: $e');
+      AppLogger.log('❌ AdService: Error in getUserAds: $e');
       throw Exception('Error fetching ads: $e');
     }
   }
@@ -418,7 +422,8 @@ class AdService {
   // Get all active ads (for display)
   Future<List<AdModel>> getActiveAds() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/api/ads/active'));
+      final response =
+          await httpClientService.get(Uri.parse('$baseUrl/api/ads/active'));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -466,7 +471,7 @@ class AdService {
         throw Exception('User not authenticated');
       }
 
-      final response = await http.patch(
+      final response = await httpClientService.patch(
         Uri.parse('$baseUrl/api/ads/$adId/status'),
         headers: {
           'Content-Type': 'application/json',
@@ -489,46 +494,49 @@ class AdService {
   // Delete ad
   Future<bool> deleteAd(String adId) async {
     try {
-      print('🗑️ AdService: Starting delete for ad ID: $adId');
+      AppLogger.log('🗑️ AdService: Starting delete for ad ID: $adId');
 
       final userData = await _authService.getUserData();
       if (userData == null) {
         throw Exception('User not authenticated');
       }
 
-      print('🔍 AdService: User authenticated, making delete request...');
-      print('🔍 AdService: Delete URL: $baseUrl/api/ads/$adId');
+      AppLogger.log(
+          '🔍 AdService: User authenticated, making delete request...');
+      AppLogger.log('🔍 AdService: Delete URL: $baseUrl/api/ads/$adId');
 
-      final response = await http.delete(
+      final response = await httpClientService.delete(
         Uri.parse('$baseUrl/api/ads/$adId'),
         headers: {'Authorization': 'Bearer ${userData['token']}'},
       );
 
-      print('🔍 AdService: Delete response status: ${response.statusCode}');
-      print('🔍 AdService: Delete response body: ${response.body}');
+      AppLogger.log(
+          '🔍 AdService: Delete response status: ${response.statusCode}');
+      AppLogger.log('🔍 AdService: Delete response body: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 204) {
-        print('✅ AdService: Ad deleted successfully');
+        AppLogger.log('✅ AdService: Ad deleted successfully');
 
         // **NEW: Clear ad cache after successful deletion**
         await _clearAdCache();
-        print('🧹 AdService: Cleared ad cache after deletion');
+        AppLogger.log('🧹 AdService: Cleared ad cache after deletion');
 
         // **NEW: Clear ActiveAdsService cache**
         await _activeAdsService.clearAdsCache();
-        print('🧹 AdService: Cleared ActiveAdsService cache');
+        AppLogger.log('🧹 AdService: Cleared ActiveAdsService cache');
 
         // **NEW: Notify video feed to refresh ads**
         await _notifyVideoFeedRefresh();
-        print('📢 AdService: Notified video feed to refresh ads');
+        AppLogger.log('📢 AdService: Notified video feed to refresh ads');
 
         return true;
       } else {
-        print('❌ AdService: Delete failed with status ${response.statusCode}');
+        AppLogger.log(
+            '❌ AdService: Delete failed with status ${response.statusCode}');
         throw Exception('Delete failed: ${response.body}');
       }
     } catch (e) {
-      print('❌ AdService: Delete error: $e');
+      AppLogger.log('❌ AdService: Delete error: $e');
       throw Exception('Error deleting ad: $e');
     }
   }
@@ -541,7 +549,7 @@ class AdService {
         throw Exception('User not authenticated');
       }
 
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse(
           '$baseUrl/api/ads/analytics/$adId?userId=${userData['googleId'] ?? userData['id']}',
         ),
@@ -571,7 +579,7 @@ class AdService {
       final userData = await _authService.getUserData();
       if (userData == null) return;
 
-      await http.post(
+      await httpClientService.post(
         Uri.parse('$baseUrl/api/ads/track-impression/$adId'),
         headers: {
           'Content-Type': 'application/json',
@@ -584,7 +592,7 @@ class AdService {
         }),
       );
     } catch (e) {
-      print('Error tracking impression: $e');
+      AppLogger.log('Error tracking impression: $e');
     }
   }
 
@@ -599,7 +607,7 @@ class AdService {
       final userData = await _authService.getUserData();
       if (userData == null) return;
 
-      await http.post(
+      await httpClientService.post(
         Uri.parse('$baseUrl/api/ads/track-click/$adId'),
         headers: {
           'Content-Type': 'application/json',
@@ -612,7 +620,7 @@ class AdService {
         }),
       );
     } catch (e) {
-      print('Error tracking click: $e');
+      AppLogger.log('Error tracking click: $e');
     }
   }
 
@@ -653,7 +661,7 @@ class AdService {
 
       return false;
     } catch (e) {
-      print('Error deleting media: $e');
+      AppLogger.log('Error deleting media: $e');
       return false;
     }
   }
@@ -666,7 +674,7 @@ class AdService {
         throw Exception('User not authenticated');
       }
 
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('$baseUrl/api/ads/$adId/performance'),
         headers: {'Authorization': 'Bearer ${userData['token']}'},
       );
@@ -689,7 +697,7 @@ class AdService {
         throw Exception('User not authenticated');
       }
 
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse(
           '$baseUrl/api/ads/creator/revenue/${userData['googleId'] ?? userData['id']}',
         ),
@@ -709,7 +717,7 @@ class AdService {
   /// **NEW: Clear ad cache to ensure deleted ads are removed from video feed**
   Future<void> _clearAdCache() async {
     try {
-      print('🧹 AdService: Clearing ad cache...');
+      AppLogger.log('🧹 AdService: Clearing ad cache...');
 
       // Clear active ads cache
       await _clearCacheForKey('active_ads');
@@ -730,9 +738,9 @@ class AdService {
         await _clearCacheForKey(key);
       }
 
-      print('✅ AdService: Ad cache cleared successfully');
+      AppLogger.log('✅ AdService: Ad cache cleared successfully');
     } catch (e) {
-      print('⚠️ AdService: Error clearing ad cache: $e');
+      AppLogger.log('⚠️ AdService: Error clearing ad cache: $e');
       // Don't throw error - cache clearing failure shouldn't break ad deletion
     }
   }
@@ -740,7 +748,7 @@ class AdService {
   /// **NEW: Clear specific cache key**
   Future<void> _clearCacheForKey(String key) async {
     try {
-      print('🧹 AdService: Clearing cache for key: $key');
+      AppLogger.log('🧹 AdService: Clearing cache for key: $key');
 
       // Clear from SmartCacheManager by forcing refresh with null data
       // This will effectively clear the cache entry
@@ -751,16 +759,16 @@ class AdService {
         maxAge: Duration.zero, // Force immediate expiration
         forceRefresh: true,
       );
-      print('✅ AdService: Cleared cache for key: $key');
+      AppLogger.log('✅ AdService: Cleared cache for key: $key');
     } catch (e) {
-      print('⚠️ AdService: Error clearing cache for key $key: $e');
+      AppLogger.log('⚠️ AdService: Error clearing cache for key $key: $e');
     }
   }
 
   /// **NEW: Notify video feed to refresh ads**
   Future<void> _notifyVideoFeedRefresh() async {
     try {
-      print('📢 AdService: Notifying video feed to refresh ads...');
+      AppLogger.log('📢 AdService: Notifying video feed to refresh ads...');
 
       // Clear video feed specific cache keys
       final videoFeedCacheKeys = [
@@ -782,16 +790,16 @@ class AdService {
       // **NEW: Notify video feed listeners to refresh ads**
       try {
         _adRefreshNotifier.notifyRefresh();
-        print(
+        AppLogger.log(
             '📢 AdService: Sent refresh notification to video feed listeners');
       } catch (e) {
-        print('⚠️ AdService: Could not send refresh notification: $e');
+        AppLogger.log('⚠️ AdService: Could not send refresh notification: $e');
       }
 
-      print(
+      AppLogger.log(
           '✅ AdService: Video feed cache cleared, ads will refresh on next load');
     } catch (e) {
-      print('⚠️ AdService: Error notifying video feed refresh: $e');
+      AppLogger.log('⚠️ AdService: Error notifying video feed refresh: $e');
     }
   }
 }

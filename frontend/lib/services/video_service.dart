@@ -13,6 +13,7 @@ import 'package:vayu/model/ad_model.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/ad_service.dart';
 import 'package:vayu/config/app_config.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 /// **OPTIMIZED VideoService - Single source of truth for all video operations**
 /// Merged from VideoService, BaseVideoService, and InstagramVideoService
@@ -55,13 +56,15 @@ class VideoService {
     if (_currentVisibleVideoIndex != newIndex) {
       final oldIndex = _currentVisibleVideoIndex;
       _currentVisibleVideoIndex = newIndex;
-      print('🎬 VideoService: Video index changed from $oldIndex to $newIndex');
+      AppLogger.log(
+          '🎬 VideoService: Video index changed from $oldIndex to $newIndex');
 
       for (final listener in _videoIndexChangeListeners) {
         try {
           listener(newIndex);
         } catch (e) {
-          print('❌ VideoService: Error in video index change listener: $e');
+          AppLogger.log(
+              '❌ VideoService: Error in video index change listener: $e');
         }
       }
     }
@@ -70,7 +73,7 @@ class VideoService {
   void updateVideoScreenState(bool isActive) {
     if (_isVideoScreenActive != isActive) {
       _isVideoScreenActive = isActive;
-      print(
+      AppLogger.log(
         '🔄 VideoService: Video screen state changed to ${isActive ? "ACTIVE" : "INACTIVE"}',
       );
 
@@ -78,7 +81,8 @@ class VideoService {
         try {
           listener(isActive);
         } catch (e) {
-          print('❌ VideoService: Error in video screen state listener: $e');
+          AppLogger.log(
+              '❌ VideoService: Error in video screen state listener: $e');
         }
       }
     }
@@ -87,7 +91,7 @@ class VideoService {
   void updateAppForegroundState(bool inForeground) {
     if (_isAppInForeground != inForeground) {
       _isAppInForeground = inForeground;
-      print(
+      AppLogger.log(
         '📱 VideoService: App foreground state changed to ${inForeground ? "FOREGROUND" : "BACKGROUND"}',
       );
     }
@@ -134,7 +138,7 @@ class VideoService {
     try {
       // Get base URL with Railway first, local fallback
       final baseUrl = await getBaseUrlWithFallback();
-      print('🔍 VideoService: Using base URL: $baseUrl');
+      AppLogger.log('🔍 VideoService: Using base URL: $baseUrl');
 
       String url = '$baseUrl/api/videos?page=$page&limit=$limit';
       // Map 'yug' (app label) to backend 'yog' filter
@@ -142,7 +146,7 @@ class VideoService {
       if (normalizedType != null &&
           (normalizedType == 'yog' || normalizedType == 'sneha')) {
         url += '&videoType=$normalizedType';
-        print('🔍 VideoService: Filtering by videoType: $videoType');
+        AppLogger.log('🔍 VideoService: Filtering by videoType: $videoType');
       }
       final response = await _makeRequest(
         () => _client.get(Uri.parse(url)),
@@ -155,12 +159,14 @@ class VideoService {
 
         final videos = videoList.map((json) {
           // **DEBUG: Log all video data for debugging**
-          print('🔍 VideoService: Video data for ${json['videoName']}:');
-          print('  - videoUrl: ${json['videoUrl']}');
-          print('  - hlsPlaylistUrl: ${json['hlsPlaylistUrl']}');
-          print('  - hlsMasterPlaylistUrl: ${json['hlsMasterPlaylistUrl']}');
-          print('  - isHLSEncoded: ${json['isHLSEncoded']}');
-          print('  - hlsVariants: ${json['hlsVariants']?.length ?? 0}');
+          AppLogger.log(
+              '🔍 VideoService: Video data for ${json['videoName']}:');
+          AppLogger.log('  - videoUrl: ${json['videoUrl']}');
+          AppLogger.log('  - hlsPlaylistUrl: ${json['hlsPlaylistUrl']}');
+          AppLogger.log(
+              '  - hlsMasterPlaylistUrl: ${json['hlsMasterPlaylistUrl']}');
+          AppLogger.log('  - isHLSEncoded: ${json['isHLSEncoded']}');
+          AppLogger.log('  - hlsVariants: ${json['hlsVariants']?.length ?? 0}');
 
           // **HLS URL Priority**: Use HLS for better streaming
           if (json['hlsPlaylistUrl'] != null &&
@@ -175,7 +181,7 @@ class VideoService {
             } else {
               json['videoUrl'] = hlsUrl;
             }
-            print(
+            AppLogger.log(
                 '🔗 VideoService: Using HLS Playlist URL: ${json['videoUrl']}');
           } else if (json['hlsMasterPlaylistUrl'] != null &&
               json['hlsMasterPlaylistUrl'].toString().isNotEmpty) {
@@ -188,7 +194,8 @@ class VideoService {
             } else {
               json['videoUrl'] = masterUrl;
             }
-            print('🔗 VideoService: Using HLS Master URL: ${json['videoUrl']}');
+            AppLogger.log(
+                '🔗 VideoService: Using HLS Master URL: ${json['videoUrl']}');
           } else {
             // **Fallback**: Ensure relative URLs are complete
             if (json['videoUrl'] != null &&
@@ -200,7 +207,7 @@ class VideoService {
               }
               json['videoUrl'] = '$baseUrl/$videoUrl';
             }
-            print(
+            AppLogger.log(
               '🔗 VideoService: Using original video URL: ${json['videoUrl']}',
             );
           }
@@ -240,7 +247,7 @@ class VideoService {
   /// **Toggle like for a video (like/unlike)**
   Future<VideoModel> toggleLike(String videoId) async {
     try {
-      print('🔄 VideoService: Toggling like for video: $videoId');
+      AppLogger.log('🔄 VideoService: Toggling like for video: $videoId');
 
       final headers = await _getAuthHeaders();
       headers['Content-Type'] = 'application/json';
@@ -264,7 +271,7 @@ class VideoService {
         throw Exception(error['error'] ?? 'Failed to toggle like');
       }
     } catch (e) {
-      print('❌ VideoService: Error toggling like: $e');
+      AppLogger.log('❌ VideoService: Error toggling like: $e');
       if (e is TimeoutException) {
         throw Exception('Request timed out. Please try again.');
       }
@@ -453,7 +460,7 @@ class VideoService {
             } else {
               json['videoUrl'] = hlsUrl;
             }
-            print(
+            AppLogger.log(
                 '🔗 VideoService: Using HLS Playlist URL: ${json['videoUrl']}');
           } else if (json['hlsMasterPlaylistUrl'] != null &&
               json['hlsMasterPlaylistUrl'].toString().isNotEmpty) {
@@ -466,7 +473,8 @@ class VideoService {
             } else {
               json['videoUrl'] = masterUrl;
             }
-            print('🔗 VideoService: Using HLS Master URL: ${json['videoUrl']}');
+            AppLogger.log(
+                '🔗 VideoService: Using HLS Master URL: ${json['videoUrl']}');
           } else {
             // **Fallback**: Ensure relative URLs are complete
             if (json['videoUrl'] != null &&
@@ -525,7 +533,7 @@ class VideoService {
     Function(double)? onProgress,
   ]) async {
     try {
-      print('🚀 VideoService: Starting video upload...');
+      AppLogger.log('🚀 VideoService: Starting video upload...');
 
       // **Check server health**
       final isHealthy = await checkServerHealth();
@@ -556,7 +564,7 @@ class VideoService {
       File? finalVideoFile = videoFile;
       if (fileSize > 50 * 1024 * 1024) {
         // Compress if > 50MB
-        print('🔄 VideoService: Compressing large video...');
+        AppLogger.log('🔄 VideoService: Compressing large video...');
         final compressedFile = await compressVideo(videoFile);
         if (compressedFile != null) {
           finalVideoFile = compressedFile;
@@ -632,10 +640,10 @@ class VideoService {
 
       final responseData = json.decode(responseBody);
 
-      print(
+      AppLogger.log(
         '📡 VideoService: Upload response status: ${streamedResponse.statusCode}',
       );
-      print('📄 VideoService: Upload response body: $responseBody');
+      AppLogger.log('📄 VideoService: Upload response body: $responseBody');
 
       // **FIX: Validate response structure**
       if (responseData == null) {
@@ -647,7 +655,7 @@ class VideoService {
 
         // **FIX: Add null checks to prevent NoSuchMethodError**
         if (videoData == null) {
-          print('❌ VideoService: Video data is null in response');
+          AppLogger.log('❌ VideoService: Video data is null in response');
           throw Exception('Invalid response: Video data is missing');
         }
 
@@ -667,10 +675,11 @@ class VideoService {
           'processingStatus': videoData['processingStatus'] ?? 'pending',
         };
       } else {
-        print(
+        AppLogger.log(
           '❌ VideoService: Upload failed with status ${streamedResponse.statusCode}',
         );
-        print('❌ VideoService: Error details: ${responseData.toString()}');
+        AppLogger.log(
+            '❌ VideoService: Error details: ${responseData.toString()}');
 
         final errorMessage = responseData['error']?.toString() ??
             responseData['details']?.toString() ??
@@ -678,7 +687,7 @@ class VideoService {
         throw Exception('❌ $errorMessage');
       }
     } catch (e) {
-      print('❌ VideoService: Error uploading video: $e');
+      AppLogger.log('❌ VideoService: Error uploading video: $e');
       if (e is TimeoutException) {
         throw Exception(
           'Upload timed out. Please check your internet connection and try again.',
@@ -695,7 +704,7 @@ class VideoService {
   /// **Delete video**
   Future<bool> deleteVideo(String videoId) async {
     try {
-      print('🗑️ VideoService: Attempting to delete video: $videoId');
+      AppLogger.log('🗑️ VideoService: Attempting to delete video: $videoId');
 
       final userData = await _authService.getUserData();
       if (userData == null) {
@@ -710,7 +719,7 @@ class VideoService {
           .timeout(const Duration(seconds: 10));
 
       if (res.statusCode == 200 || res.statusCode == 204) {
-        print('✅ VideoService: Video deleted successfully');
+        AppLogger.log('✅ VideoService: Video deleted successfully');
         return true;
       } else if (res.statusCode == 401) {
         throw Exception('Please sign in again to delete videos');
@@ -723,7 +732,7 @@ class VideoService {
         throw Exception(error['error'] ?? 'Failed to delete video');
       }
     } catch (e) {
-      print('❌ VideoService: Error deleting video: $e');
+      AppLogger.log('❌ VideoService: Error deleting video: $e');
       if (e is TimeoutException) {
         throw Exception('Request timed out. Please try again.');
       }
@@ -742,10 +751,10 @@ class VideoService {
       );
 
       if (res.statusCode != 200) {
-        print('⚠️ Failed to increment share count: ${res.statusCode}');
+        AppLogger.log('⚠️ Failed to increment share count: ${res.statusCode}');
       }
     } catch (e) {
-      print('⚠️ Error incrementing shares: $e');
+      AppLogger.log('⚠️ Error incrementing shares: $e');
       // Don't throw - sharing should work even if server tracking fails
     }
   }
@@ -753,7 +762,8 @@ class VideoService {
   /// **Get video processing status**
   Future<Map<String, dynamic>?> getVideoProcessingStatus(String videoId) async {
     try {
-      print('🔄 VideoService: Getting processing status for video: $videoId');
+      AppLogger.log(
+          '🔄 VideoService: Getting processing status for video: $videoId');
 
       final headers = await _getAuthHeaders();
       final resolvedBaseUrl = await getBaseUrlWithFallback();
@@ -764,21 +774,23 @@ class VideoService {
 
       if (res.statusCode == 200) {
         final responseData = json.decode(res.body);
-        print('✅ VideoService: Processing status retrieved successfully');
+        AppLogger.log(
+            '✅ VideoService: Processing status retrieved successfully');
         return responseData;
       } else if (res.statusCode == 404) {
-        print('⚠️ VideoService: Video not found for status check');
+        AppLogger.log('⚠️ VideoService: Video not found for status check');
         return null;
       } else {
-        print(
+        AppLogger.log(
             '❌ VideoService: Failed to get processing status: ${res.statusCode}');
         return null;
       }
     } catch (e) {
-      print('❌ VideoService: Error getting processing status: $e');
+      AppLogger.log('❌ VideoService: Error getting processing status: $e');
       return null;
     }
   }
+
   /// **Check server health**
   Future<bool> checkServerHealth() async {
     try {
@@ -802,7 +814,7 @@ class VideoService {
       await controller.dispose();
       return duration.inSeconds > maxShortVideoDuration;
     } catch (e) {
-      print('❌ VideoService: Error checking video duration: $e');
+      AppLogger.log('❌ VideoService: Error checking video duration: $e');
       return false;
     }
   }
@@ -810,7 +822,7 @@ class VideoService {
   /// **Compress video**
   Future<File?> compressVideo(File videoFile) async {
     try {
-      print('🔄 VideoService: Compressing video...');
+      AppLogger.log('🔄 VideoService: Compressing video...');
 
       final MediaInfo? mediaInfo = await VideoCompress.compressVideo(
         videoFile.path,
@@ -819,14 +831,14 @@ class VideoService {
       );
 
       if (mediaInfo?.file != null) {
-        print('✅ VideoService: Video compressed successfully');
+        AppLogger.log('✅ VideoService: Video compressed successfully');
         return mediaInfo!.file;
       } else {
-        print('❌ VideoService: Video compression failed');
+        AppLogger.log('❌ VideoService: Video compression failed');
         return null;
       }
     } catch (e) {
-      print('❌ VideoService: Error compressing video: $e');
+      AppLogger.log('❌ VideoService: Error compressing video: $e');
       return null;
     }
   }
@@ -847,7 +859,7 @@ class VideoService {
         'Authorization': 'Bearer ${userData['token']}',
       };
     } catch (e) {
-      print('❌ VideoService: Error getting auth headers: $e');
+      AppLogger.log('❌ VideoService: Error getting auth headers: $e');
       rethrow;
     }
   }
@@ -884,7 +896,7 @@ class VideoService {
     int adInsertionFrequency = 3,
   }) async {
     try {
-      print('🔍 VideoService: Fetching videos with ads...');
+      AppLogger.log('🔍 VideoService: Fetching videos with ads...');
 
       final videosResult = await getVideos(page: page, limit: limit);
       final videos =
@@ -894,7 +906,7 @@ class VideoService {
       try {
         ads = await _adService.getActiveAds();
       } catch (adError) {
-        print(
+        AppLogger.log(
             '⚠️ VideoService: Failed to fetch ads, continuing without ads: $adError');
       }
 
@@ -908,7 +920,7 @@ class VideoService {
           );
         }
       } catch (integrationError) {
-        print(
+        AppLogger.log(
           '⚠️ VideoService: Failed to integrate ads, using videos only: $integrationError',
         );
         integratedFeed = videos;
@@ -924,7 +936,7 @@ class VideoService {
         'integratedCount': integratedFeed.length,
       };
     } catch (e) {
-      print('❌ VideoService: Error fetching videos with ads: $e');
+      AppLogger.log('❌ VideoService: Error fetching videos with ads: $e');
       rethrow;
     }
   }
@@ -952,7 +964,7 @@ class VideoService {
       }
     }
 
-    print('🔍 VideoService: Integrated $adIndex ads into feed');
+    AppLogger.log('🔍 VideoService: Integrated $adIndex ads into feed');
     return integratedFeed;
   }
 
@@ -996,10 +1008,10 @@ class VideoService {
     List<String> tags = const [],
   }) async {
     try {
-      print('🚀 VideoService: Starting video upload...');
-      print('📁 File: ${videoFile.path}');
-      print('📝 Title: $title');
-      print('🏷️ Category: $category');
+      AppLogger.log('🚀 VideoService: Starting video upload...');
+      AppLogger.log('📁 File: ${videoFile.path}');
+      AppLogger.log('📝 Title: $title');
+      AppLogger.log('🏷️ Category: $category');
 
       // Get auth headers
       final headers = await _getAuthHeaders();
@@ -1034,7 +1046,7 @@ class VideoService {
         request.fields['tags'] = tags.join(',');
       }
 
-      print('📤 VideoService: Sending upload request...');
+      AppLogger.log('📤 VideoService: Sending upload request...');
 
       // Send request
       final response = await request.send().timeout(
@@ -1045,14 +1057,14 @@ class VideoService {
       final data = json.decode(responseBody);
 
       if (response.statusCode == 201) {
-        print('✅ VideoService: Upload successful');
+        AppLogger.log('✅ VideoService: Upload successful');
         return data;
       } else {
-        print('❌ VideoService: Upload failed: ${response.statusCode}');
+        AppLogger.log('❌ VideoService: Upload failed: ${response.statusCode}');
         throw Exception(data['error'] ?? 'Upload failed');
       }
     } catch (e) {
-      print('❌ VideoService: Upload error: $e');
+      AppLogger.log('❌ VideoService: Upload error: $e');
       rethrow;
     }
   }
@@ -1061,6 +1073,6 @@ class VideoService {
   void dispose() {
     _videoIndexChangeListeners.clear();
     _videoScreenStateListeners.clear();
-    print('🗑️ VideoService: Disposed all listeners');
+    AppLogger.log('🗑️ VideoService: Disposed all listeners');
   }
 }

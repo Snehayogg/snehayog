@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/model/carousel_ad_model.dart';
 import 'package:vayu/services/carousel_ad_service.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 /// **CarouselAdManager - Handles all carousel ad logic**
 /// Separated from VideoScreen for better maintainability
@@ -22,7 +23,7 @@ class CarouselAdManager {
   /// **Load carousel ads from backend or fallback to dummy**
   Future<void> loadCarouselAds() async {
     try {
-      print('🎯 CarouselAdManager: Loading carousel ads...');
+      AppLogger.log('🎯 CarouselAdManager: Loading carousel ads...');
 
       // First try to load from backend
       final ads = await _carouselAdService.fetchCarouselAds();
@@ -30,28 +31,29 @@ class CarouselAdManager {
       if (ads.isNotEmpty) {
         _carouselAds = ads;
         _isCarouselAdsLoaded = true;
-        print(
+        AppLogger.log(
             '✅ CarouselAdManager: Loaded ${ads.length} carousel ads from backend');
         // Print details of each carousel ad for debugging
         for (var ad in ads) {
-          print(
+          AppLogger.log(
               '   📍 Carousel Ad: ${ad.advertiserName} - ${ad.slides.length} slides');
         }
       } else {
         // No fallback: keep empty to avoid showing dummy ads
         _carouselAds = [];
         _isCarouselAdsLoaded = true;
-        print('⚠️ CarouselAdManager: No carousel ads available from backend');
-        print(
+        AppLogger.log(
+            '⚠️ CarouselAdManager: No carousel ads available from backend');
+        AppLogger.log(
             '   💡 TIP: Check if carousel ads are created, approved, and active');
       }
     } catch (error) {
-      print('❌ CarouselAdManager: Error loading carousel ads: $error');
-      print('   Stack trace: ${StackTrace.current}');
+      AppLogger.log('❌ CarouselAdManager: Error loading carousel ads: $error');
+      AppLogger.log('   Stack trace: ${StackTrace.current}');
       // On error, do not use dummy; keep list empty
       _carouselAds = [];
       _isCarouselAdsLoaded = true;
-      print('⚠️ CarouselAdManager: No carousel ads due to error');
+      AppLogger.log('⚠️ CarouselAdManager: No carousel ads due to error');
     }
   }
 
@@ -120,7 +122,7 @@ class CarouselAdManager {
 
   /// **Handle carousel ad closed**
   void onCarouselAdClosed(int index, PageController pageController) {
-    print('🎯 CarouselAdManager: Carousel ad closed at index $index');
+    AppLogger.log('🎯 CarouselAdManager: Carousel ad closed at index $index');
     // Skip to next video
     if (index < 1000) {
       // Arbitrary large number for safety
@@ -134,7 +136,8 @@ class CarouselAdManager {
 
   /// **Handle carousel ad clicked**
   void onCarouselAdClicked(CarouselAdModel carouselAd) {
-    print('🎯 CarouselAdManager: Carousel ad clicked: ${carouselAd.id}');
+    AppLogger.log(
+        '🎯 CarouselAdManager: Carousel ad clicked: ${carouselAd.id}');
     // Track click
     _carouselAdService.trackClick(carouselAd.id);
   }
@@ -161,7 +164,7 @@ class CarouselAdManager {
 
   /// **Refresh carousel ads from backend**
   Future<void> refreshCarouselAds() async {
-    print('🔄 CarouselAdManager: Refreshing carousel ads...');
+    AppLogger.log('🔄 CarouselAdManager: Refreshing carousel ads...');
     _isCarouselAdsLoaded = false;
     _carouselAds.clear();
     await loadCarouselAds();
@@ -173,6 +176,6 @@ class CarouselAdManager {
     _isCarouselAdsLoaded = false;
     _carouselAdIndex = 0;
     _showCarouselAd = false;
-    print('🗑️ CarouselAdManager: Carousel ads cleared');
+    AppLogger.log('🗑️ CarouselAdManager: Carousel ads cleared');
   }
 }

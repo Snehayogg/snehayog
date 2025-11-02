@@ -6,6 +6,7 @@ import 'package:vayu/model/video_model.dart';
 import 'package:vayu/core/utils/video_disposal_utils.dart';
 import 'dart:collection';
 import 'dart:async';
+import 'package:vayu/utils/app_logger.dart';
 
 class VideoControllerManager {
   static final VideoControllerManager _instance =
@@ -27,24 +28,24 @@ class VideoControllerManager {
 
   /// Choose a playback URL preferring Cloudflare/R2 or backend HLS over Cloudinary
   String _selectPlaybackUrl(VideoModel video) {
-    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    print('🎬 VIDEO URL SELECTION for: ${video.videoName}');
-    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    AppLogger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    AppLogger.log('🎬 VIDEO URL SELECTION for: ${video.videoName}');
+    AppLogger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     // Prefer explicit HLS URLs if present (served by backend/CDN)
     if (video.hlsMasterPlaylistUrl != null &&
         video.hlsMasterPlaylistUrl!.isNotEmpty) {
-      print('✅ SELECTED: HLS Master Playlist');
-      print('   URL: ${video.hlsMasterPlaylistUrl}');
-      print('   Source: ${_getUrlSource(video.hlsMasterPlaylistUrl!)}');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      AppLogger.log('✅ SELECTED: HLS Master Playlist');
+      AppLogger.log('   URL: ${video.hlsMasterPlaylistUrl}');
+      AppLogger.log('   Source: ${_getUrlSource(video.hlsMasterPlaylistUrl!)}');
+      AppLogger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
       return video.hlsMasterPlaylistUrl!;
     }
     if (video.hlsPlaylistUrl != null && video.hlsPlaylistUrl!.isNotEmpty) {
-      print('✅ SELECTED: HLS Playlist');
-      print('   URL: ${video.hlsPlaylistUrl}');
-      print('   Source: ${_getUrlSource(video.hlsPlaylistUrl!)}');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      AppLogger.log('✅ SELECTED: HLS Playlist');
+      AppLogger.log('   URL: ${video.hlsPlaylistUrl}');
+      AppLogger.log('   Source: ${_getUrlSource(video.hlsPlaylistUrl!)}');
+      AppLogger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
       return video.hlsPlaylistUrl!;
     }
 
@@ -54,10 +55,10 @@ class VideoControllerManager {
       if (lower.contains('cdn.snehayog.site') ||
           lower.contains('cdn.snehayog.com') ||
           lower.contains('r2.cloudflarestorage.com')) {
-        print('✅ SELECTED: Low Quality URL (CDN/R2)');
-        print('   URL: ${video.lowQualityUrl}');
-        print('   Source: ${_getUrlSource(video.lowQualityUrl!)}');
-        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+        AppLogger.log('✅ SELECTED: Low Quality URL (CDN/R2)');
+        AppLogger.log('   URL: ${video.lowQualityUrl}');
+        AppLogger.log('   Source: ${_getUrlSource(video.lowQualityUrl!)}');
+        AppLogger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
         return video.lowQualityUrl!;
       }
     }
@@ -69,26 +70,26 @@ class VideoControllerManager {
         origLower.contains('r2.cloudflarestorage.com') ||
         origLower.contains('/hls/');
     if (isCdn) {
-      print('✅ SELECTED: Original Video URL (CDN/R2/HLS)');
-      print('   URL: ${video.videoUrl}');
-      print('   Source: ${_getUrlSource(video.videoUrl)}');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      AppLogger.log('✅ SELECTED: Original Video URL (CDN/R2/HLS)');
+      AppLogger.log('   URL: ${video.videoUrl}');
+      AppLogger.log('   Source: ${_getUrlSource(video.videoUrl)}');
+      AppLogger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
       return video.videoUrl;
     }
 
     // Fallback: use lowQualityUrl even if not CDN, else original
     if (video.lowQualityUrl != null && video.lowQualityUrl!.isNotEmpty) {
-      print('⚠️ FALLBACK: Low Quality URL');
-      print('   URL: ${video.lowQualityUrl}');
-      print('   Source: ${_getUrlSource(video.lowQualityUrl!)}');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      AppLogger.log('⚠️ FALLBACK: Low Quality URL');
+      AppLogger.log('   URL: ${video.lowQualityUrl}');
+      AppLogger.log('   Source: ${_getUrlSource(video.lowQualityUrl!)}');
+      AppLogger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
       return video.lowQualityUrl!;
     }
 
-    print('⚠️ FALLBACK: Original Video URL');
-    print('   URL: ${video.videoUrl}');
-    print('   Source: ${_getUrlSource(video.videoUrl)}');
-    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    AppLogger.log('⚠️ FALLBACK: Original Video URL');
+    AppLogger.log('   URL: ${video.videoUrl}');
+    AppLogger.log('   Source: ${_getUrlSource(video.videoUrl)}');
+    AppLogger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
     return video.videoUrl;
   }
 
@@ -126,7 +127,8 @@ class VideoControllerManager {
       int index, VideoModel video) async {
     // Decide final URL without Cloudinary signing (prefer Cloudflare/CDN)
     String finalUrl = _selectPlaybackUrl(video);
-    print('🎯 VideoControllerManager: Selected playback URL: $finalUrl');
+    AppLogger.log(
+        '🎯 VideoControllerManager: Selected playback URL: $finalUrl');
 
     // **OPTIMIZED: Reuse existing controller if available and valid**
     if (_controllers.containsKey(index)) {
@@ -134,10 +136,12 @@ class VideoControllerManager {
       if (existingController != null &&
           existingController.value.isInitialized &&
           !existingController.value.hasError) {
-        print('♻️ VideoControllerManager: Reusing existing controller $index');
+        AppLogger.log(
+            '♻️ VideoControllerManager: Reusing existing controller $index');
         return existingController;
       } else {
-        print('🔄 VideoControllerManager: Disposing invalid controller $index');
+        AppLogger.log(
+            '🔄 VideoControllerManager: Disposing invalid controller $index');
         _disposeController(index);
       }
     }
@@ -153,7 +157,8 @@ class VideoControllerManager {
     }
 
     for (final key in controllersToRemove) {
-      print('🗑️ VideoControllerManager: Disposing distant controller $key');
+      AppLogger.log(
+          '🗑️ VideoControllerManager: Disposing distant controller $key');
       _disposeController(key);
     }
 
@@ -189,18 +194,19 @@ class VideoControllerManager {
       // **POSITION CACHING: Start tracking position for this video**
       _positionCache.startPositionTracking(controller, video.id);
 
-      print(
+      AppLogger.log(
           '✅ VideoControllerManager: Successfully created controller using VideoControllerFactory for ${video.videoName} with position caching');
       return controller;
     } catch (e) {
-      print(
+      AppLogger.log(
           '❌ VideoControllerManager: Failed to initialize controller for ${video.videoName}: $e');
 
       // Try fallback URL if this is an HLS URL
       if (finalUrl.contains('.m3u8')) {
         final fallbackUrl = _getFallbackUrl(finalUrl);
         if (fallbackUrl != finalUrl) {
-          print('🔄 VideoControllerManager: Trying fallback URL: $fallbackUrl');
+          AppLogger.log(
+              '🔄 VideoControllerManager: Trying fallback URL: $fallbackUrl');
           final fallbackVideo = video.copyWith(videoUrl: fallbackUrl);
           return await getController(index, fallbackVideo);
         }
@@ -236,17 +242,18 @@ class VideoControllerManager {
   /// Preload controller but don't play yet using VideoModel
   Future<void> preloadController(int index, VideoModel video) async {
     try {
-      print(
+      AppLogger.log(
           '🚀 VideoControllerManager: Preloading controller $index for ${video.videoName}');
 
       // **SIMPLIFIED: Direct video controller creation for 480p videos**
-      print(
+      AppLogger.log(
           '🎬 VideoControllerManager: Preloading 480p video for ${video.videoName}');
 
       await getController(index, video);
       _warmNetwork(video.videoUrl);
     } catch (e) {
-      print('❌ VideoControllerManager: Error preloading controller $index: $e');
+      AppLogger.log(
+          '❌ VideoControllerManager: Error preloading controller $index: $e');
     }
   }
 
@@ -331,7 +338,7 @@ class VideoControllerManager {
 
   /// **IMPROVED: Pause all videos but keep controllers in memory (better UX)**
   Future<void> pauseAllVideos() async {
-    print(
+    AppLogger.log(
         '⏸️ VideoControllerManager: Pausing all videos (keeping controllers)');
 
     for (final index in _controllers.keys) {
@@ -342,20 +349,22 @@ class VideoControllerManager {
             controller.value.isPlaying) {
           await controller.pause();
           _intentionallyPaused.add(index);
-          print('⏸️ VideoControllerManager: Paused video at index $index');
+          AppLogger.log(
+              '⏸️ VideoControllerManager: Paused video at index $index');
         }
       } catch (e) {
-        print('⚠️ VideoControllerManager: Error pausing video $index: $e');
+        AppLogger.log(
+            '⚠️ VideoControllerManager: Error pausing video $index: $e');
       }
     }
 
-    print(
+    AppLogger.log(
         '✅ VideoControllerManager: All videos paused (controllers kept in memory)');
   }
 
   /// **LEGACY: Force pause all videos with volume muting (for critical situations)**
   Future<void> forcePauseAllVideos() async {
-    print(
+    AppLogger.log(
         '🛑 VideoControllerManager: Force pausing all videos and clearing audio');
 
     for (final index in _controllers.keys) {
@@ -366,23 +375,24 @@ class VideoControllerManager {
           await controller.pause();
           controller.setVolume(0.0);
           _intentionallyPaused.add(index);
-          print(
+          AppLogger.log(
               '🔇 VideoControllerManager: Paused and muted controller at index $index');
         }
       } catch (e) {
-        print(
+        AppLogger.log(
             '⚠️ VideoControllerManager: Error pausing controller at index $index: $e');
       }
     }
 
     // **FIX: Clear all controller states to prevent audio overlap**
     _intentionallyPaused.clear();
-    print('✅ VideoControllerManager: All videos paused and states cleared');
+    AppLogger.log(
+        '✅ VideoControllerManager: All videos paused and states cleared');
   }
 
   /// **ENHANCED: Force clear all controllers to ensure single video playback**
   Future<void> forceClearAllControllers() async {
-    print(
+    AppLogger.log(
         '🧹 VideoControllerManager: Force clearing all controllers for single video playback');
 
     // **CRITICAL: Pause and dispose all controllers immediately**
@@ -394,11 +404,11 @@ class VideoControllerManager {
           await controller.pause();
           controller.setVolume(0.0);
           await controller.dispose();
-          print(
+          AppLogger.log(
               '🗑️ VideoControllerManager: Disposed and muted controller at index $index');
         }
       } catch (e) {
-        print(
+        AppLogger.log(
             '⚠️ VideoControllerManager: Error disposing controller at index $index: $e');
       }
     }
@@ -411,7 +421,7 @@ class VideoControllerManager {
     _controllerSourceUrl.clear();
     _controllerVideoIds.clear();
 
-    print(
+    AppLogger.log(
         '✅ VideoControllerManager: All controllers cleared - single video playback ensured');
   }
 
@@ -450,7 +460,7 @@ class VideoControllerManager {
 
   /// Dispose all controllers
   void disposeAllControllers() {
-    print('🗑️ VideoControllerManager: Disposing all controllers');
+    AppLogger.log('🗑️ VideoControllerManager: Disposing all controllers');
     for (final index in List<int>.from(_controllers.keys)) {
       _disposeController(index);
     }
@@ -489,17 +499,17 @@ class VideoControllerManager {
           controller.pause();
           controller.setVolume(0.0);
           _intentionallyPaused.add(index);
-          print(
+          AppLogger.log(
               '💾 VideoControllerManager: Cached controller $index for reuse');
         }
 
         // **FORCE: Small delay to ensure MediaCodec cleanup**
         Future.delayed(const Duration(milliseconds: 50), () {
-          print(
+          AppLogger.log(
               '✅ VideoControllerManager: MediaCodec cleanup completed for controller $index');
         });
       } catch (e) {
-        print(
+        AppLogger.log(
             '❌ VideoControllerManager: Error disposing controller $index: $e');
       }
     }
@@ -526,7 +536,8 @@ class VideoControllerManager {
   void _warmNetwork(String url) {
     // Network warming removed since VideoCacheManager was deleted
     // Videos now load directly through VideoPlayer for 480p content
-    print('🌐 VideoControllerManager: Network warming for 480p video: $url');
+    AppLogger.log(
+        '🌐 VideoControllerManager: Network warming for 480p video: $url');
   }
 
   /// Get fallback URL for HLS streams
@@ -550,7 +561,7 @@ class VideoControllerManager {
 
   /// Clear all with proper MediaCodec cleanup
   void clear() {
-    print(
+    AppLogger.log(
         '🗑️ VideoControllerManager: Clearing all controllers and freeing MediaCodec memory');
 
     for (final entry in _controllers.entries) {
@@ -568,7 +579,7 @@ class VideoControllerManager {
         VideoDisposalUtils.disposeController(controller,
             identifier: 'manager_index_$index');
       } catch (e) {
-        print(
+        AppLogger.log(
             '❌ VideoControllerManager: Error disposing controller ${entry.key}: $e');
       }
     }
@@ -582,30 +593,31 @@ class VideoControllerManager {
 
     // **FORCE: Delay to ensure MediaCodec cleanup completes**
     Future.delayed(const Duration(milliseconds: 100), () {
-      print('✅ VideoControllerManager: All MediaCodec resources freed');
+      AppLogger.log('✅ VideoControllerManager: All MediaCodec resources freed');
     });
   }
 
   /// **NEW: Handle app lifecycle changes**
   void onAppPaused() {
-    print('⏸️ VideoControllerManager: App paused - pausing all videos');
+    AppLogger.log('⏸️ VideoControllerManager: App paused - pausing all videos');
     pauseAllVideos();
   }
 
   void onAppResumed() {
-    print('▶️ VideoControllerManager: App resumed');
+    AppLogger.log('▶️ VideoControllerManager: App resumed');
     // Don't auto-resume videos - let user decide
   }
 
   void onAppDetached() {
-    print(
+    AppLogger.log(
         '🔌 VideoControllerManager: App detached - disposing all controllers');
     clear();
   }
 
   /// **NEW: Comprehensive dispose method for complete cleanup**
   void dispose() {
-    print('🗑️ VideoControllerManager: Starting comprehensive disposal...');
+    AppLogger.log(
+        '🗑️ VideoControllerManager: Starting comprehensive disposal...');
 
     // Clear all controllers
     clear();
@@ -616,7 +628,7 @@ class VideoControllerManager {
     // Dispose hot UI state manager
     _hotUIManager.dispose();
 
-    print('✅ VideoControllerManager: Comprehensive disposal completed');
+    AppLogger.log('✅ VideoControllerManager: Comprehensive disposal completed');
   }
 
   // **COMPATIBILITY METHODS** - For existing code
@@ -657,7 +669,7 @@ class VideoControllerManager {
 
   /// **TAB CHANGE DETECTION: Pause all videos when user switches tabs**
   Future<void> pauseAllVideosOnTabChange() async {
-    print(
+    AppLogger.log(
         '⏸️ VideoControllerManager: Tab change detected - pausing all videos');
 
     for (final index in _controllers.keys) {
@@ -668,9 +680,10 @@ class VideoControllerManager {
         try {
           await controller.pause();
           _intentionallyPaused.add(index);
-          print('⏸️ VideoControllerManager: Paused video at index $index');
+          AppLogger.log(
+              '⏸️ VideoControllerManager: Paused video at index $index');
         } catch (e) {
-          print(
+          AppLogger.log(
               '❌ VideoControllerManager: Error pausing video at index $index: $e');
         }
       }
@@ -679,7 +692,7 @@ class VideoControllerManager {
 
   /// **TAB CHANGE DETECTION: Resume videos when returning to video tab**
   Future<void> resumeVideosOnTabReturn() async {
-    print(
+    AppLogger.log(
         '▶️ VideoControllerManager: Returning to video tab - resuming videos');
 
     // Only resume the current active video, not all videos
@@ -694,10 +707,10 @@ class VideoControllerManager {
           try {
             await controller.play();
             _intentionallyPaused.remove(activeIndex);
-            print(
+            AppLogger.log(
                 '▶️ VideoControllerManager: Resumed video at index $activeIndex');
           } catch (e) {
-            print(
+            AppLogger.log(
                 '❌ VideoControllerManager: Error resuming video at index $activeIndex: $e');
           }
         }
@@ -707,7 +720,8 @@ class VideoControllerManager {
 
   /// **TAB CHANGE DETECTION: Force pause all videos immediately (for critical situations)**
   void forcePauseAllVideosSync() {
-    print('🛑 VideoControllerManager: Force pausing all videos immediately');
+    AppLogger.log(
+        '🛑 VideoControllerManager: Force pausing all videos immediately');
 
     for (final index in _controllers.keys) {
       final controller = _controllers[index];
@@ -716,7 +730,7 @@ class VideoControllerManager {
           controller.pause();
           _intentionallyPaused.add(index);
         } catch (e) {
-          print(
+          AppLogger.log(
               '❌ VideoControllerManager: Error force pausing video at index $index: $e');
         }
       }
@@ -725,7 +739,7 @@ class VideoControllerManager {
 
   void saveUIStateForBackground(
       int currentIndex, double scrollPosition, Map<int, VideoModel> videos) {
-    print('💾 VideoControllerManager: Saving UI state for background');
+    AppLogger.log('💾 VideoControllerManager: Saving UI state for background');
 
     _hotUIManager.saveUIState(
       currentIndex: currentIndex,
@@ -737,7 +751,8 @@ class VideoControllerManager {
 
   /// **HOT UI: Restore state when app comes to foreground**
   Map<String, dynamic>? restoreUIStateFromBackground() {
-    print('🔄 VideoControllerManager: Restoring UI state from background');
+    AppLogger.log(
+        '🔄 VideoControllerManager: Restoring UI state from background');
 
     if (_hotUIManager.isStateRestored) {
       final restoredState = _hotUIManager.restoreUIState();

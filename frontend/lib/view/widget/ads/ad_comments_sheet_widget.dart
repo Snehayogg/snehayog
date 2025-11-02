@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/services/ad_comment_service.dart';
 import 'package:vayu/model/carousel_ad_model.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 class AdCommentsSheetWidget extends StatefulWidget {
   final CarouselAdModel carouselAd;
@@ -81,7 +82,7 @@ class _AdCommentsSheetWidgetState extends State<AdCommentsSheetWidget> {
         throw Exception(response['message'] ?? 'Failed to load comments');
       }
     } catch (e) {
-      print('❌ Error loading ad comments: $e');
+      AppLogger.log('❌ Error loading ad comments: $e');
       setState(() {
         _errorMessage = e.toString();
       });
@@ -125,7 +126,7 @@ class _AdCommentsSheetWidgetState extends State<AdCommentsSheetWidget> {
         throw Exception(response['message'] ?? 'Failed to post comment');
       }
     } catch (e) {
-      print('❌ Error posting ad comment: $e');
+      AppLogger.log('❌ Error posting ad comment: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to post comment: ${e.toString()}'),
@@ -168,7 +169,7 @@ class _AdCommentsSheetWidgetState extends State<AdCommentsSheetWidget> {
         throw Exception(response['message'] ?? 'Failed to delete comment');
       }
     } catch (e) {
-      print('❌ Error deleting ad comment: $e');
+      AppLogger.log('❌ Error deleting ad comment: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to delete comment: ${e.toString()}'),
@@ -200,7 +201,7 @@ class _AdCommentsSheetWidgetState extends State<AdCommentsSheetWidget> {
         throw Exception(response['message'] ?? 'Failed to like comment');
       }
     } catch (e) {
-      print('❌ Error liking ad comment: $e');
+      AppLogger.log('❌ Error liking ad comment: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to like comment: ${e.toString()}'),

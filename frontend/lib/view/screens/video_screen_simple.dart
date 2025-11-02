@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:vayu/model/video_model.dart';
 import 'package:vayu/services/video_service.dart';
 import 'package:vayu/services/authservices.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 /// **SIMPLE VIDEO SCREEN: No complex managers, no freezing**
 class VideoScreenSimple extends StatefulWidget {
@@ -54,7 +55,7 @@ class _VideoScreenSimpleState extends State<VideoScreenSimple> {
         });
       }
     } catch (e) {
-      print('❌ Error loading videos: $e');
+      AppLogger.log('❌ Error loading videos: $e');
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -71,7 +72,7 @@ class _VideoScreenSimpleState extends State<VideoScreenSimple> {
         });
       }
     } catch (e) {
-      print('❌ Error loading user ID: $e');
+      AppLogger.log('❌ Error loading user ID: $e');
     }
   }
 

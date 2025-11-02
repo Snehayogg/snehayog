@@ -5,6 +5,7 @@ import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/user_service.dart';
 import 'package:vayu/services/video_service.dart';
 import 'package:vayu/model/video_model.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 /// **BACKGROUND PROFILE PRELOADER**
 /// Preloads profile data in the background while user is on video feed (Yog tab)
@@ -40,7 +41,8 @@ class BackgroundProfilePreloader {
   /// **START BACKGROUND PRELOADING**
   /// Call this when video feed (Yog tab) becomes visible
   void startBackgroundPreloading() {
-    print('🚀 BackgroundProfilePreloader: Starting background preloading...');
+    AppLogger.log(
+        '🚀 BackgroundProfilePreloader: Starting background preloading...');
 
     // Cancel any existing timer
     _preloadTimer?.cancel();
@@ -54,7 +56,8 @@ class BackgroundProfilePreloader {
   /// **STOP BACKGROUND PRELOADING**
   /// Call this when video feed (Yog tab) becomes hidden
   void stopBackgroundPreloading() {
-    print('⏸️ BackgroundProfilePreloader: Stopping background preloading...');
+    AppLogger.log(
+        '⏸️ BackgroundProfilePreloader: Stopping background preloading...');
     _preloadTimer?.cancel();
   }
 
@@ -62,37 +65,40 @@ class BackgroundProfilePreloader {
   Future<void> _performBackgroundPreload() async {
     // Don't preload if already preloading
     if (_isPreloading) {
-      print('⏳ BackgroundProfilePreloader: Already preloading, skipping...');
+      AppLogger.log(
+          '⏳ BackgroundProfilePreloader: Already preloading, skipping...');
       return;
     }
 
     // Don't preload if recently preloaded (within interval)
     if (_lastPreloadTime != null &&
         DateTime.now().difference(_lastPreloadTime!) < _preloadInterval) {
-      print('⏳ BackgroundProfilePreloader: Recently preloaded, skipping...');
+      AppLogger.log(
+          '⏳ BackgroundProfilePreloader: Recently preloaded, skipping...');
       return;
     }
 
     _isPreloading = true;
-    print('🔄 BackgroundProfilePreloader: Starting preload...');
+    AppLogger.log('🔄 BackgroundProfilePreloader: Starting preload...');
 
     try {
       // Get current user
       final userData = await _authService.getUserData();
       if (userData == null) {
-        print(
+        AppLogger.log(
             '⚠️ BackgroundProfilePreloader: No authenticated user, skipping preload');
         return;
       }
 
       final userId = userData['googleId'] ?? userData['id'];
       if (userId == null || userId.isEmpty) {
-        print(
+        AppLogger.log(
             '⚠️ BackgroundProfilePreloader: Invalid user ID, skipping preload');
         return;
       }
 
-      print('✅ BackgroundProfilePreloader: Preloading for user: $userId');
+      AppLogger.log(
+          '✅ BackgroundProfilePreloader: Preloading for user: $userId');
 
       // Preload profile data and videos in parallel
       await Future.wait([
@@ -104,9 +110,10 @@ class BackgroundProfilePreloader {
       _isProfilePreloaded = true;
       _areVideosPreloaded = true;
 
-      print('✅ BackgroundProfilePreloader: Preload completed successfully');
+      AppLogger.log(
+          '✅ BackgroundProfilePreloader: Preload completed successfully');
     } catch (e) {
-      print('❌ BackgroundProfilePreloader: Error during preload: $e');
+      AppLogger.log('❌ BackgroundProfilePreloader: Error during preload: $e');
     } finally {
       _isPreloading = false;
     }
@@ -115,12 +122,13 @@ class BackgroundProfilePreloader {
   /// **PRELOAD PROFILE DATA**
   Future<void> _preloadProfileData(String userId) async {
     try {
-      print('📥 BackgroundProfilePreloader: Preloading profile data...');
+      AppLogger.log(
+          '📥 BackgroundProfilePreloader: Preloading profile data...');
 
       // Check if cache is still fresh
       final cachedData = await _getCachedProfileData();
       if (cachedData != null) {
-        print(
+        AppLogger.log(
             '⚡ BackgroundProfilePreloader: Profile data already cached and fresh');
         return;
       }
@@ -130,21 +138,23 @@ class BackgroundProfilePreloader {
 
       // Cache the profile data
       await _cacheProfileData(profileData);
-      print('✅ BackgroundProfilePreloader: Profile data preloaded and cached');
+      AppLogger.log(
+          '✅ BackgroundProfilePreloader: Profile data preloaded and cached');
     } catch (e) {
-      print('❌ BackgroundProfilePreloader: Error preloading profile data: $e');
+      AppLogger.log(
+          '❌ BackgroundProfilePreloader: Error preloading profile data: $e');
     }
   }
 
   /// **PRELOAD USER VIDEOS**
   Future<void> _preloadUserVideos(String userId) async {
     try {
-      print('📥 BackgroundProfilePreloader: Preloading user videos...');
+      AppLogger.log('📥 BackgroundProfilePreloader: Preloading user videos...');
 
       // Check if cache is still fresh
       final cachedVideos = await _getCachedUserVideos();
       if (cachedVideos != null && cachedVideos.isNotEmpty) {
-        print(
+        AppLogger.log(
             '⚡ BackgroundProfilePreloader: User videos already cached and fresh');
         return;
       }
@@ -155,11 +165,12 @@ class BackgroundProfilePreloader {
       if (videos.isNotEmpty) {
         // Cache the videos
         await _cacheUserVideos(videos);
-        print(
+        AppLogger.log(
             '✅ BackgroundProfilePreloader: User videos preloaded and cached (${videos.length} videos)');
       }
     } catch (e) {
-      print('❌ BackgroundProfilePreloader: Error preloading user videos: $e');
+      AppLogger.log(
+          '❌ BackgroundProfilePreloader: Error preloading user videos: $e');
     }
   }
 
@@ -176,9 +187,10 @@ class BackgroundProfilePreloader {
       await prefs.setInt(
           _cacheKeyPreloadTimestamp, DateTime.now().millisecondsSinceEpoch);
 
-      print('💾 BackgroundProfilePreloader: Profile data cached');
+      AppLogger.log('💾 BackgroundProfilePreloader: Profile data cached');
     } catch (e) {
-      print('❌ BackgroundProfilePreloader: Error caching profile data: $e');
+      AppLogger.log(
+          '❌ BackgroundProfilePreloader: Error caching profile data: $e');
     }
   }
 
@@ -192,10 +204,11 @@ class BackgroundProfilePreloader {
       final videosJson = jsonEncode(videoJsonList);
       await prefs.setString(_cacheKeyUserVideos, videosJson);
 
-      print(
+      AppLogger.log(
           '💾 BackgroundProfilePreloader: User videos cached (${videos.length} videos)');
     } catch (e) {
-      print('❌ BackgroundProfilePreloader: Error caching user videos: $e');
+      AppLogger.log(
+          '❌ BackgroundProfilePreloader: Error caching user videos: $e');
     }
   }
 
@@ -206,7 +219,8 @@ class BackgroundProfilePreloader {
 
       // Check if cache expired
       if (_isCacheExpired(prefs)) {
-        print('⏰ BackgroundProfilePreloader: Cache expired, clearing...');
+        AppLogger.log(
+            '⏰ BackgroundProfilePreloader: Cache expired, clearing...');
         await clearCache();
         return null;
       }
@@ -214,11 +228,12 @@ class BackgroundProfilePreloader {
       final profileJson = prefs.getString(_cacheKeyProfileData);
       if (profileJson != null && profileJson.isNotEmpty) {
         final profileData = jsonDecode(profileJson) as Map<String, dynamic>;
-        print('⚡ BackgroundProfilePreloader: Found cached profile data');
+        AppLogger.log(
+            '⚡ BackgroundProfilePreloader: Found cached profile data');
         return profileData;
       }
     } catch (e) {
-      print(
+      AppLogger.log(
           '❌ BackgroundProfilePreloader: Error getting cached profile data: $e');
     }
     return null;
@@ -231,7 +246,8 @@ class BackgroundProfilePreloader {
 
       // Check if cache expired
       if (_isCacheExpired(prefs)) {
-        print('⏰ BackgroundProfilePreloader: Cache expired, clearing...');
+        AppLogger.log(
+            '⏰ BackgroundProfilePreloader: Cache expired, clearing...');
         await clearCache();
         return null;
       }
@@ -242,12 +258,12 @@ class BackgroundProfilePreloader {
         final videos = videoJsonList
             .map((json) => VideoModel.fromJson(json as Map<String, dynamic>))
             .toList();
-        print(
+        AppLogger.log(
             '⚡ BackgroundProfilePreloader: Found cached user videos (${videos.length} videos)');
         return videos;
       }
     } catch (e) {
-      print(
+      AppLogger.log(
           '❌ BackgroundProfilePreloader: Error getting cached user videos: $e');
     }
     return null;
@@ -276,9 +292,9 @@ class BackgroundProfilePreloader {
       _isProfilePreloaded = false;
       _areVideosPreloaded = false;
 
-      print('🧹 BackgroundProfilePreloader: Cache cleared');
+      AppLogger.log('🧹 BackgroundProfilePreloader: Cache cleared');
     } catch (e) {
-      print('❌ BackgroundProfilePreloader: Error clearing cache: $e');
+      AppLogger.log('❌ BackgroundProfilePreloader: Error clearing cache: $e');
     }
   }
 
@@ -304,6 +320,6 @@ class BackgroundProfilePreloader {
   /// **DISPOSE: Clean up resources**
   void dispose() {
     _preloadTimer?.cancel();
-    print('🧹 BackgroundProfilePreloader: Disposed');
+    AppLogger.log('🧹 BackgroundProfilePreloader: Disposed');
   }
 }

@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/core/managers/smart_cache_manager.dart';
 import 'package:vayu/model/video_model.dart';
+import 'package:vayu/core/services/http_client_service.dart';
 
 /// Service for intelligent ad targeting based on video content
 class AdTargetingService {
@@ -51,7 +52,7 @@ class AdTargetingService {
 
       final url = '$_baseUrl/api/ads/targeting/targeted-for-video';
 
-      final response = await http.post(
+      final response = await httpClientService.post(
         Uri.parse(url),
         headers: {
           'Content-Type': 'application/json',
@@ -122,7 +123,7 @@ class AdTargetingService {
       print(
           '🎯 AdTargetingService: Getting targeted ads for categories: $categories');
 
-      final response = await http.post(
+      final response = await httpClientService.post(
         Uri.parse('$_baseUrl/api/ads/targeting/targeted'),
         headers: {
           'Content-Type': 'application/json',
@@ -166,7 +167,7 @@ class AdTargetingService {
       print(
           '🎯 AdTargetingService: Getting targeted ads for interests: $interests');
 
-      final response = await http.post(
+      final response = await httpClientService.post(
         Uri.parse('$_baseUrl/api/ads/targeting/targeted'),
         headers: {
           'Content-Type': 'application/json',
@@ -208,7 +209,7 @@ class AdTargetingService {
     try {
       print('🔄 AdTargetingService: Getting fallback ads...');
 
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse(
             '$_baseUrl/api/ads/targeting/fallback?limit=$limit&adType=$adType'),
         headers: {
@@ -238,7 +239,7 @@ class AdTargetingService {
   /// Get targeting categories available in the system
   Future<List<String>> getTargetingCategories() async {
     try {
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('$_baseUrl/api/ads/targeting/categories'),
         headers: {
           'Content-Type': 'application/json',
@@ -265,7 +266,7 @@ class AdTargetingService {
   /// Get targeting interests available in the system
   Future<List<String>> getTargetingInterests() async {
     try {
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('$_baseUrl/api/ads/targeting/interests'),
         headers: {
           'Content-Type': 'application/json',

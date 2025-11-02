@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 /// **Shared Video Controller Pool: Singleton manager for persisting video controllers**
 /// This class manages a shared pool of video controllers that can be reused
@@ -78,7 +79,7 @@ class SharedVideoControllerPool {
   /// **Add controller to pool with LRU eviction**
   void addController(String videoId, VideoPlayerController controller,
       {bool skipDisposeOld = false, int? index}) {
-    print('📥 SharedPool: Adding controller for video: $videoId');
+    AppLogger.log('📥 SharedPool: Adding controller for video: $videoId');
 
     // **LRU: Update access time**
     _lastAccessed[videoId] = DateTime.now();
@@ -97,9 +98,10 @@ class SharedVideoControllerPool {
       if (oldController != controller && !skipDisposeOld) {
         oldController?.removeListener(_listeners[videoId] ?? () {});
         oldController?.dispose();
-        print('🗑️ SharedPool: Disposed old controller for video: $videoId');
+        AppLogger.log(
+            '🗑️ SharedPool: Disposed old controller for video: $videoId');
       } else {
-        print(
+        AppLogger.log(
             '♻️ SharedPool: Skipping dispose - same controller instance or skipDisposeOld=true');
       }
     } else {
@@ -110,7 +112,7 @@ class SharedVideoControllerPool {
     _controllerPool[videoId] = controller;
     _controllerStates[videoId] = false; // Not playing initially
 
-    print(
+    AppLogger.log(
         '✅ SharedPool: Controller added, total controllers: ${_controllerPool.length}');
   }
 
@@ -134,7 +136,8 @@ class SharedVideoControllerPool {
     }
 
     if (toRemove.isNotEmpty) {
-      print('🧹 SharedPool: Cleaned up ${toRemove.length} distant controllers');
+      AppLogger.log(
+          '🧹 SharedPool: Cleaned up ${toRemove.length} distant controllers');
     }
   }
 
@@ -149,7 +152,7 @@ class SharedVideoControllerPool {
       _lastAccessed.remove(videoId); // Remove LRU tracking
       _videoIndices.remove(videoId); // Remove index tracking
 
-      print('🗑️ SharedPool: Removed controller for video: $videoId');
+      AppLogger.log('🗑️ SharedPool: Removed controller for video: $videoId');
     }
   }
 
@@ -178,7 +181,7 @@ class SharedVideoControllerPool {
     }
 
     if (removed > 0) {
-      print('🧹 SharedPool: LRU evicted $removed old controllers');
+      AppLogger.log('🧹 SharedPool: LRU evicted $removed old controllers');
     }
   }
 
@@ -195,7 +198,7 @@ class SharedVideoControllerPool {
         controller.removeListener(_listeners[videoId] ?? () {});
         controller.dispose();
       } catch (e) {
-        print('⚠️ SharedPool: Error disposing controller $videoId: $e');
+        AppLogger.log('⚠️ SharedPool: Error disposing controller $videoId: $e');
       }
 
       _controllerPool.remove(videoId);
@@ -204,7 +207,7 @@ class SharedVideoControllerPool {
       _lastAccessed.remove(videoId); // Remove LRU tracking
       _videoIndices.remove(videoId); // Remove index tracking
 
-      print('🗑️ SharedPool: Disposed controller for video: $videoId');
+      AppLogger.log('🗑️ SharedPool: Disposed controller for video: $videoId');
     }
   }
 
@@ -214,7 +217,7 @@ class SharedVideoControllerPool {
       _listeners[videoId] = listener;
       _controllerPool[videoId]!.addListener(listener);
 
-      print('👂 SharedPool: Attached listener for video: $videoId');
+      AppLogger.log('👂 SharedPool: Attached listener for video: $videoId');
     }
   }
 
@@ -225,7 +228,7 @@ class SharedVideoControllerPool {
       _controllerPool[videoId]!.removeListener(_listeners[videoId]!);
       _listeners.remove(videoId);
 
-      print('👂 SharedPool: Removed listener for video: $videoId');
+      AppLogger.log('👂 SharedPool: Removed listener for video: $videoId');
     }
   }
 
@@ -272,21 +275,22 @@ class SharedVideoControllerPool {
 
   /// **Pause all controllers instead of disposing (better UX)**
   void pauseAllControllers() {
-    print('⏸️ SharedPool: Pausing all controllers (keeping in memory)');
+    AppLogger.log('⏸️ SharedPool: Pausing all controllers (keeping in memory)');
 
     for (final entry in _controllerPool.entries) {
       try {
         if (entry.value.value.isInitialized && entry.value.value.isPlaying) {
           entry.value.pause();
           _controllerStates[entry.key] = false;
-          print('⏸️ SharedPool: Paused controller ${entry.key}');
+          AppLogger.log('⏸️ SharedPool: Paused controller ${entry.key}');
         }
       } catch (e) {
-        print('⚠️ SharedPool: Error pausing controller ${entry.key}: $e');
+        AppLogger.log(
+            '⚠️ SharedPool: Error pausing controller ${entry.key}: $e');
       }
     }
 
-    print('✅ SharedPool: All controllers paused');
+    AppLogger.log('✅ SharedPool: All controllers paused');
   }
 
   /// **Resume specific controller (for better UX)**
@@ -297,10 +301,10 @@ class SharedVideoControllerPool {
         if (controller.value.isInitialized && !controller.value.isPlaying) {
           controller.play();
           _controllerStates[videoId] = true;
-          print('▶️ SharedPool: Resumed controller $videoId');
+          AppLogger.log('▶️ SharedPool: Resumed controller $videoId');
         }
       } catch (e) {
-        print('⚠️ SharedPool: Error resuming controller $videoId: $e');
+        AppLogger.log('⚠️ SharedPool: Error resuming controller $videoId: $e');
       }
     }
   }
@@ -314,7 +318,7 @@ class SharedVideoControllerPool {
 
   /// **Memory management: Dispose controllers when memory usage is high**
   void disposeControllersForMemoryManagement() {
-    print('🧹 SharedPool: Disposing controllers for memory management');
+    AppLogger.log('🧹 SharedPool: Disposing controllers for memory management');
 
     // Keep only the most recent 2 controllers, dispose the rest
     if (_controllerPool.length > 2) {
@@ -325,7 +329,7 @@ class SharedVideoControllerPool {
         disposeController(videoId);
       }
 
-      print(
+      AppLogger.log(
           '✅ SharedPool: Disposed ${controllersToDispose.length} controllers for memory management');
     }
   }
@@ -336,14 +340,15 @@ class SharedVideoControllerPool {
       final controller = _controllerPool[videoId]!;
       if (controller.value.isInitialized) {
         // Show first frame immediately (no loading)
-        print('🖼️ SharedPool: Showing first frame for video $videoId');
+        AppLogger.log('🖼️ SharedPool: Showing first frame for video $videoId');
 
         // Resume in background
         Future.microtask(() {
           if (controller.value.isInitialized && !controller.value.isPlaying) {
             controller.play();
             _controllerStates[videoId] = true;
-            print('▶️ SharedPool: Resumed video $videoId in background');
+            AppLogger.log(
+                '▶️ SharedPool: Resumed video $videoId in background');
           }
         });
       }
@@ -352,14 +357,15 @@ class SharedVideoControllerPool {
 
   /// **Clear all controllers (only when memory is high)**
   void clearAll() {
-    print('🗑️ SharedPool: Clearing all controllers');
+    AppLogger.log('🗑️ SharedPool: Clearing all controllers');
 
     for (final entry in _controllerPool.entries) {
       try {
         entry.value.removeListener(_listeners[entry.key] ?? () {});
         entry.value.dispose();
       } catch (e) {
-        print('⚠️ SharedPool: Error disposing controller ${entry.key}: $e');
+        AppLogger.log(
+            '⚠️ SharedPool: Error disposing controller ${entry.key}: $e');
       }
     }
 
@@ -369,7 +375,7 @@ class SharedVideoControllerPool {
     _lastAccessed.clear(); // Clear LRU tracking
     _videoIndices.clear(); // Clear index tracking
 
-    print('✅ SharedPool: All controllers cleared');
+    AppLogger.log('✅ SharedPool: All controllers cleared');
   }
 
   /// **Clear controllers except specified ones**
@@ -387,27 +393,27 @@ class SharedVideoControllerPool {
       disposeController(videoId);
     }
 
-    print(
+    AppLogger.log(
         '🗑️ SharedPool: Cleared ${toRemove.length} controllers, keeping ${keepVideoIds.length}');
   }
 
   /// **Print pool status**
   void printStatus() {
-    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    print('📊 SHARED VIDEO CONTROLLER POOL STATUS');
-    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    print('   Total Controllers: ${_controllerPool.length}');
-    print('   Video IDs: ${_controllerPool.keys.toList()}');
-    print('   Cache Hits: $_cacheHits');
-    print('   Cache Misses: $_cacheMisses');
-    print(
+    AppLogger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    AppLogger.log('📊 SHARED VIDEO CONTROLLER POOL STATUS');
+    AppLogger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    AppLogger.log('   Total Controllers: ${_controllerPool.length}');
+    AppLogger.log('   Video IDs: ${_controllerPool.keys.toList()}');
+    AppLogger.log('   Cache Hits: $_cacheHits');
+    AppLogger.log('   Cache Misses: $_cacheMisses');
+    AppLogger.log(
         '   Hit Rate: ${_totalRequests > 0 ? (_cacheHits / _totalRequests * 100).toStringAsFixed(2) : '0.00'}%');
-    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    AppLogger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   }
 
   /// **Dispose all resources**
   void dispose() {
-    print('🗑️ SharedPool: Disposing all resources');
+    AppLogger.log('🗑️ SharedPool: Disposing all resources');
     clearAll();
   }
 }

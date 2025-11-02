@@ -2,6 +2,7 @@ import 'package:video_player/video_player.dart';
 import 'package:vayu/model/video_model.dart';
 import 'package:vayu/core/utils/enhanced_controller_disposal.dart';
 import 'dart:async';
+import 'package:vayu/utils/app_logger.dart';
 
 /// Intelligent Controller Pool
 /// Manages video controllers with smart pooling and concurrent preparation
@@ -52,7 +53,7 @@ class IntelligentControllerPool {
 
   /// Initialize the intelligent pool
   void initialize() {
-    print(
+    AppLogger.log(
         '🧠 IntelligentControllerPool: Initializing intelligent controller pool');
 
     // **CLEANUP TIMER: Run cleanup every 30 seconds**
@@ -60,7 +61,7 @@ class IntelligentControllerPool {
       _performCleanup();
     });
 
-    print('✅ IntelligentControllerPool: Intelligent pool initialized');
+    AppLogger.log('✅ IntelligentControllerPool: Intelligent pool initialized');
   }
 
   /// Get or create controller for active video
@@ -71,10 +72,11 @@ class IntelligentControllerPool {
       final controller = _activeControllers[index]!;
       if (controller.value.isInitialized && !controller.value.hasError) {
         _controllerLastUsed[index] = DateTime.now();
-        print('♻️ IntelligentControllerPool: Reusing active controller $index');
+        AppLogger.log(
+            '♻️ IntelligentControllerPool: Reusing active controller $index');
         return controller;
       } else {
-        print(
+        AppLogger.log(
             '🔄 IntelligentControllerPool: Disposing invalid active controller $index');
         await _disposeController(index, isActive: true);
       }
@@ -82,7 +84,7 @@ class IntelligentControllerPool {
 
     // **CONCURRENT LIMIT: Check if we can initialize concurrently**
     if (!canInitializeConcurrently) {
-      print(
+      AppLogger.log(
           '⏳ IntelligentControllerPool: Waiting for concurrent initialization slot');
       await _waitForInitializationSlot();
     }
@@ -99,11 +101,11 @@ class IntelligentControllerPool {
       final controller = _preloadControllers[index]!;
       if (controller.value.isInitialized && !controller.value.hasError) {
         _controllerLastUsed[index] = DateTime.now();
-        print(
+        AppLogger.log(
             '♻️ IntelligentControllerPool: Reusing preload controller $index');
         return controller;
       } else {
-        print(
+        AppLogger.log(
             '🔄 IntelligentControllerPool: Disposing invalid preload controller $index');
         await _disposeController(index, isActive: false);
       }
@@ -111,14 +113,14 @@ class IntelligentControllerPool {
 
     // **POOL LIMIT: Check if we can create more controllers**
     if (!canCreateMoreControllers) {
-      print(
+      AppLogger.log(
           '⚠️ IntelligentControllerPool: Pool limit reached, cleaning up old controllers');
       await _cleanupOldControllers();
     }
 
     // **CONCURRENT LIMIT: Check if we can initialize concurrently**
     if (!canInitializeConcurrently) {
-      print(
+      AppLogger.log(
           '⏳ IntelligentControllerPool: Waiting for concurrent initialization slot');
       await _waitForInitializationSlot();
     }
@@ -131,7 +133,7 @@ class IntelligentControllerPool {
   Future<VideoPlayerController?> _createController(int index, VideoModel video,
       {required bool isActive}) async {
     try {
-      print(
+      AppLogger.log(
           '🎬 IntelligentControllerPool: Creating ${isActive ? 'active' : 'preload'} controller $index');
 
       _concurrentInitializations++;
@@ -162,11 +164,11 @@ class IntelligentControllerPool {
       _concurrentInitializations--;
       _initializingControllers.remove(index);
 
-      print(
+      AppLogger.log(
           '✅ IntelligentControllerPool: Created ${isActive ? 'active' : 'preload'} controller $index');
       return controller;
     } catch (e) {
-      print(
+      AppLogger.log(
           '❌ IntelligentControllerPool: Error creating controller $index: $e');
       _concurrentInitializations--;
       _initializingControllers.remove(index);
@@ -237,14 +239,14 @@ class IntelligentControllerPool {
       _controllerVideoIds.remove(index);
       _controllerLastUsed.remove(index);
     } catch (e) {
-      print(
+      AppLogger.log(
           '❌ IntelligentControllerPool: Error disposing controller $index: $e');
     }
   }
 
   /// Clean up old controllers
   Future<void> _cleanupOldControllers() async {
-    print('🧹 IntelligentControllerPool: Cleaning up old controllers');
+    AppLogger.log('🧹 IntelligentControllerPool: Cleaning up old controllers');
 
     // **CLEANUP STRATEGY: Remove least recently used controllers**
     final now = DateTime.now();
@@ -276,19 +278,19 @@ class IntelligentControllerPool {
       await _disposeController(index, isActive: isActive);
     }
 
-    print(
+    AppLogger.log(
         '✅ IntelligentControllerPool: Cleaned up ${controllersToRemove.length} old controllers');
   }
 
   /// Perform periodic cleanup
   void _performCleanup() {
-    print('🧹 IntelligentControllerPool: Performing periodic cleanup');
+    AppLogger.log('🧹 IntelligentControllerPool: Performing periodic cleanup');
 
     // **CLEANUP: Clean up old controllers**
     _cleanupOldControllers();
 
     // **STATUS: Log pool status**
-    print(
+    AppLogger.log(
         '📊 IntelligentControllerPool: Pool status - Active: ${_activeControllers.length}, Preload: ${_preloadControllers.length}, Total: $totalControllerCount');
   }
 
@@ -298,7 +300,7 @@ class IntelligentControllerPool {
       final controller = _preloadControllers.remove(index)!;
       _activeControllers[index] = controller;
       _controllerLastUsed[index] = DateTime.now();
-      print(
+      AppLogger.log(
           '⬆️ IntelligentControllerPool: Promoted controller $index to active');
       return controller;
     }
@@ -311,7 +313,7 @@ class IntelligentControllerPool {
       final controller = _activeControllers.remove(index)!;
       _preloadControllers[index] = controller;
       _controllerLastUsed[index] = DateTime.now();
-      print(
+      AppLogger.log(
           '⬇️ IntelligentControllerPool: Demoted controller $index to preload');
     }
   }
@@ -342,7 +344,7 @@ class IntelligentControllerPool {
 
   /// Dispose all controllers
   Future<void> disposeAllControllers() async {
-    print('🗑️ IntelligentControllerPool: Disposing all controllers');
+    AppLogger.log('🗑️ IntelligentControllerPool: Disposing all controllers');
 
     // **DISPOSE: All active controllers**
     for (final index in _activeControllers.keys.toList()) {
@@ -361,12 +363,12 @@ class IntelligentControllerPool {
     _controllerLastUsed.clear();
     _initializingControllers.clear();
 
-    print('✅ IntelligentControllerPool: All controllers disposed');
+    AppLogger.log('✅ IntelligentControllerPool: All controllers disposed');
   }
 
   /// Dispose the pool
   void dispose() {
-    print('🗑️ IntelligentControllerPool: Disposing intelligent pool');
+    AppLogger.log('🗑️ IntelligentControllerPool: Disposing intelligent pool');
 
     // **CANCEL: Cleanup timer**
     _cleanupTimer?.cancel();
@@ -374,6 +376,6 @@ class IntelligentControllerPool {
     // **DISPOSE: All controllers**
     disposeAllControllers();
 
-    print('✅ IntelligentControllerPool: Intelligent pool disposed');
+    AppLogger.log('✅ IntelligentControllerPool: Intelligent pool disposed');
   }
 }
