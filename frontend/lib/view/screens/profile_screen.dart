@@ -43,18 +43,18 @@ class _ProfileScreenState extends State<ProfileScreen>
   final ImagePicker _imagePicker = ImagePicker();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  // Simplified loading states
-  bool _isLoading = true;
-  String? _error;
+  // **OPTIMIZED: Use ValueNotifiers for granular updates**
+  final ValueNotifier<bool> _isLoading = ValueNotifier<bool>(true);
+  final ValueNotifier<String?> _error = ValueNotifier<String?>(null);
 
   // Referral tracking
-  int _invitedCount = 0;
-  int _verifiedInstalled = 0;
-  int _verifiedSignedUp = 0;
+  final ValueNotifier<int> _invitedCount = ValueNotifier<int>(0);
+  final ValueNotifier<int> _verifiedInstalled = ValueNotifier<int>(0);
+  final ValueNotifier<int> _verifiedSignedUp = ValueNotifier<int>(0);
 
   // Local tab state for content section
   // 0 => Your Videos, 1 => My Recommendations
-  int _activeProfileTabIndex = 0;
+  final ValueNotifier<int> _activeProfileTabIndex = ValueNotifier<int>(0);
   final List<Map<String, dynamic>> _recommendations = [];
 
   @override
@@ -91,13 +91,12 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  /// **SIMPLIFIED: Simple cache-first rule with parallel loading**
+  /// **OPTIMIZED: Simple cache-first rule with parallel loading (batched updates)**
   Future<void> _loadData() async {
     try {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
+      // **BATCHED UPDATE: Update multiple values at once (no setState)**
+      _isLoading.value = true;
+      _error.value = null;
 
       print('🔄 ProfileScreen: Starting simple cache-first loading');
 
@@ -110,9 +109,8 @@ class _ProfileScreenState extends State<ProfileScreen>
         // Load videos from cache in parallel
         _loadVideosFromCache();
 
-        setState(() {
-          _isLoading = false;
-        });
+        // **SINGLE UPDATE: Only update loading state**
+        _isLoading.value = false;
         return;
       }
 
@@ -127,21 +125,18 @@ class _ProfileScreenState extends State<ProfileScreen>
         // Load videos in parallel
         _loadVideos();
 
-        setState(() {
-          _isLoading = false;
-        });
+        // **SINGLE UPDATE: Only update loading state**
+        _isLoading.value = false;
       } else {
-        setState(() {
-          _error = 'Failed to load profile data';
-          _isLoading = false;
-        });
+        // **BATCHED UPDATE: Update error and loading together**
+        _error.value = 'Failed to load profile data';
+        _isLoading.value = false;
       }
     } catch (e) {
       print('❌ ProfileScreen: Error loading data: $e');
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
+      // **BATCHED UPDATE: Update error and loading together**
+      _error.value = e.toString();
+      _isLoading.value = false;
     }
   }
 
@@ -370,6 +365,13 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   void dispose() {
     ProfileScreenLogger.logProfileScreenDispose();
+    // **OPTIMIZED: Dispose ValueNotifiers**
+    _isLoading.dispose();
+    _error.dispose();
+    _invitedCount.dispose();
+    _verifiedInstalled.dispose();
+    _verifiedSignedUp.dispose();
+    _activeProfileTabIndex.dispose();
     _stateManager.dispose();
     super.dispose();
   }
@@ -494,9 +496,9 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       // Optimistically increment invite counter
       final prefs = await SharedPreferences.getInstance();
-      _invitedCount = (prefs.getInt('referral_invite_count') ?? 0) + 1;
-      await prefs.setInt('referral_invite_count', _invitedCount);
-      if (mounted) setState(() {});
+      _invitedCount.value = (prefs.getInt('referral_invite_count') ?? 0) + 1;
+      await prefs.setInt('referral_invite_count', _invitedCount.value);
+      // **REMOVED: No setState needed, ValueNotifier automatically updates listeners**
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -511,8 +513,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   Future<void> _loadReferralStats() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _invitedCount = prefs.getInt('referral_invite_count') ?? 0;
-      if (mounted) setState(() {});
+      _invitedCount.value = prefs.getInt('referral_invite_count') ?? 0;
+      // **REMOVED: No setState needed, ValueNotifier automatically updates listeners**
     } catch (_) {}
   }
 
@@ -527,9 +529,10 @@ class _ProfileScreenState extends State<ProfileScreen>
       }).timeout(const Duration(seconds: 6));
       if (resp.statusCode == 200) {
         final data = json.decode(resp.body);
-        _verifiedInstalled = data['installed'] ?? 0;
-        _verifiedSignedUp = data['signedUp'] ?? 0;
-        if (mounted) setState(() {});
+        // **BATCHED UPDATE: Update both values**
+        _verifiedInstalled.value = data['installed'] ?? 0;
+        _verifiedSignedUp.value = data['signedUp'] ?? 0;
+        // **REMOVED: No setState needed, ValueNotifier automatically updates listeners**
       }
     } catch (_) {}
   }
@@ -945,94 +948,105 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Widget _buildBody(UserProvider userProvider, UserModel? userModel) {
-    // Show loading indicator
-    if (_isLoading) {
-      return RepaintBoundary(
-        child: _buildSkeletonLoading(),
-      );
-    }
+    // **OPTIMIZED: Use ValueListenableBuilder for granular updates**
+    return ValueListenableBuilder<bool>(
+      valueListenable: _isLoading,
+      builder: (context, isLoading, child) {
+        if (isLoading) {
+          return RepaintBoundary(
+            child: _buildSkeletonLoading(),
+          );
+        }
 
-    // Show error state
-    if (_error != null) {
-      if (_error == 'No authentication data found') {
-        return _buildSignInView();
-      }
+        // **OPTIMIZED: Nested ValueListenableBuilder for error state**
+        return ValueListenableBuilder<String?>(
+          valueListenable: _error,
+          builder: (context, error, child) {
+            // Show error state
+            if (error != null) {
+              if (error == 'No authentication data found') {
+                return _buildSignInView();
+              }
 
-      // Otherwise show error with retry
-      return RepaintBoundary(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.error_outline,
-                  size: 64,
-                  color: Colors.red[300],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Failed to load profile data',
-                  style: TextStyle(
-                    color: Colors.red[700],
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+              // Otherwise show error with retry
+              return RepaintBoundary(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          size: 64,
+                          color: Colors.red[300],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Failed to load profile data',
+                          style: TextStyle(
+                            color: Colors.red[700],
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'You appear to be signed in, but we couldn\'t load your profile.',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 14,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 24),
+
+                        // **SIMPLIFIED: Simple retry button**
+                        TextButton.icon(
+                          onPressed: _loadData,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.blue,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'You appear to be signed in, but we couldn\'t load your profile.',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,
+              );
+            }
+
+            // Check if we have user data
+            if (_stateManager.userData == null) {
+              return _buildSignInView();
+            }
+
+            // If we reach here, we have user data and can show the profile
+            return RefreshIndicator(
+              onRefresh: _refreshData,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(
+                  children: [
+                    ProfileHeaderWidget(
+                      stateManager: _stateManager,
+                      userId: widget.userId,
+                      onEditProfile: _handleEditProfile,
+                      onSaveProfile: _handleSaveProfile,
+                      onCancelEdit: _handleCancelEdit,
+                      onProfilePhotoChange: _handleProfilePhotoChange,
+                      onShowHowToEarn: _showHowToEarnDialog,
+                    ),
+                    _buildProfileContent(userProvider, userModel),
+                  ],
                 ),
-                const SizedBox(height: 24),
-
-                // **SIMPLIFIED: Simple retry button**
-                TextButton.icon(
-                  onPressed: _loadData,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Retry'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.blue,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    // Check if we have user data
-    if (_stateManager.userData == null) {
-      return _buildSignInView();
-    }
-
-    // If we reach here, we have user data and can show the profile
-    return RefreshIndicator(
-      onRefresh: _refreshData,
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        child: Column(
-          children: [
-            ProfileHeaderWidget(
-              stateManager: _stateManager,
-              userId: widget.userId,
-              onEditProfile: _handleEditProfile,
-              onSaveProfile: _handleSaveProfile,
-              onCancelEdit: _handleCancelEdit,
-              onProfilePhotoChange: _handleProfilePhotoChange,
-              onShowHowToEarn: _showHowToEarnDialog,
-            ),
-            _buildProfileContent(userProvider, userModel),
-          ],
-        ),
-      ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1382,29 +1396,39 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
 
           // Content Tabs: Your Videos | My Recommendations (icon-based)
-          _ProfileTabs(
-            activeIndex: _activeProfileTabIndex,
-            onSelect: (i) => setState(() => _activeProfileTabIndex = i),
+          ValueListenableBuilder<int>(
+            valueListenable: _activeProfileTabIndex,
+            builder: (context, activeIndex, child) {
+              return _ProfileTabs(
+                activeIndex: activeIndex,
+                onSelect: (i) => _activeProfileTabIndex.value = i,
+              );
+            },
           ),
 
           // Videos Section
           // Swipe horizontally across content area to switch tabs
-          GestureDetector(
-            onHorizontalDragEnd: (details) {
-              final velocity = details.primaryVelocity ?? 0;
-              if (velocity < 0 && _activeProfileTabIndex == 0) {
-                setState(() => _activeProfileTabIndex = 1);
-              } else if (velocity > 0 && _activeProfileTabIndex == 1) {
-                setState(() => _activeProfileTabIndex = 0);
-              }
+          ValueListenableBuilder<int>(
+            valueListenable: _activeProfileTabIndex,
+            builder: (context, activeIndex, child) {
+              return GestureDetector(
+                onHorizontalDragEnd: (details) {
+                  final velocity = details.primaryVelocity ?? 0;
+                  if (velocity < 0 && activeIndex == 0) {
+                    _activeProfileTabIndex.value = 1;
+                  } else if (velocity > 0 && activeIndex == 1) {
+                    _activeProfileTabIndex.value = 0;
+                  }
+                },
+                child: activeIndex == 0
+                    ? ProfileVideosWidget(
+                        stateManager: _stateManager,
+                        isVideosLoaded: true,
+                        showHeader: false,
+                      )
+                    : _buildRecommendationsSection(),
+              );
             },
-            child: _activeProfileTabIndex == 0
-                ? ProfileVideosWidget(
-                    stateManager: _stateManager,
-                    isVideosLoaded: true,
-                    showHeader: false,
-                  )
-                : _buildRecommendationsSection(),
           ),
         ],
       ),

@@ -20,18 +20,19 @@ class UploadScreen extends StatefulWidget {
 }
 
 class _UploadScreenState extends State<UploadScreen> {
-  File? _selectedVideo;
-  bool _isUploading = false;
-  bool _isProcessing = false;
-  String? _errorMessage;
-  bool _showUploadForm = false;
+  // **OPTIMIZED: Use ValueNotifiers for granular updates (no setState)**
+  final ValueNotifier<File?> _selectedVideo = ValueNotifier<File?>(null);
+  final ValueNotifier<bool> _isUploading = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> _isProcessing = ValueNotifier<bool>(false);
+  final ValueNotifier<String?> _errorMessage = ValueNotifier<String?>(null);
+  final ValueNotifier<bool> _showUploadForm = ValueNotifier<bool>(false);
 
   // **UNIFIED PROGRESS TRACKING** - Single progress bar for entire flow
-  double _unifiedProgress = 0.0;
-  String _currentPhase = '';
-  String _phaseDescription = '';
+  final ValueNotifier<double> _unifiedProgress = ValueNotifier<double>(0.0);
+  final ValueNotifier<String> _currentPhase = ValueNotifier<String>('');
+  final ValueNotifier<String> _phaseDescription = ValueNotifier<String>('');
   int _uploadStartTime = 0;
-  int _elapsedSeconds = 0;
+  final ValueNotifier<int> _elapsedSeconds = ValueNotifier<int>(0);
 
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _linkController = TextEditingController();
@@ -82,8 +83,8 @@ class _UploadScreenState extends State<UploadScreen> {
   };
 
   // NEW: Category and Tags to align with ad targeting interests
-  String? _selectedCategory;
-  final List<String> _tags = [];
+  final ValueNotifier<String?> _selectedCategory = ValueNotifier<String?>(null);
+  final ValueNotifier<List<String>> _tags = ValueNotifier<List<String>>([]);
   final TextEditingController _tagInputController = TextEditingController();
 
   // **UNIFIED PROGRESS TRACKING METHODS**
@@ -91,17 +92,17 @@ class _UploadScreenState extends State<UploadScreen> {
   /// Start unified progress tracking for complete video processing flow
   void _startUnifiedProgress() {
     _uploadStartTime = DateTime.now().millisecondsSinceEpoch;
-    _unifiedProgress = 0.0;
-    _currentPhase = 'preparation';
-    _phaseDescription = _progressPhases['preparation']!['description'];
+    // **BATCHED UPDATE: Update progress state**
+    _unifiedProgress.value = 0.0;
+    _currentPhase.value = 'preparation';
+    _phaseDescription.value =
+        _progressPhases['preparation']!['description'] as String;
 
     _progressTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
-        setState(() {
-          _elapsedSeconds =
-              (DateTime.now().millisecondsSinceEpoch - _uploadStartTime) ~/
-                  1000;
-        });
+        // **OPTIMIZED: Update only elapsed seconds, no setState**
+        _elapsedSeconds.value =
+            (DateTime.now().millisecondsSinceEpoch - _uploadStartTime) ~/ 1000;
       }
     });
   }
@@ -109,11 +110,11 @@ class _UploadScreenState extends State<UploadScreen> {
   /// Update progress phase with smooth transitions
   void _updateProgressPhase(String phase) {
     if (mounted && _progressPhases.containsKey(phase)) {
-      setState(() {
-        _currentPhase = phase;
-        _phaseDescription = _progressPhases[phase]!['description'];
-        _unifiedProgress = _progressPhases[phase]!['progress'];
-      });
+      // **BATCHED UPDATE: Update all progress values at once**
+      _currentPhase.value = phase;
+      _phaseDescription.value =
+          _progressPhases[phase]!['description'] as String;
+      _unifiedProgress.value = _progressPhases[phase]!['progress'] as double;
     }
   }
 
@@ -122,22 +123,21 @@ class _UploadScreenState extends State<UploadScreen> {
     _progressTimer?.cancel();
     _progressTimer = null;
     if (mounted) {
-      setState(() {
-        _unifiedProgress = 1.0;
-        _currentPhase = 'completed';
-        _phaseDescription = 'Video is ready!';
-      });
+      // **BATCHED UPDATE: Update all progress values at once**
+      _unifiedProgress.value = 1.0;
+      _currentPhase.value = 'completed';
+      _phaseDescription.value = 'Video is ready!';
     }
   }
 
   /// Get current phase icon
-  IconData _getCurrentPhaseIcon() {
-    return _progressPhases[_currentPhase]?['icon'] ?? Icons.upload;
+  IconData _getCurrentPhaseIcon(String currentPhase) {
+    return _progressPhases[currentPhase]?['icon'] ?? Icons.upload;
   }
 
   /// Get current phase color
-  Color _getCurrentPhaseColor() {
-    switch (_currentPhase) {
+  Color _getCurrentPhaseColor(String currentPhase) {
+    switch (currentPhase) {
       case 'preparation':
         return Colors.blue;
       case 'upload':
@@ -157,131 +157,155 @@ class _UploadScreenState extends State<UploadScreen> {
 
   /// **UNIFIED PROGRESS WIDGET** - Beautiful progress display
   Widget _buildUnifiedProgressWidget() {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // Phase Icon and Name
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: _getCurrentPhaseColor().withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  _getCurrentPhaseIcon(),
-                  color: _getCurrentPhaseColor(),
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _progressPhases[_currentPhase]?['name'] ?? 'Processing',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
+    return ValueListenableBuilder<String>(
+      valueListenable: _currentPhase,
+      builder: (context, currentPhase, _) {
+        return ValueListenableBuilder<String>(
+          valueListenable: _phaseDescription,
+          builder: (context, phaseDescription, _) {
+            return ValueListenableBuilder<double>(
+              valueListenable: _unifiedProgress,
+              builder: (context, unifiedProgress, _) {
+                return ValueListenableBuilder<int>(
+                  valueListenable: _elapsedSeconds,
+                  builder: (context, elapsedSeconds, _) {
+                    return Container(
+                      margin: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _phaseDescription,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
+                      child: Column(
+                        children: [
+                          // Phase Icon and Name
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: _getCurrentPhaseColor(currentPhase)
+                                      .withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  _getCurrentPhaseIcon(currentPhase),
+                                  color: _getCurrentPhaseColor(currentPhase),
+                                  size: 24,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _progressPhases[currentPhase]?['name'] ??
+                                          'Processing',
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      phaseDescription,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          // Progress Bar
+                          Column(
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Progress',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.grey[700],
+                                    ),
+                                  ),
+                                  Text(
+                                    '${(unifiedProgress * 100).toInt()}%',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color:
+                                          _getCurrentPhaseColor(currentPhase),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: LinearProgressIndicator(
+                                  value: unifiedProgress,
+                                  backgroundColor: Colors.grey[200],
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                      _getCurrentPhaseColor(currentPhase)),
+                                  minHeight: 8,
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // Time Information
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.access_time,
+                                    size: 16,
+                                    color: Colors.grey[600],
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Time: ${_formatTime(elapsedSeconds)}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 20),
-
-          // Progress Bar
-          Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Progress',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.grey[700],
-                    ),
-                  ),
-                  Text(
-                    '${(_unifiedProgress * 100).toInt()}%',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: _getCurrentPhaseColor(),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: LinearProgressIndicator(
-                  value: _unifiedProgress,
-                  backgroundColor: Colors.grey[200],
-                  valueColor:
-                      AlwaysStoppedAnimation<Color>(_getCurrentPhaseColor()),
-                  minHeight: 8,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-
-          // Time Information
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.access_time,
-                    size: 16,
-                    color: Colors.grey[600],
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Time: ${_formatTime(_elapsedSeconds)}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
+                    );
+                  },
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 
@@ -435,37 +459,31 @@ class _UploadScreenState extends State<UploadScreen> {
       return;
     }
 
-    if (_selectedVideo == null) {
-      setState(() {
-        _errorMessage = 'Please select a video first';
-      });
+    // **BATCHED UPDATE: Use ValueNotifiers instead of setState**
+    if (_selectedVideo.value == null) {
+      _errorMessage.value = 'Please select a video first';
       return;
     }
 
     if (_titleController.text.isEmpty) {
-      setState(() {
-        _errorMessage = 'Please enter a title for the video';
-      });
+      _errorMessage.value = 'Please enter a title for the video';
       return;
     }
 
-    setState(() {
-      _isUploading = true;
-      _errorMessage = null;
-    });
+    // **BATCHED UPDATE: Update both values at once**
+    _isUploading.value = true;
+    _errorMessage.value = null;
 
     // Validate category selection before uploading
-    if (_selectedCategory == null || _selectedCategory!.isEmpty) {
-      setState(() {
-        _isUploading = false;
-        _errorMessage = 'Please select a video category';
-      });
+    if (_selectedCategory.value == null || _selectedCategory.value!.isEmpty) {
+      _isUploading.value = false;
+      _errorMessage.value = 'Please select a video category';
       return;
     }
 
     try {
       print('🚀 Starting HLS video upload...');
-      print('📁 Video path: ${_selectedVideo!.path}');
+      print('📁 Video path: ${_selectedVideo.value?.path}');
       print('📝 Title: ${_titleController.text}');
       print(
         '🔗 Link: ${_linkController.text.isNotEmpty ? _linkController.text : 'None'}',
@@ -478,7 +496,7 @@ class _UploadScreenState extends State<UploadScreen> {
       _startUnifiedProgress();
 
       // Check if file exists and is readable
-      if (!await _selectedVideo!.exists()) {
+      if (!await _selectedVideo.value!.exists()) {
         throw Exception('Selected video file does not exist');
       }
 
@@ -486,7 +504,7 @@ class _UploadScreenState extends State<UploadScreen> {
       _updateProgressPhase('preparation');
 
       // Check file size
-      final fileSize = await _selectedVideo!.length();
+      final fileSize = await _selectedVideo.value!.length();
       print(
         'File size: $fileSize bytes (${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB)',
       );
@@ -496,7 +514,7 @@ class _UploadScreenState extends State<UploadScreen> {
       }
 
       // Check file extension
-      final fileName = _selectedVideo!.path.split('/').last.toLowerCase();
+      final fileName = _selectedVideo.value!.path.split('/').last.toLowerCase();
       final allowedExtensions = ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm'];
       final fileExtension = fileName.split('.').last;
 
@@ -511,15 +529,15 @@ class _UploadScreenState extends State<UploadScreen> {
 
       final uploadedVideo = await runZoned(
         () => _videoService.uploadVideo(
-          _selectedVideo!,
+          _selectedVideo.value!,
           _titleController.text,
           '', // description
           _linkController.text.isNotEmpty ? _linkController.text : '', // link
         ),
         zoneValues: {
           'upload_metadata': {
-            'category': _selectedCategory,
-            'tags': _tags,
+            'category': _selectedCategory.value,
+            'tags': _tags.value,
           }
         },
       ).timeout(
@@ -543,77 +561,67 @@ class _UploadScreenState extends State<UploadScreen> {
       // Update to validation phase
       _updateProgressPhase('validation');
 
-      // **FIXED: Wait for processing to complete**
-      if (mounted) {
-        setState(() {});
+      // Update to processing phase
+      _updateProgressPhase('processing');
 
-        // Update to processing phase
-        _updateProgressPhase('processing');
+      // Wait for processing to complete
+      String? videoId;
+      videoId = uploadedVideo['id']?.toString();
 
-        // Wait for processing to complete
-        String? videoId;
-        videoId = uploadedVideo['id']?.toString();
+      if (videoId == null) {
+        throw Exception('Video ID not found in upload response');
+      }
 
-        if (videoId == null) {
-          throw Exception('Video ID not found in upload response');
-        }
+      final completedVideo = await _waitForProcessingCompletion(videoId);
 
-        final completedVideo = await _waitForProcessingCompletion(videoId);
+      if (completedVideo != null) {
+        // Update to finalizing phase
+        _updateProgressPhase('finalizing');
 
-        if (completedVideo != null) {
-          // Update to finalizing phase
-          _updateProgressPhase('finalizing');
+        print('✅ Video processing completed successfully!');
+        print('🔗 HLS Playlist URL: ${completedVideo['videoUrl']}');
+        print('🖼️ Thumbnail URL: ${completedVideo['thumbnailUrl']}');
 
-          print('✅ Video processing completed successfully!');
-          print('🔗 HLS Playlist URL: ${completedVideo['videoUrl']}');
-          print('🖼️ Thumbnail URL: ${completedVideo['thumbnailUrl']}');
-
-          // Call the callback to refresh video list first
-          print('🔄 UploadScreen: Calling onVideoUploaded callback');
-          if (widget.onVideoUploaded != null) {
-            widget.onVideoUploaded!();
-            print(
-                '✅ UploadScreen: onVideoUploaded callback called successfully');
-          } else {
-            print('❌ UploadScreen: onVideoUploaded callback is null');
-          }
-
-          // Clear form
-          setState(() {
-            _selectedVideo = null;
-            _titleController.clear();
-            _linkController.clear();
-            _selectedCategory = null;
-            _tags.clear();
-          });
-
-          // Stop unified progress tracking
-          _stopUnifiedProgress();
-
-          // Show beautiful success dialog
-          await _showSuccessDialog();
-
-          // **NEW: Trigger video feed refresh after successful upload**
-          if (widget.onVideoUploaded != null) {
-            print('🔄 Triggering video feed refresh after upload completion');
-            widget.onVideoUploaded!();
-          }
+        // Call the callback to refresh video list first
+        print('🔄 UploadScreen: Calling onVideoUploaded callback');
+        if (widget.onVideoUploaded != null) {
+          widget.onVideoUploaded!();
+          print('✅ UploadScreen: onVideoUploaded callback called successfully');
         } else {
-          throw Exception('Video processing failed or timed out');
+          print('❌ UploadScreen: onVideoUploaded callback is null');
         }
+
+        // **BATCHED UPDATE: Clear form using ValueNotifiers**
+        _selectedVideo.value = null;
+        _titleController.clear();
+        _linkController.clear();
+        _selectedCategory.value = null;
+        _tags.value = [];
+
+        // Stop unified progress tracking
+        _stopUnifiedProgress();
+
+        // Show beautiful success dialog
+        await _showSuccessDialog();
+
+        // **NEW: Trigger video feed refresh after successful upload**
+        if (widget.onVideoUploaded != null) {
+          print('🔄 Triggering video feed refresh after upload completion');
+          widget.onVideoUploaded!();
+        }
+      } else {
+        throw Exception('Video processing failed or timed out');
       }
     } on TimeoutException catch (e) {
       print('Upload timeout error: $e');
-      setState(() {
-        _errorMessage =
-            'Upload timed out. Please check your internet connection and try again.';
-      });
+      // **NO setState: Use ValueNotifier**
+      _errorMessage.value =
+          'Upload timed out. Please check your internet connection and try again.';
     } on FileSystemException catch (e) {
       print('File system error: $e');
-      setState(() {
-        _errorMessage =
-            'Error accessing video file. Please try selecting the video again.';
-      });
+      // **NO setState: Use ValueNotifier**
+      _errorMessage.value =
+          'Error accessing video file. Please try selecting the video again.';
     } catch (e, stackTrace) {
       print('Error uploading video: $e');
       print('Stack trace: $stackTrace');
@@ -641,15 +649,12 @@ class _UploadScreenState extends State<UploadScreen> {
         userFriendlyError = 'Error uploading video: ${e.toString()}';
       }
 
-      setState(() {
-        _errorMessage = userFriendlyError;
-      });
+      // **NO setState: Use ValueNotifier**
+      _errorMessage.value = userFriendlyError;
     } finally {
       if (mounted) {
-        setState(() {
-          _isUploading = false;
-        });
-
+        // **NO setState: Use ValueNotifier**
+        _isUploading.value = false;
         // Stop unified progress tracking
         _stopUnifiedProgress();
       }
@@ -683,12 +688,10 @@ class _UploadScreenState extends State<UploadScreen> {
               '🔄 Processing status: $processingStatus ($processingProgress%)');
           print('🔗 Current videoUrl: $videoUrl');
 
-          // Update UI with progress (map 0-100% server progress to 80-95% UI)
+          // **NO setState: Update progress using ValueNotifier**
           if (mounted) {
-            setState(() {
-              final clamped = processingProgress.clamp(0, 100);
-              _unifiedProgress = 0.8 + (clamped / 100.0 * 0.15);
-            });
+            final clamped = processingProgress.clamp(0, 100);
+            _unifiedProgress.value = 0.8 + (clamped / 100.0 * 0.15);
           }
 
           final hasAbsoluteUrl =
@@ -697,12 +700,12 @@ class _UploadScreenState extends State<UploadScreen> {
           if (processingStatus == 'completed' || hasAbsoluteUrl) {
             print('✅ Processing complete signal received');
 
+            // **BATCHED UPDATE: Update all progress values at once**
             if (mounted) {
-              setState(() {
-                _unifiedProgress = 1.0;
-                _currentPhase = 'completed';
-                _phaseDescription = 'Video processing completed successfully!';
-              });
+              _unifiedProgress.value = 1.0;
+              _currentPhase.value = 'completed';
+              _phaseDescription.value =
+                  'Video processing completed successfully!';
             }
 
             await Future.delayed(const Duration(seconds: 1));
@@ -935,10 +938,9 @@ class _UploadScreenState extends State<UploadScreen> {
       }
 
       if (result != null) {
-        setState(() {
-          _isProcessing = true;
-          _errorMessage = null;
-        });
+        // **BATCHED UPDATE: Use ValueNotifiers**
+        _isProcessing.value = true;
+        _errorMessage.value = null;
 
         final videoFile = File(result.files.single.path!);
 
@@ -946,17 +948,16 @@ class _UploadScreenState extends State<UploadScreen> {
         const maxSize = 100 * 1024 * 1024;
 
         if (fileSize > maxSize) {
-          setState(() {
-            _errorMessage = 'Video file is too large. Maximum size is 100MB';
-            _isProcessing = false;
-          });
+          // **BATCHED UPDATE: Update both values**
+          _errorMessage.value =
+              'Video file is too large. Maximum size is 100MB';
+          _isProcessing.value = false;
           return;
         }
 
-        setState(() {
-          _selectedVideo = videoFile;
-          _isProcessing = false;
-        });
+        // **BATCHED UPDATE: Update video selection**
+        _selectedVideo.value = videoFile;
+        _isProcessing.value = false;
 
         print('✅ Video selected: ${videoFile.path}');
         print(
@@ -964,10 +965,9 @@ class _UploadScreenState extends State<UploadScreen> {
         );
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Error picking video: $e';
-        _isProcessing = false;
-      });
+      // **BATCHED UPDATE: Update error state**
+      _errorMessage.value = 'Error picking video: $e';
+      _isProcessing.value = false;
     }
   }
 
@@ -977,6 +977,18 @@ class _UploadScreenState extends State<UploadScreen> {
     _linkController.dispose();
     _stopUnifiedProgress();
     _tagInputController.dispose();
+    // **OPTIMIZED: Dispose ValueNotifiers**
+    _selectedVideo.dispose();
+    _isUploading.dispose();
+    _isProcessing.dispose();
+    _errorMessage.dispose();
+    _showUploadForm.dispose();
+    _unifiedProgress.dispose();
+    _currentPhase.dispose();
+    _phaseDescription.dispose();
+    _elapsedSeconds.dispose();
+    _selectedCategory.dispose();
+    _tags.dispose();
     super.dispose();
   }
 
@@ -1066,9 +1078,9 @@ class _UploadScreenState extends State<UploadScreen> {
                           child: InkWell(
                             onTap: isSignedIn
                                 ? () {
-                                    setState(() {
-                                      _showUploadForm = !_showUploadForm;
-                                    });
+                                    // **NO setState: Use ValueNotifier**
+                                    _showUploadForm.value =
+                                        !_showUploadForm.value;
                                   }
                                 : () {
                                     _showLoginPrompt();
@@ -1182,309 +1194,371 @@ class _UploadScreenState extends State<UploadScreen> {
                   const SizedBox(height: 32),
 
                   // Video Upload Form (Conditional)
-                  if (_showUploadForm)
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(
-                                  Icons.video_library,
-                                  color: Colors.blue,
-                                ),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'Upload Video',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
+                  ValueListenableBuilder<bool>(
+                    valueListenable: _showUploadForm,
+                    builder: (context, showUploadForm, _) {
+                      if (!showUploadForm) return const SizedBox.shrink();
+                      return Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.video_library,
+                                    color: Colors.blue,
                                   ),
-                                ),
-                                const Spacer(),
-                                IconButton(
-                                  onPressed: () {
-                                    setState(() {
-                                      _showUploadForm = false;
-                                    });
-                                  },
-                                  icon: const Icon(Icons.close),
-                                ),
-                              ],
-                            ),
-                            Container(
-                              height: 200,
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey),
-                                borderRadius: BorderRadius.circular(12),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'Upload Video',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  IconButton(
+                                    onPressed: () {
+                                      // **NO setState: Use ValueNotifier**
+                                      _showUploadForm.value = false;
+                                    },
+                                    icon: const Icon(Icons.close),
+                                  ),
+                                ],
                               ),
-                              child: _isProcessing
-                                  ? const Center(
-                                      child: Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          CircularProgressIndicator(),
-                                          SizedBox(height: 16),
-                                          Text(
-                                            'Processing video...',
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              color: Colors.grey,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    )
-                                  : _selectedVideo != null
-                                      ? Center(
-                                          child: Column(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: [
-                                              const Icon(
-                                                Icons.video_file,
-                                                size: 48,
-                                                color: Colors.blue,
-                                              ),
-                                              const SizedBox(height: 16),
-                                              Text(
-                                                _selectedVideo!.path
-                                                    .split('/')
-                                                    .last,
-                                                style: const TextStyle(
-                                                  fontSize: 16,
-                                                  fontWeight: FontWeight.w500,
+                              Container(
+                                height: 200,
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.grey),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: ValueListenableBuilder<bool>(
+                                  valueListenable: _isProcessing,
+                                  builder: (context, isProcessing, _) {
+                                    return ValueListenableBuilder<File?>(
+                                      valueListenable: _selectedVideo,
+                                      builder: (context, selectedVideo, _) {
+                                        if (isProcessing) {
+                                          return const Center(
+                                            child: Column(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                CircularProgressIndicator(),
+                                                SizedBox(height: 16),
+                                                Text(
+                                                  'Processing video...',
+                                                  style: TextStyle(
+                                                    fontSize: 16,
+                                                    color: Colors.grey,
+                                                  ),
                                                 ),
-                                              ),
-                                            ],
-                                          ),
-                                        )
-                                      : const Center(
-                                          child: Column(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: [
-                                              Icon(
-                                                Icons.video_library,
-                                                size: 48,
-                                                color: Colors.grey,
-                                              ),
-                                              SizedBox(height: 16),
-                                              Text(
-                                                'No video selected',
-                                                style: TextStyle(
-                                                  fontSize: 16,
+                                              ],
+                                            ),
+                                          );
+                                        } else if (selectedVideo != null) {
+                                          return Center(
+                                            child: Column(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                const Icon(
+                                                  Icons.video_file,
+                                                  size: 48,
+                                                  color: Colors.blue,
+                                                ),
+                                                const SizedBox(height: 16),
+                                                Text(
+                                                  selectedVideo.path
+                                                      .split('/')
+                                                      .last,
+                                                  style: const TextStyle(
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        } else {
+                                          return const Center(
+                                            child: Column(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                Icon(
+                                                  Icons.video_library,
+                                                  size: 48,
                                                   color: Colors.grey,
                                                 ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                            ),
-                            const SizedBox(height: 24),
-                            TextField(
-                              controller: _titleController,
-                              decoration: const InputDecoration(
-                                labelText: 'Video Title',
-                                hintText: 'Enter a title for your video',
-                                border: OutlineInputBorder(),
+                                                SizedBox(height: 16),
+                                                Text(
+                                                  'No video selected',
+                                                  style: TextStyle(
+                                                    fontSize: 16,
+                                                    color: Colors.grey,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        }
+                                      },
+                                    );
+                                  },
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 16),
-                            // NEW: Category selector
-                            DropdownButtonFormField<String>(
-                              initialValue: _selectedCategory,
-                              decoration: const InputDecoration(
-                                labelText: 'Video Category',
-                                border: OutlineInputBorder(),
-                                prefixIcon: Icon(Icons.category),
-                                helperText:
-                                    'Choose a category to improve ad targeting',
+                              const SizedBox(height: 24),
+                              TextField(
+                                controller: _titleController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Video Title',
+                                  hintText: 'Enter a title for your video',
+                                  border: OutlineInputBorder(),
+                                ),
                               ),
-                              items: kInterestOptions
-                                  .where((c) => c != 'Custom Interest')
-                                  .map((c) => DropdownMenuItem<String>(
-                                        value: c,
-                                        child: Text(c),
-                                      ))
-                                  .toList(),
-                              onChanged: (val) {
-                                setState(() => _selectedCategory = val);
-                              },
-                            ),
-                            const SizedBox(height: 16),
-                            // Description removed per request
-                            // NEW: Tags input
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Tags (optional)',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
+                              const SizedBox(height: 16),
+                              // NEW: Category selector
+                              ValueListenableBuilder<String?>(
+                                valueListenable: _selectedCategory,
+                                builder: (context, selectedCategory, _) {
+                                  return DropdownButtonFormField<String>(
+                                    value: selectedCategory,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Video Category',
+                                      border: OutlineInputBorder(),
+                                      prefixIcon: Icon(Icons.category),
+                                      helperText:
+                                          'Choose a category to improve ad targeting',
+                                    ),
+                                    items: kInterestOptions
+                                        .where((c) => c != 'Custom Interest')
+                                        .map((c) => DropdownMenuItem<String>(
+                                              value: c,
+                                              child: Text(c),
+                                            ))
+                                        .toList(),
+                                    onChanged: (val) {
+                                      // **NO setState: Use ValueNotifier**
+                                      _selectedCategory.value = val;
+                                    },
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              // Description removed per request
+                              // NEW: Tags input
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Tags (optional)',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  TextField(
+                                    controller: _tagInputController,
+                                    decoration: InputDecoration(
+                                      hintText: 'Type a tag and press Add',
+                                      border: const OutlineInputBorder(),
+                                      prefixIcon: const Icon(Icons.tag),
+                                      suffixIcon: IconButton(
+                                        icon: const Icon(Icons.add),
+                                        onPressed: () {
+                                          final text =
+                                              _tagInputController.text.trim();
+                                          if (text.isNotEmpty) {
+                                            final currentTags =
+                                                List<String>.from(_tags.value);
+                                            if (!currentTags.contains(text)) {
+                                              // **NO setState: Use ValueNotifier**
+                                              currentTags.add(text);
+                                              _tags.value = currentTags;
+                                              _tagInputController.clear();
+                                            }
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                    onSubmitted: (_) {
+                                      final text =
+                                          _tagInputController.text.trim();
+                                      if (text.isNotEmpty) {
+                                        final currentTags =
+                                            List<String>.from(_tags.value);
+                                        if (!currentTags.contains(text)) {
+                                          // **NO setState: Use ValueNotifier**
+                                          currentTags.add(text);
+                                          _tags.value = currentTags;
+                                          _tagInputController.clear();
+                                        }
+                                      }
+                                    },
+                                  ),
+                                  const SizedBox(height: 8),
+                                  ValueListenableBuilder<List<String>>(
+                                    valueListenable: _tags,
+                                    builder: (context, tags, _) {
+                                      if (tags.isEmpty)
+                                        return const SizedBox.shrink();
+                                      return Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: tags
+                                            .map((t) => Chip(
+                                                  label: Text(t),
+                                                  onDeleted: () {
+                                                    // **NO setState: Use ValueNotifier**
+                                                    final currentTags =
+                                                        List<String>.from(
+                                                            _tags.value);
+                                                    currentTags.remove(t);
+                                                    _tags.value = currentTags;
+                                                  },
+                                                ))
+                                            .toList(),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              TextField(
+                                controller: _linkController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Link (optional)',
+                                  hintText: 'Add a website, social media, etc.',
+                                  border: OutlineInputBorder(),
+                                ),
+                                keyboardType: TextInputType.url,
+                              ),
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton.icon(
+                                  onPressed: _showWhatToUploadDialog,
+                                  icon: const Icon(Icons.help_outline),
+                                  label: const Text('What to Upload?'),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 14),
+                                    side: BorderSide(
+                                      color: Colors.blue.shade300,
+                                    ),
+                                    foregroundColor: Colors.blue.shade700,
                                   ),
                                 ),
-                                const SizedBox(height: 8),
-                                TextField(
-                                  controller: _tagInputController,
-                                  decoration: InputDecoration(
-                                    hintText: 'Type a tag and press Add',
-                                    border: const OutlineInputBorder(),
-                                    prefixIcon: const Icon(Icons.tag),
-                                    suffixIcon: IconButton(
-                                      icon: const Icon(Icons.add),
-                                      onPressed: () {
-                                        final text =
-                                            _tagInputController.text.trim();
-                                        if (text.isNotEmpty &&
-                                            !_tags.contains(text)) {
-                                          setState(() {
-                                            _tags.add(text);
-                                            _tagInputController.clear();
-                                          });
-                                        }
+                              ),
+                              const SizedBox(height: 24),
+
+                              // **UNIFIED PROGRESS INDICATOR** - Shows complete upload + processing flow
+                              ValueListenableBuilder<bool>(
+                                valueListenable: _isUploading,
+                                builder: (context, isUploading, _) {
+                                  if (!isUploading)
+                                    return const SizedBox.shrink();
+                                  return Column(
+                                    children: [
+                                      _buildUnifiedProgressWidget(),
+                                      const SizedBox(height: 16),
+                                    ],
+                                  );
+                                },
+                              ),
+
+                              ValueListenableBuilder<String?>(
+                                valueListenable: _errorMessage,
+                                builder: (context, errorMessage, _) {
+                                  if (errorMessage == null)
+                                    return const SizedBox.shrink();
+                                  return Padding(
+                                    padding:
+                                        const EdgeInsets.only(bottom: 16.0),
+                                    child: Text(
+                                      errorMessage,
+                                      style: const TextStyle(
+                                        color: Colors.red,
+                                        fontSize: 14,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  );
+                                },
+                              ),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      onPressed: () => _pickVideo(),
+                                      icon: const Icon(Icons.video_library),
+                                      label: const Text('Select Video'),
+                                      style: ElevatedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 16,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: ValueListenableBuilder<bool>(
+                                      valueListenable: _isUploading,
+                                      builder: (context, isUploading, _) {
+                                        return ElevatedButton.icon(
+                                          onPressed:
+                                              isUploading ? null : _uploadVideo,
+                                          icon: isUploading
+                                              ? const SizedBox(
+                                                  width: 20,
+                                                  height: 20,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    valueColor:
+                                                        AlwaysStoppedAnimation<
+                                                            Color>(
+                                                      Colors.white,
+                                                    ),
+                                                  ),
+                                                )
+                                              : const Icon(Icons.cloud_upload),
+                                          label: Text(
+                                            isUploading
+                                                ? 'Uploading...'
+                                                : 'Upload Video',
+                                          ),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.blue,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 16,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                          ),
+                                        );
                                       },
                                     ),
                                   ),
-                                  onSubmitted: (_) {
-                                    final text =
-                                        _tagInputController.text.trim();
-                                    if (text.isNotEmpty &&
-                                        !_tags.contains(text)) {
-                                      setState(() {
-                                        _tags.add(text);
-                                        _tagInputController.clear();
-                                      });
-                                    }
-                                  },
-                                ),
-                                const SizedBox(height: 8),
-                                if (_tags.isNotEmpty)
-                                  Wrap(
-                                    spacing: 8,
-                                    runSpacing: 8,
-                                    children: _tags
-                                        .map((t) => Chip(
-                                              label: Text(t),
-                                              onDeleted: () {
-                                                setState(() {
-                                                  _tags.remove(t);
-                                                });
-                                              },
-                                            ))
-                                        .toList(),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            TextField(
-                              controller: _linkController,
-                              decoration: const InputDecoration(
-                                labelText: 'Link (optional)',
-                                hintText: 'Add a website, social media, etc.',
-                                border: OutlineInputBorder(),
+                                ],
                               ),
-                              keyboardType: TextInputType.url,
-                            ),
-                            const SizedBox(height: 16),
-                            SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton.icon(
-                                onPressed: _showWhatToUploadDialog,
-                                icon: const Icon(Icons.help_outline),
-                                label: const Text('What to Upload?'),
-                                style: OutlinedButton.styleFrom(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 14),
-                                  side: BorderSide(
-                                    color: Colors.blue.shade300,
-                                  ),
-                                  foregroundColor: Colors.blue.shade700,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 24),
-
-                            // **UNIFIED PROGRESS INDICATOR** - Shows complete upload + processing flow
-                            if (_isUploading) ...[
-                              _buildUnifiedProgressWidget(),
-                              const SizedBox(height: 16),
                             ],
-
-                            if (_errorMessage != null)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 16.0),
-                                child: Text(
-                                  _errorMessage!,
-                                  style: const TextStyle(
-                                    color: Colors.red,
-                                    fontSize: 14,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: ElevatedButton.icon(
-                                    onPressed: _isUploading ? null : _pickVideo,
-                                    icon: const Icon(Icons.video_library),
-                                    label: const Text('Select Video'),
-                                    style: ElevatedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 16,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: ElevatedButton.icon(
-                                    onPressed:
-                                        _isUploading ? null : _uploadVideo,
-                                    icon: _isUploading
-                                        ? const SizedBox(
-                                            width: 20,
-                                            height: 20,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              valueColor:
-                                                  AlwaysStoppedAnimation<Color>(
-                                                Colors.white,
-                                              ),
-                                            ),
-                                          )
-                                        : const Icon(Icons.cloud_upload),
-                                    label: Text(
-                                      _isUploading
-                                          ? 'Uploading...'
-                                          : 'Upload Video',
-                                    ),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.blue,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 16,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ),
+                      );
+                    },
+                  ),
                 ],
               ),
             ),
