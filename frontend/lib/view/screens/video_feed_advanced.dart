@@ -197,6 +197,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   final Map<int, int> _preloadRetryCount = {}; // Track retry attempts per video
   static const int _maxRetryAttempts = 2; // Maximum retry attempts
   Timer? _preloadTimer;
+  // Debounce timers for smoother fast scrolling
+  Timer? _pageChangeTimer;
+  Timer? _preloadDebounceTimer;
 
   // Track whether the first frame has rendered for each index (prevents grey texture)
   final Map<int, bool> _firstFrameReady = {};
@@ -354,6 +357,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     switch (state) {
       case AppLifecycleState.paused:
         _saveBackgroundState();
+        // **FIX: Pause all videos in both controller pools when app is minimized**
+        _pauseAllVideosOnTabSwitch(); // This pauses _controllerPool videos and sets _isScreenVisible = false
         _videoControllerManager.pauseAllVideos();
         _videoControllerManager.onAppPaused();
         break;
@@ -362,6 +367,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         break;
       case AppLifecycleState.resumed:
         _videoControllerManager.onAppResumed();
+        // **FIX: Set screen visible again when app resumes**
+        _isScreenVisible = true;
         // Try restoring state after resume
         _restoreBackgroundStateIfAny().then((_) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1894,9 +1901,18 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     return null;
   }
 
-  /// **HANDLE PAGE CHANGES**
+  /// **HANDLE PAGE CHANGES** - Debounced for fast scrolling
   void _onPageChanged(int index) {
     if (index == _currentIndex) return;
+    _pageChangeTimer?.cancel();
+    _pageChangeTimer = Timer(const Duration(milliseconds: 150), () {
+      _handlePageChangeDebounced(index);
+    });
+  }
+
+  /// **DEBOUNCED PAGE CHANGE HANDLER**
+  void _handlePageChangeDebounced(int index) {
+    if (!mounted || index == _currentIndex) return;
 
     // **LRU: Track access time for previous index**
     _lastAccessedLocal[_currentIndex] = DateTime.now();
@@ -2017,7 +2033,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       }
 
       // Preload nearby videos for smooth scrolling
-      _preloadNearbyVideos();
+      _preloadNearbyVideosDebounced();
       return; // Exit early - video is ready!
     }
 
@@ -2072,7 +2088,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       });
     }
 
-    _preloadNearbyVideos();
+    _preloadNearbyVideosDebounced();
+  }
+
+  /// **DEBOUNCED PRELOAD: Avoid too many preloads during fast scrolling**
+  void _preloadNearbyVideosDebounced() {
+    _preloadDebounceTimer?.cancel();
+    _preloadDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+      _preloadNearbyVideos();
+    });
   }
 
   Widget _buildVideoFeed() {
@@ -2081,7 +2105,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       child: PageView.builder(
         controller: _pageController,
         scrollDirection: Axis.vertical,
+        physics: const ClampingScrollPhysics(),
         onPageChanged: _onPageChanged,
+        allowImplicitScrolling: false,
         itemCount: _getTotalItemCount(),
         itemBuilder: (context, index) {
           return _buildFeedItem(index);
@@ -2556,57 +2582,63 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   }
 
   Widget _buildVideoProgressBar(VideoPlayerController controller) {
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, child) {
-        final duration = controller.value.duration;
-        final position = controller.value.position;
-        final totalMs = duration.inMilliseconds;
-        final posMs = position.inMilliseconds;
-        final progress = totalMs > 0 ? (posMs / totalMs).clamp(0.0, 1.0) : 0.0;
+    // **OPTIMIZED: Get screen width once outside AnimatedBuilder to avoid repeated MediaQuery calls**
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final screenWidth = constraints.maxWidth;
 
-        return GestureDetector(
-          onTapDown: (details) => _seekToPosition(controller, details),
-          onPanUpdate: (details) => _seekToPosition(controller, details),
-          child: Container(
-            height: 4,
-            color: Colors.black.withOpacity(0.2),
-            child: Stack(
-              children: [
-                Container(
-                  height: 2,
-                  margin: const EdgeInsets.only(
-                    top: 1,
-                  ), // Center the progress bar
-                  color: Colors.grey.withOpacity(0.2),
-                ),
-                // Progress bar filled portion
-                Positioned(
-                  top: 1,
-                  left: 0,
-                  child: Container(
-                    height: 2,
-                    width: MediaQuery.of(context).size.width * progress,
-                    color: Colors.green[400],
-                  ),
-                ),
-                // Seek handle (thumb)
-                if (progress > 0)
-                  Positioned(
-                    top: 0,
-                    left: (MediaQuery.of(context).size.width * progress) - 4,
-                    child: Container(
-                      width: 8,
-                      height: 6,
-                      decoration: BoxDecoration(
+        return AnimatedBuilder(
+          animation: controller,
+          builder: (context, child) {
+            final duration = controller.value.duration;
+            final position = controller.value.position;
+            final totalMs = duration.inMilliseconds;
+            final posMs = position.inMilliseconds;
+            final progress =
+                totalMs > 0 ? (posMs / totalMs).clamp(0.0, 1.0) : 0.0;
+
+            return GestureDetector(
+              onTapDown: (details) => _seekToPosition(controller, details),
+              onPanUpdate: (details) => _seekToPosition(controller, details),
+              child: Container(
+                height: 4,
+                color: Colors.black.withOpacity(0.2),
+                child: Stack(
+                  children: [
+                    Container(
+                      height: 2,
+                      margin: const EdgeInsets.only(top: 1),
+                      color: Colors.grey.withOpacity(0.2),
+                    ),
+                    // Progress bar filled portion
+                    Positioned(
+                      top: 1,
+                      left: 0,
+                      child: Container(
+                        height: 2,
+                        width: screenWidth * progress,
                         color: Colors.green[400],
-                        borderRadius: BorderRadius.circular(4),
                       ),
                     ),
-                  ),
-              ],
-            ),
-          ),
+                    // Seek handle (thumb)
+                    if (progress > 0)
+                      Positioned(
+                        top: 0,
+                        left: (screenWidth * progress) - 4,
+                        child: Container(
+                          width: 8,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: Colors.green[400],
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );
@@ -3332,25 +3364,65 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                         behavior: HitTestBehavior.opaque,
                         onTap: () =>
                             _navigateToCreatorProfile(video.uploader.id),
-                        child: CircleAvatar(
-                          radius:
-                              12, // **REDUCED from 16 for more compact look**
-                          backgroundImage: video.uploader.profilePic.isNotEmpty
-                              ? NetworkImage(video.uploader.profilePic)
-                              : null,
-                          child: video.uploader.profilePic.isEmpty
-                              ? Text(
-                                  video.uploader.name.isNotEmpty
-                                      ? video.uploader.name[0].toUpperCase()
-                                      : 'U',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize:
-                                        10, // **REDUCED from 12 to match smaller avatar**
+                        child: Container(
+                          width: 24,
+                          height: 24,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.grey,
+                          ),
+                          child: video.uploader.profilePic.isNotEmpty
+                              ? ClipOval(
+                                  child: CachedNetworkImage(
+                                    imageUrl: video.uploader.profilePic,
+                                    fit: BoxFit.cover,
+                                    placeholder: (context, url) => Container(
+                                      color: Colors.grey[300],
+                                      child: Center(
+                                        child: Text(
+                                          video.uploader.name.isNotEmpty
+                                              ? video.uploader.name[0]
+                                                  .toUpperCase()
+                                              : 'U',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    errorWidget: (context, url, error) =>
+                                        Container(
+                                      color: Colors.grey[300],
+                                      child: Center(
+                                        child: Text(
+                                          video.uploader.name.isNotEmpty
+                                              ? video.uploader.name[0]
+                                                  .toUpperCase()
+                                              : 'U',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 )
-                              : null,
+                              : Center(
+                                  child: Text(
+                                    video.uploader.name.isNotEmpty
+                                        ? video.uploader.name[0].toUpperCase()
+                                        : 'U',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
                         ),
                       ),
                       const SizedBox(width: 6), // **REDUCED from 8**
@@ -4119,6 +4191,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     // Cancel timers
     _preloadTimer?.cancel();
+    _pageChangeTimer?.cancel();
+    _preloadDebounceTimer?.cancel();
 
     // **NEW: Cancel ad refresh subscription**
     _adRefreshSubscription?.cancel();

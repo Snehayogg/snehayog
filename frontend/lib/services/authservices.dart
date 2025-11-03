@@ -429,6 +429,12 @@ class AuthService {
         return true;
       }
 
+      // If no token, user is not logged in
+      if (token == null || token.isEmpty) {
+        AppLogger.log('ℹ️ No JWT token found, user not logged in');
+        return false;
+      }
+
       // Verify token with backend if possible
       try {
         final response = await http.get(
@@ -860,7 +866,19 @@ class AuthService {
       final prefs = await SharedPreferences.getInstance();
       String? token = prefs.getString('jwt_token');
 
-      // Check if token is expired
+      // If no token, user needs to login
+      if (token == null || token.isEmpty) {
+        AppLogger.log('⚠️ No token found, user needs to re-login');
+        return true;
+      }
+
+      // Check if it's a fallback token (starts with "temp_")
+      if (token.startsWith('temp_')) {
+        AppLogger.log('ℹ️ Fallback token detected, skipping expiry check');
+        return false; // Fallback tokens are always considered valid
+      }
+
+      // Check if real JWT token is expired
       if (!isTokenValid(token)) {
         AppLogger.log('⚠️ Token is expired, user needs to re-login');
         return true;
