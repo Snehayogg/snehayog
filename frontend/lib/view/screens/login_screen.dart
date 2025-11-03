@@ -49,7 +49,7 @@ class LoginScreen extends StatelessWidget {
 
                   // Welcome Text
                   const Text(
-                    'Welcome to Vayu',
+                    'Welcome to Vayug',
                     style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,

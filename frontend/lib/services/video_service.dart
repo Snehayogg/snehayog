@@ -7,7 +7,6 @@ import 'package:video_player/video_player.dart';
 import 'package:flutter/material.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:video_compress/video_compress.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:vayu/model/video_model.dart';
 import 'package:vayu/model/ad_model.dart';
 import 'package:vayu/services/authservices.dart';

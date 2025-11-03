@@ -380,7 +380,7 @@ class _UploadScreenState extends State<UploadScreen> {
                       const SizedBox(width: 12),
                       const Expanded(
                         child: Text(
-                          'What to Upload? \nVayu Terms & Conditions (Copyright Policy)',
+                          'What to Upload? \nVayug Terms & Conditions (Copyright Policy)',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
@@ -402,12 +402,12 @@ class _UploadScreenState extends State<UploadScreen> {
                   _buildNoticePoint(
                     title: '2. Copyright Infringement',
                     body:
-                        'If you upload content belonging to someone else without permission, you (the uploader) will be fully responsible for any legal consequences. Vayu acts only as a platform and does not own or endorse user-uploaded content.',
+                        'If you upload content belonging to someone else without permission, you (the uploader) will be fully responsible for any legal consequences. Vayug acts only as a platform and does not own or endorse user-uploaded content.',
                   ),
                   _buildNoticePoint(
                     title: '3. Reporting Copyright Violation',
                     body:
-                        'Copyright owners may submit a takedown request by emailing: copyright@snehayog.site with proof of ownership. Upon receiving a valid request, Vayu will remove the infringing content within 48 hours.',
+                        'Copyright owners may submit a takedown request by emailing: copyright@snehayog.site with proof of ownership. Upon receiving a valid request, Vayug will remove the infringing content within 48 hours.',
                   ),
                   _buildNoticePoint(
                     title: '4. Payment & Revenue Sharing',
@@ -422,7 +422,7 @@ class _UploadScreenState extends State<UploadScreen> {
                   _buildNoticePoint(
                     title: '6. Limitation of Liability',
                     body:
-                        'Vayu, as an intermediary platform, is not liable for user-uploaded content under the IT Act 2000 (India) and DMCA (international). All responsibility for copyright compliance lies with the content uploader.',
+                        'Vayug, as an intermediary platform, is not liable for user-uploaded content under the IT Act 2000 (India) and DMCA (international). All responsibility for copyright compliance lies with the content uploader.',
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
@@ -1329,7 +1329,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                 valueListenable: _selectedCategory,
                                 builder: (context, selectedCategory, _) {
                                   return DropdownButtonFormField<String>(
-                                    value: selectedCategory,
+                                    initialValue: selectedCategory,
                                     decoration: const InputDecoration(
                                       labelText: 'Video Category',
                                       border: OutlineInputBorder(),
@@ -1408,8 +1408,9 @@ class _UploadScreenState extends State<UploadScreen> {
                                   ValueListenableBuilder<List<String>>(
                                     valueListenable: _tags,
                                     builder: (context, tags, _) {
-                                      if (tags.isEmpty)
+                                      if (tags.isEmpty) {
                                         return const SizedBox.shrink();
+                                      }
                                       return Wrap(
                                         spacing: 8,
                                         runSpacing: 8,
@@ -1464,8 +1465,9 @@ class _UploadScreenState extends State<UploadScreen> {
                               ValueListenableBuilder<bool>(
                                 valueListenable: _isUploading,
                                 builder: (context, isUploading, _) {
-                                  if (!isUploading)
+                                  if (!isUploading) {
                                     return const SizedBox.shrink();
+                                  }
                                   return Column(
                                     children: [
                                       _buildUnifiedProgressWidget(),
@@ -1478,8 +1480,9 @@ class _UploadScreenState extends State<UploadScreen> {
                               ValueListenableBuilder<String?>(
                                 valueListenable: _errorMessage,
                                 builder: (context, errorMessage, _) {
-                                  if (errorMessage == null)
+                                  if (errorMessage == null) {
                                     return const SizedBox.shrink();
+                                  }
                                   return Padding(
                                     padding:
                                         const EdgeInsets.only(bottom: 16.0),

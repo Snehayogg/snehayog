@@ -46,7 +46,7 @@ class _LocationPermissionDialogState extends State<LocationPermissionDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final appName = widget.appName ?? 'Vayu';
+    final appName = widget.appName ?? 'Vayug';
 
     return Dialog(
       shape: RoundedRectangleBorder(
@@ -497,7 +497,7 @@ class LocationPermissionExample extends StatelessWidget {
               onPressed: () async {
                 bool granted = await LocationPermissionHelper.requestIfNeeded(
                   context,
-                  appName: 'Vayu',
+                  appName: 'Vayug',
                   onGranted: () {
                     print('✅ Location permission granted!');
                   },
@@ -530,5 +530,3 @@ class LocationPermissionExample extends StatelessWidget {
     );
   }
 }
-
-

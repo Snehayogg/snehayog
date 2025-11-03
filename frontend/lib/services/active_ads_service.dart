@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/core/managers/smart_cache_manager.dart';
 import 'package:vayu/services/ad_targeting_service.dart';

@@ -503,10 +503,10 @@ class _ProfileScreenState extends State<ProfileScreen>
       final String referralLink =
           referralCode.isNotEmpty ? '$base/?ref=$referralCode' : base;
       final String message =
-          'I am using Vayu! Refer 2 friends and get full access. Join now: $referralLink';
+          'I am using Vayug! Refer 2 friends and get full access. Join now: $referralLink';
       await Share.share(
         message,
-        subject: 'Vayu – Refer 2 friends and get full access',
+        subject: 'Vayug – Refer 2 friends and get full access',
       );
 
       // Optimistically increment invite counter

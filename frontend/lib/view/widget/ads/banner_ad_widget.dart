@@ -134,16 +134,69 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
     final String imageUrl = _ensureAbsoluteUrl(
         rawImage is String ? rawImage : rawImage?.toString() ?? '');
 
-    // **FIX: Don't show ad widget at all if no image URL or image load failed**
+    // **FIX: If no image or image failed, show text-only fallback instead of hiding**
     if (imageUrl.isEmpty || imageUrl.trim() == '' || _imageLoadFailed) {
-      if (_imageLoadFailed) {
-        AppLogger.log(
-            '⚠️ BannerAdWidget: Image load failed, hiding entire ad widget to prevent grey overlay');
-      } else {
-        AppLogger.log(
-            '⚠️ BannerAdWidget: No image URL available, hiding ad widget');
-      }
-      return const SizedBox.shrink();
+      final reason = _imageLoadFailed ? 'image load failed' : 'no image URL';
+      AppLogger.log('⚠️ BannerAdWidget: $reason, rendering text-only fallback');
+      // Render compact sponsored bar with title and CTA
+      return SafeArea(
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Container(
+            width: MediaQuery.of(context).size.width * 0.8,
+            height: 50,
+            margin: const EdgeInsets.only(top: 1, left: 16),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.6),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => _handleAdClickWithDialog(context),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          widget.adData['title'] ?? 'Sponsored',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade600,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'Learn More',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
     }
 
     // **NEW: Track ad impression when widget is built**
@@ -161,7 +214,8 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
             height: 50, // **REDUCED from 60 for more video space**
             margin: const EdgeInsets.only(top: 1, left: 16), // left margin
             decoration: BoxDecoration(
-              color: Colors.black, // opaque background
+              color:
+                  Colors.black.withOpacity(0.6), // semi-transparent background
               borderRadius: BorderRadius.circular(12),
             ),
             child: Material(

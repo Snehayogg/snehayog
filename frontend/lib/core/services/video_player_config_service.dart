@@ -83,7 +83,7 @@ class VideoPlayerConfigService {
   /// Get HTTP headers optimized for video streaming
   static Map<String, String> getOptimizedHeaders(String videoUrl) {
     final headers = <String, String>{
-      'User-Agent': 'Vayu-App/1.0',
+      'User-Agent': 'Vayug-App/1.0',
       'Accept': 'video/*,application/x-mpegURL,application/vnd.apple.mpegurl',
       'Accept-Encoding': 'gzip, deflate',
       'Connection': 'keep-alive',

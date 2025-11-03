@@ -85,7 +85,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         mainController.currentIndex == 0 && _isScreenVisible;
     if (!isYugVisible) return false;
 
-    final int start = _currentIndex;
+    // Never prime the current (visible) index to avoid muting audible playback
+    if (index == _currentIndex) return false;
+
+    // Prime only for offscreen forward window within decoder budget
+    final int start = (_currentIndex + 1).clamp(0, _videos.length - 1);
     final int end =
         (_currentIndex + _decoderPrimeBudget - 1).clamp(0, _videos.length - 1);
     return index >= start && index <= end;
@@ -462,6 +466,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           }
         }
 
+        try {
+          controller.setVolume(1.0);
+        } catch (_) {}
         controller.play();
         _controllerStates[_currentIndex] = true;
         _userPaused[_currentIndex] = false;
@@ -486,6 +493,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
           final controller = _controllerPool[_currentIndex];
           if (controller != null && controller.value.isInitialized) {
+            try {
+              controller.setVolume(1.0);
+            } catch (_) {}
             controller.play();
             _controllerStates[_currentIndex] = true;
             _userPaused[_currentIndex] = false;
@@ -581,70 +591,68 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     _isScreenVisible = false;
   }
 
-  /// **OPTIMIZED: Load initial data with parallel loading**
+  /// **OPTIMIZED: Load initial data with parallel loading & progressive rendering**
   Future<void> _loadInitialData() async {
     try {
       setState(() => _isLoading = true);
 
-      // **CRITICAL FIX: Use initialVideos if provided, otherwise load from API**
+      // If videos are pre-provided (e.g., from Profile), render immediately
       if (widget.initialVideos != null && widget.initialVideos!.isNotEmpty) {
-        // Use provided videos instead of API call
         _videos = List.from(widget.initialVideos!);
 
-        // Load user ID in parallel with provided videos
-        _loadCurrentUserId(); // No await - load in parallel
-
-        // Verify index immediately
-        _verifyAndSetCorrectIndex();
-
-        // Show videos immediately and start preloading
+        // Flip loading off ASAP for progressive render
         if (mounted) {
+          _verifyAndSetCorrectIndex();
           setState(() => _isLoading = false);
           AppLogger.log(
-            '🚀 VideoFeedAdvanced: Set loading to false, videos count: ${_videos.length}',
+            '🚀 VideoFeedAdvanced: Progressive render with provided videos: ${_videos.length}',
           );
-
-          // Start preloading immediately in parallel
           _startVideoPreloading();
         }
 
-        // Load ads and following users in background (non-blocking)
-        _loadActiveAds(); // No 'await' - runs in background
-        _loadFollowingUsers(); // No 'await' - runs in background
-      } else {
-        // Load from API - perform all operations in parallel
-        final cacheInvalidation = SmartCacheManager()
-            .invalidateVideoCache(videoType: widget.videoType)
-            .catchError((e) => AppLogger.log(
-                '⚠️ VideoFeedAdvanced: Error invalidating cache: $e'));
-        final userIdLoading = _loadCurrentUserId();
-        final videosLoading = _loadVideos(page: 1);
+        // Non-blocking background loads
+        _loadCurrentUserId();
+        _loadActiveAds();
+        _loadFollowingUsers();
+        return;
+      }
 
-        // Wait for videos and userId to load (cache can happen in background)
-        await Future.wait([cacheInvalidation, userIdLoading, videosLoading]);
+      // Cold start: kick everything in parallel without cache invalidation
+      final videosFuture = _loadVideos(page: 1);
+      final userFuture = _loadCurrentUserId();
+      final adsFuture = _loadActiveAds();
 
-        // Verify index and restore state
+      // As soon as videos are ready, render UI (progressive rendering)
+      videosFuture.then((_) async {
+        if (!mounted) return;
         _verifyAndSetCorrectIndex();
 
-        // Attempt to restore background state now that videos are available
-        // Skip on cold start so the first video plays by default
+        // Skip restore on first ever frame so first video autoplays
         if (!_isColdStart) {
           await _restoreBackgroundStateIfAny();
         }
 
-        // Show videos immediately and start preloading
+        setState(() => _isLoading = false);
+        AppLogger.log(
+          '🚀 VideoFeedAdvanced: Progressive render after videos loaded: ${_videos.length}',
+        );
+        _startVideoPreloading();
+        _loadFollowingUsers(); // Fire-and-forget
+      }).catchError((e) {
+        AppLogger.log('❌ Error loading videos: $e');
         if (mounted) {
-          setState(() => _isLoading = false);
-          AppLogger.log(
-            '🚀 VideoFeedAdvanced: Set loading to false, videos count: ${_videos.length}',
-          );
-
-          // Start preloading immediately in parallel
-          _startVideoPreloading();
+          setState(() {
+            _isLoading = false;
+            _errorMessage = e.toString();
+          });
         }
+      });
 
-        // Load ads in background (non-blocking)
-        _loadActiveAds(); // No 'await' - runs in background
+      // Wait for non-critical parallel tasks; do not block UI
+      try {
+        await Future.wait([userFuture, adsFuture], eagerError: false);
+      } catch (_) {
+        // Ignore: non-blocking tasks should not break initial render
       }
     } catch (e) {
       AppLogger.log('❌ Error loading initial data: $e');
@@ -686,6 +694,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       _tryAutoplayCurrent();
     });
   }
+
+  // Removed force-unmute strategy; we now avoid muting the current index during priming.
 
   /// **NEW: Pre-cache thumbnails in background**
   void _precacheThumbnails() {
@@ -762,6 +772,29 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             '   Banner Ad $i: ${ad['title']} (${ad['adType']}) - Active: ${ad['isActive']}',
           );
         }
+      }
+
+      // Retry once after a short delay if no banner ads arrived (race with backend)
+      if (mounted && (_bannerAds.isEmpty)) {
+        AppLogger.log(
+            '⚠️ VideoFeedAdvanced: No banner ads received, retrying in 3s...');
+        Future.delayed(const Duration(seconds: 3), () async {
+          if (!mounted) return;
+          try {
+            final retry = await _activeAdsService.fetchActiveAds();
+            if (!mounted) return;
+            if ((retry['banner'] ?? []).isNotEmpty) {
+              setState(() {
+                _bannerAds = retry['banner']!;
+                _adsLoaded = true;
+              });
+              AppLogger.log(
+                  '✅ VideoFeedAdvanced: Banner ads loaded on retry: ${_bannerAds.length}');
+            }
+          } catch (e) {
+            AppLogger.log('❌ VideoFeedAdvanced: Retry load ads failed: $e');
+          }
+        });
       }
 
       await _carouselAdManager.loadCarouselAds();
@@ -1276,7 +1309,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     final sharedPool = SharedVideoControllerPool();
 
     // **SMART PRELOADING: Preload current + next 2 videos (total 3)**
-    final preloadWindow = 2; // Next 2 videos
+    const preloadWindow = 2; // Next 2 videos
     for (int i = _currentIndex;
         i <= _currentIndex + preloadWindow && i < _videos.length;
         i++) {
@@ -1442,7 +1475,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         _controllerStates[index] = false; // Not playing initially
         _preloadedVideos.add(index);
         _loadingVideos.remove(index);
-        // **LRU: Track access time when controller is added**
         _lastAccessedLocal[index] = DateTime.now();
 
         // **UNIFIED STRATEGY: Always add to shared pool with index tracking**
@@ -1475,10 +1507,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         final bool shouldPrime = _canPrimeIndex(index);
         if (shouldPrime) {
           try {
-            await controller?.setVolume(0.0);
+            await controller.setVolume(0.0);
             // Tiny seek helps codecs surface a real frame
-            await controller?.seekTo(const Duration(milliseconds: 1));
-            await controller?.play();
+            await controller.seekTo(const Duration(milliseconds: 1));
+            await controller.play();
           } catch (_) {}
         }
 
@@ -1489,8 +1521,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           if (v.isInitialized && v.position > Duration.zero && !v.isBuffering) {
             _firstFrameReady[index] = true;
             try {
-              await controller?.pause();
-              await controller?.setVolume(1.0);
+              await controller.pause();
+              await controller.setVolume(1.0);
             } catch (_) {}
             if (mounted) setState(() {});
 
@@ -1501,8 +1533,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               if (mainController.currentIndex == 0 && _isScreenVisible) {
                 try {
                   await controller
-                      ?.setVolume(1.0); // ensure audible on first start
-                  await controller?.play();
+                      .setVolume(1.0); // ensure audible on first start
+                  await controller.play();
                   _controllerStates[_currentIndex] = true;
                   _userPaused[_currentIndex] = false;
                 } catch (_) {}
@@ -1893,6 +1925,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         activeController.setVolume(1.0);
       } catch (_) {}
     }
+    // No force-unmute; priming excludes current index.
 
     // **UNIFIED STRATEGY: Use shared pool as primary source (Instant playback)**
     final sharedPool = SharedVideoControllerPool();
@@ -1959,7 +1992,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     // **FIXED: Play current video if we have a valid controller**
     if (controllerToUse != null && controllerToUse.value.isInitialized) {
-      // Controller is ready, play immediately
+      // Controller is ready; only play if Yug tab is visible
+      final mainController =
+          Provider.of<MainController>(context, listen: false);
+      if (mainController.currentIndex != 0 || !_isScreenVisible) {
+        AppLogger.log('⏸️ Autoplay blocked (not visible)');
+        return;
+      }
+      controllerToUse.setVolume(1.0);
       controllerToUse.play();
       _controllerStates[index] = true;
       _userPaused[index] = false;
@@ -1996,12 +2036,20 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         if (mounted &&
             _currentIndex == index &&
             _controllerPool.containsKey(index)) {
+          // Guard again: only autoplay if visible
+          final mainController =
+              Provider.of<MainController>(context, listen: false);
+          if (mainController.currentIndex != 0 || !_isScreenVisible) {
+            AppLogger.log('⏸️ Autoplay blocked after preload (not visible)');
+            return;
+          }
           final loadedController = _controllerPool[index];
           if (loadedController != null &&
               loadedController.value.isInitialized) {
             // **LRU: Track access time**
             _lastAccessedLocal[index] = DateTime.now();
 
+            loadedController.setVolume(1.0);
             loadedController.play();
             _controllerStates[index] = true;
             _userPaused[index] = false;
@@ -2270,10 +2318,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             ),
           ),
 
-          // **FIX: Banner ad OUTSIDE AnimatedBuilder - prevents rebuild on video frame updates**
-          // This prevents grey overlay when video ends/loops (AnimatedBuilder rebuilds frequently)
-          _buildBannerAd(video, index),
-
           // Center play indicator (only when user paused)
           Positioned.fill(
             child: IgnorePointer(
@@ -2332,6 +2376,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
           // Heart animation for double tap like
           if (_showHeartAnimation[index] == true) _buildHeartAnimation(index),
+
+          // Place banner ad at the very top of the Stack so it is not obscured
+          // by any subsequent overlays or Positioned.fill widgets.
+          _buildBannerAd(video, index),
         ],
       ),
     );

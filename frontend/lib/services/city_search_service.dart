@@ -6,7 +6,7 @@ class CitySearchService {
   static const String _baseUrl = 'https://nominatim.openstreetmap.org/search';
   // Nominatim requires an identifiable User-Agent per usage policy
   static const String _userAgent =
-      'VayuApp/1.0 (contact: factshorts1@gmail.com)';
+      'VayugApp/1.0 (contact: factshorts1@gmail.com)';
 
   /// Search for cities in India using OpenStreetMap Nominatim API
   static Future<List<String>> searchCities(String query) async {

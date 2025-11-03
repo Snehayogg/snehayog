@@ -401,7 +401,7 @@ class ProfileDialogsWidget {
                         ),
                         SizedBox(height: 4),
                         Text(
-                          'Everything you need to know about Vayu',
+                          'Everything you need to know about Vayug',
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey,
@@ -426,23 +426,24 @@ class ProfileDialogsWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildFAQItem(
-                        question: "Why should I use Vayu instead of Instagram?",
+                        question:
+                            "Why should I use Vayug instead of Instagram?",
                         answer:
-                            "Because on Vayu, you can start earning from day one, not after months of growth. And unlike Instagram, you'll see relevant, meaningful content, not adult or sexual material. It's a platform built to reward real creators and protect genuine viewers.",
+                            "Because on Vayug, you can start earning from day one, not after months of growth. And unlike Instagram, you'll see relevant, meaningful content, not adult or sexual material. It's a platform built to reward real creators and protect genuine viewers.",
                         icon: Icons.compare_arrows,
                         color: Colors.green,
                       ),
                       _buildFAQItem(
                         question:
-                            "YouTube already lets creators earn money. Why switch to Vayu?",
+                            "YouTube already lets creators earn money. Why switch to Vayug?",
                         answer:
-                            "YouTube has strict monetization rules — you need 1,000 subscribers and 4,000 watch hours. On Vayu, there's no barrier — creators start earning from the first upload. It's a platform that values your effort, not your follower count.",
+                            "YouTube has strict monetization rules — you need 1,000 subscribers and 4,000 watch hours. On Vayug, there's no barrier — creators start earning from the first upload. It's a platform that values your effort, not your follower count.",
                         icon: Icons.video_library,
                         color: Colors.red,
                       ),
                       _buildFAQItem(
                         question:
-                            "Does Vayu really give 80% ad revenue? Sounds too good to be true.",
+                            "Does Vayug really give 80% ad revenue? Sounds too good to be true.",
                         answer:
                             "Yes — creators get 80% of ad revenue directly. The system automatically credits it to your bank account based on your views and engagement. Our goal is to make creators financially independent, not exploit their content.",
                         icon: Icons.account_balance_wallet,
@@ -452,13 +453,13 @@ class ProfileDialogsWidget {
                         question:
                             "What's the point of joining a new app if my followers are on Instagram and YouTube?",
                         answer:
-                            "That's exactly why now is the best time — you can be an early creator on a growing platform. Early creators get more reach, visibility, and partnership opportunities. On Vayu, you're not lost in the crowd — your content actually gets discovered.",
+                            "That's exactly why now is the best time — you can be an early creator on a growing platform. Early creators get more reach, visibility, and partnership opportunities. On Vayug, you're not lost in the crowd — your content actually gets discovered.",
                         icon: Icons.trending_up,
                         color: Colors.purple,
                       ),
                       _buildFAQItem(
                         question:
-                            "How will I get views or reach on Vayu? New platforms usually have low traffic.",
+                            "How will I get views or reach on Vayug? New platforms usually have low traffic.",
                         answer:
                             "We're actively promoting creators through in-app boosts and personalized recommendations. Because fewer creators are competing right now, your chances to go viral are much higher. Early users always benefit the most — just like YouTubers who started in 2010.",
                         icon: Icons.visibility,

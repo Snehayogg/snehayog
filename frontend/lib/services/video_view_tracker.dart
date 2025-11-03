@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/utils/app_logger.dart';

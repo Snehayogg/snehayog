@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:vayu/model/ad_model.dart';
 import 'package:snehayog_monetization/snehayog_monetization.dart';
 import 'package:vayu/services/authservices.dart';
+import 'package:vayu/config/app_config.dart';
 
 /// **PaymentHandlerWidget - Handles payment processing and dialogs**
 class PaymentHandlerWidget {
@@ -14,7 +15,7 @@ class PaymentHandlerWidget {
       keyId: 'rzp_test_1234567890', // Replace with actual key
       keySecret: 'test_secret', // Replace with actual secret
       webhookSecret: 'test_webhook', // Replace with actual webhook
-      baseUrl: 'http://192.168.0.190:5001', // Replace with actual base URL
+      baseUrl: AppConfig.baseUrl, // Use environment-configured base URL
     );
   }
 
@@ -112,7 +113,7 @@ class PaymentHandlerWidget {
       await _razorpayService.makePayment(
         amount: totalAmount,
         currency: 'INR',
-        name: 'Vayu Ad Campaign',
+        name: 'Vayug Ad Campaign',
         description: 'Advertisement campaign payment',
         email: userData['email'] ?? 'user@example.com',
         contact: userData['phone'] ?? '9999999999',
@@ -169,7 +170,7 @@ class PaymentHandlerWidget {
             Icon(Icons.star, color: Colors.amber.shade600, size: 24),
             const SizedBox(width: 12),
             const Text(
-              'Why Advertise on Vayu?',
+              'Why Advertise on Vayug?',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -184,7 +185,7 @@ class PaymentHandlerWidget {
             children: [
               _buildBenefitItem(
                 'Guaranteed Ad Impressions',
-                'Unlike other platforms where ad reach is uncertain, Vayu ensures advertisers get guaranteed impressions, providing clear ROI visibility.',
+                'Unlike other platforms where ad reach is uncertain, Vayug ensures advertisers get guaranteed impressions, providing clear ROI visibility.',
                 Icons.visibility,
                 Colors.blue.shade600,
               ),
@@ -205,7 +206,7 @@ class PaymentHandlerWidget {
               const SizedBox(height: 16),
               _buildBenefitItem(
                 'Less Competition, More Attention',
-                'Unlike crowded platforms (YouTube, Instagram, etc.), Vayu offers advertisers a space with lower competition for user attention, increasing ad visibility and impact.',
+                'Unlike crowded platforms (YouTube, Instagram, etc.), Vayug offers advertisers a space with lower competition for user attention, increasing ad visibility and impact.',
                 Icons.psychology,
                 Colors.purple.shade600,
               ),
@@ -226,7 +227,7 @@ class PaymentHandlerWidget {
               const SizedBox(height: 16),
               _buildBenefitItem(
                 'Emerging Market Advantage',
-                'Early advertisers on Vayu benefit from first-mover advantage, capturing audience attention before the platform scales massively.',
+                'Early advertisers on Vayug benefit from first-mover advantage, capturing audience attention before the platform scales massively.',
                 Icons.rocket_launch,
                 Colors.red.shade600,
               ),

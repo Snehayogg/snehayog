@@ -73,7 +73,7 @@ void _initializeServicesInBackground() async {
     // Initialize AdMob in background
     await MobileAds.instance.initialize();
     ErrorLoggingService.logServiceInitialization('AdMob');
-    
+
     // Set orientation in background
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
@@ -309,7 +309,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     return MaterialApp(
       navigatorKey: AuthService.navigatorKey,
       debugShowCheckedModeBanner: false,
-      title: 'Vayu',
+      title: 'Vayug',
       theme: AppTheme.lightTheme,
       builder: (context, child) {
         return MediaQuery(

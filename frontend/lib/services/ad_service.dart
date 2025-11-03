@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:http/http.dart' as http;
 import 'package:vayu/model/ad_model.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/cloudinary_service.dart';
