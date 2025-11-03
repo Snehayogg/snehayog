@@ -4,12 +4,13 @@ import 'package:http/http.dart' as http;
 class AppConfig {
   // **MANUAL: Development mode control**
   static const bool _isDevelopment =
-      false; // Always keep true for consistent Railway usage
+      true; // Set to true for local testing, false for production
 
   // **NEW: Smart URL selection with fallback**
   static String? _cachedBaseUrl;
 
   // Local development server (Wi‑Fi/LAN)
+  // Use laptop IP address when testing on phone: 192.168.0.198
   static const String _localIpBaseUrl = 'http://192.168.0.198:5001';
 
   // **NEW: Clear cache method for development**
@@ -24,23 +25,69 @@ class AppConfig {
       return _cachedBaseUrl!;
     }
 
-    // **FIX: Always default to Railway first, fallback to local in development**
-    print('🔍 AppConfig: Defaulting to Railway (snehayog.site)');
+    // **FIX: Use local server in development, Railway in production**
+    if (_isDevelopment) {
+      print('🔍 AppConfig: Development mode - using local server');
+      return _localIpBaseUrl;
+    }
+    print(
+        '🔍 AppConfig: Production mode - defaulting to Railway (snehayog.site)');
     return 'https://snehayog.site';
   }
 
-  // **NEW: Always use Railway base URL**
+  // **NEW: Always try local server first, then fallback to snehayog.site**
   static Future<String> getBaseUrlWithFallback() async {
-    if (_cachedBaseUrl != null) {
-      print('🔍 AppConfig: Using cached URL: $_cachedBaseUrl');
+    // **FIX: Always try local first in development, even if cached**
+    // This ensures we always check local server first, then fallback
+    if (_isDevelopment) {
+      final urlsToTry = [
+        _localIpBaseUrl, // Laptop IP first - ALWAYS try this first (192.168.0.198:5001)
+        'https://snehayog.site',
+        'http://localhost:5001', // Alternative localhost (for emulator)
+        'http://127.0.0.1:5001', // Alternative localhost
+      ];
+
+      for (final url in urlsToTry) {
+        try {
+          print('🔍 AppConfig: Testing local server: $url...');
+
+          final response = await http.get(
+            Uri.parse('$url/api/health'),
+            headers: {'Content-Type': 'application/json'},
+          ).timeout(const Duration(seconds: 5)); // Shorter timeout for local
+
+          if (response.statusCode == 200) {
+            print('✅ AppConfig: Local server accessible at $url');
+            _cachedBaseUrl = url;
+            return url;
+          }
+        } catch (e) {
+          print('❌ AppConfig: $url not accessible: $e');
+          continue;
+        }
+      }
+
+      // If local servers fail, use cached URL or fallback to snehayog.site
+      if (_cachedBaseUrl != null && _cachedBaseUrl!.contains('snehayog.site')) {
+        print('⚠️ AppConfig: Local server failed, using cached production URL');
+        return _cachedBaseUrl!;
+      }
+
+      print(
+          '⚠️ AppConfig: All local servers failed, falling back to snehayog.site');
+      _cachedBaseUrl = 'https://snehayog.site';
+      return 'https://snehayog.site';
+    }
+
+    // Production mode: try Railway first
+    if (_cachedBaseUrl != null && !_cachedBaseUrl!.contains('localhost')) {
+      print('🔍 AppConfig: Using cached production URL: $_cachedBaseUrl');
       return _cachedBaseUrl!;
     }
 
-    // **FIX: Always try Railway first (snehayog.site), then fallback to local**
     final urlsToTry = [
-      'https://snehayog.site', // Railway production - try first
+      'https://snehayog.site', // Production - try first
       'https://snehayog-production.up.railway.app', // Railway fallback
-      ...(_isDevelopment ? [_localIpBaseUrl] : []), // Local only in development
     ];
 
     for (final url in urlsToTry) {
@@ -63,16 +110,10 @@ class AppConfig {
       }
     }
 
-    // If health check fails, pick sensible default based on environment
-    if (_isDevelopment) {
-      print('⚠️ AppConfig: All servers failed, using local IP as fallback');
-      _cachedBaseUrl = _localIpBaseUrl;
-    } else {
-      print(
-          '⚠️ AppConfig: All servers failed, using custom domain as fallback');
-      _cachedBaseUrl = 'https://snehayog.site';
-    }
-    return _cachedBaseUrl!;
+    // If all production servers fail, return default
+    print('⚠️ AppConfig: All production servers failed, using default');
+    _cachedBaseUrl = 'https://snehayog.site';
+    return 'https://snehayog.site';
   }
 
   // **NEW: Check server connectivity and update URL**
@@ -80,11 +121,46 @@ class AppConfig {
     print('🔍 AppConfig: Checking server connectivity...');
     print('🔍 AppConfig: Development mode: $_isDevelopment');
 
-    // **FIX: Always try Railway first (snehayog.site), then fallback to local**
+    // **FIX: Always try local first in development, then fallback to snehayog.site**
+    if (_isDevelopment) {
+      final urlsToTry = [
+        _localIpBaseUrl, // Laptop IP first - ALWAYS try this first (192.168.0.198:5001)
+        'http://localhost:5001', // Alternative localhost (for emulator)
+        'http://127.0.0.1:5001', // Alternative localhost
+        'https://snehayog.site', // Fallback to production if local fails
+      ];
+
+      for (final url in urlsToTry) {
+        try {
+          print('🔍 AppConfig: Testing local server: $url...');
+
+          final response = await http.get(
+            Uri.parse('$url/api/health'),
+            headers: {'Content-Type': 'application/json'},
+          ).timeout(const Duration(seconds: 5)); // Shorter timeout for local
+
+          if (response.statusCode == 200) {
+            print('✅ AppConfig: Local server accessible at $url');
+            _cachedBaseUrl = url;
+            return url;
+          }
+        } catch (e) {
+          print('❌ AppConfig: $url not accessible: $e');
+          continue;
+        }
+      }
+
+      // If local servers fail, fallback to snehayog.site
+      print(
+          '⚠️ AppConfig: All local servers failed, falling back to snehayog.site');
+      _cachedBaseUrl = 'https://snehayog.site';
+      return 'https://snehayog.site';
+    }
+
+    // Production mode
     final urlsToTry = [
       'https://snehayog.site', // Railway production - try first
       'https://snehayog-production.up.railway.app', // Railway fallback
-      ...(_isDevelopment ? [_localIpBaseUrl] : []), // Local only in development
     ];
 
     for (final url in urlsToTry) {
@@ -107,16 +183,10 @@ class AppConfig {
       }
     }
 
-    // If health check fails, pick sensible default based on environment
-    if (_isDevelopment) {
-      print('⚠️ AppConfig: All servers failed, using local IP as fallback');
-      _cachedBaseUrl = _localIpBaseUrl;
-    } else {
-      print(
-          '⚠️ AppConfig: All servers failed, using custom domain as fallback');
-      _cachedBaseUrl = 'https://snehayog.site';
-    }
-    return _cachedBaseUrl!;
+    // If all production servers fail, return default
+    print('⚠️ AppConfig: All production servers failed, using default');
+    _cachedBaseUrl = 'https://snehayog.site';
+    return 'https://snehayog.site';
   }
 
   // **NEW: Reset cached URL (useful for retry scenarios)**

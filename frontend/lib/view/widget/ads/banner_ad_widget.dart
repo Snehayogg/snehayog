@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:vayu/services/active_ads_service.dart';
+import 'package:vayu/services/ad_impression_service.dart';
+import 'package:vayu/services/authservices.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/utils/app_logger.dart';
 
@@ -23,9 +26,87 @@ class BannerAdWidget extends StatefulWidget {
 
 class _BannerAdWidgetState extends State<BannerAdWidget> {
   bool _imageLoadFailed = false;
+  bool _hasTrackedView = false; // Prevent duplicate view tracking
+  DateTime? _viewStartTime; // Track when ad became visible
+  Timer? _viewTrackingTimer; // Timer to check view duration
 
   // Cache image provider per banner to avoid rebuild flicker
   static final Map<String, ImageProvider> _imageProviderCache = {};
+
+  final AdImpressionService _adImpressionService = AdImpressionService();
+  final AuthService _authService = AuthService();
+
+  @override
+  void initState() {
+    super.initState();
+    // Start tracking view duration when widget is built
+    _startViewTracking();
+  }
+
+  @override
+  void dispose() {
+    _viewTrackingTimer?.cancel();
+    super.dispose();
+  }
+
+  /// **NEW: Track ad view duration (minimum 2 seconds)**
+  void _startViewTracking() {
+    _viewStartTime = DateTime.now();
+
+    // Track view after minimum duration (2 seconds)
+    _viewTrackingTimer = Timer(const Duration(seconds: 2), () async {
+      if (!_hasTrackedView && mounted) {
+        await _trackAdView();
+      }
+    });
+  }
+
+  /// **NEW: Track ad view (minimum 2 seconds visible)**
+  Future<void> _trackAdView() async {
+    if (_hasTrackedView || _viewStartTime == null) return;
+
+    try {
+      final viewDuration =
+          DateTime.now().difference(_viewStartTime!).inMilliseconds / 1000.0;
+
+      // Minimum view duration: 2 seconds
+      if (viewDuration < 2.0) {
+        AppLogger.log(
+            '⚠️ BannerAdWidget: View duration too short ($viewDuration s), not tracking');
+        return;
+      }
+
+      final userData = await _authService.getUserData();
+      if (userData == null) {
+        AppLogger.log(
+            '⚠️ BannerAdWidget: No user data, skipping view tracking');
+        return;
+      }
+
+      final videoId = widget.adData['videoId'] ?? '';
+      final adId = widget.adData['_id'] ?? widget.adData['id'] ?? '';
+      final userId = userData['id'] ?? '';
+
+      if (videoId.isEmpty || adId.isEmpty) {
+        AppLogger.log(
+            '⚠️ BannerAdWidget: Missing videoId or adId, skipping view tracking');
+        return;
+      }
+
+      await _adImpressionService.trackBannerAdView(
+        videoId: videoId,
+        adId: adId,
+        userId: userId,
+        viewDuration: viewDuration,
+      );
+
+      _hasTrackedView = true;
+      AppLogger.log(
+          '✅ BannerAdWidget: Ad view tracked (${viewDuration.toStringAsFixed(2)}s)');
+    } catch (e) {
+      AppLogger.log('❌ BannerAdWidget: Error tracking ad view: $e');
+    }
+  }
 
   // Ensure absolute URL (adds scheme or base URL if needed)
   String _ensureAbsoluteUrl(String url) {

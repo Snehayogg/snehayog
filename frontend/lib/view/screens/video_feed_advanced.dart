@@ -30,6 +30,8 @@ import 'package:http/http.dart' as http;
 import 'package:vayu/view/widget/custom_share_widget.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:vayu/controller/google_sign_in_controller.dart';
+import 'package:vayu/services/earnings_service.dart';
 
 class VideoFeedAdvanced extends StatefulWidget {
   final int? initialIndex;
@@ -387,6 +389,37 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+
+    // **FIXED: Listen to auth state changes from GoogleSignInController**
+    final authController =
+        Provider.of<GoogleSignInController>(context, listen: false);
+    if (authController.isSignedIn && authController.userData != null) {
+      // User is signed in - update current user ID
+      final userId = authController.userData!['id'] ??
+          authController.userData!['googleId'];
+      if (userId != null && _currentUserId != userId) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              _currentUserId = userId;
+            });
+            AppLogger.log(
+                '✅ VideoFeedAdvanced: User ID updated from auth state: $userId');
+          }
+        });
+      }
+    } else if (!authController.isSignedIn && _currentUserId != null) {
+      // User signed out - clear current user ID
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _currentUserId = null;
+          });
+          AppLogger.log('✅ VideoFeedAdvanced: User ID cleared (signed out)');
+        }
+      });
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final mainController =
           Provider.of<MainController>(context, listen: false);
@@ -548,7 +581,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     _isScreenVisible = false;
   }
 
-  /// **OPTIMIZED: Load initial data with parallel ad loading**
+  /// **OPTIMIZED: Load initial data with parallel loading**
   Future<void> _loadInitialData() async {
     try {
       setState(() => _isLoading = true);
@@ -557,67 +590,62 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       if (widget.initialVideos != null && widget.initialVideos!.isNotEmpty) {
         // Use provided videos instead of API call
         _videos = List.from(widget.initialVideos!);
-      } else {
-        // **FIX: Clear cache before initial load to ensure fresh data**
-        try {
-          final cacheManager = SmartCacheManager();
-          await cacheManager.invalidateVideoCache(videoType: widget.videoType);
-        } catch (e) {
-          AppLogger.log('⚠️ VideoFeedAdvanced: Error invalidating cache: $e');
-        }
 
-        // Load from API
-        await _loadVideos(page: 1);
-      }
+        // Load user ID in parallel with provided videos
+        _loadCurrentUserId(); // No await - load in parallel
 
-      await _loadCurrentUserId();
+        // Verify index immediately
+        _verifyAndSetCorrectIndex();
 
-      // **CRITICAL FIX: Verify the current index is correct with the loaded videos**
-      // _currentIndex is already set correctly in _initializeServices
-      // Just verify that the video at _currentIndex matches initialVideoId
-      if (widget.initialVideoId != null && _videos.isNotEmpty) {
-        final videoAtCurrentIndex = _videos[_currentIndex];
-        if (videoAtCurrentIndex.id != widget.initialVideoId) {
-          // Video mismatch detected, find correct index
-          final correctIndex = _videos.indexWhere(
-            (v) => v.id == widget.initialVideoId,
-          );
-          if (correctIndex != -1) {
-            _currentIndex = correctIndex;
-            // Also update PageController to correct page
-            _pageController.jumpToPage(correctIndex);
-          }
-        }
-      }
-
-      // Attempt to restore background state now that videos are available
-      // Skip on cold start so the first video plays by default
-      if (!_isColdStart) {
-        await _restoreBackgroundStateIfAny();
-      }
-
-      // **OPTIMIZED: Show videos immediately without waiting for ads**
-      if (mounted) {
-        setState(() => _isLoading = false);
-        AppLogger.log(
-          '🚀 VideoFeedAdvanced: Set loading to false, videos count: ${_videos.length}',
-        );
-
-        // **FIXED: Trigger autoplay immediately after videos load**
-        // PageController is already initialized with correct page, so no jump needed
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          // Mark cold start complete after first frame renders
-          _isColdStart = false;
+        // Show videos immediately and start preloading
+        if (mounted) {
+          setState(() => _isLoading = false);
           AppLogger.log(
-            '🚀 VideoFeedAdvanced: Triggering instant autoplay after video load at index $_currentIndex',
+            '🚀 VideoFeedAdvanced: Set loading to false, videos count: ${_videos.length}',
           );
-          _tryAutoplayCurrent();
-        });
-      }
 
-      // **OPTIMIZED: Load ads in background (non-blocking)**
-      // Ads will appear when ready, but won't delay video display
-      _loadActiveAds(); // No 'await' - runs in background
+          // Start preloading immediately in parallel
+          _startVideoPreloading();
+        }
+
+        // Load ads and following users in background (non-blocking)
+        _loadActiveAds(); // No 'await' - runs in background
+        _loadFollowingUsers(); // No 'await' - runs in background
+      } else {
+        // Load from API - perform all operations in parallel
+        final cacheInvalidation = SmartCacheManager()
+            .invalidateVideoCache(videoType: widget.videoType)
+            .catchError((e) => AppLogger.log(
+                '⚠️ VideoFeedAdvanced: Error invalidating cache: $e'));
+        final userIdLoading = _loadCurrentUserId();
+        final videosLoading = _loadVideos(page: 1);
+
+        // Wait for videos and userId to load (cache can happen in background)
+        await Future.wait([cacheInvalidation, userIdLoading, videosLoading]);
+
+        // Verify index and restore state
+        _verifyAndSetCorrectIndex();
+
+        // Attempt to restore background state now that videos are available
+        // Skip on cold start so the first video plays by default
+        if (!_isColdStart) {
+          await _restoreBackgroundStateIfAny();
+        }
+
+        // Show videos immediately and start preloading
+        if (mounted) {
+          setState(() => _isLoading = false);
+          AppLogger.log(
+            '🚀 VideoFeedAdvanced: Set loading to false, videos count: ${_videos.length}',
+          );
+
+          // Start preloading immediately in parallel
+          _startVideoPreloading();
+        }
+
+        // Load ads in background (non-blocking)
+        _loadActiveAds(); // No 'await' - runs in background
+      }
     } catch (e) {
       AppLogger.log('❌ Error loading initial data: $e');
       if (mounted) {
@@ -629,15 +657,80 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
   }
 
-  /// **LOAD CURRENT USER ID: Get authenticated user's ID**
+  /// **NEW: Helper to verify and set correct index**
+  void _verifyAndSetCorrectIndex() {
+    if (widget.initialVideoId != null && _videos.isNotEmpty) {
+      final videoAtCurrentIndex = _videos[_currentIndex];
+      if (videoAtCurrentIndex.id != widget.initialVideoId) {
+        // Video mismatch detected, find correct index
+        final correctIndex = _videos.indexWhere(
+          (v) => v.id == widget.initialVideoId,
+        );
+        if (correctIndex != -1) {
+          _currentIndex = correctIndex;
+          // Also update PageController to correct page
+          _pageController.jumpToPage(correctIndex);
+        }
+      }
+    }
+  }
+
+  /// **NEW: Start video preloading and autoplay**
+  void _startVideoPreloading() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Mark cold start complete after first frame renders
+      _isColdStart = false;
+      AppLogger.log(
+        '🚀 VideoFeedAdvanced: Triggering instant autoplay after video load at index $_currentIndex',
+      );
+      _tryAutoplayCurrent();
+    });
+  }
+
+  /// **NEW: Pre-cache thumbnails in background**
+  void _precacheThumbnails() {
+    // Run in background without blocking
+    Future(() async {
+      for (final v in _videos.take(5)) {
+        if (v.thumbnailUrl.isNotEmpty) {
+          try {
+            if (mounted) {
+              await precacheImage(
+                  CachedNetworkImageProvider(v.thumbnailUrl), context);
+            }
+          } catch (_) {}
+        }
+      }
+    });
+  }
+
+  /// **FIXED: Load current user ID from GoogleSignInController Provider**
   Future<void> _loadCurrentUserId() async {
     try {
+      // **PREFER: Use GoogleSignInController Provider for unified auth state**
+      final authController =
+          Provider.of<GoogleSignInController>(context, listen: false);
+      if (authController.isSignedIn && authController.userData != null) {
+        final userId = authController.userData!['id'] ??
+            authController.userData!['googleId'];
+        if (userId != null) {
+          setState(() {
+            _currentUserId = userId;
+          });
+          AppLogger.log(
+              '✅ Loaded current user ID from auth controller: $_currentUserId');
+          return;
+        }
+      }
+
+      // Fallback to AuthService if Provider doesn't have data
       final userData = await _authService.getUserData();
       if (userData != null && userData['id'] != null) {
         setState(() {
           _currentUserId = userData['id'];
         });
-        AppLogger.log('✅ Loaded current user ID: $_currentUserId');
+        AppLogger.log(
+            '✅ Loaded current user ID from auth service: $_currentUserId');
       }
     } catch (e) {
       AppLogger.log('❌ Error loading current user ID: $e');
@@ -808,8 +901,18 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           _totalVideos = total; // **NEW: Store total count**
         });
 
-        // Load following users after videos are loaded
-        await _loadFollowingUsers();
+        // **OPTIMIZED: Load following users in background (non-blocking)**
+        _loadFollowingUsers(); // No await - runs in background
+
+        // Preload current and nearby videos to avoid grey frames
+        // Ensure index is valid after reload
+        if (_currentIndex >= _videos.length) {
+          _currentIndex = 0;
+        }
+
+        // **OPTIMIZED: Start preloading immediately without blocking**
+        _preloadVideo(_currentIndex); // No await - start preloading immediately
+        _preloadNearbyVideos();
 
         // **FIXED: Trigger autoplay after videos are loaded**
         if (mounted) {
@@ -818,25 +921,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           });
         }
 
-        // Preload current and nearby videos to avoid grey frames
-        // Ensure index is valid after reload
-        if (_currentIndex >= _videos.length) {
-          _currentIndex = 0;
-        }
-        await _preloadVideo(_currentIndex);
-        _preloadNearbyVideos();
-        _tryAutoplayCurrent();
-
-        // Pre-cache thumbnails for the first few items so an image shows instantly
-        for (final v in _videos.take(5)) {
-          if (v.thumbnailUrl.isNotEmpty) {
-            try {
-              // ignore: use_build_context_synchronously
-              await precacheImage(
-                  CachedNetworkImageProvider(v.thumbnailUrl), context);
-            } catch (_) {}
-          }
-        }
+        // Pre-cache thumbnails in background for the first few items
+        _precacheThumbnails();
       }
     } catch (e) {
       AppLogger.log('❌ Error loading videos: $e');
@@ -915,27 +1001,20 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       AppLogger.log(
         '🔄 VideoFeedAdvanced: Reloading carousel ads after manual refresh...',
       );
-      await _carouselAdManager.loadCarouselAds();
+      _carouselAdManager.loadCarouselAds(); // No await - load in background
 
       // After a manual refresh, proactively preload current and nearby videos
       if (mounted && _videos.isNotEmpty) {
         if (_currentIndex >= _videos.length) {
           _currentIndex = 0;
         }
-        await _preloadVideo(_currentIndex);
-        _preloadNearbyVideos();
-        _tryAutoplayCurrent();
 
-        // Pre-cache thumbnails for the first few refreshed items
-        for (final v in _videos.take(5)) {
-          if (v.thumbnailUrl.isNotEmpty) {
-            try {
-              // ignore: use_build_context_synchronously
-              await precacheImage(
-                  CachedNetworkImageProvider(v.thumbnailUrl), context);
-            } catch (_) {}
-          }
-        }
+        // **OPTIMIZED: Start preloading immediately without blocking**
+        _preloadVideo(_currentIndex); // No await - start preloading immediately
+        _preloadNearbyVideos();
+
+        // Pre-cache thumbnails in background
+        _precacheThumbnails();
       }
     } catch (e) {
       AppLogger.log('❌ VideoFeedAdvanced: Error refreshing videos: $e');
@@ -1421,6 +1500,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                   Provider.of<MainController>(context, listen: false);
               if (mainController.currentIndex == 0 && _isScreenVisible) {
                 try {
+                  await controller
+                      ?.setVolume(1.0); // ensure audible on first start
                   await controller?.play();
                   _controllerStates[_currentIndex] = true;
                   _userPaused[_currentIndex] = false;
@@ -1804,6 +1885,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     _currentIndex = index;
     _reprimeWindowIfNeeded();
+
+    // Safety: ensure newly active video's audio is unmuted
+    final activeController = _controllerPool[_currentIndex];
+    if (activeController != null && activeController.value.isInitialized) {
+      try {
+        activeController.setVolume(1.0);
+      } catch (_) {}
+    }
 
     // **UNIFIED STRATEGY: Use shared pool as primary source (Instant playback)**
     final sharedPool = SharedVideoControllerPool();
@@ -2370,12 +2459,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       child: BannerAdWidget(
         key: ValueKey(
             'banner_${video.id}'), // Stable key prevents widget recreation
-        adData: adDataNonNull,
+        adData: {
+          ...adDataNonNull,
+          'videoId': video.id, // **FIXED: Pass videoId for view tracking**
+        },
         onAdClick: () {
           AppLogger.log('🖱️ Banner ad clicked on video $index');
         },
         onAdImpression: () async {
-          // Track banner ad impression for revenue calculation
+          // **FIXED: Track impression immediately (for analytics), view will be tracked after 2s in widget**
           if (index < _videos.length) {
             final video = _videos[index];
             final adId = adDataNonNull['_id'] ?? adDataNonNull['id'];
@@ -2394,6 +2486,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                   adId: adId.toString(),
                   userId: userData['id'],
                 );
+                // Note: View tracking (for revenue) happens automatically in BannerAdWidget after 2s
               } catch (e) {
                 AppLogger.log('❌ Error tracking banner ad impression: $e');
               }
@@ -2578,8 +2671,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // Use the first carousel ad (you can implement rotation logic later)
     final carouselAd = _carouselAds[0];
 
+    // **FIXED: Get videoId from current video for view tracking**
+    String? videoId;
+    if (videoIndex < _videos.length) {
+      videoId = _videos[videoIndex].id;
+    }
+
     return CarouselAdWidget(
       carouselAd: carouselAd,
+      videoId: videoId, // **FIXED: Pass videoId for view tracking**
       onAdClosed: () {
         if (_currentHorizontalPage.containsKey(videoIndex)) {
           _currentHorizontalPage[videoIndex]!.value = 0;
@@ -2877,57 +2977,71 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     );
   }
 
-  /// **Calculate earnings based on video views**
-  /// Note: Since banner ads are shown on ALL videos, ad views = video views
-  double _calculateEarningsFromViews(VideoModel video) {
-    // Check cache first
+  /// **FIXED: Use centralized EarningsService for earnings (single source of truth)**
+  Future<double> _calculateEarningsFromAdViews(VideoModel video) async {
     if (_earningsCache.containsKey(video.id)) {
       return _earningsCache[video.id]!;
     }
-
     try {
-      // Calculate earnings based on video views
-      // Banner ads: ₹10 per 1000 impressions (views)
-      // Since banner ads are shown on all videos, earnings = (views / 1000) * 10
-      const bannerCpm = 10.0;
-      final totalEarnings = (video.views / 1000) * bannerCpm;
-
-      // Cache the result
+      final totalEarnings =
+          await EarningsService.calculateVideoRevenue(video.id);
       _earningsCache[video.id] = totalEarnings;
-
-      AppLogger.log(
-          '💰 Video: ${video.videoName} - Views: ${video.views}, Earnings: ₹${totalEarnings.toStringAsFixed(2)}');
-
       return totalEarnings;
-    } catch (e) {
-      AppLogger.log('❌ Error calculating earnings for video ${video.id}: $e');
+    } catch (_) {
       return 0.0;
     }
   }
 
-  /// **Build earnings label**
+  /// **FIXED: Build earnings label using FutureBuilder for async ad views**
   Widget _buildEarningsLabel(VideoModel video) {
-    // Calculate earnings directly from views (no async needed)
-    final earnings = _calculateEarningsFromViews(video) * 0.8;
+    return FutureBuilder<double>(
+      future: _calculateEarningsFromAdViews(video),
+      builder: (context, snapshot) {
+        // Show loading state
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: Colors.green.withOpacity(0.6),
+                width: 1,
+              ),
+            ),
+            child: const Text(
+              '...',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          );
+        }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Colors.green.withOpacity(0.6),
-          width: 1,
-        ),
-      ),
-      child: Text(
-        '₹${earnings.toStringAsFixed(2)}',
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 9,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
+        // Show earnings
+        final earnings = snapshot.data ?? 0.0;
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.3),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Colors.green.withOpacity(0.6),
+              width: 1,
+            ),
+          ),
+          child: Text(
+            '₹${earnings.toStringAsFixed(2)}',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -3785,26 +3899,58 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   Widget build(BuildContext context) {
     super.build(context); // Required for AutomaticKeepAliveClientMixin
 
-    return Consumer<MainController>(
-      builder: (context, mainController, child) {
-        final isVideoTabActive = mainController.currentIndex == 0;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _handleVisibilityChange(isVideoTabActive);
-        });
+    return Consumer<GoogleSignInController>(
+      builder: (context, authController, _) {
+        // **FIXED: Listen to auth state changes and update user ID**
+        if (authController.isSignedIn && authController.userData != null) {
+          final userId = authController.userData!['id'] ??
+              authController.userData!['googleId'];
+          if (userId != null && _currentUserId != userId) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                setState(() {
+                  _currentUserId = userId;
+                });
+                AppLogger.log(
+                    '✅ VideoFeedAdvanced: User ID synced from auth: $userId');
+              }
+            });
+          }
+        } else if (!authController.isSignedIn && _currentUserId != null) {
+          // User signed out - clear user ID
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                _currentUserId = null;
+              });
+              AppLogger.log(
+                  '✅ VideoFeedAdvanced: User ID cleared (signed out)');
+            }
+          });
+        }
 
-        return Scaffold(
-          backgroundColor: Colors.black,
-          body: Stack(
-            children: [
-              _isLoading
-                  ? Center(child: _buildGreenSpinner(size: 40))
-                  : _errorMessage != null
-                      ? _buildErrorState()
-                      : _videos.isEmpty
-                          ? _buildEmptyState()
-                          : _buildVideoFeed(),
-            ],
-          ),
+        return Consumer<MainController>(
+          builder: (context, mainController, child) {
+            final isVideoTabActive = mainController.currentIndex == 0;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _handleVisibilityChange(isVideoTabActive);
+            });
+
+            return Scaffold(
+              backgroundColor: Colors.black,
+              body: Stack(
+                children: [
+                  _isLoading
+                      ? Center(child: _buildGreenSpinner(size: 40))
+                      : _errorMessage != null
+                          ? _buildErrorState()
+                          : _videos.isEmpty
+                              ? _buildEmptyState()
+                              : _buildVideoFeed(),
+                ],
+              ),
+            );
+          },
         );
       },
     );

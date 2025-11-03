@@ -3,8 +3,11 @@ import 'package:provider/provider.dart';
 import 'package:vayu/core/managers/profile_state_manager.dart';
 import 'package:vayu/core/providers/user_provider.dart';
 import 'package:vayu/core/services/profile_screen_logger.dart';
+// import 'package:vayu/services/ad_impression_service.dart';
+import 'package:vayu/services/earnings_service.dart';
+import 'package:vayu/utils/app_logger.dart';
 
-class ProfileStatsWidget extends StatelessWidget {
+class ProfileStatsWidget extends StatefulWidget {
   final ProfileStateManager stateManager;
   final String? userId;
   final bool isVideosLoaded;
@@ -21,6 +24,100 @@ class ProfileStatsWidget extends StatelessWidget {
     this.onFollowersTap,
     this.onEarningsTap,
   });
+
+  @override
+  State<ProfileStatsWidget> createState() => _ProfileStatsWidgetState();
+}
+
+class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
+  double _earnings = 0.0;
+  bool _isLoadingEarnings = true;
+  int _lastVideoCount = -1;
+
+  @override
+  void initState() {
+    super.initState();
+    _attachStateManagerListener();
+    _loadEarnings();
+  }
+
+  @override
+  void didUpdateWidget(ProfileStatsWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Rewire listener if stateManager instance changed
+    if (oldWidget.stateManager != widget.stateManager) {
+      oldWidget.stateManager.removeListener(_onStateManagerChanged);
+      _attachStateManagerListener();
+    }
+
+    // Reload if parent indicates load state changed
+    if (widget.isVideosLoaded != oldWidget.isVideosLoaded) {
+      _loadEarnings();
+    }
+  }
+
+  void _attachStateManagerListener() {
+    _lastVideoCount = widget.stateManager.userVideos.length;
+    widget.stateManager.addListener(_onStateManagerChanged);
+  }
+
+  void _onStateManagerChanged() {
+    final currentCount = widget.stateManager.userVideos.length;
+    if (currentCount != _lastVideoCount) {
+      _lastVideoCount = currentCount;
+      _loadEarnings();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.stateManager.removeListener(_onStateManagerChanged);
+    super.dispose();
+  }
+
+  /// **FIXED: Load earnings using centralized EarningsService (single source of truth)**
+  Future<void> _loadEarnings() async {
+    if (!widget.isVideosLoaded || widget.stateManager.userVideos.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _isLoadingEarnings = false; // Don't show loading if no videos
+          _earnings = 0.0;
+        });
+      }
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _isLoadingEarnings = true;
+      });
+    }
+
+    try {
+      AppLogger.log(
+          '💰 ProfileStatsWidget: Calculating earnings (EarningsService) for ${widget.stateManager.userVideos.length} videos');
+
+      final totalRevenue = await EarningsService.calculateTotalRevenueForVideos(
+        widget.stateManager.userVideos,
+      );
+
+      if (mounted) {
+        setState(() {
+          _earnings = totalRevenue;
+          _isLoadingEarnings = false;
+        });
+      }
+    } catch (e, stackTrace) {
+      AppLogger.log('❌ ProfileStatsWidget: Error calculating earnings: $e');
+      AppLogger.log('Stack trace: $stackTrace');
+      if (mounted) {
+        setState(() {
+          _earnings = 0.0;
+          _isLoadingEarnings = false; // Always set to false on error
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,8 +143,10 @@ class ProfileStatsWidget extends StatelessWidget {
               children: [
                 _buildStatColumn(
                   'Videos',
-                  isVideosLoaded ? stateManager.userVideos.length : '...',
-                  isLoading: !isVideosLoaded,
+                  widget.isVideosLoaded
+                      ? stateManager.userVideos.length
+                      : '...',
+                  isLoading: !widget.isVideosLoaded,
                 ),
                 Container(
                   width: 1,
@@ -56,9 +155,11 @@ class ProfileStatsWidget extends StatelessWidget {
                 ),
                 _buildStatColumn(
                   'Followers',
-                  isFollowersLoaded ? _getFollowersCount(context) : '...',
-                  isLoading: !isFollowersLoaded,
-                  onTap: onFollowersTap,
+                  widget.isFollowersLoaded
+                      ? _getFollowersCount(context)
+                      : '...',
+                  isLoading: !widget.isFollowersLoaded,
+                  onTap: widget.onFollowersTap,
                 ),
                 Container(
                   width: 1,
@@ -67,9 +168,10 @@ class ProfileStatsWidget extends StatelessWidget {
                 ),
                 _buildStatColumn(
                   'Earnings',
-                  _getCurrentMonthRevenue(),
+                  _isLoadingEarnings ? '...' : _earnings,
                   isEarnings: true,
-                  onTap: onEarningsTap,
+                  isLoading: _isLoadingEarnings,
+                  onTap: widget.onEarningsTap,
                 ),
               ],
             );
@@ -95,7 +197,7 @@ class ProfileStatsWidget extends StatelessWidget {
                   isLoading
                       ? '...'
                       : (isEarnings
-                          ? '₹${value.toStringAsFixed(2)}'
+                          ? '₹${(value is double ? value : double.tryParse(value.toString()) ?? 0.0).toStringAsFixed(2)}'
                           : value.toString()),
                   style: const TextStyle(
                     color: Color(0xFF1A1A1A),
@@ -124,15 +226,16 @@ class ProfileStatsWidget extends StatelessWidget {
   // Helper method to get followers count using MongoDB ObjectID
   int _getFollowersCount(BuildContext context) {
     ProfileScreenLogger.logDebugInfo('=== GETTING FOLLOWERS COUNT ===');
-    ProfileScreenLogger.logDebugInfo('userId: $userId');
+    ProfileScreenLogger.logDebugInfo('userId: ${widget.userId}');
     ProfileScreenLogger.logDebugInfo(
-        'stateManager.userData: ${stateManager.userData != null}');
+        'stateManager.userData: ${widget.stateManager.userData != null}');
 
     // Build candidate IDs to query provider with
     final List<String> idsToTry = <String?>[
-      userId,
-      stateManager.userData?['googleId'],
-      stateManager.userData?['_id'] ?? stateManager.userData?['id'],
+      widget.userId,
+      widget.stateManager.userData?['googleId'],
+      widget.stateManager.userData?['_id'] ??
+          widget.stateManager.userData?['id'],
     ]
         .where((e) => e != null && (e).isNotEmpty)
         .map((e) => e as String)
@@ -153,12 +256,12 @@ class ProfileStatsWidget extends StatelessWidget {
     }
 
     // Check if we're viewing own profile
-    if (userId == null && stateManager.userData != null) {
+    if (widget.userId == null && widget.stateManager.userData != null) {
       ProfileScreenLogger.logDebugInfo('Viewing own profile');
 
       // Prefer counts available in userData
-      final followersCount = stateManager.userData!['followers'] ??
-          stateManager.userData!['followersCount'] ??
+      final followersCount = widget.stateManager.userData!['followers'] ??
+          widget.stateManager.userData!['followersCount'] ??
           0;
       if (followersCount != 0) {
         ProfileScreenLogger.logDebugInfo(
@@ -168,9 +271,9 @@ class ProfileStatsWidget extends StatelessWidget {
     }
 
     // Fall back to ProfileStateManager data
-    if (stateManager.userData != null &&
-        stateManager.userData!['followersCount'] != null) {
-      final followersCount = stateManager.userData!['followersCount'];
+    if (widget.stateManager.userData != null &&
+        widget.stateManager.userData!['followersCount'] != null) {
+      final followersCount = widget.stateManager.userData!['followersCount'];
       ProfileScreenLogger.logDebugInfo(
           'Using followers count from ProfileStateManager: $followersCount');
       return followersCount;
@@ -180,26 +283,5 @@ class ProfileStatsWidget extends StatelessWidget {
     ProfileScreenLogger.logDebugInfo(
         'No followers count available, using default: 0');
     return 0;
-  }
-
-  // Calculate earnings the same way as Yug tab (sum across creator videos)
-  double _getCurrentMonthRevenue() {
-    try {
-      // Use the same simplified model as in Yug/video feed:
-      // Banner ads show on all videos at ₹10 CPM; creator share = 80%
-      const double bannerCpm = 10.0;
-      const double creatorShare = 0.80;
-
-      double total = 0.0;
-      for (final video in stateManager.userVideos) {
-        final int views = video.views;
-        final double earnings = (views / 1000.0) * bannerCpm;
-        total += earnings;
-      }
-
-      return total * creatorShare;
-    } catch (_) {
-      return 0.0;
-    }
   }
 }

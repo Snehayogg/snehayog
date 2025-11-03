@@ -22,6 +22,7 @@ import 'package:vayu/controller/main_controller.dart';
 import 'package:vayu/model/video_model.dart';
 import 'package:vayu/core/managers/shared_video_controller_pool.dart';
 import 'package:vayu/utils/app_logger.dart';
+import 'package:vayu/controller/google_sign_in_controller.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -430,12 +431,20 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
+  /// **FIXED: Use GoogleSignInController Provider for unified auth state**
   Future<void> _handleGoogleSignIn() async {
     try {
       ProfileScreenLogger.logGoogleSignIn();
-      final userData = await _stateManager.handleGoogleSignIn();
+      final authController =
+          Provider.of<GoogleSignInController>(context, listen: false);
+
+      final userData = await authController.signIn();
       if (userData != null) {
+        // Update ProfileStateManager with new auth data
+        await _stateManager
+            .loadUserData(userData['id'] ?? userData['googleId']);
         _refreshData();
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -449,10 +458,11 @@ class _ProfileScreenState extends State<ProfileScreen>
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Sign-in failed. Please try again.'),
+            SnackBar(
+              content: Text(
+                  authController.error ?? 'Sign-in failed. Please try again.'),
               backgroundColor: Colors.red,
-              duration: Duration(seconds: 3),
+              duration: const Duration(seconds: 3),
             ),
           );
         }
@@ -920,38 +930,62 @@ class _ProfileScreenState extends State<ProfileScreen>
     super.build(context);
     return ChangeNotifierProvider.value(
       value: _stateManager,
-      child: Scaffold(
-        key: _scaffoldKey,
-        backgroundColor: const Color(0xFFF8F9FA),
-        appBar: _buildAppBar(),
-        drawer: ProfileMenuWidget(
-          stateManager: _stateManager,
-          userId: widget.userId,
-          onEditProfile: _handleEditProfile,
-          onSaveProfile: _handleSaveProfile,
-          onCancelEdit: _handleCancelEdit,
-          onReportUser: () => _openReportDialog(
-            targetType: 'user',
-            targetId: widget.userId!,
-          ),
-          onShowFeedback: _showFeedbackDialog,
-          onShowFAQ: _showFAQDialog,
-          onEnterSelectionMode: () => _stateManager.enterSelectionMode(),
-          onShowSettings: _showSettingsBottomSheet,
-          onLogout: _handleLogout,
-          onGoogleSignIn: _handleGoogleSignIn,
-          onCheckPaymentSetupStatus: _checkPaymentSetupStatus,
-        ),
-        body: Consumer<UserProvider>(
-          builder: (context, userProvider, child) {
-            UserModel? userModel;
-            if (widget.userId != null) {
-              userModel = userProvider.getUserData(widget.userId!);
+      child: Consumer<GoogleSignInController>(
+        builder: (context, authController, _) {
+          // **FIXED: Listen to auth state changes and sync with ProfileStateManager**
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (authController.isSignedIn && authController.userData != null) {
+              // User is signed in - ensure ProfileStateManager has the data
+              final userId = authController.userData!['id'] ??
+                  authController.userData!['googleId'];
+              if (userId != null) {
+                final currentUserId = _stateManager.userData?['id'] ??
+                    _stateManager.userData?['googleId'];
+                if (currentUserId != userId) {
+                  _stateManager.loadUserData(userId);
+                }
+              }
+            } else if (!authController.isSignedIn &&
+                _stateManager.userData != null) {
+              // User signed out - clear ProfileStateManager
+              _stateManager.clearData();
             }
-            // Use the local _stateManager directly since it's not in Provider
-            return _buildBody(userProvider, userModel);
-          },
-        ),
+          });
+
+          return Scaffold(
+            key: _scaffoldKey,
+            backgroundColor: const Color(0xFFF8F9FA),
+            appBar: _buildAppBar(),
+            drawer: ProfileMenuWidget(
+              stateManager: _stateManager,
+              userId: widget.userId,
+              onEditProfile: _handleEditProfile,
+              onSaveProfile: _handleSaveProfile,
+              onCancelEdit: _handleCancelEdit,
+              onReportUser: () => _openReportDialog(
+                targetType: 'user',
+                targetId: widget.userId!,
+              ),
+              onShowFeedback: _showFeedbackDialog,
+              onShowFAQ: _showFAQDialog,
+              onEnterSelectionMode: () => _stateManager.enterSelectionMode(),
+              onShowSettings: _showSettingsBottomSheet,
+              onLogout: _handleLogout,
+              onGoogleSignIn: _handleGoogleSignIn,
+              onCheckPaymentSetupStatus: _checkPaymentSetupStatus,
+            ),
+            body: Consumer<UserProvider>(
+              builder: (context, userProvider, child) {
+                UserModel? userModel;
+                if (widget.userId != null) {
+                  userModel = userProvider.getUserData(widget.userId!);
+                }
+                // Use the local _stateManager directly since it's not in Provider
+                return _buildBody(userProvider, userModel);
+              },
+            ),
+          );
+        },
       ),
     );
   }
@@ -1323,7 +1357,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           ProfileStatsWidget(
             stateManager: _stateManager,
             userId: widget.userId,
-            isVideosLoaded: true,
+            isVideosLoaded: _stateManager.userVideos.isNotEmpty,
             isFollowersLoaded: true,
             onFollowersTap: () {
               // **SIMPLIFIED: Simple followers tap**

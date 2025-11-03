@@ -36,7 +36,7 @@ class AppEnvironmentConfig {
 
   /// Development environment configuration
   static const Map<String, dynamic> _developmentConfig = {
-    'apiBaseUrl': 'https://snehayog.site',
+    'apiBaseUrl': 'http://localhost:5001',
     'enableLogging': true,
     'enableDebugMode': true,
     'videoCacheSize': 100 * 1024 * 1024,

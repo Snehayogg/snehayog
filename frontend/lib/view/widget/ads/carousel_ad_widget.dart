@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:vayu/model/carousel_ad_model.dart';
 import 'package:vayu/services/carousel_ad_service.dart';
+import 'package:vayu/services/ad_impression_service.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/video_service.dart';
 import 'package:vayu/view/widget/comments_sheet_widget.dart';
@@ -16,12 +18,15 @@ class CarouselAdWidget extends StatefulWidget {
   final CarouselAdModel carouselAd;
   final VoidCallback? onAdClosed;
   final bool autoPlay;
+  final String?
+      videoId; // **NEW: Track which video context this ad was shown in**
 
   const CarouselAdWidget({
     Key? key,
     required this.carouselAd,
     this.onAdClosed,
     this.autoPlay = true,
+    this.videoId, // **NEW: Optional videoId for view tracking**
   }) : super(key: key);
 
   @override
@@ -36,11 +41,15 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
   int _currentSlideIndex = 0;
   bool _hasTrackedImpression = false;
   bool _hasTrackedClick = false;
+  bool _hasTrackedView = false; // **NEW: Prevent duplicate view tracking**
   bool _isLiked = false;
   bool _initiallyLiked = false;
   String? _currentUserId;
+  DateTime? _viewStartTime; // **NEW: Track when ad became visible**
+  Timer? _viewTrackingTimer; // **NEW: Timer to check view duration**
 
   final CarouselAdService _carouselAdService = CarouselAdService();
+  final AdImpressionService _adImpressionService = AdImpressionService();
   final AuthService _authService = AuthService();
   final VideoService _videoService = VideoService();
 
@@ -56,6 +65,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
     _loadUserData();
     _trackImpression();
     _startProgressAnimation();
+    _startViewTracking(); // **NEW: Start tracking view duration**
   }
 
   Future<void> _loadUserData() async {
@@ -76,9 +86,76 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
 
   @override
   void dispose() {
+    _viewTrackingTimer?.cancel();
     _pageController.dispose();
     _progressController.dispose();
     super.dispose();
+  }
+
+  /// **NEW: Track ad view duration (minimum 2 seconds)**
+  void _startViewTracking() {
+    _viewStartTime = DateTime.now();
+
+    // Track view after minimum duration (2 seconds)
+    _viewTrackingTimer = Timer(const Duration(seconds: 2), () async {
+      if (!_hasTrackedView && mounted) {
+        await _trackAdView();
+      }
+    });
+  }
+
+  /// **NEW: Track carousel ad view (minimum 2 seconds visible)**
+  Future<void> _trackAdView() async {
+    if (_hasTrackedView || _viewStartTime == null) return;
+
+    // Need videoId to track views properly
+    if (widget.videoId == null || widget.videoId!.isEmpty) {
+      AppLogger.log(
+          '⚠️ CarouselAdWidget: No videoId provided, skipping view tracking');
+      return;
+    }
+
+    try {
+      final viewDuration =
+          DateTime.now().difference(_viewStartTime!).inMilliseconds / 1000.0;
+
+      // Minimum view duration: 2 seconds
+      if (viewDuration < 2.0) {
+        AppLogger.log(
+            '⚠️ CarouselAdWidget: View duration too short ($viewDuration s), not tracking');
+        return;
+      }
+
+      final userData = await _authService.getUserData();
+      if (userData == null) {
+        AppLogger.log(
+            '⚠️ CarouselAdWidget: No user data, skipping view tracking');
+        return;
+      }
+
+      final videoId = widget.videoId!;
+      final adId = widget.carouselAd.id;
+      final userId = userData['id'] ?? '';
+
+      if (videoId.isEmpty || adId.isEmpty) {
+        AppLogger.log(
+            '⚠️ CarouselAdWidget: Missing videoId or adId, skipping view tracking');
+        return;
+      }
+
+      await _adImpressionService.trackCarouselAdView(
+        videoId: videoId,
+        adId: adId,
+        userId: userId,
+        viewDuration: viewDuration,
+      );
+
+      _hasTrackedView = true;
+      AppLogger.log(
+          '✅ CarouselAdWidget: Ad view tracked (${viewDuration.toStringAsFixed(2)}s)');
+    } catch (e) {
+      AppLogger.log('❌ CarouselAdWidget: Error tracking ad view: $e');
+    }
   }
 
   void _trackImpression() async {

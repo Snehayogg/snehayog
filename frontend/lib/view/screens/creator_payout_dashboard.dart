@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/services/authservices.dart';
+import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:vayu/utils/app_logger.dart';
@@ -22,12 +24,55 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
   @override
   void initState() {
     super.initState();
-    // Add a small delay to prevent any overlay issues
-    Future.delayed(const Duration(milliseconds: 100), () {
+    // Don't load data in initState - wait for context to be ready
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Load data once when context is ready (allows Provider access)
+    if (_isLoading && _profileData == null && _error == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _loadDashboardData();
+        }
+      });
+    }
+  }
+
+  /// **FIXED: Get user data from GoogleSignInController Provider first, fallback to AuthService**
+  Future<Map<String, dynamic>?> _getUserData() async {
+    try {
+      // **PREFER: Use GoogleSignInController Provider for unified auth state**
       if (mounted) {
-        _loadDashboardData();
+        try {
+          final authController =
+              Provider.of<GoogleSignInController>(context, listen: false);
+          if (authController.isSignedIn && authController.userData != null) {
+            AppLogger.log(
+                '✅ CreatorPayoutDashboard: Using user data from GoogleSignInController');
+            return authController.userData;
+          }
+        } catch (e) {
+          AppLogger.log(
+              '⚠️ CreatorPayoutDashboard: Provider not available yet, using fallback: $e');
+        }
       }
-    });
+
+      // Fallback to AuthService
+      final userData = await _authService.getUserData();
+      if (userData != null) {
+        AppLogger.log(
+            '✅ CreatorPayoutDashboard: Using user data from AuthService');
+        return userData;
+      }
+
+      AppLogger.log('⚠️ CreatorPayoutDashboard: No user data available');
+      return null;
+    } catch (e) {
+      AppLogger.log('❌ CreatorPayoutDashboard: Error getting user data: $e');
+      return null;
+    }
   }
 
   Future<void> _loadDashboardData() async {
@@ -40,7 +85,8 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
       AppLogger.log('🔍 CreatorPayoutDashboard: Starting data load...');
       AppLogger.log('🔍 Base URL: ${AppConfig.baseUrl}');
 
-      final userData = await _authService.getUserData();
+      // **FIXED: Use unified auth method**
+      final userData = await _getUserData();
       AppLogger.log(
           '🔍 CreatorPayoutDashboard: User data loaded: ${userData != null}');
 
@@ -275,7 +321,8 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
     try {
       AppLogger.log('🔍 Testing authentication...');
 
-      final userData = await _authService.getUserData();
+      // **FIXED: Use unified auth method**
+      final userData = await _getUserData();
       AppLogger.log('🔍 User data available: ${userData != null}');
 
       if (userData == null) {
@@ -430,6 +477,7 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
   }
 
   Widget _buildErrorWidget() {
+    final String message = _error ?? 'Something went wrong. Please try again.';
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24.0),
@@ -444,7 +492,7 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
             ),
             const SizedBox(height: 8),
             Text(
-              _error!,
+              message,
               style: TextStyle(fontSize: 14, color: Colors.grey[600]),
               textAlign: TextAlign.center,
             ),

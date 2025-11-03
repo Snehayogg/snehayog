@@ -4,7 +4,15 @@ import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/video_service.dart';
 import 'package:vayu/model/video_model.dart';
 import 'package:vayu/services/ad_impression_service.dart';
+import 'package:vayu/services/earnings_service.dart';
 import 'package:vayu/utils/app_logger.dart';
+
+// Lightweight holder for per-video stats used in the breakdown list
+class _VideoStats {
+  final double earnings;
+  final int adViews;
+  const _VideoStats(this.earnings, this.adViews);
+}
 
 class CreatorRevenueScreen extends StatefulWidget {
   const CreatorRevenueScreen({super.key});
@@ -65,58 +73,35 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     }
   }
 
-  /// Calculate revenue for a specific video based on REAL AD IMPRESSIONS ONLY
+  /// **FIXED: Use centralized EarningsService for revenue (single source of truth)**
   Future<double> _calculateVideoRevenue(VideoModel video) async {
-    try {
-      // Get real ad impressions by type for this video
-      final bannerImpressions =
-          await _adImpressionService.getBannerAdImpressions(video.id);
-      final carouselImpressions =
-          await _adImpressionService.getCarouselAdImpressions(video.id);
-
-      // Calculate revenue using different CPM values
-      // Banner ads: ₹10 per 1000 impressions, Carousel ads: ₹30 per 1000 impressions
-      const bannerCpm = 10.0; // ₹10 per 1000 banner ad impressions
-      const carouselCpm = 30.0; // ₹30 per 1000 carousel ad impressions
-
-      final bannerRevenue = (bannerImpressions / 1000) * bannerCpm;
-      final carouselRevenue = (carouselImpressions / 1000) * carouselCpm;
-      final totalRevenue = bannerRevenue + carouselRevenue;
-
-      AppLogger.log('💰 Video: ${video.videoName}');
-      AppLogger.log(
-          '💰 Banner Impressions: $bannerImpressions (₹${bannerRevenue.toStringAsFixed(2)})');
-      AppLogger.log(
-          '💰 Carousel Impressions: $carouselImpressions (₹${carouselRevenue.toStringAsFixed(2)})');
-      AppLogger.log('💰 Total Revenue: ₹${totalRevenue.toStringAsFixed(2)}');
-
-      return totalRevenue;
-    } catch (e) {
-      AppLogger.log('❌ Error calculating video revenue: $e');
-      return 0.0;
-    }
+    return EarningsService.calculateVideoRevenue(video.id);
   }
 
-  /// Get total ad impressions (banner + carousel ads) - for display purposes
+  Future<_VideoStats> _fetchVideoStats(VideoModel video) async {
+    final earnings = await EarningsService.calculateVideoRevenue(video.id);
+    final views = await _getTotalAdImpressionsForVideo(video.id);
+    return _VideoStats(earnings, views);
+  }
+
+  /// **FIXED: Get total ad VIEWS (not impressions) - for display purposes**
   Future<int> _getTotalAdImpressionsForVideo(String videoId) async {
     try {
-      // Banner ads shown on this video
-      final bannerImpressions =
-          await _adImpressionService.getBannerAdImpressions(videoId);
+      // **FIXED: Use VIEWS for display (consistent with revenue calculation)**
+      final bannerViews = await _adImpressionService.getBannerAdViews(videoId);
 
-      // Carousel ads shown when user scrolls through this video
-      final carouselImpressions =
-          await _adImpressionService.getCarouselAdImpressions(videoId);
+      final carouselViews =
+          await _adImpressionService.getCarouselAdViews(videoId);
 
-      // Total impressions = Banner + Carousel
-      final totalImpressions = bannerImpressions + carouselImpressions;
+      // Total views = Banner + Carousel
+      final totalViews = bannerViews + carouselViews;
 
       AppLogger.log(
-          '📊 Video $videoId: Banner: $bannerImpressions, Carousel: $carouselImpressions, Total: $totalImpressions');
+          '📊 Video $videoId: Banner VIEWS: $bannerViews, Carousel VIEWS: $carouselViews, Total VIEWS: $totalViews');
 
-      return totalImpressions;
+      return totalViews;
     } catch (e) {
-      AppLogger.log('❌ Error getting ad impressions: $e');
+      AppLogger.log('❌ Error getting ad views: $e');
       return 0;
     }
   }
@@ -310,7 +295,9 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   Widget _buildRevenueOverviewCard() {
-    final totalRevenue = _revenueData?['totalRevenue'] ?? 0.0;
+    // Use unified EarningsService-based totals for consistency across app
+    final totalRevenue = _totalRevenue;
+    // Keep monthly values from backend (or 0.0 if not provided)
     final thisMonth = _revenueData?['thisMonth'] ?? 0.0;
     final lastMonth = _revenueData?['lastMonth'] ?? 0.0;
 
@@ -452,9 +439,10 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   Widget _buildRevenueBreakdownCard() {
-    final adRevenue = _revenueData?['adRevenue'] ?? 0.0;
-    final platformFee = _revenueData?['platformFee'] ?? 0.0;
-    final netRevenue = _revenueData?['netRevenue'] ?? 0.0;
+    // Derive breakdown from unified total: 80% creator, 20% platform
+    final adRevenue = _totalRevenue;
+    final platformFee = _totalRevenue * 0.20;
+    final netRevenue = _totalRevenue * 0.80;
 
     return Card(
       child: Padding(
@@ -765,12 +753,13 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
 
             // Show top 5 videos by revenue
             ..._userVideos.take(5).map((video) {
-              final revenue = _videoRevenueMap[video.id] ?? 0.0;
-
-              return FutureBuilder<int>(
-                future: _getTotalAdImpressionsForVideo(video.id),
+              return FutureBuilder<_VideoStats>(
+                future: _fetchVideoStats(video),
                 builder: (context, snapshot) {
-                  final adImpressions = snapshot.data ?? 0;
+                  final stats = snapshot.data;
+                  final revenue =
+                      stats?.earnings ?? (_videoRevenueMap[video.id] ?? 0.0);
+                  final adImpressions = stats?.adViews ?? 0;
 
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),

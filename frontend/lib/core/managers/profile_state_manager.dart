@@ -826,6 +826,18 @@ class ProfileStateManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// **Clear all user data (used when user signs out)**
+  void clearData() {
+    _userData = null;
+    _userVideos = [];
+    _isEditing = false;
+    _isSelecting = false;
+    _selectedVideoIds.clear();
+    _error = null;
+    _isLoading = false;
+    notifyListeners();
+  }
+
   // Authentication methods
   Future<void> handleLogout() async {
     try {
@@ -856,31 +868,6 @@ class ProfileStateManager extends ChangeNotifier {
       AppLogger.log('❌ ProfileStateManager: Error during logout: $e');
       _error = 'Failed to logout: ${e.toString()}';
       notifyListeners();
-    }
-  }
-
-  Future<Map<String, dynamic>?> handleGoogleSignIn() async {
-    try {
-      final userData = await _authService.signInWithGoogle();
-      AppLogger.log(
-          '🔄 ProfileStateManager: Google sign-in returned user data: $userData');
-      AppLogger.log(
-          '🔄 ProfileStateManager: Google sign-in returned googleId: ${userData?['googleId']}');
-      AppLogger.log(
-          '🔄 ProfileStateManager: Google sign-in returned id: ${userData?['id']}');
-
-      if (userData != null) {
-        _userData = userData;
-        _isLoading = false;
-        _error = null;
-        notifyListeners();
-        await loadUserVideos(null); // Load videos for the signed-in user
-      }
-      return userData;
-    } catch (e) {
-      _error = 'Failed to sign in: ${e.toString()}';
-      notifyListeners();
-      return null;
     }
   }
 

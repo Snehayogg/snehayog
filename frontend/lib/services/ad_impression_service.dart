@@ -200,4 +200,158 @@ class AdImpressionService {
       return 0;
     }
   }
+
+  /// **NEW: Track banner ad VIEW (minimum 2-3 seconds visible) - for revenue calculation**
+  Future<void> trackBannerAdView({
+    required String videoId,
+    required String adId,
+    required String userId,
+    required double viewDuration, // Duration in seconds
+  }) async {
+    try {
+      AppLogger.log('👁️ AdImpressionService: Tracking banner ad VIEW:');
+      AppLogger.log('   Video ID: $videoId');
+      AppLogger.log('   Ad ID: $adId');
+      AppLogger.log('   User ID: $userId');
+      AppLogger.log('   View Duration: ${viewDuration}s');
+
+      final url = '${AppConfig.baseUrl}/api/ads/impressions/banner/view';
+      final response = await httpClientService.post(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization':
+              'Bearer ${(await _authService.getUserData())?['token']}',
+        },
+        body: json.encode({
+          'videoId': videoId,
+          'adId': adId,
+          'userId': userId,
+          'viewDuration': viewDuration,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        AppLogger.log(
+            '✅ AdImpressionService: Banner ad VIEW tracked successfully: Video $videoId, Ad $adId, Duration: ${viewDuration}s');
+      } else {
+        AppLogger.log(
+            '❌ AdImpressionService: Failed to track banner ad view: ${response.body}');
+      }
+    } catch (e) {
+      AppLogger.log('❌ AdImpressionService: Error tracking banner ad view: $e');
+    }
+  }
+
+  /// **NEW: Track carousel ad VIEW (minimum 2-3 seconds visible) - for revenue calculation**
+  Future<void> trackCarouselAdView({
+    required String videoId,
+    required String adId,
+    required String userId,
+    required double viewDuration, // Duration in seconds
+  }) async {
+    try {
+      AppLogger.log('👁️ AdImpressionService: Tracking carousel ad VIEW:');
+      AppLogger.log('   Video ID: $videoId');
+      AppLogger.log('   Ad ID: $adId');
+      AppLogger.log('   User ID: $userId');
+      AppLogger.log('   View Duration: ${viewDuration}s');
+
+      final url = '${AppConfig.baseUrl}/api/ads/impressions/carousel/view';
+      final response = await httpClientService.post(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization':
+              'Bearer ${(await _authService.getUserData())?['token']}',
+        },
+        body: json.encode({
+          'videoId': videoId,
+          'adId': adId,
+          'userId': userId,
+          'viewDuration': viewDuration,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        AppLogger.log(
+            '✅ AdImpressionService: Carousel ad VIEW tracked successfully: Video $videoId, Ad $adId, Duration: ${viewDuration}s');
+      } else {
+        AppLogger.log(
+            '❌ AdImpressionService: Failed to track carousel ad view: ${response.body}');
+      }
+    } catch (e) {
+      AppLogger.log(
+          '❌ AdImpressionService: Error tracking carousel ad view: $e');
+    }
+  }
+
+  /// **NEW: Get banner ad VIEWS (not impressions) for revenue calculation**
+  Future<int> getBannerAdViews(String videoId) async {
+    try {
+      AppLogger.log(
+          '👁️ AdImpressionService: Getting banner ad VIEWS for video: $videoId');
+
+      final userData = await _authService.getUserData();
+      if (userData == null) {
+        AppLogger.log('❌ AdImpressionService: No authenticated user found');
+        return 0;
+      }
+
+      final url = '${AppConfig.baseUrl}/api/ads/views/video/$videoId/banner';
+      AppLogger.log('👁️ AdImpressionService: API URL: $url');
+
+      final response = await httpClientService.get(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer ${userData['token']}',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final count = data['count'] ?? 0;
+        AppLogger.log('👁️ AdImpressionService: Banner VIEWS count: $count');
+        return count;
+      } else {
+        AppLogger.log(
+            '❌ AdImpressionService: Failed to get banner views - Status: ${response.statusCode}');
+        return 0;
+      }
+    } catch (e) {
+      AppLogger.log('❌ AdImpressionService: Error getting banner ad views: $e');
+      return 0;
+    }
+  }
+
+  /// **NEW: Get carousel ad VIEWS (not impressions) for revenue calculation**
+  Future<int> getCarouselAdViews(String videoId) async {
+    try {
+      AppLogger.log(
+          '👁️ AdImpressionService: Getting carousel ad VIEWS for video: $videoId');
+
+      final userData = await _authService.getUserData();
+      if (userData == null) return 0;
+
+      final url = '${AppConfig.baseUrl}/api/ads/views/video/$videoId/carousel';
+      final response = await httpClientService.get(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer ${userData['token']}',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final count = data['count'] ?? 0;
+        AppLogger.log('👁️ AdImpressionService: Carousel VIEWS count: $count');
+        return count;
+      }
+
+      return 0;
+    } catch (e) {
+      AppLogger.log('❌ Error getting carousel ad views: $e');
+      return 0;
+    }
+  }
 }

@@ -7,6 +7,7 @@ import './Comment.js';
 import './Invoice.js';
 import './AdCampaign.js';
 import './AdCreative.js';
+import './AdImpression.js';
 import './CreatorPayout.js';
 import './Feedback.js';
 
