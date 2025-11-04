@@ -206,10 +206,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   final int _maxPoolSize = 7; // Increased to reduce re-inits while scrolling
   final Map<int, bool> _userPaused = {};
   final Map<int, bool> _isBuffering = {};
+  // Buffering state as ValueNotifiers to avoid rebuilding the whole Stack
+  final Map<int, ValueNotifier<bool>> _isBufferingVN = {};
 
   // **LRU TRACKING FOR LOCAL POOL**
-  final Map<int, DateTime> _lastAccessedLocal =
-      {}; // Track when each video was last accessed
+  final Map<int, DateTime> _lastAccessedLocal =  {}; // Track when each video was last accessed
   final Map<int, VoidCallback> _bufferingListeners = {};
 
   // **NEW: Track if video was playing before navigation (for resume on return)**
@@ -2331,7 +2332,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                   if (_carouselAds.isNotEmpty)
                     _buildCarouselAdPage(index)
                   else
-                    Container(), // Empty container if no ads
+                    const SizedBox.shrink(), // Empty container if no ads
                 ],
               );
             },
@@ -2412,14 +2413,18 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           // Buffering indicator during playback (mid-stream stalls)
           Positioned.fill(
             child: IgnorePointer(
-              child: Opacity(
-                opacity:
-                    (_isBuffering[index] == true && _userPaused[index] != true)
-                        ? 1.0
-                        : 0.0,
-                child: const Center(
-                  child: CircularProgressIndicator(color: Colors.white),
-                ),
+              child: ValueListenableBuilder<bool>(
+                valueListenable: _isBufferingVN[index] ??=
+                    ValueNotifier<bool>(false),
+                builder: (context, isBuffering, _) {
+                  final show = isBuffering && _userPaused[index] != true;
+                  return Opacity(
+                    opacity: show ? 1.0 : 0.0,
+                    child: const Center(
+                      child: CircularProgressIndicator(color: Colors.white),
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -3001,9 +3006,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           controller.value.isInitialized && controller.value.isBuffering;
       final bool current = _isBuffering[index] ?? false;
       if (current != next) {
-        setState(() {
-          _isBuffering[index] = next;
-        });
+        // Update map (for any legacy reads)
+        _isBuffering[index] = next;
+        // Update ValueNotifier to avoid rebuilding the whole Stack
+        (_isBufferingVN[index] ??= ValueNotifier<bool>(false)).value = next;
       }
     }
 
