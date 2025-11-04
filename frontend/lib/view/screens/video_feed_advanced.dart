@@ -73,6 +73,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   final VideoControllerManager _videoControllerManager =
       VideoControllerManager();
 
+  // **CACHED PROVIDERS & MEDIA QUERY** (Performance optimization)
+  MainController? _mainController;
+  double? _screenWidth;
+  double? _screenHeight;
+
   // Decoder-budgeted priming: only allow a small number of actively playing
   // controllers during preload to avoid exhausting hardware decoders.
   static const int _decoderPrimeBudget = 2; // current + next
@@ -80,9 +85,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   bool _canPrimeIndex(int index) {
     // Only prime when Yug tab is visible
-    final mainController = Provider.of<MainController>(context, listen: false);
     final bool isYugVisible =
-        mainController.currentIndex == 0 && _isScreenVisible;
+        _mainController?.currentIndex == 0 && _isScreenVisible;
     if (!isYugVisible) return false;
 
     // Never prime the current (visible) index to avoid muting audible playback
@@ -117,6 +121,28 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     _primedStartIndex = start;
   }
 
+  /// **PAUSE ALL OTHER VIDEOS: Ensure only current video plays**
+  void _pauseAllOtherVideos(int currentIndex) {
+    // Pause all videos in local controller pool
+    _controllerPool.forEach((idx, controller) {
+      if (idx != currentIndex &&
+          controller.value.isInitialized &&
+          controller.value.isPlaying) {
+        try {
+          controller.pause();
+          _controllerStates[idx] = false;
+        } catch (_) {}
+      }
+    });
+
+    // **CRITICAL FIX: Also pause videos from VideoControllerManager**
+    _videoControllerManager.pauseAllVideosOnTabChange();
+
+    // **CRITICAL FIX: Also pause videos from SharedVideoControllerPool**
+    final sharedPool = SharedVideoControllerPool();
+    sharedPool.pauseAllControllers();
+  }
+
   /// Force play the current video regardless of tab/visibility checks.
   /// Used when navigating from Profile so the tapped video always starts.
   void forcePlayCurrent() {
@@ -128,6 +154,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     final controller = _controllerPool[_currentIndex];
     if (controller != null && controller.value.isInitialized) {
+      _pauseAllOtherVideos(_currentIndex);
       controller.play();
       _controllerStates[_currentIndex] = true;
       _userPaused[_currentIndex] = false;
@@ -138,6 +165,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       if (!mounted) return;
       final c = _controllerPool[_currentIndex];
       if (c != null && c.value.isInitialized) {
+        _pauseAllOtherVideos(_currentIndex);
         c.play();
         _controllerStates[_currentIndex] = true;
         _userPaused[_currentIndex] = false;
@@ -202,10 +230,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   Timer? _preloadDebounceTimer;
 
   // Track whether the first frame has rendered for each index (prevents grey texture)
-  final Map<int, bool> _firstFrameReady = {};
+  final Map<int, ValueNotifier<bool>> _firstFrameReady = {};
 
   // Fallback to force mount player if first frame is slow (top items)
-  final Map<int, bool> _forceMountPlayer = {};
+  final Map<int, ValueNotifier<bool>> _forceMountPlayer = {};
 
   // Retention across refresh: keep visible controllers
   final Map<String, VideoPlayerController> _retainedByVideoId = {};
@@ -228,7 +256,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   bool _isScreenVisible = true;
 
   // **DOUBLE TAP LIKE ANIMATION**
-  final Map<int, bool> _showHeartAnimation = {};
+  final Map<int, ValueNotifier<bool>> _showHeartAnimation = {};
 
   // **EARNINGS CACHE**
   final Map<String, double> _earningsCache = {};
@@ -266,7 +294,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         _controllerPool[newIndex] = controller;
         _controllerStates[newIndex] = false;
         _preloadedVideos.add(newIndex);
-        _firstFrameReady[newIndex] = true; // already had a frame
+        _firstFrameReady[newIndex] =
+            ValueNotifier<bool>(true); // already had a frame
         AppLogger.log(
             '✅ Restored controller for video $videoId at index $newIndex');
       } else {
@@ -378,11 +407,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               _tryAutoplayCurrent();
               return;
             }
-            final mainController =
-                Provider.of<MainController>(context, listen: false);
-            if (mainController.currentIndex == 0 &&
-                !mainController.isMediaPickerActive &&
-                !mainController.recentlyReturnedFromPicker) {
+            if (_mainController?.currentIndex == 0 &&
+                !_mainController!.isMediaPickerActive &&
+                !_mainController!.recentlyReturnedFromPicker) {
               _tryAutoplayCurrent();
             }
           });
@@ -400,6 +427,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+
+    // **PERFORMANCE: Cache MainController to avoid repeated Provider.of() calls**
+    _mainController = Provider.of<MainController>(context, listen: false);
+
+    // **PERFORMANCE: Cache MediaQuery data to avoid repeated lookups**
+    final mediaQuery = MediaQuery.of(context);
+    _screenWidth = mediaQuery.size.width;
+    _screenHeight = mediaQuery.size.height;
 
     // **FIXED: Listen to auth state changes from GoogleSignInController**
     final authController =
@@ -432,12 +467,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final mainController =
-          Provider.of<MainController>(context, listen: false);
       // Only attempt autoplay if we're on the Yug tab and not returning from picker
-      if (mainController.currentIndex == 0 &&
-          !mainController.isMediaPickerActive &&
-          !mainController.recentlyReturnedFromPicker) {
+      if (_mainController?.currentIndex == 0 &&
+          !_mainController!.isMediaPickerActive &&
+          !_mainController!.recentlyReturnedFromPicker) {
         _tryAutoplayCurrent();
       }
     });
@@ -451,9 +484,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         widget.initialVideos != null && widget.initialVideos!.isNotEmpty;
     if (!openedFromProfile) {
       // Only autoplay on Yug tab when not opened from Profile
-      final mainController =
-          Provider.of<MainController>(context, listen: false);
-      if (mainController.currentIndex != 0) return;
+      if (_mainController?.currentIndex != 0) return;
     }
 
     // Check if current video is preloaded
@@ -464,9 +495,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           !controller.value.isPlaying) {
         // If opened from Profile, bypass tab/screen visibility guard
         if (!openedFromProfile) {
-          final mainController =
-              Provider.of<MainController>(context, listen: false);
-          if (mainController.currentIndex != 0 || !_isScreenVisible) {
+          if (_mainController?.currentIndex != 0 || !_isScreenVisible) {
             AppLogger.log(
                 '⏸️ Autoplay suppressed: not on Yug tab or screen not visible');
             return;
@@ -476,6 +505,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         try {
           controller.setVolume(1.0);
         } catch (_) {}
+        _pauseAllOtherVideos(_currentIndex);
         controller.play();
         _controllerStates[_currentIndex] = true;
         _userPaused[_currentIndex] = false;
@@ -489,9 +519,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         if (mounted && _controllerPool.containsKey(_currentIndex)) {
           // If opened from Profile, bypass tab/screen visibility guard
           if (!openedFromProfile) {
-            final mainController =
-                Provider.of<MainController>(context, listen: false);
-            if (mainController.currentIndex != 0 || !_isScreenVisible) {
+            if (_mainController?.currentIndex != 0 || !_isScreenVisible) {
               AppLogger.log(
                   '⏸️ Autoplay suppressed after preload: not on Yug tab or screen not visible');
               return;
@@ -503,6 +531,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             try {
               controller.setVolume(1.0);
             } catch (_) {}
+            _pauseAllOtherVideos(_currentIndex);
             controller.play();
             _controllerStates[_currentIndex] = true;
             _userPaused[_currentIndex] = false;
@@ -530,10 +559,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           final controller = _controllerPool[_currentIndex];
           if (controller != null && controller.value.isInitialized) {
             // **FIX: Mark first frame as ready to ensure video player displays**
-            _firstFrameReady[_currentIndex] = true;
-            if (mounted) {
-              setState(() {});
-            }
+            _firstFrameReady[_currentIndex]?.value = true;
           }
         }
 
@@ -1022,10 +1048,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         // **CRITICAL FIX: Only autoplay if still on video feed**
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
-            final mainController =
-                Provider.of<MainController>(context, listen: false);
             // Only autoplay if we're actually on the video tab (index 0)
-            if (mainController.currentIndex == 0) {
+            if (_mainController?.currentIndex == 0) {
               _tryAutoplayCurrent();
             }
           }
@@ -1154,7 +1178,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     _bufferingListeners.clear();
     _videoEndListeners.clear();
     _wasPlayingBeforeNavigation.clear();
+    // Dispose ValueNotifiers before clearing
+    for (final notifier in _firstFrameReady.values) {
+      notifier.dispose();
+    }
     _firstFrameReady.clear();
+    for (final notifier in _forceMountPlayer.values) {
+      notifier.dispose();
+    }
     _forceMountPlayer.clear();
 
     // Prefer to retain visible controllers in shared pool to keep them warm
@@ -1499,14 +1530,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         _attachBufferingListenerIfNeeded(controller, index);
 
         // First-frame priming: play muted off-screen to obtain first frame, then pause
-        _firstFrameReady[index] = false;
+        _firstFrameReady[index] = ValueNotifier<bool>(false);
         // Fallback force-mount for top items if first frame is slow
         if (index <= 1) {
-          _forceMountPlayer[index] = false;
+          _forceMountPlayer[index] = ValueNotifier<bool>(false);
           Future.delayed(const Duration(milliseconds: 700), () {
-            if (mounted && _firstFrameReady[index] != true) {
-              _forceMountPlayer[index] = true;
-              setState(() {});
+            if (mounted && _firstFrameReady[index]?.value != true) {
+              _forceMountPlayer[index]?.value = true;
             }
           });
         }
@@ -1523,24 +1553,22 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
         // Listen until first frame appears, then pause and mark ready
         void markReadyIfNeeded() async {
-          if (_firstFrameReady[index] == true) return;
+          if (_firstFrameReady[index]?.value == true) return;
           final v = controller!.value;
           if (v.isInitialized && v.position > Duration.zero && !v.isBuffering) {
-            _firstFrameReady[index] = true;
+            _firstFrameReady[index]?.value = true;
             try {
               await controller.pause();
               await controller.setVolume(1.0);
             } catch (_) {}
-            if (mounted) setState(() {});
 
             // If this is the active cell and visible, start playback now
             if (index == _currentIndex) {
-              final mainController =
-                  Provider.of<MainController>(context, listen: false);
-              if (mainController.currentIndex == 0 && _isScreenVisible) {
+              if (_mainController?.currentIndex == 0 && _isScreenVisible) {
                 try {
                   await controller
                       .setVolume(1.0); // ensure audible on first start
+                  _pauseAllOtherVideos(index);
                   await controller.play();
                   _controllerStates[_currentIndex] = true;
                   _userPaused[_currentIndex] = false;
@@ -1567,15 +1595,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               controller.value.isInitialized &&
               !controller.value.isPlaying) {
             if (openedFromProfile) {
+              _pauseAllOtherVideos(index);
               controller.play();
               _controllerStates[index] = true;
               _userPaused[index] = false;
               AppLogger.log(
                   '✅ Started playback for reused controller (from Profile)');
             } else {
-              final mainController =
-                  Provider.of<MainController>(context, listen: false);
-              if (mainController.currentIndex == 0 && _isScreenVisible) {
+              if (_mainController?.currentIndex == 0 && _isScreenVisible) {
+                _pauseAllOtherVideos(index);
                 controller.play();
                 _controllerStates[index] = true;
                 _userPaused[index] = false;
@@ -1590,6 +1618,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               controller.value.isInitialized &&
               !controller.value.isPlaying) {
             if (openedFromProfile) {
+              _pauseAllOtherVideos(index);
               controller.play();
               _controllerStates[index] = true;
               _userPaused[index] = false;
@@ -1597,9 +1626,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               AppLogger.log(
                   '▶️ Resumed video ${video.id} that was playing before navigation (from Profile)');
             } else {
-              final mainController =
-                  Provider.of<MainController>(context, listen: false);
-              if (mainController.currentIndex == 0 && _isScreenVisible) {
+              if (_mainController?.currentIndex == 0 && _isScreenVisible) {
+                _pauseAllOtherVideos(index);
                 controller.play();
                 _controllerStates[index] = true;
                 _userPaused[index] = false;
@@ -1620,10 +1648,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         AppLogger.log('   Total Controllers: ${_controllerPool.length}');
         AppLogger.log('   Preloaded Videos: ${_preloadedVideos.length}');
 
-        // Trigger UI update so isInitialized switch reflects immediately
-        if (mounted) {
-          setState(() {});
-        }
         // Clean up old controllers to prevent memory leaks
         _cleanupOldControllers();
       } else {
@@ -1880,7 +1904,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       _lastAccessedLocal[index] = DateTime.now();
 
       // **FIX: Mark first frame as ready since controller is already initialized**
-      _firstFrameReady[index] = true;
+      _firstFrameReady[index] = ValueNotifier<bool>(true);
 
       return controller;
     }
@@ -1891,7 +1915,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       if (controller != null && controller.value.isInitialized) {
         _lastAccessedLocal[index] = DateTime.now();
         // **FIX: Mark first frame as ready since controller is already initialized**
-        _firstFrameReady[index] = true;
+        _firstFrameReady[index] = ValueNotifier<bool>(true);
         return controller;
       }
     }
@@ -1925,11 +1949,23 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           '⏸️ Stopped view tracking for previous video: ${previousVideo.id}');
     }
 
-    // Pause previous video
-    if (_controllerPool.containsKey(_currentIndex)) {
-      _controllerPool[_currentIndex]?.pause();
-      _controllerStates[_currentIndex] = false;
-    }
+    // **CRITICAL: Pause ALL videos (including current) before switching to new one**
+    // Pause videos from local controller pool
+    _controllerPool.forEach((idx, controller) {
+      if (controller.value.isInitialized && controller.value.isPlaying) {
+        try {
+          controller.pause();
+          _controllerStates[idx] = false;
+        } catch (_) {}
+      }
+    });
+
+    // **CRITICAL FIX: Also pause videos from VideoControllerManager**
+    _videoControllerManager.pauseAllVideosOnTabChange();
+
+    // **CRITICAL FIX: Also pause videos from SharedVideoControllerPool**
+    final sharedPool = SharedVideoControllerPool();
+    sharedPool.pauseAllControllers();
 
     _currentIndex = index;
     _reprimeWindowIfNeeded();
@@ -1944,7 +1980,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // No force-unmute; priming excludes current index.
 
     // **UNIFIED STRATEGY: Use shared pool as primary source (Instant playback)**
-    final sharedPool = SharedVideoControllerPool();
     VideoPlayerController? controllerToUse;
 
     if (index < _videos.length) {
@@ -1964,7 +1999,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         _lastAccessedLocal[index] = DateTime.now();
 
         // **FIX: Mark first frame as ready since controller is already initialized**
-        _firstFrameReady[index] = true;
+        _firstFrameReady[index] = ValueNotifier<bool>(true);
 
         // **MEMORY MANAGEMENT: Cleanup distant controllers**
         sharedPool.cleanupDistantControllers(index, keepRange: 3);
@@ -1977,7 +2012,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           _preloadedVideos.add(index);
           _lastAccessedLocal[index] = DateTime.now();
           // **FIX: Mark first frame as ready since controller is already initialized**
-          _firstFrameReady[index] = true;
+          _firstFrameReady[index] = ValueNotifier<bool>(true);
         }
       }
     }
@@ -2002,19 +2037,21 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           controllerToUse.value.isInitialized) {
         _lastAccessedLocal[index] = DateTime.now();
         // **FIX: Mark first frame as ready since controller is already initialized**
-        _firstFrameReady[index] = true;
+        _firstFrameReady[index] = ValueNotifier<bool>(true);
       }
     }
 
     // **FIXED: Play current video if we have a valid controller**
     if (controllerToUse != null && controllerToUse.value.isInitialized) {
       // Controller is ready; only play if Yug tab is visible
-      final mainController =
-          Provider.of<MainController>(context, listen: false);
-      if (mainController.currentIndex != 0 || !_isScreenVisible) {
+      if (_mainController?.currentIndex != 0 || !_isScreenVisible) {
         AppLogger.log('⏸️ Autoplay blocked (not visible)');
         return;
       }
+
+      // **CRITICAL: Pause ALL other videos before playing current video**
+      _pauseAllOtherVideos(index);
+
       controllerToUse.setVolume(1.0);
       controllerToUse.play();
       _controllerStates[index] = true;
@@ -2042,20 +2079,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       AppLogger.log(
           '🔄 Video not preloaded, preloading and will autoplay when ready');
       // Mark as loading immediately so UI shows thumbnail/loading instead of grey
-      if (mounted) {
-        setState(() {
-          // This triggers UI rebuild to show loading state
-        });
-      }
+      // No need for setState - the _loadingVideos set is already updated
       _preloadVideo(index).then((_) {
         // After preloading, check if this is still the current video
         if (mounted &&
             _currentIndex == index &&
             _controllerPool.containsKey(index)) {
           // Guard again: only autoplay if visible
-          final mainController =
-              Provider.of<MainController>(context, listen: false);
-          if (mainController.currentIndex != 0 || !_isScreenVisible) {
+          if (_mainController?.currentIndex != 0 || !_isScreenVisible) {
             AppLogger.log('⏸️ Autoplay blocked after preload (not visible)');
             return;
           }
@@ -2064,6 +2095,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               loadedController.value.isInitialized) {
             // **LRU: Track access time**
             _lastAccessedLocal[index] = DateTime.now();
+
+            // **CRITICAL: Pause ALL other videos before playing current video**
+            _pauseAllOtherVideos(index);
 
             loadedController.setVolume(1.0);
             loadedController.play();
@@ -2327,12 +2361,19 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           Positioned.fill(child: _buildVideoThumbnail(video)),
 
           // Mount VideoPlayer after first frame ready, or force-mount for top items fallback
-          if (controller != null &&
-              controller.value.isInitialized &&
-              (_firstFrameReady[index] == true ||
-                  (_forceMountPlayer[index] == true)))
-            Positioned.fill(
-              child: _buildVideoPlayer(controller, isActive, index),
+          if (controller != null && controller.value.isInitialized)
+            ValueListenableBuilder<bool>(
+              valueListenable:
+                  _firstFrameReady[index] ?? ValueNotifier<bool>(false),
+              builder: (context, firstFrameReady, _) {
+                if (firstFrameReady ||
+                    _forceMountPlayer[index]?.value == true) {
+                  return Positioned.fill(
+                    child: _buildVideoPlayer(controller, isActive, index),
+                  );
+                }
+                return const SizedBox.shrink();
+              },
             ),
           Positioned.fill(
             child: GestureDetector(
@@ -2383,8 +2424,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             ),
           ),
 
-          // Bottom progress bar (fixed at very bottom)
-          if (controller != null && controller.value.isInitialized)
+          // Bottom progress bar (fixed at very bottom) - only for active videos
+          if (controller != null && controller.value.isInitialized && isActive)
             Positioned(
               left: 0,
               right: 0,
@@ -2401,7 +2442,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           _buildReportIndicator(index),
 
           // Heart animation for double tap like
-          if (_showHeartAnimation[index] == true) _buildHeartAnimation(index),
+          if (_showHeartAnimation[index]?.value == true)
+            _buildHeartAnimation(index),
 
           // Place banner ad at the very top of the Stack so it is not obscured
           // by any subsequent overlays or Positioned.fill widgets.
@@ -2413,27 +2455,37 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   /// **BUILD HEART ANIMATION: Animated heart for double tap like**
   Widget _buildHeartAnimation(int index) {
-    return Positioned.fill(
-      child: IgnorePointer(
-        child: Center(
-          child: AnimatedOpacity(
-            opacity: _showHeartAnimation[index] == true ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 200),
-            child: AnimatedScale(
-              scale: _showHeartAnimation[index] == true ? 1.2 : 0.8,
-              duration: const Duration(milliseconds: 200),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.3),
-                  shape: BoxShape.circle,
+    if (_showHeartAnimation[index] == null) {
+      return const SizedBox.shrink();
+    }
+    return ValueListenableBuilder<bool>(
+      valueListenable: _showHeartAnimation[index]!,
+      builder: (context, showAnimation, _) {
+        if (!showAnimation) return const SizedBox.shrink();
+        return Positioned.fill(
+          child: IgnorePointer(
+            child: Center(
+              child: AnimatedOpacity(
+                opacity: showAnimation ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 200),
+                child: AnimatedScale(
+                  scale: showAnimation ? 1.2 : 0.8,
+                  duration: const Duration(milliseconds: 200),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.3),
+                      shape: BoxShape.circle,
+                    ),
+                    child:
+                        const Icon(Icons.favorite, color: Colors.red, size: 48),
+                  ),
                 ),
-                child: const Icon(Icons.favorite, color: Colors.red, size: 48),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -2443,7 +2495,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         (index >= 0 && index < _videos.length) ? _videos[index].id : '';
     return Positioned(
       right: 16,
-      top: MediaQuery.of(context).size.height * 0.5 - 20,
+      top: (_screenHeight ?? 800) * 0.5 - 20,
       child: AnimatedOpacity(
         opacity: 0.7,
         duration: const Duration(milliseconds: 300),
@@ -2582,65 +2634,18 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   }
 
   Widget _buildVideoProgressBar(VideoPlayerController controller) {
-    // **OPTIMIZED: Get screen width once outside AnimatedBuilder to avoid repeated MediaQuery calls**
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final screenWidth = constraints.maxWidth;
-
-        return AnimatedBuilder(
-          animation: controller,
-          builder: (context, child) {
-            final duration = controller.value.duration;
-            final position = controller.value.position;
-            final totalMs = duration.inMilliseconds;
-            final posMs = position.inMilliseconds;
-            final progress =
-                totalMs > 0 ? (posMs / totalMs).clamp(0.0, 1.0) : 0.0;
-
-            return GestureDetector(
-              onTapDown: (details) => _seekToPosition(controller, details),
-              onPanUpdate: (details) => _seekToPosition(controller, details),
-              child: Container(
-                height: 4,
-                color: Colors.black.withOpacity(0.2),
-                child: Stack(
-                  children: [
-                    Container(
-                      height: 2,
-                      margin: const EdgeInsets.only(top: 1),
-                      color: Colors.grey.withOpacity(0.2),
-                    ),
-                    // Progress bar filled portion
-                    Positioned(
-                      top: 1,
-                      left: 0,
-                      child: Container(
-                        height: 2,
-                        width: screenWidth * progress,
-                        color: Colors.green[400],
-                      ),
-                    ),
-                    // Seek handle (thumb)
-                    if (progress > 0)
-                      Positioned(
-                        top: 0,
-                        left: (screenWidth * progress) - 4,
-                        child: Container(
-                          width: 8,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: Colors.green[400],
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
+    // **OPTIMIZED: Throttled progress bar that updates at 30fps instead of every frame**
+    return RepaintBoundary(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final screenWidth = constraints.maxWidth;
+          return _ThrottledProgressBar(
+            controller: controller,
+            screenWidth: screenWidth,
+            onSeek: (details) => _seekToPosition(controller, details),
+          );
+        },
+      ),
     );
   }
 
@@ -2662,7 +2667,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     final RenderBox renderBox = context.findRenderObject() as RenderBox;
     final localPosition = renderBox.globalToLocal(details.globalPosition);
-    final screenWidth = MediaQuery.of(context).size.width;
+    final screenWidth = _screenWidth ?? MediaQuery.of(context).size.width;
     final seekPosition = (localPosition.dx / screenWidth).clamp(0.0, 1.0);
 
     final duration = controller.value.duration;
@@ -2711,6 +2716,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     } else {
       // **FIX: Video is paused, so play it**
       try {
+        _pauseAllOtherVideos(index);
         controller.play();
         setState(() {
           _controllerStates[index] = true;
@@ -2774,11 +2780,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     bool isActive,
     int index,
   ) {
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: Colors.black,
-      child: Center(child: _buildVideoWithCorrectAspectRatio(controller)),
+    return RepaintBoundary(
+      child: Container(
+        width: double.infinity,
+        height: double.infinity,
+        color: Colors.black,
+        child: Center(child: _buildVideoWithCorrectAspectRatio(controller)),
+      ),
     );
   }
 
@@ -3012,22 +3020,25 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   }
 
   Widget _buildVideoThumbnail(VideoModel video) {
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: Colors.black,
-      child: video.thumbnailUrl.isNotEmpty
-          ? Center(
-              child: CachedNetworkImage(
-                imageUrl: video.thumbnailUrl,
-                fit: BoxFit.contain,
-                placeholder: (context, url) => _buildFallbackThumbnail(),
-                errorWidget: (context, url, error) => _buildFallbackThumbnail(),
-                memCacheWidth: 854, // 480p width for memory efficiency
-                memCacheHeight: 480, // 480p height
-              ),
-            )
-          : _buildFallbackThumbnail(),
+    return RepaintBoundary(
+      child: Container(
+        width: double.infinity,
+        height: double.infinity,
+        color: Colors.black,
+        child: video.thumbnailUrl.isNotEmpty
+            ? Center(
+                child: CachedNetworkImage(
+                  imageUrl: video.thumbnailUrl,
+                  fit: BoxFit.contain,
+                  placeholder: (context, url) => _buildFallbackThumbnail(),
+                  errorWidget: (context, url, error) =>
+                      _buildFallbackThumbnail(),
+                  memCacheWidth: 854, // 480p width for memory efficiency
+                  memCacheHeight: 480, // 480p height
+                ),
+              )
+            : _buildFallbackThumbnail(),
+      ),
     );
   }
 
@@ -3333,249 +3344,253 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   }
 
   Widget _buildVideoOverlay(VideoModel video, int index) {
-    return Stack(
-      children: [
-        // **NEW: Earnings label just below banner, top-right corner**
-        Positioned(
-          top:
-              52, // **REDUCED from 62 to account for smaller banner (50px + 2px margin)**
-          right: 8,
-          child: _buildEarningsLabel(video),
-        ),
+    return RepaintBoundary(
+      child: Stack(
+        children: [
+          // **NEW: Earnings label just below banner, top-right corner**
+          Positioned(
+            top:
+                52, // **REDUCED from 62 to account for smaller banner (50px + 2px margin)**
+            right: 8,
+            child: _buildEarningsLabel(video),
+          ),
 
-        Positioned(
-          bottom:
-              8, // **REDUCED from 12 - moves content closer to progress bar**
-          left: 0,
-          right: 75, // **REDUCED from 80 - gives more width to video info**
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(
-                12, 8, 12, 0), // **REDUCED padding for more space**
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _navigateToCreatorProfile(video.uploader.id),
-                  child: Row(
-                    children: [
-                      GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () =>
-                            _navigateToCreatorProfile(video.uploader.id),
-                        child: Container(
-                          width: 24,
-                          height: 24,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.grey,
-                          ),
-                          child: video.uploader.profilePic.isNotEmpty
-                              ? ClipOval(
-                                  child: CachedNetworkImage(
-                                    imageUrl: video.uploader.profilePic,
-                                    fit: BoxFit.cover,
-                                    placeholder: (context, url) => Container(
-                                      color: Colors.grey[300],
-                                      child: Center(
-                                        child: Text(
-                                          video.uploader.name.isNotEmpty
-                                              ? video.uploader.name[0]
-                                                  .toUpperCase()
-                                              : 'U',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 10,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    errorWidget: (context, url, error) =>
-                                        Container(
-                                      color: Colors.grey[300],
-                                      child: Center(
-                                        child: Text(
-                                          video.uploader.name.isNotEmpty
-                                              ? video.uploader.name[0]
-                                                  .toUpperCase()
-                                              : 'U',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 10,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                )
-                              : Center(
-                                  child: Text(
-                                    video.uploader.name.isNotEmpty
-                                        ? video.uploader.name[0].toUpperCase()
-                                        : 'U',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 10,
-                                    ),
-                                  ),
-                                ),
-                        ),
-                      ),
-                      const SizedBox(width: 6), // **REDUCED from 8**
-                      Expanded(
-                        child: GestureDetector(
+          Positioned(
+            bottom:
+                8, // **REDUCED from 12 - moves content closer to progress bar**
+            left: 0,
+            right: 75, // **REDUCED from 80 - gives more width to video info**
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(
+                  12, 8, 12, 0), // **REDUCED padding for more space**
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _navigateToCreatorProfile(video.uploader.id),
+                    child: Row(
+                      children: [
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
                           onTap: () =>
                               _navigateToCreatorProfile(video.uploader.id),
-                          child: Text(
-                            video.uploader.name,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12, // **REDUCED from 14**
-                              fontWeight: FontWeight.w600,
+                          child: Container(
+                            width: 24,
+                            height: 24,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.grey,
                             ),
-                            overflow: TextOverflow.ellipsis,
+                            child: video.uploader.profilePic.isNotEmpty
+                                ? ClipOval(
+                                    child: CachedNetworkImage(
+                                      imageUrl: video.uploader.profilePic,
+                                      fit: BoxFit.cover,
+                                      placeholder: (context, url) => Container(
+                                        color: Colors.grey[300],
+                                        child: Center(
+                                          child: Text(
+                                            video.uploader.name.isNotEmpty
+                                                ? video.uploader.name[0]
+                                                    .toUpperCase()
+                                                : 'U',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 10,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      errorWidget: (context, url, error) =>
+                                          Container(
+                                        color: Colors.grey[300],
+                                        child: Center(
+                                          child: Text(
+                                            video.uploader.name.isNotEmpty
+                                                ? video.uploader.name[0]
+                                                    .toUpperCase()
+                                                : 'U',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 10,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                : Center(
+                                    child: Text(
+                                      video.uploader.name.isNotEmpty
+                                          ? video.uploader.name[0].toUpperCase()
+                                          : 'U',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ),
                           ),
                         ),
+                        const SizedBox(width: 6), // **REDUCED from 8**
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () =>
+                                _navigateToCreatorProfile(video.uploader.id),
+                            child: Text(
+                              video.uploader.name,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12, // **REDUCED from 14**
+                                fontWeight: FontWeight.w600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6), // **REDUCED from 8**
+                        // Professional follow/unfollow button
+                        _buildFollowTextButton(video),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6), // **REDUCED from 8**
+
+                  // Video title (moved below uploader name)
+                  Text(
+                    video.videoName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11, // **REDUCED from 12**
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4), // **REDUCED from 6**
+                  if (video.link?.isNotEmpty == true)
+                    GestureDetector(
+                      onTap: () => _handleVisitNow(video),
+                      child: Container(
+                        width:
+                            (_screenWidth ?? 400) * 0.75, // 75% of screen width
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16, // **REDUCED from 20**
+                          vertical: 6, // **REDUCED from 8**
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.6),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.4),
+                              blurRadius: 12,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.open_in_new,
+                              color: Colors.white,
+                              size: 14, // **REDUCED from 16**
+                            ),
+                            SizedBox(width: 6), // **REDUCED from 8**
+                            Text(
+                              'Visit Now',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12, // **REDUCED from 14**
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(width: 6), // **REDUCED from 8**
-                      // Professional follow/unfollow button
-                      _buildFollowTextButton(video),
+                    ),
+
+                  // **FIXED: Remove spacing to eliminate black empty space**
+                ],
+              ),
+            ),
+          ),
+
+          // Vertical action buttons on the right
+          Positioned(
+            right: 12, // **REDUCED from 16**
+            bottom: 12, // **REDUCED from 20 - moves buttons up for more space**
+            child: Column(
+              children: [
+                // Like button with count
+                _buildVerticalActionButton(
+                  icon:
+                      _isLiked(video) ? Icons.favorite : Icons.favorite_border,
+                  color: _isLiked(video) ? Colors.red : Colors.white,
+                  count: video.likes,
+                  onTap: () => _handleLike(video, index),
+                ),
+                const SizedBox(height: 10), // **REDUCED from 12**
+
+                // Comment button with count
+                _buildVerticalActionButton(
+                  icon: Icons.chat_bubble_outline,
+                  count: video.comments.length,
+                  onTap: () => _handleComment(video),
+                ),
+                const SizedBox(height: 10), // **REDUCED from 12**
+
+                // Share button
+                _buildVerticalActionButton(
+                  icon: Icons.share,
+                  onTap: () => _handleShare(video),
+                ),
+                const SizedBox(height: 10), // **REDUCED from 12**
+
+                // **NEW: Carousel ad navigation - swipe indicator**
+                // Always show the arrow indicator (per requirement)
+                GestureDetector(
+                  onTap: () => _navigateToCarouselAd(index),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding:
+                            const EdgeInsets.all(10), // **REDUCED from 12**
+                        decoration: BoxDecoration(
+                          color: Colors.black
+                              .withOpacity(0.5), // **REDUCED opacity from 0.6**
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.arrow_forward_ios,
+                          color: Colors.white,
+                          size: 18, // **REDUCED from 20**
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Swipe',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 6), // **REDUCED from 8**
-
-                // Video title (moved below uploader name)
-                Text(
-                  video.videoName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11, // **REDUCED from 12**
-                    fontWeight: FontWeight.bold,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4), // **REDUCED from 6**
-                if (video.link?.isNotEmpty == true)
-                  GestureDetector(
-                    onTap: () => _handleVisitNow(video),
-                    child: Container(
-                      width: MediaQuery.of(context).size.width *
-                          0.75, // 50% of screen width
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16, // **REDUCED from 20**
-                        vertical: 6, // **REDUCED from 8**
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.6),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.4),
-                            blurRadius: 12,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.open_in_new,
-                            color: Colors.white,
-                            size: 14, // **REDUCED from 16**
-                          ),
-                          SizedBox(width: 6), // **REDUCED from 8**
-                          Text(
-                            'Visit Now',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 12, // **REDUCED from 14**
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                // **FIXED: Remove spacing to eliminate black empty space**
               ],
             ),
           ),
-        ),
-
-        // Vertical action buttons on the right
-        Positioned(
-          right: 12, // **REDUCED from 16**
-          bottom: 12, // **REDUCED from 20 - moves buttons up for more space**
-          child: Column(
-            children: [
-              // Like button with count
-              _buildVerticalActionButton(
-                icon: _isLiked(video) ? Icons.favorite : Icons.favorite_border,
-                color: _isLiked(video) ? Colors.red : Colors.white,
-                count: video.likes,
-                onTap: () => _handleLike(video, index),
-              ),
-              const SizedBox(height: 10), // **REDUCED from 12**
-
-              // Comment button with count
-              _buildVerticalActionButton(
-                icon: Icons.chat_bubble_outline,
-                count: video.comments.length,
-                onTap: () => _handleComment(video),
-              ),
-              const SizedBox(height: 10), // **REDUCED from 12**
-
-              // Share button
-              _buildVerticalActionButton(
-                icon: Icons.share,
-                onTap: () => _handleShare(video),
-              ),
-              const SizedBox(height: 10), // **REDUCED from 12**
-
-              // **NEW: Carousel ad navigation - swipe indicator**
-              // Always show the arrow indicator (per requirement)
-              GestureDetector(
-                onTap: () => _navigateToCarouselAd(index),
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10), // **REDUCED from 12**
-                      decoration: BoxDecoration(
-                        color: Colors.black
-                            .withOpacity(0.5), // **REDUCED opacity from 0.6**
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.arrow_forward_ios,
-                        color: Colors.white,
-                        size: 18, // **REDUCED from 20**
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Swipe',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -3655,17 +3670,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   /// **HANDLE DOUBLE TAP LIKE: Show animation and like**
   Future<void> _handleDoubleTapLike(VideoModel video, int index) async {
     // Show heart animation
-    setState(() {
-      _showHeartAnimation[index] = true;
-    });
+    _showHeartAnimation[index] ??= ValueNotifier<bool>(false);
+    _showHeartAnimation[index]!.value = true;
 
     // Hide animation after 1 second
     Future.delayed(const Duration(milliseconds: 1000), () {
-      if (mounted) {
-        setState(() {
-          _showHeartAnimation[index] = false;
-        });
-      }
+      _showHeartAnimation[index]?.value = false;
     });
 
     // Handle the like
@@ -4095,11 +4105,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   void dispose() {
     // **CRITICAL: Unregister callbacks from MainController**
     try {
-      final mainController = Provider.of<MainController>(
-        context,
-        listen: false,
-      );
-      mainController.unregisterCallbacks();
+      _mainController?.unregisterCallbacks();
       AppLogger.log(
           '📱 VideoFeedAdvanced: Unregistered callbacks from MainController');
     } catch (e) {
@@ -4181,6 +4187,19 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     _initializingVideos.clear();
     _preloadRetryCount.clear();
     _preloadedVideos.clear();
+    // Dispose ValueNotifiers
+    for (final notifier in _firstFrameReady.values) {
+      notifier.dispose();
+    }
+    _firstFrameReady.clear();
+    for (final notifier in _forceMountPlayer.values) {
+      notifier.dispose();
+    }
+    _forceMountPlayer.clear();
+    for (final notifier in _showHeartAnimation.values) {
+      notifier.dispose();
+    }
+    _showHeartAnimation.clear();
 
     // **NEW: Dispose VideoControllerManager**
     _videoControllerManager.dispose();
@@ -4305,5 +4324,127 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       'currentIndex': _currentIndex,
       'isLoading': _isLoading,
     };
+  }
+}
+
+/// **THROTTLED PROGRESS BAR: Updates at 30fps instead of every frame**
+/// This prevents CPU/GPU waste by limiting UI updates to 30fps (33ms intervals)
+class _ThrottledProgressBar extends StatefulWidget {
+  final VideoPlayerController controller;
+  final double screenWidth;
+  final Function(dynamic) onSeek;
+
+  const _ThrottledProgressBar({
+    required this.controller,
+    required this.screenWidth,
+    required this.onSeek,
+  });
+
+  @override
+  State<_ThrottledProgressBar> createState() => _ThrottledProgressBarState();
+}
+
+class _ThrottledProgressBarState extends State<_ThrottledProgressBar> {
+  double _progress = 0.0;
+  Timer? _updateTimer;
+  DateTime _lastUpdate = DateTime.now();
+  static const Duration _updateInterval = Duration(milliseconds: 33); // ~30fps
+
+  @override
+  void initState() {
+    super.initState();
+    _updateProgress();
+    // Listen to controller changes but throttle updates
+    widget.controller.addListener(_onControllerUpdate);
+  }
+
+  @override
+  void dispose() {
+    _updateTimer?.cancel();
+    widget.controller.removeListener(_onControllerUpdate);
+    super.dispose();
+  }
+
+  void _onControllerUpdate() {
+    final now = DateTime.now();
+    final timeSinceLastUpdate = now.difference(_lastUpdate);
+
+    // Only update if enough time has passed (throttle to 30fps)
+    if (timeSinceLastUpdate >= _updateInterval) {
+      _updateProgress();
+      _lastUpdate = now;
+    } else {
+      // Schedule update for the remaining time
+      _updateTimer?.cancel();
+      final remainingTime = _updateInterval - timeSinceLastUpdate;
+      _updateTimer = Timer(remainingTime, () {
+        if (mounted) {
+          _updateProgress();
+          _lastUpdate = DateTime.now();
+        }
+      });
+    }
+  }
+
+  void _updateProgress() {
+    if (!mounted || !widget.controller.value.isInitialized) return;
+
+    final duration = widget.controller.value.duration;
+    final position = widget.controller.value.position;
+    final totalMs = duration.inMilliseconds;
+    final posMs = position.inMilliseconds;
+    final newProgress = totalMs > 0 ? (posMs / totalMs).clamp(0.0, 1.0) : 0.0;
+
+    if ((newProgress - _progress).abs() > 0.001) {
+      // Only update if progress changed significantly (0.1% threshold)
+      setState(() {
+        _progress = newProgress;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: widget.onSeek,
+      onPanUpdate: widget.onSeek,
+      child: Container(
+        height: 4,
+        color: Colors.black.withOpacity(0.2),
+        child: Stack(
+          children: [
+            Container(
+              height: 2,
+              margin: const EdgeInsets.only(top: 1),
+              color: Colors.grey.withOpacity(0.2),
+            ),
+            // Progress bar filled portion
+            Positioned(
+              top: 1,
+              left: 0,
+              child: Container(
+                height: 2,
+                width: widget.screenWidth * _progress,
+                color: Colors.green[400],
+              ),
+            ),
+            // Seek handle (thumb)
+            if (_progress > 0)
+              Positioned(
+                top: 0,
+                left: (widget.screenWidth * _progress) - 4,
+                child: Container(
+                  width: 8,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: Colors.green[400],
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
