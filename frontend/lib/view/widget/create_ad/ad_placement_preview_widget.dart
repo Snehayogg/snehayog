@@ -150,7 +150,7 @@ class AdPlacementPreviewWidget extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             color: Colors.black,
-            child: Row(
+            child: const Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Yug',
@@ -163,12 +163,8 @@ class AdPlacementPreviewWidget extends StatelessWidget {
             ),
           ),
 
-          // Video feed item with ad placement
+          // Video feed item with ad placement (banner shows as top overlay)
           _buildVideoFeedItem(1),
-
-          // Banner ad placement (only for banner ads)
-          if (selectedAdType == 'banner' && selectedImage != null)
-            _buildBannerAdPlacement(),
 
           // Carousel ad placement (only for carousel ads)
           if (selectedAdType == 'carousel') _buildCarouselAdPlacement(),
@@ -177,63 +173,7 @@ class AdPlacementPreviewWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildBannerAdPlacement() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.blue, width: 3),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Stack(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(1),
-            child: Image.file(
-              selectedImage!,
-              width: double.infinity,
-              height: 60,
-              fit: BoxFit.cover,
-            ),
-          ),
-          // Highlight overlay
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(1),
-              ),
-            ),
-          ),
-          // Placement indicator
-          Positioned(
-            top: 4,
-            right: 4,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.blue,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.ads_click, color: Colors.white, size: 12),
-                  SizedBox(width: 4),
-                  Text(
-                    'Banner Ad',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // (Removed old separate banner preview; banner now overlays top of video)
 
   Widget _buildCarouselAdPlacement() {
     return Container(
@@ -339,18 +279,88 @@ class AdPlacementPreviewWidget extends StatelessWidget {
               ],
             ),
           ),
-          // Video controls overlay
+
+          // Banner ad overlay at the TOP of the video (only for banner ads)
+          if (selectedAdType == 'banner' && selectedImage != null)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                height: 60,
+                margin: const EdgeInsets.symmetric(horizontal: 0),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.blue, width: 3),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(8),
+                    topRight: Radius.circular(8),
+                  ),
+                ),
+                child: Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(5),
+                        topRight: Radius.circular(5),
+                      ),
+                      child: Image.file(
+                        selectedImage!,
+                        width: double.infinity,
+                        height: 60,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    // subtle highlight
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.10),
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(5),
+                            topRight: Radius.circular(5),
+                          ),
+                        ),
+                      ),
+                    ),
+                    // small badge
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.blue,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'Banner (Top)',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    )
+                  ],
+                ),
+              ),
+            ),
+          // Video actions (match Yug UI): vertical action rail on RIGHT
           Positioned(
-            bottom: 8,
-            left: 8,
             right: 8,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Icon(Icons.favorite_border, color: Colors.white, size: 24),
-                Icon(Icons.comment_outlined, color: Colors.white, size: 24),
-                Icon(Icons.share_outlined, color: Colors.white, size: 24),
-                Icon(Icons.bookmark_border, color: Colors.white, size: 24),
+            bottom: 16,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Icon(Icons.favorite_border, color: Colors.white, size: 26),
+                SizedBox(height: 14),
+                Icon(Icons.comment_outlined, color: Colors.white, size: 26),
+                SizedBox(height: 14),
+                Icon(Icons.share_outlined, color: Colors.white, size: 26),
+                SizedBox(height: 14),
+                Icon(Icons.bookmark_border, color: Colors.white, size: 26),
               ],
             ),
           ),

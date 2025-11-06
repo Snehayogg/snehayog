@@ -126,6 +126,29 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
     super.dispose();
   }
 
+  /// Reset UI to a fresh state after successful ad creation
+  void _showFreshAdScreen() {
+    // Clear all form fields and saved state
+    _clearForm();
+    // Scroll to top for a clean start
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+    // Inform user
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Advertisement created. You can create another one.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
@@ -1256,9 +1279,9 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
           AdModel.fromJson(result['ad']),
           result['invoice'],
           () {
-            _clearForm();
-            Navigator.pop(context);
-            // **NEW: Trigger video feed refresh to show new ads**
+            // Show a fresh create-ad screen instead of popping back
+            _showFreshAdScreen();
+            // Trigger video feed refresh to show new ads
             _notifyVideoFeedRefresh();
           },
         );
