@@ -21,6 +21,8 @@ class AdModel {
   final String uploaderId;
   final String uploaderName;
   final String? uploaderProfilePic;
+  final String? creativeId; // **NEW: Creative ID for analytics matching**
+  final String? campaignId; // **NEW: Campaign ID**
 
   final int? minAge;
   final int? maxAge;
@@ -61,6 +63,8 @@ class AdModel {
     required this.uploaderId,
     required this.uploaderName,
     this.uploaderProfilePic,
+    this.creativeId, // **NEW: Creative ID for analytics**
+    this.campaignId, // **NEW: Campaign ID**
     // **NEW: Advanced targeting parameters**
     this.minAge,
     this.maxAge,
@@ -107,6 +111,8 @@ class AdModel {
       uploaderId: json['uploaderId'] ?? '',
       uploaderName: json['uploaderName'] ?? '',
       uploaderProfilePic: json['uploaderProfilePic'],
+      creativeId: json['creativeId'], // **NEW: Read creativeId from backend**
+      campaignId: json['campaignId'], // **NEW: Read campaignId from backend**
       // **NEW: Advanced targeting fields**
       minAge: json['minAge'],
       maxAge: json['maxAge'],
@@ -194,6 +200,8 @@ class AdModel {
     String? uploaderId,
     String? uploaderName,
     String? uploaderProfilePic,
+    String? creativeId, // **NEW: Creative ID**
+    String? campaignId, // **NEW: Campaign ID**
     // **NEW: Advanced targeting parameters**
     int? minAge,
     int? maxAge,
@@ -235,6 +243,8 @@ class AdModel {
       uploaderId: uploaderId ?? this.uploaderId,
       uploaderName: uploaderName ?? this.uploaderName,
       uploaderProfilePic: uploaderProfilePic ?? this.uploaderProfilePic,
+      creativeId: creativeId ?? this.creativeId, // **NEW: Creative ID**
+      campaignId: campaignId ?? this.campaignId, // **NEW: Campaign ID**
       // **NEW: Advanced targeting fields**
       minAge: minAge ?? this.minAge,
       maxAge: maxAge ?? this.maxAge,

@@ -7,6 +7,7 @@ import 'package:vayu/view/widget/create_ad/ad_details_form_widget.dart';
 import 'package:vayu/view/widget/create_ad/targeting_section_widget.dart';
 import 'package:vayu/view/widget/create_ad/campaign_settings_widget.dart';
 import 'package:vayu/view/widget/create_ad/campaign_preview_widget.dart';
+import 'package:vayu/view/widget/create_ad/ad_placement_preview_widget.dart';
 import 'package:vayu/view/widget/create_ad/payment_handler_widget.dart';
 import 'package:vayu/services/ad_service.dart';
 import 'package:vayu/services/authservices.dart';
@@ -327,7 +328,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Create Advertisement'),
+        title: const Text('Create Ad'),
         centerTitle: true,
         elevation: 0,
       ),
@@ -341,8 +342,6 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Loading...'),
                 ],
               ),
             );
@@ -391,7 +390,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
           ),
           const SizedBox(height: 16),
           const Text(
-            'Please sign in to create advertisements',
+            'Sign in to create ads',
             style: TextStyle(fontSize: 18, color: Colors.grey),
             textAlign: TextAlign.center,
           ),
@@ -473,37 +472,14 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Text(
-                          _selectedAdType == 'banner'
-                              ? 'Banner Details'
-                              : 'Ad Details',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade100,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            'Required',
-                            style: TextStyle(
-                              color: Colors.red.shade700,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
+                    Text(
+                      _selectedAdType == 'banner'
+                          ? 'Banner Details'
+                          : 'Ad Details',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     AdDetailsFormWidget(
@@ -632,6 +608,22 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
               ),
             ),
             const SizedBox(height: 16),
+
+            // Ad Placement Preview (visual mockup)
+            if ((_selectedAdType == 'banner' && _selectedImage != null) ||
+                (_selectedAdType == 'carousel' &&
+                    (_selectedImages.isNotEmpty || _selectedVideo != null)))
+              AdPlacementPreviewWidget(
+                selectedAdType: _selectedAdType,
+                selectedImage: _selectedImage,
+                selectedVideo: _selectedVideo,
+                selectedImages: _selectedImages,
+              ),
+
+            if ((_selectedAdType == 'banner' && _selectedImage != null) ||
+                (_selectedAdType == 'carousel' &&
+                    (_selectedImages.isNotEmpty || _selectedVideo != null)))
+              const SizedBox(height: 16),
 
             // Campaign Preview
             CampaignPreviewWidget(

@@ -481,12 +481,13 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
         uploadedAt: videoObj.uploadedAt?.toISOString?.() || new Date().toISOString(),
         createdAt: videoObj.createdAt?.toISOString?.() || new Date().toISOString(),
         updatedAt: videoObj.updatedAt?.toISOString?.() || new Date().toISOString(),
-        // **IMPROVED: Better uploader information**
+        // **FIX: Use googleId as id for correct profile navigation**
         uploader: {
-          id: videoObj.uploader?._id?.toString() || videoObj.uploader?.toString(),
+          id: videoObj.uploader?.googleId?.toString() || videoObj.uploader?._id?.toString() || '',
+          _id: videoObj.uploader?._id?.toString() || '',
+          googleId: videoObj.uploader?.googleId?.toString() || '',
           name: videoObj.uploader?.name || 'Unknown User',
-          profilePic: videoObj.uploader?.profilePic || '',
-          googleId: videoObj.uploader?.googleId || ''
+          profilePic: videoObj.uploader?.profilePic || ''
         },
         // **HLS Streaming fields**
         hlsMasterPlaylistUrl: videoObj.hlsMasterPlaylistUrl || null,
@@ -604,8 +605,17 @@ router.get('/', async (req, res) => {
     }
 
     // Transform comments to match Flutter app expectations
+    // **FIX: Properly transform uploader data to use googleId for profile navigation**
     const transformedVideos = validVideos.map(video => ({
       ...video,
+      // **FIX: Transform uploader to use googleId as id for correct profile navigation**
+      uploader: {
+        id: video.uploader?.googleId?.toString() || video.uploader?._id?.toString() || '',
+        _id: video.uploader?._id?.toString() || '',
+        googleId: video.uploader?.googleId?.toString() || '',
+        name: video.uploader?.name || 'Unknown User',
+        profilePic: video.uploader?.profilePic || ''
+      },
       comments: video.comments.map(comment => ({
         _id: comment._id,
         text: comment.text,
@@ -684,12 +694,13 @@ router.get('/:id', verifyToken, async (req, res) => {
       processingStatus: videoObj.processingStatus || 'pending',
       processingProgress: videoObj.processingProgress || 0,
       processingError: videoObj.processingError || null,
-      // Uploader information
+      // **FIX: Use googleId as id for correct profile navigation**
       uploader: {
-        id: videoObj.uploader?._id?.toString() || videoObj.uploader?.toString(),
+        id: videoObj.uploader?.googleId?.toString() || videoObj.uploader?._id?.toString() || '',
+        _id: videoObj.uploader?._id?.toString() || '',
+        googleId: videoObj.uploader?.googleId?.toString() || '',
         name: videoObj.uploader?.name || 'Unknown User',
-        profilePic: videoObj.uploader?.profilePic || '',
-        googleId: videoObj.uploader?.googleId || ''
+        profilePic: videoObj.uploader?.profilePic || ''
       },
       // HLS Streaming fields
       hlsMasterPlaylistUrl: videoObj.hlsMasterPlaylistUrl || null,
@@ -801,8 +812,11 @@ router.post('/:id/like', verifyToken, async (req, res) => {
       views: parseInt(videoObj.views) || 0,
       shares: parseInt(videoObj.shares) || 0,
       description: videoObj.description || '',
+      // **FIX: Use googleId as id for correct profile navigation**
       uploader: {
-        _id: videoObj.uploader?._id?.toString() || videoObj.uploader?.googleId?.toString() || '',
+        id: videoObj.uploader?.googleId?.toString() || videoObj.uploader?._id?.toString() || '',
+        _id: videoObj.uploader?._id?.toString() || '',
+        googleId: videoObj.uploader?.googleId?.toString() || '',
         name: videoObj.uploader?.name || 'Unknown',
         profilePic: videoObj.uploader?.profilePic || '',
       },
@@ -920,8 +934,11 @@ router.delete('/:id/like', verifyToken, async (req, res) => {
       views: parseInt(videoObj.views) || 0,
       shares: parseInt(videoObj.shares) || 0,
       description: videoObj.description || '',
+      // **FIX: Use googleId as id for correct profile navigation**
       uploader: {
-        _id: videoObj.uploader?._id?.toString() || videoObj.uploader?.googleId?.toString() || '',
+        id: videoObj.uploader?.googleId?.toString() || videoObj.uploader?._id?.toString() || '',
+        _id: videoObj.uploader?._id?.toString() || '',
+        googleId: videoObj.uploader?.googleId?.toString() || '',
         name: videoObj.uploader?.name || 'Unknown',
         profilePic: videoObj.uploader?.profilePic || '',
       },
@@ -1669,11 +1686,13 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
         uploadedAt: videoObj.uploadedAt?.toISOString?.() || new Date().toISOString(),
         createdAt: videoObj.createdAt?.toISOString?.() || new Date().toISOString(),
         updatedAt: videoObj.updatedAt?.toISOString?.() || new Date().toISOString(),
+        // **FIX: Use googleId as id for correct profile navigation**
         uploader: {
-          id: videoObj.uploader?._id?.toString() || videoObj.uploader?.toString(),
+          id: videoObj.uploader?.googleId?.toString() || videoObj.uploader?._id?.toString() || '',
+          _id: videoObj.uploader?._id?.toString() || '',
+          googleId: videoObj.uploader?.googleId?.toString() || '',
           name: videoObj.uploader?.name || 'Unknown User',
-          profilePic: videoObj.uploader?.profilePic || '',
-          googleId: videoObj.uploader?.googleId || ''
+          profilePic: videoObj.uploader?.profilePic || ''
         },
         hlsMasterPlaylistUrl: videoObj.hlsMasterPlaylistUrl || null,
         hlsPlaylistUrl: videoObj.hlsPlaylistUrl || null,

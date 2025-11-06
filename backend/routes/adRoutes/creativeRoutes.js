@@ -108,10 +108,15 @@ router.post('/campaigns/:id/creatives', adUpload.single('creative'), asyncHandle
       callToAction: {
         label: callToActionLabel,
         url: callToActionUrl
-      }
+      },
+      // **FIX: Auto-approve and activate banner ads immediately**
+      reviewStatus: 'approved',
+      isActive: true,
+      activatedAt: new Date()
     });
 
     await creative.save();
+    console.log(`✅ ${adType} ad creative created and auto-approved:`, creative._id);
 
     res.status(201).json({
       message: 'Ad creative uploaded successfully',

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:vayu/core/providers/user_provider.dart';
 import 'package:vayu/services/authservices.dart';
+import 'package:vayu/controller/google_sign_in_controller.dart';
 
 class FollowButtonWidget extends StatefulWidget {
   final String uploaderId;
@@ -66,9 +67,50 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
 
   /// Check if the current user is the uploader of this video
   void _checkIfOwnVideo() {
-    // For now, we'll skip this check to avoid dependency issues
-    // This can be implemented later when we have proper user context
-    _isOwnVideoNotifier.value = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (mounted) {
+        try {
+          // Get current user ID from GoogleSignInController or AuthService
+          final authController =
+              Provider.of<GoogleSignInController>(context, listen: false);
+          final authService = AuthService();
+
+          String? currentUserId;
+
+          // Try GoogleSignInController first (more reliable)
+          if (authController.isSignedIn && authController.userData != null) {
+            currentUserId = authController.userData!['id'] ??
+                authController.userData!['googleId'] ??
+                authController.userData!['_id'];
+          }
+
+          // Fallback to AuthService if GoogleSignInController doesn't have data
+          if (currentUserId == null) {
+            final userData = await authService.getUserData();
+            if (userData != null) {
+              currentUserId =
+                  userData['id'] ?? userData['googleId'] ?? userData['_id'];
+            }
+          }
+
+          // Compare with uploader ID
+          if (currentUserId != null && widget.uploaderId.isNotEmpty) {
+            final isOwnVideo = currentUserId == widget.uploaderId;
+            _isOwnVideoNotifier.value = isOwnVideo;
+            print(
+                '🎯 FollowButtonWidget: Checking own video - Current: $currentUserId, Uploader: ${widget.uploaderId}, IsOwn: $isOwnVideo');
+          } else {
+            // If no current user, assume not own video (user not signed in)
+            _isOwnVideoNotifier.value = false;
+            print(
+                '⚠️ FollowButtonWidget: No current user ID found, assuming not own video');
+          }
+        } catch (e) {
+          print('❌ FollowButtonWidget: Error checking if own video: $e');
+          _isOwnVideoNotifier.value = false;
+        }
+      }
+    });
   }
 
   /// Handle follow/unfollow button tap
@@ -139,94 +181,113 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<UserProvider>(
-      builder: (context, userProvider, child) {
-        final isFollowing = userProvider.isFollowingUser(widget.uploaderId);
-        final isOwnVideo = _isOwnVideoNotifier.value;
+    // **FIXED: Listen to GoogleSignInController changes for real-time auth state updates**
+    return Consumer<GoogleSignInController>(
+      builder: (context, authController, _) {
+        // Re-check if own video when auth state changes (only once per build cycle)
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _checkIfOwnVideo();
+          }
+        });
 
-        // Don't show follow button for own videos
-        if (isOwnVideo) {
-          return const SizedBox.shrink();
-        }
+        return Consumer<UserProvider>(
+          builder: (context, userProvider, child) {
+            final isFollowing = userProvider.isFollowingUser(widget.uploaderId);
 
-        return ValueListenableBuilder<bool>(
-          valueListenable: _isInitializedNotifier,
-          builder: (context, isInitialized, child) {
-            if (!isInitialized) {
-              return Container(
-                width: 80,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Center(
-                  child: SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
-              );
-            }
+            // Use ValueListenableBuilder to listen to _isOwnVideoNotifier changes
+            return ValueListenableBuilder<bool>(
+              valueListenable: _isOwnVideoNotifier,
+              builder: (context, isOwnVideo, child) {
+                // Don't show follow button for own videos
+                if (isOwnVideo) {
+                  return const SizedBox.shrink();
+                }
 
-            return Container(
-              width: 80,
-              height: 32, // **FIXED: Increased height for better visibility**
-              decoration: BoxDecoration(
-                color: isFollowing ? Colors.grey[600] : Colors.blue,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(
-                        0.3), // **FIXED: Increased shadow for visibility**
-                    blurRadius: 6,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-                border: Border.all(
-                  // **NEW: Added border for better visibility**
-                  color: Colors.white.withOpacity(0.3),
-                  width: 1,
-                ),
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(16),
-                  onTap: _handleFollowTap,
-                  child: Center(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          isFollowing ? Icons.check : Icons.add,
-                          color: Colors.white,
-                          size: 18, // **FIXED: Increased icon size**
+                return ValueListenableBuilder<bool>(
+                  valueListenable: _isInitializedNotifier,
+                  builder: (context, isInitialized, child) {
+                    if (!isInitialized) {
+                      return Container(
+                        width: 80,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[300],
+                          borderRadius: BorderRadius.circular(14),
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          isFollowing ? 'Following' : 'Follow',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13, // **FIXED: Increased font size**
-                            fontWeight:
-                                FontWeight.bold, // **FIXED: Made text bold**
-                            shadows: [
-                              // **NEW: Added text shadow for better visibility**
-                              Shadow(
-                                offset: Offset(1, 1),
-                                blurRadius: 2,
-                                color: Colors.black54,
-                              ),
-                            ],
+                        child: const Center(
+                          child: SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+                      );
+                    }
+
+                    return Container(
+                      width: 80,
+                      height:
+                          32, // **FIXED: Increased height for better visibility**
+                      decoration: BoxDecoration(
+                        color: isFollowing ? Colors.grey[600] : Colors.blue,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(
+                                0.3), // **FIXED: Increased shadow for visibility**
+                            blurRadius: 6,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                        border: Border.all(
+                          // **NEW: Added border for better visibility**
+                          color: Colors.white.withOpacity(0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: _handleFollowTap,
+                          child: Center(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  isFollowing ? Icons.check : Icons.add,
+                                  color: Colors.white,
+                                  size: 18, // **FIXED: Increased icon size**
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  isFollowing ? 'Following' : 'Follow',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize:
+                                        13, // **FIXED: Increased font size**
+                                    fontWeight: FontWeight
+                                        .bold, // **FIXED: Made text bold**
+                                    shadows: [
+                                      // **NEW: Added text shadow for better visibility**
+                                      Shadow(
+                                        offset: Offset(1, 1),
+                                        blurRadius: 2,
+                                        color: Colors.black54,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
             );
           },
         );

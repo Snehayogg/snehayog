@@ -395,13 +395,8 @@ class AdService {
 
     console.log(`✅ AdService: ${targetedAds.length} ads matched targeting criteria`);
 
-    // **STEP 4: Return top ads and update impression count**
+    // **STEP 4: Return top ads (NO impression tracking here - impressions are tracked separately via impressionRoutes.js)**
     const finalAds = targetedAds.slice(0, 10).map(item => item.creative);
-    
-    for (const ad of finalAds) {
-      ad.impressions = (ad.impressions || 0) + 1;
-      await ad.save();
-    }
 
     // Transform raw AdCreative documents to frontend-expected format
     return finalAds.map(ad => this.transformAdForFrontend(ad));
@@ -472,36 +467,96 @@ class AdService {
   /**
    * Get ad analytics
    */
-  async getAdAnalytics(adId, userId) {
-    const ad = await AdCreative.findById(adId);
-    if (!ad) {
-      throw new Error('Ad not found');
-    }
-
-    // Verify user owns this ad
-    if (ad.uploaderId.toString() !== userId) {
-      throw new Error('Access denied');
-    }
-
-    // Calculate metrics
-    const ctr = this.calculateCTR(ad.clicks || 0, ad.impressions || 0);
-    const spend = this.calculateSpend(ad.impressions || 0, ad.fixedCpm);
-    const revenue = spend * AD_CONFIG.CREATOR_REVENUE_SHARE;
-
-    return {
-      ad: {
-        id: ad._id,
-        title: ad.title,
-        status: ad.status,
-        impressions: ad.impressions || 0,
-        clicks: ad.clicks || 0,
-        ctr: ctr.toFixed(2),
-        spend: spend.toFixed(2),
-        revenue: revenue.toFixed(2),
-        estimatedImpressions: ad.estimatedImpressions,
-        fixedCpm: ad.fixedCpm
+  async getAdAnalytics(adId, userId = null) {
+    try {
+      console.log('📊 AdService: Getting analytics for ad:', adId, 'userId:', userId);
+      
+      // **FIX: Try to find by AdCreative ID first, then by Campaign ID**
+      let ad = await AdCreative.findById(adId).populate('campaignId');
+      
+      // If not found as AdCreative, try finding by Campaign ID
+      if (!ad) {
+        console.log('🔍 AdService: Not found as AdCreative, trying Campaign ID...');
+        const campaign = await AdCampaign.findById(adId);
+        if (campaign) {
+          // Find the creative for this campaign
+          ad = await AdCreative.findOne({ campaignId: campaign._id }).populate('campaignId');
+        }
       }
-    };
+      
+      if (!ad) {
+        console.error('❌ AdService: Ad not found for ID:', adId);
+        throw new Error('Ad not found');
+      }
+
+      console.log('✅ AdService: Found ad:', ad._id, 'Campaign:', ad.campaignId?._id);
+
+      // **FIX: Verify user owns this ad via campaign's advertiserUserId**
+      if (userId) {
+        const campaign = ad.campaignId;
+        if (!campaign) {
+          throw new Error('Campaign not found for this ad');
+        }
+
+        // Get user's googleId to match with advertiserUserId
+        const User = mongoose.model('User');
+        const user = await User.findOne({ googleId: userId });
+        
+        if (!user) {
+          console.error('❌ AdService: User not found for googleId:', userId);
+          throw new Error('User not found');
+        }
+
+        // Compare campaign's advertiserUserId with user's _id
+        if (campaign.advertiserUserId.toString() !== user._id.toString()) {
+          console.error('❌ AdService: Access denied. Campaign advertiserUserId:', campaign.advertiserUserId, 'User _id:', user._id);
+          throw new Error('Access denied');
+        }
+
+        console.log('✅ AdService: User verification passed');
+      }
+
+      // **FIX: Get campaign data for proper metrics**
+      const campaign = ad.campaignId;
+      const cpm = campaign?.cpmINR || 30;
+      const ctr = this.calculateCTR(ad.clicks || 0, ad.impressions || 0);
+      const spend = this.calculateSpend(ad.impressions || 0, cpm);
+      const revenue = spend * 0.7; // 70% to advertiser, 30% to platform
+
+      // **FIX: Get imageUrl based on ad type**
+      let imageUrl = null;
+      if (ad.adType === 'carousel' && ad.slides && ad.slides.length > 0) {
+        imageUrl = ad.slides[0].thumbnail || ad.slides[0].mediaUrl || null;
+      } else {
+        imageUrl = ad.thumbnail || ad.cloudinaryUrl || null;
+      }
+
+      const result = {
+        ad: {
+          id: ad._id.toString(),
+          campaignId: campaign?._id?.toString(),
+          title: ad.title || campaign?.name || 'Unknown Ad',
+          status: ad.isActive ? 'active' : 'inactive',
+          impressions: ad.impressions || 0,
+          clicks: ad.clicks || 0,
+          ctr: ctr.toFixed(2),
+          spend: spend.toFixed(2),
+          revenue: revenue.toFixed(2),
+          cpm: cpm.toFixed(2),
+          adType: ad.adType || 'banner',
+          imageUrl: imageUrl, // **FIX: Include imageUrl for proper display**
+          createdAt: ad.createdAt,
+          updatedAt: ad.updatedAt
+        }
+      };
+
+      console.log('✅ AdService: Analytics calculated successfully:', result);
+      return result;
+      
+    } catch (error) {
+      console.error('❌ AdService: Error getting analytics:', error);
+      throw error; // Re-throw to let route handle it
+    }
   }
 
   /**
@@ -608,36 +663,6 @@ class AdService {
     }
   }
 
-  /**
-   * Get ad analytics
-   */
-  async getAdAnalytics(adId, userId = null) {
-    try {
-      const ad = await AdCreative.findById(adId).populate('campaignId');
-      if (!ad) {
-        throw new Error('Ad not found');
-      }
-      
-      const ctr = this.calculateCTR(ad.clicks || 0, ad.impressions || 0);
-      const spend = this.calculateSpend(ad.impressions || 0, ad.campaignId?.cpmINR || 30);
-      const revenue = spend * 0.7; // 70% to advertiser, 30% to platform
-      
-      return {
-        adId: ad._id,
-        title: ad.campaignId?.name || 'Unknown Ad',
-        impressions: ad.impressions || 0,
-        clicks: ad.clicks || 0,
-        ctr: ctr.toFixed(2),
-        spend: spend.toFixed(2),
-        revenue: revenue.toFixed(2),
-        status: ad.isActive ? 'active' : 'inactive'
-      };
-      
-    } catch (error) {
-      console.error('❌ AdService: Error getting analytics:', error);
-      return { error: error.message };
-    }
-  }
 
   /**
    * Calculate CTR

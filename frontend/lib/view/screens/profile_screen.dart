@@ -23,6 +23,7 @@ import 'package:vayu/model/video_model.dart';
 import 'package:vayu/core/managers/shared_video_controller_pool.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/controller/google_sign_in_controller.dart';
+import 'package:vayu/services/logout_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -388,9 +389,12 @@ class _ProfileScreenState extends State<ProfileScreen>
   Future<void> _handleLogout() async {
     try {
       ProfileScreenLogger.logLogout();
-      final prefs = await SharedPreferences.getInstance();
+
+      // **FIXED: Use centralized LogoutService for unified logout across entire app**
+      await LogoutService.performCompleteLogout(context);
 
       // **FIX: Only remove session tokens, NOT payment data**
+      final prefs = await SharedPreferences.getInstance();
       await prefs.remove('jwt_token');
       await prefs.remove('fallback_user');
 
@@ -400,12 +404,6 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       // **ENHANCED: Clear profile cache on logout**
       await _clearProfileCache();
-
-      await _stateManager.handleLogout();
-
-      // **ENHANCED: Clear UserProvider cache**
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
-      userProvider.clearAllCaches();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -932,22 +930,44 @@ class _ProfileScreenState extends State<ProfileScreen>
       value: _stateManager,
       child: Consumer<GoogleSignInController>(
         builder: (context, authController, _) {
-          // **FIXED: Listen to auth state changes and sync with ProfileStateManager**
+          // **FIX: Only sync with logged in user if viewing own profile (widget.userId is null)**
+          // If widget.userId is provided, we're viewing someone else's profile - don't override it
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (authController.isSignedIn && authController.userData != null) {
-              // User is signed in - ensure ProfileStateManager has the data
-              final userId = authController.userData!['id'] ??
-                  authController.userData!['googleId'];
-              if (userId != null) {
+            if (widget.userId == null ||
+                (authController.isSignedIn &&
+                    authController.userData != null)) {
+              final loggedInUserId = authController.userData?['id'] ??
+                  authController.userData?['googleId'];
+
+              // If viewing own profile (widget.userId is null), sync with logged in user
+              if (widget.userId == null && loggedInUserId != null) {
                 final currentUserId = _stateManager.userData?['id'] ??
                     _stateManager.userData?['googleId'];
-                if (currentUserId != userId) {
-                  _stateManager.loadUserData(userId);
+                if (currentUserId != loggedInUserId) {
+                  AppLogger.log(
+                      '🔄 ProfileScreen: Syncing with logged in user: $loggedInUserId');
+                  _stateManager.loadUserData(null); // null = own profile
                 }
               }
+              // If viewing someone else's profile (widget.userId is provided),
+              // only sync if the logged in user matches the viewed profile
+              else if (widget.userId != null && loggedInUserId != null) {
+                // Check if we're viewing the logged in user's profile
+                if (widget.userId == loggedInUserId) {
+                  final currentUserId = _stateManager.userData?['id'] ??
+                      _stateManager.userData?['googleId'];
+                  if (currentUserId != loggedInUserId) {
+                    AppLogger.log(
+                        '🔄 ProfileScreen: Syncing with logged in user (viewing own profile): $loggedInUserId');
+                    _stateManager.loadUserData(widget.userId);
+                  }
+                }
+                // If viewing someone else's profile, don't sync - keep the requested profile
+              }
             } else if (!authController.isSignedIn &&
-                _stateManager.userData != null) {
-              // User signed out - clear ProfileStateManager
+                _stateManager.userData != null &&
+                widget.userId == null) {
+              // User signed out and was viewing own profile - clear data
               _stateManager.clearData();
             }
           });

@@ -50,12 +50,30 @@ router.post('/track-click/:adId', asyncHandler(async (req, res) => {
 
 // GET /ads/analytics/:adId - Get ad analytics
 router.get('/analytics/:adId', asyncHandler(async (req, res) => {
-  const { adId } = req.params;
-  const { userId } = req.query;
-  
-  const result = await adService.getAdAnalytics(adId, userId);
-  
-  res.json(result);
+  try {
+    const { adId } = req.params;
+    const { userId } = req.query;
+    
+    console.log('📊 Analytics Route: Request for ad:', adId, 'userId:', userId);
+    
+    if (!adId) {
+      return res.status(400).json({ error: 'Ad ID is required' });
+    }
+    
+    const result = await adService.getAdAnalytics(adId, userId);
+    
+    if (result.error) {
+      return res.status(404).json(result);
+    }
+    
+    res.json(result);
+  } catch (error) {
+    console.error('❌ Analytics Route Error:', error);
+    res.status(500).json({ 
+      error: error.message || 'Failed to get ad analytics',
+      details: error.message 
+    });
+  }
 }));
 
 export default router;

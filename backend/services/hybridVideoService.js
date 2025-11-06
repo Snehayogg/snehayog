@@ -34,20 +34,26 @@ class HybridVideoService {
       console.log('📝 Video name:', videoName);
       console.log('👤 User ID:', userId);
       
-      // Check if video file exists
+      // **FIX: Verify video file exists and is accessible before processing**
       if (!fs.existsSync(videoPath)) {
         throw new Error(`Video file not found: ${videoPath}`);
       }
       
       const stats = fs.statSync(videoPath);
       console.log('📊 Video file size:', stats.size, 'bytes');
+      console.log('📊 Video file modified:', new Date(stats.mtime).toISOString());
+      
+      // **FIX: Store absolute path to ensure we use the correct file**
+      const absoluteVideoPath = path.resolve(videoPath);
+      console.log('📁 Absolute video path:', absoluteVideoPath);
       
       // Step 1: Process video to 480p using Cloudinary (with fallback)
       console.log('☁️ Step 1: Processing with Cloudinary...');
       let cloudinaryResult;
       try {
         console.log('⏱️ Starting Cloudinary processing at:', new Date().toISOString());
-        cloudinaryResult = await this.processWithCloudinary(videoPath, videoName, userId);
+        console.log('📁 Processing video file:', absoluteVideoPath);
+        cloudinaryResult = await this.processWithCloudinary(absoluteVideoPath, videoName, userId);
         console.log('✅ Step 1 completed: Cloudinary processing successful at:', new Date().toISOString());
       } catch (cloudinaryError) {
         console.error('❌ Cloudinary processing failed:', cloudinaryError.message);
@@ -57,8 +63,9 @@ class HybridVideoService {
         
         // Fallback to pure HLS processing with timeout
         console.log('🎬 Starting HLS encoding with 5-minute timeout...');
+        console.log('📁 Using video file for HLS encoding:', absoluteVideoPath);
         const hlsResult = await Promise.race([
-          hlsEncodingService.convertToHLS(videoPath, `${videoName}_${Date.now()}`, {
+          hlsEncodingService.convertToHLS(absoluteVideoPath, `${videoName}_${Date.now()}`, {
             quality: 'medium',
             resolution: '480p'
           }),
@@ -134,7 +141,26 @@ class HybridVideoService {
           size: 0, // HLS size calculation would be complex
           format: 'hls'
         };
-        r2ThumbnailUrl = cloudinaryResult.thumbnailUrl;
+        
+        // **FIX: Generate thumbnail from the uploaded video file**
+        console.log('📸 Generating thumbnail from uploaded video file...');
+        console.log(`   Video path: ${absoluteVideoPath}`);
+        const thumbnailPath = await this.generateThumbnailWithFFmpeg(absoluteVideoPath, videoName, userId);
+        
+        if (thumbnailPath) {
+          // Upload thumbnail to R2
+          console.log('📤 Uploading thumbnail to R2...');
+          r2ThumbnailUrl = await this.uploadThumbnailImageToR2(
+            thumbnailPath,
+            videoName,
+            userId
+          );
+          console.log(`✅ Thumbnail uploaded: ${r2ThumbnailUrl}`);
+        } else {
+          console.log('⚠️ No thumbnail generated, using default');
+          r2ThumbnailUrl = cloudinaryResult.thumbnailUrl || '';
+        }
+        
         localVideoPath = null; // No local file for HLS processing
       }
       
@@ -161,7 +187,8 @@ class HybridVideoService {
         // Only cleanup if we downloaded from Cloudinary
         await cloudflareR2Service.cleanupLocalFile(localVideoPath);
       }
-      await cloudflareR2Service.cleanupLocalFile(videoPath);
+      // **FIX: Use absolute path for cleanup to ensure correct file is deleted**
+      await cloudflareR2Service.cleanupLocalFile(absoluteVideoPath);
       
       console.log('🎉 Hybrid processing completed successfully!');
       console.log('📊 Cost breakdown:');
@@ -587,6 +614,18 @@ class HybridVideoService {
   async generateThumbnailWithFFmpeg(videoPath, videoName, userId) {
     return new Promise((resolve, reject) => {
       try {
+        // **FIX: Verify video file exists before generating thumbnail**
+        const absoluteVideoPath = path.resolve(videoPath);
+        if (!fs.existsSync(absoluteVideoPath)) {
+          console.error(`❌ Video file not found for thumbnail generation: ${absoluteVideoPath}`);
+          resolve(null);
+          return;
+        }
+        
+        console.log('📸 Starting thumbnail generation for video:', videoName);
+        console.log(`   Video file: ${absoluteVideoPath}`);
+        console.log(`   User ID: ${userId}`);
+        
         // Check if FFmpeg is available first
         const ffmpegCheck = spawn('ffmpeg', ['-version']);
         
@@ -609,15 +648,18 @@ class HybridVideoService {
             fs.mkdirSync(tempDir, { recursive: true });
           }
           
-          const thumbnailPath = path.join(tempDir, `${videoName}_thumb_${Date.now()}.jpg`);
+          // **FIX: Use unique filename with userId and timestamp to avoid conflicts**
+          const uniqueId = `${userId}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+          const thumbnailPath = path.join(tempDir, `${videoName}_thumb_${uniqueId}.jpg`);
           
           console.log('📸 Generating thumbnail with FFmpeg...');
-          console.log(`   Input: ${videoPath}`);
+          console.log(`   Input: ${absoluteVideoPath}`);
           console.log(`   Output: ${thumbnailPath}`);
           
+          // **FIX: Use absolute video path to ensure correct file is used**
           // FFmpeg command to extract frame at 1 second
           const ffmpeg = spawn('ffmpeg', [
-            '-i', videoPath,
+            '-i', absoluteVideoPath,
             '-ss', '00:00:01.000',  // Capture at 1 second
             '-vframes', '1',         // Extract 1 frame
             '-vf', 'scale=320:180',  // Resize to 320x180

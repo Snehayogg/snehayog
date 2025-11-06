@@ -1028,30 +1028,96 @@ router.get('/serve', async (req, res) => {
   try {
     const { adType } = req.query;
     
-    // Build query for active ads
-    const query = {
+    // Build query for active campaigns
+    const campaignQuery = {
       status: 'active',
       startDate: { $lte: new Date() },
       endDate: { $gte: new Date() }
     };
     
-    // Filter by ad type if specified
+    // Find active campaigns, sorted by creation date (newest first)
+    const campaigns = await AdCampaign.find(campaignQuery)
+      .sort({ createdAt: -1 }) // **FIX: Sort by newest first to show latest ads**
+      .limit(50); // **FIX: Increase limit to ensure all active ads are included**
+    
+    // **FIX: Get campaign IDs and query creatives separately (since AdCampaign doesn't have creative field)**
+    const campaignIds = campaigns.map(c => c._id);
+    
+    console.log('🔍 /api/ads/serve - Debug:');
+    console.log('   Found campaigns:', campaigns.length);
+    console.log('   Campaign IDs:', campaignIds.map(id => id.toString()));
+    
+    // **DEBUG: First check ALL creatives (without filters) to see what's available**
+    const allCreatives = await AdCreative.find({ 
+      campaignId: { $in: campaignIds } 
+    }).sort({ createdAt: -1 });
+    
+    console.log('   Total creatives found (no filters):', allCreatives.length);
+    allCreatives.forEach((creative, idx) => {
+      console.log(`   Creative ${idx}:`, {
+        id: creative._id,
+        campaignId: creative.campaignId,
+        adType: creative.adType,
+        title: creative.title,
+        isActive: creative.isActive,
+        reviewStatus: creative.reviewStatus,
+        cloudinaryUrl: creative.cloudinaryUrl ? 'exists' : 'missing'
+      });
+    });
+    
+    // Build creative query
+    // **FIX: Include 'pending' status for existing ads that haven't been approved yet**
+    // This allows ads that were created before auto-approve was added to still show
+    const creativeQuery = {
+      campaignId: { $in: campaignIds },
+      isActive: true,
+      reviewStatus: { $in: ['approved', 'auto-approved', 'pending'] }
+    };
+    
+    // Filter by adType if specified
     if (adType) {
-      query.adType = adType;
+      creativeQuery.adType = adType;
+      console.log('   Filtering by adType:', adType);
     }
     
-    // Find active campaigns
-    const campaigns = await AdCampaign.find(query)
-      .populate('creative')
-      .limit(10);
+    console.log('   Creative query:', JSON.stringify(creativeQuery, null, 2));
     
-    // Filter out campaigns without creatives
-    const validCampaigns = campaigns.filter(campaign => campaign.creative);
+    // Find creatives for these campaigns
+    const creatives = await AdCreative.find(creativeQuery)
+      .sort({ createdAt: -1 });
+    
+    console.log('   Creatives matching filters:', creatives.length);
+    
+    // **FIX: Create a map of campaignId -> creative for quick lookup**
+    const creativeMap = new Map();
+    creatives.forEach(creative => {
+      // Handle both ObjectId and string formats
+      const campaignId = creative.campaignId ? creative.campaignId.toString() : null;
+      if (campaignId && !creativeMap.has(campaignId)) {
+        creativeMap.set(campaignId, creative);
+      }
+    });
+    
+    // **FIX: Match campaigns with creatives**
+    const validCampaigns = campaigns
+      .map(campaign => {
+        const campaignIdStr = campaign._id.toString();
+        const creative = creativeMap.get(campaignIdStr);
+        if (!creative) {
+          console.log('⚠️ Campaign missing creative:', {
+            campaignId: campaignIdStr,
+            campaignName: campaign.name,
+            campaignStatus: campaign.status,
+            availableCreativeIds: Array.from(creativeMap.keys())
+          });
+          return null;
+        }
+        return { campaign, creative };
+      })
+      .filter(item => item !== null);
     
     // Convert to ad format for frontend
-    const ads = validCampaigns.map(campaign => {
-      const creative = campaign.creative;
-      
+    const ads = validCampaigns.map(({ campaign, creative }) => {
       // **DEBUG: Log banner ad details**
       if (creative.adType === 'banner') {
         console.log('🔍 Banner Ad Debug:');
@@ -1066,13 +1132,13 @@ router.get('/serve', async (req, res) => {
       }
       
       return {
-        id: campaign._id,
-        campaignId: campaign._id,
+        id: campaign._id.toString(),
+        campaignId: campaign._id.toString(),
         adType: creative.adType,
         title: creative.title || campaign.name,
         description: creative.description || '',
-        imageUrl: creative.cloudinaryUrl,
-        videoUrl: creative.type === 'video' ? creative.cloudinaryUrl : null,
+        imageUrl: creative.cloudinaryUrl || (creative.slides && creative.slides.length > 0 ? creative.slides[0].mediaUrl : null),
+        videoUrl: creative.type === 'video' ? (creative.cloudinaryUrl || (creative.slides && creative.slides.length > 0 ? creative.slides[0].mediaUrl : null)) : null,
         link: creative.callToAction?.url || '',
         callToAction: creative.callToAction,
         slides: creative.slides || [],
@@ -1102,6 +1168,49 @@ router.get('/serve', async (req, res) => {
   } catch (error) {
     console.error('❌ Error serving ads:', error);
     res.status(500).json({ error: 'Failed to serve ads' });
+  }
+});
+
+// **NEW: Auto-approve all pending active ads (for existing ads)**
+router.post('/auto-approve-pending', async (req, res) => {
+  try {
+    console.log('🔄 Auto-approving pending ads...');
+    
+    // Find all active campaigns
+    const campaigns = await AdCampaign.find({
+      status: 'active',
+      startDate: { $lte: new Date() },
+      endDate: { $gte: new Date() }
+    });
+    
+    const campaignIds = campaigns.map(c => c._id);
+    
+    // Update all pending creatives to approved and activate them
+    const result = await AdCreative.updateMany(
+      {
+        campaignId: { $in: campaignIds },
+        reviewStatus: 'pending',
+        isActive: false
+      },
+      {
+        $set: {
+          reviewStatus: 'approved',
+          isActive: true,
+          activatedAt: new Date()
+        }
+      }
+    );
+    
+    console.log(`✅ Auto-approved ${result.modifiedCount} pending ads`);
+    
+    res.json({
+      success: true,
+      message: `Auto-approved ${result.modifiedCount} pending ads`,
+      modifiedCount: result.modifiedCount
+    });
+  } catch (error) {
+    console.error('❌ Error auto-approving pending ads:', error);
+    res.status(500).json({ error: 'Failed to auto-approve pending ads' });
   }
 });
 

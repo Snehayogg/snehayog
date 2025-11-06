@@ -40,26 +40,39 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
       return res.json([]);
     }
 
-    // **ENHANCED: Convert campaigns to the format expected by AdModel with all new fields**
-    const ads = campaigns.map(campaign => ({
-      _id: campaign._id.toString(),
-      id: campaign._id.toString(),
-      title: campaign.name,
-      description: campaign.objective || '',
-      imageUrl: null, // Will be populated from creative if exists
-      videoUrl: null, // Will be populated from creative if exists  
-      link: null, // Will be populated from creative if exists
-      adType: 'banner', // Default, will be updated from creative
-      budget: campaign.dailyBudget * 100, // Convert to cents for frontend
-      totalBudget: campaign.totalBudget * 100, // Convert to cents for frontend
-      spend: campaign.totalSpend ? Math.round(campaign.totalSpend * 100) : 0, // Convert to cents
-      impressions: campaign.totalImpressions || 0,
-      clicks: campaign.totalClicks || 0,
-      status: campaign.status,
-      startDate: campaign.startDate ? campaign.startDate.toISOString() : null,
-      endDate: campaign.endDate ? campaign.endDate.toISOString() : null,
-      createdAt: campaign.createdAt.toISOString(),
-      updatedAt: campaign.updatedAt.toISOString(),
+    // **ENHANCED: Get creatives for each campaign and merge data**
+    const adsWithCreatives = await Promise.all(
+      campaigns.map(async (campaign) => {
+        // Find creative for this campaign
+        const creative = await AdCreative.findOne({ campaignId: campaign._id });
+        
+        // Use creative data if available, otherwise use campaign defaults
+        const impressions = creative?.impressions || campaign.impressions || 0;
+        const clicks = creative?.clicks || campaign.clicks || 0;
+        const imageUrl = creative?.cloudinaryUrl || creative?.thumbnail || null;
+        const adType = creative?.adType || 'banner';
+        const link = creative?.callToAction?.url || null;
+        
+        return {
+          _id: campaign._id.toString(),
+          id: campaign._id.toString(),
+          creativeId: creative?._id?.toString() || null, // **NEW: Include creative ID for analytics**
+          title: creative?.title || campaign.name,
+          description: creative?.description || campaign.objective || '',
+          imageUrl: imageUrl,
+          videoUrl: creative?.type === 'video' ? creative.cloudinaryUrl : null,
+          link: link,
+          adType: adType,
+          budget: campaign.dailyBudget * 100, // Convert to cents for frontend
+          totalBudget: campaign.totalBudget * 100, // Convert to cents for frontend
+          spend: campaign.spend ? Math.round(campaign.spend * 100) : 0, // Convert to cents
+          impressions: impressions, // **FIX: Use creative impressions if available**
+          clicks: clicks, // **FIX: Use creative clicks if available**
+          status: campaign.status,
+          startDate: campaign.startDate ? campaign.startDate.toISOString() : null,
+          endDate: campaign.endDate ? campaign.endDate.toISOString() : null,
+          createdAt: campaign.createdAt.toISOString(),
+          updatedAt: campaign.updatedAt.toISOString(),
       
       // **NEW: Additional fields for enhanced ad management**
       campaignId: campaign._id.toString(),
@@ -70,26 +83,30 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
       
       // **NEW: Targeting information**
       targeting: {
-        ageMin: campaign.targetingAgeMin || 18,
-        ageMax: campaign.targetingAgeMax || 65,
-        gender: campaign.targetingGender || 'all',
-        location: campaign.targetingLocation || 'all',
-        interests: campaign.targetingInterests || []
+        ageMin: campaign.target?.age?.min || 18,
+        ageMax: campaign.target?.age?.max || 65,
+        gender: campaign.target?.gender || 'all',
+        locations: campaign.target?.locations || [],
+        interests: campaign.target?.interests || [],
+        platforms: campaign.target?.platforms || [],
+        deviceType: campaign.target?.deviceType || 'all'
       },
       
       // **NEW: Performance metrics**
       metrics: {
-        ctr: campaign.totalImpressions > 0 ? 
-          ((campaign.totalClicks || 0) / campaign.totalImpressions * 100).toFixed(2) : '0.00',
-        cpc: campaign.totalClicks > 0 ? 
-          ((campaign.totalSpend || 0) / campaign.totalClicks).toFixed(2) : '0.00',
-        cpm: campaign.totalImpressions > 0 ? 
-          ((campaign.totalSpend || 0) / campaign.totalImpressions * 1000).toFixed(2) : '0.00'
+        ctr: impressions > 0 ? 
+          ((clicks || 0) / impressions * 100).toFixed(2) : '0.00',
+        cpc: clicks > 0 ? 
+          ((campaign.spend || 0) / clicks).toFixed(2) : '0.00',
+        cpm: impressions > 0 ? 
+          ((campaign.spend || 0) / impressions * 1000).toFixed(2) : '0.00'
       }
-    }));
+        };
+      })
+    );
 
-    console.log(`✅ Returning ${ads.length} formatted ads for user ${user._id}`);
-    res.json(ads);
+    console.log(`✅ Returning ${adsWithCreatives.length} formatted ads for user ${user._id}`);
+    res.json(adsWithCreatives);
 
   } catch (error) {
     console.error('❌ Error fetching user ads:', error);

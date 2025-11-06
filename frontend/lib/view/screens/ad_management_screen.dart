@@ -1168,164 +1168,510 @@ class _AdManagementScreenState extends State<AdManagementScreen>
       );
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Overall performance summary
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Overall Performance',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildAnalyticsMetric(
-                          'Total Impressions',
-                          _ads
-                              .fold(0, (sum, ad) => sum + ad.impressions)
-                              .toString(),
-                          Icons.visibility,
-                          Colors.blue,
-                        ),
-                      ),
-                      Expanded(
-                        child: _buildAnalyticsMetric(
-                          'Total Clicks',
-                          _ads.fold(0, (sum, ad) => sum + ad.clicks).toString(),
-                          Icons.touch_app,
-                          Colors.green,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildAnalyticsMetric(
-                          'Average CTR',
-                          '${(_ads.fold(0.0, (sum, ad) => sum + ad.ctr) / _ads.length).toStringAsFixed(2)}%',
-                          Icons.trending_up,
-                          Colors.orange,
-                        ),
-                      ),
-                      Expanded(
-                        child: _buildAnalyticsMetric(
-                          'Total Spend',
-                          '₹${_ads.fold(0.0, (sum, ad) => sum + ad.spend).toStringAsFixed(2)}',
-                          Icons.attach_money,
-                          Colors.red,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _fetchAllAdsAnalytics(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                const SizedBox(height: 16),
+                Text(
+                  'Error loading analytics: ${snapshot.error}',
+                  style: const TextStyle(color: Colors.red),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => setState(() {}),
+                  child: const Text('Retry'),
+                ),
+              ],
             ),
-          ),
+          );
+        }
 
-          const SizedBox(height: 16),
+        final analyticsData = snapshot.data ?? [];
 
-          // Top performing ads
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Top Performing Ads',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 16),
-                  ..._getTopPerformingAds().map((ad) => ListTile(
-                        title: Text(ad.title),
-                        subtitle: Text(
-                            'CTR: ${ad.formattedCtr} • Clicks: ${ad.clicks}'),
-                        trailing: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: ad.performanceColor.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            ad.performanceStatus,
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Overall Performance Summary
+              Card(
+                elevation: 2,
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.dashboard, color: Colors.blue),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Overall Performance Summary',
                             style: TextStyle(
-                              color: ad.performanceColor,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                        ),
-                      )),
-                ],
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      // Key Metrics Grid
+                      GridView.count(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        crossAxisCount: 2,
+                        mainAxisSpacing: 16,
+                        crossAxisSpacing: 16,
+                        childAspectRatio: 1.3,
+                        children: [
+                          _buildAnalyticsMetricCard(
+                            'Total Impressions',
+                            _calculateTotalMetric(analyticsData, 'impressions'),
+                            Icons.visibility,
+                            Colors.blue,
+                          ),
+                          _buildAnalyticsMetricCard(
+                            'Total Clicks',
+                            _calculateTotalMetric(analyticsData, 'clicks'),
+                            Icons.touch_app,
+                            Colors.green,
+                          ),
+                          _buildAnalyticsMetricCard(
+                            'Average CTR',
+                            _calculateAverageCTR(analyticsData),
+                            Icons.trending_up,
+                            Colors.orange,
+                          ),
+                          _buildAnalyticsMetricCard(
+                            'Total Spend',
+                            '₹${_calculateTotalSpend(analyticsData)}',
+                            Icons.attach_money,
+                            Colors.red,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ),
+
+              const SizedBox(height: 16),
+
+              // Individual Ad Performance
+              const Text(
+                'Individual Ad Performance',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // List of ads with detailed analytics
+              // **FIX: Use stored original ad reference for proper matching**
+              ...analyticsData.map((analytics) {
+                // **FIX: Use stored original ad reference if available**
+                AdModel? ad;
+                if (analytics['_originalAd'] != null) {
+                  ad = analytics['_originalAd'] as AdModel;
+                  AppLogger.log('✅ Using stored original ad: ${ad.title}');
+                } else {
+                  // Fallback: Try matching by creativeId or campaignId
+                  final analyticsAdId = analytics['ad']?['id']; // Creative ID
+                  final analyticsCampaignId =
+                      analytics['ad']?['campaignId']; // Campaign ID
+
+                  ad = _ads.firstWhere(
+                    (a) {
+                      // Match by creativeId (preferred) or campaignId
+                      return (a.creativeId != null &&
+                              a.creativeId == analyticsAdId) ||
+                          (analyticsCampaignId != null &&
+                              a.id == analyticsCampaignId) ||
+                          (a.id == analyticsAdId); // Fallback
+                    },
+                    orElse: () {
+                      AppLogger.log(
+                          '⚠️ Could not match analytics to ad. Analytics ID: $analyticsAdId, Campaign ID: $analyticsCampaignId');
+                      return _ads.first; // Fallback to first ad
+                    },
+                  );
+                }
+                return _buildAdAnalyticsCard(ad, analytics);
+              }),
+
+              // If no analytics data, show ads with basic metrics
+              if (analyticsData.isEmpty)
+                ..._ads.map((ad) => _buildAdAnalyticsCard(ad, null)),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Fetch analytics for all ads
+  Future<List<Map<String, dynamic>>> _fetchAllAdsAnalytics() async {
+    final analyticsList = <Map<String, dynamic>>[];
+
+    for (final ad in _ads) {
+      try {
+        // **FIX: Use creativeId if available (preferred), otherwise use campaign ID**
+        // Backend can handle both campaign ID and creative ID
+        final adIdToUse = ad.creativeId ?? ad.id;
+        AppLogger.log('📊 Fetching analytics for ad:');
+        AppLogger.log('   Ad Title: ${ad.title}');
+        AppLogger.log('   Campaign ID: ${ad.id}');
+        AppLogger.log('   Creative ID: ${ad.creativeId}');
+        AppLogger.log('   Using ID: $adIdToUse');
+
+        final analytics = await _adService.getAdAnalytics(adIdToUse);
+
+        // Check if analytics has error
+        if (analytics.containsKey('error')) {
+          AppLogger.log(
+              '⚠️ Analytics error for ad ${ad.title} (${ad.id}): ${analytics['error']}');
+          continue;
+        }
+
+        if (analytics['ad'] != null) {
+          // **FIX: Store the original ad reference with analytics for proper matching**
+          analytics['_originalAd'] = ad;
+          analyticsList.add(analytics);
+          AppLogger.log(
+              '✅ Analytics fetched successfully for ad ${ad.title} (${ad.id})');
+          AppLogger.log('   Analytics ad ID: ${analytics['ad']?['id']}');
+          AppLogger.log(
+              '   Analytics campaign ID: ${analytics['ad']?['campaignId']}');
+        } else {
+          AppLogger.log(
+              '⚠️ No ad data in analytics response for ad ${ad.title} (${ad.id})');
+        }
+      } catch (e) {
+        AppLogger.log(
+            '❌ Error fetching analytics for ad ${ad.title} (${ad.id}): $e');
+        // Continue with other ads even if one fails
+      }
+    }
+
+    AppLogger.log(
+        '📊 Total analytics fetched: ${analyticsList.length} out of ${_ads.length} ads');
+    return analyticsList;
+  }
+
+  // Build analytics metric card
+  Widget _buildAnalyticsMetricCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: color, size: 32),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
             ),
           ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade700,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
 
-          const SizedBox(height: 16),
+  // Build detailed ad analytics card
+  Widget _buildAdAnalyticsCard(AdModel ad, Map<String, dynamic>? analytics) {
+    final adData = analytics?['ad'];
 
-          // Ad type performance comparison
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Performance by Ad Type',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+    // **FIX: Use analytics data for metrics, but ALWAYS use original ad for title and imageUrl**
+    // This ensures correct title and image are displayed even if analytics has wrong data
+    final impressions = adData?['impressions'] ?? ad.impressions;
+    final clicks = adData?['clicks'] ?? ad.clicks;
+    final ctr = adData?['ctr'] != null
+        ? double.tryParse(adData['ctr'].toString()) ?? ad.ctr
+        : ad.ctr;
+    final spend = adData?['spend'] != null
+        ? double.tryParse(adData['spend'].toString()) ?? ad.spend
+        : ad.spend;
+    final revenue = adData?['revenue'] != null
+        ? double.tryParse(adData['revenue'].toString()) ?? 0.0
+        : 0.0;
+
+    // **FIX: Always use original ad's title and imageUrl, not from analytics**
+    final displayTitle = ad.title; // Use original ad title
+    final displayImageUrl = ad.imageUrl; // Use original ad imageUrl
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 1,
+      child: ExpansionTile(
+        leading: displayImageUrl != null
+            ? ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.network(
+                  displayImageUrl,
+                  width: 50,
+                  height: 50,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    width: 50,
+                    height: 50,
+                    color: Colors.grey.shade300,
+                    child: const Icon(Icons.image),
                   ),
-                  const SizedBox(height: 16),
-                  ..._getAdTypePerformance().entries.map((entry) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              entry.key.toUpperCase(),
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w500),
-                            ),
-                            const SizedBox(height: 4),
-                            LinearProgressIndicator(
-                              value: (entry.value['ctr'] ?? 0) /
-                                  10, // Normalize to 0-1 scale
-                              backgroundColor: Colors.grey.shade300,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                (entry.value['ctr'] ?? 0) > 5
-                                    ? Colors.green
-                                    : (entry.value['ctr'] ?? 0) > 2
-                                        ? Colors.orange
-                                        : Colors.red,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'CTR: ${(entry.value['ctr'] ?? 0).toStringAsFixed(2)}% • Spend: ₹${(entry.value['spend'] ?? 0).toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                  fontSize: 12, color: Colors.grey),
-                            ),
-                          ],
-                        ),
-                      )),
-                ],
-              ),
+                ),
+              )
+            : const Icon(Icons.campaign, size: 40),
+        title: Text(
+          displayTitle, // **FIX: Use original ad title**
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Text(
+          ad.adType.toUpperCase(),
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+        ),
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                // Key Metrics Row
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildMetricItem(
+                        'Impressions',
+                        _formatNumber(impressions),
+                        Icons.visibility,
+                        Colors.blue,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildMetricItem(
+                        'Clicks',
+                        _formatNumber(clicks),
+                        Icons.touch_app,
+                        Colors.green,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildMetricItem(
+                        'CTR',
+                        '${ctr.toStringAsFixed(2)}%',
+                        Icons.trending_up,
+                        Colors.orange,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildMetricItem(
+                        'Spend',
+                        '₹${spend.toStringAsFixed(2)}',
+                        Icons.attach_money,
+                        Colors.red,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // Additional Metrics
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    children: [
+                      _buildDetailRow('Ad Views', _formatNumber(impressions)),
+                      const Divider(),
+                      _buildDetailRow(
+                          'Revenue', '₹${revenue.toStringAsFixed(2)}'),
+                      const Divider(),
+                      _buildDetailRow(
+                          'CPC',
+                          clicks > 0
+                              ? '₹${(spend / clicks).toStringAsFixed(2)}'
+                              : '₹0.00'),
+                      const Divider(),
+                      _buildDetailRow(
+                          'CPM',
+                          impressions > 0
+                              ? '₹${((spend / impressions) * 1000).toStringAsFixed(2)}'
+                              : '₹0.00'),
+                      const Divider(),
+                      _buildDetailRow('Status', ad.status.toUpperCase()),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildMetricItem(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey.shade600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _calculateTotalMetric(
+    List<Map<String, dynamic>> analytics,
+    String metric,
+  ) {
+    int total = 0;
+    for (final analytics in analytics) {
+      final adData = analytics['ad'];
+      if (adData != null) {
+        total += (adData[metric] ?? 0) as int;
+      }
+    }
+    // If no analytics data, use local ad data
+    if (total == 0 && analytics.isEmpty) {
+      if (metric == 'impressions') {
+        total = _ads.fold(0, (sum, ad) => sum + ad.impressions);
+      } else if (metric == 'clicks') {
+        total = _ads.fold(0, (sum, ad) => sum + ad.clicks);
+      }
+    }
+    return _formatNumber(total);
+  }
+
+  String _calculateAverageCTR(List<Map<String, dynamic>> analytics) {
+    if (analytics.isEmpty) {
+      if (_ads.isEmpty) return '0.00%';
+      final avgCtr = _ads.fold(0.0, (sum, ad) => sum + ad.ctr) / _ads.length;
+      return '${avgCtr.toStringAsFixed(2)}%';
+    }
+
+    double totalCtr = 0;
+    int count = 0;
+    for (final analytics in analytics) {
+      final adData = analytics['ad'];
+      if (adData != null && adData['ctr'] != null) {
+        totalCtr += double.tryParse(adData['ctr'].toString()) ?? 0;
+        count++;
+      }
+    }
+    return count > 0 ? '${(totalCtr / count).toStringAsFixed(2)}%' : '0.00%';
+  }
+
+  String _calculateTotalSpend(List<Map<String, dynamic>> analytics) {
+    double total = 0;
+    for (final analytics in analytics) {
+      final adData = analytics['ad'];
+      if (adData != null && adData['spend'] != null) {
+        total += double.tryParse(adData['spend'].toString()) ?? 0;
+      }
+    }
+    // If no analytics data, use local ad data
+    if (total == 0 && analytics.isEmpty) {
+      total = _ads.fold(0.0, (sum, ad) => sum + ad.spend);
+    }
+    return total.toStringAsFixed(2);
+  }
+
+  String _formatNumber(int number) {
+    if (number >= 1000000) {
+      return '${(number / 1000000).toStringAsFixed(1)}M';
+    } else if (number >= 1000) {
+      return '${(number / 1000).toStringAsFixed(1)}K';
+    }
+    return number.toString();
   }
 
   Widget _buildInsightsTab() {
@@ -1655,35 +2001,6 @@ class _AdManagementScreenState extends State<AdManagementScreen>
   }
 
   // **NEW: Helper methods for Analytics tab**
-
-  Widget _buildAnalyticsMetric(
-      String title, String value, IconData icon, Color color) {
-    return Column(
-      children: [
-        Icon(icon, color: color, size: 28),
-        const SizedBox(height: 8),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        Text(
-          title,
-          style: const TextStyle(fontSize: 12, color: Colors.grey),
-          textAlign: TextAlign.center,
-        ),
-      ],
-    );
-  }
-
-  List<AdModel> _getTopPerformingAds() {
-    final sortedAds = List<AdModel>.from(_ads);
-    sortedAds.sort((a, b) => b.ctr.compareTo(a.ctr));
-    return sortedAds.take(3).toList();
-  }
 
   Map<String, Map<String, double>> _getAdTypePerformance() {
     final performance = <String, Map<String, double>>{};

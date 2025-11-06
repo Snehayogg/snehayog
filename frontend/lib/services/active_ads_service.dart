@@ -29,8 +29,10 @@ class ActiveAdsService {
         return await _fetchTargetedAdsForVideo(videoData);
       }
 
+      // **FIX: Use getBaseUrlWithFallback() to try local server first**
+      final baseUrl = await AppConfig.getBaseUrlWithFallback();
       AppLogger.log(
-          '🎯 ActiveAdsService: Fetching all active ads from $_baseUrl/api/ads/serve');
+          '🎯 ActiveAdsService: Fetching all active ads from $baseUrl/api/ads/serve');
 
       // Include optional targeting params to match backend filters
       final Map<String, String> queryParams = {
@@ -50,7 +52,7 @@ class ActiveAdsService {
         queryParams['videoKeywords'] = videoKeywords.join(',');
       }
 
-      final uri = Uri.parse('$_baseUrl/api/ads/serve')
+      final uri = Uri.parse('$baseUrl/api/ads/serve')
           .replace(queryParameters: queryParams);
 
       final response = await httpClientService.get(uri, headers: {
@@ -175,6 +177,21 @@ class ActiveAdsService {
         AppLogger.log('   Carousel ads: ${categorizedAds['carousel']!.length}');
         AppLogger.log(
             '   Video feed ads: ${categorizedAds['video feed ad']!.length}');
+
+        // **DEBUG: Log each banner ad with full details**
+        if (categorizedAds['banner']!.isNotEmpty) {
+          AppLogger.log('📋 Banner Ads Details:');
+          for (int i = 0; i < categorizedAds['banner']!.length; i++) {
+            final bannerAd = categorizedAds['banner']![i];
+            AppLogger.log('   Banner Ad $i:');
+            AppLogger.log('      ID: ${bannerAd['id']}');
+            AppLogger.log('      Title: ${bannerAd['title']}');
+            AppLogger.log('      AdType: ${bannerAd['adType']}');
+            AppLogger.log('      ImageUrl: ${bannerAd['imageUrl']}');
+            AppLogger.log('      IsActive: ${bannerAd['isActive']}');
+            AppLogger.log('      ReviewStatus: ${bannerAd['reviewStatus']}');
+          }
+        }
 
         return categorizedAds;
       } else {
@@ -453,8 +470,10 @@ class ActiveAdsService {
     try {
       AppLogger.log('🔄 ActiveAdsService: Fetching fallback ads...');
 
+      // **FIX: Use getBaseUrlWithFallback() to try local server first**
+      final baseUrl = await AppConfig.getBaseUrlWithFallback();
       final response = await httpClientService.get(
-        Uri.parse('$_baseUrl/api/ads/serve'),
+        Uri.parse('$baseUrl/api/ads/serve'),
         headers: {
           'Content-Type': 'application/json',
         },
