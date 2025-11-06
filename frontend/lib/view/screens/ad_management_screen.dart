@@ -1259,6 +1259,19 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                             Icons.attach_money,
                             Colors.red,
                           ),
+                          // NEW: Average CPC and CPM
+                          _buildAnalyticsMetricCard(
+                            'Average CPC',
+                            '₹${_calculateAverageCPC(analyticsData)}',
+                            Icons.monetization_on,
+                            Colors.teal,
+                          ),
+                          _buildAnalyticsMetricCard(
+                            'Average CPM',
+                            '₹${_calculateAverageCPM(analyticsData)}',
+                            Icons.stacked_line_chart,
+                            Colors.purple,
+                          ),
                         ],
                       ),
                     ],
@@ -1425,9 +1438,17 @@ class _AdManagementScreenState extends State<AdManagementScreen>
     final spend = adData?['spend'] != null
         ? double.tryParse(adData['spend'].toString()) ?? ad.spend
         : ad.spend;
-    final revenue = adData?['revenue'] != null
-        ? double.tryParse(adData['revenue'].toString()) ?? 0.0
-        : 0.0;
+    // NEW: Additional KPIs (Reach, Conversions, CVR, CPM, CPC)
+    // Reach may not be provided by backend yet; default to null
+    final int? reach = adData != null && adData['reach'] != null
+        ? int.tryParse(adData['reach'].toString())
+        : null;
+    final double cpm = impressions > 0 ? ((spend / impressions) * 1000) : 0.0;
+    final double cpc = clicks > 0 ? (spend / clicks) : 0.0;
+    final int conversions = adData != null && adData['conversions'] != null
+        ? int.tryParse(adData['conversions'].toString()) ?? 0
+        : 0;
+    final double cvr = clicks > 0 ? (conversions / clicks) * 100.0 : 0.0;
 
     // **FIX: Always use original ad's title and imageUrl, not from analytics**
     final displayTitle = ad.title; // Use original ad title
@@ -1510,6 +1531,28 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                   ],
                 ),
                 const SizedBox(height: 16),
+                // NEW: Add CPM to must-have KPIs
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildMetricItem(
+                        'CPM',
+                        cpm.isFinite ? '₹${cpm.toStringAsFixed(2)}' : '₹0.00',
+                        Icons.stacked_line_chart,
+                        Colors.teal,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildMetricItem(
+                        'CPC',
+                        cpc.isFinite ? '₹${cpc.toStringAsFixed(2)}' : '₹0.00',
+                        Icons.monetization_on,
+                        Colors.purple,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
                 // Additional Metrics
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -1521,19 +1564,23 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                     children: [
                       _buildDetailRow('Ad Views', _formatNumber(impressions)),
                       const Divider(),
-                      _buildDetailRow(
-                          'Revenue', '₹${revenue.toStringAsFixed(2)}'),
+                      _buildDetailRow('Reach (Unique Users)',
+                          reach != null ? _formatNumber(reach) : '—'),
+                      const Divider(),
+                      _buildDetailRow('Conversions', conversions.toString()),
+                      const Divider(),
+                      _buildDetailRow('CVR', '${cvr.toStringAsFixed(2)}%'),
                       const Divider(),
                       _buildDetailRow(
                           'CPC',
-                          clicks > 0
-                              ? '₹${(spend / clicks).toStringAsFixed(2)}'
+                          cpc.isFinite
+                              ? '₹${cpc.toStringAsFixed(2)}'
                               : '₹0.00'),
                       const Divider(),
                       _buildDetailRow(
                           'CPM',
-                          impressions > 0
-                              ? '₹${((spend / impressions) * 1000).toStringAsFixed(2)}'
+                          cpm.isFinite
+                              ? '₹${cpm.toStringAsFixed(2)}'
                               : '₹0.00'),
                       const Divider(),
                       _buildDetailRow('Status', ad.status.toUpperCase()),
@@ -1663,6 +1710,45 @@ class _AdManagementScreenState extends State<AdManagementScreen>
       total = _ads.fold(0.0, (sum, ad) => sum + ad.spend);
     }
     return total.toStringAsFixed(2);
+  }
+
+  // NEW: Average CPC across ads
+  String _calculateAverageCPC(List<Map<String, dynamic>> analytics) {
+    double totalSpend = 0;
+    int totalClicks = 0;
+    for (final item in analytics) {
+      final adData = item['ad'];
+      if (adData != null) {
+        totalSpend += double.tryParse(adData['spend']?.toString() ?? '0') ?? 0;
+        totalClicks += int.tryParse(adData['clicks']?.toString() ?? '0') ?? 0;
+      }
+    }
+    if (analytics.isEmpty) {
+      totalSpend = _ads.fold(0.0, (sum, ad) => sum + ad.spend);
+      totalClicks = _ads.fold(0, (sum, ad) => sum + ad.clicks);
+    }
+    if (totalClicks == 0) return '0.00';
+    return (totalSpend / totalClicks).toStringAsFixed(2);
+  }
+
+  // NEW: Average CPM across ads
+  String _calculateAverageCPM(List<Map<String, dynamic>> analytics) {
+    double totalSpend = 0;
+    int totalImpressions = 0;
+    for (final item in analytics) {
+      final adData = item['ad'];
+      if (adData != null) {
+        totalSpend += double.tryParse(adData['spend']?.toString() ?? '0') ?? 0;
+        totalImpressions +=
+            int.tryParse(adData['impressions']?.toString() ?? '0') ?? 0;
+      }
+    }
+    if (analytics.isEmpty) {
+      totalSpend = _ads.fold(0.0, (sum, ad) => sum + ad.spend);
+      totalImpressions = _ads.fold(0, (sum, ad) => sum + ad.impressions);
+    }
+    if (totalImpressions == 0) return '0.00';
+    return ((totalSpend / totalImpressions) * 1000).toStringAsFixed(2);
   }
 
   String _formatNumber(int number) {

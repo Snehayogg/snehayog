@@ -1337,13 +1337,19 @@ class _UploadScreenState extends State<UploadScreen> {
                                       helperText:
                                           'Choose a category to improve ad targeting',
                                     ),
-                                    items: kInterestOptions
-                                        .where((c) => c != 'Custom Interest')
-                                        .map((c) => DropdownMenuItem<String>(
-                                              value: c,
-                                              child: Text(c),
-                                            ))
-                                        .toList(),
+                                    items: [
+                                      ...kInterestOptions
+                                          .where((c) => c != 'Custom Interest')
+                                          .map((c) => DropdownMenuItem<String>(
+                                                value: c,
+                                                child: Text(c),
+                                              )),
+                                      // **NEW: Add "Others" option at the end**
+                                      const DropdownMenuItem<String>(
+                                        value: 'Others',
+                                        child: Text('Others'),
+                                      ),
+                                    ],
                                     onChanged: (val) {
                                       // **NO setState: Use ValueNotifier**
                                       _selectedCategory.value = val;

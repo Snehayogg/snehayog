@@ -588,27 +588,27 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       _isScreenVisible = isVisible;
 
       if (isVisible) {
-        // **FIX: When returning to Yug tab, ensure video player is displayed**
-        // Check if current video controller is initialized and mark first frame as ready
+        // Returning to Yug tab - ensure current video autoplays (no audio overlap)
+        // 1) Mark first frame ready if controller already initialized
         if (_currentIndex < _videos.length) {
           final controller = _controllerPool[_currentIndex];
           if (controller != null && controller.value.isInitialized) {
-            // **FIX: Mark first frame as ready to ensure video player displays**
             _firstFrameReady[_currentIndex]?.value = true;
           }
         }
 
-        // **FIX: When returning to Yug tab, pause videos first instead of auto-resuming**
-        // This prevents videos from playing automatically when user returns to tab
+        // 2) Pause all other videos to avoid audio overlap
+        _pauseAllVideosOnTabSwitch();
+        _isScreenVisible =
+            true; // set visible again after pause helper sets false
+
+        // 3) Autoplay the current video
         AppLogger.log(
-            '🔄 VideoFeedAdvanced: Returning to Yug tab - pausing videos first');
-        _pauseCurrentVideo();
+            '▶️ VideoFeedAdvanced: Yug tab visible - trying autoplay');
+        _tryAutoplayCurrent();
 
-        // **NEW: Start background profile preloading**
+        // 4) Start background profile preloading
         _profilePreloader.startBackgroundPreloading();
-
-        // **IMPORTANT: Don't auto-resume - let user manually start playback if they want**
-        // This fixes the issue where videos would auto-play when returning to tab
       } else {
         // Screen became hidden - pause current video
         _pauseCurrentVideo();
@@ -2101,6 +2101,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       _viewTracker.stopViewTracking(previousVideo.id);
       AppLogger.log(
           '⏸️ Stopped view tracking for previous video: ${previousVideo.id}');
+
+      // **NEW: Clear userPaused flag so returning to this video autoplays**
+      _userPaused[_currentIndex] = false;
     }
 
     // **CRITICAL: Pause ALL videos (including current) before switching to new one**
