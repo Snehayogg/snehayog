@@ -128,18 +128,18 @@ class AdPlacementPreviewWidget extends StatelessWidget {
             height: 20,
             color: Colors.black,
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
+            child: const Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('9:41',
+                Text('9:41',
                     style: TextStyle(color: Colors.white, fontSize: 10)),
                 Row(
                   children: [
                     Icon(Icons.signal_cellular_4_bar,
                         color: Colors.white, size: 12),
-                    const SizedBox(width: 4),
+                    SizedBox(width: 4),
                     Icon(Icons.wifi, color: Colors.white, size: 12),
-                    const SizedBox(width: 4),
+                    SizedBox(width: 4),
                     Icon(Icons.battery_full, color: Colors.white, size: 12),
                   ],
                 ),
@@ -190,7 +190,7 @@ class AdPlacementPreviewWidget extends StatelessWidget {
               height: 400,
               color: Colors.grey.shade900,
               child: selectedVideo != null
-                  ? Center(
+                  ? const Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -233,7 +233,7 @@ class AdPlacementPreviewWidget extends StatelessWidget {
                 color: Colors.blue,
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: Row(
+              child: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.ads_click, color: Colors.white, size: 12),
@@ -271,7 +271,7 @@ class AdPlacementPreviewWidget extends StatelessWidget {
               children: [
                 Icon(Icons.play_circle_outline,
                     color: Colors.grey.shade600, size: 50),
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 Text(
                   'Video $index',
                   style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
@@ -348,12 +348,12 @@ class AdPlacementPreviewWidget extends StatelessWidget {
               ),
             ),
           // Video actions (match Yug UI): vertical action rail on RIGHT
-          Positioned(
+          const Positioned(
             right: 8,
             bottom: 16,
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              children: const [
+              children: [
                 Icon(Icons.favorite_border, color: Colors.white, size: 26),
                 SizedBox(height: 14),
                 Icon(Icons.comment_outlined, color: Colors.white, size: 26),

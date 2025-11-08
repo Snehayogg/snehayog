@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:vayu/config/app_config.dart';
@@ -13,7 +14,6 @@ import 'package:vayu/services/location_onboarding_service.dart';
 import 'package:vayu/utils/app_logger.dart';
 
 class AuthService {
-  // ✅ Use platform-specific client ID
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: GoogleSignInConfig.scopes,
     clientId: GoogleSignInConfig.platformClientId,
@@ -426,6 +426,8 @@ class AuthService {
       String? fallbackUser = prefs.getString('fallback_user');
       if (fallbackUser != null) {
         AppLogger.log('🔄 User has fallback session');
+        // Verify in background (non-blocking)
+        unawaited(_verifyTokenInBackground(token));
         return true;
       }
 
@@ -435,21 +437,38 @@ class AuthService {
         return false;
       }
 
-      // Verify token with backend if possible
-      try {
-        final response = await http.get(
-          Uri.parse('${AppConfig.baseUrl}/api/users/profile'),
-          headers: {'Authorization': 'Bearer $token'},
-        ).timeout(const Duration(seconds: 5));
-
-        return response.statusCode == 200;
-      } catch (e) {
-        AppLogger.log('⚠️ Token verification failed, but keeping session: $e');
-        return true; // Keep the session even if backend is unreachable
-      }
+      // **OPTIMIZED: Return cached status immediately, verify in background**
+      AppLogger.log('✅ Using cached token status (optimistic)');
+      // Verify token in background (non-blocking)
+      unawaited(_verifyTokenInBackground(token));
+      return true; // Optimistic return - assume valid if token exists
     } catch (e) {
       AppLogger.log('❌ Error checking login status: $e');
       return false;
+    }
+  }
+
+  /// **NEW: Verify token in background without blocking**
+  Future<void> _verifyTokenInBackground(String? token) async {
+    if (token == null || token.isEmpty) return;
+
+    try {
+      final response = await http.get(
+        Uri.parse('${AppConfig.baseUrl}/api/users/profile'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 3));
+
+      if (response.statusCode != 200) {
+        AppLogger.log('⚠️ Token verification failed in background');
+        // Optionally clear invalid token
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('jwt_token');
+      } else {
+        AppLogger.log('✅ Token verified successfully in background');
+      }
+    } catch (e) {
+      AppLogger.log('⚠️ Background token verification failed: $e');
+      // Keep session even if backend is unreachable
     }
   }
 

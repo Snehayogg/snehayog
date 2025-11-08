@@ -207,12 +207,12 @@ class BannerImageProcessor {
     );
   }
 
-  /// **NEW: Show simple banner crop dialog - Instagram-style**
   static Future<File?> showBannerCropDialog(
     BuildContext context,
     File imageFile,
   ) async {
-    double cropOffsetY = 0.0; // Vertical offset for cropping (0.0 to 1.0)
+    double cropOffsetX = 0.5; // Horizontal offset (0.0 = left, 1.0 = right)
+    double cropOffsetY = 0.5; // Vertical offset (0.0 = top, 1.0 = bottom)
 
     return await showDialog<File?>(
       context: context,
@@ -237,8 +237,11 @@ class BannerImageProcessor {
                 TextButton(
                   onPressed: () async {
                     try {
-                      final croppedFile =
-                          await _cropImageWithOffset(imageFile, cropOffsetY);
+                      final croppedFile = await _cropImageWithOffsets(
+                        imageFile,
+                        cropOffsetX,
+                        cropOffsetY,
+                      );
                       Navigator.of(context).pop(croppedFile);
                     } catch (e) {
                       Navigator.of(context).pop(null);
@@ -280,7 +283,7 @@ class BannerImageProcessor {
                       ),
                       SizedBox(height: 8),
                       Text(
-                        'Drag the slider to position your image',
+                        'Drag the banner frame to position your image',
                         style: TextStyle(color: Colors.white, fontSize: 16),
                         textAlign: TextAlign.center,
                       ),
@@ -299,55 +302,45 @@ class BannerImageProcessor {
                   child: Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
-                    child: Stack(
-                      children: [
-                        // Background image
-                        Positioned.fill(
-                          child: Image.file(
-                            imageFile,
-                            fit: BoxFit.contain,
-                          ),
-                        ),
-
-                        // Crop area overlay
-                        Positioned.fill(
-                          child: _buildCropOverlay(context, cropOffsetY),
-                        ),
-                      ],
+                    child: _buildInteractiveCropArea(
+                      imageFile: imageFile,
+                      offsetX: cropOffsetX,
+                      offsetY: cropOffsetY,
+                      onOffsetChanged: (newOffset) {
+                        setState(() {
+                          cropOffsetX = newOffset.dx;
+                          cropOffsetY = newOffset.dy;
+                        });
+                      },
                     ),
                   ),
                 ),
 
-                // Slider control
+                // Interaction info
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
                   color: Colors.grey[900],
                   child: Column(
-                    children: [
-                      const Row(
+                    children: const [
+                      Row(
                         children: [
                           Icon(Icons.pan_tool, color: Colors.blue, size: 20),
                           SizedBox(width: 8),
-                          Text(
-                            'Drag to move image up or down',
-                            style: TextStyle(color: Colors.white, fontSize: 14),
+                          Expanded(
+                            child: Text(
+                              'Drag the blue banner box to adjust the focus. It stays locked to 3.2:1.',
+                              style:
+                                  TextStyle(color: Colors.white, fontSize: 14),
+                            ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
-                      Slider(
-                        value: cropOffsetY,
-                        min: 0.0,
-                        max: 1.0,
-                        divisions: 20,
-                        activeColor: Colors.blue,
-                        inactiveColor: Colors.grey,
-                        onChanged: (value) {
-                          setState(() {
-                            cropOffsetY = value;
-                          });
-                        },
+                      SizedBox(height: 12),
+                      Text(
+                        'Tip: You can move it in any direction. Double-tap the banner box to reset.',
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                        textAlign: TextAlign.center,
                       ),
                     ],
                   ),
@@ -360,23 +353,52 @@ class BannerImageProcessor {
     );
   }
 
-  /// **NEW: Build crop overlay showing banner area**
-  static Widget _buildCropOverlay(BuildContext context, double offsetY) {
+  /// **NEW: Build interactive crop area with draggable banner box**
+  static Widget _buildInteractiveCropArea({
+    required File imageFile,
+    required double offsetX,
+    required double offsetY,
+    required ValueChanged<Offset> onOffsetChanged,
+  }) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final containerWidth = constraints.maxWidth;
         final containerHeight = constraints.maxHeight;
 
-        // Calculate banner area dimensions
-        final bannerAreaWidth = containerWidth * 0.9;
-        final bannerAreaHeight = bannerAreaWidth / bannerAspectRatio;
+        // Determine banner area size while maintaining aspect ratio
+        final availableWidth = containerWidth * 0.9;
+        final availableHeight = containerHeight * 0.8;
 
-        // Position banner area based on offset
-        final maxOffset = containerHeight - bannerAreaHeight;
-        final bannerTop = maxOffset * offsetY;
+        double bannerAreaWidth = availableWidth;
+        double bannerAreaHeight = bannerAreaWidth / bannerAspectRatio;
+
+        if (bannerAreaHeight > availableHeight) {
+          bannerAreaHeight = availableHeight;
+          bannerAreaWidth = bannerAreaHeight * bannerAspectRatio;
+        }
+
+        final maxOffsetX =
+            (containerWidth - bannerAreaWidth).clamp(0.0, double.infinity);
+        final maxOffsetY =
+            (containerHeight - bannerAreaHeight).clamp(0.0, double.infinity);
+
+        final bannerLeft = maxOffsetX == 0
+            ? (containerWidth - bannerAreaWidth) / 2
+            : offsetX * maxOffsetX;
+        final bannerTop = maxOffsetY == 0
+            ? (containerHeight - bannerAreaHeight) / 2
+            : offsetY * maxOffsetY;
 
         return Stack(
           children: [
+            // Background image
+            Positioned.fill(
+              child: Image.file(
+                imageFile,
+                fit: BoxFit.contain,
+              ),
+            ),
+
             // Dark overlay
             Positioned.fill(
               child: Container(
@@ -384,21 +406,39 @@ class BannerImageProcessor {
               ),
             ),
 
-            // Clear crop area
+            // Draggable crop area
             Positioned(
-              left: (containerWidth - bannerAreaWidth) / 2,
+              left: bannerLeft,
               top: bannerTop,
               width: bannerAreaWidth,
               height: bannerAreaHeight,
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.blue, width: 3),
-                  borderRadius: BorderRadius.circular(4),
-                ),
+              child: GestureDetector(
+                onPanUpdate: (details) {
+                  double newOffsetX = offsetX;
+                  double newOffsetY = offsetY;
+
+                  if (maxOffsetX > 0) {
+                    final currentX = offsetX * maxOffsetX;
+                    final updatedX =
+                        (currentX + details.delta.dx).clamp(0.0, maxOffsetX);
+                    newOffsetX = updatedX / maxOffsetX;
+                  }
+
+                  if (maxOffsetY > 0) {
+                    final currentY = offsetY * maxOffsetY;
+                    final updatedY =
+                        (currentY + details.delta.dy).clamp(0.0, maxOffsetY);
+                    newOffsetY = updatedY / maxOffsetY;
+                  }
+
+                  onOffsetChanged(Offset(newOffsetX, newOffsetY));
+                },
+                onDoubleTap: () => onOffsetChanged(const Offset(0.5, 0.5)),
                 child: Container(
                   decoration: BoxDecoration(
+                    border: Border.all(color: Colors.blue, width: 3),
+                    borderRadius: BorderRadius.circular(4),
                     color: Colors.transparent,
-                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
               ),
@@ -406,8 +446,8 @@ class BannerImageProcessor {
 
             // Banner label
             Positioned(
-              left: (containerWidth - bannerAreaWidth) / 2,
-              top: bannerTop - 30,
+              left: bannerLeft,
+              top: (bannerTop - 30).clamp(8.0, double.infinity),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
@@ -430,9 +470,12 @@ class BannerImageProcessor {
     );
   }
 
-  /// **NEW: Crop image with vertical offset**
-  static Future<File> _cropImageWithOffset(
-      File imageFile, double offsetY) async {
+  /// **NEW: Crop image with adjustable offsets**
+  static Future<File> _cropImageWithOffsets(
+    File imageFile,
+    double offsetX,
+    double offsetY,
+  ) async {
     try {
       final bytes = await imageFile.readAsBytes();
       final originalImg = img.decodeImage(bytes);
@@ -444,25 +487,22 @@ class BannerImageProcessor {
       final originalWidth = originalImg.width;
       final originalHeight = originalImg.height;
 
-      // Calculate crop dimensions
-      int cropWidth, cropHeight, cropX, cropY;
+      // Calculate crop dimensions maintaining aspect ratio
+      int cropWidth = originalWidth;
+      int cropHeight = (cropWidth / bannerAspectRatio).round();
 
-      if (originalWidth / originalHeight > bannerAspectRatio) {
-        // Image is wider - crop width, use full height
+      if (cropHeight > originalHeight) {
         cropHeight = originalHeight;
         cropWidth = (cropHeight * bannerAspectRatio).round();
-        cropX = ((originalWidth - cropWidth) / 2).round();
-        cropY = 0;
-      } else {
-        // Image is taller - crop height based on offset, use full width
-        cropWidth = originalWidth;
-        cropHeight = (cropWidth / bannerAspectRatio).round();
-        cropX = 0;
-
-        // Apply vertical offset
-        final maxCropY = originalHeight - cropHeight;
-        cropY = (maxCropY * offsetY).round().clamp(0, maxCropY);
       }
+
+      final maxCropX = originalWidth - cropWidth;
+      final maxCropY = originalHeight - cropHeight;
+
+      final cropX =
+          maxCropX > 0 ? (maxCropX * offsetX).round().clamp(0, maxCropX) : 0;
+      final cropY =
+          maxCropY > 0 ? (maxCropY * offsetY).round().clamp(0, maxCropY) : 0;
 
       // Crop the image
       final croppedImg = img.copyCrop(

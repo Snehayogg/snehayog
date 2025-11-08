@@ -119,6 +119,14 @@ class AdService {
     int? frequencyCap,
     String? timeZone,
     Map<String, bool>? dayParting,
+    // **NEW: Advanced KPI parameters**
+    String? bidType,
+    double? bidAmount,
+    String? pacing,
+    Map<String, String>? hourParting,
+    double? targetCPA,
+    double? targetROAS,
+    int? attributionWindow,
     // **NEW: Support multiple image URLs for carousel ads**
     List<String>? imageUrls,
   }) async {
@@ -219,6 +227,31 @@ class AdService {
       }
       if (dayParting != null && dayParting.isNotEmpty) {
         requestData['dayParting'] = dayParting;
+      }
+
+      // **NEW: Add advanced KPI parameters**
+      if (bidType != null) {
+        requestData['bidType'] = bidType;
+      }
+      if (bidAmount != null) {
+        requestData['bidAmount'] = bidAmount;
+        requestData['cpmINR'] =
+            bidAmount; // Also set cpmINR for backend compatibility
+      }
+      if (pacing != null) {
+        requestData['pacing'] = pacing;
+      }
+      if (hourParting != null && hourParting.isNotEmpty) {
+        requestData['hourParting'] = hourParting;
+      }
+      if (targetCPA != null) {
+        requestData['targetCPA'] = targetCPA;
+      }
+      if (targetROAS != null) {
+        requestData['targetROAS'] = targetROAS;
+      }
+      if (attributionWindow != null) {
+        requestData['attributionWindow'] = attributionWindow;
       }
 
       final response = await httpClientService.post(

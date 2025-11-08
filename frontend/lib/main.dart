@@ -25,6 +25,9 @@ import 'package:vayu/services/background_profile_preloader.dart';
 import 'package:vayu/services/location_onboarding_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:vayu/core/managers/shared_video_controller_pool.dart';
+import 'package:vayu/core/managers/video_controller_manager.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -184,21 +187,69 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         break;
       case AppLifecycleState.inactive:
         ErrorLoggingService.logAppLifecycle('Inactive');
+        // **NEW: Pause all videos when app becomes inactive**
+        _pauseAllVideosGlobally();
         hotUIManager.handleAppLifecycleChange(state);
         break;
       case AppLifecycleState.paused:
         ErrorLoggingService.logAppLifecycle('Paused');
         mainController.setAppInForeground(false);
+        // **NEW: Pause all videos when app is paused (minimized)**
+        _pauseAllVideosGlobally();
         // **HOT UI: Preserve state when app goes to background**
         hotUIManager.handleAppLifecycleChange(state);
         break;
       case AppLifecycleState.detached:
         ErrorLoggingService.logAppLifecycle('Detached');
+        // **NEW: Pause all videos when app is detached**
+        _pauseAllVideosGlobally();
         hotUIManager.handleAppLifecycleChange(state);
         break;
       case AppLifecycleState.hidden:
         ErrorLoggingService.logAppLifecycle('Hidden');
+        // **NEW: Pause all videos when app is hidden**
+        _pauseAllVideosGlobally();
         break;
+    }
+  }
+
+  /// **NEW: Pause all videos globally regardless of which screen user is on**
+  void _pauseAllVideosGlobally() {
+    try {
+      AppLogger.log('⏸️ MyApp: Pausing all videos globally (app minimized)');
+
+      // 1. Pause videos from MainController
+      try {
+        final mainController =
+            Provider.of<MainController>(context, listen: false);
+        mainController.forcePauseVideos();
+        AppLogger.log('✅ MyApp: Paused videos via MainController');
+      } catch (e) {
+        AppLogger.log('⚠️ MyApp: Error pausing via MainController: $e');
+      }
+
+      // 2. Pause videos from SharedVideoControllerPool (singleton - used across all screens)
+      try {
+        final sharedPool = SharedVideoControllerPool();
+        sharedPool.pauseAllControllers();
+        AppLogger.log(
+            '✅ MyApp: Paused all videos from SharedVideoControllerPool');
+      } catch (e) {
+        AppLogger.log('⚠️ MyApp: Error pausing SharedVideoControllerPool: $e');
+      }
+
+      // 3. Pause videos from VideoControllerManager (singleton)
+      try {
+        final videoManager = VideoControllerManager();
+        videoManager.onAppPaused();
+        AppLogger.log('✅ MyApp: Paused videos via VideoControllerManager');
+      } catch (e) {
+        AppLogger.log('⚠️ MyApp: Error pausing VideoControllerManager: $e');
+      }
+
+      AppLogger.log('✅ MyApp: All videos paused globally');
+    } catch (e) {
+      AppLogger.log('❌ MyApp: Error pausing videos globally: $e');
     }
   }
 
@@ -340,10 +391,16 @@ class AuthWrapper extends StatefulWidget {
 }
 
 class _AuthWrapperState extends State<AuthWrapper> {
+  bool _hasCheckedCache = false;
+  bool _cachedAuthStatus = false;
+
   @override
   void initState() {
     super.initState();
-    // Force a check of authentication status when the widget initializes
+    // **OPTIMIZED: Check cached auth status immediately**
+    _checkCachedAuthStatus();
+
+    // Start auth check in background (non-blocking)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authController =
           Provider.of<GoogleSignInController>(context, listen: false);
@@ -352,6 +409,29 @@ class _AuthWrapperState extends State<AuthWrapper> {
       // **BACKGROUND PRELOADING: Preload profile data after authentication check**
       _startBackgroundPreloadingIfAuthenticated();
     });
+  }
+
+  /// **NEW: Check cached auth status instantly**
+  Future<void> _checkCachedAuthStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('jwt_token');
+      final fallbackUser = prefs.getString('fallback_user');
+
+      _cachedAuthStatus =
+          (token != null && token.isNotEmpty) || fallbackUser != null;
+      _hasCheckedCache = true;
+
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (e) {
+      print('⚠️ Error checking cached auth: $e');
+      _hasCheckedCache = true;
+      if (mounted) {
+        setState(() {});
+      }
+    }
   }
 
   /// **Start background preloading if user is authenticated**
@@ -364,7 +444,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         print(
             '✅ AuthWrapper: User is authenticated, starting background profile preloading');
         final preloader = BackgroundProfilePreloader();
-        await preloader.forcePreload();
+        unawaited(preloader.forcePreload()); // Non-blocking
       } else {
         print(
             'ℹ️ AuthWrapper: User not authenticated, skipping background preloading');
@@ -378,8 +458,21 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Widget build(BuildContext context) {
     return Consumer<GoogleSignInController>(
       builder: (context, authController, _) {
-        // Show loading screen while checking authentication status
-        if (authController.isLoading) {
+        // **OPTIMIZED: Show MainScreen immediately if cached auth exists (optimistic)**
+        if (_hasCheckedCache && _cachedAuthStatus) {
+          // Show MainScreen immediately, location check will happen in background
+          return const MainScreenWithLocationCheck();
+        }
+
+        // If user is signed in (from controller), show MainScreen
+        if (authController.isSignedIn) {
+          print(
+              '✅ AuthWrapper: User is signed in, showing MainScreen immediately');
+          return const MainScreenWithLocationCheck();
+        }
+
+        // Show loading only briefly on first check
+        if (authController.isLoading && !_hasCheckedCache) {
           return const Scaffold(
             body: Center(
               child: Column(
@@ -387,18 +480,11 @@ class _AuthWrapperState extends State<AuthWrapper> {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 16),
-                  Text('Checking authentication...'),
+                  Text('Loading...'),
                 ],
               ),
             ),
           );
-        }
-
-        // If user is signed in, check location permission and navigate to MainScreen
-        if (authController.isSignedIn) {
-          print(
-              '✅ AuthWrapper: User is signed in, checking location permission');
-          return const LocationPermissionWrapper();
         }
 
         // Show login screen if not signed in
@@ -409,98 +495,96 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 }
 
-class LocationPermissionWrapper extends StatefulWidget {
-  const LocationPermissionWrapper({super.key});
+/// **NEW: MainScreen with background location check**
+class MainScreenWithLocationCheck extends StatefulWidget {
+  const MainScreenWithLocationCheck({super.key});
 
   @override
-  State<LocationPermissionWrapper> createState() =>
-      _LocationPermissionWrapperState();
+  State<MainScreenWithLocationCheck> createState() =>
+      _MainScreenWithLocationCheckState();
 }
 
-class _LocationPermissionWrapperState extends State<LocationPermissionWrapper> {
-  bool _isCheckingLocation = true;
+class _MainScreenWithLocationCheckState
+    extends State<MainScreenWithLocationCheck> {
+  bool _hasCheckedLocation = false;
 
   @override
   void initState() {
     super.initState();
-    _checkLocationPermission();
+    // **NON-BLOCKING: Check location in background after showing MainScreen**
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkLocationInBackground();
+    });
   }
 
-  Future<void> _checkLocationPermission() async {
+  /// **Check location permission in background without blocking UI**
+  Future<void> _checkLocationInBackground() async {
+    if (_hasCheckedLocation) return;
+    _hasCheckedLocation = true;
+
     try {
-      print('📍 LocationPermissionWrapper: Checking location permission...');
+      print(
+          '📍 MainScreenWithLocationCheck: Checking location in background...');
 
       // Check if we should show location onboarding
       final shouldShow =
           await LocationOnboardingService.shouldShowLocationOnboarding();
 
       print(
-          '📍 LocationPermissionWrapper: Should show location dialog: $shouldShow');
+          '📍 MainScreenWithLocationCheck: Should show location dialog: $shouldShow');
 
-      setState(() {
-        _isCheckingLocation = false;
-      });
-
-      // If we should show the native permission dialog, show it after a short delay
+      // If we should show the native permission dialog, show it after a delay
       if (shouldShow && mounted) {
-        Future.delayed(const Duration(milliseconds: 500), () {
+        // Wait a bit so user sees the main screen first
+        Future.delayed(const Duration(seconds: 1), () {
           if (mounted) {
-            _requestNativeLocationPermission();
+            _requestLocationPermission();
           }
         });
       }
     } catch (e) {
       print(
-          '❌ LocationPermissionWrapper: Error checking location permission: $e');
-      setState(() {
-        _isCheckingLocation = false;
-      });
+          '❌ MainScreenWithLocationCheck: Error checking location permission: $e');
     }
   }
 
-  Future<void> _requestNativeLocationPermission() async {
+  /// **Request location permission and show dialog if needed**
+  Future<void> _requestLocationPermission() async {
     if (!mounted) return;
 
     try {
       print(
-          '📍 LocationPermissionWrapper: Requesting native location permission...');
+          '📍 MainScreenWithLocationCheck: Requesting location permission...');
 
-      // Use the native permission request directly
-      final granted =
-          await LocationOnboardingService.showLocationOnboarding(context);
+      // Check current permission status first
+      final hasPermission =
+          await LocationOnboardingService.isLocationPermissionGranted();
 
-      print('📍 LocationPermissionWrapper: Native permission result: $granted');
+      if (!hasPermission) {
+        // Show location onboarding dialog
+        final granted =
+            await LocationOnboardingService.showLocationOnboarding(context);
 
-      if (granted) {
-        print('✅ Location permission granted via native dialog');
+        print(
+            '📍 MainScreenWithLocationCheck: Location permission result: $granted');
+
+        if (granted) {
+          print('✅ Location permission granted via dialog');
+        } else {
+          print('❌ Location permission denied via dialog');
+        }
       } else {
-        print('❌ Location permission denied via native dialog');
+        print('✅ Location permission already granted');
       }
     } catch (e) {
       print(
-          '❌ LocationPermissionWrapper: Error requesting native permission: $e');
+          '❌ MainScreenWithLocationCheck: Error requesting location permission: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Show loading while checking location permission
-    if (_isCheckingLocation) {
-      return const Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('Checking location permission...'),
-            ],
-          ),
-        ),
-      );
-    }
-
-    // Show main screen
+    // **INSTANT: Show MainScreen immediately, location check happens in background**
     return const MainScreen();
   }
 }

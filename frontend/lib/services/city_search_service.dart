@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
@@ -62,7 +63,8 @@ class CitySearchService {
     return displayName;
   }
 
-  /// Search for cities with more specific parameters
+  /// **ENHANCED: Search for cities with more specific parameters**
+  /// Uses OpenStreetMap Nominatim API for professional location search
   static Future<List<Map<String, dynamic>>> searchCitiesDetailed(
       String query) async {
     if (query.length < 3) return [];
@@ -75,22 +77,30 @@ class CitySearchService {
           'q=$encodedQuery&'
           'format=jsonv2&'
           'addressdetails=1&'
-          'limit=10&'
+          'limit=15&' // **INCREASED: More results for better UX**
           'countrycodes=in&'
           'dedupe=1';
 
       print('🔍 CitySearchService: API URL: $url');
 
-      final response = await http.get(
-        Uri.parse(url),
-        headers: {
-          'User-Agent': _userAgent,
-          'Accept-Language': 'en',
-        },
-      );
+      // **ENHANCED: Add timeout for better UX**
+      final response = await http
+          .get(
+            Uri.parse(url),
+            headers: {
+              'User-Agent': _userAgent,
+              'Accept-Language': 'en',
+            },
+          )
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              print('⏱️ CitySearchService: Request timeout');
+              throw TimeoutException('Location search request timed out');
+            },
+          );
 
       print('🔍 CitySearchService: Response status: ${response.statusCode}');
-      print('🔍 CitySearchService: Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -99,38 +109,54 @@ class CitySearchService {
         print('🔍 CitySearchService: Found ${data.length} results');
 
         for (var place in data) {
-          final displayName = place['display_name'] as String? ?? '';
-          final address = place['address'] as Map<String, dynamic>?;
-          final city = address?['city'] ??
-              address?['town'] ??
-              address?['village'] ??
-              _extractCityName(displayName);
-          final state = address?['state'] ?? _extractState(displayName);
+          try {
+            final displayName = place['display_name'] as String? ?? '';
+            final address = place['address'] as Map<String, dynamic>?;
+            
+            // **ENHANCED: Better city name extraction**
+            final city = address?['city'] ??
+                address?['town'] ??
+                address?['village'] ??
+                address?['municipality'] ??
+                _extractCityName(displayName);
+            
+            // **ENHANCED: Better state extraction**
+            final state = address?['state'] ?? 
+                address?['state_district'] ??
+                _extractState(displayName);
 
-          print('🔍 CitySearchService: Processing: $city, $state');
-
-          if (city.isNotEmpty && !cities.any((c) => c['name'] == city)) {
-            cities.add({
-              'name': city,
-              'state': state,
-              'displayName': displayName,
-              'lat': place['lat'],
-              'lon': place['lon'],
-            });
+            // **ENHANCED: Skip if city name is too generic or empty**
+            if (city.isNotEmpty && 
+                city.length >= 2 && 
+                !cities.any((c) => c['name'] == city)) {
+              cities.add({
+                'name': city,
+                'state': state.isNotEmpty ? state : 'India',
+                'displayName': displayName,
+                'lat': place['lat'] ?? '0',
+                'lon': place['lon'] ?? '0',
+              });
+            }
+          } catch (e) {
+            print('⚠️ CitySearchService: Error processing place: $e');
+            continue; // Skip invalid entries
           }
         }
 
-        print('🔍 CitySearchService: Returning ${cities.length} cities');
+        print('✅ CitySearchService: Returning ${cities.length} cities');
         return cities;
       } else {
         print(
             '❌ CitySearchService: API error - Status: ${response.statusCode}');
+        throw Exception('API returned status ${response.statusCode}');
       }
+    } on TimeoutException catch (e) {
+      print('⏱️ CitySearchService: Timeout error: $e');
+      rethrow;
     } catch (e) {
       print('❌ CitySearchService: Error searching cities: $e');
+      rethrow; // **ENHANCED: Re-throw to let widget handle fallback**
     }
-
-    return [];
   }
 
   /// Extract state name from display name

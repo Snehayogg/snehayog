@@ -3,6 +3,7 @@ import 'package:vayu/services/ad_service.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/model/ad_model.dart';
 import 'package:vayu/utils/app_logger.dart';
+import 'package:vayu/view/screens/create_ad_screen_refactored.dart';
 
 /// **ENHANCED AD MANAGEMENT SCREEN**
 /// Complete ad management with advanced targeting, performance analytics, and bulk operations
@@ -626,6 +627,21 @@ class _AdManagementScreenState extends State<AdManagementScreen>
             ),
           ] else ...[
             IconButton(
+              onPressed: () async {
+                // Open Create Ad screen (simplified for beginners)
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const CreateAdScreenRefactored(),
+                  ),
+                );
+                // Refresh list after returning
+                await _loadAds();
+              },
+              icon: const Icon(Icons.add_circle_outline),
+              tooltip: 'Create Ad',
+            ),
+            IconButton(
               onPressed: () {
                 setState(() {
                   _isMultiSelectMode = true;
@@ -1212,11 +1228,11 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      const Row(
                         children: [
-                          const Icon(Icons.dashboard, color: Colors.blue),
-                          const SizedBox(width: 8),
-                          const Text(
+                          Icon(Icons.dashboard, color: Colors.blue),
+                          SizedBox(width: 8),
+                          Text(
                             'Overall Performance Summary',
                             style: TextStyle(
                               fontSize: 20,
