@@ -713,7 +713,6 @@ class _UploadScreenState extends State<UploadScreen> {
             }
 
             await Future.delayed(const Duration(seconds: 1));
-
             return {
               'videoUrl': videoUrl,
               'thumbnailUrl': (videoData?['thumbnailUrl'] ?? '').toString(),

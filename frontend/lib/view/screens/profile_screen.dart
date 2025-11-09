@@ -24,6 +24,7 @@ import 'package:vayu/core/managers/shared_video_controller_pool.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'package:vayu/services/logout_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -42,6 +43,9 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen>
     with AutomaticKeepAliveClientMixin {
+  static final Uri _whatsAppGroupUri =
+      Uri.parse('https://chat.whatsapp.com/H7eU5xnwm3r2dfpvi7hCJC');
+
   late final ProfileStateManager _stateManager;
   final ImagePicker _imagePicker = ImagePicker();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -1284,49 +1288,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 _scaffoldKey.currentState?.openDrawer();
               },
             ),
-            actions: [
-              // Show delete icon when videos are selected
-              if (stateManager.isSelecting &&
-                  stateManager.selectedVideoIds.isNotEmpty) ...[
-                IconButton(
-                  icon: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.delete_forever,
-                      color: Colors.red,
-                      size: 24,
-                    ),
-                  ),
-                  tooltip: 'Delete Selected Videos',
-                  onPressed: _handleDeleteSelectedVideos,
-                ),
-                const SizedBox(width: 8),
-              ],
-              // Show cancel icon when in selection mode
-              if (stateManager.isSelecting)
-                IconButton(
-                  icon: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.close,
-                      color: Colors.grey,
-                      size: 24,
-                    ),
-                  ),
-                  tooltip: 'Cancel Selection',
-                  onPressed: () {
-                    stateManager.exitSelectionMode();
-                  },
-                ),
-            ],
+            actions: _buildAppBarActions(stateManager),
             bottom: PreferredSize(
               preferredSize: const Size.fromHeight(1),
               child: Container(
@@ -1336,6 +1298,94 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
           );
         },
+      ),
+    );
+  }
+
+  List<Widget> _buildAppBarActions(ProfileStateManager stateManager) {
+    final actions = <Widget>[
+      _buildChatSupportAction(),
+    ];
+
+    if (stateManager.isSelecting && stateManager.selectedVideoIds.isNotEmpty) {
+      actions.add(
+        IconButton(
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.red.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.delete_forever,
+              color: Colors.red,
+              size: 24,
+            ),
+          ),
+          tooltip: 'Delete Selected Videos',
+          onPressed: _handleDeleteSelectedVideos,
+        ),
+      );
+      actions.add(const SizedBox(width: 8));
+    }
+
+    if (stateManager.isSelecting) {
+      actions.add(
+        IconButton(
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.grey.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.close,
+              color: Colors.grey,
+              size: 24,
+            ),
+          ),
+          tooltip: 'Cancel Selection',
+          onPressed: stateManager.exitSelectionMode,
+        ),
+      );
+    }
+
+    return actions;
+  }
+
+  Widget _buildChatSupportAction() {
+    return IconButton(
+      icon: const Icon(
+        Icons.headset_mic_outlined,
+        color: Color(0xFF10B981),
+      ),
+      tooltip: 'Chat with us on WhatsApp',
+      onPressed: _openWhatsAppGroupChat,
+    );
+  }
+
+  Future<void> _openWhatsAppGroupChat() async {
+    try {
+      final launched = await launchUrl(
+        _whatsAppGroupUri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched && mounted) {
+        _showChatSupportError();
+      }
+    } catch (e) {
+      AppLogger.log('❌ ProfileScreen: Error opening WhatsApp group: $e');
+      if (mounted) {
+        _showChatSupportError();
+      }
+    }
+  }
+
+  void _showChatSupportError() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content:
+            Text('Unable to open WhatsApp right now. Please try again later.'),
       ),
     );
   }

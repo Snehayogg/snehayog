@@ -1,0 +1,759 @@
+part of 'package:vayu/view/screens/video_feed_advanced.dart';
+
+extension _VideoFeedPreload on _VideoFeedAdvancedState {
+  void _startPreloading() {
+    _preloadTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+      _preloadNearbyVideos();
+    });
+  }
+
+  void _preloadNearbyVideos() {
+    if (_videos.isEmpty) return;
+
+    final sharedPool = SharedVideoControllerPool();
+
+    const preloadWindow = 2;
+    for (int i = _currentIndex;
+        i <= _currentIndex + preloadWindow && i < _videos.length;
+        i++) {
+      final video = _videos[i];
+
+      if (sharedPool.isVideoLoaded(video.id)) {
+        _preloadedVideos.add(i);
+        continue;
+      }
+
+      if (!_preloadedVideos.contains(i) && !_loadingVideos.contains(i)) {
+        _preloadVideo(i);
+      }
+    }
+
+    sharedPool.cleanupDistantControllers(_currentIndex, keepRange: 3);
+
+    if (_hasMore &&
+        !_isLoadingMore &&
+        _currentIndex >= _videos.length - _infiniteScrollThreshold) {
+      AppLogger.log(
+          '📡 Triggering load more: index=$_currentIndex, total=${_videos.length}, hasMore=$_hasMore');
+      _loadMoreVideos();
+    } else if (!_hasMore) {
+      AppLogger.log('✅ All videos loaded, no more to load');
+    }
+  }
+
+  Future<void> _preloadVideo(int index) async {
+    if (index >= _videos.length) return;
+
+    if (_initializingVideos.length >= _maxConcurrentInitializations &&
+        !_preloadedVideos.contains(index) &&
+        !_loadingVideos.contains(index)) {
+      AppLogger.log(
+          '⏳ Max concurrent initializations reached, deferring video $index');
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted && !_preloadedVideos.contains(index)) {
+          _preloadVideo(index);
+        }
+      });
+      return;
+    }
+
+    _loadingVideos.add(index);
+
+    AppLogger.log('🔄 Preloading video $index');
+    _printCacheStatus();
+
+    String? videoUrl;
+    VideoPlayerController? controller;
+    bool isReused = false;
+
+    try {
+      final video = _videos[index];
+
+      videoUrl = await _resolvePlayableUrl(video);
+      if (videoUrl == null || videoUrl.isEmpty) {
+        AppLogger.log(
+            '❌ Invalid video URL for video $index: ${video.videoUrl}');
+        _loadingVideos.remove(index);
+        return;
+      }
+
+      AppLogger.log('🎬 Preloading video $index with URL: $videoUrl');
+
+      final sharedPool = SharedVideoControllerPool();
+
+      final instantController =
+          sharedPool.getControllerForInstantPlay(video.id);
+      if (instantController != null) {
+        controller = instantController;
+        isReused = true;
+        AppLogger.log(
+            '⚡ INSTANT: Reusing controller from shared pool for video: ${video.id}');
+        _controllerPool[index] = controller;
+        _lastAccessedLocal[index] = DateTime.now();
+      } else if (sharedPool.isVideoLoaded(video.id)) {
+        final fallbackController = sharedPool.getController(video.id);
+        if (fallbackController != null) {
+          controller = fallbackController;
+          isReused = true;
+          AppLogger.log(
+              '♻️ Reusing controller from shared pool for video: ${video.id}');
+          _controllerPool[index] = controller;
+          _lastAccessedLocal[index] = DateTime.now();
+        }
+      }
+
+      if (controller == null) {
+        final Map<String, String> headers = videoUrl.contains('.m3u8')
+            ? const {
+                'Accept': 'application/vnd.apple.mpegurl,application/x-mpegURL',
+              }
+            : const {};
+
+        controller = VideoPlayerController.networkUrl(
+          Uri.parse(videoUrl),
+          videoPlayerOptions: VideoPlayerOptions(
+            mixWithOthers: true,
+            allowBackgroundPlayback: false,
+          ),
+          httpHeaders: headers,
+        );
+      }
+
+      if (!isReused) {
+        _initializingVideos.add(index);
+
+        try {
+          if (videoUrl.contains('.m3u8')) {
+            AppLogger.log('🎬 HLS Video detected: $videoUrl');
+            AppLogger.log('🎬 HLS Video duration: ${video.duration}');
+            await controller.initialize().timeout(
+              const Duration(seconds: 30),
+              onTimeout: () {
+                throw Exception('HLS video initialization timeout');
+              },
+            );
+            AppLogger.log('✅ HLS Video initialized successfully');
+          } else {
+            AppLogger.log('🎬 Regular Video detected: $videoUrl');
+            await controller.initialize().timeout(
+              const Duration(seconds: 10),
+              onTimeout: () {
+                throw Exception('Video initialization timeout');
+              },
+            );
+            AppLogger.log('✅ Regular Video initialized successfully');
+          }
+        } finally {
+          _initializingVideos.remove(index);
+        }
+      } else {
+        AppLogger.log(
+            '♻️ Skipping initialization - reusing initialized controller');
+
+        if (mounted && controller.value.isInitialized) {
+          final isPlaying = controller.value.isPlaying;
+          setState(() {
+            _firstFrameReady[index] ??= ValueNotifier<bool>(true);
+            if (!_userPaused.containsKey(index)) {
+              _userPaused[index] = false;
+            }
+            if (!_controllerStates.containsKey(index)) {
+              _controllerStates[index] = isPlaying;
+            }
+          });
+          AppLogger.log(
+              '🔄 Triggered rebuild for reused controller at index $index');
+        }
+      }
+
+      if (mounted && _loadingVideos.contains(index)) {
+        _controllerPool[index] = controller;
+        _controllerStates[index] = false;
+        _preloadedVideos.add(index);
+        _loadingVideos.remove(index);
+        _lastAccessedLocal[index] = DateTime.now();
+
+        final sharedPool = SharedVideoControllerPool();
+        final video = _videos[index];
+        sharedPool.addController(video.id, controller, index: index);
+        AppLogger.log(
+            '✅ Added video controller to shared pool: ${video.id} (index: $index)');
+
+        if (mounted) {
+          setState(() {
+            _firstFrameReady[index] ??= ValueNotifier<bool>(false);
+            if (!_userPaused.containsKey(index)) {
+              _userPaused[index] = false;
+            }
+            if (!_controllerStates.containsKey(index)) {
+              _controllerStates[index] = false;
+            }
+          });
+          AppLogger.log(
+              '🔄 Triggered rebuild after controller initialization for index $index');
+        }
+
+        _applyLoopingBehavior(controller);
+        _attachEndListenerIfNeeded(controller, index);
+        _attachBufferingListenerIfNeeded(controller, index);
+
+        _firstFrameReady[index] = ValueNotifier<bool>(false);
+        if (index <= 1) {
+          _forceMountPlayer[index] = ValueNotifier<bool>(false);
+          Future.delayed(const Duration(milliseconds: 700), () {
+            if (mounted && _firstFrameReady[index]?.value != true) {
+              _forceMountPlayer[index]?.value = true;
+            }
+          });
+        }
+        final bool shouldPrime = _canPrimeIndex(index);
+        if (shouldPrime) {
+          try {
+            await controller.setVolume(0.0);
+            await controller.seekTo(const Duration(milliseconds: 1));
+            await controller.play();
+          } catch (_) {}
+        }
+
+        void markReadyIfNeeded() async {
+          if (_firstFrameReady[index]?.value == true) return;
+          final v = controller!.value;
+          if (v.isInitialized && v.position > Duration.zero && !v.isBuffering) {
+            _firstFrameReady[index]?.value = true;
+            try {
+              await controller.pause();
+              await controller.setVolume(1.0);
+            } catch (_) {}
+
+            if (mounted) {
+              setState(() {
+                if (!_userPaused.containsKey(index)) {
+                  _userPaused[index] = false;
+                }
+                if (!_controllerStates.containsKey(index)) {
+                  _controllerStates[index] = false;
+                }
+              });
+              AppLogger.log(
+                  '🔄 Triggered rebuild when first frame ready for index $index');
+            }
+
+            if (index == _currentIndex) {
+              if (_userPaused[index] == true) {
+                AppLogger.log(
+                    '⏸️ Autoplay suppressed in markReadyIfNeeded: user has manually paused video at index $index');
+                return;
+              }
+
+              if (_mainController?.currentIndex == 0 && _isScreenVisible) {
+                try {
+                  await controller.setVolume(1.0);
+                  _pauseAllOtherVideos(index);
+                  await controller.play();
+                  _controllerStates[_currentIndex] = true;
+                  _userPaused[_currentIndex] = false;
+                } catch (_) {}
+              }
+            }
+          }
+        }
+
+        controller.addListener(markReadyIfNeeded);
+
+        if (index == _currentIndex && index < _videos.length) {
+          _viewTracker.startViewTracking(video.id,
+              videoUploaderId: video.uploader.id);
+          AppLogger.log(
+            '▶️ Started view tracking for preloaded current video: ${video.id}',
+          );
+
+          final bool openedFromProfile =
+              widget.initialVideos != null && widget.initialVideos!.isNotEmpty;
+          if (isReused &&
+              controller.value.isInitialized &&
+              !controller.value.isPlaying) {
+            if (_userPaused[index] == true) {
+              AppLogger.log(
+                  '⏸️ Autoplay suppressed for reused controller: user has manually paused video at index $index');
+            } else {
+              if (openedFromProfile) {
+                _pauseAllOtherVideos(index);
+                controller.play();
+                _controllerStates[index] = true;
+                _userPaused[index] = false;
+                AppLogger.log(
+                    '✅ Started playback for reused controller (from Profile)');
+              } else {
+                if (_mainController?.currentIndex == 0 && _isScreenVisible) {
+                  _pauseAllOtherVideos(index);
+                  controller.play();
+                  _controllerStates[index] = true;
+                  _userPaused[index] = false;
+                  AppLogger.log(
+                      '✅ Started playback for reused controller at current index');
+                }
+              }
+            }
+          }
+
+          if (_wasPlayingBeforeNavigation[index] == true &&
+              controller.value.isInitialized &&
+              !controller.value.isPlaying) {
+            if (_userPaused[index] == true) {
+              AppLogger.log(
+                  '⏸️ Resume suppressed: user has manually paused video ${video.id} at index $index');
+              _wasPlayingBeforeNavigation[index] = false;
+            } else {
+              if (openedFromProfile) {
+                _pauseAllOtherVideos(index);
+                controller.play();
+                _controllerStates[index] = true;
+                _userPaused[index] = false;
+                _wasPlayingBeforeNavigation[index] = false;
+                AppLogger.log(
+                    '▶️ Resumed video ${video.id} that was playing before navigation (from Profile)');
+              } else {
+                if (_mainController?.currentIndex == 0 && _isScreenVisible) {
+                  _pauseAllOtherVideos(index);
+                  controller.play();
+                  _controllerStates[index] = true;
+                  _userPaused[index] = false;
+                  _wasPlayingBeforeNavigation[index] = false;
+                  AppLogger.log(
+                      '▶️ Resumed video ${video.id} that was playing before navigation');
+                }
+              }
+            }
+          }
+        }
+
+        AppLogger.log('✅ Successfully preloaded video $index');
+
+        _preloadHits++;
+        AppLogger.log('📊 Cache Status Update:');
+        AppLogger.log('   Preload Hits: $_preloadHits');
+        AppLogger.log('   Total Controllers: ${_controllerPool.length}');
+        AppLogger.log('   Preloaded Videos: ${_preloadedVideos.length}');
+
+        _cleanupOldControllers();
+      } else {
+        if (!isReused) {
+          controller.dispose();
+        }
+      }
+    } catch (e) {
+      AppLogger.log('❌ Error preloading video $index: $e');
+      _loadingVideos.remove(index);
+      _initializingVideos.remove(index);
+
+      if (controller != null && !isReused) {
+        try {
+          if (controller.value.isInitialized) {
+            await controller.pause();
+          }
+          controller.dispose();
+          AppLogger.log('🗑️ Disposed failed controller for video $index');
+        } catch (disposeError) {
+          AppLogger.log('⚠️ Error disposing failed controller: $disposeError');
+        }
+      }
+
+      final errorString = e.toString().toLowerCase();
+      final isNoMemoryError = errorString.contains('no_memory') ||
+          errorString.contains('0xfffffff4') ||
+          errorString.contains('error 12') ||
+          (errorString.contains('failed to initialize') &&
+              errorString.contains('no_memory')) ||
+          (errorString.contains('mediacodec') &&
+              errorString.contains('memory')) ||
+          (errorString.contains('videoplayer') &&
+              errorString.contains('exoplaybackexception') &&
+              errorString.contains('mediacodec'));
+
+      final retryCount = _preloadRetryCount[index] ?? 0;
+
+      if (isNoMemoryError) {
+        AppLogger.log('⚠️ NO_MEMORY error detected for video $index');
+
+        _cleanupOldControllers();
+
+        if (retryCount < _maxRetryAttempts) {
+          _preloadRetryCount[index] = retryCount + 1;
+          final retryDelay = Duration(seconds: 10 + (retryCount * 5));
+          AppLogger.log(
+              '🔄 Retrying video $index after ${retryDelay.inSeconds} seconds (attempt ${retryCount + 1}/$_maxRetryAttempts)...');
+          Future.delayed(retryDelay, () {
+            if (mounted && !_preloadedVideos.contains(index)) {
+              _preloadVideo(index);
+            }
+          });
+        } else {
+          AppLogger.log(
+              '❌ Max retry attempts reached for video $index (NO_MEMORY)');
+          _preloadRetryCount.remove(index);
+        }
+      } else if (videoUrl != null && videoUrl.contains('.m3u8')) {
+        if (retryCount < _maxRetryAttempts) {
+          _preloadRetryCount[index] = retryCount + 1;
+          AppLogger.log('🔄 HLS video failed, retrying in 3 seconds...');
+          AppLogger.log('🔄 HLS Error details: $e');
+          Future.delayed(const Duration(seconds: 3), () {
+            if (mounted && !_preloadedVideos.contains(index)) {
+              _preloadVideo(index);
+            }
+          });
+        } else {
+          AppLogger.log('❌ Max retry attempts reached for HLS video $index');
+          _preloadRetryCount.remove(index);
+        }
+      } else if (e.toString().contains('400') || e.toString().contains('404')) {
+        if (retryCount < _maxRetryAttempts) {
+          _preloadRetryCount[index] = retryCount + 1;
+          AppLogger.log('🔄 Retrying video $index in 5 seconds...');
+          Future.delayed(const Duration(seconds: 5), () {
+            if (mounted && !_preloadedVideos.contains(index)) {
+              _preloadVideo(index);
+            }
+          });
+        } else {
+          AppLogger.log('❌ Max retry attempts reached for video $index');
+          _preloadRetryCount.remove(index);
+        }
+      } else {
+        AppLogger.log('❌ Video preload failed with error: $e');
+        AppLogger.log('❌ Video URL: $videoUrl');
+        AppLogger.log('❌ Video index: $index');
+        _preloadRetryCount.remove(index);
+      }
+    }
+  }
+
+  String? _validateAndFixVideoUrl(String url) {
+    if (url.isEmpty) return null;
+
+    if (!url.startsWith('http')) {
+      String cleanUrl = url;
+      if (cleanUrl.startsWith('/')) {
+        cleanUrl = cleanUrl.substring(1);
+      }
+      return '${VideoService.baseUrl}/$cleanUrl';
+    }
+
+    try {
+      final uri = Uri.parse(url);
+      if (uri.scheme == 'http' || uri.scheme == 'https') {
+        return url;
+      }
+    } catch (e) {
+      AppLogger.log('❌ Invalid URL format: $url');
+    }
+
+    return null;
+  }
+
+  Future<String?> _resolvePlayableUrl(VideoModel video) async {
+    try {
+      final hlsUrl = video.hlsPlaylistUrl?.isNotEmpty == true
+          ? video.hlsPlaylistUrl
+          : video.hlsMasterPlaylistUrl;
+      if (hlsUrl != null && hlsUrl.isNotEmpty) {
+        return _validateAndFixVideoUrl(hlsUrl);
+      }
+
+      if (video.videoUrl.contains('.m3u8') || video.videoUrl.contains('.mp4')) {
+        return _validateAndFixVideoUrl(video.videoUrl);
+      }
+
+      final uri = Uri.tryParse(video.videoUrl);
+      if (uri != null &&
+          uri.host.contains('snehayog.site') &&
+          uri.pathSegments.isNotEmpty &&
+          uri.pathSegments.first == 'video') {
+        try {
+          final details = await VideoService().getVideoById(video.id);
+          final candidate = details.hlsPlaylistUrl?.isNotEmpty == true
+              ? details.hlsPlaylistUrl
+              : details.videoUrl;
+          if (candidate != null && candidate.isNotEmpty) {
+            return _validateAndFixVideoUrl(candidate);
+          }
+        } catch (_) {}
+      }
+
+      return _validateAndFixVideoUrl(video.videoUrl);
+    } catch (_) {
+      return _validateAndFixVideoUrl(video.videoUrl);
+    }
+  }
+
+  void _cleanupOldControllers() {
+    final sharedPool = SharedVideoControllerPool();
+
+    sharedPool.cleanupDistantControllers(_currentIndex, keepRange: 3);
+
+    final controllersToRemove = <int>[];
+
+    for (final index in _controllerPool.keys.toList()) {
+      if (index < _videos.length) {
+        final videoId = _videos[index].id;
+        if (sharedPool.isVideoLoaded(videoId)) {
+          controllersToRemove.add(index);
+          continue;
+        }
+      }
+
+      final distance = (index - _currentIndex).abs();
+      if (distance > 3 || _controllerPool.length > 5) {
+        controllersToRemove.add(index);
+      }
+    }
+
+    for (final index in controllersToRemove) {
+      final ctrl = _controllerPool[index];
+
+      if (index < _videos.length) {
+        final videoId = _videos[index].id;
+        if (!sharedPool.isVideoLoaded(videoId) && ctrl != null) {
+          try {
+            ctrl.removeListener(_bufferingListeners[index] ?? () {});
+            ctrl.removeListener(_videoEndListeners[index] ?? () {});
+            ctrl.dispose();
+          } catch (e) {
+            AppLogger.log('⚠️ Error disposing controller at index $index: $e');
+          }
+        }
+      }
+
+      _controllerPool.remove(index);
+      _controllerStates.remove(index);
+      _preloadedVideos.remove(index);
+      _isBuffering.remove(index);
+      _bufferingListeners.remove(index);
+      _videoEndListeners.remove(index);
+      _lastAccessedLocal.remove(index);
+      _initializingVideos.remove(index);
+      _preloadRetryCount.remove(index);
+    }
+
+    if (controllersToRemove.isNotEmpty) {
+      AppLogger.log(
+          '🧹 Cleaned up ${controllersToRemove.length} local controller trackings');
+    }
+  }
+
+  VideoPlayerController? _getController(int index) {
+    if (index >= _videos.length) return null;
+
+    final video = _videos[index];
+    final sharedPool = SharedVideoControllerPool();
+
+    VideoPlayerController? controller =
+        sharedPool.getControllerForInstantPlay(video.id);
+
+    if (controller != null && controller.value.isInitialized) {
+      AppLogger.log(
+          '⚡ INSTANT: Reusing controller from shared pool for video ${video.id}');
+
+      _controllerPool[index] = controller;
+      _controllerStates[index] = false;
+      _preloadedVideos.add(index);
+      _lastAccessedLocal[index] = DateTime.now();
+      _firstFrameReady[index] = ValueNotifier<bool>(true);
+
+      return controller;
+    }
+
+    if (_controllerPool.containsKey(index)) {
+      controller = _controllerPool[index];
+      if (controller != null && controller.value.isInitialized) {
+        _lastAccessedLocal[index] = DateTime.now();
+        _firstFrameReady[index] = ValueNotifier<bool>(true);
+        return controller;
+      }
+    }
+
+    _preloadVideo(index);
+    return null;
+  }
+
+  void _onPageChanged(int index) {
+    if (index == _currentIndex) return;
+    _pageChangeTimer?.cancel();
+    _pageChangeTimer = Timer(const Duration(milliseconds: 150), () {
+      _handlePageChangeDebounced(index);
+    });
+  }
+
+  void _handlePageChangeDebounced(int index) {
+    if (!mounted || index == _currentIndex) return;
+
+    _lastAccessedLocal[_currentIndex] = DateTime.now();
+
+    if (_currentIndex < _videos.length) {
+      final previousVideo = _videos[_currentIndex];
+      _viewTracker.stopViewTracking(previousVideo.id);
+      AppLogger.log(
+          '⏸️ Stopped view tracking for previous video: ${previousVideo.id}');
+
+      _userPaused[_currentIndex] = false;
+    }
+
+    _controllerPool.forEach((idx, controller) {
+      if (controller.value.isInitialized && controller.value.isPlaying) {
+        try {
+          controller.pause();
+          _controllerStates[idx] = false;
+        } catch (_) {}
+      }
+    });
+
+    _videoControllerManager.pauseAllVideosOnTabChange();
+
+    final sharedPool = SharedVideoControllerPool();
+    sharedPool.pauseAllControllers();
+
+    _currentIndex = index;
+    _reprimeWindowIfNeeded();
+
+    final activeController = _controllerPool[_currentIndex];
+    if (activeController != null && activeController.value.isInitialized) {
+      try {
+        activeController.setVolume(1.0);
+      } catch (_) {}
+    }
+
+    VideoPlayerController? controllerToUse;
+
+    if (index < _videos.length) {
+      final video = _videos[index];
+
+      controllerToUse = sharedPool.getControllerForInstantPlay(video.id);
+
+      if (controllerToUse != null && controllerToUse.value.isInitialized) {
+        AppLogger.log(
+            '⚡ INSTANT: Reusing controller from shared pool for video ${video.id}');
+
+        _controllerPool[index] = controllerToUse;
+        _controllerStates[index] = false;
+        _preloadedVideos.add(index);
+        _lastAccessedLocal[index] = DateTime.now();
+        _firstFrameReady[index] = ValueNotifier<bool>(true);
+
+        sharedPool.cleanupDistantControllers(index, keepRange: 3);
+      } else if (sharedPool.isVideoLoaded(video.id)) {
+        controllerToUse = sharedPool.getController(video.id);
+        if (controllerToUse != null && controllerToUse.value.isInitialized) {
+          _controllerPool[index] = controllerToUse;
+          _controllerStates[index] = false;
+          _preloadedVideos.add(index);
+          _lastAccessedLocal[index] = DateTime.now();
+          _firstFrameReady[index] = ValueNotifier<bool>(true);
+        }
+      }
+    }
+
+    if (controllerToUse == null && _controllerPool.containsKey(index)) {
+      controllerToUse = _controllerPool[index];
+      if (controllerToUse != null && !controllerToUse.value.isInitialized) {
+        AppLogger.log('⚠️ Controller exists but not initialized, disposing...');
+        try {
+          controllerToUse.dispose();
+        } catch (e) {
+          AppLogger.log('Error disposing controller: $e');
+        }
+        _controllerPool.remove(index);
+        _controllerStates.remove(index);
+        _preloadedVideos.remove(index);
+        _lastAccessedLocal.remove(index);
+        controllerToUse = null;
+      } else if (controllerToUse != null &&
+          controllerToUse.value.isInitialized) {
+        _lastAccessedLocal[index] = DateTime.now();
+        _firstFrameReady[index] = ValueNotifier<bool>(true);
+      }
+    }
+
+    if (controllerToUse != null && controllerToUse.value.isInitialized) {
+      if (_mainController?.currentIndex != 0 || !_isScreenVisible) {
+        AppLogger.log('⏸️ Autoplay blocked (not visible)');
+        return;
+      }
+
+      if (_userPaused[index] == true) {
+        AppLogger.log(
+            '⏸️ Autoplay suppressed: user has manually paused video at index $index');
+        return;
+      }
+
+      _pauseAllOtherVideos(index);
+
+      controllerToUse.setVolume(1.0);
+      controllerToUse.play();
+      _controllerStates[index] = true;
+      _userPaused[index] = false;
+      _applyLoopingBehavior(controllerToUse);
+      _attachEndListenerIfNeeded(controllerToUse, index);
+      _attachBufferingListenerIfNeeded(controllerToUse, index);
+
+      if (index < _videos.length) {
+        final currentVideo = _videos[index];
+        _viewTracker.startViewTracking(currentVideo.id,
+            videoUploaderId: currentVideo.uploader.id);
+        AppLogger.log(
+            '▶️ Started view tracking for current video: ${currentVideo.id}');
+      }
+
+      _preloadNearbyVideosDebounced();
+      return;
+    }
+
+    if (!_controllerPool.containsKey(index)) {
+      AppLogger.log(
+          '🔄 Video not preloaded, preloading and will autoplay when ready');
+      _preloadVideo(index).then((_) {
+        if (mounted &&
+            _currentIndex == index &&
+            _controllerPool.containsKey(index)) {
+          if (_mainController?.currentIndex != 0 || !_isScreenVisible) {
+            AppLogger.log('⏸️ Autoplay blocked after preload (not visible)');
+            return;
+          }
+          final loadedController = _controllerPool[index];
+          if (loadedController != null &&
+              loadedController.value.isInitialized) {
+            _lastAccessedLocal[index] = DateTime.now();
+
+            _pauseAllOtherVideos(index);
+
+            loadedController.setVolume(1.0);
+            loadedController.play();
+            _controllerStates[index] = true;
+            _userPaused[index] = false;
+            _applyLoopingBehavior(loadedController);
+            _attachEndListenerIfNeeded(loadedController, index);
+            _attachBufferingListenerIfNeeded(loadedController, index);
+
+            if (index < _videos.length) {
+              final currentVideo = _videos[index];
+              _viewTracker.startViewTracking(currentVideo.id,
+                  videoUploaderId: currentVideo.uploader.id);
+              AppLogger.log(
+                  '▶️ Started view tracking for current video: ${currentVideo.id}');
+            }
+
+            AppLogger.log('✅ Video autoplay started after preloading');
+          }
+        }
+      });
+    }
+
+    _preloadNearbyVideosDebounced();
+  }
+
+  void _preloadNearbyVideosDebounced() {
+    _preloadDebounceTimer?.cancel();
+    _preloadDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+      _preloadNearbyVideos();
+    });
+  }
+}

@@ -222,9 +222,6 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
           color: Colors.black,
           child: Stack(
             children: [
-              // **Top Bar with Yog Title**
-              _buildTopBar(),
-
               // **Sponsored Text at Top Corner**
               _buildSponsoredText(),
 
@@ -234,8 +231,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
               ),
 
               // **Progress Indicators** (for multiple slides)
-              if (widget.carouselAd.slides.length > 1)
-                _buildProgressIndicators(),
+              if (widget.carouselAd.slides.length > 1) _buildCarouselCounter(),
 
               // **Right-Side Vertical Action Bar**
               _buildRightActionBar(),
@@ -359,25 +355,38 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
     );
   }
 
-  Widget _buildProgressIndicators() {
+  Widget _buildCarouselCounter() {
     return Positioned(
-      top: 100,
-      left: 16,
-      right: 80,
-      child: Row(
-        children: List.generate(widget.carouselAd.slides.length, (index) {
-          final isActive = index == _currentSlideIndex;
-          return Expanded(
-            child: Container(
-              height: 3,
-              margin: const EdgeInsets.symmetric(horizontal: 2),
-              decoration: BoxDecoration(
-                color: isActive ? Colors.white : Colors.white.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(2),
+      top: 0,
+      left: 0,
+      right: 0,
+      child: SafeArea(
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.85),
+              borderRadius: BorderRadius.circular(14),
+              border:
+                  Border.all(color: Colors.white.withOpacity(0.7), width: 0.7),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.6),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Text(
+              '${_currentSlideIndex + 1}/${widget.carouselAd.slides.length}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
               ),
             ),
-          );
-        }),
+          ),
+        ),
       ),
     );
   }
@@ -447,60 +456,47 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
     return '';
   }
 
-  /// **BUILD TOP BAR: Left-aligned "Yog" title**
-  Widget _buildTopBar() {
-    return Positioned(
-      top: 60,
-      left: 16,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: const Text(
-          'Yog',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ),
-    );
-  }
-
   /// **BUILD SPONSORED TEXT: Top-right corner sponsored label**
   Widget _buildSponsoredText() {
     return Positioned(
       right: 16,
       top: 0,
       child: SafeArea(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.8),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.white70, width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.4),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.campaign, size: 14, color: Colors.white70),
-              SizedBox(width: 6),
-              Text(
-                'Sponsored',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.2,
+        child: Material(
+          color: Colors.transparent,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.85),
+              borderRadius: BorderRadius.circular(12),
+              border:
+                  Border.all(color: Colors.white.withOpacity(0.7), width: 0.7),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.6),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
                 ),
+              ],
+            ),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.campaign, size: 14, color: Colors.white),
+                  SizedBox(width: 6),
+                  Text(
+                    'Sponsored',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -561,16 +557,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
       right: 80, // Leave space for action bar
       child: Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.bottomCenter,
-            end: Alignment.topCenter,
-            colors: [
-              Colors.black.withOpacity(0.8),
-              Colors.transparent,
-            ],
-          ),
-        ),
+        color: Colors.transparent,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -618,6 +605,13 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
                 color: Colors.white,
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
+                shadows: [
+                  Shadow(
+                    color: Colors.black54,
+                    blurRadius: 4,
+                    offset: Offset(0, 1),
+                  ),
+                ],
               ),
             ),
             if (_getAdDescription().isNotEmpty) ...[
@@ -627,6 +621,13 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 14,
+                  shadows: [
+                    Shadow(
+                      color: Colors.black45,
+                      blurRadius: 4,
+                      offset: Offset(0, 1),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -637,10 +638,10 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
               onTap: _onAdTap,
               child: Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(25),
+                  borderRadius: BorderRadius.circular(22),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.2),
@@ -653,7 +654,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
                   widget.carouselAd.callToActionLabel,
                   style: const TextStyle(
                     color: Colors.black,
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
