@@ -194,6 +194,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   /// **TRY AUTOPLAY CURRENT: Ensure current video starts playing**
   void _tryAutoplayCurrent() {
     if (_videos.isEmpty || _isLoading) return;
+    _autoAdvancedForIndex.remove(_currentIndex);
     // Simple rule: if opened with a provided list (from ProfileScreen), autoplay
     final openedFromProfile =
         widget.initialVideos != null && widget.initialVideos!.isNotEmpty;
@@ -1234,9 +1235,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         if (!mounted) return;
         final c = _controllerPool[index];
         if (c != null && c.value.isInitialized) {
-          // Play the video after preload
           try {
             _pauseAllOtherVideos(index);
+            _autoAdvancedForIndex.remove(index);
             c.play();
             setState(() {
               _controllerStates[index] = true;
@@ -1314,6 +1315,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         });
 
         // Now play the controller
+        _autoAdvancedForIndex.remove(index);
         controller.play();
 
         AppLogger.log('▶️ Successfully played video at index $index');

@@ -1,6 +1,7 @@
 part of 'package:vayu/view/screens/video_feed_advanced.dart';
 
 extension _VideoFeedPreload on _VideoFeedAdvancedState {
+  
   void _startPreloading() {
     _preloadTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
       _preloadNearbyVideos();
@@ -153,7 +154,10 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         if (mounted && controller.value.isInitialized) {
           final isPlaying = controller.value.isPlaying;
           setState(() {
-            _firstFrameReady[index] ??= ValueNotifier<bool>(true);
+            _firstFrameReady[index] ??= ValueNotifier<bool>(false);
+            if (_firstFrameReady[index]!.value != true) {
+              _firstFrameReady[index]!.value = true;
+            }
             if (!_userPaused.containsKey(index)) {
               _userPaused[index] = false;
             }
@@ -197,7 +201,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         _attachEndListenerIfNeeded(controller, index);
         _attachBufferingListenerIfNeeded(controller, index);
 
-        _firstFrameReady[index] = ValueNotifier<bool>(false);
+        _firstFrameReady[index] ??= ValueNotifier<bool>(false);
+        _firstFrameReady[index]!.value = false;
         if (index <= 1) {
           _forceMountPlayer[index] = ValueNotifier<bool>(false);
           Future.delayed(const Duration(milliseconds: 700), () {
@@ -558,7 +563,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       _controllerStates[index] = false;
       _preloadedVideos.add(index);
       _lastAccessedLocal[index] = DateTime.now();
-      _firstFrameReady[index] = ValueNotifier<bool>(true);
+      _firstFrameReady[index] ??= ValueNotifier<bool>(false);
+      _firstFrameReady[index]!.value = true;
 
       return controller;
     }
@@ -567,7 +573,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       controller = _controllerPool[index];
       if (controller != null && controller.value.isInitialized) {
         _lastAccessedLocal[index] = DateTime.now();
-        _firstFrameReady[index] = ValueNotifier<bool>(true);
+        _firstFrameReady[index] ??= ValueNotifier<bool>(false);
+        _firstFrameReady[index]!.value = true;
         return controller;
       }
     }
@@ -613,6 +620,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
     sharedPool.pauseAllControllers();
 
     _currentIndex = index;
+    _autoAdvancedForIndex.remove(index);
     _reprimeWindowIfNeeded();
 
     final activeController = _controllerPool[_currentIndex];
@@ -637,7 +645,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         _controllerStates[index] = false;
         _preloadedVideos.add(index);
         _lastAccessedLocal[index] = DateTime.now();
-        _firstFrameReady[index] = ValueNotifier<bool>(true);
+        _firstFrameReady[index] ??= ValueNotifier<bool>(false);
+        _firstFrameReady[index]!.value = true;
 
         sharedPool.cleanupDistantControllers(index, keepRange: 3);
       } else if (sharedPool.isVideoLoaded(video.id)) {
@@ -647,7 +656,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
           _controllerStates[index] = false;
           _preloadedVideos.add(index);
           _lastAccessedLocal[index] = DateTime.now();
-          _firstFrameReady[index] = ValueNotifier<bool>(true);
+          _firstFrameReady[index] ??= ValueNotifier<bool>(false);
+          _firstFrameReady[index]!.value = true;
         }
       }
     }
@@ -669,7 +679,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       } else if (controllerToUse != null &&
           controllerToUse.value.isInitialized) {
         _lastAccessedLocal[index] = DateTime.now();
-        _firstFrameReady[index] = ValueNotifier<bool>(true);
+        _firstFrameReady[index] ??= ValueNotifier<bool>(false);
+        _firstFrameReady[index]!.value = true;
       }
     }
 
@@ -755,5 +766,146 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
     _preloadDebounceTimer = Timer(const Duration(milliseconds: 300), () {
       _preloadNearbyVideos();
     });
+  }
+
+  void _applyLoopingBehavior(VideoPlayerController controller) {
+    try {
+      controller.setLooping(false);
+    } catch (e) {
+      AppLogger.log('⚠️ Error applying looping behavior: $e');
+    }
+  }
+
+  void _attachEndListenerIfNeeded(
+    VideoPlayerController controller,
+    int index,
+  ) {
+    final existingListener = _videoEndListeners[index];
+    if (existingListener != null) {
+      controller.removeListener(existingListener);
+    }
+
+    void handleVideoEnd() {
+      if (!mounted) return;
+      final value = controller.value;
+      if (!value.isInitialized) return;
+
+      final duration = value.duration;
+      if (duration == Duration.zero) return;
+
+      final position = value.position;
+      final remaining = duration - position;
+
+      final bool isCompleted = !value.isPlaying &&
+          !value.isBuffering &&
+          remaining <= const Duration(milliseconds: 250);
+
+      if (isCompleted) {
+        _handleVideoCompleted(index);
+      }
+    }
+
+    _videoEndListeners[index] = handleVideoEnd;
+    controller.addListener(handleVideoEnd);
+  }
+
+  void _attachBufferingListenerIfNeeded(
+    VideoPlayerController controller,
+    int index,
+  ) {
+    final existingListener = _bufferingListeners[index];
+    if (existingListener != null) {
+      controller.removeListener(existingListener);
+    }
+
+    void handleBuffering() {
+      if (!mounted) return;
+      final value = controller.value;
+      if (!value.isInitialized) return;
+
+      final bool isBuffering = value.isBuffering;
+      if (_isBuffering[index] == isBuffering) return;
+
+      _isBuffering[index] = isBuffering;
+      final notifier =
+          _isBufferingVN[index] ??= ValueNotifier<bool>(isBuffering);
+      if (notifier.value != isBuffering) {
+        notifier.value = isBuffering;
+      }
+    }
+
+    _bufferingListeners[index] = handleBuffering;
+    controller.addListener(handleBuffering);
+    handleBuffering();
+  }
+
+  void _handleVideoCompleted(int index) {
+    if (_userPaused[index] == true) return;
+    if (_autoAdvancedForIndex.contains(index)) return;
+    _autoAdvancedForIndex.add(index);
+
+    if (index < _videos.length) {
+      final video = _videos[index];
+      _viewTracker.stopViewTracking(video.id);
+      AppLogger.log('⏹️ Completed video playback for ${video.id}');
+    }
+
+    _resetControllerForReplay(index);
+
+    if (_autoScrollEnabled) {
+      _queueAutoAdvance(index);
+    } else {
+      _autoAdvancedForIndex.remove(index);
+    }
+  }
+
+  void _queueAutoAdvance(int index) {
+    final nextIndex = index + 1;
+    if (nextIndex >= _videos.length) {
+      AppLogger.log('ℹ️ Last video reached, auto-scroll skipped');
+      _autoAdvancedForIndex.remove(index);
+      return;
+    }
+    if (!_pageController.hasClients) return;
+    if (_isAnimatingPage) return;
+
+    _isAnimatingPage = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_pageController.hasClients) {
+        _isAnimatingPage = false;
+        return;
+      }
+      _pageController
+          .animateToPage(
+        nextIndex,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeInOut,
+      )
+          .whenComplete(() {
+        _isAnimatingPage = false;
+        _autoAdvancedForIndex.remove(index);
+      });
+    });
+  }
+
+  void _resetControllerForReplay(int index) {
+    final controller = _controllerPool[index];
+    if (controller == null || !controller.value.isInitialized) return;
+
+    try {
+      controller.pause();
+      controller.seekTo(Duration.zero);
+      controller.setVolume(1.0);
+    } catch (e) {
+      AppLogger.log('⚠️ Error resetting controller at index $index: $e');
+    }
+
+    _controllerStates[index] = false;
+    _userPaused[index] = false;
+    _isBuffering[index] = false;
+    if (_isBufferingVN[index]?.value == true) {
+      _isBufferingVN[index]?.value = false;
+    }
+    _firstFrameReady[index]?.value = true;
   }
 }
