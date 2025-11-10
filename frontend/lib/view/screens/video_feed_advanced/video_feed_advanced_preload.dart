@@ -97,6 +97,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         );
         _controllerPool[index] = controller;
         _lastAccessedLocal[index] = DateTime.now();
+        _attachWakelockListener(controller);
       } else if (sharedPool.isVideoLoaded(video.id)) {
         final fallbackController = sharedPool.getController(video.id);
         if (fallbackController != null) {
@@ -107,6 +108,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
           );
           _controllerPool[index] = controller;
           _lastAccessedLocal[index] = DateTime.now();
+          _attachWakelockListener(controller);
         }
       }
 
@@ -185,6 +187,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         _preloadedVideos.add(index);
         _loadingVideos.remove(index);
         _lastAccessedLocal[index] = DateTime.now();
+        _attachWakelockListener(controller);
 
         final sharedPool = SharedVideoControllerPool();
         final video = _videos[index];
@@ -542,6 +545,13 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       if (index < _videos.length) {
         final videoId = _videos[index].id;
         if (sharedPool.isVideoLoaded(videoId)) {
+          final controller = _controllerPool[index];
+          final wakelockListener = controller != null
+              ? _wakelockListeners.remove(controller)
+              : null;
+          if (controller != null && wakelockListener != null) {
+            controller.removeListener(wakelockListener);
+          }
           controllersToRemove.add(index);
           continue;
         }
@@ -560,6 +570,10 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         final videoId = _videos[index].id;
         if (!sharedPool.isVideoLoaded(videoId) && ctrl != null) {
           try {
+            final wakelockListener = _wakelockListeners.remove(ctrl);
+            if (wakelockListener != null) {
+              ctrl.removeListener(wakelockListener);
+            }
             ctrl.removeListener(_bufferingListeners[index] ?? () {});
             ctrl.removeListener(_videoEndListeners[index] ?? () {});
             ctrl.dispose();
@@ -608,6 +622,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       _lastAccessedLocal[index] = DateTime.now();
       _firstFrameReady[index] ??= ValueNotifier<bool>(false);
       _firstFrameReady[index]!.value = true;
+      _attachWakelockListener(controller);
 
       return controller;
     }
@@ -618,6 +633,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         _lastAccessedLocal[index] = DateTime.now();
         _firstFrameReady[index] ??= ValueNotifier<bool>(false);
         _firstFrameReady[index]!.value = true;
+        _attachWakelockListener(controller);
         return controller;
       }
     }
@@ -694,6 +710,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         _lastAccessedLocal[index] = DateTime.now();
         _firstFrameReady[index] ??= ValueNotifier<bool>(false);
         _firstFrameReady[index]!.value = true;
+        _attachWakelockListener(controllerToUse);
 
         sharedPool.cleanupDistantControllers(index, keepRange: 3);
       } else if (sharedPool.isVideoLoaded(video.id)) {
@@ -705,6 +722,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
           _lastAccessedLocal[index] = DateTime.now();
           _firstFrameReady[index] ??= ValueNotifier<bool>(false);
           _firstFrameReady[index]!.value = true;
+          _attachWakelockListener(controllerToUse);
         }
       }
     }
@@ -728,6 +746,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         _lastAccessedLocal[index] = DateTime.now();
         _firstFrameReady[index] ??= ValueNotifier<bool>(false);
         _firstFrameReady[index]!.value = true;
+        _attachWakelockListener(controllerToUse);
       }
     }
 

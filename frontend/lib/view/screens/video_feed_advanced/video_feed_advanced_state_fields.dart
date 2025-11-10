@@ -86,6 +86,7 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   // First-frame tracking
   final Map<int, ValueNotifier<bool>> _firstFrameReady = {};
   final Map<int, ValueNotifier<bool>> _forceMountPlayer = {};
+  final Map<VideoPlayerController, VoidCallback> _wakelockListeners = {};
 
   // Retained controllers for refresh
   final Map<String, VideoPlayerController> _retainedByVideoId = {};

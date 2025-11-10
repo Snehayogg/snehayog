@@ -377,6 +377,26 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
   }
 
+  void _attachWakelockListener(VideoPlayerController controller) {
+    final existing = _wakelockListeners[controller];
+    if (existing != null) {
+      controller.removeListener(existing);
+    }
+    void listener() {
+      if (!mounted) return;
+      final value = controller.value;
+      if (!value.isInitialized) return;
+      if (value.isPlaying) {
+        _enableWakelock();
+      } else {
+        _refreshWakelockFromControllers();
+      }
+    }
+
+    controller.addListener(listener);
+    _wakelockListeners[controller] = listener;
+  }
+
   bool _allowAutoplay(String context) {
     if (_lifecyclePaused) {
       AppLogger.log('⏸️ Autoplay blocked ($context) due to lifecycle pause.');
@@ -2023,6 +2043,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           }
 
           // Remove listeners to avoid memory leaks
+          final wakelockListener = _wakelockListeners.remove(controller);
+          if (wakelockListener != null) {
+            controller.removeListener(wakelockListener);
+          }
           controller.removeListener(_bufferingListeners[index] ?? () {});
           controller.removeListener(_videoEndListeners[index] ?? () {});
 
@@ -2038,6 +2062,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         }
       } else {
         // Dispose orphaned controllers (no corresponding video)
+        final wakelockListener = _wakelockListeners.remove(controller);
+        if (wakelockListener != null) {
+          controller.removeListener(wakelockListener);
+        }
         controller.dispose();
       }
     });
@@ -2078,6 +2106,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       notifier.dispose();
     }
     _showHeartAnimation.clear();
+    _wakelockListeners.clear();
 
     // **NEW: Dispose VideoControllerManager**
     _videoControllerManager.dispose();
