@@ -16,20 +16,13 @@ const router = express.Router();
 
 
 const videoCachingMiddleware = (req, res, next) => {
-  // Set aggressive caching headers for video data
-  res.setHeader('Cache-Control', 'public, max-age=3600'); // 1 hour cache
-  res.setHeader('Accept-Ranges', 'bytes'); // Enable range requests
-  res.setHeader('Connection', 'keep-alive'); // Keep connection alive
-  res.setHeader('X-Content-Type-Options', 'nosniff'); // Security
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN'); // Security
-  
-  // Add ETag for better caching
-  res.setHeader('ETag', `"${Date.now()}"`);
-  
+  // Default to no-store for API JSON responses served from this router.
+  res.setHeader('Cache-Control', 'no-store');
+  res.removeHeader('ETag');
   next();
 };
 
-// Apply caching middleware to all video routes
+// Apply response header middleware to all video routes
 router.use(videoCachingMiddleware);
 
 

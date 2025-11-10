@@ -116,7 +116,7 @@ class CloudflareR2Service {
         Key: key,
         Body: fileContent,
         ContentType: 'video/mp4',
-        CacheControl: 'public, max-age=31536000', // 1 year cache
+        CacheControl: 'public, max-age=31536000, immutable, stale-while-revalidate=604800',
         Metadata: {
           'video-quality': '480p',
           'processed-by': 'cloudinary-hybrid',
@@ -170,7 +170,7 @@ class CloudflareR2Service {
         Key: key,
         Body: Buffer.from(downloadResponse.data),
         ContentType: 'image/jpeg',
-        CacheControl: 'public, max-age=31536000', // 1 year cache
+        CacheControl: 'public, max-age=31536000, immutable, stale-while-revalidate=604800', // 1 year cache + SWR
         Metadata: {
           'thumbnail-for': fileName,
           'uploaded-by': userId,
@@ -255,13 +255,23 @@ class CloudflareR2Service {
       console.log(`📤 Uploading file to R2: ${key}`);
       
       const fileContent = fs.readFileSync(filePath);
+
+      // Determine cache directives based on file type
+      let cacheControl = 'public, max-age=86400, stale-while-revalidate=86400'; // Default: 1 day + SWR
+      if (/\.m3u8$/i.test(key)) {
+        cacheControl = 'public, max-age=60, stale-while-revalidate=300';
+      } else if (/\.(ts|mp4|m4s)$/i.test(key)) {
+        cacheControl = 'public, max-age=31536000, immutable, stale-while-revalidate=604800';
+      } else if (/\.(jpg|jpeg|png|webp)$/i.test(key)) {
+        cacheControl = 'public, max-age=604800, stale-while-revalidate=604800';
+      }
       
       const command = new PutObjectCommand({
         Bucket: this.bucketName,
         Key: key,
         Body: fileContent,
         ContentType: contentType,
-        CacheControl: 'public, max-age=31536000', // 1 year cache
+        CacheControl: cacheControl,
       });
   
       await this.s3Client.send(command);
