@@ -9,15 +9,19 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
     if (index == _currentIndex) return false;
 
     final int start = (_currentIndex + 1).clamp(0, _videos.length - 1);
-    final int end =
-        (_currentIndex + _decoderPrimeBudget - 1).clamp(0, _videos.length - 1);
+    final int end = (_currentIndex + _decoderPrimeBudget - 1).clamp(
+      0,
+      _videos.length - 1,
+    );
     return index >= start && index <= end;
   }
 
   void _reprimeWindowIfNeeded() {
     final int start = _currentIndex;
-    final int end =
-        (_currentIndex + _decoderPrimeBudget - 1).clamp(0, _videos.length - 1);
+    final int end = (_currentIndex + _decoderPrimeBudget - 1).clamp(
+      0,
+      _videos.length - 1,
+    );
 
     if (_primedStartIndex == start) return;
 
@@ -51,6 +55,7 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
 
     final sharedPool = SharedVideoControllerPool();
     sharedPool.pauseAllControllers();
+    _refreshWakelockFromControllers();
   }
 
   void forcePlayCurrent() {
@@ -66,6 +71,7 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
       controller.play();
       _controllerStates[_currentIndex] = true;
       _userPaused[_currentIndex] = false;
+      _enableWakelock();
       return;
     }
 
@@ -77,6 +83,7 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
         c.play();
         _controllerStates[_currentIndex] = true;
         _userPaused[_currentIndex] = false;
+        _enableWakelock();
       }
     });
   }
@@ -99,6 +106,7 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
     }
 
     _videoControllerManager.pauseAllVideosOnTabChange();
+    SharedVideoControllerPool().pauseAllControllers();
   }
 
   void _pauseAllVideosOnTabSwitch() {
@@ -110,7 +118,9 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
     });
 
     _videoControllerManager.pauseAllVideosOnTabChange();
+    SharedVideoControllerPool().pauseAllControllers();
 
     _isScreenVisible = false;
+    _disableWakelock();
   }
 }

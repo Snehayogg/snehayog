@@ -321,8 +321,8 @@ class BannerImageProcessor {
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
                   color: Colors.grey[900],
-                  child: Column(
-                    children: const [
+                  child: const Column(
+                    children: [
                       Row(
                         children: [
                           Icon(Icons.pan_tool, color: Colors.blue, size: 20),

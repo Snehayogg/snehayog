@@ -1,7 +1,6 @@
 part of 'package:vayu/view/screens/video_feed_advanced.dart';
 
 extension _VideoFeedPreload on _VideoFeedAdvancedState {
-  
   void _startPreloading() {
     _preloadTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
       _preloadNearbyVideos();
@@ -14,9 +13,11 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
     final sharedPool = SharedVideoControllerPool();
 
     const preloadWindow = 2;
-    for (int i = _currentIndex;
-        i <= _currentIndex + preloadWindow && i < _videos.length;
-        i++) {
+    for (
+      int i = _currentIndex;
+      i <= _currentIndex + preloadWindow && i < _videos.length;
+      i++
+    ) {
       final video = _videos[i];
 
       if (sharedPool.isVideoLoaded(video.id)) {
@@ -35,7 +36,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         !_isLoadingMore &&
         _currentIndex >= _videos.length - _infiniteScrollThreshold) {
       AppLogger.log(
-          '📡 Triggering load more: index=$_currentIndex, total=${_videos.length}, hasMore=$_hasMore');
+        '📡 Triggering load more: index=$_currentIndex, total=${_videos.length}, hasMore=$_hasMore',
+      );
       _loadMoreVideos();
     } else if (!_hasMore) {
       AppLogger.log('✅ All videos loaded, no more to load');
@@ -49,7 +51,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         !_preloadedVideos.contains(index) &&
         !_loadingVideos.contains(index)) {
       AppLogger.log(
-          '⏳ Max concurrent initializations reached, deferring video $index');
+        '⏳ Max concurrent initializations reached, deferring video $index',
+      );
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted && !_preloadedVideos.contains(index)) {
           _preloadVideo(index);
@@ -73,7 +76,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       videoUrl = await _resolvePlayableUrl(video);
       if (videoUrl == null || videoUrl.isEmpty) {
         AppLogger.log(
-            '❌ Invalid video URL for video $index: ${video.videoUrl}');
+          '❌ Invalid video URL for video $index: ${video.videoUrl}',
+        );
         _loadingVideos.remove(index);
         return;
       }
@@ -82,13 +86,15 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
       final sharedPool = SharedVideoControllerPool();
 
-      final instantController =
-          sharedPool.getControllerForInstantPlay(video.id);
+      final instantController = sharedPool.getControllerForInstantPlay(
+        video.id,
+      );
       if (instantController != null) {
         controller = instantController;
         isReused = true;
         AppLogger.log(
-            '⚡ INSTANT: Reusing controller from shared pool for video: ${video.id}');
+          '⚡ INSTANT: Reusing controller from shared pool for video: ${video.id}',
+        );
         _controllerPool[index] = controller;
         _lastAccessedLocal[index] = DateTime.now();
       } else if (sharedPool.isVideoLoaded(video.id)) {
@@ -97,7 +103,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
           controller = fallbackController;
           isReused = true;
           AppLogger.log(
-              '♻️ Reusing controller from shared pool for video: ${video.id}');
+            '♻️ Reusing controller from shared pool for video: ${video.id}',
+          );
           _controllerPool[index] = controller;
           _lastAccessedLocal[index] = DateTime.now();
         }
@@ -149,7 +156,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         }
       } else {
         AppLogger.log(
-            '♻️ Skipping initialization - reusing initialized controller');
+          '♻️ Skipping initialization - reusing initialized controller',
+        );
 
         if (mounted && controller.value.isInitialized) {
           final isPlaying = controller.value.isPlaying;
@@ -166,7 +174,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
             }
           });
           AppLogger.log(
-              '🔄 Triggered rebuild for reused controller at index $index');
+            '🔄 Triggered rebuild for reused controller at index $index',
+          );
         }
       }
 
@@ -181,7 +190,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         final video = _videos[index];
         sharedPool.addController(video.id, controller, index: index);
         AppLogger.log(
-            '✅ Added video controller to shared pool: ${video.id} (index: $index)');
+          '✅ Added video controller to shared pool: ${video.id} (index: $index)',
+        );
 
         if (mounted) {
           setState(() {
@@ -194,7 +204,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
             }
           });
           AppLogger.log(
-              '🔄 Triggered rebuild after controller initialization for index $index');
+            '🔄 Triggered rebuild after controller initialization for index $index',
+          );
         }
 
         _applyLoopingBehavior(controller);
@@ -240,13 +251,15 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
                 }
               });
               AppLogger.log(
-                  '🔄 Triggered rebuild when first frame ready for index $index');
+                '🔄 Triggered rebuild when first frame ready for index $index',
+              );
             }
 
             if (index == _currentIndex) {
               if (_userPaused[index] == true) {
                 AppLogger.log(
-                    '⏸️ Autoplay suppressed in markReadyIfNeeded: user has manually paused video at index $index');
+                  '⏸️ Autoplay suppressed in markReadyIfNeeded: user has manually paused video at index $index',
+                );
                 return;
               }
 
@@ -257,6 +270,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
                   await controller.play();
                   _controllerStates[_currentIndex] = true;
                   _userPaused[_currentIndex] = false;
+                  _enableWakelock();
                 } catch (_) {}
               }
             }
@@ -266,8 +280,10 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         controller.addListener(markReadyIfNeeded);
 
         if (index == _currentIndex && index < _videos.length) {
-          _viewTracker.startViewTracking(video.id,
-              videoUploaderId: video.uploader.id);
+          _viewTracker.startViewTracking(
+            video.id,
+            videoUploaderId: video.uploader.id,
+          );
           AppLogger.log(
             '▶️ Started view tracking for preloaded current video: ${video.id}',
           );
@@ -279,23 +295,28 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
               !controller.value.isPlaying) {
             if (_userPaused[index] == true) {
               AppLogger.log(
-                  '⏸️ Autoplay suppressed for reused controller: user has manually paused video at index $index');
+                '⏸️ Autoplay suppressed for reused controller: user has manually paused video at index $index',
+              );
             } else {
               if (openedFromProfile) {
                 _pauseAllOtherVideos(index);
                 controller.play();
                 _controllerStates[index] = true;
                 _userPaused[index] = false;
+                _enableWakelock();
                 AppLogger.log(
-                    '✅ Started playback for reused controller (from Profile)');
+                  '✅ Started playback for reused controller (from Profile)',
+                );
               } else {
                 if (_mainController?.currentIndex == 0 && _isScreenVisible) {
                   _pauseAllOtherVideos(index);
                   controller.play();
                   _controllerStates[index] = true;
                   _userPaused[index] = false;
+                  _enableWakelock();
                   AppLogger.log(
-                      '✅ Started playback for reused controller at current index');
+                    '✅ Started playback for reused controller at current index',
+                  );
                 }
               }
             }
@@ -306,7 +327,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
               !controller.value.isPlaying) {
             if (_userPaused[index] == true) {
               AppLogger.log(
-                  '⏸️ Resume suppressed: user has manually paused video ${video.id} at index $index');
+                '⏸️ Resume suppressed: user has manually paused video ${video.id} at index $index',
+              );
               _wasPlayingBeforeNavigation[index] = false;
             } else {
               if (openedFromProfile) {
@@ -315,8 +337,10 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
                 _controllerStates[index] = true;
                 _userPaused[index] = false;
                 _wasPlayingBeforeNavigation[index] = false;
+                _enableWakelock();
                 AppLogger.log(
-                    '▶️ Resumed video ${video.id} that was playing before navigation (from Profile)');
+                  '▶️ Resumed video ${video.id} that was playing before navigation (from Profile)',
+                );
               } else {
                 if (_mainController?.currentIndex == 0 && _isScreenVisible) {
                   _pauseAllOtherVideos(index);
@@ -324,8 +348,10 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
                   _controllerStates[index] = true;
                   _userPaused[index] = false;
                   _wasPlayingBeforeNavigation[index] = false;
+                  _enableWakelock();
                   AppLogger.log(
-                      '▶️ Resumed video ${video.id} that was playing before navigation');
+                    '▶️ Resumed video ${video.id} that was playing before navigation',
+                  );
                 }
               }
             }
@@ -364,7 +390,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       }
 
       final errorString = e.toString().toLowerCase();
-      final isNoMemoryError = errorString.contains('no_memory') ||
+      final isNoMemoryError =
+          errorString.contains('no_memory') ||
           errorString.contains('0xfffffff4') ||
           errorString.contains('error 12') ||
           (errorString.contains('failed to initialize') &&
@@ -386,7 +413,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
           _preloadRetryCount[index] = retryCount + 1;
           final retryDelay = Duration(seconds: 10 + (retryCount * 5));
           AppLogger.log(
-              '🔄 Retrying video $index after ${retryDelay.inSeconds} seconds (attempt ${retryCount + 1}/$_maxRetryAttempts)...');
+            '🔄 Retrying video $index after ${retryDelay.inSeconds} seconds (attempt ${retryCount + 1}/$_maxRetryAttempts)...',
+          );
           Future.delayed(retryDelay, () {
             if (mounted && !_preloadedVideos.contains(index)) {
               _preloadVideo(index);
@@ -394,7 +422,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
           });
         } else {
           AppLogger.log(
-              '❌ Max retry attempts reached for video $index (NO_MEMORY)');
+            '❌ Max retry attempts reached for video $index (NO_MEMORY)',
+          );
           _preloadRetryCount.remove(index);
         }
       } else if (videoUrl != null && videoUrl.contains('.m3u8')) {
@@ -542,7 +571,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
     if (controllersToRemove.isNotEmpty) {
       AppLogger.log(
-          '🧹 Cleaned up ${controllersToRemove.length} local controller trackings');
+        '🧹 Cleaned up ${controllersToRemove.length} local controller trackings',
+      );
     }
   }
 
@@ -552,12 +582,14 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
     final video = _videos[index];
     final sharedPool = SharedVideoControllerPool();
 
-    VideoPlayerController? controller =
-        sharedPool.getControllerForInstantPlay(video.id);
+    VideoPlayerController? controller = sharedPool.getControllerForInstantPlay(
+      video.id,
+    );
 
     if (controller != null && controller.value.isInitialized) {
       AppLogger.log(
-          '⚡ INSTANT: Reusing controller from shared pool for video ${video.id}');
+        '⚡ INSTANT: Reusing controller from shared pool for video ${video.id}',
+      );
 
       _controllerPool[index] = controller;
       _controllerStates[index] = false;
@@ -600,7 +632,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       final previousVideo = _videos[_currentIndex];
       _viewTracker.stopViewTracking(previousVideo.id);
       AppLogger.log(
-          '⏸️ Stopped view tracking for previous video: ${previousVideo.id}');
+        '⏸️ Stopped view tracking for previous video: ${previousVideo.id}',
+      );
 
       _userPaused[_currentIndex] = false;
     }
@@ -639,7 +672,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
       if (controllerToUse != null && controllerToUse.value.isInitialized) {
         AppLogger.log(
-            '⚡ INSTANT: Reusing controller from shared pool for video ${video.id}');
+          '⚡ INSTANT: Reusing controller from shared pool for video ${video.id}',
+        );
 
         _controllerPool[index] = controllerToUse;
         _controllerStates[index] = false;
@@ -692,7 +726,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
       if (_userPaused[index] == true) {
         AppLogger.log(
-            '⏸️ Autoplay suppressed: user has manually paused video at index $index');
+          '⏸️ Autoplay suppressed: user has manually paused video at index $index',
+        );
         return;
       }
 
@@ -702,16 +737,20 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       controllerToUse.play();
       _controllerStates[index] = true;
       _userPaused[index] = false;
+      _enableWakelock();
       _applyLoopingBehavior(controllerToUse);
       _attachEndListenerIfNeeded(controllerToUse, index);
       _attachBufferingListenerIfNeeded(controllerToUse, index);
 
       if (index < _videos.length) {
         final currentVideo = _videos[index];
-        _viewTracker.startViewTracking(currentVideo.id,
-            videoUploaderId: currentVideo.uploader.id);
+        _viewTracker.startViewTracking(
+          currentVideo.id,
+          videoUploaderId: currentVideo.uploader.id,
+        );
         AppLogger.log(
-            '▶️ Started view tracking for current video: ${currentVideo.id}');
+          '▶️ Started view tracking for current video: ${currentVideo.id}',
+        );
       }
 
       _preloadNearbyVideosDebounced();
@@ -720,7 +759,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
     if (!_controllerPool.containsKey(index)) {
       AppLogger.log(
-          '🔄 Video not preloaded, preloading and will autoplay when ready');
+        '🔄 Video not preloaded, preloading and will autoplay when ready',
+      );
       _preloadVideo(index).then((_) {
         if (mounted &&
             _currentIndex == index &&
@@ -740,16 +780,20 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
             loadedController.play();
             _controllerStates[index] = true;
             _userPaused[index] = false;
+            _enableWakelock();
             _applyLoopingBehavior(loadedController);
             _attachEndListenerIfNeeded(loadedController, index);
             _attachBufferingListenerIfNeeded(loadedController, index);
 
             if (index < _videos.length) {
               final currentVideo = _videos[index];
-              _viewTracker.startViewTracking(currentVideo.id,
-                  videoUploaderId: currentVideo.uploader.id);
+              _viewTracker.startViewTracking(
+                currentVideo.id,
+                videoUploaderId: currentVideo.uploader.id,
+              );
               AppLogger.log(
-                  '▶️ Started view tracking for current video: ${currentVideo.id}');
+                '▶️ Started view tracking for current video: ${currentVideo.id}',
+              );
             }
 
             AppLogger.log('✅ Video autoplay started after preloading');
@@ -776,10 +820,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
     }
   }
 
-  void _attachEndListenerIfNeeded(
-    VideoPlayerController controller,
-    int index,
-  ) {
+  void _attachEndListenerIfNeeded(VideoPlayerController controller, int index) {
     final existingListener = _videoEndListeners[index];
     if (existingListener != null) {
       controller.removeListener(existingListener);
@@ -796,7 +837,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       final position = value.position;
       final remaining = duration - position;
 
-      final bool isCompleted = !value.isPlaying &&
+      final bool isCompleted =
+          !value.isPlaying &&
           !value.isBuffering &&
           remaining <= const Duration(milliseconds: 250);
 
@@ -827,8 +869,9 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       if (_isBuffering[index] == isBuffering) return;
 
       _isBuffering[index] = isBuffering;
-      final notifier =
-          _isBufferingVN[index] ??= ValueNotifier<bool>(isBuffering);
+      final notifier = _isBufferingVN[index] ??= ValueNotifier<bool>(
+        isBuffering,
+      );
       if (notifier.value != isBuffering) {
         notifier.value = isBuffering;
       }
@@ -877,14 +920,14 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       }
       _pageController
           .animateToPage(
-        nextIndex,
-        duration: const Duration(milliseconds: 320),
-        curve: Curves.easeInOut,
-      )
+            nextIndex,
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeInOut,
+          )
           .whenComplete(() {
-        _isAnimatingPage = false;
-        _autoAdvancedForIndex.remove(index);
-      });
+            _isAnimatingPage = false;
+            _autoAdvancedForIndex.remove(index);
+          });
     });
   }
 
@@ -907,5 +950,6 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       _isBufferingVN[index]?.value = false;
     }
     _firstFrameReady[index]?.value = true;
+    _refreshWakelockFromControllers();
   }
 }

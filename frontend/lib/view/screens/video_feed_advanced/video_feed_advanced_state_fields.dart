@@ -118,4 +118,7 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
 
   // Cold start tracking
   bool _isColdStart = true;
+
+  // Screen wake lock
+  bool _wakelockEnabled = false;
 }
