@@ -93,6 +93,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         _videoControllerManager.onAppResumed();
         // **FIX: Set screen visible again when app resumes**
         _isScreenVisible = true;
+        _ensureWakelockForVisibility();
         // Try restoring state after resume
         _restoreBackgroundStateIfAny().then((_) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -120,7 +121,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       case AppLifecycleState.detached:
         _videoControllerManager.disposeAllControllers();
         _videoControllerManager.onAppDetached();
-        _disableWakelock();
+        _ensureWakelockForVisibility();
         break;
       case AppLifecycleState.hidden:
         _handleAppMovedToBackground(state);
@@ -134,8 +135,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     _videoControllerManager.pauseAllVideos();
     _videoControllerManager.onAppPaused();
     SharedVideoControllerPool().pauseAllControllers();
-    _disableWakelock();
     _lifecyclePaused = true;
+    _ensureWakelockForVisibility();
     AppLogger.log(
       '📱 VideoFeedAdvanced: Lifecycle state $state triggered background handling; all videos paused.',
     );
@@ -261,7 +262,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         }
         _pauseAllOtherVideos(_currentIndex);
         controller.play();
-        _enableWakelock();
+        _ensureWakelockForVisibility();
         _controllerStates[_currentIndex] = true;
         _userPaused[_currentIndex] = false;
         AppLogger.log('✅ VideoFeedAdvanced: Current video autoplay started');
@@ -301,7 +302,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             } catch (_) {}
             _pauseAllOtherVideos(_currentIndex);
             controller.play();
-            _enableWakelock();
+            _ensureWakelockForVisibility();
             _controllerStates[_currentIndex] = true;
             _userPaused[_currentIndex] = false;
             AppLogger.log(
@@ -334,6 +335,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         _pauseAllVideosOnTabSwitch();
         _isScreenVisible =
             true; // set visible again after pause helper sets false
+        _ensureWakelockForVisibility();
 
         // 3) Autoplay the current video
         AppLogger.log(
@@ -349,6 +351,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
         // **NEW: Stop background profile preloading**
         _profilePreloader.stopBackgroundPreloading();
+        _ensureWakelockForVisibility();
       }
     }
   }
@@ -365,36 +368,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     _wakelockEnabled = false;
   }
 
-  void _refreshWakelockFromControllers() {
-    final anyPlaying = _controllerPool.values.any(
-      (controller) =>
-          controller.value.isInitialized && controller.value.isPlaying,
-    );
-    if (anyPlaying) {
+  void _ensureWakelockForVisibility() {
+    if (_isScreenVisible && !_lifecyclePaused) {
       _enableWakelock();
     } else {
       _disableWakelock();
     }
-  }
-
-  void _attachWakelockListener(VideoPlayerController controller) {
-    final existing = _wakelockListeners[controller];
-    if (existing != null) {
-      controller.removeListener(existing);
-    }
-    void listener() {
-      if (!mounted) return;
-      final value = controller.value;
-      if (!value.isInitialized) return;
-      if (value.isPlaying) {
-        _enableWakelock();
-      } else {
-        _refreshWakelockFromControllers();
-      }
-    }
-
-    controller.addListener(listener);
-    _wakelockListeners[controller] = listener;
   }
 
   bool _allowAutoplay(String context) {
@@ -1429,7 +1408,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
         // Now pause the controller
         controller.pause();
-        _refreshWakelockFromControllers();
+        _ensureWakelockForVisibility();
 
         AppLogger.log('⏸️ Successfully paused video at index $index');
 
@@ -1462,7 +1441,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         // Now play the controller
         _autoAdvancedForIndex.remove(index);
         controller.play();
-        _enableWakelock();
+        _ensureWakelockForVisibility();
 
         AppLogger.log('▶️ Successfully played video at index $index');
 
@@ -2043,10 +2022,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           }
 
           // Remove listeners to avoid memory leaks
-          final wakelockListener = _wakelockListeners.remove(controller);
-          if (wakelockListener != null) {
-            controller.removeListener(wakelockListener);
-          }
           controller.removeListener(_bufferingListeners[index] ?? () {});
           controller.removeListener(_videoEndListeners[index] ?? () {});
 
@@ -2062,10 +2037,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         }
       } else {
         // Dispose orphaned controllers (no corresponding video)
-        final wakelockListener = _wakelockListeners.remove(controller);
-        if (wakelockListener != null) {
-          controller.removeListener(wakelockListener);
-        }
         controller.dispose();
       }
     });
@@ -2106,7 +2077,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       notifier.dispose();
     }
     _showHeartAnimation.clear();
-    _wakelockListeners.clear();
 
     // **NEW: Dispose VideoControllerManager**
     _videoControllerManager.dispose();

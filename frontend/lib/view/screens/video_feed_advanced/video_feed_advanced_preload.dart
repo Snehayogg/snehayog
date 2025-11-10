@@ -97,7 +97,6 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         );
         _controllerPool[index] = controller;
         _lastAccessedLocal[index] = DateTime.now();
-        _attachWakelockListener(controller);
       } else if (sharedPool.isVideoLoaded(video.id)) {
         final fallbackController = sharedPool.getController(video.id);
         if (fallbackController != null) {
@@ -108,7 +107,6 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
           );
           _controllerPool[index] = controller;
           _lastAccessedLocal[index] = DateTime.now();
-          _attachWakelockListener(controller);
         }
       }
 
@@ -187,7 +185,6 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         _preloadedVideos.add(index);
         _loadingVideos.remove(index);
         _lastAccessedLocal[index] = DateTime.now();
-        _attachWakelockListener(controller);
 
         final sharedPool = SharedVideoControllerPool();
         final video = _videos[index];
@@ -276,7 +273,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
                   await controller.play();
                   _controllerStates[_currentIndex] = true;
                   _userPaused[_currentIndex] = false;
-                  _enableWakelock();
+                  _ensureWakelockForVisibility();
                 } catch (_) {}
               }
             }
@@ -310,7 +307,6 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
                   controller.play();
                   _controllerStates[index] = true;
                   _userPaused[index] = false;
-                  _enableWakelock();
                   AppLogger.log(
                     '✅ Started playback for reused controller (from Profile)',
                   );
@@ -322,7 +318,6 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
                     controller.play();
                     _controllerStates[index] = true;
                     _userPaused[index] = false;
-                    _enableWakelock();
                     AppLogger.log(
                       '✅ Started playback for reused controller at current index',
                     );
@@ -348,7 +343,6 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
                   _controllerStates[index] = true;
                   _userPaused[index] = false;
                   _wasPlayingBeforeNavigation[index] = false;
-                  _enableWakelock();
                   AppLogger.log(
                     '▶️ Resumed video ${video.id} that was playing before navigation (from Profile)',
                   );
@@ -361,7 +355,6 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
                     _controllerStates[index] = true;
                     _userPaused[index] = false;
                     _wasPlayingBeforeNavigation[index] = false;
-                    _enableWakelock();
                     AppLogger.log(
                       '▶️ Resumed video ${video.id} that was playing before navigation',
                     );
@@ -546,12 +539,6 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         final videoId = _videos[index].id;
         if (sharedPool.isVideoLoaded(videoId)) {
           final controller = _controllerPool[index];
-          final wakelockListener = controller != null
-              ? _wakelockListeners.remove(controller)
-              : null;
-          if (controller != null && wakelockListener != null) {
-            controller.removeListener(wakelockListener);
-          }
           controllersToRemove.add(index);
           continue;
         }
@@ -570,10 +557,6 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         final videoId = _videos[index].id;
         if (!sharedPool.isVideoLoaded(videoId) && ctrl != null) {
           try {
-            final wakelockListener = _wakelockListeners.remove(ctrl);
-            if (wakelockListener != null) {
-              ctrl.removeListener(wakelockListener);
-            }
             ctrl.removeListener(_bufferingListeners[index] ?? () {});
             ctrl.removeListener(_videoEndListeners[index] ?? () {});
             ctrl.dispose();
@@ -622,9 +605,6 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       _lastAccessedLocal[index] = DateTime.now();
       _firstFrameReady[index] ??= ValueNotifier<bool>(false);
       _firstFrameReady[index]!.value = true;
-      _attachWakelockListener(controller);
-
-      return controller;
     }
 
     if (_controllerPool.containsKey(index)) {
@@ -633,7 +613,6 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         _lastAccessedLocal[index] = DateTime.now();
         _firstFrameReady[index] ??= ValueNotifier<bool>(false);
         _firstFrameReady[index]!.value = true;
-        _attachWakelockListener(controller);
         return controller;
       }
     }
@@ -710,9 +689,6 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         _lastAccessedLocal[index] = DateTime.now();
         _firstFrameReady[index] ??= ValueNotifier<bool>(false);
         _firstFrameReady[index]!.value = true;
-        _attachWakelockListener(controllerToUse);
-
-        sharedPool.cleanupDistantControllers(index, keepRange: 3);
       } else if (sharedPool.isVideoLoaded(video.id)) {
         controllerToUse = sharedPool.getController(video.id);
         if (controllerToUse != null && controllerToUse.value.isInitialized) {
@@ -722,7 +698,6 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
           _lastAccessedLocal[index] = DateTime.now();
           _firstFrameReady[index] ??= ValueNotifier<bool>(false);
           _firstFrameReady[index]!.value = true;
-          _attachWakelockListener(controllerToUse);
         }
       }
     }
@@ -746,7 +721,6 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         _lastAccessedLocal[index] = DateTime.now();
         _firstFrameReady[index] ??= ValueNotifier<bool>(false);
         _firstFrameReady[index]!.value = true;
-        _attachWakelockListener(controllerToUse);
       }
     }
 
@@ -772,7 +746,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       controllerToUse.play();
       _controllerStates[index] = true;
       _userPaused[index] = false;
-      _enableWakelock();
+      _ensureWakelockForVisibility();
       _applyLoopingBehavior(controllerToUse);
       _attachEndListenerIfNeeded(controllerToUse, index);
       _attachBufferingListenerIfNeeded(controllerToUse, index);
@@ -818,7 +792,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
             loadedController.play();
             _controllerStates[index] = true;
             _userPaused[index] = false;
-            _enableWakelock();
+            _ensureWakelockForVisibility();
             _applyLoopingBehavior(loadedController);
             _attachEndListenerIfNeeded(loadedController, index);
             _attachBufferingListenerIfNeeded(loadedController, index);
@@ -988,6 +962,6 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       _isBufferingVN[index]?.value = false;
     }
     _firstFrameReady[index]?.value = true;
-    _refreshWakelockFromControllers();
+    _ensureWakelockForVisibility();
   }
 }

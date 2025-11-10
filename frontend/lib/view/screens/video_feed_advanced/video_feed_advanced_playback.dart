@@ -55,7 +55,7 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
 
     final sharedPool = SharedVideoControllerPool();
     sharedPool.pauseAllControllers();
-    _refreshWakelockFromControllers();
+    _ensureWakelockForVisibility();
   }
 
   void forcePlayCurrent() {
@@ -72,7 +72,7 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
       controller.play();
       _controllerStates[_currentIndex] = true;
       _userPaused[_currentIndex] = false;
-      _enableWakelock();
+      _ensureWakelockForVisibility();
       return;
     }
 
@@ -85,7 +85,7 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
         c.play();
         _controllerStates[_currentIndex] = true;
         _userPaused[_currentIndex] = false;
-        _enableWakelock();
+        _ensureWakelockForVisibility();
       }
     });
   }
