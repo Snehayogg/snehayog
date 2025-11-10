@@ -68,6 +68,7 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
     final controller = _controllerPool[_currentIndex];
     if (controller != null && controller.value.isInitialized) {
       _pauseAllOtherVideos(_currentIndex);
+      _lifecyclePaused = false;
       controller.play();
       _controllerStates[_currentIndex] = true;
       _userPaused[_currentIndex] = false;
@@ -80,6 +81,7 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
       final c = _controllerPool[_currentIndex];
       if (c != null && c.value.isInitialized) {
         _pauseAllOtherVideos(_currentIndex);
+        _lifecyclePaused = false;
         c.play();
         _controllerStates[_currentIndex] = true;
         _userPaused[_currentIndex] = false;

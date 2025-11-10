@@ -96,6 +96,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         // Try restoring state after resume
         _restoreBackgroundStateIfAny().then((_) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (_lifecyclePaused) {
+              AppLogger.log(
+                '⏸️ Resume detected but autoplay blocked until user interaction.',
+              );
+              return;
+            }
             final openedFromProfile =
                 widget.initialVideos != null &&
                 widget.initialVideos!.isNotEmpty;
@@ -129,6 +135,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     _videoControllerManager.onAppPaused();
     SharedVideoControllerPool().pauseAllControllers();
     _disableWakelock();
+    _lifecyclePaused = true;
     AppLogger.log(
       '📱 VideoFeedAdvanced: Lifecycle state $state triggered background handling; all videos paused.',
     );
@@ -210,6 +217,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   /// **TRY AUTOPLAY CURRENT: Ensure current video starts playing**
   void _tryAutoplayCurrent() {
     if (_videos.isEmpty || _isLoading) return;
+    if (!_allowAutoplay('tryAutoplayCurrent')) {
+      return;
+    }
     _autoAdvancedForIndex.remove(_currentIndex);
     // Simple rule: if opened with a provided list (from ProfileScreen), autoplay
     final openedFromProfile =
@@ -246,6 +256,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         try {
           controller.setVolume(1.0);
         } catch (_) {}
+        if (!_allowAutoplay('autoplay current immediate')) {
+          return;
+        }
         _pauseAllOtherVideos(_currentIndex);
         controller.play();
         _enableWakelock();
@@ -277,6 +290,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               AppLogger.log(
                 '⏸️ Autoplay suppressed after preload: user has manually paused video at index $_currentIndex',
               );
+              return;
+            }
+            if (!_allowAutoplay('autoplay current after preload')) {
               return;
             }
 
@@ -359,6 +375,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     } else {
       _disableWakelock();
     }
+  }
+
+  bool _allowAutoplay(String context) {
+    if (_lifecyclePaused) {
+      AppLogger.log('⏸️ Autoplay blocked ($context) due to lifecycle pause.');
+      return false;
+    }
+    return true;
   }
 
   /// **PAUSE CURRENT VIDEO: When screen becomes hidden**
@@ -1413,6 +1437,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           _controllerStates[index] = true;
           _userPaused[index] = false; // hide when playing
         });
+        _lifecyclePaused = false;
 
         // Now play the controller
         _autoAdvancedForIndex.remove(index);

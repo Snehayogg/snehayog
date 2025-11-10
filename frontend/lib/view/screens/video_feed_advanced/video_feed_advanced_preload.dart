@@ -266,6 +266,9 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
               if (_mainController?.currentIndex == 0 && _isScreenVisible) {
                 try {
                   await controller.setVolume(1.0);
+                  if (!_allowAutoplay('markReadyIfNeeded current')) {
+                    return;
+                  }
                   _pauseAllOtherVideos(index);
                   await controller.play();
                   _controllerStates[_currentIndex] = true;
@@ -299,24 +302,28 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
               );
             } else {
               if (openedFromProfile) {
-                _pauseAllOtherVideos(index);
-                controller.play();
-                _controllerStates[index] = true;
-                _userPaused[index] = false;
-                _enableWakelock();
-                AppLogger.log(
-                  '✅ Started playback for reused controller (from Profile)',
-                );
-              } else {
-                if (_mainController?.currentIndex == 0 && _isScreenVisible) {
+                if (_allowAutoplay('reused controller (profile)')) {
                   _pauseAllOtherVideos(index);
                   controller.play();
                   _controllerStates[index] = true;
                   _userPaused[index] = false;
                   _enableWakelock();
                   AppLogger.log(
-                    '✅ Started playback for reused controller at current index',
+                    '✅ Started playback for reused controller (from Profile)',
                   );
+                }
+              } else {
+                if (_mainController?.currentIndex == 0 && _isScreenVisible) {
+                  if (_allowAutoplay('reused controller at current index')) {
+                    _pauseAllOtherVideos(index);
+                    controller.play();
+                    _controllerStates[index] = true;
+                    _userPaused[index] = false;
+                    _enableWakelock();
+                    AppLogger.log(
+                      '✅ Started playback for reused controller at current index',
+                    );
+                  }
                 }
               }
             }
@@ -332,17 +339,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
               _wasPlayingBeforeNavigation[index] = false;
             } else {
               if (openedFromProfile) {
-                _pauseAllOtherVideos(index);
-                controller.play();
-                _controllerStates[index] = true;
-                _userPaused[index] = false;
-                _wasPlayingBeforeNavigation[index] = false;
-                _enableWakelock();
-                AppLogger.log(
-                  '▶️ Resumed video ${video.id} that was playing before navigation (from Profile)',
-                );
-              } else {
-                if (_mainController?.currentIndex == 0 && _isScreenVisible) {
+                if (_allowAutoplay('resume controller (profile)')) {
                   _pauseAllOtherVideos(index);
                   controller.play();
                   _controllerStates[index] = true;
@@ -350,8 +347,22 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
                   _wasPlayingBeforeNavigation[index] = false;
                   _enableWakelock();
                   AppLogger.log(
-                    '▶️ Resumed video ${video.id} that was playing before navigation',
+                    '▶️ Resumed video ${video.id} that was playing before navigation (from Profile)',
                   );
+                }
+              } else {
+                if (_mainController?.currentIndex == 0 && _isScreenVisible) {
+                  if (_allowAutoplay('resume controller (current)')) {
+                    _pauseAllOtherVideos(index);
+                    controller.play();
+                    _controllerStates[index] = true;
+                    _userPaused[index] = false;
+                    _wasPlayingBeforeNavigation[index] = false;
+                    _enableWakelock();
+                    AppLogger.log(
+                      '▶️ Resumed video ${video.id} that was playing before navigation',
+                    );
+                  }
                 }
               }
             }
@@ -626,6 +637,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
   void _handlePageChangeDebounced(int index) {
     if (!mounted || index == _currentIndex) return;
 
+    _lifecyclePaused = false;
+
     _lastAccessedLocal[_currentIndex] = DateTime.now();
 
     if (_currentIndex < _videos.length) {
@@ -731,6 +744,9 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         return;
       }
 
+      if (!_allowAutoplay('page change autoplay')) {
+        return;
+      }
       _pauseAllOtherVideos(index);
 
       controllerToUse.setVolume(1.0);
@@ -774,6 +790,9 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
               loadedController.value.isInitialized) {
             _lastAccessedLocal[index] = DateTime.now();
 
+            if (!_allowAutoplay('post preload autoplay')) {
+              return;
+            }
             _pauseAllOtherVideos(index);
 
             loadedController.setVolume(1.0);

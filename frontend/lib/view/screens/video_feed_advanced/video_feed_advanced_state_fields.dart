@@ -105,6 +105,7 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
 
   // Screen visibility
   bool _isScreenVisible = true;
+  bool _lifecyclePaused = false;
 
   // Double tap animations
   final Map<int, ValueNotifier<bool>> _showHeartAnimation = {};
