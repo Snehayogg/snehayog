@@ -214,7 +214,7 @@ class LoginScreen extends StatelessWidget {
                                             },
                                             icon: const Icon(
                                               Icons.arrow_forward_ios,
-                                              color: Colors.white,
+                                              color: Colors.black87,
                                               size: 16,
                                             ),
                                             label: const Text(
@@ -222,19 +222,21 @@ class LoginScreen extends StatelessWidget {
                                               style: TextStyle(
                                                 fontSize: 14,
                                                 fontWeight: FontWeight.w600,
-                                                color: Colors.white,
+                                                color: Colors.black87,
                                               ),
                                             ),
                                             style: ElevatedButton.styleFrom(
-                                              backgroundColor:
-                                                  Colors.orange[600],
-                                              foregroundColor: Colors.white,
-                                              elevation: 4,
-                                              shadowColor: Colors.orange
-                                                  .withOpacity(0.3),
+                                              backgroundColor: Colors.white,
+                                              foregroundColor: Colors.black87,
+                                              elevation: 0,
+                                              shadowColor: Colors.transparent,
                                               shape: RoundedRectangleBorder(
                                                 borderRadius:
                                                     BorderRadius.circular(12),
+                                                side: const BorderSide(
+                                                  color: Colors.black87,
+                                                  width: 1.2,
+                                                ),
                                               ),
                                             ),
                                           ),
@@ -332,7 +334,7 @@ class LoginScreen extends StatelessWidget {
                               },
                               icon: const Icon(
                                 Icons.arrow_forward_ios,
-                                color: Colors.white,
+                                color: Colors.black87,
                                 size: 16,
                               ),
                               label: const Text(
@@ -340,16 +342,20 @@ class LoginScreen extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.white,
+                                  color: Colors.black87,
                                 ),
                               ),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.orange[600],
-                                foregroundColor: Colors.white,
-                                elevation: 4,
-                                shadowColor: Colors.orange.withOpacity(0.3),
+                                backgroundColor: Colors.white,
+                                foregroundColor: Colors.black87,
+                                elevation: 0,
+                                shadowColor: Colors.transparent,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
+                                  side: const BorderSide(
+                                    color: Colors.black87,
+                                    width: 1.2,
+                                  ),
                                 ),
                               ),
                             ),

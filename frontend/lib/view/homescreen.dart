@@ -6,6 +6,7 @@ import 'package:vayu/view/screens/profile_screen.dart';
 import 'package:vayu/view/screens/upload_screen.dart';
 import 'package:vayu/view/screens/vayu_screen.dart';
 import 'package:vayu/view/screens/video_screen.dart';
+import 'package:vayu/view/screens/login_screen.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/background_profile_preloader.dart';
 import 'package:vayu/services/location_onboarding_service.dart';
@@ -206,9 +207,9 @@ class _MainScreenState extends State<MainScreen>
             '⚠️ MainScreen: Token validation failed, clearing expired tokens');
         await _authService.clearExpiredTokens();
 
-        // Show re-login dialog
+        // Redirect to login screen when session expires
         if (mounted) {
-          _showReLoginDialog();
+          _redirectToLoginScreen();
         }
       }
     } catch (e) {
@@ -216,26 +217,10 @@ class _MainScreenState extends State<MainScreen>
     }
   }
 
-  /// Show re-login dialog when tokens are expired
-  void _showReLoginDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('🔄 Session Expired'),
-        content: const Text(
-          'Your session has expired. Please sign in again to continue using the app.',
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.of(context).pop();
-              await _authService.signInWithGoogle();
-            },
-            child: const Text('Login Again'),
-          ),
-        ],
-      ),
+  void _redirectToLoginScreen() {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
     );
   }
 

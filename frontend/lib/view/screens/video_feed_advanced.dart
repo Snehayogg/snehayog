@@ -103,8 +103,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               );
               return;
             }
-            final openedFromProfile =
-                widget.initialVideos != null &&
+            final openedFromProfile = widget.initialVideos != null &&
                 widget.initialVideos!.isNotEmpty;
             if (openedFromProfile) {
               _tryAutoplayCurrent();
@@ -161,8 +160,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     );
     if (authController.isSignedIn && authController.userData != null) {
       // User is signed in - update current user ID
-      final userId =
-          authController.userData!['id'] ??
+      final userId = authController.userData!['id'] ??
           authController.userData!['googleId'];
       if (userId != null && _currentUserId != userId) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -368,8 +366,19 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     _wakelockEnabled = false;
   }
 
+  bool _hasActivePlayback() {
+    for (final controller in _controllerPool.values) {
+      if (controller.value.isInitialized && controller.value.isPlaying) {
+        return true;
+      }
+    }
+    return SharedVideoControllerPool().hasActivePlayback();
+  }
+
   void _ensureWakelockForVisibility() {
-    if (_isScreenVisible && !_lifecyclePaused) {
+    final bool shouldKeepAwake =
+        (_isScreenVisible && !_lifecyclePaused) || _hasActivePlayback();
+    if (shouldKeepAwake) {
       _enableWakelock();
     } else {
       _disableWakelock();
@@ -816,8 +825,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
       // **NEW: Detect NO_MEMORY errors specifically**
       final errorString = e.toString().toLowerCase();
-      final isNoMemoryError =
-          errorString.contains('no_memory') ||
+      final isNoMemoryError = errorString.contains('no_memory') ||
           errorString.contains('0xfffffff4') ||
           errorString.contains('error 12') ||
           (errorString.contains('failed to initialize') &&
@@ -1343,46 +1351,44 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       );
 
       // Preload video and then play it
-      _preloadVideo(index)
-          .then((_) {
-            if (!mounted) return;
-            final c = _controllerPool[index];
-            if (c != null && c.value.isInitialized) {
-              try {
-                _pauseAllOtherVideos(index);
-                _autoAdvancedForIndex.remove(index);
-                c.play();
-                setState(() {
-                  _controllerStates[index] = true;
-                  _userPaused[index] = false;
-                });
-                AppLogger.log(
-                  '▶️ Successfully played video at index $index after preload',
-                );
-
-                // Start view tracking
-                if (index < _videos.length) {
-                  final video = _videos[index];
-                  _viewTracker.startViewTracking(
-                    video.id,
-                    videoUploaderId: video.uploader.id,
-                  );
-                  AppLogger.log(
-                    '▶️ User played video: ${video.id}, started view tracking',
-                  );
-                }
-              } catch (e) {
-                AppLogger.log(
-                  '❌ Error playing video after preload at index $index: $e',
-                );
-              }
-            }
-          })
-          .catchError((e) {
+      _preloadVideo(index).then((_) {
+        if (!mounted) return;
+        final c = _controllerPool[index];
+        if (c != null && c.value.isInitialized) {
+          try {
+            _pauseAllOtherVideos(index);
+            _autoAdvancedForIndex.remove(index);
+            c.play();
+            setState(() {
+              _controllerStates[index] = true;
+              _userPaused[index] = false;
+            });
             AppLogger.log(
-              '❌ Error preloading video for play/pause at index $index: $e',
+              '▶️ Successfully played video at index $index after preload',
             );
-          });
+
+            // Start view tracking
+            if (index < _videos.length) {
+              final video = _videos[index];
+              _viewTracker.startViewTracking(
+                video.id,
+                videoUploaderId: video.uploader.id,
+              );
+              AppLogger.log(
+                '▶️ User played video: ${video.id}, started view tracking',
+              );
+            }
+          } catch (e) {
+            AppLogger.log(
+              '❌ Error playing video after preload at index $index: $e',
+            );
+          }
+        }
+      }).catchError((e) {
+        AppLogger.log(
+          '❌ Error preloading video for play/pause at index $index: $e',
+        );
+      });
       return;
     }
 
@@ -1571,7 +1577,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   /// **HANDLE LIKE: With API integration**
   Future<void> _handleLike(VideoModel video, int index) async {
     if (_currentUserId == null) {
-      _showSignInPrompt();
+      _navigateToLoginScreen();
       return;
     }
 
@@ -1611,33 +1617,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
   }
 
-  /// Prompt unauthenticated users to sign in with actionable UI
-  void _showSignInPrompt() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Sign in required'),
-          content: const Text(
-            'Please sign in to like videos and use this feature.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Not now'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                Navigator.of(
-                  context,
-                ).push(MaterialPageRoute(builder: (_) => const LoginScreen()));
-              },
-              child: const Text('Sign in'),
-            ),
-          ],
-        );
-      },
+  void _navigateToLoginScreen() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
     );
   }
 
@@ -1918,8 +1900,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       builder: (context, authController, _) {
         // **FIXED: Listen to auth state changes and update user ID**
         if (authController.isSignedIn && authController.userData != null) {
-          final userId =
-              authController.userData!['id'] ??
+          final userId = authController.userData!['id'] ??
               authController.userData!['googleId'];
           if (userId != null && _currentUserId != userId) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1961,10 +1942,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                   _isLoading
                       ? Center(child: _buildGreenSpinner(size: 40))
                       : _errorMessage != null
-                      ? _buildErrorState()
-                      : _videos.isEmpty
-                      ? _buildEmptyState()
-                      : _buildVideoFeed(),
+                          ? _buildErrorState()
+                          : _videos.isEmpty
+                              ? _buildEmptyState()
+                              : _buildVideoFeed(),
                 ],
               ),
             );
@@ -2002,8 +1983,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         final video = _videos[index];
         try {
           // **NEW: Track if video was playing before navigation**
-          final wasPlaying =
-              _controllerStates[index] == true &&
+          final wasPlaying = _controllerStates[index] == true &&
               !(_userPaused[index] ?? false);
           _wasPlayingBeforeNavigation[index] = wasPlaying;
           AppLogger.log(

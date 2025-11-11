@@ -309,6 +309,20 @@ class SharedVideoControllerPool {
     }
   }
 
+  /// **Check if any controller is currently playing**
+  bool hasActivePlayback() {
+    for (final controller in _controllerPool.values) {
+      try {
+        if (controller.value.isInitialized && controller.value.isPlaying) {
+          return true;
+        }
+      } catch (_) {
+        // Ignore controllers that may have been disposed mid-iteration
+      }
+    }
+    return false;
+  }
+
   /// **Check if controller is paused (not disposed)**
   bool isControllerPaused(String videoId) {
     return _controllerPool.containsKey(videoId) &&
