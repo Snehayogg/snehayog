@@ -122,4 +122,6 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
 
   // Screen wake lock
   bool _wakelockEnabled = false;
+  bool _wasSignedIn = false;
+  bool _pendingAutoplayAfterLogin = false;
 }

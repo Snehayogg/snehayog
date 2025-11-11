@@ -73,22 +73,39 @@ class ProfileVideosWidget extends StatelessWidget {
             builder: (context, stateManager, child) {
               if (!isVideosLoaded) {
                 return RepaintBoundary(
-                  child: Container(
-                    padding: const EdgeInsets.all(32),
+                  child: SizedBox(
+                    height: 200,
                     child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const SizedBox(
-                          width: 40,
-                          height: 40,
-                          child: CircularProgressIndicator(),
+                        SizedBox(
+                          width: 64,
+                          height: 64,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 5,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.green.shade500,
+                            ),
+                            backgroundColor: Colors.green.shade100,
+                          ),
                         ),
                         const SizedBox(height: 16),
-                        Text(
-                          'Loading your videos...',
+                        const Text(
+                          'Fetching your videos...',
                           style: TextStyle(
-                            color: Colors.grey[600],
+                            color: Color(0xFF1A1A1A),
                             fontSize: 14,
+                            fontWeight: FontWeight.w600,
                           ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Please wait while we get everything ready.',
+                          style: TextStyle(
+                            color: Colors.grey[500],
+                            fontSize: 12,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
                       ],
                     ),

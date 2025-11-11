@@ -94,6 +94,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         // **FIX: Set screen visible again when app resumes**
         _isScreenVisible = true;
         _ensureWakelockForVisibility();
+        _lifecyclePaused = false;
         // Try restoring state after resume
         _restoreBackgroundStateIfAny().then((_) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -135,6 +136,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     _videoControllerManager.onAppPaused();
     SharedVideoControllerPool().pauseAllControllers();
     _lifecyclePaused = true;
+    _pendingAutoplayAfterLogin = false;
     _ensureWakelockForVisibility();
     AppLogger.log(
       '📱 VideoFeedAdvanced: Lifecycle state $state triggered background handling; all videos paused.',
@@ -216,17 +218,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   /// **TRY AUTOPLAY CURRENT: Ensure current video starts playing**
   void _tryAutoplayCurrent() {
     if (_videos.isEmpty || _isLoading) return;
-    if (!_allowAutoplay('tryAutoplayCurrent')) {
-      return;
-    }
+    if (!_shouldAutoplayForContext('tryAutoplayCurrent')) return;
     _autoAdvancedForIndex.remove(_currentIndex);
-    // Simple rule: if opened with a provided list (from ProfileScreen), autoplay
-    final openedFromProfile =
-        widget.initialVideos != null && widget.initialVideos!.isNotEmpty;
-    if (!openedFromProfile) {
-      // Only autoplay on Yug tab when not opened from Profile
-      if (_mainController?.currentIndex != 0) return;
-    }
 
     // Check if current video is preloaded
     if (_controllerPool.containsKey(_currentIndex)) {
@@ -242,27 +235,16 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           return;
         }
 
-        // If opened from Profile, bypass tab/screen visibility guard
-        if (!openedFromProfile) {
-          if (_mainController?.currentIndex != 0 || !_isScreenVisible) {
-            AppLogger.log(
-              '⏸️ Autoplay suppressed: not on Yug tab or screen not visible',
-            );
-            return;
-          }
-        }
-
         try {
           controller.setVolume(1.0);
         } catch (_) {}
-        if (!_allowAutoplay('autoplay current immediate')) {
-          return;
-        }
+        if (!_shouldAutoplayForContext('autoplay current immediate')) return;
         _pauseAllOtherVideos(_currentIndex);
         controller.play();
         _ensureWakelockForVisibility();
         _controllerStates[_currentIndex] = true;
         _userPaused[_currentIndex] = false;
+        _pendingAutoplayAfterLogin = false;
         AppLogger.log('✅ VideoFeedAdvanced: Current video autoplay started');
       }
     } else {
@@ -272,16 +254,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       );
       _preloadVideo(_currentIndex).then((_) {
         if (mounted && _controllerPool.containsKey(_currentIndex)) {
-          // If opened from Profile, bypass tab/screen visibility guard
-          if (!openedFromProfile) {
-            if (_mainController?.currentIndex != 0 || !_isScreenVisible) {
-              AppLogger.log(
-                '⏸️ Autoplay suppressed after preload: not on Yug tab or screen not visible',
-              );
-              return;
-            }
-          }
-
           final controller = _controllerPool[_currentIndex];
           if (controller != null && controller.value.isInitialized) {
             // **FIX: Don't autoplay if user has manually paused the video**
@@ -291,7 +263,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               );
               return;
             }
-            if (!_allowAutoplay('autoplay current after preload')) {
+            if (!_shouldAutoplayForContext('autoplay current after preload')) {
               return;
             }
 
@@ -303,6 +275,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             _ensureWakelockForVisibility();
             _controllerStates[_currentIndex] = true;
             _userPaused[_currentIndex] = false;
+            _pendingAutoplayAfterLogin = false;
             AppLogger.log(
               '✅ VideoFeedAdvanced: Current video autoplay started after preloading',
             );
@@ -373,6 +346,37 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       }
     }
     return SharedVideoControllerPool().hasActivePlayback();
+  }
+
+  bool get _openedFromProfile =>
+      widget.initialVideos != null && widget.initialVideos!.isNotEmpty;
+
+  bool _shouldAutoplayForContext(String context) {
+    if (!_allowAutoplay(context)) {
+      return false;
+    }
+    if (_openedFromProfile) {
+      return true;
+    }
+    final bool isVideoTabActive =
+        (_mainController?.currentIndex ?? 0) == 0 && _isScreenVisible;
+    if (!isVideoTabActive) {
+      AppLogger.log(
+        '⏸️ Autoplay suppressed ($context): Yug tab not active or screen hidden',
+      );
+      return false;
+    }
+    return true;
+  }
+
+  void _scheduleAutoplayAfterLogin() {
+    if (!_pendingAutoplayAfterLogin) return;
+    _pendingAutoplayAfterLogin = false;
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (!mounted) return;
+      AppLogger.log('🚀 Triggering autoplay after login');
+      forcePlayCurrent();
+    });
   }
 
   void _ensureWakelockForVisibility() {
@@ -691,7 +695,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                 return;
               }
 
-              if (_mainController?.currentIndex == 0 && _isScreenVisible) {
+              if (_shouldAutoplayForContext('markReadyIfNeeded')) {
                 try {
                   await controller.setVolume(
                     1.0,
@@ -700,6 +704,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                   await controller.play();
                   _controllerStates[_currentIndex] = true;
                   _userPaused[_currentIndex] = false;
+                  _pendingAutoplayAfterLogin = false;
                 } catch (_) {}
               }
             }
@@ -719,8 +724,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           );
 
           // **CRITICAL FIX: If reused controller for current video, start playing immediately**
-          final bool openedFromProfile =
-              widget.initialVideos != null && widget.initialVideos!.isNotEmpty;
+          final bool openedFromProfile = _openedFromProfile;
           if (isReused &&
               controller.value.isInitialized &&
               !controller.value.isPlaying) {
@@ -730,24 +734,19 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                 '⏸️ Autoplay suppressed for reused controller: user has manually paused video at index $index',
               );
             } else {
-              if (openedFromProfile) {
+              if (_shouldAutoplayForContext(openedFromProfile
+                  ? 'reused controller (profile)'
+                  : 'reused controller at current index')) {
                 _pauseAllOtherVideos(index);
                 controller.play();
                 _controllerStates[index] = true;
                 _userPaused[index] = false;
+                _pendingAutoplayAfterLogin = false;
                 AppLogger.log(
-                  '✅ Started playback for reused controller (from Profile)',
+                  openedFromProfile
+                      ? '✅ Started playback for reused controller (from Profile)'
+                      : '✅ Started playback for reused controller at current index',
                 );
-              } else {
-                if (_mainController?.currentIndex == 0 && _isScreenVisible) {
-                  _pauseAllOtherVideos(index);
-                  controller.play();
-                  _controllerStates[index] = true;
-                  _userPaused[index] = false;
-                  AppLogger.log(
-                    '✅ Started playback for reused controller at current index',
-                  );
-                }
               }
             }
           }
@@ -763,26 +762,20 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               );
               _wasPlayingBeforeNavigation[index] = false; // Clear the flag
             } else {
-              if (openedFromProfile) {
+              if (_shouldAutoplayForContext(openedFromProfile
+                  ? 'resume controller (profile)'
+                  : 'resume controller (current)')) {
                 _pauseAllOtherVideos(index);
                 controller.play();
                 _controllerStates[index] = true;
                 _userPaused[index] = false;
                 _wasPlayingBeforeNavigation[index] = false; // Clear the flag
+                _pendingAutoplayAfterLogin = false;
                 AppLogger.log(
-                  '▶️ Resumed video ${video.id} that was playing before navigation (from Profile)',
+                  openedFromProfile
+                      ? '▶️ Resumed video ${video.id} that was playing before navigation (from Profile)'
+                      : '▶️ Resumed video ${video.id} that was playing before navigation',
                 );
-              } else {
-                if (_mainController?.currentIndex == 0 && _isScreenVisible) {
-                  _pauseAllOtherVideos(index);
-                  controller.play();
-                  _controllerStates[index] = true;
-                  _userPaused[index] = false;
-                  _wasPlayingBeforeNavigation[index] = false; // Clear the flag
-                  AppLogger.log(
-                    '▶️ Resumed video ${video.id} that was playing before navigation',
-                  );
-                }
               }
             }
           }
@@ -1203,9 +1196,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     // **FIXED: Play current video if we have a valid controller**
     if (controllerToUse != null && controllerToUse.value.isInitialized) {
-      // Controller is ready; only play if Yug tab is visible
-      if (_mainController?.currentIndex != 0 || !_isScreenVisible) {
-        AppLogger.log('⏸️ Autoplay blocked (not visible)');
+      // Controller is ready; ensure context allows autoplay
+      if (!_shouldAutoplayForContext('handlePageChange immediate')) {
         return;
       }
 
@@ -1227,6 +1219,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       _applyLoopingBehavior(controllerToUse);
       _attachEndListenerIfNeeded(controllerToUse, index);
       _attachBufferingListenerIfNeeded(controllerToUse, index);
+      _pendingAutoplayAfterLogin = false;
 
       // **NEW: Start view tracking for current video**
       if (index < _videos.length) {
@@ -1257,9 +1250,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         if (mounted &&
             _currentIndex == index &&
             _controllerPool.containsKey(index)) {
-          // Guard again: only autoplay if visible
-          if (_mainController?.currentIndex != 0 || !_isScreenVisible) {
-            AppLogger.log('⏸️ Autoplay blocked after preload (not visible)');
+          // Guard again: only autoplay if context allows it
+          if (!_shouldAutoplayForContext('handlePageChange after preload')) {
             return;
           }
           final loadedController = _controllerPool[index];
@@ -1292,6 +1284,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             }
 
             AppLogger.log('✅ Video autoplay started after preloading');
+            _pendingAutoplayAfterLogin = false;
           }
         }
       });
@@ -1898,8 +1891,23 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     return Consumer<GoogleSignInController>(
       builder: (context, authController, _) {
+        final bool isSignedIn = authController.isSignedIn;
+        if (isSignedIn != _wasSignedIn) {
+          _wasSignedIn = isSignedIn;
+          if (isSignedIn) {
+            _pendingAutoplayAfterLogin = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                _scheduleAutoplayAfterLogin();
+              }
+            });
+          } else {
+            _pendingAutoplayAfterLogin = false;
+          }
+        }
+
         // **FIXED: Listen to auth state changes and update user ID**
-        if (authController.isSignedIn && authController.userData != null) {
+        if (isSignedIn && authController.userData != null) {
           final userId = authController.userData!['id'] ??
               authController.userData!['googleId'];
           if (userId != null && _currentUserId != userId) {
@@ -1914,7 +1922,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               }
             });
           }
-        } else if (!authController.isSignedIn && _currentUserId != null) {
+        } else if (!isSignedIn && _currentUserId != null) {
           // User signed out - clear user ID
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
