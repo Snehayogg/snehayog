@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
+import 'package:vayu/config/app_config.dart';
 import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'package:vayu/services/ad_service.dart';
 import 'package:vayu/services/authservices.dart';
@@ -34,7 +35,9 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   Map<String, dynamic>? _revenueData;
   List<VideoModel> _userVideos = [];
   final Map<String, double> _videoRevenueMap = {};
+  final Map<String, _VideoStats> _videoStatsMap = {};
   double _totalRevenue = 0.0;
+  double _grossRevenue = 0.0;
   bool _isLoading = true;
   String? _errorMessage;
   int _currentMonthViews = 0;
@@ -58,20 +61,31 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     try {
       // Load user videos first
       final userData = await _authService.getUserData();
-      if (userData != null) {
-        final videos = await _videoService.getUserVideos(userData['id'] ?? '');
+      if (userData case final Map<String, dynamic> rawUserMap) {
+        final userMap = Map<String, dynamic>.from(rawUserMap);
+        final userId = (userMap['id'] ?? '').toString();
+        final videosFuture = _videoService.getUserVideos(userId);
+        final revenueSummaryFuture = _adService.getCreatorRevenueSummary();
+
+        final videos = await videosFuture;
+        if (!mounted) return;
         setState(() {
           _userVideos = videos;
         });
 
-        // Calculate revenue for all videos
-        await _calculateTotalRevenue();
+        // Calculate revenue for all videos and fetch revenue summary in parallel
+        await _calculateTotalRevenue(userMap);
+
+        final revenueData = await revenueSummaryFuture;
+        if (!mounted) return;
+        setState(() {
+          _revenueData = revenueData;
+          _isLoading = false;
+        });
+        return;
       }
 
-      // Load revenue data from AdService
-      final revenueData = await _adService.getCreatorRevenueSummary();
       setState(() {
-        _revenueData = revenueData;
         _isLoading = false;
       });
     } catch (e) {
@@ -82,16 +96,8 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     }
   }
 
-  /// **FIXED: Use centralized EarningsService for revenue (single source of truth)**
-  Future<double> _calculateVideoRevenue(VideoModel video) async {
-    return EarningsService.calculateVideoRevenue(video.id);
-  }
-
-  Future<_VideoStats> _fetchVideoStats(VideoModel video) async {
-    final earnings = await EarningsService.calculateVideoRevenue(video.id);
-    final views = await _getTotalAdImpressionsForVideo(video.id);
-    return _VideoStats(earnings, views);
-  }
+  _VideoStats _getVideoStats(VideoModel video) =>
+      _videoStatsMap[video.id] ?? const _VideoStats(0.0, 0);
 
   /// **FIXED: Get total ad VIEWS (not impressions) - for display purposes**
   Future<int> _getTotalAdImpressionsForVideo(String videoId) async {
@@ -116,25 +122,54 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   /// Calculate total revenue from all videos
-  Future<void> _calculateTotalRevenue() async {
+  Future<void> _calculateTotalRevenue(Map<String, dynamic> userData) async {
     try {
-      double totalRevenue = 0.0;
-      _videoRevenueMap.clear();
+      final statsFutures = _userVideos.map((video) async {
+        final earningsFuture = EarningsService.calculateVideoRevenue(video.id);
+        final viewsFuture = _getTotalAdImpressionsForVideo(video.id);
 
-      for (final video in _userVideos) {
-        final videoRevenue = await _calculateVideoRevenue(video);
-        _videoRevenueMap[video.id] = videoRevenue;
-        totalRevenue += videoRevenue;
+        final grossEarnings = await earningsFuture;
+        final creatorEarnings =
+            EarningsService.creatorShareFromGross(grossEarnings);
+        final views = await viewsFuture;
+
+        return MapEntry(video.id, (
+          stats: _VideoStats(creatorEarnings, views),
+          gross: grossEarnings,
+          creator: creatorEarnings,
+        ));
+      }).toList();
+
+      final statsEntries = await Future.wait(statsFutures);
+
+      double grossRevenue = 0.0;
+      double creatorRevenue = 0.0;
+      _videoRevenueMap
+        ..clear()
+        ..addEntries(statsEntries.map(
+          (entry) => MapEntry(entry.key, entry.value.creator),
+        ));
+      _videoStatsMap
+        ..clear()
+        ..addEntries(statsEntries.map((entry) => MapEntry(
+              entry.key,
+              entry.value.stats,
+            )));
+
+      for (final entry in statsEntries) {
+        grossRevenue += entry.value.gross;
+        creatorRevenue += entry.value.creator;
       }
 
       setState(() {
-        _totalRevenue = totalRevenue;
+        _totalRevenue = creatorRevenue;
+        _grossRevenue = grossRevenue;
       });
 
-      await _calculateMonthlyViews();
+      await _calculateMonthlyViews(userData);
 
       AppLogger.log(
-          '💰 CreatorRevenueScreen: Total revenue calculated: ₹${totalRevenue.toStringAsFixed(2)}');
+          '💰 CreatorRevenueScreen: Creator earnings calculated: ₹${creatorRevenue.toStringAsFixed(2)} (gross: ₹${grossRevenue.toStringAsFixed(2)})');
       AppLogger.log(
           '💰 CreatorRevenueScreen: Video revenue breakdown: $_videoRevenueMap');
     } catch (e) {
@@ -142,7 +177,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     }
   }
 
-  Future<void> _calculateMonthlyViews() async {
+  Future<void> _calculateMonthlyViews(Map<String, dynamic> userData) async {
     final totalViews =
         _userVideos.fold<int>(0, (sum, video) => sum + (video.views));
     final now = DateTime.now();
@@ -158,9 +193,8 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         _isMonthlyViewsLoading = true;
       });
 
-      final userData = await _authService.getUserData();
-      final userId = userData?['id']?.toString() ??
-          userData?['googleId']?.toString() ??
+      final userId = userData['id']?.toString() ??
+          userData['googleId']?.toString() ??
           'anonymous';
 
       final prefs = await SharedPreferences.getInstance();
@@ -227,6 +261,10 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
 
       return {
         'total_revenue': _totalRevenue,
+        'creator_revenue': _totalRevenue,
+        'gross_revenue': _grossRevenue,
+        'platform_fee':
+            (_grossRevenue - _totalRevenue).clamp(0.0, double.infinity),
         'total_videos': _userVideos.length,
         'average_revenue_per_video': averageRevenuePerVideo,
         'top_performing_video': topPerformingVideo?.videoName,
@@ -391,7 +429,12 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
 
   Widget _buildRevenueOverviewCard() {
     // Use unified EarningsService-based totals for consistency across app
-    final totalRevenue = _totalRevenue;
+    final creatorRevenue = _totalRevenue;
+    final grossRevenue = _grossRevenue;
+    final platformFee =
+        (grossRevenue - creatorRevenue).clamp(0.0, double.infinity);
+    final platformSharePercent =
+        (AppConfig.platformRevenueShare * 100).toStringAsFixed(0);
     // Keep monthly values from backend (or 0.0 if not provided)
     final thisMonth = _revenueData?['thisMonth'] ?? 0.0;
     final lastMonth = _revenueData?['lastMonth'] ?? 0.0;
@@ -403,7 +446,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         child: Column(
           children: [
             const Text(
-              'Total Revenue',
+              'Creator Earnings',
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.grey,
@@ -411,12 +454,33 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              '₹${totalRevenue.toStringAsFixed(2)}',
+              '₹${creatorRevenue.toStringAsFixed(2)}',
               style: const TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.bold,
                 color: Colors.green,
               ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildRevenueStat(
+                    'Gross Revenue',
+                    '₹${grossRevenue.toStringAsFixed(2)}',
+                    Icons.receipt_long,
+                    Colors.grey[700]!,
+                  ),
+                ),
+                Expanded(
+                  child: _buildRevenueStat(
+                    'Platform Fee ($platformSharePercent%)',
+                    '₹${platformFee.toStringAsFixed(2)}',
+                    Icons.account_balance,
+                    Colors.red,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 20),
             Row(
@@ -561,7 +625,9 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
 
   Widget _buildRevenueAnalyticsCard() {
     final analytics = _getRevenueAnalytics();
-    final totalRevenue = analytics['total_revenue'] ?? 0.0;
+    final creatorRevenue = analytics['creator_revenue'] ?? 0.0;
+    final grossRevenue = analytics['gross_revenue'] ?? 0.0;
+    final platformFee = analytics['platform_fee'] ?? 0.0;
     final totalVideos = analytics['total_videos'] ?? 0;
     final averageRevenue = analytics['average_revenue_per_video'] ?? 0.0;
     final topPerformingVideoName = analytics['top_performing_video'] as String?;
@@ -583,7 +649,11 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
             ),
             const SizedBox(height: 16),
             _buildAnalyticsRow(
-                'Total Revenue', '₹${totalRevenue.toStringAsFixed(2)}'),
+                'Creator Earnings', '₹${creatorRevenue.toStringAsFixed(2)}'),
+            _buildAnalyticsRow(
+                'Gross Revenue', '₹${grossRevenue.toStringAsFixed(2)}'),
+            _buildAnalyticsRow(
+                'Platform Fee', '₹${platformFee.toStringAsFixed(2)}'),
             _buildAnalyticsRow('Total Videos', totalVideos.toString()),
             _buildAnalyticsRow('Average Revenue per Video',
                 '₹${averageRevenue.toStringAsFixed(2)}'),
@@ -623,10 +693,24 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   Widget _buildRevenueBreakdownCard() {
-    // Derive breakdown from unified total: 80% creator, 20% platform
-    final adRevenue = _totalRevenue;
-    final platformFee = _totalRevenue * 0.20;
-    final netRevenue = _totalRevenue * 0.80;
+    final grossRevenue = _grossRevenue;
+    final creatorRevenue = _totalRevenue;
+    final platformFee =
+        (grossRevenue - creatorRevenue).clamp(0.0, double.infinity);
+    final hasRevenue = grossRevenue > 0.0;
+    final platformSharePercent =
+        (AppConfig.platformRevenueShare * 100).toStringAsFixed(0);
+    final creatorSharePercent =
+        (AppConfig.creatorRevenueShare * 100).toStringAsFixed(0);
+    final totalFlexUnits = hasRevenue ? 100 : 1;
+    int creatorFlex = hasRevenue
+        ? (creatorRevenue / grossRevenue * totalFlexUnits).round()
+        : 1;
+    creatorFlex = creatorFlex.clamp(1, totalFlexUnits);
+    int platformFlex = hasRevenue ? totalFlexUnits - creatorFlex : 1;
+    if (platformFlex <= 0) {
+      platformFlex = hasRevenue ? 1 : platformFlex.abs();
+    }
 
     return Card(
       child: Padding(
@@ -647,7 +731,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
             Row(
               children: [
                 Expanded(
-                  flex: (adRevenue * 100).round(),
+                  flex: creatorFlex,
                   child: Container(
                     height: 8,
                     decoration: BoxDecoration(
@@ -657,7 +741,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                   ),
                 ),
                 Expanded(
-                  flex: (platformFee * 100).round(),
+                  flex: platformFlex,
                   child: Container(
                     height: 8,
                     decoration: BoxDecoration(
@@ -671,14 +755,14 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
 
             const SizedBox(height: 16),
 
-            _buildBreakdownRow(
-                'Ad Revenue', '₹${adRevenue.toStringAsFixed(2)}', Colors.green),
-            _buildBreakdownRow('Platform Fee (20%)',
+            _buildBreakdownRow('Gross Revenue',
+                '₹${grossRevenue.toStringAsFixed(2)}', Colors.green),
+            _buildBreakdownRow('Platform Fee ($platformSharePercent%)',
                 '₹${platformFee.toStringAsFixed(2)}', Colors.red),
             const Divider(),
             _buildBreakdownRow(
-                'Net Revenue (80%)',
-                '₹${netRevenue.toStringAsFixed(2)}',
+                'Creator Earnings ($creatorSharePercent%)',
+                '₹${creatorRevenue.toStringAsFixed(2)}',
                 Colors.grey[700]!, // Changed from Colors.blue
                 isTotal: true),
           ],
@@ -937,69 +1021,62 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
 
             // Show top 5 videos by revenue
             ..._userVideos.take(5).map((video) {
-              return FutureBuilder<_VideoStats>(
-                future: _fetchVideoStats(video),
-                builder: (context, snapshot) {
-                  final stats = snapshot.data;
-                  final revenue =
-                      stats?.earnings ?? (_videoRevenueMap[video.id] ?? 0.0);
-                  final adImpressions = stats?.adViews ?? 0;
+              final stats = _getVideoStats(video);
+              final revenue = stats.earnings;
+              final adImpressions = stats.adViews;
 
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[50],
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.grey[200]!),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey[200]!),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  video.videoName,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                          Expanded(
+                            child: Text(
+                              video.videoName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
                               ),
-                              Text(
-                                '₹${revenue.toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.green,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ],
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              _buildVideoStat('Views', '${video.views}'),
-                              const SizedBox(width: 16),
-                              _buildVideoStat('Likes', '${video.likes}'),
-                              const SizedBox(width: 16),
-                              _buildVideoStat(
-                                  'Comments', '${video.comments.length}'),
-                              const SizedBox(width: 16),
-                              _buildVideoStat(
-                                  'Ad Impressions', '$adImpressions'),
-                            ],
+                          Text(
+                            '₹${revenue.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green,
+                              fontSize: 16,
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                  );
-                },
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          _buildVideoStat('Views', '${video.views}'),
+                          const SizedBox(width: 16),
+                          _buildVideoStat('Likes', '${video.likes}'),
+                          const SizedBox(width: 16),
+                          _buildVideoStat(
+                              'Comments', '${video.comments.length}'),
+                          const SizedBox(width: 16),
+                          _buildVideoStat('Ad Impressions', '$adImpressions'),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               );
             }).toList(),
 
@@ -1117,47 +1194,42 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
           child: SingleChildScrollView(
             child: Column(
               children: _userVideos.map((video) {
-                final revenue = _videoRevenueMap[video.id] ?? 0.0;
+                final stats = _getVideoStats(video);
+                final revenue = stats.earnings;
+                final adImpressions = stats.adViews;
 
-                return FutureBuilder<int>(
-                  future: _getTotalAdImpressionsForVideo(video.id),
-                  builder: (context, snapshot) {
-                    final adImpressions = snapshot.data ?? 0;
-
-                    return ListTile(
-                      leading: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.network(
-                          video.thumbnailUrl,
+                return ListTile(
+                  leading: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      video.thumbnailUrl,
+                      width: 50,
+                      height: 50,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
                           width: 50,
                           height: 50,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              width: 50,
-                              height: 50,
-                              color: Colors.grey[300],
-                              child: const Icon(Icons.video_library, size: 24),
-                            );
-                          },
-                        ),
-                      ),
-                      title: Text(
-                        video.videoName,
-                        style: const TextStyle(fontSize: 14),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text('$adImpressions impressions'),
-                      trailing: Text(
-                        '₹${revenue.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green,
-                        ),
-                      ),
-                    );
-                  },
+                          color: Colors.grey[300],
+                          child: const Icon(Icons.video_library, size: 24),
+                        );
+                      },
+                    ),
+                  ),
+                  title: Text(
+                    video.videoName,
+                    style: const TextStyle(fontSize: 14),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text('$adImpressions impressions'),
+                  trailing: Text(
+                    '₹${revenue.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green,
+                    ),
+                  ),
                 );
               }).toList(),
             ),

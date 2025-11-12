@@ -256,7 +256,10 @@ class ProfileStateManager extends ChangeNotifier {
     return [];
   }
 
-  Future<List<VideoModel>> _fetchVideosFromServer(String userId) async {
+  Future<List<VideoModel>> _fetchVideosFromServer(
+    String userId, {
+    required bool isMyProfile,
+  }) async {
     List<VideoModel> videos = [];
     try {
       videos = await _videoService.getUserVideos(userId);
@@ -275,8 +278,8 @@ class ProfileStateManager extends ChangeNotifier {
         }
       }
 
-      if (altId == null || altId.isEmpty) {
-        final fetchedId = (await _authService.getUserData())?['id'] as String?;
+      if ((altId == null || altId.isEmpty) && isMyProfile) {
+        final fetchedId = (await _authService.getUserData())?['id']?.toString();
         if (fetchedId != null && fetchedId.isNotEmpty && fetchedId != userId) {
           altId = fetchedId;
         }
@@ -302,41 +305,69 @@ class ProfileStateManager extends ChangeNotifier {
         '🔄 ProfileStateManager: loadUserVideos called with userId: $userId');
 
     try {
+      final loggedInUser = await _authService.getUserData();
+      final bool isMyProfile = userId == null ||
+          userId == loggedInUser?['id'] ||
+          userId == loggedInUser?['googleId'];
+
       // **FIXED: Properly check feature flag using FeatureFlags.instance**
       if (FeatureFlags.instance.isEnabled(Features.smartVideoCaching)) {
-        await _loadUserVideosWithCaching(userId);
+        await _loadUserVideosWithCaching(
+          userId,
+          isMyProfile: isMyProfile,
+        );
       } else {
-        await _loadUserVideosDirect(userId);
+        await _loadUserVideosDirect(
+          userId,
+          isMyProfile: isMyProfile,
+        );
       }
 
       // **FIXED: Ensure videos are loaded even if caching fails**
       if (_userVideos.isEmpty) {
         AppLogger.log(
             '⚠️ ProfileStateManager: No videos loaded, trying direct fallback');
-        await _loadUserVideosDirect(userId);
+        await _loadUserVideosDirect(
+          userId,
+          isMyProfile: isMyProfile,
+        );
       }
 
       AppLogger.log(
           '✅ ProfileStateManager: loadUserVideos completed with ${_userVideos.length} videos');
     } catch (e) {
       AppLogger.log('❌ ProfileStateManager: Error in loadUserVideos: $e');
+      final loggedInUser = await _authService.getUserData();
+      final bool isMyProfile = userId == null ||
+          userId == loggedInUser?['id'] ||
+          userId == loggedInUser?['googleId'];
       // Fallback to direct loading
-      await _loadUserVideosDirect(userId);
+      await _loadUserVideosDirect(
+        userId,
+        isMyProfile: isMyProfile,
+      );
     }
   }
 
-  Future<void> _loadUserVideosWithCaching(String? userId) async {
+  Future<void> _loadUserVideosWithCaching(
+    String? userId, {
+    required bool isMyProfile,
+  }) async {
     try {
       AppLogger.log(
           '🔄 ProfileStateManager: Loading videos with smart caching for userId: $userId');
 
       final loggedInUser = await _authService.getUserData();
-      final bool isMyProfile = userId == null ||
-          userId == loggedInUser?['id'] ||
-          userId == loggedInUser?['googleId'];
-
-      final targetUserId =
-          isMyProfile ? (loggedInUser?['googleId']?.toString() ?? '') : userId;
+      String? resolvedId;
+      if (isMyProfile) {
+        resolvedId = loggedInUser?['googleId']?.toString();
+        if (resolvedId == null || resolvedId.trim().isEmpty) {
+          resolvedId = loggedInUser?['id']?.toString();
+        }
+      } else {
+        resolvedId = userId;
+      }
+      final String targetUserId = resolvedId?.trim() ?? '';
 
       if (targetUserId.isEmpty) {
         AppLogger.log(
@@ -358,7 +389,10 @@ class ProfileStateManager extends ChangeNotifier {
           cacheType: 'videos',
           maxAge: _userVideosCacheTime,
           fetchFn: () async {
-            final videos = await _fetchVideosFromServer(targetUserId);
+            final videos = await _fetchVideosFromServer(
+              targetUserId,
+              isMyProfile: isMyProfile,
+            );
             return {
               'videos':
                   videos.map((video) => video.toJson()).toList(growable: false),
@@ -379,25 +413,31 @@ class ProfileStateManager extends ChangeNotifier {
 
       AppLogger.log(
           '📡 ProfileStateManager: Fetching fresh videos for $targetUserId');
-      final videos = await _fetchVideosFromServer(targetUserId);
+      final videos = await _fetchVideosFromServer(
+        targetUserId,
+        isMyProfile: isMyProfile,
+      );
       _userVideos = videos;
       notifyListeners();
     } catch (e) {
       AppLogger.log('❌ ProfileStateManager: Error in cached video loading: $e');
-      await _loadUserVideosDirect(userId);
+      await _loadUserVideosDirect(
+        userId,
+        isMyProfile: isMyProfile,
+      );
     }
   }
 
   /// Load user videos directly without caching (fallback)
-  Future<void> _loadUserVideosDirect(String? userId) async {
+  Future<void> _loadUserVideosDirect(
+    String? userId, {
+    required bool isMyProfile,
+  }) async {
     try {
       AppLogger.log(
           '🔄 ProfileStateManager: Loading videos directly for userId: $userId');
 
       final loggedInUser = await _authService.getUserData();
-      final bool isMyProfile = userId == null ||
-          userId == loggedInUser?['id'] ||
-          userId == loggedInUser?['googleId'];
       AppLogger.log(
           '🔍 ProfileStateManager: Direct loading - isMyProfile: $isMyProfile');
       AppLogger.log(
@@ -408,25 +448,24 @@ class ProfileStateManager extends ChangeNotifier {
           '🔍 ProfileStateManager: Direct loading - loggedInUser googleId: ${loggedInUser?['googleId']}');
 
       // Build a prioritized list of IDs to try (googleId then Mongo _id, then provided userId)
-      final idsToTry = <String?>[
-        if (isMyProfile) loggedInUser?['googleId'] else null,
-        if (isMyProfile) loggedInUser?['id'] else null,
-        if (!isMyProfile) userId else null,
-        // If we have already loaded userData for other profile, try both ids from it
-        _userData?['googleId'],
-        _userData?['id'],
+      final candidateIds = <String?>[
+        if (isMyProfile) loggedInUser?['googleId']?.toString(),
+        if (isMyProfile) loggedInUser?['id']?.toString(),
+        if (!isMyProfile) userId?.toString(),
+        if (!isMyProfile) _userData?['googleId']?.toString(),
+        if (!isMyProfile) _userData?['id']?.toString(),
       ]
-          .where((e) => e != null && (e).isNotEmpty)
-          .map((e) => e as String)
-          .toList()
+          .whereType<String>()
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
           .toSet()
           .toList();
 
       AppLogger.log(
-          '🔍 ProfileStateManager: Direct loading - idsToTry: $idsToTry');
+          '🔍 ProfileStateManager: Direct loading - idsToTry: $candidateIds');
 
       _userVideos = [];
-      for (final candidateId in idsToTry) {
+      for (final candidateId in candidateIds) {
         try {
           AppLogger.log(
               '🔍 ProfileStateManager: Trying VideoService.getUserVideos with id: $candidateId');
@@ -640,7 +679,10 @@ class ProfileStateManager extends ChangeNotifier {
         try {
           final refreshUserId = _userData?['googleId'] ?? _userData?['id'];
           if (refreshUserId != null && refreshUserId.toString().isNotEmpty) {
-            await _loadUserVideosDirect(refreshUserId);
+            await _loadUserVideosDirect(
+              refreshUserId,
+              isMyProfile: true,
+            );
             AppLogger.log(
                 '🔄 ProfileStateManager: Reloaded videos after deletion');
           }
@@ -987,6 +1029,10 @@ class ProfileStateManager extends ChangeNotifier {
 
       if (targetUserId != null && targetUserId.isNotEmpty) {
         final String resolvedUserId = targetUserId;
+        final authUser = await _authService.getUserData();
+        final bool refreshIsMyProfile =
+            resolvedUserId == authUser?['id']?.toString() ||
+                resolvedUserId == authUser?['googleId']?.toString();
         await _ensureSmartCacheInitialized();
         if (_smartCacheInitialized) {
           final smartKey = _resolveVideoCacheKey(resolvedUserId);
@@ -999,7 +1045,10 @@ class ProfileStateManager extends ChangeNotifier {
             cacheType: 'videos',
             maxAge: _userVideosCacheTime,
             fetchFn: () async {
-              final videos = await _fetchVideosFromServer(resolvedUserId);
+              final videos = await _fetchVideosFromServer(
+                resolvedUserId,
+                isMyProfile: refreshIsMyProfile,
+              );
               return {
                 'videos': videos
                     .map((video) => video.toJson())
@@ -1019,7 +1068,10 @@ class ProfileStateManager extends ChangeNotifier {
         }
 
         // Fallback: fetch directly and update state (SmartCache disabled or fetch failed)
-        final videos = await _fetchVideosFromServer(resolvedUserId);
+        final videos = await _fetchVideosFromServer(
+          resolvedUserId,
+          isMyProfile: refreshIsMyProfile,
+        );
         _userVideos = videos;
         notifyListeners();
         AppLogger.log(

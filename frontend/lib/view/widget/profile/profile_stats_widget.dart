@@ -95,9 +95,11 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
 
     try {
       AppLogger.log(
-          '💰 ProfileStatsWidget: Calculating earnings (EarningsService) for ${widget.stateManager.userVideos.length} videos');
+        '💰 ProfileStatsWidget: Calculating earnings (EarningsService) for ${widget.stateManager.userVideos.length} videos',
+      );
 
-      final totalRevenue = await EarningsService.calculateTotalRevenueForVideos(
+      final totalRevenue =
+          await EarningsService.calculateCreatorTotalRevenueForVideos(
         widget.stateManager.userVideos,
       );
 
@@ -148,11 +150,7 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
                       : '...',
                   isLoading: !widget.isVideosLoaded,
                 ),
-                Container(
-                  width: 1,
-                  height: 40,
-                  color: const Color(0xFFE5E7EB),
-                ),
+                Container(width: 1, height: 40, color: const Color(0xFFE5E7EB)),
                 _buildStatColumn(
                   'Followers',
                   widget.isFollowersLoaded
@@ -161,11 +159,7 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
                   isLoading: !widget.isFollowersLoaded,
                   onTap: widget.onFollowersTap,
                 ),
-                Container(
-                  width: 1,
-                  height: 40,
-                  color: const Color(0xFFE5E7EB),
-                ),
+                Container(width: 1, height: 40, color: const Color(0xFFE5E7EB)),
                 _buildStatColumn(
                   'Earnings',
                   _isLoadingEarnings ? '...' : _earnings,
@@ -181,8 +175,13 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
     );
   }
 
-  Widget _buildStatColumn(String label, dynamic value,
-      {bool isEarnings = false, VoidCallback? onTap, bool isLoading = false}) {
+  Widget _buildStatColumn(
+    String label,
+    dynamic value, {
+    bool isEarnings = false,
+    VoidCallback? onTap,
+    bool isLoading = false,
+  }) {
     return RepaintBoundary(
       child: Builder(
         builder: (context) => Column(
@@ -190,7 +189,7 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
             GestureDetector(
               onTap: onTap,
               child: MouseRegion(
-                cursor: isEarnings
+                cursor: isEarnings && onTap != null
                     ? SystemMouseCursors.click
                     : SystemMouseCursors.basic,
                 child: Text(
@@ -228,7 +227,8 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
     ProfileScreenLogger.logDebugInfo('=== GETTING FOLLOWERS COUNT ===');
     ProfileScreenLogger.logDebugInfo('userId: ${widget.userId}');
     ProfileScreenLogger.logDebugInfo(
-        'stateManager.userData: ${widget.stateManager.userData != null}');
+      'stateManager.userData: ${widget.stateManager.userData != null}',
+    );
 
     // Build candidate IDs to query provider with
     final List<String> idsToTry = <String?>[
@@ -249,7 +249,8 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
         final userModel = userProvider.getUserData(candidateId);
         if (userModel?.followersCount != null) {
           ProfileScreenLogger.logDebugInfo(
-              'Using followers count from UserProvider for $candidateId: ${userModel!.followersCount}');
+            'Using followers count from UserProvider for $candidateId: ${userModel!.followersCount}',
+          );
           return userModel.followersCount;
         }
       }
@@ -265,7 +266,8 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
           0;
       if (followersCount != 0) {
         ProfileScreenLogger.logDebugInfo(
-            'Using followers count from ProfileStateManager: $followersCount');
+          'Using followers count from ProfileStateManager: $followersCount',
+        );
         return followersCount;
       }
     }
@@ -275,13 +277,15 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
         widget.stateManager.userData!['followersCount'] != null) {
       final followersCount = widget.stateManager.userData!['followersCount'];
       ProfileScreenLogger.logDebugInfo(
-          'Using followers count from ProfileStateManager: $followersCount');
+        'Using followers count from ProfileStateManager: $followersCount',
+      );
       return followersCount;
     }
 
     // Final fallback
     ProfileScreenLogger.logDebugInfo(
-        'No followers count available, using default: 0');
+      'No followers count available, using default: 0',
+    );
     return 0;
   }
 }

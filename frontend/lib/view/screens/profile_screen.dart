@@ -168,10 +168,26 @@ class _ProfileScreenState extends State<ProfileScreen>
         final List<dynamic> cached = json.decode(cachedVideosJson) as List;
         if (cached.isNotEmpty) {
           final videos = cached.map((v) => VideoModel.fromJson(v)).toList();
-          _stateManager.setVideos(videos);
           AppLogger.log(
-              '⚡ ProfileScreen: Loaded ${videos.length} videos from cache');
-          return;
+              '⚡ ProfileScreen: Loaded ${videos.length} cached videos for $cacheKey');
+
+          final viewedUserId =
+              widget.userId ?? _stateManager.userData?['googleId'];
+          final cachedOwnerId =
+              videos.isNotEmpty ? videos.first.uploader.id : null;
+
+          if (viewedUserId != null &&
+              cachedOwnerId != null &&
+              cachedOwnerId.trim().isNotEmpty &&
+              cachedOwnerId == viewedUserId) {
+            _stateManager.setVideos(videos);
+            AppLogger.log(
+                '⚡ ProfileScreen: Using cached videos for $viewedUserId');
+            return;
+          }
+
+          AppLogger.log(
+              'ℹ️ ProfileScreen: Cached videos belong to $cachedOwnerId but viewing $viewedUserId. Fetching fresh data.');
         } else {
           AppLogger.log(
               'ℹ️ ProfileScreen: Cached videos empty; fetching from server');
@@ -1424,6 +1440,18 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Widget _buildProfileContent(UserProvider userProvider, UserModel? userModel) {
+    final authController =
+        Provider.of<GoogleSignInController>(context, listen: false);
+    final loggedInUserId = authController.userData?['id']?.toString() ??
+        authController.userData?['googleId']?.toString();
+    final displayedUserId = widget.userId ??
+        _stateManager.userData?['googleId']?.toString() ??
+        _stateManager.userData?['id']?.toString();
+    final bool isViewingOwnProfile =
+        loggedInUserId != null && loggedInUserId.isNotEmpty
+            ? loggedInUserId == displayedUserId
+            : widget.userId == null;
+
     return RepaintBoundary(
       child: Column(
         children: [
@@ -1437,15 +1465,16 @@ class _ProfileScreenState extends State<ProfileScreen>
               // **SIMPLIFIED: Simple followers tap**
               AppLogger.log('🔄 ProfileScreen: Followers tapped');
             },
-            onEarningsTap: () async {
-              // Navigate directly to revenue screen
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const CreatorRevenueScreen(),
-                ),
-              );
-            },
+            onEarningsTap: isViewingOwnProfile
+                ? () async {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CreatorRevenueScreen(),
+                      ),
+                    );
+                  }
+                : null,
           ),
 
           const SizedBox(height: 24),

@@ -86,19 +86,58 @@ class VideoModel {
           print(
               '🔍 VideoModel: json["uploader"] type = ${json['uploader']?.runtimeType}');
 
+          Uploader uploader;
           if (json['uploader'] is Map<String, dynamic>) {
             print('🔍 VideoModel: uploader is Map, calling Uploader.fromJson');
-            final uploader = Uploader.fromJson(json['uploader']);
+            final uploaderMap =
+                Map<String, dynamic>.from(json['uploader'] as Map);
+            uploader = Uploader.fromJson(uploaderMap);
             print('🔍 VideoModel: parsed uploader = ${uploader.toJson()}');
-            return uploader;
           } else {
             print(
                 '🔍 VideoModel: uploader is not Map, creating default Uploader');
-            return Uploader(
-                id: json['uploader']?.toString() ?? 'unknown',
-                name: 'Unknown',
-                profilePic: '');
+            uploader = Uploader(
+              id: json['uploader']?.toString() ?? 'unknown',
+              name: 'Unknown',
+              profilePic: '',
+            );
           }
+
+          final uploaderMap = json['uploader'] is Map
+              ? Map<String, dynamic>.from(json['uploader'] as Map)
+              : <String, dynamic>{};
+
+          final fallbackIdCandidates = [
+            uploaderMap['_id'],
+            uploaderMap['id'],
+            json['uploaderId'],
+            json['uploader_id'],
+            json['creatorId'],
+            json['creator_id'],
+            json['userId'],
+            json['user_id'],
+            uploaderMap['googleId'],
+            uploader.id,
+          ];
+
+          final normalizedId = fallbackIdCandidates
+              .whereType<String>()
+              .map((value) => value.trim())
+              .firstWhere(
+                (value) => value.isNotEmpty,
+                orElse: () => '',
+              );
+
+          if (normalizedId.isNotEmpty) {
+            uploader = uploader.copyWith(id: normalizedId);
+            print('🔍 VideoModel: Selected uploader ID: $normalizedId');
+          } else {
+            print(
+              '⚠️ VideoModel: Unable to resolve uploader ID, defaulting to placeholder',
+            );
+          }
+
+          return uploader;
         }(),
         uploadedAt: json['uploadedAt'] != null
             ? DateTime.tryParse(json['uploadedAt'].toString()) ?? DateTime.now()
@@ -399,22 +438,31 @@ class Uploader {
   final String id;
   final String name;
   final String profilePic;
+  final String? googleId;
 
   Uploader({
     required this.id,
     required this.name,
     required this.profilePic,
+    this.googleId,
   });
 
   factory Uploader.fromJson(Map<String, dynamic> json) {
     try {
       return Uploader(
-        id: json['googleId']?.toString() ??
-            json['_id']?.toString() ??
+        id: json['_id']?.toString() ??
             json['id']?.toString() ??
+            json['uploaderId']?.toString() ??
+            json['uploader_id']?.toString() ??
+            json['creatorId']?.toString() ??
+            json['creator_id']?.toString() ??
+            json['userId']?.toString() ??
+            json['user_id']?.toString() ??
+            json['googleId']?.toString() ??
             '',
         name: json['name']?.toString() ?? '',
         profilePic: json['profilePic']?.toString() ?? '',
+        googleId: json['googleId']?.toString(),
       );
     } catch (e, stackTrace) {
       print('❌ Uploader.fromJson Error: $e');
@@ -428,11 +476,13 @@ class Uploader {
     String? id,
     String? name,
     String? profilePic,
+    String? googleId,
   }) {
     return Uploader(
       id: id ?? this.id,
       name: name ?? this.name,
       profilePic: profilePic ?? this.profilePic,
+      googleId: googleId ?? this.googleId,
     );
   }
 
@@ -441,6 +491,7 @@ class Uploader {
       'id': id,
       'name': name,
       'profilePic': profilePic,
+      if (googleId != null) 'googleId': googleId,
     };
   }
 }

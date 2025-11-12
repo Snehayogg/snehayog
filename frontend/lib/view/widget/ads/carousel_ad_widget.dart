@@ -12,6 +12,7 @@ import 'package:vayu/services/ad_comment_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:vayu/view/widget/custom_share_widget.dart';
 import 'package:vayu/utils/app_logger.dart';
+import 'package:vayu/core/constants/app_constants.dart';
 
 /// **Professional Carousel Ad Widget**
 class CarouselAdWidget extends StatefulWidget {
@@ -96,8 +97,8 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
   void _startViewTracking() {
     _viewStartTime = DateTime.now();
 
-    // Track view after minimum duration (2 seconds)
-    _viewTrackingTimer = Timer(const Duration(seconds: 2), () async {
+    // Track view after minimum duration (shared threshold)
+    _viewTrackingTimer = Timer(AppConstants.viewCountThreshold, () async {
       if (!_hasTrackedView && mounted) {
         await _trackAdView();
       }
@@ -119,10 +120,11 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
       final viewDuration =
           DateTime.now().difference(_viewStartTime!).inMilliseconds / 1000.0;
 
-      // Minimum view duration: 2 seconds
-      if (viewDuration < 2.0) {
+      // Minimum view duration shared with video views
+      final minSeconds = AppConstants.viewCountThreshold.inSeconds;
+      if (viewDuration < minSeconds) {
         AppLogger.log(
-            '⚠️ CarouselAdWidget: View duration too short ($viewDuration s), not tracking');
+            '⚠️ CarouselAdWidget: View duration too short ($viewDuration s), not tracking (min: ${minSeconds}s)');
         return;
       }
 

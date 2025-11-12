@@ -27,4 +27,8 @@ class AppConstants {
       Duration(milliseconds: 200); // reduced from 300
   static const Duration slideAnimationDuration =
       Duration(milliseconds: 200); // reduced from 250
+
+  // View tracking constants
+  static const Duration viewCountThreshold =
+      Duration(seconds: 4); // unified threshold for views & ads
 }

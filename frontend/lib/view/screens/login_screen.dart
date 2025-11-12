@@ -366,12 +366,11 @@ class LoginScreen extends StatelessWidget {
                           // Google Sign-In Button (30% smaller, vertical layout)
                           SizedBox(
                             width: double.infinity,
-                            height: 45,
+                            height: 48,
                             child: ElevatedButton.icon(
                               onPressed: () async {
                                 final user = await authController.signIn();
                                 if (user != null && context.mounted) {
-                                  // Show location permission dialog for new user
                                   final result = await LocationOnboardingService
                                       .showLocationOnboarding(context);
                                   if (result) {
@@ -386,36 +385,36 @@ class LoginScreen extends StatelessWidget {
                                       context, '/home');
                                 }
                               },
-                              icon: Image.asset(
-                                'assets/icons/google_logo.png',
-                                width: 20,
-                                height: 20,
+                              icon: Image.network(
+                                'https://www.google.com/favicon.ico',
+                                height: 24,
                                 errorBuilder: (context, error, stackTrace) =>
-                                    const Icon(
-                                  Icons.login,
-                                  color: Colors.white,
-                                  size: 20,
+                                    Image.asset(
+                                  'assets/icons/google_logo.png',
+                                  width: 24,
+                                  height: 24,
                                 ),
                               ),
                               label: const Text(
-                                'Continue with Google',
+                                'Sign in with Google',
                                 maxLines: 1,
                                 softWrap: false,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  fontSize: 14,
+                                  fontSize: 16,
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.white,
                                 ),
                               ),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green[600],
+                                backgroundColor: Colors.grey[700],
                                 foregroundColor: Colors.white,
-                                elevation: 6,
-                                shadowColor: Colors.green.withOpacity(0.3),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 24, vertical: 12),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(8),
+                                  side: BorderSide(color: Colors.grey[600]!),
                                 ),
+                                elevation: 2,
                               ),
                             ),
                           ),

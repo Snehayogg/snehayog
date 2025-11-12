@@ -6,6 +6,7 @@ import 'package:vayu/services/ad_impression_service.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/utils/app_logger.dart';
+import 'package:vayu/core/constants/app_constants.dart';
 
 /// Widget to display banner ads at the top of video feed
 class BannerAdWidget extends StatefulWidget {
@@ -53,8 +54,8 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
   void _startViewTracking() {
     _viewStartTime = DateTime.now();
 
-    // Track view after minimum duration (2 seconds)
-    _viewTrackingTimer = Timer(const Duration(seconds: 2), () async {
+    // Track view after minimum duration (shared threshold)
+    _viewTrackingTimer = Timer(AppConstants.viewCountThreshold, () async {
       if (!_hasTrackedView && mounted) {
         await _trackAdView();
       }
@@ -69,10 +70,11 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
       final viewDuration =
           DateTime.now().difference(_viewStartTime!).inMilliseconds / 1000.0;
 
-      // Minimum view duration: 2 seconds
-      if (viewDuration < 2.0) {
+      // Minimum view duration shared with video views
+      final minSeconds = AppConstants.viewCountThreshold.inSeconds;
+      if (viewDuration < minSeconds) {
         AppLogger.log(
-            '⚠️ BannerAdWidget: View duration too short ($viewDuration s), not tracking');
+            '⚠️ BannerAdWidget: View duration too short ($viewDuration s), not tracking (min: ${minSeconds}s)');
         return;
       }
 

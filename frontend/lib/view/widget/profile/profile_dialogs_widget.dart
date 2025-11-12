@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'package:vayu/core/managers/profile_state_manager.dart';
 import 'package:vayu/core/services/auto_scroll_settings.dart';
 import 'package:vayu/view/screens/creator_payment_setup_screen.dart';
@@ -30,8 +31,9 @@ class ProfileDialogsWidget {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: Colors.grey[100],
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(20)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(20),
+                ),
               ),
               child: Row(
                 children: [
@@ -59,6 +61,21 @@ class ProfileDialogsWidget {
             Consumer<ProfileStateManager>(
               builder: (context, stateManager, child) {
                 if (stateManager.userData != null) {
+                  final authController = Provider.of<GoogleSignInController>(
+                    context,
+                    listen: false,
+                  );
+                  final loggedInUserId =
+                      authController.userData?['id']?.toString() ??
+                      authController.userData?['googleId']?.toString();
+                  final viewedUserId =
+                      stateManager.userData?['googleId']?.toString() ??
+                      stateManager.userData?['id']?.toString();
+                  final bool isViewingOwnProfile =
+                      loggedInUserId != null &&
+                      loggedInUserId.isNotEmpty &&
+                      loggedInUserId == viewedUserId;
+
                   return Column(
                     children: [
                       _buildSettingsTile(
@@ -73,7 +90,8 @@ class ProfileDialogsWidget {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
-                                    'Auto Scroll: ${!enabled ? 'ON' : 'OFF'}'),
+                                  'Auto Scroll: ${!enabled ? 'ON' : 'OFF'}',
+                                ),
                                 duration: const Duration(seconds: 1),
                               ),
                             );
@@ -108,7 +126,8 @@ class ProfileDialogsWidget {
                           Navigator.pop(context);
                           // Add a small delay to ensure modal closes completely
                           await Future.delayed(
-                              const Duration(milliseconds: 300));
+                            const Duration(milliseconds: 300),
+                          );
                           if (context.mounted) {
                             Navigator.push(
                               context,
@@ -131,8 +150,9 @@ class ProfileDialogsWidget {
                             // Show current payment details or allow editing
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content:
-                                    Text('✅ Payment setup already completed'),
+                                content: Text(
+                                  '✅ Payment setup already completed',
+                                ),
                                 backgroundColor: Colors.green,
                               ),
                             );
@@ -147,33 +167,34 @@ class ProfileDialogsWidget {
                           }
                         },
                       ),
-                      _buildSettingsTile(
-                        icon: Icons.analytics,
-                        title: 'Revenue Analytics',
-                        subtitle: 'Track your earnings',
-                        onTap: () async {
-                          Navigator.pop(context);
-                          final hasPaymentSetup =
-                              await checkPaymentSetupStatus();
-                          if (hasPaymentSetup) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const CreatorRevenueScreen(),
-                              ),
-                            );
-                          } else {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const CreatorPaymentSetupScreen(),
-                              ),
-                            );
-                          }
-                        },
-                      ),
+                      if (isViewingOwnProfile)
+                        _buildSettingsTile(
+                          icon: Icons.analytics,
+                          title: 'Revenue Analytics',
+                          subtitle: 'Track your earnings',
+                          onTap: () async {
+                            Navigator.pop(context);
+                            final hasPaymentSetup =
+                                await checkPaymentSetupStatus();
+                            if (hasPaymentSetup) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      const CreatorRevenueScreen(),
+                                ),
+                              );
+                            } else {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      const CreatorPaymentSetupScreen(),
+                                ),
+                              );
+                            }
+                          },
+                        ),
                       _buildSettingsTile(
                         icon: Icons.help_outline,
                         title: 'Help & Support',
@@ -241,11 +262,7 @@ class ProfileDialogsWidget {
           color: (iconColor ?? Colors.grey).withOpacity(0.1),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Icon(
-          icon,
-          color: iconColor ?? Colors.grey,
-          size: 20,
-        ),
+        child: Icon(icon, color: iconColor ?? Colors.grey, size: 20),
       ),
       title: Text(
         title,
@@ -257,10 +274,7 @@ class ProfileDialogsWidget {
       ),
       subtitle: Text(
         subtitle,
-        style: const TextStyle(
-          color: Colors.black54,
-          fontSize: 14,
-        ),
+        style: const TextStyle(color: Colors.black54, fontSize: 14),
       ),
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
@@ -276,10 +290,7 @@ class ProfileDialogsWidget {
           children: [
             Icon(Icons.help_outline, color: Colors.black87),
             SizedBox(width: 12),
-            Text(
-              'Help & Support',
-              style: TextStyle(color: Colors.black87),
-            ),
+            Text('Help & Support', style: TextStyle(color: Colors.black87)),
           ],
         ),
         content: const Column(
@@ -346,10 +357,8 @@ class ProfileDialogsWidget {
     showDialog(
       context: context,
       barrierDismissible: true,
-      builder: (context) => ReportDialogWidget(
-        targetType: targetType,
-        targetId: targetId,
-      ),
+      builder: (context) =>
+          ReportDialogWidget(targetType: targetType, targetId: targetId),
     );
   }
 
@@ -402,10 +411,7 @@ class ProfileDialogsWidget {
                         SizedBox(height: 4),
                         Text(
                           'Everything you need to know about Vayug',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey,
-                          ),
+                          style: TextStyle(fontSize: 14, color: Colors.grey),
                         ),
                       ],
                     ),
@@ -508,10 +514,7 @@ class ProfileDialogsWidget {
       decoration: BoxDecoration(
         color: Colors.grey.shade50,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.grey.shade200,
-          width: 1,
-        ),
+        border: Border.all(color: Colors.grey.shade200, width: 1),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.04),
@@ -533,11 +536,7 @@ class ProfileDialogsWidget {
                   color: color.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  icon,
-                  color: color,
-                  size: 20,
-                ),
+                child: Icon(icon, color: color, size: 20),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -561,10 +560,7 @@ class ProfileDialogsWidget {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Colors.grey.shade200,
-                width: 1,
-              ),
+              border: Border.all(color: Colors.grey.shade200, width: 1),
             ),
             child: Text(
               answer,
@@ -610,8 +606,10 @@ class ProfileDialogsWidget {
                           color: Colors.blue.shade100,
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(Icons.workspace_premium,
-                            color: Colors.blue.shade700),
+                        child: Icon(
+                          Icons.workspace_premium,
+                          color: Colors.blue.shade700,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       const Expanded(
@@ -627,7 +625,7 @@ class ProfileDialogsWidget {
                       IconButton(
                         icon: const Icon(Icons.close),
                         onPressed: () => Navigator.pop(context),
-                      )
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -672,7 +670,7 @@ class ProfileDialogsWidget {
                         foregroundColor: Colors.white,
                       ),
                     ),
-                  )
+                  ),
                 ],
               ),
             ),
@@ -682,8 +680,10 @@ class ProfileDialogsWidget {
     );
   }
 
-  static Widget _buildHowToEarnPoint(
-      {required String title, required String body}) {
+  static Widget _buildHowToEarnPoint({
+    required String title,
+    required String body,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Column(

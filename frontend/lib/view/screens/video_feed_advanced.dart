@@ -370,9 +370,18 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   void _scheduleAutoplayAfterLogin() {
     if (!_pendingAutoplayAfterLogin) return;
-    _pendingAutoplayAfterLogin = false;
+
     Future.delayed(const Duration(milliseconds: 150), () {
       if (!mounted) return;
+
+      if (!_shouldAutoplayForContext('autoplay after login')) {
+        AppLogger.log(
+          '⏸️ Autoplay deferred (login): Yug tab not active or screen hidden',
+        );
+        return;
+      }
+
+      _pendingAutoplayAfterLogin = false;
       AppLogger.log('🚀 Triggering autoplay after login');
       forcePlayCurrent();
     });
@@ -1788,18 +1797,32 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   }
 
   /// **NAVIGATE TO CREATOR PROFILE: Navigate to user profile screen**
-  void _navigateToCreatorProfile(String userId) {
-    if (userId.isEmpty) {
+  void _navigateToCreatorProfile(VideoModel video) {
+    final candidateIds = <String>[
+      if (video.uploader.googleId != null) video.uploader.googleId!.trim(),
+      if (video.uploader.id.isNotEmpty) video.uploader.id.trim(),
+    ]
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty && id.toLowerCase() != 'unknown')
+        .toList();
+
+    AppLogger.log('🔗 Creator profile candidate IDs: $candidateIds');
+
+    final targetUserId = candidateIds.isNotEmpty ? candidateIds.first : '';
+
+    if (targetUserId.isEmpty) {
       _showSnackBar('User profile not available', isError: true);
       return;
     }
 
-    AppLogger.log('🔗 Navigating to creator profile: $userId');
+    AppLogger.log('🔗 Navigating to creator profile: $targetUserId');
 
     // Navigate to profile screen
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => ProfileScreen(userId: userId)),
+      MaterialPageRoute(
+        builder: (context) => ProfileScreen(userId: targetUserId),
+      ),
     ).catchError((error) {
       AppLogger.log('❌ Error navigating to profile: $error');
       _showSnackBar('Failed to open profile', isError: true);

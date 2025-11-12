@@ -648,28 +648,28 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     AppLogger.log('🔍 Using MODEL aspect ratio for display');
   }
 
-Widget _buildVideoThumbnail(VideoModel video) {
-  final aspectRatio = video.aspectRatio > 0 ? video.aspectRatio : 9 / 16;
-  return RepaintBoundary(
-    child: Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: Colors.black,
-      child: video.thumbnailUrl.isNotEmpty
-          ? AspectRatio(
-              aspectRatio: aspectRatio,
-              child: CachedNetworkImage(
-                imageUrl: video.thumbnailUrl,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => _buildFallbackThumbnail(),
-                errorWidget: (context, url, error) => _buildFallbackThumbnail(),
-              ),
-            )
-          : _buildFallbackThumbnail(),
-    ),
-  );
-}
-
+  Widget _buildVideoThumbnail(VideoModel video) {
+    final aspectRatio = video.aspectRatio > 0 ? video.aspectRatio : 9 / 16;
+    return RepaintBoundary(
+      child: Container(
+        width: double.infinity,
+        height: double.infinity,
+        color: Colors.black,
+        child: video.thumbnailUrl.isNotEmpty
+            ? AspectRatio(
+                aspectRatio: aspectRatio,
+                child: CachedNetworkImage(
+                  imageUrl: video.thumbnailUrl,
+                  fit: BoxFit.cover,
+                  placeholder: (context, url) => _buildFallbackThumbnail(),
+                  errorWidget: (context, url, error) =>
+                      _buildFallbackThumbnail(),
+                ),
+              )
+            : _buildFallbackThumbnail(),
+      ),
+    );
+  }
 
   Widget _buildFallbackThumbnail() {
     return Container(
@@ -702,7 +702,7 @@ Widget _buildVideoThumbnail(VideoModel video) {
     }
     try {
       final totalEarnings =
-          await EarningsService.calculateVideoRevenue(video.id);
+          await EarningsService.calculateCreatorRevenueForVideo(video.id);
       _earningsCache[video.id] = totalEarnings;
       return totalEarnings;
     } catch (_) {
@@ -781,13 +781,12 @@ Widget _buildVideoThumbnail(VideoModel video) {
                 children: [
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: () => _navigateToCreatorProfile(video.uploader.id),
+                    onTap: () => _navigateToCreatorProfile(video),
                     child: Row(
                       children: [
                         GestureDetector(
                           behavior: HitTestBehavior.opaque,
-                          onTap: () =>
-                              _navigateToCreatorProfile(video.uploader.id),
+                          onTap: () => _navigateToCreatorProfile(video),
                           child: Container(
                             width: 24,
                             height: 24,
@@ -852,8 +851,7 @@ Widget _buildVideoThumbnail(VideoModel video) {
                         const SizedBox(width: 6),
                         Expanded(
                           child: GestureDetector(
-                            onTap: () =>
-                                _navigateToCreatorProfile(video.uploader.id),
+                            onTap: () => _navigateToCreatorProfile(video),
                             child: Text(
                               video.uploader.name,
                               style: const TextStyle(

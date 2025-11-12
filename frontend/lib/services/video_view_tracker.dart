@@ -4,6 +4,7 @@ import 'package:vayu/config/app_config.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/core/services/http_client_service.dart';
+import 'package:vayu/core/constants/app_constants.dart';
 
 /// Handles 4-second view threshold, repeat views (max 10 per user), self-view prevention, and API integration
 class VideoViewTracker {
@@ -22,9 +23,15 @@ class VideoViewTracker {
 
   /// Increment view count for a video after 4 seconds of playback
   /// Returns true if view was counted, false if already at max or error
-  Future<bool> incrementView(String videoId,
-      {int duration = 4, String? videoUploaderId}) async {
+  Future<bool> incrementView(
+    String videoId, {
+    int? duration,
+    String? videoUploaderId,
+  }) async {
     try {
+      final effectiveDuration =
+          duration ?? AppConstants.viewCountThreshold.inSeconds;
+
       AppLogger.log(
           '🎯 VideoViewTracker: Attempting to increment view for video $videoId');
 
@@ -78,7 +85,7 @@ class VideoViewTracker {
         },
         body: json.encode({
           'userId': userId,
-          'duration': duration,
+          'duration': effectiveDuration,
         }),
       );
 
@@ -124,9 +131,10 @@ class VideoViewTracker {
     _viewTimers[videoId]?.cancel();
 
     // Start new timer
-    _viewTimers[videoId] = Timer(const Duration(seconds: 4), () async {
+    _viewTimers[videoId] = Timer(AppConstants.viewCountThreshold, () async {
       AppLogger.log(
-          '⏰ VideoViewTracker: 4 seconds elapsed for video $videoId, incrementing view');
+        '⏰ VideoViewTracker: ${AppConstants.viewCountThreshold.inSeconds} seconds elapsed for video $videoId, incrementing view',
+      );
 
       // Check if this video hasn't been counted yet in this session
       final viewKey = '${videoId}_current_session';

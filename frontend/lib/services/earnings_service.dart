@@ -10,6 +10,12 @@ class EarningsService {
 
   static final AdImpressionService _adImpressionService = AdImpressionService();
 
+  static double _applyCreatorShare(double grossAmount) =>
+      grossAmount * AppConfig.creatorRevenueShare;
+
+  static double _applyPlatformShare(double grossAmount) =>
+      grossAmount * AppConfig.platformRevenueShare;
+
   /// Calculate revenue for a single video using ad VIEWS (not impressions)
   static Future<double> calculateVideoRevenue(String videoId,
       {Duration timeout = const Duration(seconds: 10)}) async {
@@ -49,4 +55,32 @@ class EarningsService {
 
     return total;
   }
+
+  /// Calculate creator take-home revenue (after platform share) for a list of videos
+  static Future<double> calculateCreatorTotalRevenueForVideos(
+    List<VideoModel> videos, {
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    final gross = await calculateTotalRevenueForVideos(
+      videos,
+      timeout: timeout,
+    );
+    return _applyCreatorShare(gross);
+  }
+
+  /// Calculate creator earnings for a single video (net of platform share)
+  static Future<double> calculateCreatorRevenueForVideo(
+    String videoId, {
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    final gross = await calculateVideoRevenue(videoId, timeout: timeout);
+    return _applyCreatorShare(gross);
+  }
+
+  /// Expose helpers so UI layers can convert gross to creator/platform shares
+  static double creatorShareFromGross(double grossAmount) =>
+      _applyCreatorShare(grossAmount);
+
+  static double platformShareFromGross(double grossAmount) =>
+      _applyPlatformShare(grossAmount);
 }
