@@ -129,27 +129,33 @@ class SmartCacheManager {
 
   // Cache configurations for different data types
   final Map<String, InstagramCacheConfig> _cacheConfigs = {
-    'videos': const InstagramCacheConfig(
-      maxAge: Duration(minutes: 15),
+    'default': const InstagramCacheConfig(
+      maxAge: Duration(minutes: 10),
       maxEntries: 50,
+      enableEtag: true,
+      enableStaleWhileRevalidate: true,
+    ),
+    'videos': const InstagramCacheConfig(
+      maxAge: Duration(minutes: 60),
+      maxEntries: 150,
       enableEtag: true,
       enableStaleWhileRevalidate: true,
     ),
     'user_profile': const InstagramCacheConfig(
       maxAge: Duration(hours: 24),
-      maxEntries: 10,
+      maxEntries: 40,
       enableEtag: true,
       enableStaleWhileRevalidate: true,
     ),
     'video_metadata': const InstagramCacheConfig(
-      maxAge: Duration(hours: 1),
-      maxEntries: 100,
+      maxAge: Duration(hours: 2),
+      maxEntries: 200,
       enableEtag: true,
       enableStaleWhileRevalidate: true,
     ),
     'ads': const InstagramCacheConfig(
-      maxAge: Duration(minutes: 10),
-      maxEntries: 20,
+      maxAge: Duration(minutes: 30),
+      maxEntries: 60,
       enableEtag: true,
       enableStaleWhileRevalidate: true,
     ),
@@ -191,7 +197,7 @@ class SmartCacheManager {
 
   // **NEW: Cache size limits**
   static const int maxMemoryCacheSize = 50; // Limit memory cache entries
-  static const int maxDiskCacheMB = 100; // Limit disk cache to 100 MB
+  static const int maxDiskCacheMB = 200; // Limit disk cache to 200 MB
 
   /// Initialize consolidated smart cache manager
   Future<void> initialize() async {
@@ -374,6 +380,44 @@ class SmartCacheManager {
 
       rethrow;
     }
+  }
+
+  /// Peek cache without affecting hit/miss counters or triggering fetches.
+  Future<T?> peek<T>(
+    String key, {
+    String cacheType = 'default',
+    bool allowStale = true,
+  }) async {
+    if (!Features.smartVideoCaching.isEnabled) {
+      return null;
+    }
+
+    final memoryEntry = _memoryCache[key];
+    if (memoryEntry != null) {
+      final entry = memoryEntry as InstagramCacheEntry<T>;
+      final isFresh = !entry.isExpired;
+      if (isFresh) {
+        return entry.data;
+      }
+      if (allowStale && _shouldUseStaleWhileRevalidate(cacheType)) {
+        return entry.data;
+      }
+    }
+
+    final diskEntry = await _getFromDiskCache<T>(key);
+    if (diskEntry != null) {
+      final isFresh = !diskEntry.isExpired;
+      if (isFresh) {
+        _addToMemoryCache(key, diskEntry);
+        return diskEntry.data;
+      }
+      if (allowStale && _shouldUseStaleWhileRevalidate(cacheType)) {
+        _addToMemoryCache(key, diskEntry);
+        return diskEntry.data;
+      }
+    }
+
+    return null;
   }
 
   // ===== PRELOADING & PREDICTION =====
@@ -938,14 +982,6 @@ class SmartCacheManager {
       AppLogger.log(
           '❌ SmartCacheManager: Error enforcing disk cache limit: $e');
     }
-  }
-
-  /// Get cache type from key
-  String _getCacheTypeFromKey(String key) {
-    if (key.startsWith('video_')) return 'videos';
-    if (key.startsWith('user_')) return 'user_profile';
-    if (key.startsWith('ad_')) return 'ads';
-    return 'default';
   }
 
   /// Analyze navigation patterns and predict next screens

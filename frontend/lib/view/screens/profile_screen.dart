@@ -6,6 +6,7 @@ import 'package:vayu/view/screens/creator_revenue_screen.dart';
 import 'dart:convert';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/core/managers/profile_state_manager.dart';
+import 'package:vayu/core/managers/smart_cache_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:vayu/core/providers/user_provider.dart';
 import 'package:vayu/model/usermodel.dart';
@@ -396,6 +397,9 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       // **FIXED: Use centralized LogoutService for unified logout across entire app**
       await LogoutService.performCompleteLogout(context);
+
+      // Ensure local state is cleared immediately so login prompt appears
+      _stateManager.clearData();
 
       // **FIX: Only remove session tokens, NOT payment data**
       final prefs = await SharedPreferences.getInstance();
@@ -1897,6 +1901,32 @@ class _ProfileScreenState extends State<ProfileScreen>
       await prefs.remove('profile_cache_timestamp_$cacheKey');
 
       ProfileScreenLogger.logDebugInfo('Profile cache cleared');
+
+      final smartCache = SmartCacheManager();
+      await smartCache.initialize();
+      if (smartCache.isInitialized) {
+        final idsToClear = <String>{
+          if (widget.userId != null && widget.userId!.isNotEmpty)
+            widget.userId!,
+          if (_stateManager.userData?['googleId'] != null &&
+              _stateManager.userData!['googleId'].toString().isNotEmpty)
+            _stateManager.userData!['googleId'].toString(),
+          if (_stateManager.userData?['id'] != null &&
+              _stateManager.userData!['id'].toString().isNotEmpty)
+            _stateManager.userData!['id'].toString(),
+        };
+
+        if (idsToClear.isEmpty) {
+          idsToClear.add('self');
+        }
+
+        for (final id in idsToClear) {
+          final pattern = 'user_profile_$id';
+          await smartCache.clearCacheByPattern(pattern);
+          AppLogger.log(
+              '🧹 ProfileScreen: Cleared SmartCache entry pattern $pattern');
+        }
+      }
     } catch (e) {
       ProfileScreenLogger.logWarning('Error clearing profile cache: $e');
     }

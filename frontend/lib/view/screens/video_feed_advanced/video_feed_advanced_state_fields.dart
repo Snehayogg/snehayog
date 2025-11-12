@@ -92,7 +92,7 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   final Set<int> _retainedIndices = {};
 
   // Infinite scrolling
-  int get _infiniteScrollThreshold => 4;
+  int get _infiniteScrollThreshold => 5;
   bool _isLoadingMore = false;
   int _currentPage = 1;
   int get _videosPerPage => 5;

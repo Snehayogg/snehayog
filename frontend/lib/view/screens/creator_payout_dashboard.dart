@@ -83,7 +83,8 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
       });
 
       AppLogger.log('🔍 CreatorPayoutDashboard: Starting data load...');
-      AppLogger.log('🔍 Base URL: ${AppConfig.baseUrl}');
+      final baseUrl = await AppConfig.getBaseUrlWithFallback();
+      AppLogger.log('🔍 CreatorPayoutDashboard: Resolved base URL: $baseUrl');
 
       // **FIXED: Use unified auth method**
       final userData = await _getUserData();
@@ -115,27 +116,30 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
       }
 
       AppLogger.log('🔍 Token found, making API calls...');
-      AppLogger.log('🔍 Base URL: ${AppConfig.baseUrl}');
 
       // Load profile data
-      final profileUrl = '${AppConfig.baseUrl}/api/creator-payouts/profile';
+      final profileUrl = '$baseUrl/api/creator-payouts/profile';
       AppLogger.log('🔍 CreatorPayoutDashboard: Profile URL: $profileUrl');
 
-      final profileResponse = await http.get(
-        Uri.parse(profileUrl),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      ).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          throw Exception('Profile API request timed out');
-        },
-      ).catchError((error) {
-        AppLogger.log('❌ HTTP Request Error: $error');
-        throw Exception('Network error: $error');
-      });
+      http.Response profileResponse;
+      try {
+        profileResponse = await http.get(
+          Uri.parse(profileUrl),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+        ).timeout(
+          const Duration(seconds: 10),
+          onTimeout: () {
+            throw Exception('Profile API request timed out');
+          },
+        );
+      } catch (error) {
+        AppLogger.log('❌ HTTP Request Error (profile): $error');
+        AppConfig.resetCachedUrl();
+        throw Exception('Network error while loading profile: $error');
+      }
 
       AppLogger.log(
           '🔍 Profile response status: ${profileResponse.statusCode}');
@@ -165,7 +169,14 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
               'firstPayout': {'INR': 'No minimum'},
               'subsequentPayouts': {'INR': '₹200 minimum'}
             },
-            'paymentMethods': ['upi', 'bank_transfer', 'paytm']
+            'paymentMethods': [
+              'upi',
+              'bank_transfer',
+              'paypal',
+              'stripe',
+              'wise',
+              'bank_wire'
+            ]
           };
         });
         // Don't set _isLoading = false here, let it continue to load history
@@ -180,16 +191,23 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
       }
 
       // Load payout history
-      final historyUrl = '${AppConfig.baseUrl}/api/creator-payouts/monthly';
+      final historyUrl = '$baseUrl/api/creator-payouts/monthly';
       AppLogger.log('🔍 History URL: $historyUrl');
 
-      final historyResponse = await http.get(
-        Uri.parse(historyUrl),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      );
+      http.Response historyResponse;
+      try {
+        historyResponse = await http.get(
+          Uri.parse(historyUrl),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+        );
+      } catch (error) {
+        AppLogger.log('⚠️ HTTP Request Error (history): $error');
+        AppConfig.resetCachedUrl();
+        rethrow;
+      }
 
       AppLogger.log(
           '🔍 History response status: ${historyResponse.statusCode}');
@@ -245,10 +263,11 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
   Future<void> _testBackendConnection() async {
     try {
       AppLogger.log('🔍 Testing backend connection...');
-      AppLogger.log('🔍 Base URL: ${AppConfig.baseUrl}');
+      final baseUrl = await AppConfig.getBaseUrlWithFallback();
+      AppLogger.log('🔍 Resolved base URL for test: $baseUrl');
 
       // Test the health endpoint first (no auth required)
-      final healthUrl = '${AppConfig.baseUrl}/api/creator-payouts/health';
+      final healthUrl = '$baseUrl/api/creator-payouts/health';
       AppLogger.log('🔍 Testing health endpoint: $healthUrl');
 
       final healthResponse = await http.get(Uri.parse(healthUrl)).timeout(
@@ -262,7 +281,7 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
 
       if (healthResponse.statusCode == 200) {
         // Test the test endpoint
-        final testUrl = '${AppConfig.baseUrl}/api/creator-payouts/test';
+        final testUrl = '$baseUrl/api/creator-payouts/test';
         AppLogger.log('🔍 Testing test endpoint: $testUrl');
 
         final testResponse = await http.get(Uri.parse(testUrl));
@@ -356,7 +375,8 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
       }
 
       // Test authenticated endpoint
-      final profileUrl = '${AppConfig.baseUrl}/api/creator-payouts/profile';
+      final baseUrl = await AppConfig.getBaseUrlWithFallback();
+      final profileUrl = '$baseUrl/api/creator-payouts/profile';
       AppLogger.log('🔍 Testing authenticated endpoint: $profileUrl');
 
       final response = await http.get(
@@ -424,8 +444,11 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
           : _error != null
               ? _buildErrorWidget()
               : _buildDashboardContent();
-    } catch (e) {
-      AppLogger.log('❌ CreatorPayoutDashboard: Error in build method: $e');
+    } catch (e, stackTrace) {
+      final errorMessage = 'Dashboard render error: $e';
+      AppLogger.log('❌ CreatorPayoutDashboard: $errorMessage');
+      AppLogger.log('❌ Stack trace: $stackTrace');
+      _error ??= errorMessage;
       bodyWidget = _buildErrorWidget();
     }
 
@@ -478,6 +501,8 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
 
   Widget _buildErrorWidget() {
     final String message = _error ?? 'Something went wrong. Please try again.';
+    AppLogger.log(
+        '⚠️ CreatorPayoutDashboard: Showing error widget with message: $message');
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24.0),
@@ -955,10 +980,13 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
   }
 
   Widget _buildPayoutHistoryItem(Map<String, dynamic> payout) {
-    final status = payout['status'] ?? 'pending';
-    final month = payout['month'] ?? 'Unknown';
-    final amount = payout['payableINR'] ?? 0;
-    final currency = payout['currency'] ?? 'INR';
+    final status = payout['status']?.toString() ?? 'pending';
+    final month = payout['month']?.toString() ?? 'Unknown';
+    final rawAmount = payout['payableINR'];
+    final double amount = rawAmount is num
+        ? rawAmount.toDouble()
+        : double.tryParse(rawAmount?.toString() ?? '') ?? 0.0;
+    final currency = payout['currency']?.toString() ?? 'INR';
 
     Color statusColor;
     IconData statusIcon;

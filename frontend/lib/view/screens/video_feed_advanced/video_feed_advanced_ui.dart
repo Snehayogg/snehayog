@@ -648,28 +648,28 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     AppLogger.log('🔍 Using MODEL aspect ratio for display');
   }
 
-  Widget _buildVideoThumbnail(VideoModel video) {
-    return RepaintBoundary(
-      child: Container(
-        width: double.infinity,
-        height: double.infinity,
-        color: Colors.black,
-        child: video.thumbnailUrl.isNotEmpty
-            ? Center(
-                child: CachedNetworkImage(
-                  imageUrl: video.thumbnailUrl,
-                  fit: BoxFit.contain,
-                  placeholder: (context, url) => _buildFallbackThumbnail(),
-                  errorWidget: (context, url, error) =>
-                      _buildFallbackThumbnail(),
-                  memCacheWidth: 854,
-                  memCacheHeight: 480,
-                ),
-              )
-            : _buildFallbackThumbnail(),
-      ),
-    );
-  }
+Widget _buildVideoThumbnail(VideoModel video) {
+  final aspectRatio = video.aspectRatio > 0 ? video.aspectRatio : 9 / 16;
+  return RepaintBoundary(
+    child: Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: Colors.black,
+      child: video.thumbnailUrl.isNotEmpty
+          ? AspectRatio(
+              aspectRatio: aspectRatio,
+              child: CachedNetworkImage(
+                imageUrl: video.thumbnailUrl,
+                fit: BoxFit.cover,
+                placeholder: (context, url) => _buildFallbackThumbnail(),
+                errorWidget: (context, url, error) => _buildFallbackThumbnail(),
+              ),
+            )
+          : _buildFallbackThumbnail(),
+    ),
+  );
+}
+
 
   Widget _buildFallbackThumbnail() {
     return Container(

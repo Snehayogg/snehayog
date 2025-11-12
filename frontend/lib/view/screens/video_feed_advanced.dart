@@ -227,7 +227,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       if (controller != null &&
           controller.value.isInitialized &&
           !controller.value.isPlaying) {
-        // **FIX: Don't autoplay if user has manually paused the video**
         if (_userPaused[_currentIndex] == true) {
           AppLogger.log(
             '⏸️ Autoplay suppressed: user has manually paused video at index $_currentIndex',

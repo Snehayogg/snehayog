@@ -51,7 +51,7 @@ class VideoRepositoryImpl implements VideoRepository {
                     .toList(),
                 videoType: model.videoType,
                 link: model.link,
-                isLongVideo: model.videoType == 'yog',
+                isLongVideo: model.videoType == 'yug',
               ))
           .toList();
 
@@ -92,7 +92,7 @@ class VideoRepositoryImpl implements VideoRepository {
             .toList(),
         videoType: videoModel.videoType,
         link: videoModel.link,
-        isLongVideo: videoModel.videoType == 'yog',
+        isLongVideo: videoModel.videoType == 'yug',
       );
     } catch (e) {
       rethrow;
@@ -128,7 +128,7 @@ class VideoRepositoryImpl implements VideoRepository {
                     .toList(),
                 videoType: model.videoType,
                 link: model.link,
-                isLongVideo: model.videoType == 'yog',
+                isLongVideo: model.videoType == 'yug',
               ))
           .toList();
     } catch (e) {
@@ -185,7 +185,7 @@ class VideoRepositoryImpl implements VideoRepository {
             .toList(),
         videoType: videoModel.videoType,
         link: videoModel.link,
-        isLongVideo: videoModel.videoType == 'yog',
+        isLongVideo: videoModel.videoType == 'yug',
       );
     } catch (e) {
       rethrow;

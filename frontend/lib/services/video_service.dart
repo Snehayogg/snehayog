@@ -140,12 +140,12 @@ class VideoService {
       AppLogger.log('🔍 VideoService: Using base URL: $baseUrl');
 
       String url = '$baseUrl/api/videos?page=$page&limit=$limit';
-      // Map 'yug' (app label) to backend 'yog' filter
-      final normalizedType = (videoType == 'yug') ? 'yog' : videoType;
+      final normalizedType = videoType?.toLowerCase();
       if (normalizedType != null &&
-          (normalizedType == 'yog' || normalizedType == 'sneha')) {
+          (normalizedType == 'yug' || normalizedType == 'vayu')) {
         url += '&videoType=$normalizedType';
-        AppLogger.log('🔍 VideoService: Filtering by videoType: $videoType');
+        AppLogger.log(
+            '🔍 VideoService: Filtering by videoType: $normalizedType');
       }
       final response = await _makeRequest(
         () => _client.get(Uri.parse(url)),
@@ -618,11 +618,10 @@ class VideoService {
       // **Add fields**
       request.fields['videoName'] = title;
       // Description intentionally omitted from upload flow
-      request.fields['videoType'] = 'yog';
+      String resolvedVideoType = 'yug';
       if (link != null && link.isNotEmpty) {
         request.fields['link'] = link;
       }
-
       try {
         // Using Zone to retrieve optional metadata injected by caller
         final dynamic metadata = Zone.current['upload_metadata'];
@@ -637,8 +636,14 @@ class VideoService {
           if (tags != null && tags.isNotEmpty) {
             request.fields['tags'] = json.encode(tags);
           }
+          final String? metadataVideoType = metadata['videoType'] as String?;
+          if (metadataVideoType != null && metadataVideoType.isNotEmpty) {
+            resolvedVideoType = metadataVideoType;
+          }
         }
       } catch (_) {}
+
+      request.fields['videoType'] = resolvedVideoType;
 
       // **Send request**
       final streamedResponse = await request.send().timeout(
@@ -1022,7 +1027,7 @@ class VideoService {
     String title, {
     String description = '',
     String link = '',
-    String videoType = 'yog',
+    String videoType = 'yug',
     String category = '',
     List<String> tags = const [],
   }) async {

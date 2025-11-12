@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/payment_setup_service.dart';
@@ -40,24 +39,20 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
   final _routingNumberController = TextEditingController();
   final _panNumberController = TextEditingController();
   final _gstNumberController = TextEditingController();
-  // **NEW: Card payment controllers**
-  final _cardNumberController = TextEditingController();
-  final _cardExpiryController = TextEditingController();
-  final _cardCvvController = TextEditingController();
-  final _cardholderNameController = TextEditingController();
+  bool _showOptionalTaxInfo = false;
 
   // Auth service
   final AuthService _authService = AuthService();
 
   // Country and payment method mappings
   final Map<String, List<String>> _countryPaymentMethods = {
-    'IN': ['upi', 'bank_transfer', 'card_payment'],
-    'US': ['paypal', 'stripe', 'bank_wire', 'card_payment'],
-    'CA': ['paypal', 'stripe', 'bank_wire', 'card_payment'],
-    'GB': ['paypal', 'stripe', 'wise', 'bank_wire', 'card_payment'],
-    'DE': ['paypal', 'stripe', 'wise', 'bank_wire', 'card_payment'],
-    'AU': ['paypal', 'stripe', 'bank_wire', 'card_payment'],
-    'default': ['paypal', 'stripe', 'wise', 'payoneer', 'card_payment']
+    'IN': ['upi', 'bank_transfer'],
+    'US': ['paypal', 'stripe', 'bank_wire'],
+    'CA': ['paypal', 'stripe', 'bank_wire'],
+    'GB': ['paypal', 'stripe', 'wise', 'bank_wire'],
+    'DE': ['paypal', 'stripe', 'wise', 'bank_wire'],
+    'AU': ['paypal', 'stripe', 'bank_wire'],
+    'default': ['paypal', 'stripe', 'wise', 'payoneer']
   };
 
   final Map<String, String> _countryNames = {
@@ -77,6 +72,14 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
     'CAD': 'C\$',
     'AUD': 'A\$'
   };
+
+  void _normalizeSelectedPaymentMethod() {
+    final methods = _countryPaymentMethods[_selectedCountry] ??
+        _countryPaymentMethods['default']!;
+    if (!methods.contains(_selectedPaymentMethod)) {
+      _selectedPaymentMethod = methods.first;
+    }
+  }
 
   @override
   void initState() {
@@ -165,6 +168,7 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
         _selectedCurrency = data['currency'] ?? _selectedCurrency;
         _selectedPaymentMethod =
             data['paymentMethod'] ?? _selectedPaymentMethod;
+        _normalizeSelectedPaymentMethod();
 
         final payment = data['paymentDetails'] as Map<String, dynamic>?;
         if (payment != null) {
@@ -189,6 +193,8 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
           _panNumberController.text = tax['panNumber'] ?? '';
           _gstNumberController.text = tax['gstNumber'] ?? '';
         }
+        _showOptionalTaxInfo = _panNumberController.text.isNotEmpty ||
+            _gstNumberController.text.isNotEmpty;
       });
 
       AppLogger.log('✅ Payment profile loaded from cache successfully');
@@ -226,6 +232,7 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
           _selectedCurrency = data['creator']['currency'] ?? 'INR';
           _selectedPaymentMethod =
               data['creator']['preferredPaymentMethod'] ?? 'upi';
+          _normalizeSelectedPaymentMethod();
 
           // Load existing payment details if available
           if (data['paymentDetails'] != null) {
@@ -253,6 +260,8 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
             _panNumberController.text = data['taxInfo']?['panNumber'] ?? '';
             _gstNumberController.text = data['taxInfo']?['gstNumber'] ?? '';
           }
+          _showOptionalTaxInfo = _panNumberController.text.isNotEmpty ||
+              _gstNumberController.text.isNotEmpty;
         });
 
         // **FIX: Cache for instant prefill next time with user-specific key**
@@ -360,15 +369,6 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
           };
           break;
 
-        case 'card_payment':
-          paymentDetails['cardDetails'] = {
-            'cardNumber': _cardNumberController.text.trim(),
-            'expiryDate': _cardExpiryController.text.trim(),
-            'cvv': _cardCvvController.text.trim(),
-            'cardholderName': _cardholderNameController.text.trim(),
-          };
-          break;
-
         case 'paypal':
           paymentDetails['paypalEmail'] = _paypalEmailController.text.trim();
           break;
@@ -452,11 +452,6 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
             'paymentMethod': _selectedPaymentMethod,
             'paymentDetails': {
               ...paymentDetails,
-              if (paymentDetails['cardDetails'] != null)
-                'cardDetails': {
-                  ...paymentDetails['cardDetails'],
-                  'cvv': null, // Never store CVV locally
-                }
             },
             'taxInfo': {
               'panNumber': _panNumberController.text.trim(),
@@ -820,23 +815,42 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
                             const SizedBox(height: 16),
 
                             if (_selectedCountry == 'IN') ...[
-                              TextFormField(
-                                controller: _panNumberController,
-                                decoration: const InputDecoration(
-                                  labelText: 'PAN Number',
-                                  border: OutlineInputBorder(),
-                                  hintText: 'ABCDE1234F',
+                              OutlinedButton.icon(
+                                onPressed: () {
+                                  setState(() {
+                                    _showOptionalTaxInfo =
+                                        !_showOptionalTaxInfo;
+                                  });
+                                },
+                                icon: Icon(
+                                  _showOptionalTaxInfo
+                                      ? Icons.keyboard_arrow_up
+                                      : Icons.keyboard_arrow_down,
                                 ),
+                                label: Text(_showOptionalTaxInfo
+                                    ? 'Hide Optional Tax Details'
+                                    : 'Add Optional Tax Details'),
                               ),
-                              const SizedBox(height: 16),
-                              TextFormField(
-                                controller: _gstNumberController,
-                                decoration: const InputDecoration(
-                                  labelText: 'GST Number (Optional)',
-                                  border: OutlineInputBorder(),
-                                  hintText: '22AAAAA0000A1Z5',
+                              if (_showOptionalTaxInfo) ...[
+                                const SizedBox(height: 16),
+                                TextFormField(
+                                  controller: _panNumberController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'PAN Number',
+                                    border: OutlineInputBorder(),
+                                    hintText: 'ABCDE1234F',
+                                  ),
                                 ),
-                              ),
+                                const SizedBox(height: 16),
+                                TextFormField(
+                                  controller: _gstNumberController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'GST Number (Optional)',
+                                    border: OutlineInputBorder(),
+                                    hintText: '22AAAAA0000A1Z5',
+                                  ),
+                                ),
+                              ],
                             ],
 
                             const SizedBox(height: 32),
@@ -1194,20 +1208,6 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
               'Account Holder', _accountHolderNameController.text));
         }
         break;
-      case 'card_payment':
-        if (_cardNumberController.text.isNotEmpty) {
-          items.add(_buildReviewItem(
-              'Card Number', _maskCardNumber(_cardNumberController.text)));
-        }
-        if (_cardExpiryController.text.isNotEmpty) {
-          items
-              .add(_buildReviewItem('Expiry Date', _cardExpiryController.text));
-        }
-        if (_cardholderNameController.text.isNotEmpty) {
-          items.add(_buildReviewItem(
-              'Cardholder Name', _cardholderNameController.text));
-        }
-        break;
       case 'paypal':
         if (_paypalEmailController.text.isNotEmpty) {
           items.add(
@@ -1248,11 +1248,6 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
     }
 
     return items;
-  }
-
-  String _maskCardNumber(String cardNumber) {
-    if (cardNumber.length < 8) return cardNumber;
-    return '${cardNumber.substring(0, 4)} **** **** ${cardNumber.substring(cardNumber.length - 4)}';
   }
 
   Widget _buildPaymentMethodFields() {
@@ -1335,110 +1330,6 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
                   return 'Please enter account holder name';
-                }
-                return null;
-              },
-            ),
-          ],
-        );
-
-      case 'card_payment':
-        return Column(
-          children: [
-            TextFormField(
-              controller: _cardNumberController,
-              decoration: const InputDecoration(
-                labelText: 'Card Number',
-                border: OutlineInputBorder(),
-                hintText: '1234 5678 9012 3456',
-                prefixIcon: Icon(Icons.credit_card),
-              ),
-              keyboardType: TextInputType.number,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(16),
-                CardNumberFormatter(),
-              ],
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter card number';
-                }
-                if (value.replaceAll(' ', '').length < 13 ||
-                    value.replaceAll(' ', '').length > 19) {
-                  return 'Please enter a valid card number';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _cardExpiryController,
-                    decoration: const InputDecoration(
-                      labelText: 'Expiry Date',
-                      border: OutlineInputBorder(),
-                      hintText: 'MM/YY',
-                      prefixIcon: Icon(Icons.calendar_today),
-                    ),
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(4),
-                      ExpiryDateFormatter(),
-                    ],
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Please enter expiry date';
-                      }
-                      if (!RegExp(r'^\d{2}/\d{2}$').hasMatch(value)) {
-                        return 'Please enter in MM/YY format';
-                      }
-                      return null;
-                    },
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: TextFormField(
-                    controller: _cardCvvController,
-                    decoration: const InputDecoration(
-                      labelText: 'CVV',
-                      border: OutlineInputBorder(),
-                      hintText: '123',
-                      prefixIcon: Icon(Icons.security),
-                    ),
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(4),
-                    ],
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Please enter CVV';
-                      }
-                      if (value.length < 3 || value.length > 4) {
-                        return 'Please enter a valid CVV';
-                      }
-                      return null;
-                    },
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _cardholderNameController,
-              decoration: const InputDecoration(
-                labelText: 'Cardholder Name',
-                border: OutlineInputBorder(),
-                hintText: 'As printed on card',
-                prefixIcon: Icon(Icons.person),
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter cardholder name';
                 }
                 return null;
               },
@@ -1594,8 +1485,6 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
         return 'UPI';
       case 'bank_transfer':
         return 'Bank Transfer';
-      case 'card_payment':
-        return 'Credit/Debit Card';
       case 'paypal':
         return 'PayPal';
       case 'stripe':
@@ -1625,62 +1514,6 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
     _routingNumberController.dispose();
     _panNumberController.dispose();
     _gstNumberController.dispose();
-    _cardNumberController.dispose();
-    _cardExpiryController.dispose();
-    _cardCvvController.dispose();
-    _cardholderNameController.dispose();
     super.dispose();
-  }
-}
-
-class CardNumberFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-      TextEditingValue oldValue, TextEditingValue newValue) {
-    final text = newValue.text;
-
-    if (text.length < oldValue.text.length) {
-      return newValue;
-    }
-
-    final newText = StringBuffer();
-
-    for (int i = 0; i < text.length; i++) {
-      if (i > 0 && i % 4 == 0) {
-        newText.write(' ');
-      }
-      newText.write(text[i]);
-    }
-
-    return TextEditingValue(
-      text: newText.toString(),
-      selection: TextSelection.collapsed(offset: newText.length),
-    );
-  }
-}
-
-class ExpiryDateFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-      TextEditingValue oldValue, TextEditingValue newValue) {
-    final text = newValue.text;
-
-    if (text.length < oldValue.text.length) {
-      return newValue;
-    }
-
-    final newText = StringBuffer();
-
-    for (int i = 0; i < text.length; i++) {
-      if (i == 2 && text.length > 2) {
-        newText.write('/');
-      }
-      newText.write(text[i]);
-    }
-
-    return TextEditingValue(
-      text: newText.toString(),
-      selection: TextSelection.collapsed(offset: newText.length),
-    );
   }
 }

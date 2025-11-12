@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
+import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'package:vayu/services/ad_service.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/video_service.dart';
 import 'package:vayu/model/video_model.dart';
 import 'package:vayu/services/ad_impression_service.dart';
 import 'package:vayu/services/earnings_service.dart';
+import 'package:vayu/services/logout_service.dart';
 import 'package:vayu/utils/app_logger.dart';
 
 // Lightweight holder for per-video stats used in the breakdown list
@@ -33,6 +37,11 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   double _totalRevenue = 0.0;
   bool _isLoading = true;
   String? _errorMessage;
+  int _currentMonthViews = 0;
+  int _allTimeViews = 0;
+  DateTime? _currentViewCycleStart;
+  DateTime? _nextViewResetDate;
+  bool _isMonthlyViewsLoading = true;
 
   @override
   void initState() {
@@ -122,12 +131,84 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         _totalRevenue = totalRevenue;
       });
 
+      await _calculateMonthlyViews();
+
       AppLogger.log(
           '💰 CreatorRevenueScreen: Total revenue calculated: ₹${totalRevenue.toStringAsFixed(2)}');
       AppLogger.log(
           '💰 CreatorRevenueScreen: Video revenue breakdown: $_videoRevenueMap');
     } catch (e) {
       AppLogger.log('❌ Error calculating total revenue: $e');
+    }
+  }
+
+  Future<void> _calculateMonthlyViews() async {
+    final totalViews =
+        _userVideos.fold<int>(0, (sum, video) => sum + (video.views));
+    final now = DateTime.now();
+    final cycleStart = DateTime(now.year, now.month, 1);
+    final nextReset = DateTime(
+      now.month == 12 ? now.year + 1 : now.year,
+      now.month == 12 ? 1 : now.month + 1,
+      1,
+    );
+
+    try {
+      setState(() {
+        _isMonthlyViewsLoading = true;
+      });
+
+      final userData = await _authService.getUserData();
+      final userId = userData?['id']?.toString() ??
+          userData?['googleId']?.toString() ??
+          'anonymous';
+
+      final prefs = await SharedPreferences.getInstance();
+      final baselineKey = 'creator_monthly_view_baseline_$userId';
+      final resetKey = 'creator_monthly_view_last_reset_$userId';
+      final currentMonthKey =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}';
+
+      String? storedResetMonth = prefs.getString(resetKey);
+      int baseline = prefs.getInt(baselineKey) ?? -1;
+
+      if (baseline < 0) {
+        baseline = 0;
+        await prefs.setInt(baselineKey, baseline);
+      }
+
+      if (storedResetMonth == null) {
+        storedResetMonth = currentMonthKey;
+        await prefs.setString(resetKey, currentMonthKey);
+      }
+
+      if (storedResetMonth != currentMonthKey) {
+        baseline = totalViews;
+        await prefs.setInt(baselineKey, baseline);
+        await prefs.setString(resetKey, currentMonthKey);
+      }
+
+      final monthlyViews = totalViews - baseline;
+
+      if (!mounted) return;
+      setState(() {
+        _allTimeViews = totalViews;
+        _currentMonthViews = monthlyViews < 0 ? 0 : monthlyViews;
+        _currentViewCycleStart = cycleStart;
+        _nextViewResetDate = nextReset;
+        _isMonthlyViewsLoading = false;
+      });
+    } catch (e) {
+      AppLogger.log(
+          '❌ CreatorRevenueScreen: Error calculating monthly views: $e');
+      if (!mounted) return;
+      setState(() {
+        _allTimeViews = totalViews;
+        _currentMonthViews = 0;
+        _currentViewCycleStart = cycleStart;
+        _nextViewResetDate = nextReset;
+        _isMonthlyViewsLoading = false;
+      });
     }
   }
 
@@ -209,8 +290,17 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed: () async {
-              await _authService.signInWithGoogle();
-              setState(() {});
+              final authController = Provider.of<GoogleSignInController>(
+                context,
+                listen: false,
+              );
+              final user = await authController.signIn();
+              if (user != null) {
+                await LogoutService.refreshAllState(context);
+                if (mounted) {
+                  setState(() {});
+                }
+              }
             },
             child: const Text('Sign In with Google'),
           ),
@@ -259,6 +349,11 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         children: [
           // **NEW: Revenue Overview Card**
           _buildRevenueOverviewCard(),
+
+          const SizedBox(height: 16),
+
+          // **NEW: Monthly Views Card**
+          _buildMonthlyViewsCard(),
 
           const SizedBox(height: 16),
 
@@ -373,6 +468,95 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         ),
       ],
     );
+  }
+
+  Widget _buildMonthlyViewsCard() {
+    final cycleStart = _currentViewCycleStart;
+    final nextReset = _nextViewResetDate;
+    final cycleEnd =
+        nextReset != null ? nextReset.subtract(const Duration(days: 1)) : null;
+
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'View Cycle Summary',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Icon(
+                  Icons.visibility,
+                  color: Colors.grey[700],
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (_isMonthlyViewsLoading)
+              const Center(child: CircularProgressIndicator())
+            else ...[
+              Text(
+                'Current Cycle Views',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _currentMonthViews.toString(),
+                style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green,
+                ),
+              ),
+              const SizedBox(height: 20),
+              _buildAnalyticsRow(
+                'All-time Views',
+                _allTimeViews.toString(),
+              ),
+              _buildAnalyticsRow(
+                'Cycle Period',
+                '${_formatDate(cycleStart)} → ${_formatDate(cycleEnd)}',
+              ),
+              _buildAnalyticsRow(
+                'Next Reset',
+                _formatDate(nextReset),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) return '—';
+    const monthNames = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
+    final monthName = monthNames[date.month - 1];
+    return '${date.day} $monthName ${date.year}';
   }
 
   Widget _buildRevenueAnalyticsCard() {

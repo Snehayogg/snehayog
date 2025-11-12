@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import AdCreative from '../../models/AdCreative.js';
 import AdImpression from '../../models/AdImpression.js';
 import { verifyToken } from '../../utils/verifytoken.js';
@@ -9,6 +10,14 @@ const router = express.Router();
 router.post('/impressions/banner', async (req, res) => {
   try {
     const { videoId, adId, userId } = req.body;
+    const normalizedUserId =
+      userId && mongoose.isValidObjectId(userId) ? userId : null;
+    if (userId && !normalizedUserId) {
+      console.warn(
+        '⚠️ Invalid userId received for banner impression, storing as anonymous:',
+        userId
+      );
+    }
 
     console.log('📊 Tracking banner ad impression:');
     console.log('   Video ID:', videoId);
@@ -38,7 +47,7 @@ router.post('/impressions/banner', async (req, res) => {
       const existingImpression = await AdImpression.findOne({
         videoId: videoId,
         adId: adId,
-        userId: userId || null,
+        userId: normalizedUserId,
         timestamp: { $gte: oneHourAgo }
       });
 
@@ -47,7 +56,7 @@ router.post('/impressions/banner', async (req, res) => {
         await AdImpression.create({
           videoId: videoId,
           adId: adId,
-          userId: userId || null,
+          userId: normalizedUserId,
           adType: 'banner',
           impressionType: 'view',
           timestamp: new Date()
@@ -85,6 +94,14 @@ router.post('/impressions/banner', async (req, res) => {
 router.post('/impressions/carousel', async (req, res) => {
   try {
     const { videoId, adId, userId, scrollPosition } = req.body;
+    const normalizedUserId =
+      userId && mongoose.isValidObjectId(userId) ? userId : null;
+    if (userId && !normalizedUserId) {
+      console.warn(
+        '⚠️ Invalid userId received for carousel impression, storing as anonymous:',
+        userId
+      );
+    }
 
     console.log('📊 Tracking carousel ad impression:');
     console.log('   Video ID:', videoId);
@@ -115,7 +132,7 @@ router.post('/impressions/carousel', async (req, res) => {
       const existingImpression = await AdImpression.findOne({
         videoId: videoId,
         adId: adId,
-        userId: userId || null,
+        userId: normalizedUserId,
         timestamp: { $gte: oneHourAgo }
       });
 
@@ -124,7 +141,7 @@ router.post('/impressions/carousel', async (req, res) => {
         await AdImpression.create({
           videoId: videoId,
           adId: adId,
-          userId: userId || null,
+          userId: normalizedUserId,
           adType: 'carousel',
           impressionType: 'scroll_view',
           timestamp: new Date()
@@ -212,6 +229,14 @@ router.get('/impressions/video/:videoId/carousel', async (req, res) => {
 router.post('/impressions/banner/view', async (req, res) => {
   try {
     const { videoId, adId, userId, viewDuration } = req.body;
+    const normalizedUserId =
+      userId && mongoose.isValidObjectId(userId) ? userId : null;
+    if (userId && !normalizedUserId) {
+      console.warn(
+        '⚠️ Invalid userId received for banner view, storing as anonymous:',
+        userId
+      );
+    }
 
     console.log('👁️ Tracking banner ad VIEW (minimum duration):');
     console.log('   Video ID:', videoId);
@@ -238,7 +263,7 @@ router.post('/impressions/banner/view', async (req, res) => {
     const impression = await AdImpression.findOne({
       videoId: videoId,
       adId: adId,
-      userId: userId || null,
+      userId: normalizedUserId,
       timestamp: { $gte: oneHourAgo },
       isViewed: false // Only update if not already viewed
     });
@@ -254,7 +279,7 @@ router.post('/impressions/banner/view', async (req, res) => {
       await AdImpression.create({
         videoId: videoId,
         adId: adId,
-        userId: userId || null,
+        userId: normalizedUserId,
         adType: 'banner',
         impressionType: 'view',
         isViewed: true,
@@ -282,6 +307,14 @@ router.post('/impressions/banner/view', async (req, res) => {
 router.post('/impressions/carousel/view', async (req, res) => {
   try {
     const { videoId, adId, userId, viewDuration } = req.body;
+    const normalizedUserId =
+      userId && mongoose.isValidObjectId(userId) ? userId : null;
+    if (userId && !normalizedUserId) {
+      console.warn(
+        '⚠️ Invalid userId received for carousel view, storing as anonymous:',
+        userId
+      );
+    }
 
     console.log('👁️ Tracking carousel ad VIEW (minimum duration):');
     console.log('   Video ID:', videoId);
@@ -308,7 +341,7 @@ router.post('/impressions/carousel/view', async (req, res) => {
     const impression = await AdImpression.findOne({
       videoId: videoId,
       adId: adId,
-      userId: userId || null,
+      userId: normalizedUserId,
       timestamp: { $gte: oneHourAgo },
       isViewed: false
     });
@@ -322,7 +355,7 @@ router.post('/impressions/carousel/view', async (req, res) => {
       await AdImpression.create({
         videoId: videoId,
         adId: adId,
-        userId: userId || null,
+        userId: normalizedUserId,
         adType: 'carousel',
         impressionType: 'scroll_view',
         isViewed: true,

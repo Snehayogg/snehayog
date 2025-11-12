@@ -101,7 +101,7 @@ class _VideoScreenState extends State<VideoScreen> {
       initialIndex: widget.initialIndex,
       initialVideos: widget.initialVideos,
       initialVideoId: widget.initialVideoId,
-      videoType: 'yog', // **FIX: Pass yog videoType for filtering**
+      videoType: 'yug', // **FIX: Pass yug videoType for filtering**
     );
   }
 }

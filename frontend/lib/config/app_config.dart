@@ -25,44 +25,18 @@ class AppConfig {
       return _cachedBaseUrl!;
     }
 
-    // Default to custom domain in production
-    print('🔍 AppConfig: Defaulting to custom domain');
-    return 'https://snehayog.site';
+    // Default to local network server while detecting availability
+    print('🔍 AppConfig: No cached URL, defaulting to local server');
+    return _localIpBaseUrl;
   }
 
-  // **NEW: Try custom domain first, then Railway, then local**
+  // **NEW: Try local server first, then custom domain, then Railway**
   static Future<String> getBaseUrlWithFallback() async {
     print(
-        '🔍 AppConfig: getBaseUrlWithFallback() - Trying production first...');
+        '🔍 AppConfig: getBaseUrlWithFallback() - Trying local network first...');
 
-    // 1) Production first
-    final prodUrls = [
-      'https://snehayog.site',
-      'https://snehayog-production.up.railway.app',
-    ];
-
-    for (final url in prodUrls) {
-      try {
-        print('🔍 AppConfig: Testing prod server: $url...');
-        final response = await http.get(
-          Uri.parse('$url/api/health'),
-          headers: {'Content-Type': 'application/json'},
-        ).timeout(const Duration(seconds: 8));
-
-        if (response.statusCode == 200) {
-          print('✅ AppConfig: Prod server accessible at $url');
-          _cachedBaseUrl = url;
-          return url;
-        }
-      } catch (e) {
-        print('❌ AppConfig: $url not accessible: $e');
-        continue;
-      }
-    }
-
-    // 2) Local as last resort (dev only)
-    print('⚠️ AppConfig: Prod unreachable, trying local dev servers...');
-    final localUrls = [
+    // 1) Local network servers (preferred during testing)
+    const localUrls = [
       _localIpBaseUrl,
       'http://localhost:5001',
       'http://127.0.0.1:5001',
@@ -88,10 +62,37 @@ class AppConfig {
       }
     }
 
-    // 3) Default to custom domain
+    // 2) Remote servers - custom domain first, then Railway
+    print(
+        '⚠️ AppConfig: Local servers unreachable, trying remote endpoints...');
+    const remoteUrls = [
+      'https://snehayog.site',
+      'https://snehayog-production.up.railway.app',
+    ];
+
+    for (final url in remoteUrls) {
+      try {
+        print('🔍 AppConfig: Testing remote server: $url...');
+        final response = await http.get(
+          Uri.parse('$url/api/health'),
+          headers: {'Content-Type': 'application/json'},
+        ).timeout(const Duration(seconds: 8));
+
+        if (response.statusCode == 200) {
+          print('✅ AppConfig: Remote server accessible at $url');
+          _cachedBaseUrl = url;
+          return url;
+        }
+      } catch (e) {
+        print('❌ AppConfig: $url not accessible: $e');
+        continue;
+      }
+    }
+
+    // 3) Default to custom domain if everything fails
     print('⚠️ AppConfig: All servers failed, using default custom domain');
     _cachedBaseUrl = 'https://snehayog.site';
-    return 'https://snehayog.site';
+    return _cachedBaseUrl!;
   }
 
   // **NEW: Check server connectivity and update URL**
@@ -99,46 +100,11 @@ class AppConfig {
     print('🔍 AppConfig: Checking server connectivity...');
     print('🔍 AppConfig: Development mode: $_isDevelopment');
 
-    // Prefer custom domain -> Railway -> local (even in development)
-    if (_isDevelopment) {
-      final urlsToTry = [
-        'https://snehayog.site',
-        'https://snehayog-production.up.railway.app',
-        _localIpBaseUrl,
-        'http://localhost:5001',
-        'http://127.0.0.1:5001',
-        'http://10.0.2.2:5001',
-      ];
-
-      for (final url in urlsToTry) {
-        try {
-          print('🔍 AppConfig: Testing server: $url...');
-
-          final response = await http.get(
-            Uri.parse('$url/api/health'),
-            headers: {'Content-Type': 'application/json'},
-          ).timeout(const Duration(seconds: 8));
-
-          if (response.statusCode == 200) {
-            print('✅ AppConfig: Server accessible at $url');
-            _cachedBaseUrl = url;
-            return url;
-          }
-        } catch (e) {
-          print('❌ AppConfig: $url not accessible: $e');
-          continue;
-        }
-      }
-
-      // Fallback to custom domain
-      print(
-          '⚠️ AppConfig: All tested servers failed, defaulting to snehayog.site');
-      _cachedBaseUrl = 'https://snehayog.site';
-      return 'https://snehayog.site';
-    }
-
-    // Production mode
     final urlsToTry = [
+      _localIpBaseUrl,
+      'http://localhost:5001',
+      'http://127.0.0.1:5001',
+      'http://10.0.2.2:5001',
       'https://snehayog.site',
       'https://snehayog-production.up.railway.app',
     ];
@@ -150,7 +116,13 @@ class AppConfig {
         final response = await http.get(
           Uri.parse('$url/api/health'),
           headers: {'Content-Type': 'application/json'},
-        ).timeout(const Duration(seconds: 30));
+        ).timeout(
+          url.startsWith('http')
+              ? (url.startsWith('http://')
+                  ? const Duration(seconds: 4)
+                  : const Duration(seconds: 12))
+              : const Duration(seconds: 8),
+        );
 
         if (response.statusCode == 200) {
           print('✅ AppConfig: Server is accessible at $url');
@@ -166,7 +138,7 @@ class AppConfig {
     // If all production servers fail, return default
     print('⚠️ AppConfig: All production servers failed, using default');
     _cachedBaseUrl = 'https://snehayog.site';
-    return 'https://snehayog.site';
+    return _cachedBaseUrl!;
   }
 
   // **NEW: Reset cached URL (useful for retry scenarios)**

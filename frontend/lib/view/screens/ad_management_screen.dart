@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'package:vayu/services/ad_service.dart';
 import 'package:vayu/services/authservices.dart';
+import 'package:vayu/services/logout_service.dart';
 import 'package:vayu/model/ad_model.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/view/screens/create_ad_screen_refactored.dart';
@@ -708,7 +711,14 @@ class _AdManagementScreenState extends State<AdManagementScreen>
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed: () async {
-              await _authService.signInWithGoogle();
+              final authController = Provider.of<GoogleSignInController>(
+                context,
+                listen: false,
+              );
+              final user = await authController.signIn();
+              if (user != null) {
+                await LogoutService.refreshAllState(context);
+              }
               setState(() {});
             },
             child: const Text('Sign In with Google'),

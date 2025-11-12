@@ -13,47 +13,57 @@ class LogoutService {
   factory LogoutService() => _instance;
   LogoutService._internal();
 
+  static T? _readProvider<T>(BuildContext context) {
+    try {
+      return Provider.of<T>(context, listen: false);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// **FIXED: Perform complete logout across all state managers**
   static Future<void> performCompleteLogout(BuildContext context) async {
     try {
       print('🚪 LogoutService: Starting complete logout process...');
 
-      // **FIXED: Get all providers from context**
-      final authController =
-          Provider.of<GoogleSignInController>(context, listen: false);
-      final mainController =
-          Provider.of<MainController>(context, listen: false);
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
-      final videoProvider = Provider.of<VideoProvider>(context, listen: false);
+      final authController = _readProvider<GoogleSignInController>(context);
+      final mainController = _readProvider<MainController>(context);
+      final userProvider = _readProvider<UserProvider>(context);
+      final videoProvider = _readProvider<VideoProvider>(context);
+      final profileStateManager = _readProvider<ProfileStateManager>(context);
 
-      // **FIXED: Step 1: Sign out from AuthService (clears SharedPreferences)**
-      print('🚪 LogoutService: Step 1 - Signing out from AuthService...');
-      final authService = AuthService();
-      await authService.signOut();
+      // **Step 1: Sign out via controller (falls back to direct service if unavailable)**
+      print(
+          '🚪 LogoutService: Step 1 - Signing out via GoogleSignInController...');
+      if (authController != null) {
+        await authController.signOut();
+      } else {
+        print(
+            '⚠️ LogoutService: GoogleSignInController not available, falling back to AuthService directly');
+        await AuthService().signOut();
+      }
 
-      // **FIXED: Step 2: Clear GoogleSignInController state**
-      print('🚪 LogoutService: Step 2 - Clearing GoogleSignInController...');
-      await authController.signOut();
+      // **Step 2: Reset MainController navigation state**
+      if (mainController != null) {
+        print('🚪 LogoutService: Step 2 - Clearing MainController...');
+        await mainController.performLogout(resetIndex: false);
+      }
 
-      // **FIXED: Step 3: Clear MainController state**
-      print('🚪 LogoutService: Step 3 - Clearing MainController...');
-      await mainController.performLogout();
+      // **Step 3: Clear cached user/video data**
+      if (userProvider != null) {
+        print('🚪 LogoutService: Step 3 - Clearing UserProvider...');
+        userProvider.clearAllCaches();
+      }
 
-      // **FIXED: Step 4: Clear UserProvider caches**
-      print('🚪 LogoutService: Step 4 - Clearing UserProvider...');
-      userProvider.clearAllCaches();
+      if (videoProvider != null) {
+        print('🚪 LogoutService: Step 4 - Clearing VideoProvider...');
+        videoProvider.clearAllVideos();
+      }
 
-      // **FIXED: Step 5: Clear VideoProvider state**
-      print('🚪 LogoutService: Step 5 - Clearing VideoProvider...');
-      videoProvider.clearAllVideos();
-
-      // **FIXED: Step 6: Clear ProfileStateManager (if accessible)**
-      print('🚪 LogoutService: Step 6 - Clearing ProfileStateManager...');
-      try {
-        final profileStateManager = ProfileStateManager();
-        await profileStateManager.handleLogout();
-      } catch (e) {
-        print('⚠️ LogoutService: ProfileStateManager not accessible: $e');
+      // **Step 5: Clear ProfileStateManager instance if scoped in tree**
+      if (profileStateManager != null) {
+        print('🚪 LogoutService: Step 5 - Clearing ProfileStateManager...');
+        profileStateManager.clearData();
       }
 
       print('✅ LogoutService: Complete logout successful - All state cleared');
@@ -68,23 +78,33 @@ class LogoutService {
     try {
       print('🔄 LogoutService: Refreshing all state after account switch...');
 
-      // **FIXED: Get all providers from context**
-      final authController =
-          Provider.of<GoogleSignInController>(context, listen: false);
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
-      final videoProvider = Provider.of<VideoProvider>(context, listen: false);
+      final authController = _readProvider<GoogleSignInController>(context);
+      final userProvider = _readProvider<UserProvider>(context);
+      final videoProvider = _readProvider<VideoProvider>(context);
+      final profileStateManager = _readProvider<ProfileStateManager>(context);
 
       // **FIXED: Step 1: Refresh authentication state**
-      print('🔄 LogoutService: Refreshing authentication state...');
-      await authController.refreshAuthState();
+      if (authController != null) {
+        print('🔄 LogoutService: Refreshing authentication state...');
+        await authController.refreshAuthState();
+      }
 
       // **FIXED: Step 2: Clear and refresh user caches**
-      print('🔄 LogoutService: Refreshing user caches...');
-      userProvider.clearAllCaches();
+      if (userProvider != null) {
+        print('🔄 LogoutService: Refreshing user caches...');
+        userProvider.clearAllCaches();
+      }
 
       // **FIXED: Step 3: Clear and refresh video state**
-      print('🔄 LogoutService: Refreshing video state...');
-      videoProvider.clearAllVideos();
+      if (videoProvider != null) {
+        print('🔄 LogoutService: Refreshing video state...');
+        videoProvider.clearAllVideos();
+      }
+
+      if (profileStateManager != null) {
+        print('🔄 LogoutService: Resetting ProfileStateManager cached data...');
+        profileStateManager.clearData();
+      }
 
       print('✅ LogoutService: All state refreshed successfully');
     } catch (e) {

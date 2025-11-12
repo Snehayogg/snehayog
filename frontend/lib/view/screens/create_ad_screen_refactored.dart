@@ -10,6 +10,8 @@ import 'package:vayu/view/widget/create_ad/ad_placement_preview_widget.dart';
 import 'package:vayu/view/widget/create_ad/payment_handler_widget.dart';
 import 'package:vayu/services/ad_service.dart';
 import 'package:vayu/services/authservices.dart';
+import 'package:vayu/controller/google_sign_in_controller.dart';
+import 'package:vayu/services/logout_service.dart';
 import 'package:vayu/services/cloudinary_service.dart';
 import 'package:vayu/services/ad_refresh_notifier.dart';
 import 'package:vayu/model/ad_model.dart';
@@ -465,7 +467,14 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed: () async {
-              await _authService.signInWithGoogle();
+              final authController = Provider.of<GoogleSignInController>(
+                context,
+                listen: false,
+              );
+              final user = await authController.signIn();
+              if (user != null) {
+                await LogoutService.refreshAllState(context);
+              }
               setState(() {});
             },
             child: const Text('Sign In with Google'),

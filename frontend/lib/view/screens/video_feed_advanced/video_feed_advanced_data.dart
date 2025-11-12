@@ -340,7 +340,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
 
       await _loadActiveAds();
 
-      if (widget.videoType == 'yog') {
+      if (widget.videoType == 'yug') {
         await _loadCarouselAds();
       }
 
@@ -353,7 +353,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
   Future<void> _loadCarouselAds() async {
     try {
       AppLogger.log(
-          '🎯 VideoFeedAdvanced: Loading carousel ads for Yog tab...');
+          '🎯 VideoFeedAdvanced: Loading carousel ads for Yug tab...');
 
       await _carouselAdManager.loadCarouselAds();
       final carouselAds = _carouselAdManager.carouselAds;

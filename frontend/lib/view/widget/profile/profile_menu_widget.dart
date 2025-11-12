@@ -239,14 +239,14 @@ class ProfileMenuWidget extends StatelessWidget {
                     });
 
                     return Padding(
-                      padding: const EdgeInsets.all(16.0),
+                      padding: const EdgeInsets.all(12.0),
                       child: GridView.builder(
                         gridDelegate:
                             const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                          childAspectRatio: 1.2,
+                          crossAxisSpacing: 8,
+                          mainAxisSpacing: 8,
+                          childAspectRatio: 1.05,
                         ),
                         itemCount: menuItems.length,
                         itemBuilder: (context, index) {
@@ -281,7 +281,7 @@ class ProfileMenuWidget extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: color.withOpacity(0.2),
             width: 1,
@@ -298,7 +298,7 @@ class ProfileMenuWidget extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: color.withOpacity(0.1),
                 shape: BoxShape.circle,
@@ -306,15 +306,15 @@ class ProfileMenuWidget extends StatelessWidget {
               child: Icon(
                 icon,
                 color: color,
-                size: 24,
+                size: 17,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
               title,
               style: const TextStyle(
                 color: Colors.black87,
-                fontSize: 12,
+                fontSize: 10,
                 fontWeight: FontWeight.w600,
               ),
               textAlign: TextAlign.center,

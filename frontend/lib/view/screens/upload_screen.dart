@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'package:vayu/controller/main_controller.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:vayu/services/video_service.dart';
 import 'package:vayu/services/authservices.dart';
+import 'package:vayu/services/logout_service.dart';
 import 'package:vayu/view/screens/create_ad_screen_refactored.dart';
 import 'package:vayu/view/screens/ad_management_screen.dart';
 import 'package:vayu/core/constants/interests.dart';
+import 'package:vayu/view/screens/upload_screen/widgets/upload_advanced_settings_section.dart';
 import 'package:vayu/utils/app_logger.dart';
 
 class UploadScreen extends StatefulWidget {
@@ -86,6 +89,8 @@ class _UploadScreenState extends State<UploadScreen> {
   // NEW: Category and Tags to align with ad targeting interests
   final ValueNotifier<String?> _selectedCategory = ValueNotifier<String?>(null);
   final ValueNotifier<List<String>> _tags = ValueNotifier<List<String>>([]);
+  final ValueNotifier<String?> _videoType = ValueNotifier<String?>(null);
+  final ValueNotifier<bool> _showAdvancedSettings = ValueNotifier<bool>(false);
   final TextEditingController _tagInputController = TextEditingController();
 
   // **UNIFIED PROGRESS TRACKING METHODS**
@@ -447,6 +452,32 @@ class _UploadScreenState extends State<UploadScreen> {
     );
   }
 
+  void _toggleAdvancedSettings() {
+    _showAdvancedSettings.value = !_showAdvancedSettings.value;
+  }
+
+  void _handleVideoTypeChanged(String? value) {
+    _videoType.value = value;
+  }
+
+  void _handleAddTag(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+    final currentTags = List<String>.from(_tags.value);
+    if (!currentTags.contains(trimmed)) {
+      currentTags.add(trimmed);
+      _tags.value = currentTags;
+    }
+    _tagInputController.clear();
+  }
+
+  void _handleRemoveTag(String tag) {
+    final currentTags = List<String>.from(_tags.value);
+    if (currentTags.remove(tag)) {
+      _tags.value = currentTags;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -528,6 +559,12 @@ class _UploadScreenState extends State<UploadScreen> {
       // Update to upload phase
       _updateProgressPhase('upload');
 
+      final String serverVideoType =
+          _videoType.value == 'paid' ? 'vayu' : 'yug';
+
+      AppLogger.log(
+          '🎯 UploadScreen: Using videoType=$serverVideoType (selection: ${_videoType.value ?? 'default'})');
+
       final uploadedVideo = await runZoned(
         () => _videoService.uploadVideo(
           _selectedVideo.value!,
@@ -539,6 +576,7 @@ class _UploadScreenState extends State<UploadScreen> {
           'upload_metadata': {
             'category': _selectedCategory.value,
             'tags': _tags.value,
+            if (_videoType.value != null) 'videoType': serverVideoType,
           }
         },
       ).timeout(
@@ -600,6 +638,8 @@ class _UploadScreenState extends State<UploadScreen> {
         _linkController.clear();
         _selectedCategory.value = null;
         _tags.value = [];
+        _videoType.value = null;
+        _showAdvancedSettings.value = false;
 
         // Stop unified progress tracking
         _stopUnifiedProgress();
@@ -908,8 +948,15 @@ class _UploadScreenState extends State<UploadScreen> {
           ),
           TextButton(
             onPressed: () async {
+              final authController = Provider.of<GoogleSignInController>(
+                context,
+                listen: false,
+              );
               Navigator.pop(context);
-              await _authService.signInWithGoogle();
+              final user = await authController.signIn();
+              if (user != null && mounted) {
+                await LogoutService.refreshAllState(this.context);
+              }
             },
             child: const Text('Sign In'),
           ),
@@ -992,6 +1039,8 @@ class _UploadScreenState extends State<UploadScreen> {
     _elapsedSeconds.dispose();
     _selectedCategory.dispose();
     _tags.dispose();
+    _videoType.dispose();
+    _showAdvancedSettings.dispose();
     super.dispose();
   }
 
@@ -1050,7 +1099,15 @@ class _UploadScreenState extends State<UploadScreen> {
                           ),
                           TextButton(
                             onPressed: () async {
-                              await _authService.signInWithGoogle();
+                              final authController =
+                                  Provider.of<GoogleSignInController>(
+                                context,
+                                listen: false,
+                              );
+                              final user = await authController.signIn();
+                              if (user != null) {
+                                await LogoutService.refreshAllState(context);
+                              }
                             },
                             child: const Text('Sign In'),
                           ),
@@ -1357,95 +1414,16 @@ class _UploadScreenState extends State<UploadScreen> {
                                 },
                               ),
                               const SizedBox(height: 16),
-                              // Description removed per request
-                              // NEW: Tags input
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Tags (optional)',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  TextField(
-                                    controller: _tagInputController,
-                                    decoration: InputDecoration(
-                                      hintText: 'Type a tag and press Add',
-                                      border: const OutlineInputBorder(),
-                                      prefixIcon: const Icon(Icons.tag),
-                                      suffixIcon: IconButton(
-                                        icon: const Icon(Icons.add),
-                                        onPressed: () {
-                                          final text =
-                                              _tagInputController.text.trim();
-                                          if (text.isNotEmpty) {
-                                            final currentTags =
-                                                List<String>.from(_tags.value);
-                                            if (!currentTags.contains(text)) {
-                                              // **NO setState: Use ValueNotifier**
-                                              currentTags.add(text);
-                                              _tags.value = currentTags;
-                                              _tagInputController.clear();
-                                            }
-                                          }
-                                        },
-                                      ),
-                                    ),
-                                    onSubmitted: (_) {
-                                      final text =
-                                          _tagInputController.text.trim();
-                                      if (text.isNotEmpty) {
-                                        final currentTags =
-                                            List<String>.from(_tags.value);
-                                        if (!currentTags.contains(text)) {
-                                          // **NO setState: Use ValueNotifier**
-                                          currentTags.add(text);
-                                          _tags.value = currentTags;
-                                          _tagInputController.clear();
-                                        }
-                                      }
-                                    },
-                                  ),
-                                  const SizedBox(height: 8),
-                                  ValueListenableBuilder<List<String>>(
-                                    valueListenable: _tags,
-                                    builder: (context, tags, _) {
-                                      if (tags.isEmpty) {
-                                        return const SizedBox.shrink();
-                                      }
-                                      return Wrap(
-                                        spacing: 8,
-                                        runSpacing: 8,
-                                        children: tags
-                                            .map((t) => Chip(
-                                                  label: Text(t),
-                                                  onDeleted: () {
-                                                    // **NO setState: Use ValueNotifier**
-                                                    final currentTags =
-                                                        List<String>.from(
-                                                            _tags.value);
-                                                    currentTags.remove(t);
-                                                    _tags.value = currentTags;
-                                                  },
-                                                ))
-                                            .toList(),
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 16),
-                              TextField(
-                                controller: _linkController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Link (optional)',
-                                  hintText: 'Add a website, social media, etc.',
-                                  border: OutlineInputBorder(),
-                                ),
-                                keyboardType: TextInputType.url,
+                              UploadAdvancedSettingsSection(
+                                isExpanded: _showAdvancedSettings,
+                                onToggle: _toggleAdvancedSettings,
+                                videoType: _videoType,
+                                onVideoTypeChanged: _handleVideoTypeChanged,
+                                linkController: _linkController,
+                                tagInputController: _tagInputController,
+                                tags: _tags,
+                                onAddTag: _handleAddTag,
+                                onRemoveTag: _handleRemoveTag,
                               ),
                               const SizedBox(height: 16),
                               SizedBox(

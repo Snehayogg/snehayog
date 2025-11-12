@@ -265,12 +265,14 @@ class MainController extends ChangeNotifier {
   }
 
   /// **FIXED: Centralized logout method to clear all state**
-  Future<void> performLogout() async {
+  Future<void> performLogout({bool resetIndex = true}) async {
     try {
       print('🚪 MainController: Starting centralized logout...');
 
       // **FIXED: Reset main controller state**
-      _currentIndex = 0;
+      if (resetIndex) {
+        _currentIndex = 0;
+      }
       _isAppInForeground = true;
       _pauseVideosCallback = null;
       _resumeVideosCallback = null;

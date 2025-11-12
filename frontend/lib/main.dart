@@ -112,13 +112,13 @@ Future<void> _splashPrefetch() async {
     }());
 
     // Cache the first page in SmartCacheManager for instant loading
-    const cacheKey = 'videos_page_1_yog';
+    const cacheKey = 'videos_page_1_yug';
     final result = await cacheManager.get<Map<String, dynamic>>(
       cacheKey,
       fetchFn: () async {
         print('🚀 SplashPrefetch: Fetching first page for cache');
         return await videoService.getVideos(
-            page: 1, limit: 6, videoType: 'yog');
+            page: 1, limit: 6, videoType: 'yug');
       },
       cacheType: 'videos',
       maxAge: const Duration(minutes: 15), // Cache for 15 minutes

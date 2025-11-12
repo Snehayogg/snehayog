@@ -38,6 +38,16 @@ import adCleanupService from './services/adCleanupService.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 const app = express();
+app.set('etag', 'strong');
+
+const createCacheMiddleware = (cacheHeader) => (req, res, next) => {
+  if (req.method !== 'GET' || req.headers.authorization) {
+    return next();
+  }
+  res.set('Cache-Control', cacheHeader);
+  res.set('Vary', 'Authorization');
+  return next();
+};
 
 // ES Module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -134,10 +144,10 @@ app.use('/hls', (err, req, res, next) => {
 // API Routes
 app.use('/api/users', userRoutes);
 app.use('/api/auth', authRoutes);
-app.use('/api/ads', adRoutes);
+app.use('/api/ads', createCacheMiddleware('public, max-age=180, stale-while-revalidate=600'), adRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/creator-payouts', creatorPayoutRoutes);
-app.use('/api/videos', videoRoutes);
+app.use('/api/videos', createCacheMiddleware('public, max-age=180, stale-while-revalidate=600'), videoRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/feedback', feedbackRoutes);

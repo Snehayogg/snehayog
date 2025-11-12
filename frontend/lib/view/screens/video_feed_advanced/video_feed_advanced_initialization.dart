@@ -239,7 +239,7 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
       }
 
       await _carouselAdManager.loadCarouselAds();
-      if (widget.videoType == 'yug' || widget.videoType == 'yog') {
+      if (widget.videoType == 'yug' || widget.videoType == 'vayu') {
         await _loadCarouselAds();
       }
     } catch (e) {

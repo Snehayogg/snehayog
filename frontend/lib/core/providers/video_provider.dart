@@ -59,35 +59,34 @@ class VideoProvider extends ChangeNotifier {
           '🔄 VideoProvider: Loading videos, page: $_currentPage, videoType: $videoType');
 
       // 1) Try instant render from SmartCacheManager (cache-first on initial load)
+      final smartCache = SmartCacheManager();
+      if (!smartCache.isInitialized) {
+        await smartCache.initialize();
+      }
+
+      final normalizedType = (videoType ?? 'all').toLowerCase();
+      final cacheKey = 'videos_page_${_currentPage}_$normalizedType';
+
+      bool cachedMarkedAsEnd = false;
+
       if (isInitialLoad) {
         try {
-          final smartCache = SmartCacheManager();
-          if (!smartCache.isInitialized) {
-            await smartCache.initialize();
-          }
-
-          // Normalize yug->yog to match splash prefetch cache key
-          final normalizedType =
-              (videoType == 'yug') ? 'yog' : (videoType ?? 'yog');
-          final cacheKey = 'videos_page_1_$normalizedType';
-
-          final cached = await smartCache.get<Map<String, dynamic>>(
+          final cached = await smartCache.peek<Map<String, dynamic>>(
             cacheKey,
-            // Do not fetch here; only return if present for instant UI
-            fetchFn: () async => throw Exception('cache-only read'),
             cacheType: 'videos',
-            maxAge: const Duration(minutes: 15),
-            forceRefresh: false,
           );
 
           if (cached != null) {
-            final List<VideoModel> cachedVideos =
-                (cached['videos'] as List<dynamic>).cast<VideoModel>();
+            final cachedVideos = _deserializeVideoList(cached['videos']);
             if (cachedVideos.isNotEmpty) {
               print(
                   '⚡ VideoProvider: Instant render from cache: ${cachedVideos.length} videos');
               _videos = cachedVideos;
-              _hasMore = cached['hasMore'] ?? true;
+
+              final cachedHasMore = cached['hasMore'] as bool? ?? true;
+              cachedMarkedAsEnd = !cachedHasMore;
+              _hasMore = cachedHasMore;
+
               notifyListeners();
               // Pre-create first controller for zero-wait playback
               try {
@@ -111,10 +110,34 @@ class VideoProvider extends ChangeNotifier {
       }
 
       // 2) Network fetch for fresh data
-      final response = await _videoService.getVideos(
-          page: _currentPage, videoType: videoType);
-      final List<VideoModel> fetchedVideos = response['videos'];
-      final bool hasMore = response['hasMore'];
+      final response = await smartCache.get<Map<String, dynamic>>(
+        cacheKey,
+        cacheType: 'videos',
+        maxAge: const Duration(minutes: 15),
+        forceRefresh: !isInitialLoad || cachedMarkedAsEnd,
+        fetchFn: () async {
+          final result = await _videoService.getVideos(
+            page: _currentPage,
+            videoType: videoType,
+          );
+
+          final videos = (result['videos'] as List<VideoModel>)
+              .map((video) => video.toJson())
+              .toList();
+
+          return {
+            ...result,
+            'videos': videos,
+          };
+        },
+      );
+
+      if (response == null) {
+        throw Exception('Failed to load videos');
+      }
+
+      final fetchedVideos = _deserializeVideoList(response['videos']);
+      final bool hasMore = response['hasMore'] as bool? ?? false;
 
       if (isInitialLoad) {
         _videos = fetchedVideos;
@@ -355,10 +378,9 @@ class VideoProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Filter videos by type (yug/yog or sneha)
+  /// Filter videos by type (yug/vayu)
   Future<void> filterVideosByType(String videoType) async {
-    // Accept 'yug' as app label; backend mapping handled by VideoService
-    if (videoType != 'yug' && videoType != 'yog' && videoType != 'sneha') {
+    if (videoType != 'yug' && videoType != 'vayu') {
       print('⚠️ VideoProvider: Invalid videoType: $videoType');
       return;
     }
@@ -381,6 +403,43 @@ class VideoProvider extends ChangeNotifier {
   Future<void> loadAllVideos() async {
     print('🔍 VideoProvider: Loading all videos (no filter)');
     await loadVideos(isInitialLoad: true, videoType: null);
+  }
+
+  List<VideoModel> _deserializeVideoList(dynamic rawVideos) {
+    if (rawVideos == null) {
+      return <VideoModel>[];
+    }
+
+    if (rawVideos is List<VideoModel>) {
+      return rawVideos;
+    }
+
+    if (rawVideos is List) {
+      final parsedVideos = <VideoModel>[];
+
+      for (final item in rawVideos) {
+        if (item is VideoModel) {
+          parsedVideos.add(item);
+        } else if (item is Map<String, dynamic>) {
+          try {
+            parsedVideos.add(VideoModel.fromJson(item));
+          } catch (e) {
+            print('⚠️ VideoProvider: Failed to deserialize cached video: $e');
+          }
+        } else if (item is Map) {
+          try {
+            parsedVideos
+                .add(VideoModel.fromJson(Map<String, dynamic>.from(item)));
+          } catch (e) {
+            print('⚠️ VideoProvider: Failed to deserialize cached video: $e');
+          }
+        }
+      }
+
+      return parsedVideos;
+    }
+
+    return <VideoModel>[];
   }
 
   void _setLoadState(VideoLoadState state) {
