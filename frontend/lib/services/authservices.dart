@@ -489,8 +489,7 @@ class AuthService {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.remove('jwt_token');
       await prefs.remove('fallback_user');
-
-      // **FIXED: Clear any cached user data**
+      await prefs.remove('auth_skip_login');
       await prefs.remove('user_profile');
       await prefs.remove('user_videos');
       await prefs.remove('last_user_id');

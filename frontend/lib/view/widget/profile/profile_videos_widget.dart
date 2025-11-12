@@ -9,7 +9,6 @@ import 'package:vayu/utils/app_logger.dart';
 
 class ProfileVideosWidget extends StatelessWidget {
   final ProfileStateManager stateManager;
-  final bool isVideosLoaded;
   final VoidCallback? onVideoTap;
   final VoidCallback? onVideoLongPress;
   final VoidCallback? onVideoSelection;
@@ -18,7 +17,6 @@ class ProfileVideosWidget extends StatelessWidget {
   const ProfileVideosWidget({
     super.key,
     required this.stateManager,
-    required this.isVideosLoaded,
     this.onVideoTap,
     this.onVideoLongPress,
     this.onVideoSelection,
@@ -70,8 +68,8 @@ class ProfileVideosWidget extends StatelessWidget {
             const SizedBox(height: 16),
           ],
           Consumer<ProfileStateManager>(
-            builder: (context, stateManager, child) {
-              if (!isVideosLoaded) {
+            builder: (context, manager, child) {
+              if (manager.isVideosLoading) {
                 return RepaintBoundary(
                   child: SizedBox(
                     height: 200,
@@ -113,7 +111,7 @@ class ProfileVideosWidget extends StatelessWidget {
                 );
               }
 
-              if (stateManager.userVideos.isEmpty) {
+              if (manager.userVideos.isEmpty) {
                 return RepaintBoundary(
                   child: Container(
                     padding: const EdgeInsets.all(48),
@@ -166,19 +164,19 @@ class ProfileVideosWidget extends StatelessWidget {
                     mainAxisSpacing: 1,
                     childAspectRatio: 0.5, // taller tiles (double height)
                   ),
-                  itemCount: stateManager.userVideos.length,
+                  itemCount: manager.userVideos.length,
                   itemBuilder: (context, index) {
-                    final video = stateManager.userVideos[index];
+                    final video = manager.userVideos[index];
                     final isSelected =
-                        stateManager.selectedVideoIds.contains(video.id);
+                        manager.selectedVideoIds.contains(video.id);
 
                     // Simplified video selection logic
-                    final canSelectVideo = stateManager.isSelecting &&
-                        stateManager.userData != null;
+                    final canSelectVideo =
+                        manager.isSelecting && manager.userData != null;
                     return RepaintBoundary(
                       child: GestureDetector(
                         onTap: () async {
-                          if (!stateManager.isSelecting) {
+                          if (!manager.isSelecting) {
                             // **FIXED: Ensure correct video plays by pausing all others first**
                             print(
                                 '🎬 ProfileVideosWidget: Navigating to video at index $index');
@@ -199,30 +197,29 @@ class ProfileVideosWidget extends StatelessWidget {
                                 builder: (context) => VideoScreen(
                                   // **CRITICAL: Don't pass initialIndex to avoid wrong video playback**
                                   // Only pass initialVideoId to ensure correct video is identified
-                                  initialVideos: stateManager.userVideos,
+                                  initialVideos: manager.userVideos,
                                   initialVideoId: video
                                       .id, // **Use video ID for accurate video identification**
                                 ),
                               ),
                             );
                             // Do not force-pause after navigating; avoids pausing the new screen's controller
-                          } else if (stateManager.isSelecting &&
-                              canSelectVideo) {
+                          } else if (manager.isSelecting && canSelectVideo) {
                             // Use proper logic for video selection
                             ProfileScreenLogger.logVideoSelection(
                                 videoId: video.id,
-                                isSelected: !stateManager.selectedVideoIds
+                                isSelected: !manager.selectedVideoIds
                                     .contains(video.id));
                             ProfileScreenLogger.logDebugInfo(
                                 'Video ID: ${video.id}');
                             ProfileScreenLogger.logDebugInfo(
                                 'Can select: $canSelectVideo');
-                            stateManager.toggleVideoSelection(video.id);
+                            manager.toggleVideoSelection(video.id);
                           } else {
                             ProfileScreenLogger.logDebugInfo(
                                 'Video tapped but not selectable');
                             ProfileScreenLogger.logDebugInfo(
-                                'isSelecting: ${stateManager.isSelecting}');
+                                'isSelecting: ${manager.isSelecting}');
                             ProfileScreenLogger.logDebugInfo(
                                 'canSelectVideo: $canSelectVideo');
                           }
@@ -232,18 +229,18 @@ class ProfileVideosWidget extends StatelessWidget {
                           ProfileScreenLogger.logDebugInfo(
                               'Long press detected on video');
                           ProfileScreenLogger.logDebugInfo(
-                              'userData: ${stateManager.userData != null}');
+                              'userData: ${manager.userData != null}');
                           ProfileScreenLogger.logDebugInfo(
                               'canSelectVideo: $canSelectVideo');
                           ProfileScreenLogger.logDebugInfo(
-                              'isSelecting: ${stateManager.isSelecting}');
+                              'isSelecting: ${manager.isSelecting}');
 
-                          if (stateManager.userData != null &&
-                              !stateManager.isSelecting) {
+                          if (manager.userData != null &&
+                              !manager.isSelecting) {
                             ProfileScreenLogger.logDebugInfo(
                                 'Entering selection mode via long press');
-                            stateManager.enterSelectionMode();
-                            stateManager.toggleVideoSelection(video.id);
+                            manager.enterSelectionMode();
+                            manager.toggleVideoSelection(video.id);
                           } else {
                             ProfileScreenLogger.logDebugInfo(
                                 'Cannot enter selection mode via long press');
@@ -355,7 +352,7 @@ class ProfileVideosWidget extends StatelessWidget {
                                   ),
 
                                 // Selection Checkbox
-                                if (stateManager.isSelecting && canSelectVideo)
+                                if (manager.isSelecting && canSelectVideo)
                                   Positioned(
                                     top: 12,
                                     right: 12,

@@ -40,6 +40,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => MainController()),
         ChangeNotifierProvider(create: (_) => VideoProvider()),
         ChangeNotifierProvider(create: (_) => UserProvider()),
+        Provider(create: (_) => AuthService()),
       ],
       child: ScreenUtilInit(
         designSize: const Size(375, 812),
@@ -417,9 +418,11 @@ class _AuthWrapperState extends State<AuthWrapper> {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('jwt_token');
       final fallbackUser = prefs.getString('fallback_user');
+      final skipLogin = prefs.getBool('auth_skip_login') ?? false;
 
-      _cachedAuthStatus =
-          (token != null && token.isNotEmpty) || fallbackUser != null;
+      _cachedAuthStatus = (token != null && token.isNotEmpty) ||
+          fallbackUser != null ||
+          skipLogin;
       _hasCheckedCache = true;
 
       if (mounted) {

@@ -93,7 +93,11 @@ class _MainScreenState extends State<MainScreen>
       print('🔄 MainScreen: Double-tap on Yug tab detected - starting refresh');
 
       // Get the video screen state
-      final videoScreenState = _videoScreenKey.currentState;
+      State? videoScreenState = _videoScreenKey.currentState;
+      if (videoScreenState == null) {
+        await Future.delayed(const Duration(milliseconds: 32));
+        videoScreenState = _videoScreenKey.currentState;
+      }
       if (videoScreenState != null) {
         // Call refresh method with await
         await (videoScreenState as dynamic).refreshVideos();

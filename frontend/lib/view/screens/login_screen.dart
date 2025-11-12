@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'package:vayu/services/location_onboarding_service.dart';
 import 'package:vayu/utils/app_logger.dart';
@@ -57,8 +58,6 @@ class LoginScreen extends StatelessWidget {
                     ),
                     textAlign: TextAlign.center,
                   ),
-
-                  const SizedBox(height: 8),
 
                   Column(
                     children: [
@@ -322,13 +321,14 @@ class LoginScreen extends StatelessWidget {
 
                       return Column(
                         children: [
-                          // Skip Button (30% smaller, vertical layout)
                           SizedBox(
                             width: double.infinity,
                             height: 45,
                             child: ElevatedButton.icon(
-                              onPressed: () {
-                                // Skip sign-in and go to home
+                              onPressed: () async {
+                                final prefs =
+                                    await SharedPreferences.getInstance();
+                                await prefs.setBool('auth_skip_login', true);
                                 Navigator.pushReplacementNamed(
                                     context, '/home');
                               },

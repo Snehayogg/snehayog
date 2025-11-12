@@ -1564,7 +1564,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                 child: activeIndex == 0
                     ? ProfileVideosWidget(
                         stateManager: _stateManager,
-                        isVideosLoaded: true,
                         showHeader: false,
                       )
                     : _buildRecommendationsSection(),

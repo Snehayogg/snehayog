@@ -37,6 +37,7 @@ class ProfileStateManager extends ChangeNotifier {
   Map<String, dynamic>? _userData;
   bool _isEditing = false;
   bool _isSelecting = false;
+  bool _isVideosLoading = false;
   final Set<String> _selectedVideoIds = {};
 
   // Controllers
@@ -77,6 +78,7 @@ class ProfileStateManager extends ChangeNotifier {
   bool get isSelecting => _isSelecting;
   Set<String> get selectedVideoIds => _selectedVideoIds;
   bool get hasSelectedVideos => _selectedVideoIds.isNotEmpty;
+  bool get isVideosLoading => _isVideosLoading;
 
   // Profile management
   Future<void> loadUserData(String? userId) async {
@@ -304,6 +306,9 @@ class ProfileStateManager extends ChangeNotifier {
     AppLogger.log(
         '🔄 ProfileStateManager: loadUserVideos called with userId: $userId');
 
+    _isVideosLoading = true;
+    notifyListeners();
+
     try {
       final loggedInUser = await _authService.getUserData();
       final bool isMyProfile = userId == null ||
@@ -346,6 +351,9 @@ class ProfileStateManager extends ChangeNotifier {
         userId,
         isMyProfile: isMyProfile,
       );
+    } finally {
+      _isVideosLoading = false;
+      notifyListeners();
     }
   }
 
@@ -1007,6 +1015,9 @@ class ProfileStateManager extends ChangeNotifier {
 
   /// Force refresh videos only (for when new videos are uploaded)
   Future<void> refreshVideosOnly() async {
+    _isVideosLoading = true;
+    notifyListeners();
+
     try {
       AppLogger.log('🔄 ProfileStateManager: Force refreshing user videos...');
 
@@ -1083,6 +1094,9 @@ class ProfileStateManager extends ChangeNotifier {
     } catch (e) {
       AppLogger.log('❌ ProfileStateManager: Error refreshing videos: $e');
       _error = 'Failed to refresh videos: ${e.toString()}';
+      notifyListeners();
+    } finally {
+      _isVideosLoading = false;
       notifyListeners();
     }
   }

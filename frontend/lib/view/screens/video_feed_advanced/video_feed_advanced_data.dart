@@ -34,8 +34,10 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
           '⚠️ VideoFeedAdvanced: Empty videos received, invalidating cache to prevent stale data',
         );
         try {
-          final cacheManager = SmartCacheManager();
-          await cacheManager.invalidateVideoCache(videoType: widget.videoType);
+          await _cacheManager.initialize();
+          await _cacheManager.invalidateVideoCache(
+            videoType: widget.videoType,
+          );
 
           AppLogger.log('🔄 VideoFeedAdvanced: Retrying with force refresh...');
           final retryResponse = await _videoService.getVideos(
@@ -131,8 +133,10 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         });
       }
 
-      final cacheManager = SmartCacheManager();
-      await cacheManager.invalidateVideoCache(videoType: widget.videoType);
+      await _cacheManager.initialize();
+      await _cacheManager.invalidateVideoCache(
+        videoType: widget.videoType,
+      );
 
       _currentPage = 1;
       await _loadVideos(page: 1, append: false);
@@ -316,8 +320,10 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
   Future<void> _invalidateVideoCache() async {
     try {
       AppLogger.log('🗑️ VideoFeedAdvanced: Invalidating video cache keys');
-      final cacheManager = SmartCacheManager();
-      await cacheManager.invalidateVideoCache(videoType: widget.videoType);
+      await _cacheManager.initialize();
+      await _cacheManager.invalidateVideoCache(
+        videoType: widget.videoType,
+      );
       AppLogger.log('✅ VideoFeedAdvanced: Video cache invalidated');
     } catch (e) {
       AppLogger.log('⚠️ VideoFeedAdvanced: Error invalidating cache: $e');
