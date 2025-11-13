@@ -13,6 +13,11 @@ class AppConfig {
   // Use laptop IP address when testing on phone: 192.168.0.198
   static const String _localIpBaseUrl = 'http://192.168.0.198:5001';
 
+  // Primary production endpoints
+  static const String _customDomainUrl = 'https://snehayog.site';
+  static const String _railwayUrl =
+      'https://snehayog-production.up.railway.app';
+
   // **NEW: Clear cache method for development**
   static void clearCache() {
     _cachedBaseUrl = null;
@@ -25,15 +30,53 @@ class AppConfig {
       return _cachedBaseUrl!;
     }
 
-    // Default to local network server while detecting availability
-    print('🔍 AppConfig: No cached URL, defaulting to local server');
-    return _localIpBaseUrl;
+    // Use local server in explicit development mode, otherwise prefer custom domain
+    if (_isDevelopment) {
+      print('🔍 AppConfig: No cached URL, development mode -> local server');
+      return _localIpBaseUrl;
+    }
+
+    print('🔍 AppConfig: No cached URL, defaulting to custom domain');
+    _cachedBaseUrl = _customDomainUrl;
+    return _cachedBaseUrl!;
   }
 
   // **NEW: Try local server first, then custom domain, then Railway**
   static Future<String> getBaseUrlWithFallback() async {
+    if (_cachedBaseUrl != null) {
+      print('🔍 AppConfig: Using cached URL: $_cachedBaseUrl');
+      return _cachedBaseUrl!;
+    }
+
     print(
-        '🔍 AppConfig: getBaseUrlWithFallback() - Trying local network first...');
+        '🔍 AppConfig: getBaseUrlWithFallback() - Trying primary production endpoints first...');
+
+    const remoteUrls = [
+      _customDomainUrl,
+      _railwayUrl,
+    ];
+
+    for (final url in remoteUrls) {
+      try {
+        print('🔍 AppConfig: Testing remote server: $url...');
+        final response = await http.get(
+          Uri.parse('$url/api/health'),
+          headers: {'Content-Type': 'application/json'},
+        ).timeout(const Duration(seconds: 8));
+
+        if (response.statusCode == 200) {
+          print('✅ AppConfig: Remote server accessible at $url');
+          _cachedBaseUrl = url;
+          return url;
+        }
+      } catch (e) {
+        print('❌ AppConfig: $url not accessible: $e');
+        continue;
+      }
+    }
+
+    print(
+        '⚠️ AppConfig: Primary endpoints unreachable, checking local development servers...');
 
     // 1) Local network servers (preferred during testing)
     const localUrls = [
@@ -64,34 +107,8 @@ class AppConfig {
 
     // 2) Remote servers - custom domain first, then Railway
     print(
-        '⚠️ AppConfig: Local servers unreachable, trying remote endpoints...');
-    const remoteUrls = [
-      'https://snehayog.site',
-      'https://snehayog-production.up.railway.app',
-    ];
-
-    for (final url in remoteUrls) {
-      try {
-        print('🔍 AppConfig: Testing remote server: $url...');
-        final response = await http.get(
-          Uri.parse('$url/api/health'),
-          headers: {'Content-Type': 'application/json'},
-        ).timeout(const Duration(seconds: 8));
-
-        if (response.statusCode == 200) {
-          print('✅ AppConfig: Remote server accessible at $url');
-          _cachedBaseUrl = url;
-          return url;
-        }
-      } catch (e) {
-        print('❌ AppConfig: $url not accessible: $e');
-        continue;
-      }
-    }
-
-    // 3) Default to custom domain if everything fails
-    print('⚠️ AppConfig: All servers failed, using default custom domain');
-    _cachedBaseUrl = 'https://snehayog.site';
+        '⚠️ AppConfig: Local servers unreachable, no endpoints available. Using default custom domain');
+    _cachedBaseUrl = _customDomainUrl;
     return _cachedBaseUrl!;
   }
 
@@ -101,12 +118,12 @@ class AppConfig {
     print('🔍 AppConfig: Development mode: $_isDevelopment');
 
     final urlsToTry = [
+      _customDomainUrl,
+      _railwayUrl,
       _localIpBaseUrl,
       'http://localhost:5001',
       'http://127.0.0.1:5001',
       'http://10.0.2.2:5001',
-      'https://snehayog.site',
-      'https://snehayog-production.up.railway.app',
     ];
 
     for (final url in urlsToTry) {
@@ -137,7 +154,7 @@ class AppConfig {
 
     // If all production servers fail, return default
     print('⚠️ AppConfig: All production servers failed, using default');
-    _cachedBaseUrl = 'https://snehayog.site';
+    _cachedBaseUrl = _customDomainUrl;
     return _cachedBaseUrl!;
   }
 
@@ -149,8 +166,8 @@ class AppConfig {
 
   // **NEW: Fallback URLs - custom domain first for production**
   static const List<String> fallbackUrls = [
-    'https://snehayog.site',
-    'https://snehayog-production.up.railway.app',
+    _customDomainUrl,
+    _railwayUrl,
   ];
 
   // **NEW: Network timeout configurations**
@@ -529,7 +546,7 @@ class NetworkHelper {
     try {
       print('🔍 NetworkHelper: Checking Railway server accessibility...');
       final response = await http.get(
-        Uri.parse('https://snehayog-production.up.railway.app/api/health'),
+        Uri.parse('${AppConfig._railwayUrl}/api/health'),
         headers: {'Content-Type': 'application/json'},
       ).timeout(const Duration(seconds: 30));
 
@@ -542,15 +559,37 @@ class NetworkHelper {
     }
   }
 
+  /// **NEW: Check if custom domain is accessible**
+  static Future<bool> isCustomDomainAccessible() async {
+    try {
+      print('🔍 NetworkHelper: Checking custom domain accessibility...');
+      final response = await http.get(
+        Uri.parse('${AppConfig._customDomainUrl}/api/health'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 30));
+
+      final isAccessible = response.statusCode == 200;
+      print('🔍 NetworkHelper: Custom domain accessible: $isAccessible');
+      return isAccessible;
+    } catch (e) {
+      print('❌ NetworkHelper: Custom domain not accessible: $e');
+      return false;
+    }
+  }
+
   /// **NEW: Get best available server URL**
   static Future<String> getBestServerUrl() async {
     print('🔍 NetworkHelper: Finding best server URL...');
 
-    // Check Railway first for production
+    // Prefer custom domain in production
     if (!AppConfig._isDevelopment) {
+      if (await isCustomDomainAccessible()) {
+        print('✅ NetworkHelper: Using custom domain');
+        return AppConfig._customDomainUrl;
+      }
       if (await isRailwayAccessible()) {
         print('✅ NetworkHelper: Using Railway server');
-        return 'https://snehayog-production.up.railway.app';
+        return AppConfig._railwayUrl;
       }
     }
 
