@@ -26,6 +26,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
           (_currentIndex >= 0 && _currentIndex < _videos.length)
               ? videoIdentityKey(_videos[_currentIndex])
               : null;
+      final preserveKey = existingCurrentKey;
 
       AppLogger.log('📊 Video Loading Complete:');
       AppLogger.log('   New Videos Loaded: ${newVideos.length}');
@@ -76,22 +77,34 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         }
       }
 
-      if (mounted) {
-        final previousVideoKey = existingCurrentKey;
+      if (!mounted) return;
 
-        final combinedVideos = append
-            ? <VideoModel>[..._videos, ...newVideos]
-            : List<VideoModel>.from(newVideos);
+      if (append) {
+        final rankedNewVideos = _filterAndRankNewVideos(newVideos);
+
+        setState(() {
+          if (rankedNewVideos.isNotEmpty) {
+            _videos.addAll(rankedNewVideos);
+          }
+          _currentPage = currentPage;
+          final bool inferredHasMore =
+              hasMore || newVideos.length == _videosPerPage;
+          _hasMore = inferredHasMore;
+          _totalVideos = total;
+        });
+
+        _markCurrentVideoAsSeen();
+      } else {
         final rankedVideos = _rankVideosWithEngagement(
-          combinedVideos,
-          preserveVideoKey: previousVideoKey,
+          newVideos,
+          preserveVideoKey: preserveKey,
         );
 
         int? nextIndex;
-        if (previousVideoKey != null) {
-          final candidateIndex = rankedVideos.indexWhere((video) {
-            return videoIdentityKey(video) == previousVideoKey;
-          });
+        if (preserveKey != null) {
+          final candidateIndex = rankedVideos.indexWhere(
+            (video) => videoIdentityKey(video) == preserveKey,
+          );
           if (candidateIndex != -1) {
             nextIndex = candidateIndex;
           }
@@ -101,7 +114,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
           _videos = rankedVideos;
           if (nextIndex != null) {
             _currentIndex = nextIndex;
-          } else if (!append || _currentIndex >= _videos.length) {
+          } else if (_currentIndex >= _videos.length) {
             _currentIndex = 0;
           }
           _currentPage = currentPage;
@@ -121,28 +134,28 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
             }
           });
         }
-
-        _loadFollowingUsers();
-
-        if (_currentIndex >= _videos.length) {
-          _currentIndex = 0;
-        }
-
-        _preloadVideo(_currentIndex);
-        _preloadNearbyVideos();
-
-        if (mounted) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _tryAutoplayCurrent();
-          });
-        }
-
-        _precacheThumbnails();
-
-        AppLogger.log(
-          '📝 Video list prepared (total: ${_videos.length}) after engagement ranking',
-        );
       }
+
+      _loadFollowingUsers();
+
+      if (_currentIndex >= _videos.length) {
+        _currentIndex = 0;
+      }
+
+      _preloadVideo(_currentIndex);
+      _preloadNearbyVideos();
+
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _tryAutoplayCurrent();
+        });
+      }
+
+      _precacheThumbnails();
+
+      AppLogger.log(
+        '📝 Video list prepared (total: ${_videos.length}) after engagement ranking/filtering',
+      );
     } catch (e) {
       AppLogger.log('❌ Error loading videos: $e');
       AppLogger.log('❌ Error stack trace: ${StackTrace.current}');
@@ -160,36 +173,64 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
   }) {
     if (videos.isEmpty) return <VideoModel>[];
 
-    final Map<String, VideoModel> uniqueVideos = {};
+    final Map<String, VideoModel> seenFiltered = {};
+    final Map<String, VideoModel> repeatedVideos = {};
+
     for (final video in videos) {
       final key = videoIdentityKey(video);
       if (key.isEmpty) continue;
-      uniqueVideos[key] = video;
-    }
 
-    final dedupedVideos = uniqueVideos.entries.toList();
+      final alreadySeen = _seenVideoKeys.contains(key);
+      final shouldPreserve =
+          preserveVideoKey != null && key == preserveVideoKey;
 
-    final filteredVideos = <VideoModel>[];
-    for (final entry in dedupedVideos) {
-      final key = entry.key;
-      if (preserveVideoKey != null && key == preserveVideoKey) {
-        filteredVideos.add(entry.value);
-        continue;
-      }
-      if (_seenVideoKeys.contains(key)) {
-        continue;
-      }
-      filteredVideos.add(entry.value);
-    }
-
-    if (filteredVideos.isEmpty && preserveVideoKey != null) {
-      final preserved = uniqueVideos[preserveVideoKey];
-      if (preserved != null) {
-        filteredVideos.add(preserved);
+      if (alreadySeen && !shouldPreserve) {
+        repeatedVideos[key] = video;
+      } else {
+        seenFiltered[key] = video;
       }
     }
 
-    return VideoEngagementRanker.rankVideos(filteredVideos);
+    final rankedVideos =
+        VideoEngagementRanker.rankVideos(seenFiltered.values.toList());
+
+    if (preserveVideoKey != null) {
+      final preserveIndex = rankedVideos.indexWhere(
+        (video) => videoIdentityKey(video) == preserveVideoKey,
+      );
+      if (preserveIndex > 0) {
+        final preservedVideo = rankedVideos.removeAt(preserveIndex);
+        rankedVideos.insert(0, preservedVideo);
+      }
+    }
+
+    if (rankedVideos.isEmpty && repeatedVideos.isNotEmpty) {
+      rankedVideos.addAll(repeatedVideos.values);
+    }
+
+    return rankedVideos;
+  }
+
+  List<VideoModel> _filterAndRankNewVideos(List<VideoModel> videos) {
+    if (videos.isEmpty) return <VideoModel>[];
+
+    final Map<String, VideoModel> uniqueNewVideos = {};
+    final existingKeys = <String>{
+      for (final existing in _videos) videoIdentityKey(existing),
+    };
+
+    for (final video in videos) {
+      final key = videoIdentityKey(video);
+      if (key.isEmpty) continue;
+      if (_seenVideoKeys.contains(key)) continue;
+      if (existingKeys.contains(key)) continue;
+      if (uniqueNewVideos.containsKey(key)) continue;
+      uniqueNewVideos[key] = video;
+    }
+
+    if (uniqueNewVideos.isEmpty) return <VideoModel>[];
+
+    return VideoEngagementRanker.rankVideos(uniqueNewVideos.values.toList());
   }
 
   void _markVideoAsSeen(VideoModel video) {
