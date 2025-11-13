@@ -759,25 +759,33 @@
                 const isMarked = isCreatorMarked(creator.id);
                 const encodedId = encodeURIComponent(creator.id);
 
-                let pendingCell = isMarked ? `<span class="status-badge status-paid">Marked Paid ✅</span>` : '—';
-                if (pendingAmount > 0) {
-                    if (isMarked) {
-                        pendingCell = `
-                            <div style="display:flex; align-items:center; gap:8px; flex-wrap: wrap;">
-                                <span class="status-badge status-paid">${formatCurrencyINR(pendingAmount)} Paid ✅</span>
-                            </div>
-                        `;
-                    } else {
-                        pendingCell = `
-                            <div style="display:flex; align-items:center; gap:8px; flex-wrap: wrap;">
-                                <span class="status-badge status-pending">${formatCurrencyINR(pendingAmount)}</span>
-                                <button class="btn btn-success btn-sm" onclick="markCreatorPaid('${encodedId}')">Mark Paid</button>
-                            </div>
-                        `;
-                    }
-                }
-                if (pendingAmount === 0 && isMarked) {
-                    pendingCell = `<span class="status-badge status-paid">Marked Paid ✅</span>`;
+                const markedBadge = formatCurrencyINR(
+                    pendingAmount > 0 ? pendingAmount : netEarnings
+                );
+                const shouldShowMarkButton =
+                    !isMarked && (pendingAmount > 0 || netEarnings > 0);
+
+                let pendingCell = '—';
+                if (isMarked) {
+                    pendingCell = `
+                        <span class="status-badge status-paid">
+                            ${markedBadge} Paid ✅
+                        </span>
+                    `;
+                } else if (shouldShowMarkButton) {
+                    const amountBadge =
+                        pendingAmount > 0
+                            ? `<span class="status-badge status-pending">${formatCurrencyINR(pendingAmount)}</span>`
+                            : '';
+
+                    pendingCell = `
+                        <div style="display:flex; align-items:center; gap:8px; flex-wrap: wrap;">
+                            ${amountBadge}
+                            <button class="btn btn-success btn-sm" onclick="markCreatorPaid('${encodedId}')">
+                                Mark Paid
+                            </button>
+                        </div>
+                    `;
                 }
 
                 return `
