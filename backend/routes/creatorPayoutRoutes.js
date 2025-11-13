@@ -2,6 +2,7 @@ import express from 'express';
 import CreatorPayout from '../models/CreatorPayout.js';
 import User from '../models/User.js';
 import { verifyToken } from '../utils/verifytoken.js';
+import requireAdminDashboardKey from '../middleware/adminDashboardAuth.js';
 
 const router = express.Router();
 
@@ -353,7 +354,7 @@ router.post('/request', verifyToken, async (req, res) => {
 });
 
 // **NEW: Admin endpoints for monitoring and control**
-router.get('/stats', verifyToken, async (req, res) => {
+router.get('/stats', requireAdminDashboardKey, async (req, res) => {
   try {
     const stats = await CreatorPayout.aggregate([
       {
@@ -384,7 +385,7 @@ router.get('/stats', verifyToken, async (req, res) => {
   }
 });
 
-router.get('/overview', verifyToken, async (req, res) => {
+router.get('/overview', requireAdminDashboardKey, async (req, res) => {
   try {
     const totalCreators = await User.countDocuments();
     const eligibleForPayout = await CreatorPayout.countDocuments({ 
@@ -418,7 +419,7 @@ router.get('/overview', verifyToken, async (req, res) => {
   }
 });
 
-router.get('/recent', verifyToken, async (req, res) => {
+router.get('/recent', requireAdminDashboardKey, async (req, res) => {
   try {
     const recentPayouts = await CreatorPayout.find()
       .populate('creatorId', 'name')

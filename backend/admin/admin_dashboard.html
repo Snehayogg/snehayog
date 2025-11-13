@@ -349,6 +349,33 @@
         </div>
 
         <div class="dashboard-section">
+            <h2 class="section-title">👥 All Creators</h2>
+            <div class="filter-controls">
+                <input type="text" id="creatorSearch" placeholder="Search by name, email, Google ID, or UPI" oninput="filterCreators()">
+                <select id="creatorSort" onchange="filterCreators()">
+                    <option value="earnings">Sort by Earnings</option>
+                    <option value="views">Sort by Total Views</option>
+                    <option value="adViews">Sort by Ad Views</option>
+                    <option value="name">Sort by Name</option>
+                    <option value="pending">Sort by Pending Payout</option>
+                </select>
+                <select id="creatorEligibilityFilter" onchange="filterCreators()">
+                    <option value="all">All Creators</option>
+                    <option value="eligible">Eligible for Payout</option>
+                    <option value="pending">Pending Payouts</option>
+                    <option value="noEarnings">No Earnings Yet</option>
+                </select>
+                <button class="btn btn-primary btn-sm" onclick="resetCreatorFilters()">Reset</button>
+            </div>
+            <div id="creatorsSummary" style="margin-bottom: 15px;">
+                <p>Loading creator metrics...</p>
+            </div>
+            <div id="creatorsList">
+                <p>Loading creators...</p>
+            </div>
+        </div>
+
+        <div class="dashboard-section">
             <h2 class="section-title">📊 Payout Overview</h2>
             <div id="payoutOverview">
                 <p>Loading payout overview...</p>
@@ -398,7 +425,451 @@
     </button>
 
     <script>
-        const API_BASE = 'http://192.168.0.190:3000/api';
+        const ADMIN_KEY_STORAGE_KEY = 'vayu_admin_dashboard_key';
+        let ADMIN_DASHBOARD_KEY = null;
+
+        const detectAdminKeyFromQuery = () => {
+            const params = new URLSearchParams(window.location.search);
+            const queryKey = params.get('adminKey') || params.get('key');
+            if (queryKey && queryKey.trim()) {
+                const trimmed = queryKey.trim();
+                localStorage.setItem(ADMIN_KEY_STORAGE_KEY, trimmed);
+                return trimmed;
+            }
+            return null;
+        };
+
+        const detectAdminKey = () => {
+            const fromQuery = detectAdminKeyFromQuery();
+            if (fromQuery) return fromQuery;
+
+            const stored = localStorage.getItem(ADMIN_KEY_STORAGE_KEY);
+            if (stored && stored.trim()) {
+                return stored.trim();
+            }
+            return null;
+        };
+
+        const promptForAdminKey = () => {
+            const key = prompt('Enter the Admin Dashboard access key:');
+            if (key && key.trim()) {
+                const trimmed = key.trim();
+                localStorage.setItem(ADMIN_KEY_STORAGE_KEY, trimmed);
+                return trimmed;
+            }
+            return null;
+        };
+
+        const clearAdminKey = () => {
+            localStorage.removeItem(ADMIN_KEY_STORAGE_KEY);
+            ADMIN_DASHBOARD_KEY = null;
+        };
+
+        const getAdminKey = ({ promptIfMissing = true } = {}) => {
+            if (!ADMIN_DASHBOARD_KEY) {
+                ADMIN_DASHBOARD_KEY = detectAdminKey();
+            }
+
+            if (!ADMIN_DASHBOARD_KEY && promptIfMissing) {
+                ADMIN_DASHBOARD_KEY = promptForAdminKey();
+            }
+
+            return ADMIN_DASHBOARD_KEY;
+        };
+
+        const authorizedFetch = async (url, options = {}) => {
+            let attempt = 0;
+            let lastResponse = null;
+            while (attempt < 2) {
+                const key = getAdminKey({ promptIfMissing: attempt > 0 });
+                const headers = new Headers(options.headers || {});
+                if (key) {
+                    headers.set('x-admin-key', key);
+                }
+
+                const response = await fetch(url, { ...options, headers });
+
+                lastResponse = response;
+                if (response.status !== 401) {
+                    return response;
+                }
+
+                clearAdminKey();
+                attempt += 1;
+                if (attempt < 2) {
+                    showError('Admin dashboard key required or invalid. Please enter it.');
+                }
+            }
+
+            return lastResponse;
+        };
+
+        const detectApiBase = () => {
+            const params = new URLSearchParams(window.location.search);
+            const override = params.get('apiBase');
+            if (override) {
+                return override.replace(/\/$/, '');
+            }
+
+            const { protocol, hostname, port } = window.location;
+            const isLocalHost = ['localhost', '127.0.0.1'].includes(hostname);
+
+            if (protocol.startsWith('http') && isLocalHost) {
+                const resolvedPort = port || '5001';
+                return `${protocol}//${hostname}:${resolvedPort}/api`;
+            }
+
+            if (protocol.startsWith('http') && hostname) {
+                const hostWithPort = port ? `${hostname}:${port}` : hostname;
+                return `${protocol}//${hostWithPort}/api`;
+            }
+
+            return 'https://snehayog.site/api';
+        };
+
+        const API_BASE = detectApiBase();
+        let creatorData = [];
+
+        const currencyFormatterINR = new Intl.NumberFormat('en-IN', {
+            style: 'currency',
+            currency: 'INR',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+
+        const numberFormatter = new Intl.NumberFormat('en-IN');
+
+        const formatCurrencyINR = (value) => {
+            const amount = Number.isFinite(value) ? value : 0;
+            return currencyFormatterINR.format(amount);
+        };
+
+        const formatNumber = (value) => {
+            const numeric = Number.isFinite(value) ? value : 0;
+            return numberFormatter.format(numeric);
+        };
+
+        const formatDate = (value) => {
+            if (!value) return '—';
+            try {
+                return new Date(value).toLocaleDateString('en-IN', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                });
+            } catch (error) {
+                return '—';
+            }
+        };
+
+        const escapeHtml = (value = '') => {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        };
+
+        function copyToClipboard(text) {
+            if (!text) return;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text)
+                    .then(() => showSuccess('Copied to clipboard'))
+                    .catch(() => fallbackCopy(text));
+            } else {
+                fallbackCopy(text);
+            }
+        }
+
+        function fallbackCopy(text) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.setAttribute('readonly', '');
+            textarea.style.position = 'absolute';
+            textarea.style.left = '-9999px';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                showSuccess('Copied to clipboard');
+            } catch (error) {
+                showError('Unable to copy text automatically');
+            }
+            document.body.removeChild(textarea);
+        }
+
+        function renderCreators(creators) {
+            const container = document.getElementById('creatorsList');
+            const summaryContainer = document.getElementById('creatorsSummary');
+
+            if (!creators || creators.length === 0) {
+                summaryContainer.innerHTML = `
+                    <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                        <div style="flex: 1 1 200px; background: #f8f9fa; border-radius: 12px; padding: 16px; text-align: center;">
+                            <h3 style="margin-bottom: 8px; color: #667eea;">0</h3>
+                            <p style="margin: 0; color: #555;">Creators Found</p>
+                        </div>
+                    </div>
+                `;
+                container.innerHTML = '<p>No creators found</p>';
+                return;
+            }
+
+            const totals = creators.reduce((acc, creator) => {
+                const net = Number(creator.creatorRevenueINR ?? creator.totalEarningsINR ?? 0);
+                const gross = Number(creator.grossRevenueINR ?? net);
+                const platform = Number(creator.platformRevenueINR ?? (gross - net));
+
+                acc.totalViews += Number(creator.totalViews || 0);
+                acc.totalAdViews += Number(creator.totalAdViews || 0);
+                acc.totalCreatorEarnings += net;
+                acc.totalGrossEarnings += gross;
+                acc.totalPlatformRevenue += platform > 0 ? platform : Math.max(gross - net, 0);
+                acc.pendingEarnings += Number(creator.pendingEarningsINR || 0);
+                acc.eligiblePending += Number(creator.eligiblePendingINR || 0);
+                if ((creator.eligiblePendingINR || 0) > 0) acc.eligibleCount += 1;
+                if ((creator.pendingEarningsINR || 0) > 0) acc.pendingCount += 1;
+                return acc;
+            }, {
+                totalViews: 0,
+                totalAdViews: 0,
+                totalCreatorEarnings: 0,
+                totalGrossEarnings: 0,
+                totalPlatformRevenue: 0,
+                pendingEarnings: 0,
+                eligiblePending: 0,
+                eligibleCount: 0,
+                pendingCount: 0
+            });
+
+            summaryContainer.innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px;">
+                    <div style="background: #f8f9fa; border-radius: 12px; padding: 16px; text-align: center;">
+                        <h3 style="margin-bottom: 8px; color: #667eea;">${formatNumber(creators.length)}</h3>
+                        <p style="margin: 0; color: #555;">Creators Listed</p>
+                    </div>
+                    <div style="background: #f8f9fa; border-radius: 12px; padding: 16px; text-align: center;">
+                        <h3 style="margin-bottom: 8px; color: #28a745;">${formatCurrencyINR(totals.totalCreatorEarnings)}</h3>
+                        <p style="margin: 0; color: #555;">Creator Earnings (Net)</p>
+                    </div>
+                    <div style="background: #f8f9fa; border-radius: 12px; padding: 16px; text-align: center;">
+                        <h3 style="margin-bottom: 8px; color: #17a2b8;">${formatCurrencyINR(totals.totalGrossEarnings)}</h3>
+                        <p style="margin: 0; color: #555;">Gross Ad Revenue</p>
+                    </div>
+                    <div style="background: #f8f9fa; border-radius: 12px; padding: 16px; text-align: center;">
+                        <h3 style="margin-bottom: 8px; color: #6c757d;">${formatCurrencyINR(totals.totalPlatformRevenue)}</h3>
+                        <p style="margin: 0; color: #555;">Platform Share</p>
+                    </div>
+                    <div style="background: #f8f9fa; border-radius: 12px; padding: 16px; text-align: center;">
+                        <h3 style="margin-bottom: 8px; color: #ffc107;">${formatCurrencyINR(totals.pendingEarnings)}</h3>
+                        <p style="margin: 0; color: #555;">Pending Payouts (${formatNumber(totals.pendingCount)} creators)</p>
+                    </div>
+                    <div style="background: #f8f9fa; border-radius: 12px; padding: 16px; text-align: center;">
+                        <h3 style="margin-bottom: 8px; color: #dc3545;">${formatCurrencyINR(totals.eligiblePending)}</h3>
+                        <p style="margin: 0; color: #555;">Eligible for Payout (${formatNumber(totals.eligibleCount)} creators)</p>
+                    </div>
+                    <div style="background: #f8f9fa; border-radius: 12px; padding: 16px; text-align: center;">
+                        <h3 style="margin-bottom: 8px; color: #6f42c1;">${formatNumber(totals.totalViews)}</h3>
+                        <p style="margin: 0; color: #555;">Total Video Views</p>
+                    </div>
+                    <div style="background: #f8f9fa; border-radius: 12px; padding: 16px; text-align: center;">
+                        <h3 style="margin-bottom: 8px; color: #0dcaf0;">${formatNumber(totals.totalAdViews)}</h3>
+                        <p style="margin: 0; color: #555;">Total Ad Views</p>
+                    </div>
+                </div>
+            `;
+
+            const tableRows = creators.map((creator) => {
+                const name = escapeHtml(creator.name || 'Unknown');
+                const email = escapeHtml(creator.email || '—');
+                const googleId = escapeHtml(creator.googleId || '—');
+                const country = escapeHtml(creator.country || 'IN');
+
+                const paymentMethodRaw = creator.paymentDetails?.preferredPaymentMethod
+                    ? creator.paymentDetails.preferredPaymentMethod.replace(/_/g, ' ').toUpperCase()
+                    : '—';
+                const paymentMethod = paymentMethodRaw === '—' ? paymentMethodRaw : escapeHtml(paymentMethodRaw);
+
+                const upiIdRaw = creator.paymentDetails?.upiId || '—';
+                const upiId = upiIdRaw === '—' ? upiIdRaw : escapeHtml(upiIdRaw);
+
+                const bankInfo = creator.paymentDetails?.bank;
+                let bankDisplay = '—';
+                if (bankInfo) {
+                    const segments = [];
+                    if (bankInfo.bankName) {
+                        segments.push(escapeHtml(bankInfo.bankName));
+                    }
+                    if (bankInfo.accountHolderName) {
+                        segments.push(`<small>${escapeHtml(bankInfo.accountHolderName)}</small>`);
+                    }
+                    const accountParts = [];
+                    if (bankInfo.accountNumber) {
+                        accountParts.push(escapeHtml(bankInfo.accountNumber));
+                    }
+                    if (bankInfo.ifscCode) {
+                        accountParts.push(escapeHtml(bankInfo.ifscCode));
+                    }
+                    if (accountParts.length > 0) {
+                        segments.push(`<small>${accountParts.join(' • ')}</small>`);
+                    }
+                    bankDisplay = segments.length > 0 ? segments.join('<br>') : '—';
+                }
+
+                const totalAdViews = Number(creator.totalAdViews || 0);
+                const netEarnings = Number(creator.creatorRevenueINR ?? creator.totalEarningsINR ?? 0);
+                const grossEarnings = Number(creator.grossRevenueINR ?? netEarnings);
+                const platformRevenue = Math.max(Number(creator.platformRevenueINR ?? (grossEarnings - netEarnings)), 0);
+
+                const pendingBadge = creator.pendingEarningsINR > 0
+                    ? `<span class="status-badge status-pending">${formatCurrencyINR(creator.pendingEarningsINR)}</span>`
+                    : '—';
+                const eligibleBadge = creator.eligiblePendingINR > 0
+                    ? `<span class="status-badge status-paid">${formatCurrencyINR(creator.eligiblePendingINR)}</span>`
+                    : '—';
+
+                return `
+                    <tr>
+                        <td>
+                            <strong>${name}</strong><br>
+                            <small>${email}</small><br>
+                            <small>Google ID: ${googleId}</small>
+                        </td>
+                        <td>${country}</td>
+                        <td>${creator.totalVideos}</td>
+                        <td>${formatNumber(creator.totalViews)}</td>
+                        <td>${formatNumber(totalAdViews)}</td>
+                        <td>${formatCurrencyINR(netEarnings)}</td>
+                        <td>${formatCurrencyINR(grossEarnings)}</td>
+                        <td>${formatCurrencyINR(platformRevenue)}</td>
+                        <td>${pendingBadge}</td>
+                        <td>${eligibleBadge}</td>
+                        <td>${paymentMethod}</td>
+                        <td>
+                            ${upiId !== '—' ? `
+                                <div>
+                                    <span>${upiId}</span><br>
+                                    <button class="btn btn-success btn-sm" data-upi="${upiId}" onclick="copyToClipboard(this.dataset.upi)">Copy UPI</button>
+                                </div>
+                            ` : '—'}
+                        </td>
+                        <td>${bankDisplay}</td>
+                        <td>${formatDate(creator.lastPayoutAt)}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            container.innerHTML = `
+                <div style="overflow-x: auto;">
+                    <table class="payout-table">
+                        <thead>
+                                <tr>
+                                    <th>Creator</th>
+                                    <th>Country</th>
+                                    <th>Videos</th>
+                                    <th>Total Views</th>
+                                    <th>Ad Views</th>
+                                    <th>Net Earnings (₹)</th>
+                                    <th>Gross Revenue (₹)</th>
+                                    <th>Platform Share (₹)</th>
+                                    <th>Pending (₹)</th>
+                                    <th>Eligible Now (₹)</th>
+                                    <th>Preferred Method</th>
+                                    <th>UPI ID</th>
+                                    <th>Bank Details</th>
+                                    <th>Last Payout</th>
+                                </tr>
+                        </thead>
+                        <tbody>
+                            ${tableRows}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function filterCreators() {
+            if (!Array.isArray(creatorData)) {
+                return;
+            }
+
+            const searchValue = document.getElementById('creatorSearch').value.trim().toLowerCase();
+            const sortValue = document.getElementById('creatorSort').value;
+            const eligibilityFilter = document.getElementById('creatorEligibilityFilter').value;
+
+            let filtered = creatorData.slice();
+
+            if (searchValue) {
+                filtered = filtered.filter((creator) => {
+                    const fields = [
+                        creator.name,
+                        creator.email,
+                        creator.googleId,
+                        creator.paymentDetails?.upiId
+                    ].filter(Boolean);
+                    return fields.some((field) =>
+                        field.toLowerCase().includes(searchValue)
+                    );
+                });
+            }
+
+            if (eligibilityFilter === 'eligible') {
+                filtered = filtered.filter((creator) => creator.eligiblePendingINR > 0);
+            } else if (eligibilityFilter === 'pending') {
+                filtered = filtered.filter((creator) => creator.pendingEarningsINR > 0);
+            } else if (eligibilityFilter === 'noEarnings') {
+                filtered = filtered.filter((creator) => {
+                    const net = Number(creator.creatorRevenueINR ?? creator.totalEarningsINR ?? 0);
+                    return net === 0;
+                });
+            }
+
+            filtered.sort((a, b) => {
+                const netA = Number(a.creatorRevenueINR ?? a.totalEarningsINR ?? 0);
+                const netB = Number(b.creatorRevenueINR ?? b.totalEarningsINR ?? 0);
+                switch (sortValue) {
+                    case 'views':
+                        return Number(b.totalViews || 0) - Number(a.totalViews || 0);
+                    case 'adViews':
+                        return Number(b.totalAdViews || 0) - Number(a.totalAdViews || 0);
+                    case 'name':
+                        return a.name.localeCompare(b.name);
+                    case 'pending':
+                        return Number(b.pendingEarningsINR || 0) - Number(a.pendingEarningsINR || 0);
+                    case 'earnings':
+                    default:
+                        return netB - netA;
+                }
+            });
+
+            renderCreators(filtered);
+        }
+
+        function resetCreatorFilters() {
+            document.getElementById('creatorSearch').value = '';
+            document.getElementById('creatorSort').value = 'earnings';
+            document.getElementById('creatorEligibilityFilter').value = 'all';
+            renderCreators(creatorData);
+        }
+
+        async function loadCreators() {
+            const container = document.getElementById('creatorsList');
+            try {
+                container.innerHTML = '<p>Loading creators...</p>';
+                const response = await authorizedFetch(`${API_BASE}/admin/creators`);
+                if (!response || !response.ok) {
+                    container.innerHTML = '<p class="error-message">Failed to load creators list</p>';
+                    return;
+                }
+                const data = await response.json();
+                creatorData = data.creators || [];
+                renderCreators(creatorData);
+            } catch (error) {
+                console.error('Error loading creators:', error);
+                container.innerHTML = `<p class="error-message">Error loading creators: ${error.message}</p>`;
+            }
+        }
         
         // Load data on page load
         document.addEventListener('DOMContentLoaded', function() {
@@ -409,7 +880,7 @@
         async function loadFeedback() {
             try {
                 setLoading(true);
-                const response = await fetch(`${API_BASE}/admin/feedback`);
+                const response = await authorizedFetch(`${API_BASE}/admin/feedback`);
                 if (response.ok) {
                     const data = await response.json();
                     displayFeedback(data.feedback || []);
@@ -550,7 +1021,7 @@
 
         async function viewFeedbackDetails(feedbackId) {
             try {
-                const response = await fetch(`${API_BASE}/admin/feedback/${feedbackId}`);
+                const response = await authorizedFetch(`${API_BASE}/admin/feedback/${feedbackId}`);
                 if (response.ok) {
                     const feedback = await response.json();
                     alert(`Feedback Details:\n\nRating: ${feedback.rating}/5\nUser: ${feedback.userEmail || 'Anonymous'}\nComments: ${feedback.comments || 'None'}\nDate: ${new Date(feedback.createdAt).toLocaleString()}`);
@@ -564,7 +1035,7 @@
 
         async function markAsRead(feedbackId) {
             try {
-                const response = await fetch(`${API_BASE}/admin/feedback/${feedbackId}/read`, { method: 'PUT' });
+                const response = await authorizedFetch(`${API_BASE}/admin/feedback/${feedbackId}/read`, { method: 'PUT' });
                 if (response.ok) {
                     showSuccess('Feedback marked as read');
                     loadFeedback(); // Refresh the list
@@ -580,7 +1051,7 @@
             const reply = prompt('Enter your reply to this feedback:');
             if (reply && reply.trim()) {
                 try {
-                    const response = await fetch(`${API_BASE}/admin/feedback/${feedbackId}/reply`, {
+                    const response = await authorizedFetch(`${API_BASE}/admin/feedback/${feedbackId}/reply`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ reply: reply.trim() })
@@ -598,7 +1069,7 @@
 
         async function exportFeedback() {
             try {
-                const response = await fetch(`${API_BASE}/admin/feedback/export`);
+                const response = await authorizedFetch(`${API_BASE}/admin/feedback/export`);
                 if (response.ok) {
                     const blob = await response.blob();
                     const url = window.URL.createObjectURL(blob);
@@ -627,6 +1098,9 @@
                 
                 // Load payout overview
                 await loadPayoutOverview();
+
+                // Load creator summaries
+                await loadCreators();
                 
                 // Load recent payouts
                 await loadRecentPayouts();
@@ -641,7 +1115,7 @@
 
         async function loadPayoutStats() {
             try {
-                const response = await fetch(`${API_BASE}/creator-payouts/stats`);
+                const response = await authorizedFetch(`${API_BASE}/creator-payouts/stats`);
                 if (response.ok) {
                     const stats = await response.json();
                     
@@ -657,7 +1131,7 @@
 
         async function loadPayoutOverview() {
             try {
-                const response = await fetch(`${API_BASE}/creator-payouts/overview`);
+                const response = await authorizedFetch(`${API_BASE}/creator-payouts/overview`);
                 if (response.ok) {
                     const overview = await response.json();
                     
@@ -692,7 +1166,7 @@
 
         async function loadRecentPayouts() {
             try {
-                const response = await fetch(`${API_BASE}/creator-payouts/recent`);
+                const response = await authorizedFetch(`${API_BASE}/creator-payouts/recent`);
                 if (response.ok) {
                     const data = await response.json();
                     const payouts = data.payouts || [];
@@ -743,7 +1217,7 @@
 
         async function startScheduler() {
             try {
-                const response = await fetch(`${API_BASE}/admin/start-scheduler`, { method: 'POST' });
+                const response = await authorizedFetch(`${API_BASE}/admin/start-scheduler`, { method: 'POST' });
                 if (response.ok) {
                     showSuccess('Scheduler started successfully!');
                     refreshData();
@@ -757,7 +1231,7 @@
 
         async function stopScheduler() {
             try {
-                const response = await fetch(`${API_BASE}/admin/stop-scheduler`, { method: 'POST' });
+                const response = await authorizedFetch(`${API_BASE}/admin/stop-scheduler`, { method: 'POST' });
                 if (response.ok) {
                     showSuccess('Scheduler stopped successfully!');
                     refreshData();
@@ -799,9 +1273,6 @@
             
             setTimeout(() => successDiv.remove(), 5000);
         }
-
-        // Auto-refresh every 30 seconds
-        setInterval(refreshData, 30000);
     </script>
 </body>
 </html>

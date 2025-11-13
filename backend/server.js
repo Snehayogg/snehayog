@@ -67,15 +67,38 @@ process.env.MONGO_URI = mongoUri;
 const PORT = process.env.PORT || 5001;
 const HOST = process.env.HOST || '0.0.0.0'; // Railway requires 0.0.0.0
 
+// Asset Links dynamic response (avoid committing real fingerprints)
+const assetLinksPackageName = process.env.ANDROID_ASSETLINKS_PACKAGE_NAME;
+const assetLinksFingerprintsRaw = process.env.ANDROID_ASSETLINKS_FINGERPRINTS || '';
+const assetLinksFingerprints = assetLinksFingerprintsRaw
+  .split(',')
+  .map((fp) => fp.trim())
+  .filter((fp) => fp.length > 0);
+
+if (assetLinksPackageName && assetLinksFingerprints.length > 0) {
+  app.get('/.well-known/assetlinks.json', (req, res) => {
+    res.json([
+      {
+        relation: ['delegate_permission/common.handle_all_urls'],
+        target: {
+          namespace: 'android_app',
+          package_name: assetLinksPackageName,
+          sha256_cert_fingerprints: assetLinksFingerprints
+        }
+      }
+    ]);
+  });
+}
+
 // Middleware
 app.use(compression()); // Enable gzip compression
 app.use('/.well-known', express.static(path.join(__dirname, 'public/.well-known')))
 // **ENHANCED: CORS Configuration for Flutter app and Railway**
 app.use(cors({
   origin: [
+    'http://192.168.0.198:5001', // Local development
     'https://snehayog.site', // Production web app
     'https://vayu.app',      // Public site that embeds/uses API
-    'http://192.168.0.198:5001', // Local development
     'http://192.168.0.188:5001', // Local development (legacy)
     'http://localhost:5001',      // Local development
     'http://10.0.2.2:5001',      // Android emulator
@@ -91,7 +114,9 @@ app.use(cors({
     'Accept',
     'Origin',
     'Access-Control-Request-Method',
-    'Access-Control-Request-Headers'
+    'Access-Control-Request-Headers',
+    'x-admin-key',
+    'X-Admin-Key'
   ],
   exposedHeaders: ['Content-Length', 'Content-Range', 'Accept-Ranges'],
   maxAge: 86400
@@ -102,6 +127,9 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Serve admin dashboard assets
+app.use('/admin', express.static(path.join(__dirname, 'admin')));
 
 // Serve HLS files with proper MIME types and CORS
 app.use('/hls', (req, res, next) => {

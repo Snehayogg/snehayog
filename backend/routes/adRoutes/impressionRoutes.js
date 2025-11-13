@@ -5,6 +5,7 @@ import AdImpression from '../../models/AdImpression.js';
 import { verifyToken } from '../../utils/verifytoken.js';
 
 const router = express.Router();
+const DAILY_VIEW_FREQUENCY_CAP = 3;
 
 // POST /ads/impressions/banner - Track banner ad impression
 router.post('/impressions/banner', async (req, res) => {
@@ -257,6 +258,29 @@ router.post('/impressions/banner/view', async (req, res) => {
       });
     }
 
+    let dailyViewCount = 0;
+    if (normalizedUserId) {
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      dailyViewCount = await AdImpression.countDocuments({
+        videoId: videoId,
+        adId: adId,
+        userId: normalizedUserId,
+        adType: 'banner',
+        isViewed: true,
+        timestamp: { $gte: startOfDay }
+      });
+
+      if (dailyViewCount >= DAILY_VIEW_FREQUENCY_CAP) {
+        return res.status(200).json({
+          success: false,
+          message: 'Daily ad view cap reached for this user',
+          dailyViews: dailyViewCount,
+          frequencyCap: DAILY_VIEW_FREQUENCY_CAP
+        });
+      }
+    }
+
     // Find existing impression record and mark it as viewed
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
     
@@ -272,6 +296,11 @@ router.post('/impressions/banner/view', async (req, res) => {
       // Update existing impression to mark as viewed
       impression.isViewed = true;
       impression.viewDuration = viewDuration;
+       impression.viewCount = Math.min(
+        (impression.viewCount || 0) + 1,
+        DAILY_VIEW_FREQUENCY_CAP
+      );
+      impression.frequencyCap = impression.frequencyCap || DAILY_VIEW_FREQUENCY_CAP;
       await impression.save();
       console.log(`✅ Banner ad VIEW tracked: Video ${videoId}, Ad ${adId}, Duration: ${viewDuration}s`);
     } else {
@@ -284,6 +313,8 @@ router.post('/impressions/banner/view', async (req, res) => {
         impressionType: 'view',
         isViewed: true,
         viewDuration: viewDuration,
+        viewCount: 1,
+        frequencyCap: DAILY_VIEW_FREQUENCY_CAP,
         timestamp: new Date()
       });
       console.log(`✅ New banner ad VIEW created: Video ${videoId}, Ad ${adId}, Duration: ${viewDuration}s`);
@@ -292,7 +323,9 @@ router.post('/impressions/banner/view', async (req, res) => {
     res.status(200).json({ 
       success: true,
       message: 'Banner ad view tracked successfully',
-      viewDuration: viewDuration
+      viewDuration: viewDuration,
+      dailyViews: normalizedUserId ? dailyViewCount + 1 : undefined,
+      frequencyCap: normalizedUserId ? DAILY_VIEW_FREQUENCY_CAP : undefined
     });
   } catch (error) {
     console.error('❌ Error tracking banner ad view:', error);
@@ -335,6 +368,29 @@ router.post('/impressions/carousel/view', async (req, res) => {
       });
     }
 
+    let dailyViewCount = 0;
+    if (normalizedUserId) {
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      dailyViewCount = await AdImpression.countDocuments({
+        videoId: videoId,
+        adId: adId,
+        userId: normalizedUserId,
+        adType: 'carousel',
+        isViewed: true,
+        timestamp: { $gte: startOfDay }
+      });
+
+      if (dailyViewCount >= DAILY_VIEW_FREQUENCY_CAP) {
+        return res.status(200).json({
+          success: false,
+          message: 'Daily ad view cap reached for this user',
+          dailyViews: dailyViewCount,
+          frequencyCap: DAILY_VIEW_FREQUENCY_CAP
+        });
+      }
+    }
+
     // Find existing impression record and mark it as viewed
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
     
@@ -349,6 +405,11 @@ router.post('/impressions/carousel/view', async (req, res) => {
     if (impression) {
       impression.isViewed = true;
       impression.viewDuration = viewDuration;
+      impression.viewCount = Math.min(
+        (impression.viewCount || 0) + 1,
+        DAILY_VIEW_FREQUENCY_CAP
+      );
+      impression.frequencyCap = impression.frequencyCap || DAILY_VIEW_FREQUENCY_CAP;
       await impression.save();
       console.log(`✅ Carousel ad VIEW tracked: Video ${videoId}, Ad ${adId}, Duration: ${viewDuration}s`);
     } else {
@@ -360,6 +421,8 @@ router.post('/impressions/carousel/view', async (req, res) => {
         impressionType: 'scroll_view',
         isViewed: true,
         viewDuration: viewDuration,
+        viewCount: 1,
+        frequencyCap: DAILY_VIEW_FREQUENCY_CAP,
         timestamp: new Date()
       });
       console.log(`✅ New carousel ad VIEW created: Video ${videoId}, Ad ${adId}, Duration: ${viewDuration}s`);
@@ -368,7 +431,9 @@ router.post('/impressions/carousel/view', async (req, res) => {
     res.status(200).json({ 
       success: true,
       message: 'Carousel ad view tracked successfully',
-      viewDuration: viewDuration
+      viewDuration: viewDuration,
+      dailyViews: normalizedUserId ? dailyViewCount + 1 : undefined,
+      frequencyCap: normalizedUserId ? DAILY_VIEW_FREQUENCY_CAP : undefined
     });
   } catch (error) {
     console.error('❌ Error tracking carousel ad view:', error);

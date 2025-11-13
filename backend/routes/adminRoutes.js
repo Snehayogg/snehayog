@@ -1,167 +1,480 @@
 import express from 'express';
-import AdCreative from '../models/AdCreative.js';
-import AdCampaign from '../models/AdCampaign.js';
+import Feedback from '../models/Feedback.js';
+import requireAdminDashboardKey from '../middleware/adminDashboardAuth.js';
+import User from '../models/User.js';
+import Video from '../models/Video.js';
+import CreatorPayout from '../models/CreatorPayout.js';
+import AdImpression from '../models/AdImpression.js';
+import { AD_CONFIG } from '../constants/index.js';
 
 const router = express.Router();
 
-// **NEW: Remove test carousel ads**
-router.delete('/cleanup-test-carousel-ads', async (req, res) => {
+
+// Admin feedback endpoints
+router.get('/feedback', requireAdminDashboardKey, async (req, res) => {
   try {
-    console.log('🗑️ Starting to delete test carousel ads...');
-    
-    // Find test carousel ads
-    const testCarouselAds = await AdCreative.find({
-      adType: 'carousel',
-      $or: [
-        { 'callToAction.label': 'Learn More' },
-        { 'callToAction.url': 'https://example.com' },
-        { advertiserName: { $regex: /test|dummy|placeholder/i } },
-        { title: { $regex: /test|dummy|placeholder/i } },
-        { description: { $regex: /test|dummy|placeholder/i } }
-      ]
-    });
+    const {
+      limit = 50,
+      rating,
+      search,
+      sort = 'desc',
+      unread,
+      replied
+    } = req.query;
 
-    console.log(`🔍 Found ${testCarouselAds.length} test carousel ads to delete`);
+    const query = {};
 
-    let deletedCount = 0;
-    let deletedCampaigns = 0;
-
-    if (testCarouselAds.length > 0) {
-      // Show what we're about to delete
-      console.log('📋 Test carousel ads to be deleted:');
-      testCarouselAds.forEach((ad, index) => {
-        console.log(`   ${index + 1}. ${ad.title || 'No title'} - ${ad.slides?.length || 0} slides`);
-      });
-
-      // Delete the ads
-      const result = await AdCreative.deleteMany({
-        _id: { $in: testCarouselAds.map(ad => ad._id) }
-      });
-
-      deletedCount = result.deletedCount;
-      console.log(`✅ Deleted ${deletedCount} test carousel ads`);
-
-      // Also delete associated campaigns if they exist
-      const campaignIds = testCarouselAds
-        .map(ad => ad.campaignId)
-        .filter(id => id !== null);
-
-      if (campaignIds.length > 0) {
-        const campaignResult = await AdCampaign.deleteMany({
-          _id: { $in: campaignIds }
-        });
-        deletedCampaigns = campaignResult.deletedCount;
-        console.log(`✅ Deleted ${deletedCampaigns} associated campaigns`);
+    if (rating) {
+      const parsedRating = parseInt(rating, 10);
+      if (!Number.isNaN(parsedRating)) {
+        query.rating = parsedRating;
       }
     }
 
-    console.log('🎉 Test carousel ads cleanup completed!');
-    
+    if (unread === 'true') {
+      query.isRead = false;
+    } else if (unread === 'false') {
+      query.isRead = true;
+    }
+
+    if (replied === 'true') {
+      query.isReplied = true;
+    } else if (replied === 'false') {
+      query.isReplied = false;
+    }
+
+    if (search && search.trim()) {
+      const regex = new RegExp(search.trim(), 'i');
+      query.$or = [
+        { comments: regex },
+        { userEmail: regex },
+        { adminReply: regex }
+      ];
+    }
+
+    const sortOrder = sort === 'asc' ? 1 : -1;
+    const normalizedLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+
+    const feedback = await Feedback.find(query)
+      .sort({ createdAt: sortOrder })
+      .limit(normalizedLimit)
+      .lean();
+
     res.json({
       success: true,
-      message: 'Test carousel ads cleanup completed',
-      deletedAds: deletedCount,
-      deletedCampaigns: deletedCampaigns,
-      totalDeleted: deletedCount
+      count: feedback.length,
+      feedback
     });
-    
   } catch (error) {
-    console.error('❌ Error deleting test carousel ads:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to delete test carousel ads',
-      message: error.message
-    });
+    console.error('❌ Error loading feedback:', error);
+    res.status(500).json({ success: false, error: 'Failed to load feedback' });
   }
 });
 
-// Delete all dummy/placeholder ads
-router.delete('/cleanup-dummy-ads', async (req, res) => {
+router.get('/feedback/stats', requireAdminDashboardKey, async (req, res) => {
   try {
-    console.log('🗑️ Starting to delete dummy ads...');
-    
-    // Find ads with dummy/placeholder content
-    const dummyAds = await AdCreative.find({
-      $or: [
-        { 'callToAction.label': 'Learn More' },
-        { 'callToAction.url': 'https://example.com' },
-        { cloudinaryUrl: { $regex: /placeholder|dummy|test/i } },
-        { title: { $regex: /ad image|advertiser|sponsored|dummy|test|placeholder/i } },
-        { description: { $regex: /ad image|advertiser|sponsored|dummy|test|placeholder/i } }
-      ]
-    });
+    const stats = await Feedback.getStats();
+    res.json({ success: true, stats });
+  } catch (error) {
+    console.error('❌ Error loading feedback stats:', error);
+    res.status(500).json({ success: false, error: 'Failed to load feedback stats' });
+  }
+});
 
-    console.log(`🔍 Found ${dummyAds.length} dummy ads to delete`);
+router.get('/feedback/:id', requireAdminDashboardKey, async (req, res) => {
+  try {
+    const feedback = await Feedback.findById(req.params.id).lean();
+    if (!feedback) {
+      return res.status(404).json({ success: false, error: 'Feedback not found' });
+    }
+    res.json(feedback);
+  } catch (error) {
+    console.error('❌ Error loading feedback detail:', error);
+    res.status(500).json({ success: false, error: 'Failed to load feedback detail' });
+  }
+});
 
-    let deletedCount = 0;
-    let deletedCampaigns = 0;
+router.put('/feedback/:id/read', requireAdminDashboardKey, async (req, res) => {
+  try {
+    const feedback = await Feedback.findById(req.params.id);
+    if (!feedback) {
+      return res.status(404).json({ success: false, error: 'Feedback not found' });
+    }
 
-    if (dummyAds.length > 0) {
-      // Show what we're about to delete
-      console.log('📋 Dummy ads to be deleted:');
-      dummyAds.forEach((ad, index) => {
-        console.log(`   ${index + 1}. ${ad.title || 'No title'} - ${ad.callToAction?.label || 'No CTA'}`);
-      });
+    if (!feedback.isRead) {
+      feedback.isRead = true;
+      feedback.readAt = new Date();
+      await feedback.save();
+    }
 
-      // Delete the ads
-      const result = await AdCreative.deleteMany({
-        _id: { $in: dummyAds.map(ad => ad._id) }
-      });
+    res.json({ success: true, message: 'Feedback marked as read' });
+  } catch (error) {
+    console.error('❌ Error marking feedback as read:', error);
+    res.status(500).json({ success: false, error: 'Failed to mark feedback as read' });
+  }
+});
 
-      deletedCount = result.deletedCount;
-      console.log(`✅ Deleted ${deletedCount} dummy ads`);
+router.post('/feedback/:id/reply', requireAdminDashboardKey, async (req, res) => {
+  try {
+    const { reply } = req.body;
+    if (!reply || !reply.trim()) {
+      return res.status(400).json({ success: false, error: 'Reply is required' });
+    }
 
-      // Also delete associated campaigns if they exist
-      const campaignIds = dummyAds
-        .map(ad => ad.campaignId)
-        .filter(id => id !== null);
+    const feedback = await Feedback.findById(req.params.id);
+    if (!feedback) {
+      return res.status(404).json({ success: false, error: 'Feedback not found' });
+    }
 
-      if (campaignIds.length > 0) {
-        const campaignResult = await AdCampaign.deleteMany({
-          _id: { $in: campaignIds }
-        });
-        deletedCampaigns = campaignResult.deletedCount;
-        console.log(`✅ Deleted ${deletedCampaigns} associated campaigns`);
+    feedback.adminReply = reply.trim();
+    feedback.isReplied = true;
+    feedback.repliedAt = new Date();
+    await feedback.save();
+
+    res.json({ success: true, message: 'Reply recorded successfully' });
+  } catch (error) {
+    console.error('❌ Error replying to feedback:', error);
+    res.status(500).json({ success: false, error: 'Failed to reply to feedback' });
+  }
+});
+
+router.get('/feedback/export', requireAdminDashboardKey, async (req, res) => {
+  try {
+    const feedback = await Feedback.find().sort({ createdAt: -1 }).lean();
+
+    const headers = [
+      'id',
+      'rating',
+      'comments',
+      'userEmail',
+      'userId',
+      'isRead',
+      'readAt',
+      'isReplied',
+      'adminReply',
+      'repliedAt',
+      'createdAt',
+      'updatedAt'
+    ];
+
+    const escapeCsv = (value) => {
+      if (value === null || value === undefined) return '';
+      const stringValue = String(value).replace(/"/g, '""');
+      if (/[",\n]/.test(stringValue)) {
+        return `"${stringValue}"`;
       }
-    }
+      return stringValue;
+    };
 
-    // Also delete any ads with empty or null cloudinaryUrl
-    const emptyAds = await AdCreative.find({
-      $or: [
-        { cloudinaryUrl: { $exists: false } },
-        { cloudinaryUrl: null },
-        { cloudinaryUrl: '' }
-      ]
+    const rows = feedback.map((item) => [
+      item._id,
+      item.rating,
+      item.comments || '',
+      item.userEmail,
+      item.userId || '',
+      item.isRead,
+      item.readAt ? item.readAt.toISOString() : '',
+      item.isReplied,
+      item.adminReply || '',
+      item.repliedAt ? item.repliedAt.toISOString() : '',
+      item.createdAt ? item.createdAt.toISOString() : '',
+      item.updatedAt ? item.updatedAt.toISOString() : ''
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row) => row.map(escapeCsv).join(','))
+    ].join('\n');
+
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="feedback-export-${new Date().toISOString().split('T')[0]}.csv"`
+    );
+    res.setHeader('Content-Type', 'text/csv');
+    res.send(csvContent);
+  } catch (error) {
+    console.error('❌ Error exporting feedback:', error);
+    res.status(500).json({ success: false, error: 'Failed to export feedback' });
+  }
+});
+
+router.get('/creators', requireAdminDashboardKey, async (req, res) => {
+  try {
+    const [creators, videoStats, adStats, payoutStats, earningsStats] = await Promise.all([
+      User.find({}, 'name email preferredPaymentMethod paymentDetails country payoutCount createdAt googleId').lean(),
+      Video.aggregate([
+        {
+          $group: {
+            _id: '$uploader',
+            totalViews: { $sum: '$views' },
+            totalVideos: { $sum: 1 }
+          }
+        }
+      ]),
+      AdImpression.aggregate([
+        {
+          $group: {
+            _id: '$videoId',
+            totalAdViews: {
+              $sum: {
+                $cond: [
+                  { $gt: ['$viewCount', 0] },
+                  '$viewCount',
+                  { $cond: ['$isViewed', 1, 0] }
+                ]
+              }
+            },
+            totalAdImpressions: { $sum: 1 }
+          }
+        },
+        {
+          $lookup: {
+            from: 'videos',
+            localField: '_id',
+            foreignField: '_id',
+            as: 'video'
+          }
+        },
+        { $unwind: '$video' },
+        {
+          $group: {
+            _id: '$video.uploader',
+            totalAdViews: { $sum: '$totalAdViews' },
+            totalAdImpressions: { $sum: '$totalAdImpressions' }
+          }
+        }
+      ]),
+      CreatorPayout.aggregate([
+        {
+          $group: {
+            _id: '$creatorId',
+            totalEarningsINR: { $sum: '$payableINR' },
+            pendingEarningsINR: {
+              $sum: {
+                $cond: [{ $eq: ['$status', 'pending'] }, '$payableINR', 0]
+              }
+            },
+            processingEarningsINR: {
+              $sum: {
+                $cond: [{ $eq: ['$status', 'processing'] }, '$payableINR', 0]
+              }
+            },
+            paidEarningsINR: {
+              $sum: {
+                $cond: [{ $eq: ['$status', 'paid'] }, '$payableINR', 0]
+              }
+            },
+            eligiblePendingINR: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $eq: ['$status', 'pending'] },
+                      '$isEligibleForPayout'
+                    ]
+                  },
+                  '$payableINR',
+                  0
+                ]
+              }
+            },
+            lastPayoutAt: { $max: '$paymentDate' }
+          }
+        }
+      ]),
+      AdImpression.aggregate([
+        { $match: { isViewed: true } },
+        {
+          $lookup: {
+            from: 'videos',
+            localField: 'videoId',
+            foreignField: '_id',
+            as: 'video'
+          }
+        },
+        { $unwind: '$video' },
+        {
+          $group: {
+            _id: { creator: '$video.uploader', adType: '$adType' },
+            viewSum: {
+              $sum: {
+                $cond: [
+                  { $gt: ['$viewCount', 0] },
+                  '$viewCount',
+                  1
+                ]
+              }
+            }
+          }
+        },
+        {
+          $group: {
+            _id: '$_id.creator',
+            bannerViews: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$_id.adType', 'banner'] },
+                  '$viewSum',
+                  0
+                ]
+              }
+            },
+            carouselViews: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$_id.adType', 'carousel'] },
+                  '$viewSum',
+                  0
+                ]
+              }
+            },
+            totalAdViews: { $sum: '$viewSum' }
+          }
+        }
+      ])
+    ]);
+
+    const videoMap = new Map();
+    videoStats.forEach((stat) => {
+      videoMap.set(String(stat._id), {
+        totalViews: stat.totalViews || 0,
+        totalVideos: stat.totalVideos || 0
+      });
     });
 
-    let deletedEmptyAds = 0;
-    if (emptyAds.length > 0) {
-      console.log(`🔍 Found ${emptyAds.length} ads with empty URLs to delete`);
-      const emptyResult = await AdCreative.deleteMany({
-        _id: { $in: emptyAds.map(ad => ad._id) }
+    const adMap = new Map();
+    adStats.forEach((stat) => {
+      adMap.set(String(stat._id), {
+        totalAdViews: stat.totalAdViews || 0,
+        totalAdImpressions: stat.totalAdImpressions || 0
       });
-      deletedEmptyAds = emptyResult.deletedCount;
-      console.log(`✅ Deleted ${deletedEmptyAds} ads with empty URLs`);
-    }
+    });
 
-    console.log('🎉 Dummy ads cleanup completed!');
-    
+    const payoutMap = new Map();
+    payoutStats.forEach((stat) => {
+      payoutMap.set(String(stat._id), {
+        totalEarningsINR: stat.totalEarningsINR || 0,
+        pendingEarningsINR: stat.pendingEarningsINR || 0,
+        processingEarningsINR: stat.processingEarningsINR || 0,
+        paidEarningsINR: stat.paidEarningsINR || 0,
+        eligiblePendingINR: stat.eligiblePendingINR || 0,
+        lastPayoutAt: stat.lastPayoutAt || null
+      });
+    });
+
+    const bannerCpm = AD_CONFIG?.BANNER_CPM ?? 10;
+    const carouselCpm = AD_CONFIG?.DEFAULT_CPM ?? 30;
+    const creatorShare = AD_CONFIG?.CREATOR_REVENUE_SHARE ?? 0.8;
+    const platformShare = AD_CONFIG?.PLATFORM_REVENUE_SHARE ?? 0.2;
+
+    const earningsMap = new Map();
+    earningsStats.forEach((stat) => {
+      const totalViews = stat.totalAdViews || 0;
+      const bannerViews = stat.bannerViews || 0;
+      const carouselViews = stat.carouselViews || 0;
+      const bannerRevenue = (bannerViews / 1000) * bannerCpm;
+      const carouselRevenue = (carouselViews / 1000) * carouselCpm;
+      const grossRevenueINR = bannerRevenue + carouselRevenue;
+      const creatorRevenueINR = grossRevenueINR * creatorShare;
+      const platformRevenueINR = grossRevenueINR * platformShare;
+
+      earningsMap.set(String(stat._id), {
+        totalAdViews: totalViews,
+        bannerViews,
+        carouselViews,
+        grossRevenueINR,
+        creatorRevenueINR,
+        platformRevenueINR
+      });
+    });
+
+    const creatorSummaries = creators.map((creator) => {
+      const id = String(creator._id);
+      const videos = videoMap.get(id) || { totalViews: 0, totalVideos: 0 };
+      const ads = adMap.get(id) || {
+        totalAdViews: 0,
+        totalAdImpressions: 0
+      };
+      const payouts = payoutMap.get(id) || {
+        totalEarningsINR: 0,
+        pendingEarningsINR: 0,
+        processingEarningsINR: 0,
+        paidEarningsINR: 0,
+        eligiblePendingINR: 0,
+        lastPayoutAt: null
+      };
+
+      const upiId = creator?.paymentDetails?.upiId || null;
+      const bankAccount = creator?.paymentDetails?.bankAccount || null;
+      const paymentSummary = {
+        preferredPaymentMethod: creator.preferredPaymentMethod || null,
+        upiId,
+        bank: bankAccount
+          ? {
+              accountNumber: bankAccount.accountNumber,
+              ifscCode: bankAccount.ifscCode,
+              bankName: bankAccount.bankName,
+              accountHolderName: bankAccount.accountHolderName
+            }
+          : null
+      };
+
+      const earnings = earningsMap.get(id) || {
+        totalAdViews: ads.totalAdViews || 0,
+        bannerViews: 0,
+        carouselViews: 0,
+        grossRevenueINR: 0,
+        creatorRevenueINR: 0,
+        platformRevenueINR: 0
+      };
+
+      const creatorRevenueINR =
+        earnings.creatorRevenueINR && earnings.creatorRevenueINR > 0
+          ? earnings.creatorRevenueINR
+          : payouts.totalEarningsINR || 0;
+
+      return {
+        id,
+        googleId: creator.googleId,
+        name: creator.name,
+        email: creator.email,
+        country: creator.country || 'IN',
+        totalVideos: videos.totalVideos,
+        totalViews: videos.totalViews,
+        totalAdViews: earnings.totalAdViews,
+        bannerAdViews: earnings.bannerViews,
+        carouselAdViews: earnings.carouselViews,
+        totalAdImpressions: ads.totalAdImpressions,
+        grossRevenueINR: earnings.grossRevenueINR,
+        creatorRevenueINR,
+        platformRevenueINR: earnings.platformRevenueINR,
+        reportedPayoutINR: payouts.totalEarningsINR,
+        totalEarningsINR: creatorRevenueINR,
+        pendingEarningsINR: payouts.pendingEarningsINR,
+        processingEarningsINR: payouts.processingEarningsINR,
+        paidEarningsINR: payouts.paidEarningsINR,
+        eligiblePendingINR: payouts.eligiblePendingINR,
+        payoutCount: creator.payoutCount || 0,
+        paymentDetails: paymentSummary,
+        createdAt: creator.createdAt,
+        lastPayoutAt: payouts.lastPayoutAt
+      };
+    });
+
+    creatorSummaries.sort(
+      (a, b) => (b.creatorRevenueINR || 0) - (a.creatorRevenueINR || 0)
+    );
+
     res.json({
       success: true,
-      message: 'Dummy ads cleanup completed',
-      deletedAds: deletedCount,
-      deletedCampaigns: deletedCampaigns,
-      deletedEmptyAds: deletedEmptyAds,
-      totalDeleted: deletedCount + deletedEmptyAds
+      count: creatorSummaries.length,
+      creators: creatorSummaries
     });
-    
   } catch (error) {
-    console.error('❌ Error deleting dummy ads:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to delete dummy ads',
-      message: error.message
-    });
+    console.error('❌ Error loading creator summaries:', error);
+    res
+      .status(500)
+      .json({ success: false, error: 'Failed to load creator data' });
   }
 });
 

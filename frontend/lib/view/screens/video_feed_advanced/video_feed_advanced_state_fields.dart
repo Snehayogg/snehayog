@@ -7,6 +7,7 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   String? _currentUserId;
   int _currentIndex = 0;
   final Set<String> _followingUsers = {};
+  final Set<String> _seenVideoKeys = <String>{};
   String? _errorMessage;
   bool _isRefreshing = false;
 
@@ -124,4 +125,11 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   bool _wakelockEnabled = false;
   bool _wasSignedIn = false;
   bool _pendingAutoplayAfterLogin = false;
+
+  String videoIdentityKey(VideoModel video) {
+    if (video.id.isNotEmpty) return video.id;
+    if (video.videoUrl.isNotEmpty) return video.videoUrl;
+    if (video.videoName.isNotEmpty) return video.videoName;
+    return '${video.hashCode}';
+  }
 }

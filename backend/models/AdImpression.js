@@ -39,6 +39,14 @@ const AdImpressionSchema = new mongoose.Schema({
     type: Number, // Duration in seconds that ad was visible
     default: 0
   },
+  viewCount: {
+    type: Number,
+    default: 0
+  },
+  frequencyCap: {
+    type: Number,
+    default: 3
+  },
   timestamp: {
     type: Date,
     default: Date.now,

@@ -13,11 +13,9 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
     final sharedPool = SharedVideoControllerPool();
 
     const preloadWindow = 2;
-    for (
-      int i = _currentIndex;
-      i <= _currentIndex + preloadWindow && i < _videos.length;
-      i++
-    ) {
+    for (int i = _currentIndex;
+        i <= _currentIndex + preloadWindow && i < _videos.length;
+        i++) {
       final video = _videos[i];
 
       if (sharedPool.isVideoLoaded(video.id)) {
@@ -397,8 +395,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       }
 
       final errorString = e.toString().toLowerCase();
-      final isNoMemoryError =
-          errorString.contains('no_memory') ||
+      final isNoMemoryError = errorString.contains('no_memory') ||
           errorString.contains('0xfffffff4') ||
           errorString.contains('error 12') ||
           (errorString.contains('failed to initialize') &&
@@ -675,6 +672,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
     if (index < _videos.length) {
       final video = _videos[index];
+      _markVideoAsSeen(video);
 
       controllerToUse = sharedPool.getControllerForInstantPlay(video.id);
 
@@ -849,8 +847,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       final position = value.position;
       final remaining = duration - position;
 
-      final bool isCompleted =
-          !value.isPlaying &&
+      final bool isCompleted = !value.isPlaying &&
           !value.isBuffering &&
           remaining <= const Duration(milliseconds: 250);
 
@@ -932,14 +929,14 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       }
       _pageController
           .animateToPage(
-            nextIndex,
-            duration: const Duration(milliseconds: 320),
-            curve: Curves.easeInOut,
-          )
+        nextIndex,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeInOut,
+      )
           .whenComplete(() {
-            _isAnimatingPage = false;
-            _autoAdvancedForIndex.remove(index);
-          });
+        _isAnimatingPage = false;
+        _autoAdvancedForIndex.remove(index);
+      });
     });
   }
 

@@ -32,6 +32,7 @@ import 'package:vayu/utils/app_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'package:vayu/services/earnings_service.dart';
+import 'package:vayu/core/utils/video_engagement_ranker.dart';
 
 part 'video_feed_advanced/video_feed_advanced_state_fields.dart';
 part 'video_feed_advanced/video_feed_advanced_playback.dart';

@@ -36,6 +36,21 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
 
       if (widget.initialVideos != null && widget.initialVideos!.isNotEmpty) {
         _videos = List.from(widget.initialVideos!);
+        String? preserveKey;
+        if (widget.initialVideoId != null) {
+          for (final video in _videos) {
+            if (video.id == widget.initialVideoId) {
+              preserveKey = videoIdentityKey(video);
+              break;
+            }
+          }
+        }
+        preserveKey ??=
+            _videos.isNotEmpty ? videoIdentityKey(_videos.first) : null;
+        _videos = _rankVideosWithEngagement(
+          _videos,
+          preserveVideoKey: preserveKey,
+        );
 
         if (mounted) {
           _verifyAndSetCorrectIndex();
@@ -43,6 +58,7 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
           AppLogger.log(
             '🚀 VideoFeedAdvanced: Progressive render with provided videos: ${_videos.length}',
           );
+          _markCurrentVideoAsSeen();
           _startVideoPreloading();
         }
 
