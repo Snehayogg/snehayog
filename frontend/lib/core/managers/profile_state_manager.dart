@@ -9,6 +9,7 @@ import 'package:vayu/model/video_model.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/cloudinary_service.dart';
 import 'package:vayu/services/user_service.dart';
+import 'package:vayu/services/payment_setup_service.dart';
 import 'package:vayu/services/video_service.dart';
 import 'package:vayu/utils/feature_flags.dart';
 import 'package:vayu/core/constants/profile_constants.dart';
@@ -21,6 +22,7 @@ class ProfileStateManager extends ChangeNotifier {
   final VideoService _videoService = VideoService();
   final AuthService _authService = AuthService();
   final UserService _userService = UserService();
+  final PaymentSetupService _paymentSetupService = PaymentSetupService();
 
   // BuildContext to access VideoProvider
   BuildContext? _context;
@@ -156,6 +158,8 @@ class ProfileStateManager extends ChangeNotifier {
           '🔄 ProfileStateManager: User data keys: ${_userData?.keys.toList()}');
       AppLogger.log(
           '🔄 ProfileStateManager: User data values: ${_userData?.values.toList()}');
+
+      await _hydratePaymentDetailsIfNeeded();
 
       _isLoading = false;
       notifyListeners();
@@ -1010,6 +1014,62 @@ class ProfileStateManager extends ChangeNotifier {
       _error = 'Failed to refresh data: ${e.toString()}';
       notifyListeners();
       AppLogger.log('❌ ProfileStateManager: Error refreshing data: $e');
+    }
+  }
+
+  bool get hasUpiId {
+    final upi = _userData?['paymentDetails']?['upiId'];
+    return upi is String && upi.trim().isNotEmpty;
+  }
+
+  Future<void> ensurePaymentDetailsHydrated() async {
+    await _hydratePaymentDetailsIfNeeded();
+  }
+
+  Future<void> saveUpiIdQuick(String upiId) async {
+    final sanitizedUpiId = upiId.trim().toLowerCase();
+    if (sanitizedUpiId.isEmpty) {
+      throw Exception('UPI ID cannot be empty');
+    }
+
+    await _paymentSetupService.updateUpiId(sanitizedUpiId);
+    await _paymentSetupService.markPaymentSetupCompleted();
+
+    _userData ??= {};
+    final paymentDetails =
+        Map<String, dynamic>.from(_userData?['paymentDetails'] ?? {});
+    paymentDetails['upiId'] = sanitizedUpiId;
+    _userData!['paymentDetails'] = paymentDetails;
+    _userData!['preferredPaymentMethod'] = 'upi';
+    notifyListeners();
+  }
+
+  Future<void> _hydratePaymentDetailsIfNeeded() async {
+    try {
+      if (_userData == null) return;
+      final currentDetails = _userData?['paymentDetails'];
+      if (currentDetails is Map<String, dynamic> &&
+          (currentDetails['upiId']?.toString().isNotEmpty ?? false)) {
+        return;
+      }
+
+      final profile = await _paymentSetupService.fetchPaymentProfile();
+      if (profile == null) return;
+
+      final paymentDetails = profile['paymentDetails'];
+      if (paymentDetails is Map<String, dynamic>) {
+        _userData!['paymentDetails'] =
+            Map<String, dynamic>.from(paymentDetails);
+        final preferredMethod =
+            profile['creator']?['preferredPaymentMethod']?.toString();
+        if (preferredMethod != null && preferredMethod.isNotEmpty) {
+          _userData!['preferredPaymentMethod'] = preferredMethod;
+        }
+        notifyListeners();
+      }
+    } catch (e) {
+      AppLogger.log(
+          '⚠️ ProfileStateManager: Failed to hydrate payment details: $e');
     }
   }
 

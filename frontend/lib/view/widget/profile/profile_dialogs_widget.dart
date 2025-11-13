@@ -67,12 +67,11 @@ class ProfileDialogsWidget {
                   );
                   final loggedInUserId =
                       authController.userData?['id']?.toString() ??
-                      authController.userData?['googleId']?.toString();
+                          authController.userData?['googleId']?.toString();
                   final viewedUserId =
                       stateManager.userData?['googleId']?.toString() ??
-                      stateManager.userData?['id']?.toString();
-                  final bool isViewingOwnProfile =
-                      loggedInUserId != null &&
+                          stateManager.userData?['id']?.toString();
+                  final bool isViewingOwnProfile = loggedInUserId != null &&
                       loggedInUserId.isNotEmpty &&
                       loggedInUserId == viewedUserId;
 
@@ -577,8 +576,23 @@ class ProfileDialogsWidget {
     );
   }
 
-  static void showHowToEarnDialog(BuildContext context) {
-    showModalBottomSheet(
+  static Future<void> showHowToEarnDialog(
+    BuildContext context, {
+    required ProfileStateManager stateManager,
+  }) async {
+    await stateManager.ensurePaymentDetailsHydrated();
+
+    final userData = stateManager.userData;
+    String currentUpi =
+        userData?['paymentDetails']?['upiId']?.toString().trim() ?? '';
+
+    final upiController = TextEditingController(text: currentUpi);
+
+    bool showUpiField = currentUpi.isEmpty;
+    bool isSaving = false;
+    String? validationMessage;
+
+    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
@@ -586,98 +600,227 @@ class ProfileDialogsWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (context) {
-        return DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.8,
-          minChildSize: 0.5,
-          maxChildSize: 0.95,
-          builder: (context, scrollController) => Padding(
-            padding: const EdgeInsets.all(16),
-            child: SingleChildScrollView(
-              controller: scrollController,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+        void closeSheet() {
+          Navigator.pop(context);
+        }
+
+        return StatefulBuilder(
+          builder: (context, setState) {
+            final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 20,
+                  right: 20,
+                  top: 16,
+                  bottom: bottomInset + 16,
+                ),
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade100,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.workspace_premium,
-                          color: Colors.blue.shade700,
-                        ),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade100,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.workspace_premium,
+                              color: Colors.blue.shade700,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Text(
+                              'How to earn on Vayu',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: closeSheet,
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'How to earn on Vayu',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.black87,
+                      const SizedBox(height: 12),
+                      _buildHowToEarnPoint(
+                        title: 'Payout schedule',
+                        body:
+                            'Balances are credited on the 1st of every month to your preferred payment method after verification.',
+                      ),
+                      _buildHowToEarnPoint(
+                        title: 'Follow content guidelines',
+                        body:
+                            'Avoid copyrighted or restricted content. Repeated violations may impact earnings and account status.',
+                      ),
+                      if (!showUpiField && currentUpi.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.blue.shade100),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Saved UPI ID',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                currentUpi,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton(
+                            onPressed: () {
+                              setState(() {
+                                showUpiField = true;
+                                validationMessage = null;
+                                upiController.text = currentUpi;
+                              });
+                            },
+                            child: const Text('Update UPI ID'),
+                          ),
+                        ),
+                      ],
+                      if (showUpiField) ...[
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: upiController,
+                          decoration: const InputDecoration(
+                            labelText: 'Enter your UPI ID',
+                            hintText: 'example@bank',
+                            border: OutlineInputBorder(),
+                          ),
+                          textInputAction: TextInputAction.done,
+                        ),
+                        if (validationMessage != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            validationMessage!,
+                            style: TextStyle(
+                              color: Colors.red.shade600,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ],
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: isSaving
+                              ? null
+                              : () async {
+                                  if (!showUpiField) {
+                                    closeSheet();
+                                    return;
+                                  }
+
+                                  final upiId = upiController.text.trim();
+                                  final regex = RegExp(
+                                    r'^[a-zA-Z0-9.\-_]{2,}@[a-zA-Z]{2,}$',
+                                  );
+
+                                  if (upiId.isEmpty || !regex.hasMatch(upiId)) {
+                                    setState(() {
+                                      validationMessage =
+                                          'Enter a valid UPI ID (for example: creator@bank).';
+                                    });
+                                    return;
+                                  }
+
+                                  FocusScope.of(context).unfocus();
+                                  setState(() {
+                                    isSaving = true;
+                                    validationMessage = null;
+                                  });
+
+                                  try {
+                                    await stateManager.saveUpiIdQuick(upiId);
+                                    currentUpi = upiId;
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'UPI ID saved successfully. Payouts will be credited on the 1st of every month.',
+                                          ),
+                                          duration: Duration(seconds: 3),
+                                        ),
+                                      );
+                                    }
+                                    setState(() {
+                                      isSaving = false;
+                                      showUpiField = false;
+                                      validationMessage =
+                                          'UPI ID saved successfully! Your payouts will credit on the 1st.';
+                                    });
+                                  } catch (e) {
+                                    setState(() {
+                                      isSaving = false;
+                                      validationMessage = e
+                                          .toString()
+                                          .replaceFirst('Exception: ', '');
+                                    });
+                                  }
+                                },
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            backgroundColor: Colors.blue.shade600,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: Text(
+                            isSaving
+                                ? 'Saving...'
+                                : showUpiField
+                                    ? 'Verify & Save'
+                                    : 'Done',
                           ),
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(context),
-                      ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-
-                  // Points
-                  _buildHowToEarnPoint(
-                    title: '1. Upload quality videos',
-                    body:
-                        'Create engaging Yog content. Use clear titles and relevant categories/tags for better reach.',
-                  ),
-                  _buildHowToEarnPoint(
-                    title: '2. Earn from ad revenue',
-                    body:
-                        'You earn a share when ads are shown with your videos. Higher engagement increases your earnings.',
-                  ),
-                  _buildHowToEarnPoint(
-                    title: '3. Payout schedule',
-                    body:
-                        'Balances are credited on the 1st of every month to your preferred payment method after verification.',
-                  ),
-                  _buildHowToEarnPoint(
-                    title: '4. Complete payment setup',
-                    body:
-                        'Set up your payout details in Creator Dashboard to receive monthly payments without delays.',
-                  ),
-                  _buildHowToEarnPoint(
-                    title: '5. Follow content guidelines',
-                    body:
-                        'Avoid copyrighted or restricted content. Repeated violations may impact earnings and account status.',
-                  ),
-
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.check_circle_outline),
-                      label: const Text('Got it'),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        backgroundColor: Colors.blue.shade600,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
+
+    upiController.dispose();
+
+    if (stateManager.hasUpiId) {
+      await stateManager.refreshData();
+    }
   }
 
   static Widget _buildHowToEarnPoint({

@@ -886,7 +886,10 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   /// Show How to Earn guidance (same style as UploadScreen's What to Upload)
   void _showHowToEarnDialog() {
-    ProfileDialogsWidget.showHowToEarnDialog(context);
+    ProfileDialogsWidget.showHowToEarnDialog(
+      context,
+      stateManager: _stateManager,
+    );
   }
 
   Widget _buildSignInView() {

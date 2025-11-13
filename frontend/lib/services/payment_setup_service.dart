@@ -207,4 +207,63 @@ class PaymentSetupService {
       };
     }
   }
+
+  Future<Map<String, dynamic>?> fetchPaymentProfile() async {
+    try {
+      final userData = await _authService.getUserData();
+      final token = userData?['token'];
+      if (token == null) return null;
+
+      final response = await http.get(
+        Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/profile'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is Map<String, dynamic>) {
+          final prefs = await SharedPreferences.getInstance();
+          final userId = userData?['googleId'] ?? userData?['id'];
+          if (userId != null) {
+            await prefs.setString(
+              '${_paymentProfileKey}_$userId',
+              json.encode(data),
+            );
+          }
+          return data;
+        }
+      }
+
+      return null;
+    } catch (e) {
+      print('❌ Error fetching payment profile: $e');
+      return null;
+    }
+  }
+
+  Future<void> updateUpiId(String upiId) async {
+    final userData = await _authService.getUserData();
+    final token = userData?['token'];
+    if (token == null) {
+      throw Exception('Not authenticated');
+    }
+
+    final response = await http.put(
+      Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/payment-method/upi'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: json.encode({'upiId': upiId}),
+    );
+
+    if (response.statusCode != 200) {
+      final message =
+          response.body.isNotEmpty ? response.body : 'Unknown error';
+      throw Exception('Failed to update UPI ID: $message');
+    }
+  }
 }
