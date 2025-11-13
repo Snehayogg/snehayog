@@ -359,10 +359,10 @@
                     <option value="name">Sort by Name</option>
                     <option value="pending">Sort by Pending Payout</option>
                 </select>
-                <select id="creatorEligibilityFilter" onchange="filterCreators()">
+                <select id="creatorStatusFilter" onchange="filterCreators()">
                     <option value="all">All Creators</option>
-                    <option value="eligible">Eligible for Payout</option>
                     <option value="pending">Pending Payouts</option>
+                    <option value="marked">Marked Paid</option>
                     <option value="noEarnings">No Earnings Yet</option>
                 </select>
                 <button class="btn btn-primary btn-sm" onclick="resetCreatorFilters()">Reset</button>
@@ -530,12 +530,61 @@
         const API_BASE = detectApiBase();
         let creatorData = [];
 
+        const MARKED_CREATORS_STORAGE_KEY = 'vayu_admin_marked_creators';
+        let markedCreators = new Set();
+
         const currencyFormatterINR = new Intl.NumberFormat('en-IN', {
             style: 'currency',
             currency: 'INR',
             minimumFractionDigits: 2,
             maximumFractionDigits: 2
         });
+
+        function loadMarkedCreators() {
+            try {
+                const stored = localStorage.getItem(MARKED_CREATORS_STORAGE_KEY);
+                if (stored) {
+                    const parsed = JSON.parse(stored);
+                    if (Array.isArray(parsed)) {
+                        markedCreators = new Set(parsed);
+                    }
+                }
+            } catch (error) {
+                console.warn('Failed to load marked creators from storage', error);
+                markedCreators = new Set();
+            }
+        }
+
+        function saveMarkedCreators() {
+            try {
+                localStorage.setItem(
+                    MARKED_CREATORS_STORAGE_KEY,
+                    JSON.stringify(Array.from(markedCreators))
+                );
+            } catch (error) {
+                console.warn('Failed to save marked creators', error);
+            }
+        }
+
+        function isCreatorMarked(creatorId) {
+            if (!creatorId) return false;
+            return markedCreators.has(creatorId);
+        }
+
+        function markCreatorPaid(encodedId) {
+            const creatorId = decodeURIComponent(encodedId);
+            if (!creatorId) return;
+            if (markedCreators.has(creatorId)) {
+                showSuccess('This creator is already marked as paid.');
+                return;
+            }
+            markedCreators.add(creatorId);
+            saveMarkedCreators();
+            showSuccess('Marked payout as done ✅');
+            filterCreators();
+        }
+
+        loadMarkedCreators();
 
         const numberFormatter = new Intl.NumberFormat('en-IN');
 
@@ -617,19 +666,27 @@
             }
 
             const totals = creators.reduce((acc, creator) => {
+                const isMarked = isCreatorMarked(creator.id);
                 const net = Number(creator.creatorRevenueINR ?? creator.totalEarningsINR ?? 0);
                 const gross = Number(creator.grossRevenueINR ?? net);
-                const platform = Number(creator.platformRevenueINR ?? (gross - net));
+                const platform = Math.max(Number(creator.platformRevenueINR ?? (gross - net)), 0);
+                const pendingAmount = Number(creator.pendingEarningsINR || 0);
 
                 acc.totalViews += Number(creator.totalViews || 0);
                 acc.totalAdViews += Number(creator.totalAdViews || 0);
                 acc.totalCreatorEarnings += net;
                 acc.totalGrossEarnings += gross;
                 acc.totalPlatformRevenue += platform > 0 ? platform : Math.max(gross - net, 0);
-                acc.pendingEarnings += Number(creator.pendingEarningsINR || 0);
-                acc.eligiblePending += Number(creator.eligiblePendingINR || 0);
-                if ((creator.eligiblePendingINR || 0) > 0) acc.eligibleCount += 1;
-                if ((creator.pendingEarningsINR || 0) > 0) acc.pendingCount += 1;
+
+                if (!isMarked && pendingAmount > 0) {
+                    acc.pendingEarnings += pendingAmount;
+                    acc.pendingCount += 1;
+                }
+
+                if (isMarked) {
+                    acc.markedCount += 1;
+                }
+
                 return acc;
             }, {
                 totalViews: 0,
@@ -638,9 +695,8 @@
                 totalGrossEarnings: 0,
                 totalPlatformRevenue: 0,
                 pendingEarnings: 0,
-                eligiblePending: 0,
-                eligibleCount: 0,
-                pendingCount: 0
+                pendingCount: 0,
+                markedCount: 0
             });
 
             summaryContainer.innerHTML = `
@@ -666,8 +722,8 @@
                         <p style="margin: 0; color: #555;">Pending Payouts (${formatNumber(totals.pendingCount)} creators)</p>
                     </div>
                     <div style="background: #f8f9fa; border-radius: 12px; padding: 16px; text-align: center;">
-                        <h3 style="margin-bottom: 8px; color: #dc3545;">${formatCurrencyINR(totals.eligiblePending)}</h3>
-                        <p style="margin: 0; color: #555;">Eligible for Payout (${formatNumber(totals.eligibleCount)} creators)</p>
+                        <h3 style="margin-bottom: 8px; color: #20c997;">${formatNumber(totals.markedCount)}</h3>
+                        <p style="margin: 0; color: #555;">Marked as Paid</p>
                     </div>
                     <div style="background: #f8f9fa; border-radius: 12px; padding: 16px; text-align: center;">
                         <h3 style="margin-bottom: 8px; color: #6f42c1;">${formatNumber(totals.totalViews)}</h3>
@@ -694,40 +750,35 @@
                 const upiIdRaw = creator.paymentDetails?.upiId || '—';
                 const upiId = upiIdRaw === '—' ? upiIdRaw : escapeHtml(upiIdRaw);
 
-                const bankInfo = creator.paymentDetails?.bank;
-                let bankDisplay = '—';
-                if (bankInfo) {
-                    const segments = [];
-                    if (bankInfo.bankName) {
-                        segments.push(escapeHtml(bankInfo.bankName));
-                    }
-                    if (bankInfo.accountHolderName) {
-                        segments.push(`<small>${escapeHtml(bankInfo.accountHolderName)}</small>`);
-                    }
-                    const accountParts = [];
-                    if (bankInfo.accountNumber) {
-                        accountParts.push(escapeHtml(bankInfo.accountNumber));
-                    }
-                    if (bankInfo.ifscCode) {
-                        accountParts.push(escapeHtml(bankInfo.ifscCode));
-                    }
-                    if (accountParts.length > 0) {
-                        segments.push(`<small>${accountParts.join(' • ')}</small>`);
-                    }
-                    bankDisplay = segments.length > 0 ? segments.join('<br>') : '—';
-                }
-
                 const totalAdViews = Number(creator.totalAdViews || 0);
                 const netEarnings = Number(creator.creatorRevenueINR ?? creator.totalEarningsINR ?? 0);
                 const grossEarnings = Number(creator.grossRevenueINR ?? netEarnings);
                 const platformRevenue = Math.max(Number(creator.platformRevenueINR ?? (grossEarnings - netEarnings)), 0);
 
-                const pendingBadge = creator.pendingEarningsINR > 0
-                    ? `<span class="status-badge status-pending">${formatCurrencyINR(creator.pendingEarningsINR)}</span>`
-                    : '—';
-                const eligibleBadge = creator.eligiblePendingINR > 0
-                    ? `<span class="status-badge status-paid">${formatCurrencyINR(creator.eligiblePendingINR)}</span>`
-                    : '—';
+                const pendingAmount = Number(creator.pendingEarningsINR || 0);
+                const isMarked = isCreatorMarked(creator.id);
+                const encodedId = encodeURIComponent(creator.id);
+
+                let pendingCell = isMarked ? `<span class="status-badge status-paid">Marked Paid ✅</span>` : '—';
+                if (pendingAmount > 0) {
+                    if (isMarked) {
+                        pendingCell = `
+                            <div style="display:flex; align-items:center; gap:8px; flex-wrap: wrap;">
+                                <span class="status-badge status-paid">${formatCurrencyINR(pendingAmount)} Paid ✅</span>
+                            </div>
+                        `;
+                    } else {
+                        pendingCell = `
+                            <div style="display:flex; align-items:center; gap:8px; flex-wrap: wrap;">
+                                <span class="status-badge status-pending">${formatCurrencyINR(pendingAmount)}</span>
+                                <button class="btn btn-success btn-sm" onclick="markCreatorPaid('${encodedId}')">Mark Paid</button>
+                            </div>
+                        `;
+                    }
+                }
+                if (pendingAmount === 0 && isMarked) {
+                    pendingCell = `<span class="status-badge status-paid">Marked Paid ✅</span>`;
+                }
 
                 return `
                     <tr>
@@ -743,8 +794,7 @@
                         <td>${formatCurrencyINR(netEarnings)}</td>
                         <td>${formatCurrencyINR(grossEarnings)}</td>
                         <td>${formatCurrencyINR(platformRevenue)}</td>
-                        <td>${pendingBadge}</td>
-                        <td>${eligibleBadge}</td>
+                        <td>${pendingCell}</td>
                         <td>${paymentMethod}</td>
                         <td>
                             ${upiId !== '—' ? `
@@ -754,7 +804,6 @@
                                 </div>
                             ` : '—'}
                         </td>
-                        <td>${bankDisplay}</td>
                         <td>${formatDate(creator.lastPayoutAt)}</td>
                     </tr>
                 `;
@@ -773,11 +822,9 @@
                                     <th>Net Earnings (₹)</th>
                                     <th>Gross Revenue (₹)</th>
                                     <th>Platform Share (₹)</th>
-                                    <th>Pending (₹)</th>
-                                    <th>Eligible Now (₹)</th>
+                                    <th>Pending</th>
                                     <th>Preferred Method</th>
                                     <th>UPI ID</th>
-                                    <th>Bank Details</th>
                                     <th>Last Payout</th>
                                 </tr>
                         </thead>
@@ -796,7 +843,8 @@
 
             const searchValue = document.getElementById('creatorSearch').value.trim().toLowerCase();
             const sortValue = document.getElementById('creatorSort').value;
-            const eligibilityFilter = document.getElementById('creatorEligibilityFilter').value;
+            const statusSelect = document.getElementById('creatorStatusFilter');
+            const statusFilter = statusSelect ? statusSelect.value : 'all';
 
             let filtered = creatorData.slice();
 
@@ -814,11 +862,14 @@
                 });
             }
 
-            if (eligibilityFilter === 'eligible') {
-                filtered = filtered.filter((creator) => creator.eligiblePendingINR > 0);
-            } else if (eligibilityFilter === 'pending') {
-                filtered = filtered.filter((creator) => creator.pendingEarningsINR > 0);
-            } else if (eligibilityFilter === 'noEarnings') {
+            if (statusFilter === 'pending') {
+                filtered = filtered.filter((creator) => {
+                    const pendingAmount = Number(creator.pendingEarningsINR || 0);
+                    return pendingAmount > 0 && !isCreatorMarked(creator.id);
+                });
+            } else if (statusFilter === 'marked') {
+                filtered = filtered.filter((creator) => isCreatorMarked(creator.id));
+            } else if (statusFilter === 'noEarnings') {
                 filtered = filtered.filter((creator) => {
                     const net = Number(creator.creatorRevenueINR ?? creator.totalEarningsINR ?? 0);
                     return net === 0;
@@ -849,7 +900,10 @@
         function resetCreatorFilters() {
             document.getElementById('creatorSearch').value = '';
             document.getElementById('creatorSort').value = 'earnings';
-            document.getElementById('creatorEligibilityFilter').value = 'all';
+            const statusSelect = document.getElementById('creatorStatusFilter');
+            if (statusSelect) {
+                statusSelect.value = 'all';
+            }
             renderCreators(creatorData);
         }
 
@@ -865,6 +919,8 @@
                 const data = await response.json();
                 creatorData = data.creators || [];
                 renderCreators(creatorData);
+                // Re-apply current filters after data refresh
+                filterCreators();
             } catch (error) {
                 console.error('Error loading creators:', error);
                 container.innerHTML = `<p class="error-message">Error loading creators: ${error.message}</p>`;
