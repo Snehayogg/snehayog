@@ -2006,41 +2006,57 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     AppLogger.log('🚀 VideoFeedAdvanced: Disposed BackgroundProfilePreloader');
 
     final sharedPool = SharedVideoControllerPool();
+    final bool openedFromProfile = _openedFromProfile;
     int savedControllers = 0;
 
     _controllerPool.forEach((index, controller) {
       if (index < _videos.length) {
         final video = _videos[index];
         try {
-          // **NEW: Track if video was playing before navigation**
-          final wasPlaying = _controllerStates[index] == true &&
-              !(_userPaused[index] ?? false);
-          _wasPlayingBeforeNavigation[index] = wasPlaying;
-          AppLogger.log(
-            '💾 VideoFeedAdvanced: Video ${video.id} was ${wasPlaying ? "playing" : "paused"} before navigation',
-          );
-
-          // **NEW: Pause video if it was playing (user didn't pause it)**
-          if (wasPlaying &&
-              controller.value.isInitialized &&
-              controller.value.isPlaying) {
-            controller.pause();
-            _controllerStates[index] = false;
-            AppLogger.log(
-              '⏸️ VideoFeedAdvanced: Paused video ${video.id} before saving to shared pool',
-            );
-          }
-
           // Remove listeners to avoid memory leaks
           controller.removeListener(_bufferingListeners[index] ?? () {});
           controller.removeListener(_videoEndListeners[index] ?? () {});
 
-          // **CRITICAL FIX: Use skipDisposeOld=true to prevent disposing the controller we're trying to save**
-          sharedPool.addController(video.id, controller, skipDisposeOld: true);
-          savedControllers++;
-          AppLogger.log(
-            '💾 VideoFeedAdvanced: Saved controller for video ${video.id} to shared pool',
-          );
+          if (openedFromProfile) {
+            // **PROFILE FLOW: Fully dispose controllers to free decoder resources**
+            try {
+              if (controller.value.isInitialized &&
+                  controller.value.isPlaying) {
+                controller.pause();
+              }
+              controller.setVolume(0.0);
+            } catch (_) {}
+            sharedPool.removeController(video.id);
+            controller.dispose();
+            AppLogger.log(
+              '🗑️ VideoFeedAdvanced: Disposed controller for video ${video.id} (profile flow)',
+            );
+          } else {
+            // **TAB FLOW: Preserve controller in shared pool for quick resume**
+            final wasPlaying = _controllerStates[index] == true &&
+                !(_userPaused[index] ?? false);
+            _wasPlayingBeforeNavigation[index] = wasPlaying;
+            AppLogger.log(
+              '💾 VideoFeedAdvanced: Video ${video.id} was ${wasPlaying ? "playing" : "paused"} before navigation',
+            );
+
+            if (wasPlaying &&
+                controller.value.isInitialized &&
+                controller.value.isPlaying) {
+              controller.pause();
+              _controllerStates[index] = false;
+              AppLogger.log(
+                '⏸️ VideoFeedAdvanced: Paused video ${video.id} before saving to shared pool',
+              );
+            }
+
+            sharedPool.addController(video.id, controller,
+                skipDisposeOld: true);
+            savedControllers++;
+            AppLogger.log(
+              '💾 VideoFeedAdvanced: Saved controller for video ${video.id} to shared pool',
+            );
+          }
         } catch (e) {
           AppLogger.log('⚠️ Error saving controller for video ${video.id}: $e');
           controller.dispose();
@@ -2056,7 +2072,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     );
 
     // **MEMORY MANAGEMENT: Keep only recent controllers in shared pool**
-    if (savedControllers > 2) {
+    if (!openedFromProfile && savedControllers > 2) {
       AppLogger.log(
         '🧹 VideoFeedAdvanced: Triggering memory management (keeping only 2 controllers)',
       );
