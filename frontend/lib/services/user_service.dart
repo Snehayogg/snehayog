@@ -33,6 +33,12 @@ class UserService {
 
   /// Follow a user
   Future<bool> followUser(String userIdToFollow) async {
+    final trimmedUserId = userIdToFollow.trim();
+    if (trimmedUserId.isEmpty || trimmedUserId == 'unknown') {
+      AppLogger.log('❌ Follow API Error: Invalid user ID provided');
+      throw Exception('Invalid user ID');
+    }
+
     try {
       final token = (await _authService.getUserData())?['token'];
       AppLogger.log(
@@ -44,7 +50,7 @@ class UserService {
       }
 
       AppLogger.log(
-          '🔍 Follow API Debug: Making request to follow user: $userIdToFollow');
+          '🔍 Follow API Debug: Making request to follow user: $trimmedUserId');
       AppLogger.log(
           '🔍 Follow API Debug: Using token: ${token.substring(0, 10)}...');
 
@@ -54,9 +60,7 @@ class UserService {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-        body: jsonEncode({
-          'userIdToFollow': userIdToFollow,
-        }),
+        body: jsonEncode({'userIdToFollow': trimmedUserId}),
       );
 
       AppLogger.log(
@@ -79,6 +83,12 @@ class UserService {
 
   /// Unfollow a user
   Future<bool> unfollowUser(String userIdToUnfollow) async {
+    final trimmedUserId = userIdToUnfollow.trim();
+    if (trimmedUserId.isEmpty || trimmedUserId == 'unknown') {
+      AppLogger.log('❌ Unfollow API Error: Invalid user ID provided');
+      throw Exception('Invalid user ID');
+    }
+
     try {
       final token = (await _authService.getUserData())?['token'];
       AppLogger.log(
@@ -90,7 +100,7 @@ class UserService {
       }
 
       AppLogger.log(
-          '🔍 Unfollow API Debug: Making request to unfollow user: $userIdToUnfollow');
+          '🔍 Unfollow API Debug: Making request to unfollow user: $trimmedUserId');
 
       final response = await httpClientService.post(
         Uri.parse('${VideoService.baseUrl}/api/users/unfollow'),
@@ -98,9 +108,7 @@ class UserService {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-        body: jsonEncode({
-          'userIdToUnfollow': userIdToUnfollow,
-        }),
+        body: jsonEncode({'userIdToUnfollow': trimmedUserId}),
       );
 
       AppLogger.log(
@@ -123,6 +131,11 @@ class UserService {
 
   /// Check if current user is following another user
   Future<bool> isFollowingUser(String userIdToCheck) async {
+    final trimmedUserId = userIdToCheck.trim();
+    if (trimmedUserId.isEmpty || trimmedUserId == 'unknown') {
+      return false;
+    }
+
     try {
       final token = (await _authService.getUserData())?['token'];
       if (token == null) {
@@ -131,7 +144,7 @@ class UserService {
 
       final response = await httpClientService.get(
         Uri.parse(
-            '${VideoService.baseUrl}/api/users/isfollowing/$userIdToCheck'),
+            '${VideoService.baseUrl}/api/users/isfollowing/$trimmedUserId'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',

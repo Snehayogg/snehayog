@@ -117,7 +117,9 @@ class _UploaderInfoSection extends StatelessWidget {
         // Follow button
         const SizedBox(width: 4),
         FollowButtonWidget(
-          uploaderId: video.uploader.id,
+          uploaderId: (video.uploader.googleId?.trim().isNotEmpty == true)
+              ? video.uploader.googleId!.trim()
+              : video.uploader.id,
           uploaderName: video.uploader.name,
           onFollowChanged: () {
             // Optionally refresh video data or update UI

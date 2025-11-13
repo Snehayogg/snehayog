@@ -107,7 +107,24 @@ class VideoModel {
               ? Map<String, dynamic>.from(json['uploader'] as Map)
               : <String, dynamic>{};
 
+          final googleIdCandidates = [
+            uploader.googleId,
+            uploaderMap['googleId'],
+            uploaderMap['google_id'],
+            json['uploaderGoogleId'],
+            json['googleId'],
+            json['google_id'],
+          ]
+              .whereType<String>()
+              .map((value) => value.trim())
+              .where((value) => value.isNotEmpty)
+              .toList();
+
+          final resolvedGoogleId =
+              googleIdCandidates.isNotEmpty ? googleIdCandidates.first : '';
+
           final fallbackIdCandidates = [
+            resolvedGoogleId,
             uploaderMap['_id'],
             uploaderMap['id'],
             json['uploaderId'],
@@ -116,11 +133,10 @@ class VideoModel {
             json['creator_id'],
             json['userId'],
             json['user_id'],
-            uploaderMap['googleId'],
             uploader.id,
           ];
 
-          final normalizedId = fallbackIdCandidates
+          final resolvedId = fallbackIdCandidates
               .whereType<String>()
               .map((value) => value.trim())
               .firstWhere(
@@ -128,9 +144,14 @@ class VideoModel {
                 orElse: () => '',
               );
 
-          if (normalizedId.isNotEmpty) {
-            uploader = uploader.copyWith(id: normalizedId);
-            print('🔍 VideoModel: Selected uploader ID: $normalizedId');
+          if (resolvedId.isNotEmpty) {
+            uploader = uploader.copyWith(
+              id: resolvedId,
+              googleId: resolvedGoogleId.isNotEmpty
+                  ? resolvedGoogleId
+                  : uploader.googleId,
+            );
+            print('🔍 VideoModel: Selected uploader ID: $resolvedId');
           } else {
             print(
               '⚠️ VideoModel: Unable to resolve uploader ID, defaulting to placeholder',
@@ -449,20 +470,49 @@ class Uploader {
 
   factory Uploader.fromJson(Map<String, dynamic> json) {
     try {
+      final googleIdCandidates = [
+        json['googleId'],
+        json['google_id'],
+        json['uploaderGoogleId'],
+      ];
+
+      String? resolvedGoogleId;
+      for (final candidate in googleIdCandidates) {
+        if (candidate == null) continue;
+        final value = candidate.toString().trim();
+        if (value.isNotEmpty) {
+          resolvedGoogleId = value;
+          break;
+        }
+      }
+
+      final idCandidates = [
+        resolvedGoogleId,
+        json['_id'],
+        json['id'],
+        json['uploaderId'],
+        json['uploader_id'],
+        json['creatorId'],
+        json['creator_id'],
+        json['userId'],
+        json['user_id'],
+      ];
+
+      String resolvedId = '';
+      for (final candidate in idCandidates) {
+        if (candidate == null) continue;
+        final value = candidate.toString().trim();
+        if (value.isNotEmpty) {
+          resolvedId = value;
+          break;
+        }
+      }
+
       return Uploader(
-        id: json['_id']?.toString() ??
-            json['id']?.toString() ??
-            json['uploaderId']?.toString() ??
-            json['uploader_id']?.toString() ??
-            json['creatorId']?.toString() ??
-            json['creator_id']?.toString() ??
-            json['userId']?.toString() ??
-            json['user_id']?.toString() ??
-            json['googleId']?.toString() ??
-            '',
+        id: resolvedId,
         name: json['name']?.toString() ?? '',
         profilePic: json['profilePic']?.toString() ?? '',
-        googleId: json['googleId']?.toString(),
+        googleId: resolvedGoogleId,
       );
     } catch (e, stackTrace) {
       print('❌ Uploader.fromJson Error: $e');

@@ -42,6 +42,14 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
           print(
               '🎯 FollowButtonWidget: Initializing follow status for ${widget.uploaderName} (ID: ${widget.uploaderId})');
 
+          final trimmedUploaderId = widget.uploaderId.trim();
+          if (trimmedUploaderId.isEmpty || trimmedUploaderId == 'unknown') {
+            print(
+                '⚠️ FollowButtonWidget: No uploader ID provided, skipping follow status check');
+            _isInitializedNotifier.value = true;
+            return;
+          }
+
           final userProvider =
               Provider.of<UserProvider>(context, listen: false);
           final authService = Provider.of<AuthService>(context, listen: false);
@@ -51,7 +59,7 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
           if (userData != null && userData['token'] != null) {
             print(
                 '🎯 FollowButtonWidget: User authenticated, checking follow status');
-            await userProvider.checkFollowStatus(widget.uploaderId);
+            await userProvider.checkFollowStatus(trimmedUploaderId);
           } else {
             print(
                 '⚠️ FollowButtonWidget: User not authenticated, skipping follow status check');
@@ -94,11 +102,15 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
           }
 
           // Compare with uploader ID
-          if (currentUserId != null && widget.uploaderId.isNotEmpty) {
-            final isOwnVideo = currentUserId == widget.uploaderId;
+          final trimmedUploaderId = widget.uploaderId.trim();
+
+          if (currentUserId != null &&
+              trimmedUploaderId.isNotEmpty &&
+              trimmedUploaderId != 'unknown') {
+            final isOwnVideo = currentUserId == trimmedUploaderId;
             _isOwnVideoNotifier.value = isOwnVideo;
             print(
-                '🎯 FollowButtonWidget: Checking own video - Current: $currentUserId, Uploader: ${widget.uploaderId}, IsOwn: $isOwnVideo');
+                '🎯 FollowButtonWidget: Checking own video - Current: $currentUserId, Uploader: $trimmedUploaderId, IsOwn: $isOwnVideo');
           } else {
             // If no current user, assume not own video (user not signed in)
             _isOwnVideoNotifier.value = false;
@@ -121,6 +133,13 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
       print(
           '🎯 FollowButtonWidget: Attempting to toggle follow for ${widget.uploaderName} (ID: ${widget.uploaderId})');
 
+      final trimmedUploaderId = widget.uploaderId.trim();
+      if (trimmedUploaderId.isEmpty || trimmedUploaderId == 'unknown') {
+        _showSnackBar('Unable to follow right now. Please try again later.');
+        print('❌ FollowButtonWidget: Uploader ID is empty');
+        return;
+      }
+
       final userProvider = Provider.of<UserProvider>(context, listen: false);
 
       // **NEW: Check authentication status first**
@@ -135,10 +154,10 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
       print(
           '🎯 FollowButtonWidget: Authentication token found, proceeding with follow toggle');
 
-      final success = await userProvider.toggleFollow(widget.uploaderId);
+      final success = await userProvider.toggleFollow(trimmedUploaderId);
 
       if (success) {
-        final isFollowing = userProvider.isFollowingUser(widget.uploaderId);
+        final isFollowing = userProvider.isFollowingUser(trimmedUploaderId);
         _showSnackBar(isFollowing
             ? 'Followed ${widget.uploaderName}'
             : 'Unfollowed ${widget.uploaderName}');
@@ -193,7 +212,9 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
 
         return Consumer<UserProvider>(
           builder: (context, userProvider, child) {
-            final isFollowing = userProvider.isFollowingUser(widget.uploaderId);
+            final isFollowing = userProvider.isFollowingUser(
+              widget.uploaderId.trim(),
+            );
 
             // Use ValueListenableBuilder to listen to _isOwnVideoNotifier changes
             return ValueListenableBuilder<bool>(
