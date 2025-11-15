@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:vayu/model/video_model.dart';
 import 'package:vayu/view/screens/video_feed_advanced.dart';
 import 'package:vayu/core/managers/video_controller_manager.dart';
+import 'package:vayu/core/managers/shared_video_controller_pool.dart';
 import 'package:provider/provider.dart';
 import 'package:vayu/controller/main_controller.dart';
 import 'package:vayu/utils/app_logger.dart';
@@ -65,6 +66,23 @@ class _VideoScreenState extends State<VideoScreen> {
   void dispose() {
     AppLogger.log('🗑️ VideoScreen: Disposing VideoScreen');
 
+    // **FIX: Check if opened from ProfileScreen and dispose controllers immediately**
+    final bool openedFromProfile =
+        widget.initialVideos != null && widget.initialVideos!.isNotEmpty;
+
+    if (openedFromProfile) {
+      AppLogger.log(
+          '🧹 VideoScreen: Opened from ProfileScreen - disposing controllers immediately');
+      try {
+        final sharedPool = SharedVideoControllerPool();
+        sharedPool.clearAll();
+        AppLogger.log(
+            '✅ VideoScreen: Cleared shared pool on dispose (profile flow)');
+      } catch (e) {
+        AppLogger.log('⚠️ VideoScreen: Error clearing shared pool: $e');
+      }
+    }
+
     // **FIX: Pause all videos when leaving VideoScreen**
     try {
       final mainController =
@@ -96,12 +114,19 @@ class _VideoScreenState extends State<VideoScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // When videos come from profile, don't filter by videoType
+    // Only use videoType when loading from API (no initialVideos)
+    final String? videoType =
+        widget.initialVideos == null || widget.initialVideos!.isEmpty
+            ? 'yug'
+            : null;
+
     return VideoFeedAdvanced(
       key: _videoFeedKey,
       initialIndex: widget.initialIndex,
       initialVideos: widget.initialVideos,
       initialVideoId: widget.initialVideoId,
-      videoType: 'yug', // **FIX: Pass yug videoType for filtering**
+      videoType: videoType,
     );
   }
 }

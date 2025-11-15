@@ -538,7 +538,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     final cycleStart = _currentViewCycleStart;
     final nextReset = _nextViewResetDate;
     final cycleEnd =
-        nextReset != null ? nextReset.subtract(const Duration(days: 1)) : null;
+        nextReset?.subtract(const Duration(days: 1));
 
     return Card(
       elevation: 4,

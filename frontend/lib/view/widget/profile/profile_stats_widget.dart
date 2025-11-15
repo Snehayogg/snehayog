@@ -76,6 +76,7 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
   }
 
   /// **FIXED: Load earnings using centralized EarningsService (single source of truth)**
+  /// **ENHANCED: Works for any creator's videos (own profile or other creators)**
   Future<void> _loadEarnings() async {
     if (!widget.isVideosLoaded || widget.stateManager.userVideos.isEmpty) {
       if (mounted) {
@@ -94,13 +95,19 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
     }
 
     try {
+      final videoCount = widget.stateManager.userVideos.length;
+      final viewingUserId = widget.userId ?? 'own profile';
       AppLogger.log(
-        '💰 ProfileStatsWidget: Calculating earnings (EarningsService) for ${widget.stateManager.userVideos.length} videos',
+        '💰 ProfileStatsWidget: Calculating earnings for $videoCount videos (viewing: $viewingUserId)',
       );
 
       final totalRevenue =
           await EarningsService.calculateCreatorTotalRevenueForVideos(
         widget.stateManager.userVideos,
+      );
+
+      AppLogger.log(
+        '💰 ProfileStatsWidget: Earnings calculated: ₹${totalRevenue.toStringAsFixed(2)} for $viewingUserId',
       );
 
       if (mounted) {

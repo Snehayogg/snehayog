@@ -191,6 +191,11 @@ class _MainScreenState extends State<MainScreen>
 
     _checkTokenValidity();
 
+    // **NEW: Restore last tab index when app starts**
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _restoreLastTabIndex();
+    });
+
     // **BACKGROUND PRELOADING: Start preloading profile data when app opens (user starts on Yug tab)**
     WidgetsBinding.instance.addPostFrameCallback((_) {
       print(
@@ -200,6 +205,18 @@ class _MainScreenState extends State<MainScreen>
       // **LOCATION ONBOARDING: Check and show location permission request**
       _checkAndShowLocationOnboarding();
     });
+  }
+
+  /// **NEW: Restore last tab index from saved state**
+  Future<void> _restoreLastTabIndex() async {
+    try {
+      final mainController =
+          Provider.of<MainController>(context, listen: false);
+      final restoredIndex = await mainController.restoreLastTabIndex();
+      print('✅ MainScreen: Restored to tab index $restoredIndex');
+    } catch (e) {
+      print('❌ MainScreen: Error restoring tab index: $e');
+    }
   }
 
   /// Check if JWT token is valid and handle expired tokens
@@ -284,6 +301,8 @@ class _MainScreenState extends State<MainScreen>
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached) {
       mainController.handleAppBackgrounded();
+      // **NEW: Save navigation state when app goes to background**
+      mainController.saveStateForBackground();
     } else if (state == AppLifecycleState.resumed) {
       mainController.handleAppForegrounded();
     }

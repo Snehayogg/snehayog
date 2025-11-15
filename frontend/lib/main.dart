@@ -197,6 +197,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         mainController.setAppInForeground(false);
         // **NEW: Pause all videos when app is paused (minimized)**
         _pauseAllVideosGlobally();
+        // **NEW: Save navigation state before going to background**
+        mainController.saveStateForBackground();
         // **HOT UI: Preserve state when app goes to background**
         hotUIManager.handleAppLifecycleChange(state);
         break;
@@ -394,6 +396,7 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   bool _hasCheckedCache = false;
   bool _cachedAuthStatus = false;
+  bool _hasSkippedLogin = false;
 
   @override
   void initState() {
@@ -412,7 +415,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     });
   }
 
-  /// **NEW: Check cached auth status instantly**
+  /// **ENHANCED: Check cached auth status and skip login flag**
   Future<void> _checkCachedAuthStatus() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -420,6 +423,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       final fallbackUser = prefs.getString('fallback_user');
       final skipLogin = prefs.getBool('auth_skip_login') ?? false;
 
+      _hasSkippedLogin = skipLogin;
       _cachedAuthStatus = (token != null && token.isNotEmpty) ||
           fallbackUser != null ||
           skipLogin;
@@ -467,6 +471,13 @@ class _AuthWrapperState extends State<AuthWrapper> {
           return const MainScreenWithLocationCheck();
         }
 
+        // **ENHANCED: Show MainScreen if user has skipped login (on-demand login)**
+        if (_hasCheckedCache && _hasSkippedLogin) {
+          print(
+              '✅ AuthWrapper: User has skipped login, showing MainScreen (login on-demand)');
+          return const MainScreenWithLocationCheck();
+        }
+
         // If user is signed in (from controller), show MainScreen
         if (authController.isSignedIn) {
           print(
@@ -490,9 +501,26 @@ class _AuthWrapperState extends State<AuthWrapper> {
           );
         }
 
-        // Show login screen if not signed in
-        print('ℹ️ AuthWrapper: User is not signed in, showing LoginScreen');
-        return const LoginScreen();
+        // Show login screen only if not skipped and not signed in
+        if (_hasCheckedCache) {
+          print(
+              'ℹ️ AuthWrapper: User is not signed in and has not skipped, showing LoginScreen');
+          return const LoginScreen();
+        }
+
+        // Show loading while checking cache
+        return const Scaffold(
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Loading...'),
+              ],
+            ),
+          ),
+        );
       },
     );
   }

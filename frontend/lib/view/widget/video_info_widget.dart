@@ -5,7 +5,7 @@ import 'package:vayu/view/screens/profile_screen.dart';
 import 'package:vayu/view/widget/follow_button_widget.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class VideoInfoWidget extends StatelessWidget {
+class VideoInfoWidget extends StatefulWidget {
   final VideoModel video;
 
   const VideoInfoWidget({
@@ -14,28 +14,71 @@ class VideoInfoWidget extends StatelessWidget {
   }) : super(key: key);
 
   @override
+  State<VideoInfoWidget> createState() => _VideoInfoWidgetState();
+}
+
+class _VideoInfoWidgetState extends State<VideoInfoWidget> {
+  bool _isExpanded = false;
+
+  @override
   Widget build(BuildContext context) {
+    // Check if title is long enough to need truncation (reduced threshold for better UX)
+    final isLongTitle = widget.video.videoName.length > 20;
+
     return RepaintBoundary(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Video title - **REDUCED from 15 to 13**
-          Text(
-            video.videoName,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
+          // Video title with "view more" functionality
+          GestureDetector(
+            onTap: isLongTitle
+                ? () {
+                    setState(() {
+                      _isExpanded = !_isExpanded;
+                    });
+                  }
+                : null,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.video.videoName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: _isExpanded ? null : 1,
+                  overflow: _isExpanded
+                      ? TextOverflow.visible
+                      : TextOverflow.ellipsis,
+                ),
+                // Show "view more" / "view less" text if title is long
+                if (isLongTitle)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      _isExpanded ? 'view less' : 'view more',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.9),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
           // **REDUCED spacing from 4 to 2**
           const SizedBox(height: 2),
 
           // Video description (limited to 2 lines) - **REDUCED from 13 to 11**
-          if (video.description != null && video.description!.isNotEmpty)
+          if (widget.video.description != null &&
+              widget.video.description!.isNotEmpty)
             Text(
-              video.description!,
+              widget.video.description!,
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 11,
@@ -47,17 +90,17 @@ class VideoInfoWidget extends StatelessWidget {
           const SizedBox(height: 2),
 
           // Uploader information (tappable to go to profile)
-          _UploaderInfoSection(video: video),
+          _UploaderInfoSection(video: widget.video),
 
           // Visit Now button below uploader info (if video has a link)
           // **DEBUG: Add logging to check link status**
           Builder(
             builder: (context) {
-              if (video.link != null && video.link!.isNotEmpty) {
+              if (widget.video.link != null && widget.video.link!.isNotEmpty) {
                 return Column(
                   children: [
                     const SizedBox(height: 2),
-                    _VisitNowButton(link: video.link!),
+                    _VisitNowButton(link: widget.video.link!),
                   ],
                 );
               } else {

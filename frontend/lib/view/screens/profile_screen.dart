@@ -86,45 +86,50 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   /// **PUBLIC METHOD: Called when Profile tab is selected**
-  /// Forces immediate data load if not already loaded
+  /// Uses cache if available, only loads from server if no cache exists
   void onProfileTabSelected() {
     AppLogger.log(
         '🔄 ProfileScreen: Profile tab selected, ensuring data is loaded');
 
-    // **SIMPLIFIED: Just reload data if needed**
+    // **ENHANCED: Use cache-first approach - only load if no data in memory**
     if (_stateManager.userData == null) {
-      AppLogger.log('📡 ProfileScreen: Data not loaded, loading now');
-      _loadData();
+      AppLogger.log(
+          '📡 ProfileScreen: Data not loaded, loading from cache or server');
+      _loadData(); // This will use cache if available, only fetch from server if no cache
     } else {
-      AppLogger.log('✅ ProfileScreen: Data already loaded');
+      AppLogger.log('✅ ProfileScreen: Data already loaded in memory');
     }
   }
 
-  /// **OPTIMIZED: Simple cache-first rule with parallel loading (batched updates)**
-  Future<void> _loadData() async {
+  /// **ENHANCED: Smart cache-first loading - only fetch from server if no cache exists or manual refresh**
+  Future<void> _loadData({bool forceRefresh = false}) async {
     try {
       // **BATCHED UPDATE: Update multiple values at once (no setState)**
       _isLoading.value = true;
       _error.value = null;
 
-      AppLogger.log('🔄 ProfileScreen: Starting simple cache-first loading');
+      AppLogger.log(
+          '🔄 ProfileScreen: Starting smart cache-first loading (forceRefresh: $forceRefresh)');
 
-      // Step 1: Try cache first
-      final cachedData = await _loadCachedProfileData();
-      if (cachedData != null) {
-        AppLogger.log('⚡ ProfileScreen: Using cached data');
-        _stateManager.setUserData(cachedData);
+      // Step 1: Try cache first (unless forcing refresh)
+      if (!forceRefresh) {
+        final cachedData = await _loadCachedProfileData();
+        if (cachedData != null) {
+          AppLogger.log('⚡ ProfileScreen: Using cached data (no server fetch)');
+          _stateManager.setUserData(cachedData);
 
-        // Load videos from cache in parallel
-        _loadVideosFromCache();
+          // Load videos from cache in parallel
+          _loadVideosFromCache();
 
-        // **SINGLE UPDATE: Only update loading state**
-        _isLoading.value = false;
-        return;
+          // **SINGLE UPDATE: Only update loading state**
+          _isLoading.value = false;
+          return;
+        }
       }
 
-      // Step 2: No cache - load from server
-      AppLogger.log('📡 ProfileScreen: No cache, loading from server');
+      // Step 2: No cache or force refresh - load from server
+      AppLogger.log(
+          '📡 ProfileScreen: ${forceRefresh ? "Force refreshing" : "No cache, loading"} from server');
       await _stateManager.loadUserData(widget.userId);
 
       if (_stateManager.userData != null) {
@@ -149,27 +154,20 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  /// **IMPROVED: Load videos from cache with freshness and empty-cache guard**
+  /// **ENHANCED: Load videos from cache - use cache if exists, only fetch from server if no cache**
   Future<void> _loadVideosFromCache() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final cacheKey = _getProfileCacheKey();
       final cachedVideosJson =
           prefs.getString('profile_videos_cache_$cacheKey');
-      final cacheTimestamp =
-          prefs.getInt('profile_videos_cache_timestamp_$cacheKey');
 
-      // Consider stale after 10 minutes
-      const int maxAgeMs = 10 * 60 * 1000;
-      final bool isStale = cacheTimestamp == null ||
-          (DateTime.now().millisecondsSinceEpoch - cacheTimestamp) > maxAgeMs;
-
-      if (cachedVideosJson != null && !isStale) {
+      if (cachedVideosJson != null && cachedVideosJson.isNotEmpty) {
         final List<dynamic> cached = json.decode(cachedVideosJson) as List;
         if (cached.isNotEmpty) {
           final videos = cached.map((v) => VideoModel.fromJson(v)).toList();
           AppLogger.log(
-              '⚡ ProfileScreen: Loaded ${videos.length} cached videos for $cacheKey');
+              '⚡ ProfileScreen: Loaded ${videos.length} cached videos for $cacheKey (no server fetch)');
 
           final viewedUserId =
               widget.userId ?? _stateManager.userData?['googleId'];
@@ -192,12 +190,12 @@ class _ProfileScreenState extends State<ProfileScreen>
           AppLogger.log(
               'ℹ️ ProfileScreen: Cached videos empty; fetching from server');
         }
-      } else if (isStale && cachedVideosJson != null) {
+      } else {
         AppLogger.log(
-            'ℹ️ ProfileScreen: Video cache stale; fetching fresh data');
+            'ℹ️ ProfileScreen: No video cache found; fetching from server');
       }
 
-      // No cache, empty cache, or stale → load from server
+      // No cache or cache mismatch → load from server
       await _loadVideos();
     } catch (e) {
       AppLogger.log('❌ ProfileScreen: Error loading videos from cache: $e');
@@ -249,15 +247,16 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  /// **SIMPLIFIED: Simple refresh data**
+  /// **ENHANCED: Manual refresh - clear cache and fetch fresh data from server**
   Future<void> _refreshData() async {
-    AppLogger.log('🔄 ProfileScreen: Refreshing data');
+    AppLogger.log(
+        '🔄 ProfileScreen: Manual refresh - clearing cache and fetching from server');
 
     // Clear cache to force fresh load
     await _clearProfileCache();
 
-    // Reload data using simple rule
-    await _loadData();
+    // Reload data with force refresh flag
+    await _loadData(forceRefresh: true);
   }
 
   @override
@@ -589,10 +588,12 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       await _stateManager.saveProfile();
 
-      // **ENHANCED: Clear profile cache to force fresh data on next load**
-      await _clearProfileCache();
-      AppLogger.log(
-          '🧹 ProfileScreen: Cleared profile cache after name update');
+      // **ENHANCED: Update cache immediately with new data (no server fetch needed)**
+      if (_stateManager.userData != null) {
+        await _cacheProfileData(_stateManager.userData!);
+        AppLogger.log(
+            '✅ ProfileScreen: Updated profile cache immediately after name update');
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -630,6 +631,11 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (!shouldDelete) return;
 
       await _stateManager.deleteSelectedVideos();
+
+      // **ENHANCED: Update videos cache immediately after deletion (no server fetch needed)**
+      await _cacheVideos();
+      AppLogger.log(
+          '✅ ProfileScreen: Updated videos cache immediately after deletion');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -836,10 +842,12 @@ class _ProfileScreenState extends State<ProfileScreen>
 
         await _stateManager.updateProfilePhoto(image.path);
 
-        // **ENHANCED: Clear profile cache to force fresh data on next load**
-        await _clearProfileCache();
-        AppLogger.log(
-            '🧹 ProfileScreen: Cleared profile cache after photo update');
+        // **ENHANCED: Update cache immediately with new data (no server fetch needed)**
+        if (_stateManager.userData != null) {
+          await _cacheProfileData(_stateManager.userData!);
+          AppLogger.log(
+              '✅ ProfileScreen: Updated profile cache immediately after photo update');
+        }
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -999,28 +1007,41 @@ class _ProfileScreenState extends State<ProfileScreen>
             }
           });
 
+          // Determine if viewing own profile (use authController from Consumer builder)
+          final loggedInUserId = authController.userData?['id']?.toString() ??
+              authController.userData?['googleId']?.toString();
+          final displayedUserId = widget.userId ??
+              _stateManager.userData?['googleId']?.toString() ??
+              _stateManager.userData?['id']?.toString();
+          final bool isViewingOwnProfile = loggedInUserId != null &&
+              loggedInUserId.isNotEmpty &&
+              loggedInUserId == displayedUserId;
+
           return Scaffold(
             key: _scaffoldKey,
             backgroundColor: const Color(0xFFF8F9FA),
-            appBar: _buildAppBar(),
-            drawer: ProfileMenuWidget(
-              stateManager: _stateManager,
-              userId: widget.userId,
-              onEditProfile: _handleEditProfile,
-              onSaveProfile: _handleSaveProfile,
-              onCancelEdit: _handleCancelEdit,
-              onReportUser: () => _openReportDialog(
-                targetType: 'user',
-                targetId: widget.userId!,
-              ),
-              onShowFeedback: _showFeedbackDialog,
-              onShowFAQ: _showFAQDialog,
-              onEnterSelectionMode: () => _stateManager.enterSelectionMode(),
-              onShowSettings: _showSettingsBottomSheet,
-              onLogout: _handleLogout,
-              onGoogleSignIn: _handleGoogleSignIn,
-              onCheckPaymentSetupStatus: _checkPaymentSetupStatus,
-            ),
+            appBar: _buildAppBar(isViewingOwnProfile),
+            drawer: isViewingOwnProfile
+                ? ProfileMenuWidget(
+                    stateManager: _stateManager,
+                    userId: widget.userId,
+                    onEditProfile: _handleEditProfile,
+                    onSaveProfile: _handleSaveProfile,
+                    onCancelEdit: _handleCancelEdit,
+                    onReportUser: () => _openReportDialog(
+                      targetType: 'user',
+                      targetId: widget.userId!,
+                    ),
+                    onShowFeedback: _showFeedbackDialog,
+                    onShowFAQ: _showFAQDialog,
+                    onEnterSelectionMode: () =>
+                        _stateManager.enterSelectionMode(),
+                    onShowSettings: _showSettingsBottomSheet,
+                    onLogout: _handleLogout,
+                    onGoogleSignIn: _handleGoogleSignIn,
+                    onCheckPaymentSetupStatus: _checkPaymentSetupStatus,
+                  )
+                : null,
             body: Consumer<UserProvider>(
               builder: (context, userProvider, child) {
                 UserModel? userModel;
@@ -1113,6 +1134,18 @@ class _ProfileScreenState extends State<ProfileScreen>
               return _buildSignInView();
             }
 
+            // Determine if viewing own profile
+            final authController =
+                Provider.of<GoogleSignInController>(context, listen: false);
+            final loggedInUserId = authController.userData?['id']?.toString() ??
+                authController.userData?['googleId']?.toString();
+            final displayedUserId = widget.userId ??
+                _stateManager.userData?['googleId']?.toString() ??
+                _stateManager.userData?['id']?.toString();
+            final bool isViewingOwnProfile = loggedInUserId != null &&
+                loggedInUserId.isNotEmpty &&
+                loggedInUserId == displayedUserId;
+
             // If we reach here, we have user data and can show the profile
             return RefreshIndicator(
               onRefresh: _refreshData,
@@ -1127,7 +1160,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                       onSaveProfile: _handleSaveProfile,
                       onCancelEdit: _handleCancelEdit,
                       onProfilePhotoChange: _handleProfilePhotoChange,
-                      onShowHowToEarn: _showHowToEarnDialog,
+                      onShowHowToEarn:
+                          isViewingOwnProfile ? _showHowToEarnDialog : null,
                     ),
                     _buildProfileContent(userProvider, userModel),
                   ],
@@ -1274,7 +1308,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  PreferredSizeWidget _buildAppBar() {
+  PreferredSizeWidget _buildAppBar(bool isViewingOwnProfile) {
     return PreferredSize(
       preferredSize: const Size.fromHeight(kToolbarHeight + 10),
       child: Consumer<ProfileStateManager>(
@@ -1304,13 +1338,23 @@ class _ProfileScreenState extends State<ProfileScreen>
                       letterSpacing: -0.5,
                     ),
                   ),
-            leading: IconButton(
-              icon: const Icon(Icons.menu, color: Color(0xFF1A1A1A), size: 24),
-              tooltip: 'Menu',
-              onPressed: () {
-                _scaffoldKey.currentState?.openDrawer();
-              },
-            ),
+            leading: isViewingOwnProfile
+                ? IconButton(
+                    icon: const Icon(Icons.menu,
+                        color: Color(0xFF1A1A1A), size: 24),
+                    tooltip: 'Menu',
+                    onPressed: () {
+                      _scaffoldKey.currentState?.openDrawer();
+                    },
+                  )
+                : IconButton(
+                    icon: const Icon(Icons.arrow_back,
+                        color: Color(0xFF1A1A1A), size: 24),
+                    tooltip: 'Back',
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                  ),
             actions: _buildAppBarActions(stateManager),
             bottom: PreferredSize(
               preferredSize: const Size.fromHeight(1),
@@ -1867,27 +1911,21 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   // **NEW: Enhanced caching methods for profile data**
 
-  /// Load cached profile data from SharedPreferences
+  /// **ENHANCED: Load cached profile data - use cache if exists (no expiry check)**
+  /// Only fetches from server if no cache exists or manual refresh
   Future<Map<String, dynamic>?> _loadCachedProfileData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final cacheKey = _getProfileCacheKey();
       final cachedDataJson = prefs.getString('profile_cache_$cacheKey');
-      final cacheTimestamp = prefs.getInt('profile_cache_timestamp_$cacheKey');
 
-      if (cachedDataJson != null && cacheTimestamp != null) {
-        final cacheAge = DateTime.now().millisecondsSinceEpoch - cacheTimestamp;
-        const maxCacheAge = 30 * 60 * 1000; // 30 minutes in milliseconds
-
-        if (cacheAge < maxCacheAge) {
-          ProfileScreenLogger.logDebugInfo(
-              'Loading profile from SharedPreferences cache');
-          return Map<String, dynamic>.from(json.decode(cachedDataJson));
-        } else {
-          ProfileScreenLogger.logDebugInfo(
-              'Profile cache expired, removing stale data');
-          await _clearProfileCache();
-        }
+      if (cachedDataJson != null && cachedDataJson.isNotEmpty) {
+        ProfileScreenLogger.logDebugInfo(
+            '⚡ Loading profile from SharedPreferences cache (no expiry check - cache persists until manual refresh)');
+        return Map<String, dynamic>.from(json.decode(cachedDataJson));
+      } else {
+        ProfileScreenLogger.logDebugInfo(
+            'ℹ️ No profile cache found - will fetch from server');
       }
     } catch (e) {
       ProfileScreenLogger.logWarning('Error loading cached profile data: $e');

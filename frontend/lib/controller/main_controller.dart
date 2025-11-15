@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/core/managers/shared_video_controller_pool.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 // Removed: import 'package:vayu/core/managers/video_manager.dart';
 
 class MainController extends ChangeNotifier {
@@ -8,6 +9,9 @@ class MainController extends ChangeNotifier {
   bool _isAppInForeground = true;
   bool _isMediaPickerActive = false;
   DateTime? _lastPickerReturnAt;
+
+  static const String _lastTabIndexKey = 'last_tab_index';
+  static const String _lastTabTimestampKey = 'last_tab_timestamp';
 
   // Add a callback function to pause videos
   VoidCallback? _pauseVideosCallback;
@@ -45,6 +49,8 @@ class MainController extends ChangeNotifier {
       // Update the current index
       _currentIndex = index;
       print('🔄 MainController: Index updated to $_currentIndex');
+      // **NEW: Save tab index when it changes**
+      _saveCurrentTabIndex();
       notifyListeners();
     });
   }
@@ -272,6 +278,7 @@ class MainController extends ChangeNotifier {
       // **FIXED: Reset main controller state**
       if (resetIndex) {
         _currentIndex = 0;
+        await _saveCurrentTabIndex();
       }
       _isAppInForeground = true;
       _pauseVideosCallback = null;
@@ -282,5 +289,70 @@ class MainController extends ChangeNotifier {
     } catch (e) {
       print('❌ MainController: Error during logout: $e');
     }
+  }
+
+  /// **NEW: Save current tab index to SharedPreferences**
+  Future<void> _saveCurrentTabIndex() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_lastTabIndexKey, _currentIndex);
+      await prefs.setInt(
+          _lastTabTimestampKey, DateTime.now().millisecondsSinceEpoch);
+      print(
+          '💾 MainController: Saved tab index $_currentIndex to SharedPreferences');
+    } catch (e) {
+      print('❌ MainController: Error saving tab index: $e');
+    }
+  }
+
+  /// **NEW: Restore last tab index from SharedPreferences**
+  /// Returns the restored index, or 0 if no saved state or state is too old
+  Future<int> restoreLastTabIndex() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedIndex = prefs.getInt(_lastTabIndexKey);
+      final savedTimestamp = prefs.getInt(_lastTabTimestampKey);
+
+      // If no saved state, return default (0)
+      if (savedIndex == null || savedTimestamp == null) {
+        print('ℹ️ MainController: No saved tab index found, using default (0)');
+        return 0;
+      }
+
+      // Check if saved state is too old (more than 7 days)
+      final savedTime = DateTime.fromMillisecondsSinceEpoch(savedTimestamp);
+      final daysSinceSaved = DateTime.now().difference(savedTime).inDays;
+
+      if (daysSinceSaved > 7) {
+        print(
+            'ℹ️ MainController: Saved tab index is too old ($daysSinceSaved days), using default (0)');
+        // Clear old state
+        await prefs.remove(_lastTabIndexKey);
+        await prefs.remove(_lastTabTimestampKey);
+        return 0;
+      }
+
+      // Validate index is within bounds
+      if (savedIndex >= 0 && savedIndex < _routes.length) {
+        print(
+            '✅ MainController: Restoring tab index $savedIndex (saved $daysSinceSaved days ago)');
+        _currentIndex = savedIndex;
+        notifyListeners();
+        return savedIndex;
+      } else {
+        print(
+            '⚠️ MainController: Saved tab index $savedIndex is invalid, using default (0)');
+        return 0;
+      }
+    } catch (e) {
+      print('❌ MainController: Error restoring tab index: $e');
+      return 0;
+    }
+  }
+
+  /// **NEW: Save tab index when app goes to background**
+  Future<void> saveStateForBackground() async {
+    print('💾 MainController: Saving state before app goes to background');
+    await _saveCurrentTabIndex();
   }
 }

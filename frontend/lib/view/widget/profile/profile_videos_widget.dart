@@ -183,8 +183,16 @@ class ProfileVideosWidget extends StatelessWidget {
                             print('📊 Video ID: ${video.id}');
                             print('📊 Video Name: ${video.videoName}');
 
-                            // Keep it simple: do not pre-play here; VideoScreen will handle playback
+                            // **FIX: Dispose all controllers BEFORE navigating to prevent accumulation**
                             final sharedPool = SharedVideoControllerPool();
+                            AppLogger.log(
+                              '🧹 ProfileVideosWidget: Cleaning up controllers before navigation',
+                            );
+
+                            // **CRITICAL: Clear shared pool BEFORE navigation to prevent memory buildup**
+                            sharedPool.clearAll();
+
+                            // Also pause any active controllers
                             sharedPool.pauseAllControllers();
 
                             // **FIXED: Use video ID instead of index for correct video identification**

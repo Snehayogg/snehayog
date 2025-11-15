@@ -32,7 +32,10 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
 
   Future<void> _loadInitialData() async {
     try {
-      setState(() => _isLoading = true);
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null; // Clear any previous error
+      });
 
       if (widget.initialVideos != null && widget.initialVideos!.isNotEmpty) {
         _videos = List.from(widget.initialVideos!);
@@ -47,24 +50,65 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
         }
         preserveKey ??=
             _videos.isNotEmpty ? videoIdentityKey(_videos.first) : null;
+
+        // **FIX: Rank videos and find correct index AFTER ranking**
         _videos = _rankVideosWithEngagement(
           _videos,
           preserveVideoKey: preserveKey,
         );
 
         if (mounted) {
-          _verifyAndSetCorrectIndex();
-          setState(() => _isLoading = false);
+          // **FIX: Find correct index AFTER ranking (videos may have been reordered)**
+          int correctIndex = 0;
+          if (widget.initialVideoId != null && _videos.isNotEmpty) {
+            final foundIndex = _videos.indexWhere(
+              (v) => v.id == widget.initialVideoId,
+            );
+            if (foundIndex != -1) {
+              correctIndex = foundIndex;
+            }
+          }
+
+          _currentIndex = correctIndex;
+
+          // **FIX: Update PageController to correct index after ranking**
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _pageController.hasClients) {
+              _pageController.jumpToPage(correctIndex);
+              AppLogger.log(
+                '🎯 VideoFeedAdvanced: Updated PageController to index $correctIndex after ranking',
+              );
+            }
+          });
+
+          // Use a single setState call to prevent excessive updates
+          setState(() {
+            _isLoading = false;
+            _errorMessage = null; // Ensure error is cleared
+          });
+
           AppLogger.log(
-            '🚀 VideoFeedAdvanced: Progressive render with provided videos: ${_videos.length}',
+            '🚀 VideoFeedAdvanced: Progressive render with provided videos: ${_videos.length}, currentIndex: $_currentIndex (videoId: ${widget.initialVideoId})',
           );
-          _markCurrentVideoAsSeen();
-          _startVideoPreloading();
+
+          if (_videos.isNotEmpty) {
+            _markCurrentVideoAsSeen();
+            _startVideoPreloading();
+          } else {
+            AppLogger.log('⚠️ VideoFeedAdvanced: No videos after ranking');
+          }
         }
 
-        _loadCurrentUserId();
-        _loadActiveAds();
-        _loadFollowingUsers();
+        // Load background data asynchronously - don't block video display on errors
+        _loadCurrentUserId().catchError((e) {
+          AppLogger.log('⚠️ Error loading user ID (non-blocking): $e');
+        });
+        _loadActiveAds().catchError((e) {
+          AppLogger.log('⚠️ Error loading ads (non-blocking): $e');
+        });
+        _loadFollowingUsers().catchError((e) {
+          AppLogger.log('⚠️ Error loading following users (non-blocking): $e');
+        });
         return;
       }
 
@@ -112,20 +156,37 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
 
   void _verifyAndSetCorrectIndex() {
     if (widget.initialVideoId != null && _videos.isNotEmpty) {
-      final videoAtCurrentIndex = _videos[_currentIndex];
-      if (videoAtCurrentIndex.id != widget.initialVideoId) {
-        final correctIndex = _videos.indexWhere(
-          (v) => v.id == widget.initialVideoId,
-        );
-        if (correctIndex != -1) {
-          _currentIndex = correctIndex;
-          _pageController.jumpToPage(correctIndex);
+      // Ensure currentIndex is valid before accessing
+      if (_currentIndex >= _videos.length) {
+        _currentIndex = 0;
+      }
+
+      if (_currentIndex < _videos.length) {
+        final videoAtCurrentIndex = _videos[_currentIndex];
+        if (videoAtCurrentIndex.id != widget.initialVideoId) {
+          final correctIndex = _videos.indexWhere(
+            (v) => v.id == widget.initialVideoId,
+          );
+          if (correctIndex != -1) {
+            _currentIndex = correctIndex;
+            if (_pageController.hasClients) {
+              _pageController.jumpToPage(correctIndex);
+            }
+          }
         }
       }
     }
   }
 
   void _startVideoPreloading() {
+    // **FIX: Ensure screen is visible when opened from ProfileScreen**
+    final bool openedFromProfile =
+        widget.initialVideos != null && widget.initialVideos!.isNotEmpty;
+    if (openedFromProfile) {
+      _isScreenVisible = true;
+      _ensureWakelockForVisibility();
+    }
+
     if (_currentIndex < _videos.length) {
       _preloadVideo(_currentIndex).then((_) {
         if (!mounted) return;

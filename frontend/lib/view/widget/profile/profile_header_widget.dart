@@ -197,27 +197,29 @@ class ProfileHeaderWidget extends StatelessWidget {
                           }
                         },
                       ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        height: 32,
-                        child: OutlinedButton.icon(
-                          onPressed: onShowHowToEarn,
-                          icon: const Icon(Icons.info_outline, size: 16),
-                          label: const Text(
-                            'How to earn',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 6),
-                            side: const BorderSide(color: Color(0xFF3B82F6)),
-                            foregroundColor: const Color(0xFF3B82F6),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(6),
+                      if (onShowHowToEarn != null) ...[
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          height: 32,
+                          child: OutlinedButton.icon(
+                            onPressed: onShowHowToEarn,
+                            icon: const Icon(Icons.info_outline, size: 16),
+                            label: const Text(
+                              'How to earn',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              side: const BorderSide(color: Color(0xFF3B82F6)),
+                              foregroundColor: const Color(0xFF3B82F6),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(6),
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),

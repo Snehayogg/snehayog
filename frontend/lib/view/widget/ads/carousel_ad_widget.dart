@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 import 'package:vayu/model/carousel_ad_model.dart';
 import 'package:vayu/services/carousel_ad_service.dart';
 import 'package:vayu/services/ad_impression_service.dart';
@@ -48,6 +49,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
   String? _currentUserId;
   DateTime? _viewStartTime; // **NEW: Track when ad became visible**
   Timer? _viewTrackingTimer; // **NEW: Timer to check view duration**
+  bool _isVisible = false; // **NEW: Track if ad is actually visible on screen**
 
   final CarouselAdService _carouselAdService = CarouselAdService();
   final AdImpressionService _adImpressionService = AdImpressionService();
@@ -66,7 +68,8 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
     _loadUserData();
     _trackImpression();
     _startProgressAnimation();
-    _startViewTracking(); // **NEW: Start tracking view duration**
+    // **FIX: Don't start view tracking in initState - wait for visibility**
+    // View tracking will start when ad becomes visible (detected by VisibilityDetector)
   }
 
   Future<void> _loadUserData() async {
@@ -87,22 +90,43 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
 
   @override
   void dispose() {
-    _viewTrackingTimer?.cancel();
+    _stopViewTracking();
     _pageController.dispose();
     _progressController.dispose();
     super.dispose();
   }
 
   /// **NEW: Track ad view duration (minimum 2 seconds)**
+  /// **FIX: Only start tracking when ad is actually visible**
   void _startViewTracking() {
+    if (_hasTrackedView || _isVisible) {
+      // Already tracking or already tracked
+      return;
+    }
+
+    _isVisible = true;
     _viewStartTime = DateTime.now();
+    AppLogger.log(
+        '✅ CarouselAdWidget: Ad became visible, starting view tracking');
 
     // Track view after minimum duration (shared threshold)
     _viewTrackingTimer = Timer(AppConstants.viewCountThreshold, () async {
-      if (!_hasTrackedView && mounted) {
+      if (!_hasTrackedView && mounted && _isVisible) {
         await _trackAdView();
       }
     });
+  }
+
+  /// **NEW: Stop view tracking when ad becomes invisible**
+  void _stopViewTracking() {
+    if (!_isVisible) return;
+
+    _isVisible = false;
+    _viewTrackingTimer?.cancel();
+    _viewTrackingTimer = null;
+    _viewStartTime = null;
+    AppLogger.log(
+        '⏸️ CarouselAdWidget: Ad became invisible, stopped view tracking');
   }
 
   /// **NEW: Track carousel ad view (minimum 2 seconds visible)**
@@ -215,39 +239,54 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
 
   @override
   Widget build(BuildContext context) {
-    return RepaintBoundary(
-      child: Scaffold(
-        backgroundColor: Colors.black,
-        body: Container(
-          width: double.infinity,
-          height: double.infinity,
-          color: Colors.black,
-          child: Stack(
-            children: [
-              // **Sponsored Text at Top Corner**
-              _buildSponsoredText(),
+    return VisibilityDetector(
+      key: Key('carousel_ad_${widget.carouselAd.id}'),
+      onVisibilityChanged: (VisibilityInfo info) {
+        // **FIX: Only track views when ad is actually visible (at least 50% visible)**
+        final visibleFraction = info.visibleFraction;
+        if (visibleFraction >= 0.5 && !_isVisible) {
+          // Ad became visible - start tracking
+          _startViewTracking();
+        } else if (visibleFraction < 0.5 && _isVisible) {
+          // Ad became invisible - stop tracking
+          _stopViewTracking();
+        }
+      },
+      child: RepaintBoundary(
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          body: Container(
+            width: double.infinity,
+            height: double.infinity,
+            color: Colors.black,
+            child: Stack(
+              children: [
+                // **Sponsored Text at Top Corner**
+                _buildSponsoredText(),
 
-              // **Main Content Area - Dynamic Ad Section**
-              Positioned.fill(
-                child: _buildMainContentArea(),
-              ),
+                // **Main Content Area - Dynamic Ad Section**
+                Positioned.fill(
+                  child: _buildMainContentArea(),
+                ),
 
-              // **Progress Indicators** (for multiple slides)
-              if (widget.carouselAd.slides.length > 1) _buildCarouselCounter(),
+                // **Progress Indicators** (for multiple slides)
+                if (widget.carouselAd.slides.length > 1)
+                  _buildCarouselCounter(),
 
-              // **Right-Side Vertical Action Bar**
-              _buildRightActionBar(),
+                // **Right-Side Vertical Action Bar**
+                _buildRightActionBar(),
 
-              // **Bottom Ad Metadata Section**
-              _buildBottomAdMetadata(),
+                // **Bottom Ad Metadata Section**
+                _buildBottomAdMetadata(),
 
-              // **Back Button** (bottom corner
-              Positioned(
-                right: 16,
-                bottom: 20, // Aligned with action buttons
-                child: _buildBackButton(),
-              ),
-            ],
+                // **Back Button** (bottom corner
+                Positioned(
+                  right: 16,
+                  bottom: 20, // Aligned with action buttons
+                  child: _buildBackButton(),
+                ),
+              ],
+            ),
           ),
         ),
       ),

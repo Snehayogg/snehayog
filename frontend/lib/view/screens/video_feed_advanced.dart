@@ -190,10 +190,19 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Only attempt autoplay if we're on the Yug tab and not returning from picker
-      if (_mainController?.currentIndex == 0 &&
-          !_mainController!.isMediaPickerActive &&
-          !_mainController!.recentlyReturnedFromPicker) {
+      // **FIX: Allow autoplay when opened from ProfileScreen OR when on Yug tab**
+      final bool shouldAttemptAutoplay = _openedFromProfile ||
+          (_mainController?.currentIndex == 0 &&
+              !_mainController!.isMediaPickerActive &&
+              !_mainController!.recentlyReturnedFromPicker);
+
+      if (shouldAttemptAutoplay) {
+        // **FIX: Ensure screen is visible when opened from ProfileScreen**
+        if (_openedFromProfile) {
+          _isScreenVisible = true;
+          _ensureWakelockForVisibility();
+        }
+
         // **FIX: Ensure video is preloaded before trying autoplay**
         if (_videos.isNotEmpty && _currentIndex < _videos.length) {
           // If controller not initialized, preload first
@@ -2010,28 +2019,45 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     final bool openedFromProfile = _openedFromProfile;
     int savedControllers = 0;
 
-    _controllerPool.forEach((index, controller) {
+    // **FIX: Create a copy of the pool to avoid modification during iteration**
+    final controllersToDispose =
+        Map<int, VideoPlayerController>.from(_controllerPool);
+
+    controllersToDispose.forEach((index, controller) {
       if (index < _videos.length) {
         final video = _videos[index];
         try {
-          // Remove listeners to avoid memory leaks
+          // **FIX: Remove listeners to avoid memory leaks (once, before branching)**
           controller.removeListener(_bufferingListeners[index] ?? () {});
           controller.removeListener(_videoEndListeners[index] ?? () {});
 
           if (openedFromProfile) {
             // **PROFILE FLOW: Fully dispose controllers to free decoder resources**
             try {
-              if (controller.value.isInitialized &&
-                  controller.value.isPlaying) {
-                controller.pause();
+              if (controller.value.isInitialized) {
+                if (controller.value.isPlaying) {
+                  controller.pause();
+                }
+                controller.setVolume(0.0);
               }
-              controller.setVolume(0.0);
-            } catch (_) {}
-            sharedPool.removeController(video.id);
-            controller.dispose();
-            AppLogger.log(
-              '🗑️ VideoFeedAdvanced: Disposed controller for video ${video.id} (profile flow)',
-            );
+            } catch (e) {
+              AppLogger.log(
+                '⚠️ VideoFeedAdvanced: Error pausing controller before disposal: $e',
+              );
+            }
+
+            // **FIX: Remove from shared pool first, then dispose**
+            try {
+              sharedPool.removeController(video.id);
+              controller.dispose();
+              AppLogger.log(
+                '🗑️ VideoFeedAdvanced: Disposed controller for video ${video.id} (profile flow)',
+              );
+            } catch (e) {
+              AppLogger.log(
+                '⚠️ VideoFeedAdvanced: Error disposing controller: $e',
+              );
+            }
           } else {
             // **TAB FLOW: Preserve controller in shared pool for quick resume**
             final wasPlaying = _controllerStates[index] == true &&
@@ -2060,11 +2086,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           }
         } catch (e) {
           AppLogger.log('⚠️ Error saving controller for video ${video.id}: $e');
-          controller.dispose();
+          try {
+            controller.dispose();
+          } catch (_) {}
         }
       } else {
         // Dispose orphaned controllers (no corresponding video)
-        controller.dispose();
+        try {
+          controller.dispose();
+        } catch (_) {}
       }
     });
 
@@ -2072,8 +2102,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       '💾 VideoFeedAdvanced: Saved $savedControllers controllers to shared pool',
     );
 
-    // **MEMORY MANAGEMENT: Keep only recent controllers in shared pool**
-    if (!openedFromProfile && savedControllers > 2) {
+    // **MEMORY MANAGEMENT: Aggressively clean up when opened from ProfileScreen**
+    if (openedFromProfile) {
+      AppLogger.log(
+        '🧹 VideoFeedAdvanced: Cleaning up shared pool for profile flow (disposing all controllers)',
+      );
+      // **FIX: Dispose all controllers in shared pool when opened from ProfileScreen**
+      // This prevents accumulation of controllers when quickly switching between videos
+      sharedPool.clearAll();
+    } else if (savedControllers > 2) {
       AppLogger.log(
         '🧹 VideoFeedAdvanced: Triggering memory management (keeping only 2 controllers)',
       );

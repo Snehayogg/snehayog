@@ -12,7 +12,16 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
     final sharedPool = SharedVideoControllerPool();
 
-    const preloadWindow = 2;
+    // **FIX: Limit preloading when opened from ProfileScreen to prevent memory buildup**
+    final bool openedFromProfile =
+        widget.initialVideos != null && widget.initialVideos!.isNotEmpty;
+    final int preloadWindow = openedFromProfile
+        ? 1
+        : 2; // Only preload 1 video ahead when from ProfileScreen
+    final int keepRange = openedFromProfile
+        ? 1
+        : 3; // Keep only current video when from ProfileScreen
+
     for (int i = _currentIndex;
         i <= _currentIndex + preloadWindow && i < _videos.length;
         i++) {
@@ -28,7 +37,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       }
     }
 
-    sharedPool.cleanupDistantControllers(_currentIndex, keepRange: 3);
+    sharedPool.cleanupDistantControllers(_currentIndex, keepRange: keepRange);
 
     if (_hasMore &&
         !_isLoadingMore &&
@@ -45,11 +54,18 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
   Future<void> _preloadVideo(int index) async {
     if (index >= _videos.length) return;
 
-    if (_initializingVideos.length >= _maxConcurrentInitializations &&
+    // **FIX: More aggressive limiting when opened from ProfileScreen**
+    final bool openedFromProfile =
+        widget.initialVideos != null && widget.initialVideos!.isNotEmpty;
+    final int maxConcurrent = openedFromProfile
+        ? 1
+        : _maxConcurrentInitializations; // Only 1 concurrent when from ProfileScreen
+
+    if (_initializingVideos.length >= maxConcurrent &&
         !_preloadedVideos.contains(index) &&
         !_loadingVideos.contains(index)) {
       AppLogger.log(
-        '⏳ Max concurrent initializations reached, deferring video $index',
+        '⏳ Max concurrent initializations reached (${_initializingVideos.length}/$maxConcurrent), deferring video $index',
       );
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted && !_preloadedVideos.contains(index)) {
