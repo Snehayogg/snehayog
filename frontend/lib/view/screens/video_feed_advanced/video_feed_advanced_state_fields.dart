@@ -117,6 +117,9 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   // Persisted state keys
   String get _kSavedFeedIndexKey => 'video_feed_saved_index';
   String get _kSavedFeedTypeKey => 'video_feed_saved_type';
+  String get _kSavedVideoIdKey => 'video_feed_saved_video_id';
+  String get _kSavedPageKey => 'video_feed_saved_page';
+  String get _kSavedStateTimestampKey => 'video_feed_saved_timestamp';
 
   // Cold start tracking
   bool _isColdStart = true;

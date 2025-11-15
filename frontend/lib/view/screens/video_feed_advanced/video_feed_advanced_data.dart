@@ -1,12 +1,114 @@
 part of 'package:vayu/view/screens/video_feed_advanced.dart';
 
 extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
-  Future<void> _loadVideos({int page = 1, bool append = false}) async {
+  Future<void> _loadVideos(
+      {int page = 1, bool append = false, bool useCache = true}) async {
     try {
-      AppLogger.log('🔄 Loading videos - Page: $page, Append: $append');
+      AppLogger.log(
+          '🔄 Loading videos - Page: $page, Append: $append, UseCache: $useCache');
       _printCacheStatus();
 
-      AppLogger.log('🔍 VideoFeedAdvanced: Loading videos directly from API');
+      // **NEW: Try to load from cache first (instant) if not appending and cache is enabled**
+      if (useCache && !append && page == 1) {
+        try {
+          await _cacheManager.initialize();
+          final cacheKey = 'videos_page_${page}_${widget.videoType ?? 'yug'}';
+
+          // **Use peek to get cached data without triggering fetch**
+          final cachedData = await _cacheManager.peek<Map<String, dynamic>>(
+            cacheKey,
+            cacheType: 'videos',
+            allowStale: true, // Allow stale cache for instant load
+          );
+
+          if (cachedData != null && cachedData['videos'] != null) {
+            final cachedVideos =
+                (cachedData['videos'] as List).cast<VideoModel>();
+            if (cachedVideos.isNotEmpty) {
+              AppLogger.log(
+                  '✅ Loaded ${cachedVideos.length} videos from cache (instant)');
+
+              // Restore state from saved preferences
+              final prefs = await SharedPreferences.getInstance();
+              final savedVideoId = prefs.getString(_kSavedVideoIdKey);
+
+              // Rank cached videos
+              final rankedVideos = _rankVideosWithEngagement(
+                cachedVideos,
+                preserveVideoKey: savedVideoId != null
+                    ? cachedVideos
+                        .firstWhere((v) => v.id == savedVideoId,
+                            orElse: () => cachedVideos.first)
+                        .id
+                    : null,
+              );
+
+              // Find saved video index
+              int? restoredIndex;
+              if (savedVideoId != null) {
+                restoredIndex =
+                    rankedVideos.indexWhere((v) => v.id == savedVideoId);
+                if (restoredIndex == -1) restoredIndex = null;
+              }
+
+              if (mounted) {
+                setState(() {
+                  _videos = rankedVideos;
+                  if (restoredIndex != null) {
+                    _currentIndex = restoredIndex;
+                  } else {
+                    _currentIndex = 0;
+                  }
+                  _isLoading = false;
+                });
+
+                // Jump to saved index
+                if (restoredIndex != null && _pageController.hasClients) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (_pageController.hasClients) {
+                      _pageController.jumpToPage(restoredIndex!);
+                    }
+                  });
+                }
+
+                // Try autoplay immediately with cached data
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _tryAutoplayCurrent();
+                });
+
+                AppLogger.log(
+                    '✅ Instant resume: Showing cached videos, refreshing in background');
+              }
+
+              // **Load fresh data in background (non-blocking)**
+              _loadVideosFromAPI(page: page, append: append).catchError((e) {
+                AppLogger.log('⚠️ Background refresh failed: $e');
+              });
+              return;
+            }
+          }
+        } catch (e) {
+          AppLogger.log('⚠️ Error loading from cache: $e, falling back to API');
+        }
+      }
+
+      // **FALLBACK: Load from API directly**
+      await _loadVideosFromAPI(page: page, append: append);
+    } catch (e) {
+      AppLogger.log('❌ Error loading videos: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = e.toString();
+        });
+      }
+    }
+  }
+
+  /// **NEW: Load videos from API (separate method for background refresh)**
+  Future<void> _loadVideosFromAPI({int page = 1, bool append = false}) async {
+    try {
+      AppLogger.log('🔍 VideoFeedAdvanced: Loading videos from API');
       final response = await _videoService.getVideos(
         page: page,
         limit: _videosPerPage,
@@ -95,9 +197,24 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
 
         _markCurrentVideoAsSeen();
       } else {
+        // **NEW: Try to preserve current video ID when refreshing from background**
+        String? preserveVideoId;
+        if (_currentIndex >= 0 && _currentIndex < _videos.length) {
+          preserveVideoId = _videos[_currentIndex].id;
+        }
+
+        // **FALLBACK: Try to get from saved preferences if current index is invalid**
+        if (preserveVideoId == null) {
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            preserveVideoId = prefs.getString(_kSavedVideoIdKey);
+          } catch (_) {}
+        }
+
         final rankedVideos = _rankVideosWithEngagement(
           newVideos,
-          preserveVideoKey: preserveKey,
+          preserveVideoKey:
+              preserveKey ?? (preserveVideoId != null ? preserveVideoId : null),
         );
 
         int? nextIndex;
@@ -108,32 +225,42 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
           if (candidateIndex != -1) {
             nextIndex = candidateIndex;
           }
+        } else if (preserveVideoId != null) {
+          // **NEW: Try to find by video ID**
+          final candidateIndex = rankedVideos.indexWhere(
+            (video) => video.id == preserveVideoId,
+          );
+          if (candidateIndex != -1) {
+            nextIndex = candidateIndex;
+          }
         }
 
-        setState(() {
-          _videos = rankedVideos;
-          if (nextIndex != null) {
-            _currentIndex = nextIndex;
-          } else if (_currentIndex >= _videos.length) {
-            _currentIndex = 0;
+        if (mounted) {
+          setState(() {
+            _videos = rankedVideos;
+            if (nextIndex != null) {
+              _currentIndex = nextIndex;
+            } else if (_currentIndex >= _videos.length) {
+              _currentIndex = 0;
+            }
+            _currentPage = currentPage;
+            final bool inferredHasMore =
+                hasMore || newVideos.length == _videosPerPage;
+            _hasMore = inferredHasMore;
+            _totalVideos = total;
+          });
+
+          // **NEW: Update page controller if index changed**
+          if (nextIndex != null && _pageController.hasClients) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_pageController.hasClients && _currentIndex == nextIndex) {
+                _pageController.jumpToPage(nextIndex!);
+              }
+            });
           }
-          _currentPage = currentPage;
-          final bool inferredHasMore =
-              hasMore || newVideos.length == _videosPerPage;
-          _hasMore = inferredHasMore;
-          _totalVideos = total;
-        });
+        }
 
         _markCurrentVideoAsSeen();
-
-        if (nextIndex != null && _pageController.hasClients) {
-          final int targetIndex = nextIndex;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (_pageController.hasClients) {
-              _pageController.jumpToPage(targetIndex);
-            }
-          });
-        }
       }
 
       _loadFollowingUsers();

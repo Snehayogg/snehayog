@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/controller/main_controller.dart';
 import 'package:vayu/view/screens/profile_screen.dart';
 import 'package:vayu/view/screens/upload_screen.dart';
@@ -222,13 +223,22 @@ class _MainScreenState extends State<MainScreen>
   /// Check if JWT token is valid and handle expired tokens
   Future<void> _checkTokenValidity() async {
     try {
+      // **FIXED: Check if user has skipped login before requiring re-login**
+      final prefs = await SharedPreferences.getInstance();
+      final skipLogin = prefs.getBool('auth_skip_login') ?? false;
+      
+      if (skipLogin) {
+        print('ℹ️ MainScreen: User has skipped login, not checking token validity');
+        return; // Don't check token or redirect if user skipped login
+      }
+      
       final needsReLogin = await _authService.needsReLogin();
       if (needsReLogin) {
         print(
             '⚠️ MainScreen: Token validation failed, clearing expired tokens');
         await _authService.clearExpiredTokens();
 
-        // Redirect to login screen when session expires
+        // Redirect to login screen when session expires (only if user hasn't skipped login)
         if (mounted) {
           _redirectToLoginScreen();
         }

@@ -458,17 +458,25 @@ class AuthService {
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 3));
 
-      if (response.statusCode != 200) {
-        AppLogger.log('⚠️ Token verification failed in background');
-        // Optionally clear invalid token
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.remove('jwt_token');
-      } else {
+      // Only clear token if it's actually unauthorized (401/403), not on network errors
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        AppLogger.log(
+            '⚠️ Token verification failed - unauthorized (${response.statusCode})');
+        // Check if token is actually expired before removing
+        if (!isTokenValid(token)) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove('jwt_token');
+          AppLogger.log('⚠️ Removed expired token');
+        }
+      } else if (response.statusCode == 200) {
         AppLogger.log('✅ Token verified successfully in background');
+      } else {
+        AppLogger.log(
+            '⚠️ Token verification returned status ${response.statusCode}, keeping token');
       }
     } catch (e) {
       AppLogger.log('⚠️ Background token verification failed: $e');
-      // Keep session even if backend is unreachable
+      // Keep session even if backend is unreachable - don't remove token on network errors
     }
   }
 
@@ -882,9 +890,17 @@ class AuthService {
   Future<bool> needsReLogin() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+
+      // **FIXED: Check if user has skipped login - don't require re-login if skipped**
+      final skipLogin = prefs.getBool('auth_skip_login') ?? false;
+      if (skipLogin) {
+        AppLogger.log('ℹ️ User has skipped login, not requiring re-login');
+        return false;
+      }
+
       String? token = prefs.getString('jwt_token');
 
-      // If no token, user needs to login
+      // If no token, user needs to login (unless they skipped)
       if (token == null || token.isEmpty) {
         AppLogger.log('⚠️ No token found, user needs to re-login');
         return true;
@@ -905,6 +921,14 @@ class AuthService {
       return false;
     } catch (e) {
       AppLogger.log('❌ Error checking re-login status: $e');
+      // On error, check if user skipped login - if yes, don't require re-login
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final skipLogin = prefs.getBool('auth_skip_login') ?? false;
+        if (skipLogin) {
+          return false;
+        }
+      } catch (_) {}
       return true;
     }
   }
