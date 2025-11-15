@@ -414,45 +414,41 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
 
     final adDataNonNull = adData;
 
-    return Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
-      child: BannerAdWidget(
-        key: ValueKey('banner_${video.id}'),
-        adData: {
-          ...adDataNonNull,
-          'videoId': video.id,
-        },
-        onAdClick: () {
-          AppLogger.log('🖱️ Banner ad clicked on video $index');
-        },
-        onAdImpression: () async {
-          if (index < _videos.length) {
-            final video = _videos[index];
-            final adId = adDataNonNull['_id'] ?? adDataNonNull['id'];
-            final userData = await _authService.getUserData();
+    // Use BannerAdSection which supports both Google AdMob and custom ads
+    return BannerAdSection(
+      adData: {
+        ...adDataNonNull,
+        'videoId': video.id,
+      },
+      onClick: () {
+        AppLogger.log('🖱️ Banner ad clicked on video $index');
+      },
+      onImpression: () async {
+        if (index < _videos.length) {
+          final video = _videos[index];
+          final adId = adDataNonNull['_id'] ?? adDataNonNull['id'];
+          final userData = await _authService.getUserData();
 
-            AppLogger.log('📊 Banner Ad Impression Tracking:');
-            AppLogger.log('   Video ID: ${video.id}');
-            AppLogger.log('   Video Name: ${video.videoName}');
-            AppLogger.log('   Ad ID: $adId');
-            AppLogger.log('   User ID: ${userData?['id']}');
+          AppLogger.log('📊 Banner Ad Impression Tracking:');
+          AppLogger.log('   Video ID: ${video.id}');
+          AppLogger.log('   Video Name: ${video.videoName}');
+          AppLogger.log('   Ad ID: $adId');
+          AppLogger.log('   User ID: ${userData?['id']}');
 
-            if (adId != null && userData != null) {
-              try {
-                await _adImpressionService.trackBannerAdImpression(
-                  videoId: video.id,
-                  adId: adId.toString(),
-                  userId: userData['id'],
-                );
-              } catch (e) {
-                AppLogger.log('❌ Error tracking banner ad impression: $e');
-              }
+          if (adId != null && userData != null) {
+            try {
+              await _adImpressionService.trackBannerAdImpression(
+                videoId: video.id,
+                adId: adId.toString(),
+                userId: userData['id'],
+              );
+            } catch (e) {
+              AppLogger.log('❌ Error tracking banner ad impression: $e');
             }
           }
-        },
-      ),
+        }
+      },
+      useGoogleAds: true, // Use Google AdMob if configured
     );
   }
 

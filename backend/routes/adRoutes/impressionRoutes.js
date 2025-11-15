@@ -2,20 +2,43 @@ import express from 'express';
 import mongoose from 'mongoose';
 import AdCreative from '../../models/AdCreative.js';
 import AdImpression from '../../models/AdImpression.js';
-import { verifyToken } from '../../utils/verifytoken.js';
+import User from '../../models/User.js';
 
 const router = express.Router();
 const DAILY_VIEW_FREQUENCY_CAP = 3;
+
+// **FIXED: Helper function to normalize userId (Google ID to MongoDB ObjectId)**
+async function normalizeUserId(userId) {
+  if (!userId) return null;
+  
+  // If it's already a valid MongoDB ObjectId, return it as ObjectId
+  if (mongoose.isValidObjectId(userId)) {
+    return new mongoose.Types.ObjectId(userId);
+  }
+  
+  // Otherwise, try to find user by Google ID and return MongoDB ObjectId
+  try {
+    const user = await User.findOne({ googleId: userId });
+    if (user) {
+      return user._id; // Return ObjectId directly
+    }
+  } catch (error) {
+    console.error('⚠️ Error looking up user by Google ID:', error);
+  }
+  
+  // If user not found, return null (will be stored as anonymous)
+  return null;
+}
 
 // POST /ads/impressions/banner - Track banner ad impression
 router.post('/impressions/banner', async (req, res) => {
   try {
     const { videoId, adId, userId } = req.body;
-    const normalizedUserId =
-      userId && mongoose.isValidObjectId(userId) ? userId : null;
+    // **FIXED: Normalize userId (Google ID to MongoDB ObjectId)**
+    const normalizedUserId = await normalizeUserId(userId);
     if (userId && !normalizedUserId) {
       console.warn(
-        '⚠️ Invalid userId received for banner impression, storing as anonymous:',
+        '⚠️ User not found for Google ID, storing as anonymous:',
         userId
       );
     }
@@ -95,11 +118,11 @@ router.post('/impressions/banner', async (req, res) => {
 router.post('/impressions/carousel', async (req, res) => {
   try {
     const { videoId, adId, userId, scrollPosition } = req.body;
-    const normalizedUserId =
-      userId && mongoose.isValidObjectId(userId) ? userId : null;
+    // **FIXED: Normalize userId (Google ID to MongoDB ObjectId)**
+    const normalizedUserId = await normalizeUserId(userId);
     if (userId && !normalizedUserId) {
       console.warn(
-        '⚠️ Invalid userId received for carousel impression, storing as anonymous:',
+        '⚠️ User not found for Google ID, storing as anonymous:',
         userId
       );
     }
@@ -230,11 +253,11 @@ router.get('/impressions/video/:videoId/carousel', async (req, res) => {
 router.post('/impressions/banner/view', async (req, res) => {
   try {
     const { videoId, adId, userId, viewDuration } = req.body;
-    const normalizedUserId =
-      userId && mongoose.isValidObjectId(userId) ? userId : null;
+    // **FIXED: Normalize userId (Google ID to MongoDB ObjectId)**
+    const normalizedUserId = await normalizeUserId(userId);
     if (userId && !normalizedUserId) {
       console.warn(
-        '⚠️ Invalid userId received for banner view, storing as anonymous:',
+        '⚠️ User not found for Google ID, storing as anonymous:',
         userId
       );
     }
@@ -340,11 +363,11 @@ router.post('/impressions/banner/view', async (req, res) => {
 router.post('/impressions/carousel/view', async (req, res) => {
   try {
     const { videoId, adId, userId, viewDuration } = req.body;
-    const normalizedUserId =
-      userId && mongoose.isValidObjectId(userId) ? userId : null;
+    // **FIXED: Normalize userId (Google ID to MongoDB ObjectId)**
+    const normalizedUserId = await normalizeUserId(userId);
     if (userId && !normalizedUserId) {
       console.warn(
-        '⚠️ Invalid userId received for carousel view, storing as anonymous:',
+        '⚠️ User not found for Google ID, storing as anonymous:',
         userId
       );
     }

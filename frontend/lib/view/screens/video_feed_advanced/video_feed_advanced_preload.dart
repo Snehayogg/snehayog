@@ -269,32 +269,76 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
               );
             }
 
+            // **NEW: Immediately trigger autoplay for current index when ready**
             if (index == _currentIndex) {
-              if (_userPaused[index] == true) {
-                AppLogger.log(
-                  '⏸️ Autoplay suppressed in markReadyIfNeeded: user has manually paused video at index $index',
-                );
-                return;
-              }
-
-              if (_mainController?.currentIndex == 0 && _isScreenVisible) {
-                try {
-                  await controller.setVolume(1.0);
-                  if (!_allowAutoplay('markReadyIfNeeded current')) {
-                    return;
-                  }
-                  _pauseAllOtherVideos(index);
-                  await controller.play();
-                  _controllerStates[_currentIndex] = true;
-                  _userPaused[_currentIndex] = false;
-                  _ensureWakelockForVisibility();
-                } catch (_) {}
-              }
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted && _currentIndex == index) {
+                  _tryAutoplayCurrentImmediate(index);
+                }
+              });
             }
           }
         }
 
         controller.addListener(markReadyIfNeeded);
+
+        // **ENHANCED: For current index, immediately try autoplay after initialization**
+        // Don't wait for first frame - this ensures fast autoplay for server-fetched videos
+        if (index == _currentIndex && controller.value.isInitialized) {
+          AppLogger.log(
+            '⚡ VideoFeedAdvanced: Current video initialized, triggering immediate autoplay for index $index',
+          );
+
+          // **IMMEDIATE: Try autoplay right away without waiting for buffer**
+          // For server-fetched videos, we want to start playing as soon as controller is initialized
+          final currentController = controller;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted &&
+                _currentIndex == index &&
+                currentController.value.isInitialized) {
+              AppLogger.log(
+                '⚡ VideoFeedAdvanced: Triggering immediate autoplay (no buffer wait)',
+              );
+              _tryAutoplayCurrentImmediate(index);
+            }
+          });
+
+          // **FALLBACK: Also check after a small delay in case immediate attempt didn't work**
+          // This handles cases where video needs a tiny bit more time to be ready
+          Future.delayed(const Duration(milliseconds: 150), () {
+            if (mounted &&
+                _currentIndex == index &&
+                currentController.value.isInitialized &&
+                !currentController.value.isPlaying &&
+                _userPaused[index] != true) {
+              AppLogger.log(
+                '⚡ VideoFeedAdvanced: Retrying autoplay after brief delay',
+              );
+              _tryAutoplayCurrentImmediate(index);
+            }
+          });
+
+          // **ADDITIONAL FALLBACK: Wait for buffer if needed**
+          // Only if video still hasn't started playing after immediate attempts
+          Future.delayed(const Duration(milliseconds: 400), () {
+            if (mounted &&
+                _currentIndex == index &&
+                currentController.value.isInitialized &&
+                !currentController.value.isPlaying &&
+                _userPaused[index] != true) {
+              final hasBuffer =
+                  currentController.value.position > Duration.zero ||
+                      !currentController.value.isBuffering;
+
+              if (hasBuffer) {
+                AppLogger.log(
+                  '⚡ VideoFeedAdvanced: Final retry with buffer check',
+                );
+                _tryAutoplayCurrentImmediate(index);
+              }
+            }
+          });
+        }
 
         if (index == _currentIndex && index < _videos.length) {
           _viewTracker.startViewTracking(
@@ -551,7 +595,6 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       if (index < _videos.length) {
         final videoId = _videos[index].id;
         if (sharedPool.isVideoLoaded(videoId)) {
-          final controller = _controllerPool[index];
           controllersToRemove.add(index);
           continue;
         }
@@ -976,5 +1019,84 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
     }
     _firstFrameReady[index]?.value = true;
     _ensureWakelockForVisibility();
+  }
+
+  // **NEW: Immediate autoplay helper that doesn't wait for full buffer**
+  void _tryAutoplayCurrentImmediate(int index) {
+    if (_videos.isEmpty || _isLoading) return;
+    if (index != _currentIndex) return; // Make sure index hasn't changed
+    if (!_allowAutoplay('tryAutoplayCurrentImmediate')) return;
+
+    final controller = _controllerPool[index];
+    if (controller != null &&
+        controller.value.isInitialized &&
+        !controller.value.isPlaying) {
+      if (_userPaused[index] == true) {
+        AppLogger.log(
+          '⏸️ Autoplay suppressed: user has manually paused video at index $index',
+        );
+        return;
+      }
+
+      try {
+        controller.setVolume(1.0);
+      } catch (_) {}
+
+      if (!_allowAutoplay('autoplay immediate')) return;
+
+      _pauseAllOtherVideos(index);
+
+      // **ENHANCED: Try to play immediately, with error handling**
+      final controllerToPlay = controller;
+      try {
+        controllerToPlay.play();
+        _ensureWakelockForVisibility();
+        _controllerStates[index] = true;
+        _userPaused[index] = false;
+        _pendingAutoplayAfterLogin = false;
+        AppLogger.log(
+            '⚡ VideoFeedAdvanced: Immediate autoplay started for index $index');
+
+        // **NEW: Verify play actually started, retry if needed**
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted &&
+              _currentIndex == index &&
+              controllerToPlay.value.isInitialized &&
+              !controllerToPlay.value.isPlaying &&
+              _userPaused[index] != true) {
+            AppLogger.log(
+                '⚠️ VideoFeedAdvanced: Play command didn\'t start, retrying...');
+            try {
+              controllerToPlay.play();
+            } catch (e) {
+              AppLogger.log('❌ VideoFeedAdvanced: Retry play failed: $e');
+            }
+          }
+        });
+      } catch (e) {
+        AppLogger.log(
+            '❌ VideoFeedAdvanced: Immediate autoplay failed: $e, will retry');
+        // Retry after a brief delay if initial play failed
+        Future.delayed(const Duration(milliseconds: 200), () {
+          if (mounted &&
+              _currentIndex == index &&
+              controllerToPlay.value.isInitialized &&
+              !controllerToPlay.value.isPlaying &&
+              _userPaused[index] != true) {
+            try {
+              controllerToPlay.play();
+              _ensureWakelockForVisibility();
+              _controllerStates[index] = true;
+              _userPaused[index] = false;
+              AppLogger.log(
+                  '✅ VideoFeedAdvanced: Autoplay started on retry for index $index');
+            } catch (retryError) {
+              AppLogger.log(
+                  '❌ VideoFeedAdvanced: Retry autoplay failed: $retryError');
+            }
+          }
+        });
+      }
+    }
   }
 }

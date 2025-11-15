@@ -206,10 +206,17 @@ class LoginScreen extends StatelessWidget {
                                         child: SizedBox(
                                           height: 50,
                                           child: ElevatedButton.icon(
-                                            onPressed: () {
+                                            onPressed: () async {
                                               // Skip sign-in and go to home even during error
-                                              Navigator.pushReplacementNamed(
-                                                  context, '/home');
+                                              // Clear error state and set skip flag
+                                              authController.clearError();
+                                              final prefs =
+                                                  await SharedPreferences.getInstance();
+                                              await prefs.setBool('auth_skip_login', true);
+                                              if (context.mounted) {
+                                                Navigator.pushReplacementNamed(
+                                                    context, '/home');
+                                              }
                                             },
                                             icon: const Icon(
                                               Icons.arrow_forward_ios,

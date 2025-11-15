@@ -272,9 +272,25 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       _preloadVideo(_currentIndex);
       _preloadNearbyVideos();
 
+      // **ENHANCED: Don't add additional delay - _preloadVideo already handles immediate autoplay**
+      // Only fallback if _preloadVideo's immediate autoplay didn't trigger
       if (mounted) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          _tryAutoplayCurrent();
+          // **DELAYED FALLBACK: Only try autoplay if video still hasn't started**
+          // This ensures we don't interfere with immediate autoplay from _preloadVideo
+          Future.delayed(const Duration(milliseconds: 300), () {
+            if (mounted && _currentIndex < _videos.length) {
+              final controller = _controllerPool[_currentIndex];
+              if (controller != null &&
+                  controller.value.isInitialized &&
+                  !controller.value.isPlaying &&
+                  _userPaused[_currentIndex] != true) {
+                AppLogger.log(
+                    '🔄 VideoFeedAdvanced: Fallback autoplay trigger after video load');
+                _tryAutoplayCurrent();
+              }
+            }
+          });
         });
       }
 

@@ -41,7 +41,7 @@ class AppConfig {
     return _cachedBaseUrl!;
   }
 
-  // **NEW: Try local server first, then custom domain, then Railway**
+  // **NEW: Try local IP (192.168.0.198) first, then snehayog.site, then Railway**
   static Future<String> getBaseUrlWithFallback() async {
     if (_cachedBaseUrl != null) {
       print('🔍 AppConfig: Using cached URL: $_cachedBaseUrl');
@@ -49,111 +49,137 @@ class AppConfig {
     }
 
     print(
-        '🔍 AppConfig: getBaseUrlWithFallback() - Trying primary production endpoints first...');
+        '🔍 AppConfig: getBaseUrlWithFallback() - Trying local IP (192.168.0.198) first...');
 
-    const remoteUrls = [
-      _customDomainUrl,
-      _railwayUrl,
-    ];
+    // 1) Local IP server (192.168.0.198:5001) - first priority
+    try {
+      print('🔍 AppConfig: Testing local IP server: $_localIpBaseUrl...');
+      final response = await http.get(
+        Uri.parse('$_localIpBaseUrl/api/health'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 3));
 
-    for (final url in remoteUrls) {
-      try {
-        print('🔍 AppConfig: Testing remote server: $url...');
-        final response = await http.get(
-          Uri.parse('$url/api/health'),
-          headers: {'Content-Type': 'application/json'},
-        ).timeout(const Duration(seconds: 8));
-
-        if (response.statusCode == 200) {
-          print('✅ AppConfig: Remote server accessible at $url');
-          _cachedBaseUrl = url;
-          return url;
-        }
-      } catch (e) {
-        print('❌ AppConfig: $url not accessible: $e');
-        continue;
+      if (response.statusCode == 200) {
+        print('✅ AppConfig: Local IP server accessible at $_localIpBaseUrl');
+        _cachedBaseUrl = _localIpBaseUrl;
+        return _localIpBaseUrl;
       }
+    } catch (e) {
+      print('❌ AppConfig: Local IP server not accessible: $e');
     }
 
     print(
-        '⚠️ AppConfig: Primary endpoints unreachable, checking local development servers...');
+        '⚠️ AppConfig: Local IP unreachable, trying snehayog.site as fallback...');
 
-    // 1) Local network servers (preferred during testing)
-    const localUrls = [
-      _localIpBaseUrl,
-      'http://localhost:5001',
-      'http://127.0.0.1:5001',
-      'http://10.0.2.2:5001',
-    ];
+    // 2) Custom domain (snehayog.site) - second priority
+    try {
+      print('🔍 AppConfig: Testing custom domain: $_customDomainUrl...');
+      final response = await http.get(
+        Uri.parse('$_customDomainUrl/api/health'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 8));
 
-    for (final url in localUrls) {
-      try {
-        print('🔍 AppConfig: Testing local server: $url...');
-        final response = await http.get(
-          Uri.parse('$url/api/health'),
-          headers: {'Content-Type': 'application/json'},
-        ).timeout(const Duration(seconds: 3));
-
-        if (response.statusCode == 200) {
-          print('✅ AppConfig: Local server accessible at $url');
-          _cachedBaseUrl = url;
-          return url;
-        }
-      } catch (e) {
-        print('❌ AppConfig: $url not accessible: $e');
-        continue;
+      if (response.statusCode == 200) {
+        print('✅ AppConfig: Custom domain accessible at $_customDomainUrl');
+        _cachedBaseUrl = _customDomainUrl;
+        return _customDomainUrl;
       }
+    } catch (e) {
+      print('❌ AppConfig: Custom domain not accessible: $e');
     }
 
-    // 2) Remote servers - custom domain first, then Railway
     print(
-        '⚠️ AppConfig: Local servers unreachable, no endpoints available. Using default custom domain');
+        '⚠️ AppConfig: Custom domain unreachable, trying Railway URL as fallback...');
+
+    // 3) Railway URL - third priority
+    try {
+      print('🔍 AppConfig: Testing Railway server: $_railwayUrl...');
+      final response = await http.get(
+        Uri.parse('$_railwayUrl/api/health'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        print('✅ AppConfig: Railway server accessible at $_railwayUrl');
+        _cachedBaseUrl = _railwayUrl;
+        return _railwayUrl;
+      }
+    } catch (e) {
+      print('❌ AppConfig: Railway server not accessible: $e');
+    }
+
+    // 4) All servers failed - use default custom domain as last resort
+    print(
+        '⚠️ AppConfig: All servers unreachable, using default custom domain as last resort');
     _cachedBaseUrl = _customDomainUrl;
     return _cachedBaseUrl!;
   }
 
-  // **NEW: Check server connectivity and update URL**
+  // **NEW: Check server connectivity - local IP (192.168.0.198) first, then snehayog.site, then Railway**
   static Future<String> checkAndUpdateServerUrl() async {
     print('🔍 AppConfig: Checking server connectivity...');
     print('🔍 AppConfig: Development mode: $_isDevelopment');
 
-    final urlsToTry = [
-      _customDomainUrl,
-      _railwayUrl,
-      _localIpBaseUrl,
-      'http://localhost:5001',
-      'http://127.0.0.1:5001',
-      'http://10.0.2.2:5001',
-    ];
+    // 1) Try local IP (192.168.0.198:5001) first
+    try {
+      print('🔍 AppConfig: Testing local IP server: $_localIpBaseUrl...');
+      final response = await http.get(
+        Uri.parse('$_localIpBaseUrl/api/health'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 4));
 
-    for (final url in urlsToTry) {
-      try {
-        print('🔍 AppConfig: Testing $url...');
-
-        final response = await http.get(
-          Uri.parse('$url/api/health'),
-          headers: {'Content-Type': 'application/json'},
-        ).timeout(
-          url.startsWith('http')
-              ? (url.startsWith('http://')
-                  ? const Duration(seconds: 4)
-                  : const Duration(seconds: 12))
-              : const Duration(seconds: 8),
-        );
-
-        if (response.statusCode == 200) {
-          print('✅ AppConfig: Server is accessible at $url');
-          _cachedBaseUrl = url;
-          return url;
-        }
-      } catch (e) {
-        print('❌ AppConfig: $url not accessible: $e');
-        continue;
+      if (response.statusCode == 200) {
+        print('✅ AppConfig: Local IP server is accessible at $_localIpBaseUrl');
+        _cachedBaseUrl = _localIpBaseUrl;
+        return _localIpBaseUrl;
       }
+    } catch (e) {
+      print('❌ AppConfig: Local IP server not accessible: $e');
     }
 
-    // If all production servers fail, return default
-    print('⚠️ AppConfig: All production servers failed, using default');
+    print(
+        '⚠️ AppConfig: Local IP unreachable, trying snehayog.site as fallback...');
+
+    // 2) Try custom domain (snehayog.site) as fallback
+    try {
+      print('🔍 AppConfig: Testing custom domain: $_customDomainUrl...');
+      final response = await http.get(
+        Uri.parse('$_customDomainUrl/api/health'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 12));
+
+      if (response.statusCode == 200) {
+        print('✅ AppConfig: Custom domain is accessible at $_customDomainUrl');
+        _cachedBaseUrl = _customDomainUrl;
+        return _customDomainUrl;
+      }
+    } catch (e) {
+      print('❌ AppConfig: Custom domain not accessible: $e');
+    }
+
+    print(
+        '⚠️ AppConfig: Custom domain unreachable, trying Railway URL as fallback...');
+
+    // 3) Try Railway URL as fallback
+    try {
+      print('🔍 AppConfig: Testing Railway server: $_railwayUrl...');
+      final response = await http.get(
+        Uri.parse('$_railwayUrl/api/health'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 12));
+
+      if (response.statusCode == 200) {
+        print('✅ AppConfig: Railway server is accessible at $_railwayUrl');
+        _cachedBaseUrl = _railwayUrl;
+        return _railwayUrl;
+      }
+    } catch (e) {
+      print('❌ AppConfig: Railway server not accessible: $e');
+    }
+
+    // If all servers fail, return default
+    print(
+        '⚠️ AppConfig: All servers failed, using default custom domain as last resort');
     _cachedBaseUrl = _customDomainUrl;
     return _cachedBaseUrl!;
   }
@@ -460,6 +486,20 @@ class AppConfig {
   static int calculateImpressionsFromBudgetWithCpm(double budget, double cpm) {
     return (budget / cpm * 1000).round();
   }
+
+  // **NEW: AdMob Configuration**
+  // Delegates to AdMobConfig for modular approach
+  static String? get adMobBannerAdUnitId {
+    // Import and use AdMobConfig
+    // This getter provides backward compatibility
+    try {
+      // Dynamic import to avoid circular dependencies
+      // AdMobConfig will be imported where needed
+      return null; // Will be resolved by AdMobConfig
+    } catch (e) {
+      return null;
+    }
+  }
 }
 
 /// Optimized network helper for better performance
@@ -577,23 +617,46 @@ class NetworkHelper {
     }
   }
 
-  /// **NEW: Get best available server URL**
+  /// **NEW: Get best available server URL - local IP (192.168.0.198) first, then snehayog.site, then Railway**
   static Future<String> getBestServerUrl() async {
-    print('🔍 NetworkHelper: Finding best server URL...');
+    print(
+        '🔍 NetworkHelper: Finding best server URL (192.168.0.198 → snehayog.site → Railway)...');
 
-    // Prefer custom domain in production
-    if (!AppConfig._isDevelopment) {
-      if (await isCustomDomainAccessible()) {
-        print('✅ NetworkHelper: Using custom domain');
-        return AppConfig._customDomainUrl;
+    // **NEW: Try local servers first regardless of environment**
+    // Try local IP first
+    try {
+      final localIpResponse = await http.get(
+        Uri.parse('${AppConfig._localIpBaseUrl}/api/health'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 3));
+
+      if (localIpResponse.statusCode == 200) {
+        print('✅ NetworkHelper: Local IP server accessible');
+        return AppConfig._localIpBaseUrl;
       }
-      if (await isRailwayAccessible()) {
-        print('✅ NetworkHelper: Using Railway server');
-        return AppConfig._railwayUrl;
-      }
+    } catch (e) {
+      print('❌ NetworkHelper: Local IP server not accessible: $e');
     }
 
-    // Fallback to AppConfig logic
+    print(
+        '⚠️ NetworkHelper: Local IP unreachable, trying snehayog.site as fallback...');
+
+    // 2) Try custom domain (snehayog.site) as fallback
+    if (await isCustomDomainAccessible()) {
+      print('✅ NetworkHelper: Using snehayog.site as fallback');
+      return AppConfig._customDomainUrl;
+    }
+
+    print(
+        '⚠️ NetworkHelper: Custom domain unreachable, trying Railway URL as fallback...');
+
+    // 3) Try Railway URL as fallback
+    if (await isRailwayAccessible()) {
+      print('✅ NetworkHelper: Using Railway server as fallback');
+      return AppConfig._railwayUrl;
+    }
+
+    // Final fallback to AppConfig logic
     return await AppConfig.getBaseUrlWithFallback();
   }
 }
