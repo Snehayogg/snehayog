@@ -159,6 +159,11 @@ app.use('/hls', (req, res, next) => {
   }
 }));
 
+// Serve app-ads.txt from root
+app.get("/app-ads.txt", (req, res) => {
+  res.sendFile(path.join(__dirname, "app-ads.txt"));
+});
+
 // **FIXED: Add error handler for HLS files**
 app.use('/hls', (err, req, res, next) => {
   console.error('❌ HLS serving error:', err);
