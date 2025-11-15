@@ -109,8 +109,8 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
     AppLogger.log(
         '✅ CarouselAdWidget: Ad became visible, starting view tracking');
 
-    // Track view after minimum duration (shared threshold)
-    _viewTrackingTimer = Timer(AppConstants.viewCountThreshold, () async {
+    // Track view after minimum duration (4 seconds for ads)
+    _viewTrackingTimer = Timer(AppConstants.adViewCountThreshold, () async {
       if (!_hasTrackedView && mounted && _isVisible) {
         await _trackAdView();
       }
@@ -129,7 +129,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
         '⏸️ CarouselAdWidget: Ad became invisible, stopped view tracking');
   }
 
-  /// **NEW: Track carousel ad view (minimum 2 seconds visible)**
+  /// **NEW: Track carousel ad view (minimum 4 seconds visible)**
   Future<void> _trackAdView() async {
     if (_hasTrackedView || _viewStartTime == null) return;
 
@@ -144,8 +144,8 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
       final viewDuration =
           DateTime.now().difference(_viewStartTime!).inMilliseconds / 1000.0;
 
-      // Minimum view duration shared with video views
-      final minSeconds = AppConstants.viewCountThreshold.inSeconds;
+      // Minimum view duration for ads (4 seconds)
+      final minSeconds = AppConstants.adViewCountThreshold.inSeconds;
       if (viewDuration < minSeconds) {
         AppLogger.log(
             '⚠️ CarouselAdWidget: View duration too short ($viewDuration s), not tracking (min: ${minSeconds}s)');

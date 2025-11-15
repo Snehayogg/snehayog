@@ -41,14 +41,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.4"
-  applovin_max:
-    dependency: "direct main"
-    description:
-      name: applovin_max
-      sha256: a34f0c51781cb0ccd3246446060d7bf94d50ef74b6a83cd5611a8232bd0ebd42
-      url: "https://pub.dev"
-    source: hosted
-    version: "4.6.0"
   archive:
     dependency: transitive
     description:

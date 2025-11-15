@@ -29,6 +29,12 @@ class AppConstants {
       Duration(milliseconds: 200); // reduced from 250
 
   // View tracking constants
-  static const Duration viewCountThreshold =
-      Duration(seconds: 4); // unified threshold for views & ads
+  static const Duration videoViewCountThreshold =
+      Duration(seconds: 2); // Video view count threshold (2 seconds)
+  static const Duration adViewCountThreshold =
+      Duration(seconds: 4); // Ad view count threshold (4 seconds)
+
+  // **DEPRECATED: Use videoViewCountThreshold or adViewCountThreshold instead**
+  @Deprecated('Use videoViewCountThreshold or adViewCountThreshold')
+  static const Duration viewCountThreshold = videoViewCountThreshold;
 }

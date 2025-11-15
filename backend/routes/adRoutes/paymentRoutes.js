@@ -52,7 +52,33 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
     const userVideos = await user.getVideos();
     console.log('🔍 Found videos for user:', userVideos.length);
 
-    // Calculate estimated revenue based on video views and engagement
+    // Get video IDs for querying ad impressions
+    const videoIds = userVideos.map(video => video._id);
+
+    // **FIXED: Use ACTUAL ad impressions from AdImpression collection (realtime)**
+    const AdImpression = (await import('../../models/AdImpression.js')).default;
+    
+    // Count actual banner ad impressions for user's videos
+    const bannerImpressions = await AdImpression.countDocuments({
+      videoId: { $in: videoIds },
+      adType: 'banner',
+      impressionType: 'view'
+    });
+
+    // Count actual carousel ad impressions for user's videos
+    const carouselImpressions = await AdImpression.countDocuments({
+      videoId: { $in: videoIds },
+      adType: 'carousel',
+      impressionType: 'view'
+    });
+
+    console.log('📊 Actual Ad Impressions:', {
+      bannerImpressions,
+      carouselImpressions,
+      totalImpressions: bannerImpressions + carouselImpressions
+    });
+
+    // Calculate video statistics (for display purposes only)
     let totalViews = 0;
     let totalLikes = 0;
     let totalShares = 0;
@@ -63,51 +89,28 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
       totalShares += video.shares || 0;
     });
 
-    // **NEW: CPM calculation for India market - using weighted average**
-    // Most ads are carousel/video feed ads (₹30 CPM), some banner ads (₹10 CPM)
-    // Using weighted average: 80% carousel/video feed ads, 20% banner ads
-    const weightedCpm = (30 * 0.8) + (10 * 0.2); // ₹26 weighted average CPM
-    const estimatedRevenueINR = (totalViews / 1000) * weightedCpm;
-    const creatorRevenueINR = estimatedRevenueINR * 0.80; // 80% to creator
-
-    // **NEW: EXACT REVENUE CALCULATION for payouts (not estimates)**
-    // We need to calculate actual revenue based on real ad impressions by type
-    // For now, we'll use a more accurate calculation based on video performance
-    // In the future, this should track actual ad impression data when available
+    // **REVENUE CALCULATION: Based on ACTUAL ad impressions (realtime)**
+    // Banner ads: ₹10 CPM (₹10 per 1000 impressions)
+    const bannerCpm = 10;
+    const bannerRevenueINR = (bannerImpressions / 1000) * bannerCpm;
     
-    // **DISPLAY ESTIMATE** (using weighted average for user interface)
-    const displayEstimatedRevenueINR = (totalViews / 1000) * weightedCpm;
+    // Carousel ads: ₹30 CPM (₹30 per 1000 impressions)
+    const carouselCpm = 30;
+    const carouselRevenueINR = (carouselImpressions / 1000) * carouselCpm;
     
-    // **EXACT PAYOUT CALCULATION** (using actual ad performance data)
-    // Since we don't have ad impression tracking yet, we'll use a more realistic calculation
-    // This should be replaced with actual ad impression data when available
-    const exactRevenueINR = (totalViews / 1000) * 25; // ₹25 average (more conservative than ₹26)
-    const exactCreatorRevenueINR = exactRevenueINR * 0.80; // 80% to creator
-
-    // **CORRECT REVENUE CALCULATION: Separate banner and carousel ad revenue**
-    // 1. Banner ads (₹10 CPM) appear on ALL videos
-    // 2. Carousel ads (₹30 CPM) appear on only SOME videos (let's say 30% of videos)
-    
-    // **BANNER AD REVENUE** - appears on ALL videos
-    const bannerCpm = 10; // ₹10 per 1000 impressions
-    const bannerRevenueINR = (totalViews / 1000) * bannerCpm;
-    
-    // **CAROUSEL AD REVENUE** - appears on only SOME videos (estimated 30% of total views)
-    const carouselCpm = 30; // ₹30 per 1000 impressions
-    const carouselAdViews = totalViews * 0.30; // Only 30% of videos get carousel ads
-    const carouselRevenueINR = (carouselAdViews / 1000) * carouselCpm;
-    
-    // **TOTAL EXACT REVENUE** - sum of both ad types
+    // **TOTAL EXACT REVENUE** - sum of both ad types (based on actual impressions)
     const totalExactRevenueINR = bannerRevenueINR + carouselRevenueINR;
     const totalExactCreatorRevenueINR = totalExactRevenueINR * 0.80; // 80% to creator
 
-    console.log('💰 Revenue Breakdown:', {
-      totalViews,
+    console.log('💰 Revenue Breakdown (Based on Actual Ad Impressions):', {
+      bannerImpressions,
+      carouselImpressions,
+      totalImpressions: bannerImpressions + carouselImpressions,
       bannerRevenue: bannerRevenueINR.toFixed(2),
-      carouselAdViews: carouselAdViews.toFixed(0),
       carouselRevenue: carouselRevenueINR.toFixed(2),
       totalExactRevenue: totalExactRevenueINR.toFixed(2),
-      creatorRevenue: totalExactCreatorRevenueINR.toFixed(2)
+      creatorRevenue: totalExactCreatorRevenueINR.toFixed(2),
+      note: 'Revenue calculated from actual ad impressions (realtime)'
     });
 
     // Get actual payout records if they exist
@@ -142,20 +145,62 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
       return videoDate.getMonth() === lastMonth && videoDate.getFullYear() === lastMonthYear;
     });
 
-    // **CORRECT MONTHLY REVENUE: Separate banner and carousel calculations**
-    // **Current Month**
-    const currentMonthViews = currentMonthVideos.reduce((sum, v) => sum + (v.views || 0), 0);
-    const currentMonthBannerRevenue = (currentMonthViews / 1000) * 10; // ₹10 CPM on all videos
-    const currentMonthCarouselViews = currentMonthViews * 0.30; // 30% of videos get carousel ads
-    const currentMonthCarouselRevenue = (currentMonthCarouselViews / 1000) * 30; // ₹30 CPM
+    // **MONTHLY REVENUE: Based on ACTUAL ad impressions (realtime)**
+    const currentMonthVideoIds = currentMonthVideos.map(v => v._id);
+    const lastMonthVideoIds = lastMonthVideos.map(v => v._id);
+    
+    // **Current Month** - Count actual impressions
+    const currentMonthBannerImpressions = await AdImpression.countDocuments({
+      videoId: { $in: currentMonthVideoIds },
+      adType: 'banner',
+      impressionType: 'view',
+      timestamp: {
+        $gte: new Date(currentYear, currentMonth, 1),
+        $lt: new Date(currentYear, currentMonth + 1, 1)
+      }
+    });
+    
+    const currentMonthCarouselImpressions = await AdImpression.countDocuments({
+      videoId: { $in: currentMonthVideoIds },
+      adType: 'carousel',
+      impressionType: 'view',
+      timestamp: {
+        $gte: new Date(currentYear, currentMonth, 1),
+        $lt: new Date(currentYear, currentMonth + 1, 1)
+      }
+    });
+    
+    const currentMonthBannerRevenue = (currentMonthBannerImpressions / 1000) * 10; // ₹10 CPM
+    const currentMonthCarouselRevenue = (currentMonthCarouselImpressions / 1000) * 30; // ₹30 CPM
     const currentMonthTotalRevenue = currentMonthBannerRevenue + currentMonthCarouselRevenue;
     const currentMonthCreatorRevenue = currentMonthTotalRevenue * 0.80;
     
-    // **Last Month**
-    const lastMonthViews = lastMonthVideos.reduce((sum, v) => sum + (v.views || 0), 0);
-    const lastMonthBannerRevenue = (lastMonthViews / 1000) * 10; // ₹10 CPM on all videos
-    const lastMonthCarouselViews = lastMonthViews * 0.30; // 30% of videos get carousel ads
-    const lastMonthCarouselRevenue = (lastMonthCarouselViews / 1000) * 30; // ₹30 CPM
+    // **Last Month** - Count actual impressions
+    const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+    const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+    
+    const lastMonthBannerImpressions = await AdImpression.countDocuments({
+      videoId: { $in: lastMonthVideoIds },
+      adType: 'banner',
+      impressionType: 'view',
+      timestamp: {
+        $gte: new Date(lastMonthYear, lastMonth, 1),
+        $lt: new Date(lastMonthYear, lastMonth + 1, 1)
+      }
+    });
+    
+    const lastMonthCarouselImpressions = await AdImpression.countDocuments({
+      videoId: { $in: lastMonthVideoIds },
+      adType: 'carousel',
+      impressionType: 'view',
+      timestamp: {
+        $gte: new Date(lastMonthYear, lastMonth, 1),
+        $lt: new Date(lastMonthYear, lastMonth + 1, 1)
+      }
+    });
+    
+    const lastMonthBannerRevenue = (lastMonthBannerImpressions / 1000) * 10; // ₹10 CPM
+    const lastMonthCarouselRevenue = (lastMonthCarouselImpressions / 1000) * 30; // ₹30 CPM
     const lastMonthTotalRevenue = lastMonthBannerRevenue + lastMonthCarouselRevenue;
     const lastMonthCreatorRevenue = lastMonthTotalRevenue * 0.80;
 
@@ -172,21 +217,22 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
       netRevenue: Math.round(totalExactCreatorRevenueINR * 100) / 100,
       availableForPayout: Math.round((totalExactCreatorRevenueINR - totalPaidOut) * 100) / 100,
       
-      // **REVENUE BREAKDOWN** (detailed breakdown for transparency)
+      // **REVENUE BREAKDOWN** (detailed breakdown based on actual ad impressions)
       revenueBreakdown: {
         bannerAds: {
           cpm: 10,
-          views: totalViews,
+          impressions: bannerImpressions, // Actual ad impressions (realtime)
           revenue: Math.round(bannerRevenueINR * 100) / 100,
           creatorShare: Math.round(bannerRevenueINR * 0.80 * 100) / 100
         },
         carouselAds: {
           cpm: 30,
-          views: Math.round(totalViews * 0.30), // 30% of videos get carousel ads
+          impressions: carouselImpressions, // Actual ad impressions (realtime)
           revenue: Math.round(carouselRevenueINR * 100) / 100,
           creatorShare: Math.round(carouselRevenueINR * 0.80 * 100) / 100
         },
         total: {
+          impressions: bannerImpressions + carouselImpressions, // Total ad impressions
           revenue: Math.round(totalExactRevenueINR * 100) / 100,
           creatorShare: Math.round(totalExactCreatorRevenueINR * 100) / 100
         }
@@ -216,14 +262,16 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
       }))
     };
 
-    console.log('✅ Creator revenue data sent:', {
+    console.log('✅ Creator revenue data sent (Based on Actual Ad Impressions):', {
       userId: userId,
-      totalViews: totalViews,
+      bannerImpressions,
+      carouselImpressions,
+      totalImpressions: bannerImpressions + carouselImpressions,
       bannerRevenue: bannerRevenueINR.toFixed(2),
       carouselRevenue: carouselRevenueINR.toFixed(2),
       totalExactRevenue: totalExactRevenueINR.toFixed(2),
       totalExactCreatorRevenue: totalExactCreatorRevenueINR.toFixed(2),
-      note: 'Showing exact revenue: Banner (₹10) + Carousel (₹30) = Total Revenue'
+      note: 'Revenue calculated from actual ad impressions (realtime) - Banner (₹10 CPM) + Carousel (₹30 CPM)'
     });
 
     res.json(response);

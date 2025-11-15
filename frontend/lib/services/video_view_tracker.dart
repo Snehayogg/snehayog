@@ -6,7 +6,7 @@ import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/core/services/http_client_service.dart';
 import 'package:vayu/core/constants/app_constants.dart';
 
-/// Handles 4-second view threshold, repeat views (max 10 per user), self-view prevention, and API integration
+/// Handles 2-second view threshold for videos, repeat views (max 10 per user), self-view prevention, and API integration
 class VideoViewTracker {
   static String get _baseUrl => AppConfig.baseUrl;
   final AuthService _authService = AuthService();
@@ -21,7 +21,7 @@ class VideoViewTracker {
   static const Duration _minViewInterval =
       Duration(minutes: 1); // Minimum 1 minute between views
 
-  /// Increment view count for a video after 4 seconds of playback
+  /// Increment view count for a video after 2 seconds of playback
   /// Returns true if view was counted, false if already at max or error
   Future<bool> incrementView(
     String videoId, {
@@ -30,7 +30,7 @@ class VideoViewTracker {
   }) async {
     try {
       final effectiveDuration =
-          duration ?? AppConstants.viewCountThreshold.inSeconds;
+          duration ?? AppConstants.videoViewCountThreshold.inSeconds;
 
       AppLogger.log(
           '🎯 VideoViewTracker: Attempting to increment view for video $videoId');
@@ -122,7 +122,7 @@ class VideoViewTracker {
     }
   }
 
-  /// Start tracking view for a video - will increment after 4 seconds
+  /// Start tracking view for a video - will increment after 2 seconds
   void startViewTracking(String videoId, {String? videoUploaderId}) {
     AppLogger.log(
         '🎯 VideoViewTracker: Starting view tracking for video $videoId');
@@ -131,9 +131,10 @@ class VideoViewTracker {
     _viewTimers[videoId]?.cancel();
 
     // Start new timer
-    _viewTimers[videoId] = Timer(AppConstants.viewCountThreshold, () async {
+    _viewTimers[videoId] =
+        Timer(AppConstants.videoViewCountThreshold, () async {
       AppLogger.log(
-        '⏰ VideoViewTracker: ${AppConstants.viewCountThreshold.inSeconds} seconds elapsed for video $videoId, incrementing view',
+        '⏰ VideoViewTracker: ${AppConstants.videoViewCountThreshold.inSeconds} seconds elapsed for video $videoId, incrementing view',
       );
 
       // Check if this video hasn't been counted yet in this session

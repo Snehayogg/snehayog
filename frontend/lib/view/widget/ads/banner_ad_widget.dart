@@ -50,19 +50,19 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
     super.dispose();
   }
 
-  /// **NEW: Track ad view duration (minimum 2 seconds)**
+  /// **NEW: Track ad view duration (minimum 4 seconds)**
   void _startViewTracking() {
     _viewStartTime = DateTime.now();
 
-    // Track view after minimum duration (shared threshold)
-    _viewTrackingTimer = Timer(AppConstants.viewCountThreshold, () async {
+    // Track view after minimum duration (4 seconds for ads)
+    _viewTrackingTimer = Timer(AppConstants.adViewCountThreshold, () async {
       if (!_hasTrackedView && mounted) {
         await _trackAdView();
       }
     });
   }
 
-  /// **NEW: Track ad view (minimum 2 seconds visible)**
+  /// **NEW: Track ad view (minimum 4 seconds visible)**
   Future<void> _trackAdView() async {
     if (_hasTrackedView || _viewStartTime == null) return;
 
@@ -70,8 +70,8 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
       final viewDuration =
           DateTime.now().difference(_viewStartTime!).inMilliseconds / 1000.0;
 
-      // Minimum view duration shared with video views
-      final minSeconds = AppConstants.viewCountThreshold.inSeconds;
+      // Minimum view duration for ads (4 seconds)
+      final minSeconds = AppConstants.adViewCountThreshold.inSeconds;
       if (viewDuration < minSeconds) {
         AppLogger.log(
             '⚠️ BannerAdWidget: View duration too short ($viewDuration s), not tracking (min: ${minSeconds}s)');
