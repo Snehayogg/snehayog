@@ -101,33 +101,49 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  /// **ENHANCED: Smart cache-first loading - only fetch from server if no cache exists or manual refresh**
+  /// **ENHANCED: Instant cache-first loading - show cached data immediately, refresh in background**
   Future<void> _loadData({bool forceRefresh = false}) async {
     try {
-      // **BATCHED UPDATE: Update multiple values at once (no setState)**
-      _isLoading.value = true;
-      _error.value = null;
-
       AppLogger.log(
-          '🔄 ProfileScreen: Starting smart cache-first loading (forceRefresh: $forceRefresh)');
+          '🔄 ProfileScreen: Starting instant cache-first loading (forceRefresh: $forceRefresh)');
 
       // Step 1: Try cache first (unless forcing refresh)
       if (!forceRefresh) {
         final cachedData = await _loadCachedProfileData();
         if (cachedData != null) {
-          AppLogger.log('⚡ ProfileScreen: Using cached data (no server fetch)');
+          AppLogger.log(
+              '⚡ ProfileScreen: Using cached data (INSTANT - no server fetch)');
+
+          // **INSTANT: Show cached data immediately (no loading state)**
           _stateManager.setUserData(cachedData);
-
-          // Load videos from cache in parallel
           _loadVideosFromCache();
+          _isLoading.value = false; // Hide loading immediately
 
-          // **SINGLE UPDATE: Only update loading state**
-          _isLoading.value = false;
-          return;
+          // **BACKGROUND: Refresh in background (non-blocking)**
+          Future.microtask(() async {
+            try {
+              AppLogger.log('🔄 ProfileScreen: Background refresh started');
+              await _stateManager.loadUserData(widget.userId);
+
+              if (_stateManager.userData != null) {
+                await _cacheProfileData(_stateManager.userData!);
+                await _loadVideos();
+                AppLogger.log('✅ ProfileScreen: Background refresh completed');
+              }
+            } catch (e) {
+              AppLogger.log('⚠️ ProfileScreen: Background refresh failed: $e');
+              // Don't show error - user already has cached data
+            }
+          });
+
+          return; // Exit early - user sees cached data instantly
         }
       }
 
       // Step 2: No cache or force refresh - load from server
+      _isLoading.value = true;
+      _error.value = null;
+
       AppLogger.log(
           '📡 ProfileScreen: ${forceRefresh ? "Force refreshing" : "No cache, loading"} from server');
       await _stateManager.loadUserData(widget.userId);

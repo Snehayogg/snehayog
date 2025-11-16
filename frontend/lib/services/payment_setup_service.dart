@@ -251,19 +251,31 @@ class PaymentSetupService {
       throw Exception('Not authenticated');
     }
 
+    // Backend expects paymentMethod and paymentDetails in the request body
+    final requestBody = {
+      'paymentMethod': 'upi',
+      'paymentDetails': {
+        'upiId': upiId,
+      },
+      'currency': 'INR',
+      'country': 'IN',
+    };
+
     final response = await http.put(
-      Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/payment-method/upi'),
+      Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/payment-method'),
       headers: {
         'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
       },
-      body: json.encode({'upiId': upiId}),
+      body: json.encode(requestBody),
     );
 
     if (response.statusCode != 200) {
-      final message =
-          response.body.isNotEmpty ? response.body : 'Unknown error';
-      throw Exception('Failed to update UPI ID: $message');
+      final errorData = response.body.isNotEmpty
+          ? json.decode(response.body)
+          : {'error': 'Unknown error'};
+      final errorMessage = errorData['error'] ?? response.body;
+      throw Exception('Failed to update UPI ID: $errorMessage');
     }
   }
 }

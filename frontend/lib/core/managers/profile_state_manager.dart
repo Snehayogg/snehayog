@@ -115,15 +115,25 @@ class ProfileStateManager extends ChangeNotifier {
       }
 
       final cacheKey = _resolveProfileCacheKey(userId, loggedInUser);
+      final bool isMyProfile = userId == null ||
+          userId == loggedInUser['id'] ||
+          userId == loggedInUser['googleId'];
+
       Map<String, dynamic>? userData;
 
       if (_smartCacheInitialized) {
         AppLogger.log(
-            '🧠 ProfileStateManager: Attempting smart cache fetch for $cacheKey');
+            '🧠 ProfileStateManager: Attempting smart cache fetch for $cacheKey (isMyProfile: $isMyProfile)');
+
+        // **ENHANCED: Use longer cache time for other users' profiles (7 days vs 24 hours)**
+        final cacheTime = isMyProfile
+            ? _userProfileCacheTime // 24 hours for own profile
+            : Duration(days: 7); // 7 days for other users' profiles
+
         userData = await _smartCacheManager.get<Map<String, dynamic>>(
           cacheKey,
           cacheType: 'user_profile',
-          maxAge: _userProfileCacheTime,
+          maxAge: cacheTime,
           fetchFn: () async {
             final fetched =
                 await _fetchProfileData(userId, loggedInUser, cacheKey);

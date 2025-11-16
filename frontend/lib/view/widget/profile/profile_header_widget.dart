@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:vayu/core/managers/profile_state_manager.dart';
 import 'package:vayu/core/providers/user_provider.dart';
 import 'package:vayu/core/services/profile_screen_logger.dart';
+import 'package:vayu/view/widget/follow_button_widget.dart';
+import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'dart:io';
 
 class ProfileHeaderWidget extends StatelessWidget {
@@ -139,7 +141,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 16),
-                // Username and How to earn
+                // Username and How to earn / Follow button
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -197,29 +199,59 @@ class ProfileHeaderWidget extends StatelessWidget {
                           }
                         },
                       ),
-                      if (onShowHowToEarn != null) ...[
-                        const SizedBox(height: 8),
-                        SizedBox(
-                          height: 32,
-                          child: OutlinedButton.icon(
-                            onPressed: onShowHowToEarn,
-                            icon: const Icon(Icons.info_outline, size: 16),
-                            label: const Text(
-                              'How to earn',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 6),
-                              side: const BorderSide(color: Color(0xFF3B82F6)),
-                              foregroundColor: const Color(0xFF3B82F6),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(6),
+                      const SizedBox(height: 8),
+                      // Show follow button when viewing someone else's profile
+                      // Show "How to earn" button when viewing own profile
+                      Consumer<GoogleSignInController>(
+                        builder: (context, authController, _) {
+                          final loggedInUserId = authController.userData?['id']
+                                  ?.toString() ??
+                              authController.userData?['googleId']?.toString();
+                          final displayedUserId = userId ??
+                              stateManager.userData?['googleId']?.toString() ??
+                              stateManager.userData?['id']?.toString();
+                          final bool isViewingOwnProfile =
+                              loggedInUserId != null &&
+                                  loggedInUserId.isNotEmpty &&
+                                  loggedInUserId == displayedUserId;
+
+                          // Show follow button when viewing someone else's profile
+                          if (!isViewingOwnProfile && displayedUserId != null) {
+                            final userName = _getUserName(context);
+                            return FollowButtonWidget(
+                              uploaderId: displayedUserId,
+                              uploaderName: userName,
+                            );
+                          }
+
+                          // Show "How to earn" button when viewing own profile
+                          if (isViewingOwnProfile && onShowHowToEarn != null) {
+                            return SizedBox(
+                              height: 32,
+                              child: OutlinedButton.icon(
+                                onPressed: onShowHowToEarn,
+                                icon: const Icon(Icons.info_outline, size: 16),
+                                label: const Text(
+                                  'How to earn',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 6),
+                                  side: const BorderSide(
+                                      color: Color(0xFF3B82F6)),
+                                  foregroundColor: const Color(0xFF3B82F6),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                        ),
-                      ],
+                            );
+                          }
+
+                          return const SizedBox.shrink();
+                        },
+                      ),
                     ],
                   ),
                 ),

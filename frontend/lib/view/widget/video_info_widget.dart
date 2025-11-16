@@ -3,6 +3,7 @@ import 'package:vayu/model/video_model.dart';
 import 'package:vayu/core/constants/app_constants.dart';
 import 'package:vayu/view/screens/profile_screen.dart';
 import 'package:vayu/view/widget/follow_button_widget.dart';
+import 'package:vayu/services/profile_preloader.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class VideoInfoWidget extends StatefulWidget {
@@ -127,7 +128,14 @@ class _UploaderInfoSection extends StatelessWidget {
         // Uploader avatar and name (tappable)
         Expanded(
           child: GestureDetector(
-            onTap: () {
+            onTap: () async {
+              // **NEW: Preload profile before navigation for instant opening**
+              if (video.uploader.id.isNotEmpty &&
+                  video.uploader.id != 'unknown') {
+                final profilePreloader = ProfilePreloader();
+                await profilePreloader.preloadProfileOnTap(video.uploader.id);
+              }
+
               Navigator.push(
                 context,
                 MaterialPageRoute(

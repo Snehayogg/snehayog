@@ -14,6 +14,7 @@ import 'package:vayu/services/active_ads_service.dart';
 import 'package:vayu/services/video_view_tracker.dart';
 import 'package:vayu/services/ad_refresh_notifier.dart';
 import 'package:vayu/services/background_profile_preloader.dart';
+import 'package:vayu/services/profile_preloader.dart';
 import 'package:vayu/services/ad_impression_service.dart';
 import 'package:vayu/view/widget/ads/banner_ad_widget.dart';
 import 'package:vayu/view/widget/ads/carousel_ad_widget.dart';

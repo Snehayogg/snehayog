@@ -349,6 +349,11 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
             '▶️ Started view tracking for preloaded current video: ${video.id}',
           );
 
+          // **NEW: Preload creator's profile in background for instant profile opening**
+          if (video.uploader.id.isNotEmpty && video.uploader.id != 'unknown') {
+            ProfilePreloader().preloadProfile(video.uploader.id);
+          }
+
           final bool openedFromProfile =
               widget.initialVideos != null && widget.initialVideos!.isNotEmpty;
           if (isReused &&
@@ -817,6 +822,12 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         AppLogger.log(
           '▶️ Started view tracking for current video: ${currentVideo.id}',
         );
+
+        // **NEW: Preload creator's profile in background for instant profile opening**
+        if (currentVideo.uploader.id.isNotEmpty &&
+            currentVideo.uploader.id != 'unknown') {
+          ProfilePreloader().preloadProfile(currentVideo.uploader.id);
+        }
       }
 
       _preloadNearbyVideosDebounced();
@@ -863,6 +874,12 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
               AppLogger.log(
                 '▶️ Started view tracking for current video: ${currentVideo.id}',
               );
+
+              // **NEW: Preload creator's profile in background for instant profile opening**
+              if (currentVideo.uploader.id.isNotEmpty &&
+                  currentVideo.uploader.id != 'unknown') {
+                ProfilePreloader().preloadProfile(currentVideo.uploader.id);
+              }
             }
 
             AppLogger.log('✅ Video autoplay started after preloading');

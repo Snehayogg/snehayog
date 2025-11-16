@@ -230,74 +230,97 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
                   builder: (context, isInitialized, child) {
                     if (!isInitialized) {
                       return Container(
-                        width: 80,
-                        height: 28,
+                        width: 90,
+                        height: 36,
                         decoration: BoxDecoration(
-                          color: Colors.grey[300],
-                          borderRadius: BorderRadius.circular(14),
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: Colors.grey.shade300,
+                            width: 1.5,
+                          ),
                         ),
                         child: const Center(
                           child: SizedBox(
                             width: 16,
                             height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.blue,
+                              ),
+                            ),
                           ),
                         ),
                       );
                     }
 
-                    return Container(
-                      width: 80,
-                      height:
-                          32, // **FIXED: Increased height for better visibility**
+                    // Professional follow button design
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeInOut,
+                      width: isFollowing ? 100 : 90,
+                      height: 36,
                       decoration: BoxDecoration(
-                        color: isFollowing ? Colors.grey[600] : Colors.blue,
-                        borderRadius: BorderRadius.circular(16),
+                        color: isFollowing
+                            ? Colors.grey.shade100
+                            : Colors.blue.shade600,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isFollowing
+                              ? Colors.grey.shade300
+                              : Colors.blue.shade700,
+                          width: 1.5,
+                        ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(
-                                0.3), // **FIXED: Increased shadow for visibility**
-                            blurRadius: 6,
-                            offset: const Offset(0, 3),
+                            color: isFollowing
+                                ? Colors.grey.withOpacity(0.1)
+                                : Colors.blue.withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
                           ),
                         ],
-                        border: Border.all(
-                          // **NEW: Added border for better visibility**
-                          color: Colors.white.withOpacity(0.3),
-                          width: 1,
-                        ),
                       ),
                       child: Material(
                         color: Colors.transparent,
                         child: InkWell(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(20),
                           onTap: _handleFollowTap,
-                          child: Center(
+                          splashColor: isFollowing
+                              ? Colors.grey.shade200
+                              : Colors.blue.shade700,
+                          highlightColor: isFollowing
+                              ? Colors.grey.shade100
+                              : Colors.blue.shade500,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
                             child: Row(
+                              mainAxisSize: MainAxisSize.min,
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Icon(
-                                  isFollowing ? Icons.check : Icons.add,
-                                  color: Colors.white,
-                                  size: 18, // **FIXED: Increased icon size**
+                                  isFollowing
+                                      ? Icons.check_circle
+                                      : Icons.person_add,
+                                  color: isFollowing
+                                      ? Colors.grey.shade700
+                                      : Colors.white,
+                                  size: 16,
                                 ),
-                                const SizedBox(width: 4),
+                                const SizedBox(width: 6),
                                 Text(
                                   isFollowing ? 'Following' : 'Follow',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize:
-                                        13, // **FIXED: Increased font size**
-                                    fontWeight: FontWeight
-                                        .bold, // **FIXED: Made text bold**
-                                    shadows: [
-                                      // **NEW: Added text shadow for better visibility**
-                                      Shadow(
-                                        offset: Offset(1, 1),
-                                        blurRadius: 2,
-                                        color: Colors.black54,
-                                      ),
-                                    ],
+                                  style: TextStyle(
+                                    color: isFollowing
+                                        ? Colors.grey.shade800
+                                        : Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.3,
                                   ),
                                 ),
                               ],
