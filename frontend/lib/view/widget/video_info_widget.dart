@@ -4,6 +4,8 @@ import 'package:vayu/core/constants/app_constants.dart';
 import 'package:vayu/view/screens/profile_screen.dart';
 import 'package:vayu/view/widget/follow_button_widget.dart';
 import 'package:vayu/services/profile_preloader.dart';
+import 'package:vayu/core/managers/shared_video_controller_pool.dart';
+import 'package:vayu/core/managers/video_controller_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class VideoInfoWidget extends StatefulWidget {
@@ -129,6 +131,22 @@ class _UploaderInfoSection extends StatelessWidget {
         Expanded(
           child: GestureDetector(
             onTap: () async {
+              // **NEW: Pause video before navigation**
+              try {
+                final sharedPool = SharedVideoControllerPool();
+                sharedPool.pauseAllControllers();
+
+                // Also pause VideoControllerManager videos if available
+                try {
+                  final videoControllerManager = VideoControllerManager();
+                  videoControllerManager.pauseAllVideos();
+                } catch (e) {
+                  // VideoControllerManager might not be available, ignore
+                }
+              } catch (e) {
+                // Ignore errors - video pause is best effort
+              }
+
               // **NEW: Preload profile before navigation for instant opening**
               if (video.uploader.id.isNotEmpty &&
                   video.uploader.id != 'unknown') {
@@ -154,7 +172,6 @@ class _UploaderInfoSection extends StatelessWidget {
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w500,
-                      // **REDUCED from 13 to 11**
                       fontSize: 11,
                     ),
                     overflow: TextOverflow.ellipsis,

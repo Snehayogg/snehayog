@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/core/managers/profile_state_manager.dart';
 import 'package:vayu/core/providers/user_provider.dart';
 import 'package:vayu/core/services/profile_screen_logger.dart';
-// import 'package:vayu/services/ad_impression_service.dart';
 import 'package:vayu/services/earnings_service.dart';
 import 'package:vayu/utils/app_logger.dart';
 
@@ -38,7 +38,44 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
   void initState() {
     super.initState();
     _attachStateManagerListener();
+    // **NEW: Try to load cached earnings first, then calculate if needed**
+    _loadEarningsFromCache();
     _loadEarnings();
+  }
+
+  /// **NEW: Load earnings from cache if available (non-blocking)**
+  Future<void> _loadEarningsFromCache() async {
+    final cacheKey = _getEarningsCacheKey();
+    if (cacheKey == null) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cachedEarningsJson = prefs.getString('earnings_cache_$cacheKey');
+      final cachedTimestamp =
+          prefs.getInt('earnings_cache_timestamp_$cacheKey');
+
+      if (cachedEarningsJson != null && cachedTimestamp != null) {
+        final cacheTime = DateTime.fromMillisecondsSinceEpoch(cachedTimestamp);
+        final age = DateTime.now().difference(cacheTime);
+
+        // Use cache if it's less than 1 day old
+        if (age.inDays < 1) {
+          final cachedEarnings = double.tryParse(cachedEarningsJson) ?? 0.0;
+          if (mounted) {
+            setState(() {
+              _earnings = cachedEarnings;
+              _isLoadingEarnings = false;
+            });
+          }
+          AppLogger.log(
+            '💰 ProfileStatsWidget: Loaded cached earnings on init: ₹${cachedEarnings.toStringAsFixed(2)}',
+          );
+        }
+      }
+    } catch (e) {
+      AppLogger.log(
+          '⚠️ ProfileStatsWidget: Error loading cached earnings on init: $e');
+    }
   }
 
   @override
@@ -65,7 +102,10 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
     final currentCount = widget.stateManager.userVideos.length;
     if (currentCount != _lastVideoCount) {
       _lastVideoCount = currentCount;
-      _loadEarnings();
+      // **FIXED: Only recalculate if videos are actually loaded and count changed meaningfully**
+      if (widget.isVideosLoaded && currentCount > 0) {
+        _loadEarnings();
+      }
     }
   }
 
@@ -75,19 +115,66 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
     super.dispose();
   }
 
-  /// **FIXED: Load earnings using centralized EarningsService (single source of truth)**
+  /// **FIXED: Load earnings with caching - check cache first, then calculate if needed**
   /// **ENHANCED: Works for any creator's videos (own profile or other creators)**
   Future<void> _loadEarnings() async {
-    if (!widget.isVideosLoaded || widget.stateManager.userVideos.isEmpty) {
+    // **FIXED: Don't show 0 if videos are still loading**
+    if (!widget.isVideosLoaded) {
+      // Keep loading state, don't set to 0 yet
       if (mounted) {
         setState(() {
-          _isLoadingEarnings = false; // Don't show loading if no videos
+          _isLoadingEarnings = true;
+        });
+      }
+      return;
+    }
+
+    if (widget.stateManager.userVideos.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _isLoadingEarnings = false;
           _earnings = 0.0;
         });
       }
       return;
     }
 
+    // **NEW: Try to load from cache first**
+    final cacheKey = _getEarningsCacheKey();
+    if (cacheKey != null) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final cachedEarningsJson = prefs.getString('earnings_cache_$cacheKey');
+        final cachedTimestamp =
+            prefs.getInt('earnings_cache_timestamp_$cacheKey');
+
+        if (cachedEarningsJson != null && cachedTimestamp != null) {
+          final cacheTime =
+              DateTime.fromMillisecondsSinceEpoch(cachedTimestamp);
+          final age = DateTime.now().difference(cacheTime);
+
+          // Use cache if it's less than 1 day old
+          if (age.inDays < 1) {
+            final cachedEarnings = double.tryParse(cachedEarningsJson) ?? 0.0;
+            AppLogger.log(
+              '💰 ProfileStatsWidget: Using cached earnings: ₹${cachedEarnings.toStringAsFixed(2)} (${age.inHours}h old)',
+            );
+            if (mounted) {
+              setState(() {
+                _earnings = cachedEarnings;
+                _isLoadingEarnings = false;
+              });
+            }
+            return; // Exit early with cached value
+          }
+        }
+      } catch (e) {
+        AppLogger.log(
+            '⚠️ ProfileStatsWidget: Error loading cached earnings: $e');
+      }
+    }
+
+    // Cache miss or expired - calculate earnings
     if (mounted) {
       setState(() {
         _isLoadingEarnings = true;
@@ -110,6 +197,22 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
         '💰 ProfileStatsWidget: Earnings calculated: ₹${totalRevenue.toStringAsFixed(2)} for $viewingUserId',
       );
 
+      // **NEW: Cache the calculated earnings**
+      if (cacheKey != null) {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(
+              'earnings_cache_$cacheKey', totalRevenue.toString());
+          await prefs.setInt(
+            'earnings_cache_timestamp_$cacheKey',
+            DateTime.now().millisecondsSinceEpoch,
+          );
+          AppLogger.log('✅ ProfileStatsWidget: Earnings cached for $cacheKey');
+        } catch (e) {
+          AppLogger.log('⚠️ ProfileStatsWidget: Error caching earnings: $e');
+        }
+      }
+
       if (mounted) {
         setState(() {
           _earnings = totalRevenue;
@@ -126,6 +229,18 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
         });
       }
     }
+  }
+
+  /// **NEW: Get cache key for earnings based on userId and video count**
+  String? _getEarningsCacheKey() {
+    final userId = widget.userId ??
+        widget.stateManager.userData?['googleId'] ??
+        widget.stateManager.userData?['id'];
+    if (userId == null) return null;
+
+    final videoCount = widget.stateManager.userVideos.length;
+    // Include video count in cache key so cache invalidates when videos change
+    return '${userId}_${videoCount}';
   }
 
   @override
@@ -244,7 +359,24 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
       'stateManager.userData: ${widget.stateManager.userData != null}',
     );
 
-    // Build candidate IDs to query provider with
+    // **FIXED: Prioritize ProfileStateManager.userData first (loaded immediately)**
+    // This ensures follower count displays immediately when viewing another creator's profile
+    if (widget.stateManager.userData != null) {
+      // Try both field names for compatibility
+      final followersCount = widget.stateManager.userData!['followersCount'] ??
+          widget.stateManager.userData!['followers'];
+
+      if (followersCount != null && followersCount != 0) {
+        ProfileScreenLogger.logDebugInfo(
+          '✅ Using followers count from ProfileStateManager: $followersCount',
+        );
+        return followersCount is int
+            ? followersCount
+            : (int.tryParse(followersCount.toString()) ?? 0);
+      }
+    }
+
+    // **FALLBACK: Check UserProvider cache (populated asynchronously)**
     final List<String> idsToTry = <String?>[
       widget.userId,
       widget.stateManager.userData?['googleId'],
@@ -261,44 +393,19 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       for (final candidateId in idsToTry) {
         final userModel = userProvider.getUserData(candidateId);
-        if (userModel?.followersCount != null) {
+        if (userModel?.followersCount != null &&
+            userModel!.followersCount > 0) {
           ProfileScreenLogger.logDebugInfo(
-            'Using followers count from UserProvider for $candidateId: ${userModel!.followersCount}',
+            '✅ Using followers count from UserProvider for $candidateId: ${userModel.followersCount}',
           );
           return userModel.followersCount;
         }
       }
     }
 
-    // Check if we're viewing own profile
-    if (widget.userId == null && widget.stateManager.userData != null) {
-      ProfileScreenLogger.logDebugInfo('Viewing own profile');
-
-      // Prefer counts available in userData
-      final followersCount = widget.stateManager.userData!['followers'] ??
-          widget.stateManager.userData!['followersCount'] ??
-          0;
-      if (followersCount != 0) {
-        ProfileScreenLogger.logDebugInfo(
-          'Using followers count from ProfileStateManager: $followersCount',
-        );
-        return followersCount;
-      }
-    }
-
-    // Fall back to ProfileStateManager data
-    if (widget.stateManager.userData != null &&
-        widget.stateManager.userData!['followersCount'] != null) {
-      final followersCount = widget.stateManager.userData!['followersCount'];
-      ProfileScreenLogger.logDebugInfo(
-        'Using followers count from ProfileStateManager: $followersCount',
-      );
-      return followersCount;
-    }
-
     // Final fallback
     ProfileScreenLogger.logDebugInfo(
-      'No followers count available, using default: 0',
+      '⚠️ No followers count available, using default: 0',
     );
     return 0;
   }

@@ -16,7 +16,6 @@ import 'package:vayu/services/ad_refresh_notifier.dart';
 import 'package:vayu/services/background_profile_preloader.dart';
 import 'package:vayu/services/profile_preloader.dart';
 import 'package:vayu/services/ad_impression_service.dart';
-import 'package:vayu/view/widget/ads/banner_ad_widget.dart';
 import 'package:vayu/view/widget/ads/carousel_ad_widget.dart';
 import 'package:vayu/view/screens/video_feed_advanced/widgets/banner_ad_section.dart';
 import 'package:vayu/config/app_config.dart';
@@ -457,6 +456,32 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // Update screen visibility state
     _isScreenVisible = false;
     _disableWakelock();
+  }
+
+  /// **NEW: Pause videos before navigating away (e.g., to creator profile)**
+  void _pauseVideosForProfileNavigation() {
+    try {
+      AppLogger.log(
+          '⏸️ VideoFeedAdvanced: Pausing current video before navigation');
+      _pauseCurrentVideo();
+    } catch (e) {
+      AppLogger.log('⚠️ VideoFeedAdvanced: Error pausing current video: $e');
+    }
+
+    try {
+      final sharedPool = SharedVideoControllerPool();
+      sharedPool.pauseAllControllers();
+    } catch (e) {
+      AppLogger.log(
+          '⚠️ VideoFeedAdvanced: Error pausing SharedVideoControllerPool: $e');
+    }
+
+    try {
+      _videoControllerManager.pauseAllVideosOnTabChange();
+    } catch (e) {
+      AppLogger.log(
+          '⚠️ VideoFeedAdvanced: Error pausing VideoControllerManager: $e');
+    }
   }
 
   /// **PRELOAD SINGLE VIDEO**
@@ -1828,6 +1853,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
 
     AppLogger.log('🔗 Navigating to creator profile: $targetUserId');
+    _pauseVideosForProfileNavigation();
 
     // Navigate to profile screen
     Navigator.push(

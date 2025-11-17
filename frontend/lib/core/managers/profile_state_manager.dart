@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/core/providers/video_provider.dart';
+import 'package:vayu/core/providers/user_provider.dart';
 import 'package:vayu/model/video_model.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/cloudinary_service.dart';
@@ -169,6 +170,45 @@ class ProfileStateManager extends ChangeNotifier {
       AppLogger.log(
           '🔄 ProfileStateManager: User data values: ${_userData?.values.toList()}');
 
+      // **NEW: Populate UserProvider cache when loading another creator's profile**
+      // This ensures follower count is available in UserProvider for ProfileStatsWidget
+      if (userId != null && _context != null) {
+        try {
+          final userProvider =
+              Provider.of<UserProvider>(_context!, listen: false);
+          final profileUserId = userId.trim();
+
+          // Check if this is another user's profile (not own profile)
+          final loggedInUser = await _authService.getUserData();
+          final loggedInUserId =
+              loggedInUser?['googleId'] ?? loggedInUser?['id'];
+          final isOtherUser =
+              profileUserId != loggedInUserId?.toString().trim();
+
+          if (isOtherUser) {
+            AppLogger.log(
+                '🔄 ProfileStateManager: Populating UserProvider cache for other user: $profileUserId');
+
+            // Populate UserProvider cache with the loaded user data
+            // Use getUserDataWithFollowers which fetches UserModel and caches it
+            try {
+              userProvider
+                  .getUserDataWithFollowers(profileUserId)
+                  .catchError((e) {
+                AppLogger.log(
+                    '⚠️ ProfileStateManager: Error populating UserProvider: $e');
+              });
+            } catch (e) {
+              AppLogger.log(
+                  '⚠️ ProfileStateManager: Error populating UserProvider cache: $e');
+            }
+          }
+        } catch (e) {
+          AppLogger.log(
+              '⚠️ ProfileStateManager: Could not access UserProvider: $e');
+        }
+      }
+
       await _hydratePaymentDetailsIfNeeded();
 
       _isLoading = false;
@@ -215,6 +255,7 @@ class ProfileStateManager extends ChangeNotifier {
         final backendUser =
             myId != null ? await _userService.getUserById(myId) : null;
         if (backendUser != null) {
+          // **FIXED: getUserById returns Map, ensure all fields are present**
           userData = Map<String, dynamic>.from(backendUser);
           AppLogger.log(
               '🔄 ProfileStateManager: Loaded own profile from backend: ${userData['name']}');
@@ -246,9 +287,36 @@ class ProfileStateManager extends ChangeNotifier {
         AppLogger.log(
             '🔄 ProfileStateManager: Fetching other user profile for ID: $requestedUserId');
         final otherUser = await _userService.getUserById(requestedUserId);
-        userData = Map<String, dynamic>.from(otherUser);
-        AppLogger.log(
-            '🔄 ProfileStateManager: Other user profile loaded: ${userData['name']}');
+        if (otherUser != null) {
+          // **FIXED: getUserById returns Map, ensure all fields are present**
+          userData = Map<String, dynamic>.from(otherUser);
+
+          // **NEW: Also add googleId and _id fields for compatibility if missing**
+          final userId = userData['googleId'] ??
+              userData['id'] ??
+              userData['_id'] ??
+              requestedUserId;
+          userData['googleId'] = userId;
+          userData['_id'] = userId;
+          userData['id'] = userId;
+
+          // **FIXED: Ensure followersCount is properly set (use both field names)**
+          final followersCount =
+              userData['followersCount'] ?? userData['followers'] ?? 0;
+          userData['followersCount'] = followersCount;
+          userData['followers'] = followersCount;
+
+          final followingCount =
+              userData['followingCount'] ?? userData['following'] ?? 0;
+          userData['followingCount'] = followingCount;
+          userData['following'] = followingCount;
+
+          AppLogger.log(
+              '🔄 ProfileStateManager: Other user profile loaded: ${userData['name']}, followers: ${userData['followersCount']}');
+        } else {
+          AppLogger.log(
+              '⚠️ ProfileStateManager: getUserById returned null for $requestedUserId');
+        }
       } catch (e) {
         AppLogger.log(
             '⚠️ ProfileStateManager: Failed to fetch other user profile: $e');

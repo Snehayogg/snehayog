@@ -116,25 +116,52 @@ class _ProfileScreenState extends State<ProfileScreen>
 
           // **INSTANT: Show cached data immediately (no loading state)**
           _stateManager.setUserData(cachedData);
-          _loadVideosFromCache();
-          _isLoading.value = false; // Hide loading immediately
+          await _loadVideosFromCache(); // **FIXED: Wait for videos to load before hiding loading**
+          _isLoading.value = false; // Hide loading after videos are loaded
 
-          // **BACKGROUND: Refresh in background (non-blocking)**
-          Future.microtask(() async {
-            try {
-              AppLogger.log('🔄 ProfileScreen: Background refresh started');
-              await _stateManager.loadUserData(widget.userId);
+          // **FIXED: Only refresh in background if cache is older than 1 day**
+          final prefs = await SharedPreferences.getInstance();
+          final cacheKey = _getProfileCacheKey();
+          final cachedTimestamp =
+              prefs.getInt('profile_cache_timestamp_$cacheKey');
 
-              if (_stateManager.userData != null) {
-                await _cacheProfileData(_stateManager.userData!);
-                await _loadVideos();
-                AppLogger.log('✅ ProfileScreen: Background refresh completed');
-              }
-            } catch (e) {
-              AppLogger.log('⚠️ ProfileScreen: Background refresh failed: $e');
-              // Don't show error - user already has cached data
+          bool shouldRefresh = true;
+          if (cachedTimestamp != null) {
+            final cacheTime =
+                DateTime.fromMillisecondsSinceEpoch(cachedTimestamp);
+            final age = DateTime.now().difference(cacheTime);
+            if (age.inDays < 1) {
+              shouldRefresh = false;
+              AppLogger.log(
+                '⚡ ProfileScreen: Cache is fresh (${age.inHours}h old, ${age.inDays} days), skipping background refresh',
+              );
+            } else {
+              AppLogger.log(
+                '🔄 ProfileScreen: Cache is stale (${age.inDays} days old), will refresh in background',
+              );
             }
-          });
+          }
+
+          if (shouldRefresh) {
+            // **BACKGROUND: Refresh in background (non-blocking)**
+            Future.microtask(() async {
+              try {
+                AppLogger.log('🔄 ProfileScreen: Background refresh started');
+                await _stateManager.loadUserData(widget.userId);
+
+                if (_stateManager.userData != null) {
+                  await _cacheProfileData(_stateManager.userData!);
+                  await _loadVideos();
+                  AppLogger.log(
+                      '✅ ProfileScreen: Background refresh completed');
+                }
+              } catch (e) {
+                AppLogger.log(
+                    '⚠️ ProfileScreen: Background refresh failed: $e');
+                // Don't show error - user already has cached data
+              }
+            });
+          }
 
           return; // Exit early - user sees cached data instantly
         }
@@ -1976,7 +2003,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     return 'own_profile';
   }
 
-  /// Clear profile cache
+  /// Clear profile cache (including earnings cache)
   Future<void> _clearProfileCache() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -1984,8 +2011,27 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       await prefs.remove('profile_cache_$cacheKey');
       await prefs.remove('profile_cache_timestamp_$cacheKey');
+      await prefs.remove('profile_videos_cache_$cacheKey');
+      await prefs.remove('profile_videos_cache_timestamp_$cacheKey');
 
-      ProfileScreenLogger.logDebugInfo('Profile cache cleared');
+      // **NEW: Clear earnings cache for this user**
+      // Clear all earnings cache entries that match this user's ID
+      final userId = widget.userId ??
+          _stateManager.userData?['googleId'] ??
+          _stateManager.userData?['id'];
+      if (userId != null) {
+        // Get all keys and remove earnings cache entries for this user
+        final allKeys = prefs.getKeys();
+        for (final key in allKeys) {
+          if (key.startsWith('earnings_cache_$userId')) {
+            await prefs.remove(key);
+            AppLogger.log('🧹 ProfileScreen: Cleared earnings cache: $key');
+          }
+        }
+      }
+
+      ProfileScreenLogger.logDebugInfo(
+          'Profile cache cleared (including earnings)');
 
       final smartCache = SmartCacheManager();
       await smartCache.initialize();
