@@ -128,7 +128,7 @@ class ProfileStateManager extends ChangeNotifier {
         // **ENHANCED: Use longer cache time for other users' profiles (7 days vs 24 hours)**
         final cacheTime = isMyProfile
             ? _userProfileCacheTime // 24 hours for own profile
-            : Duration(days: 7); // 7 days for other users' profiles
+            : const Duration(days: 7); // 7 days for other users' profiles
 
         userData = await _smartCacheManager.get<Map<String, dynamic>>(
           cacheKey,
@@ -1215,6 +1215,62 @@ class ProfileStateManager extends ChangeNotifier {
         });
       }
     }
+
+    notifyListeners();
+  }
+
+  /// **NEW: Update follower count in userData (called when follow/unfollow happens)**
+  void updateFollowerCount(String userId, {required bool increment}) {
+    if (_userData == null) {
+      AppLogger.log(
+          '⚠️ ProfileStateManager: Cannot update follower count - userData is null');
+      return;
+    }
+
+    final trimmedUserId = userId.trim();
+
+    // Try multiple ID formats for comparison
+    final profileGoogleId = _userData!['googleId']?.toString().trim();
+    final profileId = _userData!['id']?.toString().trim();
+    final profileMongoId = _userData!['_id']?.toString().trim();
+
+    AppLogger.log(
+        '🔄 ProfileStateManager: updateFollowerCount called for userId: $trimmedUserId');
+    AppLogger.log(
+        '🔄 ProfileStateManager: Profile googleId: $profileGoogleId, id: $profileId, _id: $profileMongoId');
+
+    // Check if the userId matches any of the profile's IDs
+    final isMatch = trimmedUserId == profileGoogleId ||
+        trimmedUserId == profileId ||
+        trimmedUserId == profileMongoId ||
+        profileGoogleId == trimmedUserId ||
+        profileId == trimmedUserId ||
+        profileMongoId == trimmedUserId;
+
+    if (!isMatch) {
+      AppLogger.log(
+          '⚠️ ProfileStateManager: UserId mismatch - skipping follower count update. Requested: $trimmedUserId, Profile: googleId=$profileGoogleId, id=$profileId, _id=$profileMongoId');
+      return;
+    }
+
+    // Get current follower count
+    final currentFollowersRaw =
+        _userData!['followersCount'] ?? _userData!['followers'] ?? 0;
+    final currentFollowers = currentFollowersRaw is int
+        ? currentFollowersRaw
+        : (int.tryParse(currentFollowersRaw.toString()) ?? 0);
+
+    // Calculate new follower count
+    final newFollowers = increment
+        ? currentFollowers + 1
+        : (currentFollowers - 1).clamp(0, double.infinity);
+
+    // Update both fields to ensure consistency
+    _userData!['followersCount'] = newFollowers;
+    _userData!['followers'] = newFollowers;
+
+    AppLogger.log(
+        '✅ ProfileStateManager: Updated follower count for $trimmedUserId: $currentFollowers → $newFollowers (${increment ? 'increment' : 'decrement'})');
 
     notifyListeners();
   }

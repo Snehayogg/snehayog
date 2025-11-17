@@ -214,7 +214,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         final rankedVideos = _rankVideosWithEngagement(
           newVideos,
           preserveVideoKey:
-              preserveKey ?? (preserveVideoId != null ? preserveVideoId : null),
+              preserveKey ?? (preserveVideoId),
         );
 
         int? nextIndex;

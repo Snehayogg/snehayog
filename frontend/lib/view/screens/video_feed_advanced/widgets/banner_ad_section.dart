@@ -7,8 +7,8 @@ import 'package:vayu/utils/app_logger.dart';
 
 /// Banner Ad Section Widget
 /// Supports both custom banner ads and Google AdMob banner ads
-/// Uses Google AdMob by default if configured, falls back to custom ads
-class BannerAdSection extends StatelessWidget {
+/// Uses Google AdMob by default if configured, falls back to custom ads when AdMob fails
+class BannerAdSection extends StatefulWidget {
   final Map<String, dynamic>? adData;
   final VoidCallback? onClick;
   final Future<void> Function()? onImpression;
@@ -23,9 +23,16 @@ class BannerAdSection extends StatelessWidget {
   }) : super(key: key);
 
   @override
+  State<BannerAdSection> createState() => _BannerAdSectionState();
+}
+
+class _BannerAdSectionState extends State<BannerAdSection> {
+  bool _admobAdFailed = false;
+
+  @override
   Widget build(BuildContext context) {
-    // Use Google AdMob if configured and enabled
-    if (useGoogleAds && AdMobConfig.isConfigured()) {
+    // **FIXED: Try Google AdMob first if configured and enabled, then fallback to custom ads**
+    if (widget.useGoogleAds && AdMobConfig.isConfigured() && !_admobAdFailed) {
       return Positioned(
         top: 0,
         left: 0,
@@ -33,18 +40,31 @@ class BannerAdSection extends StatelessWidget {
         child: GoogleAdMobBannerWidget(
           adSize: AdSize.banner,
           onAdLoaded: () {
-            AppLogger.log('✅ BannerAdSection: Google AdMob ad loaded');
+            AppLogger.log(
+                '✅ BannerAdSection: Google AdMob ad loaded successfully');
+            // Reset failed state if ad loads successfully
+            if (_admobAdFailed) {
+              setState(() {
+                _admobAdFailed = false;
+              });
+            }
           },
           onAdFailed: () {
-            AppLogger.log('⚠️ BannerAdSection: Google AdMob ad failed, showing fallback');
-            // Could show custom ad as fallback if needed
+            AppLogger.log(
+                '⚠️ BannerAdSection: Google AdMob ad failed, falling back to custom banner');
+            // Mark AdMob as failed and show custom ad as fallback
+            if (mounted) {
+              setState(() {
+                _admobAdFailed = true;
+              });
+            }
           },
         ),
       );
     }
 
-    // Fallback to custom banner ads
-    if (adData == null) {
+    // **FALLBACK: Show custom banner ads if AdMob not configured, disabled, or failed**
+    if (widget.adData == null) {
       return const Positioned(
         top: 0,
         left: 0,
@@ -54,7 +74,7 @@ class BannerAdSection extends StatelessWidget {
       );
     }
 
-    final data = adData!;
+    final data = widget.adData!;
     return Positioned(
       top: 0,
       left: 0,
@@ -62,8 +82,8 @@ class BannerAdSection extends StatelessWidget {
       child: BannerAdWidget(
         key: ValueKey('banner_${data['videoId'] ?? data['_id'] ?? data['id']}'),
         adData: data,
-        onAdClick: () => onClick?.call(),
-        onAdImpression: () async => await onImpression?.call(),
+        onAdClick: () => widget.onClick?.call(),
+        onAdImpression: () async => await widget.onImpression?.call(),
       ),
     );
   }

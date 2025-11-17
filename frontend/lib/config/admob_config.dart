@@ -14,8 +14,10 @@ class AdMobConfig {
   // **PRODUCTION Ad Unit IDs**
   // These should be set via environment variables or from backend
   // Format: ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX
-  static String? _productionBannerAdUnitIdAndroid;
-  static String? _productionBannerAdUnitIdIOS;
+  static String? _productionBannerAdUnitIdAndroid =
+      'ca-app-pub-2359959043864469/8166031130'; // Production Android Ad Unit ID
+  static String? _productionBannerAdUnitIdIOS =
+      'ca-app-pub-2359959043864469/8166031130'; // Production iOS Ad Unit ID (same for now)
 
   // **AdMob App ID (required for Android/iOS)**
   // Format: ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX

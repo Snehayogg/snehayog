@@ -111,13 +111,23 @@ class UserProvider extends ChangeNotifier {
       if (success) {
         _followStatusCache[normalizedId] = true;
 
-        // Update follower count in cache
+        // **FIXED: Update follower count in cache optimistically**
         if (_userDataCache.containsKey(normalizedId)) {
           final currentUser = _userDataCache[normalizedId]!;
           _userDataCache[normalizedId] = currentUser.copyWith(
             followersCount: currentUser.followersCount + 1,
             isFollowing: true,
           );
+        } else {
+          // **NEW: If user data not in cache, fetch it to get updated follower count**
+          // This ensures the follower count is accurate even if cache was empty
+          Future.microtask(() async {
+            try {
+              await getUserDataWithFollowers(normalizedId);
+            } catch (e) {
+              print('Error fetching user data after follow: $e');
+            }
+          });
         }
 
         notifyListeners();
@@ -141,7 +151,7 @@ class UserProvider extends ChangeNotifier {
       if (success) {
         _followStatusCache[normalizedId] = false;
 
-        // Update follower count in cache
+        // **FIXED: Update follower count in cache optimistically**
         if (_userDataCache.containsKey(normalizedId)) {
           final currentUser = _userDataCache[normalizedId]!;
           _userDataCache[normalizedId] = currentUser.copyWith(
@@ -150,6 +160,16 @@ class UserProvider extends ChangeNotifier {
                 .toInt(),
             isFollowing: false,
           );
+        } else {
+          // **NEW: If user data not in cache, fetch it to get updated follower count**
+          // This ensures the follower count is accurate even if cache was empty
+          Future.microtask(() async {
+            try {
+              await getUserDataWithFollowers(normalizedId);
+            } catch (e) {
+              print('Error fetching user data after unfollow: $e');
+            }
+          });
         }
 
         notifyListeners();
@@ -195,12 +215,36 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
-  /// Refresh user data for a specific user ID
+  /// Refresh user data for a specific user ID (forces fresh fetch by clearing cache)
   Future<void> refreshUserDataForId(String userId) async {
     try {
-      print('🔄 UserProvider: Refreshing user data for ID: $userId');
-      await getUserDataWithFollowers(userId);
-      print('✅ UserProvider: User data refreshed successfully for ID: $userId');
+      final normalizedId = userId.trim();
+      if (normalizedId.isEmpty || normalizedId == 'unknown') {
+        return;
+      }
+
+      print('🔄 UserProvider: Refreshing user data for ID: $normalizedId');
+
+      // **FIXED: Clear cache first to force fresh data fetch**
+      _userDataCache.remove(normalizedId);
+
+      // Mark as loading
+      _loadingUserData.add(normalizedId);
+      notifyListeners();
+
+      try {
+        final userData = await _userService.getUserData(normalizedId);
+        if (userData != null) {
+          _userDataCache[normalizedId] = userData;
+        }
+        print(
+            '✅ UserProvider: User data refreshed successfully for ID: $normalizedId');
+      } catch (e) {
+        print('Error getting user data: $e');
+      } finally {
+        _loadingUserData.remove(normalizedId);
+        notifyListeners();
+      }
     } catch (e) {
       print('❌ UserProvider: Error refreshing user data for ID $userId: $e');
     }

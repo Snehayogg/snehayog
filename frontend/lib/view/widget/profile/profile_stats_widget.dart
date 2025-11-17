@@ -147,34 +147,41 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
         ),
         child: Consumer<ProfileStateManager>(
           builder: (context, stateManager, child) {
-            return Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildStatColumn(
-                  'Videos',
-                  widget.isVideosLoaded
-                      ? stateManager.userVideos.length
-                      : '...',
-                  isLoading: !widget.isVideosLoaded,
-                ),
-                Container(width: 1, height: 40, color: const Color(0xFFE5E7EB)),
-                _buildStatColumn(
-                  'Followers',
-                  widget.isFollowersLoaded
-                      ? _getFollowersCount(context)
-                      : '...',
-                  isLoading: !widget.isFollowersLoaded,
-                  onTap: widget.onFollowersTap,
-                ),
-                Container(width: 1, height: 40, color: const Color(0xFFE5E7EB)),
-                _buildStatColumn(
-                  'Earnings',
-                  _isLoadingEarnings ? '...' : _earnings,
-                  isEarnings: true,
-                  isLoading: _isLoadingEarnings,
-                  onTap: widget.onEarningsTap,
-                ),
-              ],
+            // **FIXED: Also listen to UserProvider to get real-time follower count updates**
+            return Consumer<UserProvider>(
+              builder: (context, userProvider, child) {
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildStatColumn(
+                      'Videos',
+                      widget.isVideosLoaded
+                          ? stateManager.userVideos.length
+                          : '...',
+                      isLoading: !widget.isVideosLoaded,
+                    ),
+                    Container(
+                        width: 1, height: 40, color: const Color(0xFFE5E7EB)),
+                    _buildStatColumn(
+                      'Followers',
+                      widget.isFollowersLoaded
+                          ? _getFollowersCount(context)
+                          : '...',
+                      isLoading: !widget.isFollowersLoaded,
+                      onTap: widget.onFollowersTap,
+                    ),
+                    Container(
+                        width: 1, height: 40, color: const Color(0xFFE5E7EB)),
+                    _buildStatColumn(
+                      'Earnings',
+                      _isLoadingEarnings ? '...' : _earnings,
+                      isEarnings: true,
+                      isLoading: _isLoadingEarnings,
+                      onTap: widget.onEarningsTap,
+                    ),
+                  ],
+                );
+              },
             );
           },
         ),

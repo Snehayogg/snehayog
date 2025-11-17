@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:vayu/core/providers/user_provider.dart';
+import 'package:vayu/core/managers/profile_state_manager.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/controller/google_sign_in_controller.dart';
 
@@ -165,7 +166,43 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
         print(
             '✅ FollowButtonWidget: Successfully ${isFollowing ? 'followed' : 'unfollowed'} ${widget.uploaderName}');
 
-        // Refresh user data to update follower counts in real-time
+        // **FIXED: Update follower count optimistically in both UserProvider and ProfileStateManager**
+        // This ensures the follower count updates instantly on the profile screen
+
+        // 1. UserProvider cache is already updated via followUser/unfollowUser methods
+        // which optimistically update the follower count in the cache
+        print(
+            '🔄 FollowButtonWidget: UserProvider cache updated via followUser/unfollowUser');
+
+        // 2. Update ProfileStateManager immediately (optimistic update)
+        try {
+          final profileStateManager = Provider.of<ProfileStateManager>(
+            context,
+            listen: false,
+          );
+          profileStateManager.updateFollowerCount(
+            trimmedUploaderId,
+            increment: isFollowing,
+          );
+          print(
+              '✅ FollowButtonWidget: ProfileStateManager updated optimistically');
+        } catch (e) {
+          print(
+              '⚠️ FollowButtonWidget: Could not update ProfileStateManager: $e');
+        }
+
+        // 3. Refresh user data from backend to ensure accuracy
+        // This happens in background to sync with server
+        Future.microtask(() async {
+          try {
+            await userProvider.refreshUserDataForId(trimmedUploaderId);
+            print('✅ FollowButtonWidget: UserProvider refreshed from backend');
+          } catch (e) {
+            print('⚠️ FollowButtonWidget: Error refreshing UserProvider: $e');
+          }
+        });
+
+        // Also refresh current user data if needed
         await userProvider.refreshUserData();
 
         // Notify parent about follow status change
@@ -256,10 +293,12 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
                     }
 
                     // Professional follow button design
+                    // **FIXED: Increased width for "Following" state to fit text properly**
                     return AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       curve: Curves.easeInOut,
-                      width: isFollowing ? 100 : 90,
+                      width:
+                          isFollowing ? 110 : 90, // Increased from 100 to 110
                       height: 36,
                       decoration: BoxDecoration(
                         color: isFollowing
@@ -294,8 +333,9 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
                               ? Colors.grey.shade100
                               : Colors.blue.shade500,
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
+                            padding: EdgeInsets.symmetric(
+                              horizontal:
+                                  isFollowing ? 14 : 16, // Adjusted padding
                               vertical: 8,
                             ),
                             child: Row(
