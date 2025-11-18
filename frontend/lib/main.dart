@@ -27,7 +27,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/core/managers/shared_video_controller_pool.dart';
 import 'package:vayu/core/managers/video_controller_manager.dart';
 import 'package:vayu/utils/app_logger.dart';
-import 'package:vayu/services/device_id_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -426,17 +425,9 @@ class AuthWrapper extends StatefulWidget {
 }
 
 class _AuthWrapperState extends State<AuthWrapper> {
-  bool _hasCheckedCache = false;
-  bool _cachedAuthStatus = false;
-  bool _hasSkippedLogin = false;
-  bool _hasDeviceId = false;
-
   @override
   void initState() {
     super.initState();
-    // **OPTIMIZED: Check cached auth status and device ID immediately**
-    _checkCachedAuthStatus();
-
     // Start auth check in background (non-blocking)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authController =
@@ -446,43 +437,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
       // **BACKGROUND PRELOADING: Preload profile data after authentication check**
       _startBackgroundPreloadingIfAuthenticated();
     });
-  }
-
-  /// **ENHANCED: Check cached auth status, skip login flag, and device ID**
-  Future<void> _checkCachedAuthStatus() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('jwt_token');
-      final fallbackUser = prefs.getString('fallback_user');
-      final skipLogin = prefs.getBool('auth_skip_login') ?? false;
-
-      // **NEW: Check if device ID exists (user logged in before)**
-      final deviceIdService = DeviceIdService();
-      _hasDeviceId = await deviceIdService.hasStoredDeviceId();
-
-      _hasSkippedLogin = skipLogin;
-      // **ENHANCED: Allow access if device ID exists (user logged in before, even after reinstall)**
-      _cachedAuthStatus = (token != null && token.isNotEmpty) ||
-          fallbackUser != null ||
-          skipLogin ||
-          _hasDeviceId; // Device ID check allows skipping login
-      _hasCheckedCache = true;
-
-      if (mounted) {
-        setState(() {});
-      }
-
-      if (_hasDeviceId) {
-        print(
-            '✅ AuthWrapper: Device ID found - user logged in before, skipping login screen');
-      }
-    } catch (e) {
-      print('⚠️ Error checking cached auth: $e');
-      _hasCheckedCache = true;
-      if (mounted) {
-        setState(() {});
-      }
-    }
   }
 
   /// **Start background preloading if user is authenticated**
@@ -507,73 +461,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<GoogleSignInController>(
-      builder: (context, authController, _) {
-        // **OPTIMIZED: Show MainScreen immediately if cached auth exists (optimistic)**
-        if (_hasCheckedCache && _cachedAuthStatus) {
-          // Show MainScreen immediately, location check will happen in background
-          return const MainScreenWithLocationCheck();
-        }
-
-        // **ENHANCED: Show MainScreen if user has skipped login (on-demand login)**
-        if (_hasCheckedCache && _hasSkippedLogin) {
-          print(
-              '✅ AuthWrapper: User has skipped login, showing MainScreen (login on-demand)');
-          return const MainScreenWithLocationCheck();
-        }
-
-        // If user is signed in (from controller), show MainScreen
-        if (authController.isSignedIn) {
-          print(
-              '✅ AuthWrapper: User is signed in, showing MainScreen immediately');
-          return const MainScreenWithLocationCheck();
-        }
-
-        // Show loading only briefly on first check
-        if (authController.isLoading && !_hasCheckedCache) {
-          return const Scaffold(
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Loading...'),
-                ],
-              ),
-            ),
-          );
-        }
-
-        // **ENHANCED: Only show login screen on demand - if no cached auth, no skip, no device ID, and not signed in**
-        // Login screen should not show automatically - only show when explicitly needed
-        if (_hasCheckedCache &&
-            !_cachedAuthStatus &&
-            !_hasSkippedLogin &&
-            !_hasDeviceId &&
-            !authController.isSignedIn) {
-          print(
-              'ℹ️ AuthWrapper: User is not signed in, has not skipped, no device ID - but login screen only shown on demand');
-          // **NEW: Don't show login screen automatically - go to home instead (on-demand login)**
-          // User can access login screen from settings/profile if needed
-          return const MainScreenWithLocationCheck();
-        }
-
-        // Show loading while checking cache
-        return const Scaffold(
-          body: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('Loading...'),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+    // **ALWAYS: Show MainScreen directly, skip login screen entirely**
+    // Users can access login from settings/profile if needed
+    return const MainScreenWithLocationCheck();
   }
 }
 

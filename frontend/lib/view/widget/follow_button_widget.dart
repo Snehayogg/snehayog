@@ -24,6 +24,9 @@ class FollowButtonWidget extends StatefulWidget {
 class _FollowButtonWidgetState extends State<FollowButtonWidget> {
   late final ValueNotifier<bool> _isOwnVideoNotifier;
   late final ValueNotifier<bool> _isInitializedNotifier;
+  bool _hasCheckedOwnVideo =
+      false; // **FIX: Prevent re-checking on every build**
+  bool _isInitializing = false; // **FIX: Prevent duplicate initialization**
 
   @override
   void initState() {
@@ -31,23 +34,24 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
     _isOwnVideoNotifier = ValueNotifier<bool>(false);
     _isInitializedNotifier = ValueNotifier<bool>(false);
 
+    // **FIX: Only initialize once, not on every build**
     _checkIfOwnVideo();
     _initializeFollowStatus();
   }
 
   /// Initialize follow status from provider
+  /// **FIX: Only initialize once, not on every build**
   void _initializeFollowStatus() {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (mounted) {
-        try {
-          print(
-              '🎯 FollowButtonWidget: Initializing follow status for ${widget.uploaderName} (ID: ${widget.uploaderId})');
+    if (_isInitializing) return; // **FIX: Prevent duplicate initialization**
+    _isInitializing = true;
 
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (mounted && _isInitializing) {
+        try {
           final trimmedUploaderId = widget.uploaderId.trim();
           if (trimmedUploaderId.isEmpty || trimmedUploaderId == 'unknown') {
-            print(
-                '⚠️ FollowButtonWidget: No uploader ID provided, skipping follow status check');
             _isInitializedNotifier.value = true;
+            _isInitializing = false;
             return;
           }
 
@@ -55,27 +59,31 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
               Provider.of<UserProvider>(context, listen: false);
           final authService = Provider.of<AuthService>(context, listen: false);
 
-          // Check authentication first
+          // Check authentication first - use cached check if available
           final userData = await authService.getUserData();
           if (userData != null && userData['token'] != null) {
-            print(
-                '🎯 FollowButtonWidget: User authenticated, checking follow status');
+            // **OPTIMIZATION: checkFollowStatus already checks cache first**
+            // So it won't make duplicate API calls if already cached
             await userProvider.checkFollowStatus(trimmedUploaderId);
-          } else {
-            print(
-                '⚠️ FollowButtonWidget: User not authenticated, skipping follow status check');
           }
 
           _isInitializedNotifier.value = true;
+          _isInitializing = false;
         } catch (e) {
           print('❌ FollowButtonWidget: Error initializing follow status: $e');
+          _isInitializedNotifier.value = true;
+          _isInitializing = false;
         }
       }
     });
   }
 
   /// Check if the current user is the uploader of this video
+  /// **FIX: Only check once, not on every build**
   void _checkIfOwnVideo() {
+    if (_hasCheckedOwnVideo) return; // **FIX: Prevent re-checking**
+    _hasCheckedOwnVideo = true; // **FIX: Mark as checked immediately**
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted) {
         try {
@@ -110,13 +118,9 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
               trimmedUploaderId != 'unknown') {
             final isOwnVideo = currentUserId == trimmedUploaderId;
             _isOwnVideoNotifier.value = isOwnVideo;
-            print(
-                '🎯 FollowButtonWidget: Checking own video - Current: $currentUserId, Uploader: $trimmedUploaderId, IsOwn: $isOwnVideo');
           } else {
             // If no current user, assume not own video (user not signed in)
             _isOwnVideoNotifier.value = false;
-            print(
-                '⚠️ FollowButtonWidget: No current user ID found, assuming not own video');
           }
         } catch (e) {
           print('❌ FollowButtonWidget: Error checking if own video: $e');
@@ -191,9 +195,22 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
               '⚠️ FollowButtonWidget: Could not update ProfileStateManager: $e');
         }
 
-        // 3. Refresh user data from backend to ensure accuracy
-        // This happens in background to sync with server
-        Future.microtask(() async {
+        // 3. Refresh follow status separately using dedicated API endpoint (more reliable)
+        // This ensures follow status syncs correctly even if user data refresh has stale data
+        Future.delayed(const Duration(seconds: 1), () async {
+          try {
+            // Force refresh follow status using dedicated API endpoint
+            // This bypasses cache and fetches fresh data from backend
+            await userProvider.checkFollowStatus(trimmedUploaderId,
+                forceRefresh: true);
+            print('✅ FollowButtonWidget: Follow status refreshed from backend');
+          } catch (e) {
+            print('⚠️ FollowButtonWidget: Error refreshing follow status: $e');
+          }
+        });
+
+        // 4. Refresh user data from backend after a delay (for follower count, etc.)
+        Future.delayed(const Duration(seconds: 1), () async {
           try {
             await userProvider.refreshUserDataForId(trimmedUploaderId);
             print('✅ FollowButtonWidget: UserProvider refreshed from backend');
@@ -203,7 +220,14 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
         });
 
         // Also refresh current user data if needed
-        await userProvider.refreshUserData();
+        Future.delayed(const Duration(milliseconds: 500), () async {
+          try {
+            await userProvider.refreshUserData();
+          } catch (e) {
+            print(
+                '⚠️ FollowButtonWidget: Error refreshing current user data: $e');
+          }
+        });
 
         // Notify parent about follow status change
         widget.onFollowChanged?.call();
@@ -237,139 +261,147 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
 
   @override
   Widget build(BuildContext context) {
-    // **FIXED: Listen to GoogleSignInController changes for real-time auth state updates**
-    return Consumer<GoogleSignInController>(
-      builder: (context, authController, _) {
-        // Re-check if own video when auth state changes (only once per build cycle)
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _checkIfOwnVideo();
-          }
-        });
+    // **FIX: Remove unnecessary postFrameCallback from build - only initialize once in initState**
+    return Consumer<UserProvider>(
+      builder: (context, userProvider, child) {
+        // **SYNC: Consumer automatically rebuilds when UserProvider.notifyListeners() is called**
+        // When follow happens from profile screen, followUser() updates cache and calls notifyListeners()
+        // This ensures follow status syncs across all FollowButtonWidgets in the app (video feed, profile, etc.)
+        final trimmedUploaderId = widget.uploaderId.trim();
+        final isFollowing = userProvider.isFollowingUser(trimmedUploaderId);
 
-        return Consumer<UserProvider>(
-          builder: (context, userProvider, child) {
-            final isFollowing = userProvider.isFollowingUser(
-              widget.uploaderId.trim(),
-            );
+        // Use ValueListenableBuilder to listen to _isOwnVideoNotifier changes
+        return ValueListenableBuilder<bool>(
+          valueListenable: _isOwnVideoNotifier,
+          builder: (context, isOwnVideo, child) {
+            // Don't show follow button for own videos
+            if (isOwnVideo) {
+              return const SizedBox.shrink();
+            }
 
-            // Use ValueListenableBuilder to listen to _isOwnVideoNotifier changes
             return ValueListenableBuilder<bool>(
-              valueListenable: _isOwnVideoNotifier,
-              builder: (context, isOwnVideo, child) {
-                // Don't show follow button for own videos
-                if (isOwnVideo) {
-                  return const SizedBox.shrink();
+              valueListenable: _isInitializedNotifier,
+              builder: (context, isInitialized, child) {
+                if (!isInitialized) {
+                  // **MODERN LOADING STATE: Professional skeleton loader**
+                  return Container(
+                    width: 90,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.2),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: const Center(
+                      child: SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
                 }
 
-                return ValueListenableBuilder<bool>(
-                  valueListenable: _isInitializedNotifier,
-                  builder: (context, isInitialized, child) {
-                    if (!isInitialized) {
-                      return Container(
-                        width: 90,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: Colors.grey.shade300,
-                            width: 1.5,
-                          ),
-                        ),
-                        child: const Center(
-                          child: SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.blue,
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    }
-
-                    // Professional follow button design
-                    // **FIXED: Increased width for "Following" state to fit text properly**
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      curve: Curves.easeInOut,
-                      width:
-                          isFollowing ? 110 : 90, // Increased from 100 to 110
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: isFollowing
-                            ? Colors.grey.shade100
-                            : Colors.blue.shade600,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: isFollowing
-                              ? Colors.grey.shade300
-                              : Colors.blue.shade700,
-                          width: 1.5,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: isFollowing
-                                ? Colors.grey.withOpacity(0.1)
-                                : Colors.blue.withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
+                // **MODERN PROFESSIONAL FOLLOW BUTTON DESIGN**
+                // Clean white background for both states with gray text
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOutCubic,
+                  width: isFollowing ? 110 : 85,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    // **UNIFIED DESIGN: White background for both states**
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: Colors.grey.shade300,
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      // **PROFESSIONAL SHADOWS: Subtle depth**
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.08),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                        spreadRadius: 0,
                       ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(20),
-                          onTap: _handleFollowTap,
-                          splashColor: isFollowing
-                              ? Colors.grey.shade200
-                              : Colors.blue.shade700,
-                          highlightColor: isFollowing
-                              ? Colors.grey.shade100
-                              : Colors.blue.shade500,
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal:
-                                  isFollowing ? 14 : 16, // Adjusted padding
-                              vertical: 8,
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  isFollowing
-                                      ? Icons.check_circle
-                                      : Icons.person_add,
-                                  color: isFollowing
-                                      ? Colors.grey.shade700
-                                      : Colors.white,
-                                  size: 16,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  isFollowing ? 'Following' : 'Follow',
-                                  style: TextStyle(
-                                    color: isFollowing
-                                        ? Colors.grey.shade800
-                                        : Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.3,
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.04),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                        spreadRadius: -1,
+                      ),
+                    ],
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(24),
+                      onTap: _handleFollowTap,
+                      splashColor: Colors.grey.shade200,
+                      highlightColor: Colors.grey.shade100,
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isFollowing ? 16 : 18,
+                          vertical: 9,
+                        ),
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 250),
+                          transitionBuilder: (child, animation) {
+                            return ScaleTransition(
+                              scale: animation,
+                              child: child,
+                            );
+                          },
+                          child: Row(
+                            key: ValueKey(isFollowing),
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // **SHOW CHECKMARK ONLY FOR FOLLOWING STATE**
+                              if (isFollowing) ...[
+                                AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 250),
+                                  transitionBuilder: (child, animation) {
+                                    return RotationTransition(
+                                      turns: animation,
+                                      child: child,
+                                    );
+                                  },
+                                  child: Icon(
+                                    Icons.check_circle_rounded,
+                                    key: const ValueKey('following'),
+                                    color: const Color(0xFF10B981), // Green-500
+                                    size: 18,
                                   ),
                                 ),
+                                const SizedBox(width: 6),
                               ],
-                            ),
+                              Text(
+                                isFollowing ? 'Following' : 'Follow',
+                                style: const TextStyle(
+                                  color: Color(
+                                      0xFF374151), // Gray-700 (same for both)
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.2,
+                                  height: 1.0,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                    );
-                  },
+                    ),
+                  ),
                 );
               },
             );

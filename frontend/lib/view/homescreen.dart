@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/controller/main_controller.dart';
 import 'package:vayu/view/screens/profile_screen.dart';
 import 'package:vayu/view/screens/upload_screen.dart';
 import 'package:vayu/view/screens/vayu_screen.dart';
 import 'package:vayu/view/screens/video_screen.dart';
-import 'package:vayu/view/screens/login_screen.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/background_profile_preloader.dart';
 import 'package:vayu/services/location_onboarding_service.dart';
@@ -223,36 +221,20 @@ class _MainScreenState extends State<MainScreen>
   /// Check if JWT token is valid and handle expired tokens
   Future<void> _checkTokenValidity() async {
     try {
-      // **FIXED: Check if user has skipped login before requiring re-login**
-      final prefs = await SharedPreferences.getInstance();
-      final skipLogin = prefs.getBool('auth_skip_login') ?? false;
-      
-      if (skipLogin) {
-        print('ℹ️ MainScreen: User has skipped login, not checking token validity');
-        return; // Don't check token or redirect if user skipped login
-      }
-      
+      // **DISABLED: Always skip login screen, never redirect to login**
+      // Users can access login from settings/profile if needed
       final needsReLogin = await _authService.needsReLogin();
       if (needsReLogin) {
         print(
             '⚠️ MainScreen: Token validation failed, clearing expired tokens');
         await _authService.clearExpiredTokens();
-
-        // Redirect to login screen when session expires (only if user hasn't skipped login)
-        if (mounted) {
-          _redirectToLoginScreen();
-        }
+        // **DISABLED: No redirect to login screen - user stays on home screen**
+        print(
+            'ℹ️ MainScreen: Token expired but staying on home screen (login disabled)');
       }
     } catch (e) {
       print('❌ MainScreen: Error checking token validity: $e');
     }
-  }
-
-  void _redirectToLoginScreen() {
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-      (route) => false,
-    );
   }
 
   /// Check and show location onboarding if needed

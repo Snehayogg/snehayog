@@ -40,14 +40,15 @@ class UserProvider extends ChangeNotifier {
   }
 
   /// Check if current user is following another user
-  Future<bool> checkFollowStatus(String userId) async {
+  Future<bool> checkFollowStatus(String userId,
+      {bool forceRefresh = false}) async {
     final normalizedId = userId.trim();
     if (normalizedId.isEmpty || normalizedId == 'unknown') {
       return false;
     }
 
-    // Return cached value if available
-    if (_followStatusCache.containsKey(normalizedId)) {
+    // Return cached value if available (unless force refresh is requested)
+    if (!forceRefresh && _followStatusCache.containsKey(normalizedId)) {
       return _followStatusCache[normalizedId]!;
     }
 
@@ -225,8 +226,11 @@ class UserProvider extends ChangeNotifier {
 
       print('🔄 UserProvider: Refreshing user data for ID: $normalizedId');
 
-      // **FIXED: Clear cache first to force fresh data fetch**
+      // **FIXED: Clear user data cache first to force fresh data fetch**
       _userDataCache.remove(normalizedId);
+      // **SYNC FIX: Don't update follow status cache from user data refresh**
+      // Follow status is refreshed separately using checkFollowStatus() API endpoint
+      // This prevents overwriting optimistic updates with stale backend data
 
       // Mark as loading
       _loadingUserData.add(normalizedId);
@@ -236,9 +240,11 @@ class UserProvider extends ChangeNotifier {
         final userData = await _userService.getUserData(normalizedId);
         if (userData != null) {
           _userDataCache[normalizedId] = userData;
+          // **NOTE: Follow status cache is NOT updated here**
+          // It's refreshed separately using checkFollowStatus() which is more reliable
+          print(
+              '✅ UserProvider: User data refreshed successfully for ID: $normalizedId');
         }
-        print(
-            '✅ UserProvider: User data refreshed successfully for ID: $normalizedId');
       } catch (e) {
         print('Error getting user data: $e');
       } finally {
