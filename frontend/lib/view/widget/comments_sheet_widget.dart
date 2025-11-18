@@ -26,6 +26,7 @@ class CommentsSheetWidget extends StatefulWidget {
 class _CommentsSheetWidgetState extends State<CommentsSheetWidget> {
   late List<Comment> _comments;
   final TextEditingController _controller = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
   bool _isPosting = false;
 
@@ -56,6 +57,7 @@ class _CommentsSheetWidgetState extends State<CommentsSheetWidget> {
       setState(() {
         _comments = items.map((item) => Comment.fromJson(item)).toList();
       });
+      _scrollToLatestComment();
     } catch (_) {}
     setState(() => _isLoading = false);
   }
@@ -89,6 +91,7 @@ class _CommentsSheetWidgetState extends State<CommentsSheetWidget> {
         setState(() {
           _comments = items.map((item) => Comment.fromJson(item)).toList();
         });
+        _scrollToLatestComment();
       } else {
         // Legacy video path
         final updatedComments = await widget.videoService!.addComment(
@@ -100,6 +103,7 @@ class _CommentsSheetWidgetState extends State<CommentsSheetWidget> {
           _comments = updatedComments;
           _controller.clear();
         });
+        _scrollToLatestComment();
         widget.onCommentsUpdated?.call(updatedComments);
       }
     } catch (e) {
@@ -247,6 +251,7 @@ class _CommentsSheetWidgetState extends State<CommentsSheetWidget> {
             SizedBox(
               height: 250,
               child: ListView.builder(
+                controller: _scrollController,
                 itemCount: _comments.length,
                 itemBuilder: (context, index) {
                   final comment = _comments[index];
@@ -327,6 +332,19 @@ class _CommentsSheetWidgetState extends State<CommentsSheetWidget> {
   @override
   void dispose() {
     _controller.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _scrollToLatestComment() {
+    if (!_scrollController.hasClients) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    });
   }
 }

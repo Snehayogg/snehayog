@@ -579,7 +579,10 @@ class Comment {
         userProfilePic: json['userProfilePic']?.toString() ??
             json['user']?['profilePic']?.toString() ??
             '',
-        text: json['text']?.toString() ?? '',
+        text: json['text']?.toString() ??
+            json['content']?.toString() ??
+            json['comment']?.toString() ??
+            '',
         createdAt: json['createdAt'] != null
             ? DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now()
             : DateTime.now(),

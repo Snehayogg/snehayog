@@ -8,7 +8,6 @@ import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'package:vayu/controller/main_controller.dart';
 import 'package:vayu/core/providers/video_provider.dart';
 import 'package:vayu/core/providers/user_provider.dart';
-import 'package:vayu/view/screens/login_screen.dart';
 import 'package:vayu/view/screens/video_screen.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:vayu/core/services/error_logging_service.dart';
@@ -28,6 +27,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/core/managers/shared_video_controller_pool.dart';
 import 'package:vayu/core/managers/video_controller_manager.dart';
 import 'package:vayu/utils/app_logger.dart';
+import 'package:vayu/services/device_id_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -326,10 +326,42 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         (uri.scheme == 'https' &&
             uri.host == 'snehayog.site' &&
             (uri.path.startsWith('/video') || uri.path == '/'))) {
-      final videoId = uri.queryParameters['id'] ?? uri.pathSegments.last;
+      // **FIX: Better video ID extraction from deep links**
+      String? videoId;
 
-      if (videoId.isNotEmpty && videoId != '/') {
-        print('🎬 Opening video with ID: $videoId');
+      // Try query parameter first
+      if (uri.queryParameters.containsKey('id')) {
+        videoId = uri.queryParameters['id']?.trim();
+      }
+
+      // If no query param, try path segments
+      if (videoId == null || videoId.isEmpty) {
+        if (uri.pathSegments.isNotEmpty) {
+          // For 'snehayog://video/abc123', pathSegments = ['video', 'abc123']
+          // For 'https://snehayog.site/video/abc123', pathSegments = ['video', 'abc123']
+          final lastSegment = uri.pathSegments.last;
+          if (lastSegment.isNotEmpty &&
+              lastSegment != 'video' &&
+              lastSegment != '/') {
+            videoId = lastSegment.trim();
+          }
+        }
+      }
+
+      // **FIX: Also try extracting from full path if pathSegments didn't work**
+      if ((videoId == null || videoId.isEmpty) && uri.path.isNotEmpty) {
+        // Extract ID from path like '/video/abc123'
+        final pathParts =
+            uri.path.split('/').where((p) => p.isNotEmpty).toList();
+        if (pathParts.length >= 2 && pathParts[0] == 'video') {
+          videoId = pathParts[1].trim();
+        }
+      }
+
+      if (videoId != null && videoId.isNotEmpty && videoId != '/') {
+        print('🎬 Deep link: Opening video with ID: $videoId');
+        print('🎬 Deep link: Full URI: $uri');
+        print('🎬 Deep link: Path segments: ${uri.pathSegments}');
         _navigateToVideo(videoId);
       } else {
         // If it's a referral root link without a specific video, just open home
@@ -397,11 +429,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
   bool _hasCheckedCache = false;
   bool _cachedAuthStatus = false;
   bool _hasSkippedLogin = false;
+  bool _hasDeviceId = false;
 
   @override
   void initState() {
     super.initState();
-    // **OPTIMIZED: Check cached auth status immediately**
+    // **OPTIMIZED: Check cached auth status and device ID immediately**
     _checkCachedAuthStatus();
 
     // Start auth check in background (non-blocking)
@@ -415,7 +448,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     });
   }
 
-  /// **ENHANCED: Check cached auth status and skip login flag**
+  /// **ENHANCED: Check cached auth status, skip login flag, and device ID**
   Future<void> _checkCachedAuthStatus() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -423,14 +456,25 @@ class _AuthWrapperState extends State<AuthWrapper> {
       final fallbackUser = prefs.getString('fallback_user');
       final skipLogin = prefs.getBool('auth_skip_login') ?? false;
 
+      // **NEW: Check if device ID exists (user logged in before)**
+      final deviceIdService = DeviceIdService();
+      _hasDeviceId = await deviceIdService.hasStoredDeviceId();
+
       _hasSkippedLogin = skipLogin;
+      // **ENHANCED: Allow access if device ID exists (user logged in before, even after reinstall)**
       _cachedAuthStatus = (token != null && token.isNotEmpty) ||
           fallbackUser != null ||
-          skipLogin;
+          skipLogin ||
+          _hasDeviceId; // Device ID check allows skipping login
       _hasCheckedCache = true;
 
       if (mounted) {
         setState(() {});
+      }
+
+      if (_hasDeviceId) {
+        print(
+            '✅ AuthWrapper: Device ID found - user logged in before, skipping login screen');
       }
     } catch (e) {
       print('⚠️ Error checking cached auth: $e');
@@ -501,11 +545,18 @@ class _AuthWrapperState extends State<AuthWrapper> {
           );
         }
 
-        // Show login screen only if not skipped and not signed in
-        if (_hasCheckedCache) {
+        // **ENHANCED: Only show login screen on demand - if no cached auth, no skip, no device ID, and not signed in**
+        // Login screen should not show automatically - only show when explicitly needed
+        if (_hasCheckedCache &&
+            !_cachedAuthStatus &&
+            !_hasSkippedLogin &&
+            !_hasDeviceId &&
+            !authController.isSignedIn) {
           print(
-              'ℹ️ AuthWrapper: User is not signed in and has not skipped, showing LoginScreen');
-          return const LoginScreen();
+              'ℹ️ AuthWrapper: User is not signed in, has not skipped, no device ID - but login screen only shown on demand');
+          // **NEW: Don't show login screen automatically - go to home instead (on-demand login)**
+          // User can access login screen from settings/profile if needed
+          return const MainScreenWithLocationCheck();
         }
 
         // Show loading while checking cache

@@ -4,6 +4,8 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
   void _initializeServices() {
     AppConfig.resetCachedUrl();
 
+    // **FIX: For deep links (initialVideoId without initialVideos),
+    // we'll set initialPage after fetching the video**
     int initialPage = widget.initialIndex ?? 0;
     if (widget.initialVideoId != null && widget.initialVideos != null) {
       final videoIndex = widget.initialVideos!.indexWhere(
@@ -14,6 +16,8 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
         _currentIndex = videoIndex;
       }
     }
+    // **FIX: For deep links without initialVideos, start at 0 but we'll correct it after video fetch**
+    // Don't set initialPage here for deep links - we'll set it after fetching the video
 
     _pageController = PageController(initialPage: initialPage);
 
@@ -112,14 +116,110 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
         return;
       }
 
-      final videosFuture = _loadVideos(page: 1);
+      // **FIX: If initialVideoId is provided (deep link), fetch that video first**
+      if (widget.initialVideoId != null && widget.initialVideos == null) {
+        try {
+          final targetVideoId = widget.initialVideoId!.trim();
+          AppLogger.log(
+            '🔗 VideoFeedAdvanced: Deep link detected (cold start), fetching video: $targetVideoId',
+          );
+
+          // Fetch the target video first
+          final targetVideo = await _videoService.getVideoById(targetVideoId);
+          AppLogger.log(
+            '✅ VideoFeedAdvanced: Fetched deep link video: ${targetVideo.videoName} (ID: ${targetVideo.id})',
+          );
+
+          // Load regular videos from API
+          await _loadVideos(page: 1);
+
+          if (mounted) {
+            // **CRITICAL: Find video by ID after ranking (videos may have been reordered)**
+            int correctIndex = 0;
+            final foundIndex = _videos.indexWhere(
+              (v) => v.id.trim() == targetVideoId || v.id == targetVideoId,
+            );
+
+            if (foundIndex == -1) {
+              // Video not in list, insert it at the beginning
+              AppLogger.log(
+                '📌 VideoFeedAdvanced: Deep link video not in loaded list, inserting at index 0',
+              );
+              _videos.insert(0, targetVideo);
+              correctIndex = 0;
+            } else {
+              // Video already in list, use its index
+              correctIndex = foundIndex;
+              AppLogger.log(
+                '✅ VideoFeedAdvanced: Found deep link video at index $correctIndex',
+              );
+            }
+
+            // **CRITICAL: Update currentIndex BEFORE PageController operations**
+            _currentIndex = correctIndex;
+
+            // **FIX: For cold start, we need to immediately update PageController**
+            // The PageController was initialized with initialPage: 0, but we need to change it
+            if (_pageController.hasClients) {
+              // PageController is already attached, jump immediately
+              _pageController.jumpToPage(correctIndex);
+              AppLogger.log(
+                '🎯 VideoFeedAdvanced: PageController jumped to index $correctIndex (cold start, immediate)',
+              );
+            } else {
+              // PageController not ready yet, wait for it
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  // Try immediately
+                  if (_pageController.hasClients) {
+                    _pageController.jumpToPage(correctIndex);
+                    AppLogger.log(
+                      '🎯 VideoFeedAdvanced: PageController jumped to index $correctIndex (cold start, first callback)',
+                    );
+                  } else {
+                    // If still not ready, wait a bit more
+                    Future.delayed(const Duration(milliseconds: 150), () {
+                      if (mounted && _pageController.hasClients) {
+                        _pageController.jumpToPage(correctIndex);
+                        AppLogger.log(
+                          '🎯 VideoFeedAdvanced: PageController jumped to index $correctIndex (cold start, delayed)',
+                        );
+                      }
+                    });
+                  }
+                }
+              });
+            }
+
+            AppLogger.log(
+              '✅ VideoFeedAdvanced: Deep link video ready at index $_currentIndex (ID: $targetVideoId, videoName: ${targetVideo.videoName})',
+            );
+          }
+        } catch (e) {
+          AppLogger.log(
+            '⚠️ VideoFeedAdvanced: Error fetching deep link video: $e, falling back to regular load',
+          );
+          // Fallback to regular video load
+          await _loadVideos(page: 1);
+          if (mounted) {
+            _verifyAndSetCorrectIndex();
+          }
+        }
+      } else {
+        // Regular video load (no deep link)
+        final videosFuture = _loadVideos(page: 1);
+        videosFuture.then((_) async {
+          if (!mounted) return;
+          _verifyAndSetCorrectIndex();
+        }).catchError((e) {
+          AppLogger.log('❌ Error loading videos: $e');
+        });
+      }
+
       final userFuture = _loadCurrentUserId();
       final adsFuture = _loadActiveAds();
 
-      videosFuture.then((_) async {
-        if (!mounted) return;
-        _verifyAndSetCorrectIndex();
-
+      if (mounted) {
         if (!_isColdStart) {
           await _restoreBackgroundStateIfAny();
         }
@@ -130,15 +230,7 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
         );
         _startVideoPreloading();
         _loadFollowingUsers();
-      }).catchError((e) {
-        AppLogger.log('❌ Error loading videos: $e');
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-            _errorMessage = e.toString();
-          });
-        }
-      });
+      }
 
       try {
         await Future.wait([userFuture, adsFuture], eagerError: false);
@@ -156,6 +248,8 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
 
   void _verifyAndSetCorrectIndex() {
     if (widget.initialVideoId != null && _videos.isNotEmpty) {
+      final targetVideoId = widget.initialVideoId!.trim();
+
       // Ensure currentIndex is valid before accessing
       if (_currentIndex >= _videos.length) {
         _currentIndex = 0;
@@ -163,16 +257,36 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
 
       if (_currentIndex < _videos.length) {
         final videoAtCurrentIndex = _videos[_currentIndex];
-        if (videoAtCurrentIndex.id != widget.initialVideoId) {
+        // **FIX: Compare with trimmed IDs to handle whitespace issues**
+        final currentVideoId = videoAtCurrentIndex.id.trim();
+
+        if (currentVideoId != targetVideoId &&
+            videoAtCurrentIndex.id != targetVideoId) {
+          // Find the correct video by ID (try both trimmed and original)
           final correctIndex = _videos.indexWhere(
-            (v) => v.id == widget.initialVideoId,
+            (v) => v.id.trim() == targetVideoId || v.id == targetVideoId,
           );
+
           if (correctIndex != -1) {
+            AppLogger.log(
+              '🔧 VideoFeedAdvanced: Correcting index from $_currentIndex to $correctIndex for video ID: $targetVideoId',
+            );
             _currentIndex = correctIndex;
             if (_pageController.hasClients) {
               _pageController.jumpToPage(correctIndex);
+              AppLogger.log(
+                '✅ VideoFeedAdvanced: PageController updated to index $correctIndex',
+              );
             }
+          } else {
+            AppLogger.log(
+              '⚠️ VideoFeedAdvanced: Video with ID $targetVideoId not found in list of ${_videos.length} videos',
+            );
           }
+        } else {
+          AppLogger.log(
+            '✅ VideoFeedAdvanced: Current video at index $_currentIndex matches target ID: $targetVideoId',
+          );
         }
       }
     }
@@ -187,7 +301,35 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
       _ensureWakelockForVisibility();
     }
 
+    // **FIX: For deep links on cold start, verify we're preloading the correct video**
+    if (widget.initialVideoId != null &&
+        widget.initialVideos == null &&
+        _videos.isNotEmpty) {
+      final targetVideoId = widget.initialVideoId!.trim();
+      if (_currentIndex < _videos.length) {
+        final currentVideoId = _videos[_currentIndex].id.trim();
+        if (currentVideoId != targetVideoId) {
+          // Wrong video at current index, find correct one
+          final correctIndex = _videos.indexWhere(
+            (v) => v.id.trim() == targetVideoId || v.id == targetVideoId,
+          );
+          if (correctIndex != -1 && correctIndex != _currentIndex) {
+            AppLogger.log(
+              '🔧 VideoFeedAdvanced: Correcting index from $_currentIndex to $correctIndex before preload (deep link cold start)',
+            );
+            _currentIndex = correctIndex;
+            if (_pageController.hasClients) {
+              _pageController.jumpToPage(correctIndex);
+            }
+          }
+        }
+      }
+    }
+
     if (_currentIndex < _videos.length) {
+      AppLogger.log(
+        '🎬 VideoFeedAdvanced: Starting preload for index $_currentIndex (video ID: ${_videos[_currentIndex].id}, name: ${_videos[_currentIndex].videoName})',
+      );
       _preloadVideo(_currentIndex).then((_) {
         if (!mounted) return;
 

@@ -12,6 +12,7 @@ import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:vayu/config/google_sign_in_config.dart';
 import 'package:vayu/services/location_onboarding_service.dart';
 import 'package:vayu/utils/app_logger.dart';
+import 'package:vayu/services/device_id_service.dart';
 
 class AuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
@@ -221,6 +222,10 @@ class AuthService {
           await prefs.setString('fallback_user', jsonEncode(fallbackData));
           AppLogger.log('✅ Saved fallback_user with Google account data');
 
+          // **NEW: Store device ID after successful login**
+          await DeviceIdService().storeDeviceId();
+          AppLogger.log('✅ Device ID stored after successful login');
+
           // Return combined user data
           return {
             'id': googleUser.id,
@@ -308,6 +313,10 @@ class AuthService {
                 body: jsonEncode(userData),
               );
 
+              // **NEW: Store device ID after successful retry login**
+              await DeviceIdService().storeDeviceId();
+              AppLogger.log('✅ Device ID stored after retry login');
+
               return {
                 'id': googleUser.id,
                 'googleId': googleUser.id,
@@ -356,6 +365,10 @@ class AuthService {
             'profilePic': googleUser.photoUrl,
             'isFallback': true,
           }));
+
+      // **NEW: Store device ID after fallback login**
+      await DeviceIdService().storeDeviceId();
+      AppLogger.log('✅ Device ID stored after fallback login');
 
       AppLogger.log('✅ Fallback session created successfully');
 
@@ -501,6 +514,10 @@ class AuthService {
       await prefs.remove('user_profile');
       await prefs.remove('user_videos');
       await prefs.remove('last_user_id');
+
+      // **NEW: Clear device ID on logout (optional - remove if you want device ID to persist)**
+      // Note: Keeping device ID allows user to skip login after reinstall
+      // await DeviceIdService().clearDeviceId();
 
       // **FIXED: Clear all SharedPreferences keys related to user data**
       final keys = prefs.getKeys();
