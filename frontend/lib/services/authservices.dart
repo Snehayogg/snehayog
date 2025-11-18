@@ -91,13 +91,19 @@ class AuthService {
 
       AppLogger.log('🔑 Got ID token, attempting backend authentication...');
 
+      // **NEW: Get device ID to send to backend**
+      final deviceId = await DeviceIdService().getDeviceId();
+
       // First, authenticate with backend to get JWT
       try {
         final authResponse = await http
             .post(
               Uri.parse('${AppConfig.baseUrl}/api/auth'),
               headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({'idToken': idToken}),
+              body: jsonEncode({
+                'idToken': idToken,
+                'deviceId': deviceId, // **NEW: Send device ID to backend
+              }),
             )
             .timeout(const Duration(seconds: 10));
 
@@ -290,7 +296,10 @@ class AuthService {
                 .post(
                   Uri.parse('${AppConfig.baseUrl}/api/auth'),
                   headers: {'Content-Type': 'application/json'},
-                  body: jsonEncode({'idToken': idToken}),
+                  body: jsonEncode({
+                    'idToken': idToken,
+                    'deviceId': deviceId, // **NEW: Send device ID on retry
+                  }),
                 )
                 .timeout(const Duration(seconds: 10));
 

@@ -1,6 +1,9 @@
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:vayu/config/app_config.dart';
 
 /// Service to manage device ID for persistent user identification
 /// Device ID persists across app reinstalls (Android: Android ID, iOS: Identifier for Vendor)
@@ -89,10 +92,8 @@ class DeviceIdService {
   }
 
   /// Check if device ID has been stored (user has logged in before)
-  /// **PERMISSIVE APPROACH: Allows skipping login if platform device ID exists**
-  /// Platform device IDs persist across reinstalls (Android ID / iOS Identifier for Vendor)
-  /// **NOTE: This is permissive - any device with valid device ID can skip login**
-  /// For production, backend verification should be added for better security
+  /// **FIX: Uses backend verification to check if device ID has logged in before**
+  /// This works across app reinstalls since device ID is stored on backend
   Future<bool> hasStoredDeviceId() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -111,12 +112,8 @@ class DeviceIdService {
         return true;
       }
 
-      // **PERMISSIVE APPROACH: For reinstall scenario - check platform device ID**
-      // Platform device IDs (Android ID / iOS Identifier for Vendor) persist
-      // across app reinstalls. Since SharedPreferences clears on reinstall,
-      // we use permissive approach: allow if device ID exists
-      // This ensures reinstall doesn't force login screen
-
+      // **NEW: For reinstall scenario - verify with backend if device ID has logged in before**
+      // Platform device IDs persist across reinstalls, so we can check backend
       try {
         final deviceInfo = DeviceInfoPlugin();
         String? platformDeviceId;
@@ -134,24 +131,70 @@ class DeviceIdService {
           platformDeviceId = iosInfo.identifierForVendor;
         }
 
-        // **PERMISSIVE: If platform device ID exists, allow access**
-        // This assumes user might have logged in before (can't verify after reinstall)
-        // Store it now so we don't check again
         if (platformDeviceId != null && platformDeviceId.isNotEmpty) {
-          await prefs.setBool(_deviceIdKey, true);
-          await prefs.setString(_deviceIdValueKey, platformDeviceId);
-          _cachedDeviceId = platformDeviceId;
+          // **VERIFY WITH BACKEND: Check if this device ID has logged in before**
+          try {
+            final baseUrl = AppConfig.baseUrl;
+            final response = await http
+                .post(
+                  Uri.parse('$baseUrl/api/auth/check-device'),
+                  headers: {'Content-Type': 'application/json'},
+                  body: jsonEncode({'deviceId': platformDeviceId}),
+                )
+                .timeout(const Duration(seconds: 5));
 
-          if (kDebugMode) {
-            print(
-                '✅ DeviceIdService: Platform device ID found: ${platformDeviceId.substring(0, 8)}...');
-            print(
-                'ℹ️ DeviceIdService: Using permissive approach - allowing access based on device ID');
-            print(
-                'ℹ️ DeviceIdService: Note: This allows skipping login after reinstall');
+            if (response.statusCode == 200) {
+              final data = jsonDecode(response.body);
+              final hasLoggedIn = data['hasLoggedIn'] ?? false;
+
+              if (hasLoggedIn) {
+                // Device ID found on backend - user logged in before
+                // Store it locally for future checks
+                await prefs.setBool(_deviceIdKey, true);
+                await prefs.setString(_deviceIdValueKey, platformDeviceId);
+                _cachedDeviceId = platformDeviceId;
+
+                if (kDebugMode) {
+                  print(
+                      '✅ DeviceIdService: Device ID verified with backend - user logged in before');
+                  print(
+                      '✅ DeviceIdService: Device ID: ${platformDeviceId.substring(0, 8)}...');
+                  print(
+                      '✅ DeviceIdService: User: ${data['userName'] ?? 'Unknown'}');
+                }
+
+                return true;
+              } else {
+                if (kDebugMode) {
+                  print(
+                      'ℹ️ DeviceIdService: Device ID not found on backend - first time login');
+                }
+                return false;
+              }
+            } else {
+              if (kDebugMode) {
+                print(
+                    '⚠️ DeviceIdService: Backend check failed: ${response.statusCode}');
+              }
+              // If backend check fails, fall back to permissive approach
+              // (allow access based on device ID existence)
+              await prefs.setBool(_deviceIdKey, true);
+              await prefs.setString(_deviceIdValueKey, platformDeviceId);
+              _cachedDeviceId = platformDeviceId;
+              return true;
+            }
+          } catch (e) {
+            if (kDebugMode) {
+              print('⚠️ DeviceIdService: Error checking with backend: $e');
+              print('ℹ️ DeviceIdService: Falling back to permissive approach');
+            }
+            // If backend is unreachable, fall back to permissive approach
+            // Store device ID and allow access
+            await prefs.setBool(_deviceIdKey, true);
+            await prefs.setString(_deviceIdValueKey, platformDeviceId);
+            _cachedDeviceId = platformDeviceId;
+            return true;
           }
-
-          return true; // Allow access (permissive)
         }
       } catch (e) {
         if (kDebugMode) {

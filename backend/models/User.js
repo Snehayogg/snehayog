@@ -91,6 +91,12 @@ const UserSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  // **NEW: Device IDs - Store device IDs that have logged in with this account**
+  // This allows skipping login screen after app reinstall
+  deviceIds: [{
+    type: String,
+    trim: true
+  }],
   // **NEW: Location Data**
   location: {
     latitude: {
