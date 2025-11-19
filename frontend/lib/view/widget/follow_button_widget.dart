@@ -376,10 +376,10 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
                                       child: child,
                                     );
                                   },
-                                  child: Icon(
+                                  child: const Icon(
                                     Icons.check_circle_rounded,
-                                    key: const ValueKey('following'),
-                                    color: const Color(0xFF10B981), // Green-500
+                                    key: ValueKey('following'),
+                                    color: Color(0xFF10B981), // Green-500
                                     size: 18,
                                   ),
                                 ),

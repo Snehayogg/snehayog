@@ -33,6 +33,7 @@ import reportRoutes from './routes/reportRoutes.js';
 // Import services
 import automatedPayoutService from './services/automatedPayoutService.js';
 import adCleanupService from './services/adCleanupService.js';
+import redisService from './services/redisService.js';
 
 // Import middleware
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
@@ -401,10 +402,18 @@ app.use(errorHandler);
 
 // Graceful shutdown
 const gracefulShutdown = async (signal) => {
+  console.log(`\n🛑 Received ${signal}, shutting down gracefully...`);
   
   try {
+    // Disconnect Redis
+    if (redisService.getConnectionStatus()) {
+      await redisService.disconnect();
+    }
+    
+    // Disconnect database
     await databaseManager.disconnect();
     
+    console.log('✅ Graceful shutdown complete');
     process.exit(0);
   } catch (error) {
     console.error('❌ Error during shutdown:', error);
@@ -422,6 +431,14 @@ const startServer = async () => {
     // Connect to database
     await databaseManager.connect();
     
+    // **NEW: Connect to Redis for caching (non-blocking - app works without Redis)**
+    const redisConnected = await redisService.connect();
+    if (redisConnected) {
+      console.log('✅ Redis connected successfully - Caching enabled');
+    } else {
+      console.log('⚠️ Redis connection failed - App will continue without caching');
+    }
+    
     // Start automated payout service
     automatedPayoutService.startScheduler();
     
@@ -436,7 +453,8 @@ const startServer = async () => {
     
     // Start HTTP server
     app.listen(PORT, HOST, () => {
-      
+      console.log(`🚀 Server running on ${HOST}:${PORT}`);
+      console.log(`📊 Redis Status: ${redisService.getConnectionStatus() ? '✅ Connected' : '❌ Disconnected'}`);
     });
     
   } catch (error) {

@@ -1,21 +1,38 @@
 import express from 'express';
 import { asyncHandler } from '../../middleware/errorHandler.js';
 import adService from '../../services/adService.js';
+import redisService from '../../services/redisService.js';
+import { AdCacheKeys } from '../../middleware/cacheMiddleware.js';
 
 const router = express.Router();
 
 // GET /ads/serve - Get active ads for serving with targeting
+// **NEW: Redis caching integrated for faster ad serving**
 router.get('/serve', asyncHandler(async (req, res) => {
-  const { userId, platform, location, videoCategory, videoTags, videoKeywords } = req.query;
+  const { userId, platform, location, videoCategory, videoTags, videoKeywords, adType } = req.query;
   
   // Parse comma-separated tags and keywords
   const parsedTags = videoTags ? videoTags.split(',').map(t => t.trim()) : [];
   const parsedKeywords = videoKeywords ? videoKeywords.split(',').map(k => k.trim()) : [];
   
+  // **NEW: Generate cache key based on targeting parameters**
+  const cacheKey = `ads:serve:${adType || 'all'}:${videoCategory || 'all'}:${parsedTags.join(',')}:${parsedKeywords.join(',')}`;
+  
+  // **NEW: Try to get from Redis cache first (cache for 2 minutes)**
+  if (redisService.getConnectionStatus()) {
+    const cached = await redisService.get(cacheKey);
+    if (cached) {
+      console.log(`✅ Ad Cache HIT: ${cacheKey}`);
+      return res.json(cached);
+    }
+    console.log(`❌ Ad Cache MISS: ${cacheKey}`);
+  }
+  
   console.log('🎯 Ad Serve Request:', {
     videoCategory,
     videoTags: parsedTags,
-    videoKeywords: parsedKeywords
+    videoKeywords: parsedKeywords,
+    adType
   });
   
   const activeAds = await adService.getActiveAds({ 
@@ -24,18 +41,28 @@ router.get('/serve', asyncHandler(async (req, res) => {
     location,
     videoCategory,
     videoTags: parsedTags,
-    videoKeywords: parsedKeywords
+    videoKeywords: parsedKeywords,
+    adType
   });
   
-  res.json({
+  const response = {
     ads: activeAds,
     count: activeAds.length,
     targeting: {
       videoCategory,
       videoTags: parsedTags,
-      videoKeywords: parsedKeywords
+      videoKeywords: parsedKeywords,
+      adType: adType || 'all'
     }
-  });
+  };
+  
+  // **NEW: Cache the response for 2 minutes (120 seconds)**
+  if (redisService.getConnectionStatus()) {
+    await redisService.set(cacheKey, response, 120);
+    console.log(`✅ Cached ad response: ${cacheKey}`);
+  }
+  
+  res.json(response);
 }));
 
 // POST /ads/track-click/:adId - Track ad clicks

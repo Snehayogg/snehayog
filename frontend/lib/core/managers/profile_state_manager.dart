@@ -287,37 +287,32 @@ class ProfileStateManager extends ChangeNotifier {
         AppLogger.log(
             '🔄 ProfileStateManager: Fetching other user profile for ID: $requestedUserId');
         final otherUser = await _userService.getUserById(requestedUserId);
-        if (otherUser != null) {
-          // **FIXED: getUserById returns Map, ensure all fields are present**
-          userData = Map<String, dynamic>.from(otherUser);
+        // **FIXED: getUserById returns Map, ensure all fields are present**
+        userData = Map<String, dynamic>.from(otherUser);
 
-          // **NEW: Also add googleId and _id fields for compatibility if missing**
-          final userId = userData['googleId'] ??
-              userData['id'] ??
-              userData['_id'] ??
-              requestedUserId;
-          userData['googleId'] = userId;
-          userData['_id'] = userId;
-          userData['id'] = userId;
+        // **NEW: Also add googleId and _id fields for compatibility if missing**
+        final userId = userData['googleId'] ??
+            userData['id'] ??
+            userData['_id'] ??
+            requestedUserId;
+        userData['googleId'] = userId;
+        userData['_id'] = userId;
+        userData['id'] = userId;
 
-          // **FIXED: Ensure followersCount is properly set (use both field names)**
-          final followersCount =
-              userData['followersCount'] ?? userData['followers'] ?? 0;
-          userData['followersCount'] = followersCount;
-          userData['followers'] = followersCount;
+        // **FIXED: Ensure followersCount is properly set (use both field names)**
+        final followersCount =
+            userData['followersCount'] ?? userData['followers'] ?? 0;
+        userData['followersCount'] = followersCount;
+        userData['followers'] = followersCount;
 
-          final followingCount =
-              userData['followingCount'] ?? userData['following'] ?? 0;
-          userData['followingCount'] = followingCount;
-          userData['following'] = followingCount;
+        final followingCount =
+            userData['followingCount'] ?? userData['following'] ?? 0;
+        userData['followingCount'] = followingCount;
+        userData['following'] = followingCount;
 
-          AppLogger.log(
-              '🔄 ProfileStateManager: Other user profile loaded: ${userData['name']}, followers: ${userData['followersCount']}');
-        } else {
-          AppLogger.log(
-              '⚠️ ProfileStateManager: getUserById returned null for $requestedUserId');
-        }
-      } catch (e) {
+        AppLogger.log(
+            '🔄 ProfileStateManager: Other user profile loaded: ${userData['name']}, followers: ${userData['followersCount']}');
+            } catch (e) {
         AppLogger.log(
             '⚠️ ProfileStateManager: Failed to fetch other user profile: $e');
       }

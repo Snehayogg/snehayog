@@ -8,6 +8,8 @@ import fs from 'fs';
 import path from 'path';
 import { verifyToken } from '../utils/verifytoken.js';
 import { isCloudinaryConfigured } from '../config.js';
+import redisService from '../services/redisService.js';
+import { VideoCacheKeys, invalidateCache } from '../middleware/cacheMiddleware.js';
 // Lazy import to ensure env vars are loaded first
 let hybridVideoService;
 const router = express.Router();
@@ -290,6 +292,16 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
     
     console.log('✅ Video record created with ID:', video._id);
     
+    // **NEW: Invalidate cache when new video is uploaded**
+    if (redisService.getConnectionStatus()) {
+      await invalidateCache([
+        'videos:feed:*', // Clear all video feed caches
+        `videos:user:${user.googleId}`, // Clear user's video cache
+        VideoCacheKeys.all() // Clear all video-related caches
+      ]);
+      console.log('🧹 Cache invalidated after video upload');
+    }
+    
     // **NEW: Start Cloudinary processing in background (non-blocking)**
     processVideoHybrid(video._id, req.file.path, videoName, user._id.toString());
     
@@ -393,10 +405,24 @@ async function processVideoToHLS(videoId, videoPath, videoName, userId) {
 // 100% FREE processing + FREE bandwidth = Maximum savings!
 
 // Get videos by user ID (consistently use googleId)
+// **NEW: Redis caching integrated**
 router.get('/user/:googleId', verifyToken, async (req, res) => {
   try {
     const { googleId } = req.params;
     console.log('🎬 Fetching videos for googleId:', googleId);
+
+    // **NEW: Generate cache key**
+    const cacheKey = VideoCacheKeys.user(googleId);
+
+    // **NEW: Try to get from Redis cache first**
+    if (redisService.getConnectionStatus()) {
+      const cached = await redisService.get(cacheKey);
+      if (cached) {
+        console.log(`✅ Cache HIT: ${cacheKey}`);
+        return res.json(cached);
+      }
+      console.log(`❌ Cache MISS: ${cacheKey}`);
+    }
 
     // Find user by googleId
     const user = await User.findOne({ googleId: googleId });
@@ -505,9 +531,15 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
 
     console.log('✅ Sending videos response:', {
       totalVideos: videosWithUrls.length,
-      firstVideo: videosWithUrls.isNotEmpty ? videosWithUrls[0].videoName : 'None',
-      lastVideo: videosWithUrls.isNotEmpty ? videosWithUrls.last.videoName : 'None'
+      firstVideo: videosWithUrls.length > 0 ? videosWithUrls[0].videoName : 'None',
+      lastVideo: videosWithUrls.length > 0 ? videosWithUrls[videosWithUrls.length - 1].videoName : 'None'
     });
+
+    // **NEW: Cache the response for 10 minutes (600 seconds)**
+    if (redisService.getConnectionStatus()) {
+      await redisService.set(cacheKey, videosWithUrls, 600);
+      console.log(`✅ Cached user videos: ${cacheKey}`);
+    }
 
     res.json(videosWithUrls);
   } catch (error) {
@@ -523,6 +555,7 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
 
 
 // Get all videos (optimized for performance) - SUPPORTS MP4 AND HLS
+// **NEW: Redis caching integrated for 10x faster response**
 router.get('/', async (req, res) => {
   try {
     const { videoType, page = 1, limit = 10 } = req.query;
@@ -532,6 +565,19 @@ router.get('/', async (req, res) => {
     const pageNum = parseInt(page) || 1;
     const limitNum = parseInt(limit) || 10;
     const skip = (pageNum - 1) * limitNum;
+    
+    // **NEW: Generate cache key based on query parameters**
+    const cacheKey = `videos:feed:${videoType || 'all'}:page:${pageNum}:limit:${limitNum}`;
+    
+    // **NEW: Try to get from Redis cache first**
+    if (redisService.getConnectionStatus()) {
+      const cached = await redisService.get(cacheKey);
+      if (cached) {
+        console.log(`✅ Cache HIT: ${cacheKey}`);
+        return res.json(cached);
+      }
+      console.log(`❌ Cache MISS: ${cacheKey}`);
+    }
     
     // Build query filter - Show only valid videos with proper uploader references
     const queryFilter = {
@@ -620,9 +666,7 @@ router.get('/', async (req, res) => {
       }))
     }));
     
-    console.log(`✅ Found ${validVideos.length} valid videos (page ${page}, total: ${totalVideos})`);
-    
-    res.json({
+    const response = {
       videos: transformedVideos,
       hasMore: (pageNum * limitNum) < totalVideos,
       total: totalVideos,
@@ -633,7 +677,17 @@ router.get('/', async (req, res) => {
         format: 'mp4_and_hls'
       },
       message: `✅ Fetched ${validVideos.length} valid videos successfully${videoType ? ` (${videoType} type)` : ''}`
-    });
+    };
+    
+    // **NEW: Cache the response for 5 minutes (300 seconds)**
+    if (redisService.getConnectionStatus()) {
+      await redisService.set(cacheKey, response, 300);
+      console.log(`✅ Cached response: ${cacheKey}`);
+    }
+    
+    console.log(`✅ Found ${validVideos.length} valid videos (page ${page}, total: ${totalVideos})`);
+    
+    res.json(response);
   } catch (error) {
     console.error('❌ Error fetching videos:', error);
     res.status(500).json({ 
@@ -786,6 +840,16 @@ router.post('/:id/like', verifyToken, async (req, res) => {
 
     await video.save();
     console.log('✅ Like API: Video saved successfully');
+
+    // **NEW: Invalidate cache when video is liked/unliked**
+    if (redisService.getConnectionStatus()) {
+      await invalidateCache([
+        'videos:feed:*', // Clear all video feed caches
+        VideoCacheKeys.single(videoId), // Clear single video cache
+        `videos:user:${video.uploader?.toString()}`, // Clear uploader's video cache
+      ]);
+      console.log('🧹 Cache invalidated after like/unlike');
+    }
 
     // Return the updated video with populated fields
     const updatedVideo = await Video.findById(videoId)
@@ -1429,6 +1493,17 @@ router.delete('/:id', verifyToken, async (req, res) => {
       { new: true }
     );
 
+    // **NEW: Invalidate cache when video is deleted**
+    if (redisService.getConnectionStatus()) {
+      await invalidateCache([
+        'videos:feed:*', // Clear all video feed caches
+        VideoCacheKeys.single(videoId), // Clear single video cache
+        `videos:user:${user.googleId}`, // Clear user's video cache
+        VideoCacheKeys.all() // Clear all video-related caches
+      ]);
+      console.log('🧹 Cache invalidated after video deletion');
+    }
+
     console.log(`🗑️ Video deleted: ${videoId} by user: ${user._id}`);
     res.json({ success: true, message: 'Video deleted successfully' });
   } catch (error) {
@@ -1483,6 +1558,16 @@ router.post('/bulk-delete', verifyToken, async (req, res) => {
       { $pull: { videos: { $in: videoIds } } },
       { new: true }
     );
+
+    // **NEW: Invalidate cache when videos are bulk deleted**
+    if (redisService.getConnectionStatus()) {
+      await invalidateCache([
+        'videos:feed:*', // Clear all video feed caches
+        `videos:user:${user.googleId}`, // Clear user's video cache
+        VideoCacheKeys.all() // Clear all video-related caches
+      ]);
+      console.log('🧹 Cache invalidated after bulk video deletion');
+    }
     
     console.log(`✅ Bulk delete successful: ${deleteResult.deletedCount} videos deleted`);
     

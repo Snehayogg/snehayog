@@ -240,7 +240,7 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
 
     final videoCount = widget.stateManager.userVideos.length;
     // Include video count in cache key so cache invalidates when videos change
-    return '${userId}_${videoCount}';
+    return '${userId}_$videoCount';
   }
 
   @override
