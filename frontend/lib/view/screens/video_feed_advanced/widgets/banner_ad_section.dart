@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:vayu/view/widget/ads/banner_ad_widget.dart';
 import 'package:vayu/view/widget/ads/google_admob_banner_widget.dart';
@@ -16,7 +17,7 @@ class BannerAdSection extends StatefulWidget {
 
   const BannerAdSection({
     Key? key,
-    required this.adData,
+    this.adData, // **FIXED: Make adData optional to prioritize AdMob**
     this.onClick,
     this.onImpression,
     this.useGoogleAds = true, // Default to Google AdMob
@@ -42,10 +43,9 @@ class _BannerAdSectionState extends State<BannerAdSection> {
           onAdLoaded: () {
             AppLogger.log(
                 '✅ BannerAdSection: Google AdMob ad loaded successfully');
-            // Reset failed state if ad loads successfully
-            if (_admobAdFailed) {
+            if (mounted) {
               setState(() {
-                _admobAdFailed = false;
+                _admobAdFailed = false; // Reset failed state
               });
             }
           },
@@ -57,6 +57,13 @@ class _BannerAdSectionState extends State<BannerAdSection> {
               setState(() {
                 _admobAdFailed = true;
               });
+
+              // After marking failed, rebuild to show custom ad if available
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  setState(() {});
+                }
+              });
             }
           },
         ),
@@ -64,17 +71,22 @@ class _BannerAdSectionState extends State<BannerAdSection> {
     }
 
     // **FALLBACK: Show custom banner ads if AdMob not configured, disabled, or failed**
+    // Only show custom ads if adData is provided
     if (widget.adData == null) {
+      // No custom ad data available - show empty space
       return const Positioned(
         top: 0,
         left: 0,
         right: 0,
         height: 60,
-        child: ColoredBox(color: Colors.black),
+        child: SizedBox.shrink(), // Don't show anything if no ads available
       );
     }
 
+    // **FIXED: Show custom backend ad as fallback**
     final data = widget.adData!;
+    AppLogger.log(
+        '🔄 BannerAdSection: Showing custom backend ad as fallback: ${data['title'] ?? data['id']}');
     return Positioned(
       top: 0,
       left: 0,

@@ -18,6 +18,7 @@ import 'package:vayu/services/profile_preloader.dart';
 import 'package:vayu/services/ad_impression_service.dart';
 import 'package:vayu/view/widget/ads/carousel_ad_widget.dart';
 import 'package:vayu/view/screens/video_feed_advanced/widgets/banner_ad_section.dart';
+import 'package:vayu/view/screens/video_feed_advanced/widgets/heart_animation.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/view/screens/profile_screen.dart';
 import 'package:vayu/view/screens/login_screen.dart';
@@ -34,6 +35,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'package:vayu/services/earnings_service.dart';
 import 'package:vayu/core/utils/video_engagement_ranker.dart';
+import 'package:vayu/config/admob_config.dart';
 
 part 'video_feed_advanced/video_feed_advanced_state_fields.dart';
 part 'video_feed_advanced/video_feed_advanced_playback.dart';

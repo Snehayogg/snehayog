@@ -291,38 +291,11 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
   }
 
   Widget _buildHeartAnimation(int index) {
-    if (_showHeartAnimation[index] == null) {
+    final notifier = _showHeartAnimation[index];
+    if (notifier == null) {
       return const SizedBox.shrink();
     }
-    return ValueListenableBuilder<bool>(
-      valueListenable: _showHeartAnimation[index]!,
-      builder: (context, showAnimation, _) {
-        if (!showAnimation) return const SizedBox.shrink();
-        return Positioned.fill(
-          child: IgnorePointer(
-            child: Center(
-              child: AnimatedOpacity(
-                opacity: showAnimation ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 200),
-                child: AnimatedScale(
-                  scale: showAnimation ? 1.2 : 0.8,
-                  duration: const Duration(milliseconds: 200),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.3),
-                      shape: BoxShape.circle,
-                    ),
-                    child:
-                        const Icon(Icons.favorite, color: Colors.red, size: 48),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
+    return HeartAnimation(showNotifier: notifier);
   }
 
   Widget _buildReportIndicator(int index) {
@@ -364,13 +337,17 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
   }
 
   Widget _buildBannerAd(VideoModel video, int index) {
-    Map<String, dynamic>? adData;
+    // **FIXED: Always prepare custom ad data for fallback, even when AdMob is configured**
+    final bool shouldUseAdMob = AdMobConfig.isConfigured();
 
     if (_adsLoaded) {
       AppLogger.log(
-        '🔍 _buildBannerAd: Video index=$index, Total banner ads=${_bannerAds.length}, Locked ads=${_lockedBannerAdByVideoId.length}',
+        '🔍 _buildBannerAd: Video index=$index, Total banner ads=${_bannerAds.length}, Locked ads=${_lockedBannerAdByVideoId.length}, AdMob configured: $shouldUseAdMob',
       );
     }
+
+    // **FIXED: Prepare custom ad data for fallback (even when AdMob is configured)**
+    Map<String, dynamic>? adData;
 
     if (_lockedBannerAdByVideoId.containsKey(video.id)) {
       adData = _lockedBannerAdByVideoId[video.id];
@@ -392,41 +369,28 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           '⚠️ Invalid adIndex $adIndex for bannerAds length ${_bannerAds.length}',
         );
       }
-    } else {
-      return Positioned(
-        top: 0,
-        left: 0,
-        right: 0,
-        height: 60,
-        child: Container(color: Colors.black),
-      );
     }
 
-    if (adData == null) {
-      return Positioned(
-        top: 0,
-        left: 0,
-        right: 0,
-        height: 60,
-        child: Container(color: Colors.black),
-      );
-    }
-
-    final adDataNonNull = adData;
-
-    // Use BannerAdSection which supports both Google AdMob and custom ads
-    return BannerAdSection(
-      adData: {
-        ...adDataNonNull,
+    // Prepare ad data map with videoId if available
+    Map<String, dynamic>? adDataWithVideoId;
+    if (adData != null) {
+      adDataWithVideoId = {
+        ...adData,
         'videoId': video.id,
-      },
+      };
+    }
+
+    // **FIXED: Always pass custom ad data to BannerAdSection for fallback**
+    // BannerAdSection will try AdMob first, then fallback to custom ads
+    return BannerAdSection(
+      adData: adDataWithVideoId, // **FIXED: Pass custom ad data for fallback**
       onClick: () {
         AppLogger.log('🖱️ Banner ad clicked on video $index');
       },
       onImpression: () async {
-        if (index < _videos.length) {
+        if (index < _videos.length && adData != null) {
           final video = _videos[index];
-          final adId = adDataNonNull['_id'] ?? adDataNonNull['id'];
+          final adId = adData['_id'] ?? adData['id'];
           final userData = await _authService.getUserData();
 
           AppLogger.log('📊 Banner Ad Impression Tracking:');
@@ -448,7 +412,8 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           }
         }
       },
-      useGoogleAds: true, // Use Google AdMob if configured
+      useGoogleAds:
+          shouldUseAdMob, // **FIXED: Use AdMob if configured, fallback to custom ads**
     );
   }
 
