@@ -207,13 +207,10 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
         }
       } else {
         // Regular video load (no deep link)
-        final videosFuture = _loadVideos(page: 1);
-        videosFuture.then((_) async {
-          if (!mounted) return;
-          _verifyAndSetCorrectIndex();
-        }).catchError((e) {
-          AppLogger.log('❌ Error loading videos: $e');
-        });
+        // **FIX: Wait for videos to load before setting isLoading = false**
+        await _loadVideos(page: 1);
+        if (!mounted) return;
+        _verifyAndSetCorrectIndex();
       }
 
       final userFuture = _loadCurrentUserId();
@@ -224,12 +221,41 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
           await _restoreBackgroundStateIfAny();
         }
 
-        setState(() => _isLoading = false);
-        AppLogger.log(
-          '🚀 VideoFeedAdvanced: Progressive render after videos loaded: ${_videos.length}',
-        );
-        _startVideoPreloading();
-        _loadFollowingUsers();
+        // **FIX: Only set isLoading = false if videos are actually loaded**
+        // If videos list is still empty, keep loading state or show error
+        if (_videos.isEmpty && _errorMessage == null) {
+          AppLogger.log(
+            '⚠️ VideoFeedAdvanced: No videos loaded, retrying once...',
+          );
+          // No error but no videos - might be network issue, retry once
+          try {
+            await Future.delayed(const Duration(milliseconds: 500));
+            await _loadVideos(page: 1, useCache: false);
+            if (!mounted) return;
+            _verifyAndSetCorrectIndex();
+          } catch (retryError) {
+            AppLogger.log('❌ VideoFeedAdvanced: Retry failed: $retryError');
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+                _errorMessage = retryError.toString();
+              });
+            }
+            return;
+          }
+        }
+
+        // Videos loaded successfully or error occurred
+        if (mounted) {
+          setState(() => _isLoading = false);
+          if (_videos.isNotEmpty) {
+            AppLogger.log(
+              '🚀 VideoFeedAdvanced: Progressive render after videos loaded: ${_videos.length}',
+            );
+            _startVideoPreloading();
+            _loadFollowingUsers();
+          }
+        }
       }
 
       try {

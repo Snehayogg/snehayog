@@ -76,13 +76,50 @@ class VideoViewTracker {
         return false;
       }
 
-      // Make API call to increment view
+      // **NEW: Get auth token for watch tracking**
+      final token = await AuthService.getToken();
+      Map<String, String> headers = {
+        'Content-Type': 'application/json',
+      };
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+
+      // **NEW: Track watch history for personalized feed (requires auth)**
+      if (token != null && token.isNotEmpty) {
+        try {
+          final watchUrl = Uri.parse('$_baseUrl/api/videos/$videoId/watch');
+          final watchResponse = await httpClientService.post(
+            watchUrl,
+            headers: headers,
+            body: json.encode({
+              'duration': effectiveDuration,
+              'completed': false, // Will be updated when video completes
+            }),
+          );
+
+          if (watchResponse.statusCode == 200) {
+            AppLogger.log(
+                '✅ VideoViewTracker: Watch history tracked successfully');
+            final watchData = json.decode(watchResponse.body);
+            AppLogger.log(
+                '   Watch count: ${watchData['watchEntry']?['watchCount'] ?? 1}');
+          } else {
+            AppLogger.log(
+                '⚠️ VideoViewTracker: Watch tracking failed (non-critical): ${watchResponse.statusCode}');
+          }
+        } catch (watchError) {
+          AppLogger.log(
+              '⚠️ VideoViewTracker: Error tracking watch (non-critical): $watchError');
+          // Don't fail view tracking if watch tracking fails
+        }
+      }
+
+      // Make API call to increment view (existing functionality)
       final url = Uri.parse('$_baseUrl/api/videos/$videoId/increment-view');
       final response = await httpClientService.post(
         url,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: headers,
         body: json.encode({
           'userId': userId,
           'duration': effectiveDuration,
@@ -215,6 +252,60 @@ class VideoViewTracker {
     _viewedVideos.clear();
     _userViewCounts.clear();
     _recentViews.clear(); // **NEW: Clear recent views tracking**
+  }
+
+  /// **NEW: Track video completion for watch history**
+  Future<void> trackVideoCompletion(String videoId, {int? duration}) async {
+    try {
+      AppLogger.log(
+          '📊 VideoViewTracker: Tracking video completion for $videoId');
+
+      // Get current user data
+      final userData = await _authService.getUserData();
+      if (userData == null || userData['id'] == null) {
+        AppLogger.log(
+            '❌ VideoViewTracker: No authenticated user found for completion tracking');
+        return;
+      }
+
+      final userId = userData['id'];
+      final token = await AuthService.getToken();
+
+      if (token == null || token.isEmpty) {
+        AppLogger.log(
+            '⚠️ VideoViewTracker: No auth token for completion tracking');
+        return;
+      }
+
+      // Track completed watch history
+      final watchUrl = Uri.parse('$_baseUrl/api/videos/$videoId/watch');
+      final watchResponse = await httpClientService.post(
+        watchUrl,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({
+          'duration': duration ?? 0,
+          'completed': true, // Mark as completed
+        }),
+      );
+
+      if (watchResponse.statusCode == 200) {
+        AppLogger.log(
+            '✅ VideoViewTracker: Video completion tracked successfully');
+        final watchData = json.decode(watchResponse.body);
+        AppLogger.log(
+            '   Watch count: ${watchData['watchEntry']?['watchCount'] ?? 1}');
+        AppLogger.log(
+            '   Completed: ${watchData['watchEntry']?['completed'] ?? false}');
+      } else {
+        AppLogger.log(
+            '⚠️ VideoViewTracker: Completion tracking failed: ${watchResponse.statusCode}');
+      }
+    } catch (e) {
+      AppLogger.log('❌ VideoViewTracker: Error tracking video completion: $e');
+    }
   }
 
   /// Dispose of the service and clean up resources

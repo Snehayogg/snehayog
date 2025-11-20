@@ -129,6 +129,7 @@ class VideoService {
   // **CORE VIDEO METHODS - Merged from all services**
 
   /// **Get videos with pagination and HLS support**
+  /// **NEW: Optional authentication for personalized feed**
   Future<Map<String, dynamic>> getVideos({
     int page = 1,
     int limit = 10,
@@ -147,8 +148,25 @@ class VideoService {
         AppLogger.log(
             '🔍 VideoService: Filtering by videoType: $normalizedType');
       }
+
+      // **NEW: Get auth token for personalized feed (optional - don't fail if missing)**
+      Map<String, String> headers = {'Content-Type': 'application/json'};
+      try {
+        final token = await AuthService.getToken();
+        if (token != null && token.isNotEmpty) {
+          headers['Authorization'] = 'Bearer $token';
+          AppLogger.log(
+              '✅ VideoService: Using authenticated request for personalized feed');
+        } else {
+          AppLogger.log('ℹ️ VideoService: No auth token - using regular feed');
+        }
+      } catch (e) {
+        AppLogger.log(
+            '⚠️ VideoService: Error getting auth token, using regular feed: $e');
+      }
+
       final response = await _makeRequest(
-        () => _client.get(Uri.parse(url)),
+        () => _client.get(Uri.parse(url), headers: headers),
         timeout: const Duration(seconds: 15),
       );
 

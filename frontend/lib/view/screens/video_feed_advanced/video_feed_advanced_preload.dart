@@ -975,6 +975,16 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
     if (index < _videos.length) {
       final video = _videos[index];
       _viewTracker.stopViewTracking(video.id);
+
+      // **NEW: Track video completion for watch history**
+      final controller = _controllerPool[index];
+      if (controller != null && controller.value.isInitialized) {
+        final duration = controller.value.duration.inSeconds;
+        _viewTracker.trackVideoCompletion(
+          video.id,
+          duration: duration,
+        );
+      }
       AppLogger.log('⏹️ Completed video playback for ${video.id}');
     }
 

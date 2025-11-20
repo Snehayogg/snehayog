@@ -213,8 +213,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
 
         final rankedVideos = _rankVideosWithEngagement(
           newVideos,
-          preserveVideoKey:
-              preserveKey ?? (preserveVideoId),
+          preserveVideoKey: preserveKey ?? (preserveVideoId),
         );
 
         int? nextIndex;
@@ -261,6 +260,13 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         }
 
         _markCurrentVideoAsSeen();
+
+        // **FIX: Ensure isLoading is set to false after videos are loaded**
+        if (mounted && _isLoading) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
       }
 
       _loadFollowingUsers();

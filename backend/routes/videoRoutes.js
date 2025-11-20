@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import Video from '../models/Video.js';
 import User from '../models/User.js';
 import Comment from '../models/Comment.js';
+import WatchHistory from '../models/WatchHistory.js';
 import fs from 'fs'; 
 import path from 'path';
 import { verifyToken } from '../utils/verifytoken.js';
@@ -555,19 +556,60 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
 
 
 // Get all videos (optimized for performance) - SUPPORTS MP4 AND HLS
+// **NEW: Personalized feed with watch history filtering**
 // **NEW: Redis caching integrated for 10x faster response**
+// **NOTE: verifyToken is optional - if provided, returns personalized feed; otherwise, regular feed**
 router.get('/', async (req, res) => {
   try {
+    // Try to get user from token (optional authentication)
+    let userId = null;
+    try {
+      const token = req.headers.authorization?.split(' ')[1];
+      if (token) {
+        // Try to verify token manually (optional - don't fail if invalid)
+        try {
+          // Try Google access token first
+          const googleResponse = await fetch(`https://www.googleapis.com/oauth2/v2/userinfo?access_token=${token}`);
+          if (googleResponse.ok) {
+            const userInfo = await googleResponse.json();
+            userId = userInfo.id;
+            console.log('✅ Google token verified for personalized feed:', userId);
+          } else {
+            // Try JWT token
+            const jwt = (await import('jsonwebtoken')).default;
+            const JWT_SECRET = process.env.JWT_SECRET;
+            if (JWT_SECRET) {
+              try {
+                const decoded = jwt.verify(token, JWT_SECRET);
+                userId = decoded.id || decoded.googleId;
+                console.log('✅ JWT token verified for personalized feed:', userId);
+              } catch (jwtError) {
+                // Token invalid - continue without user
+                console.log('⚠️ Token verification failed, using regular feed');
+              }
+            }
+          }
+        } catch (tokenError) {
+          // Token verification failed - continue without personalized feed
+          console.log('⚠️ Token verification failed, using regular feed:', tokenError.message);
+        }
+      }
+    } catch (error) {
+      // Error getting token - continue without personalized feed
+      console.log('⚠️ Error checking token, using regular feed');
+    }
+
     const { videoType, page = 1, limit = 10 } = req.query;
-    console.log('📹 Fetching videos...', { videoType, page, limit });
+    console.log('📹 Fetching videos...', { videoType, page, limit, userId: userId ? 'authenticated' : 'anonymous' });
     
     // Get query parameters for pagination
     const pageNum = parseInt(page) || 1;
     const limitNum = parseInt(limit) || 10;
-    const skip = (pageNum - 1) * limitNum;
     
-    // **NEW: Generate cache key based on query parameters**
-    const cacheKey = `videos:feed:${videoType || 'all'}:page:${pageNum}:limit:${limitNum}`;
+    // **NEW: Generate personalized cache key if user is authenticated**
+    const cacheKey = userId 
+      ? `videos:feed:user:${userId}:${videoType || 'all'}:page:${pageNum}:limit:${limitNum}`
+      : `videos:feed:${videoType || 'all'}:page:${pageNum}:limit:${limitNum}`;
     
     // **NEW: Try to get from Redis cache first**
     if (redisService.getConnectionStatus()) {
@@ -579,75 +621,131 @@ router.get('/', async (req, res) => {
       console.log(`❌ Cache MISS: ${cacheKey}`);
     }
     
-    // Build query filter - Show only valid videos with proper uploader references
-    const queryFilter = {
-      uploader: { $exists: true, $ne: null }, // Ensure uploader exists and is not null
+    // Build base query filter
+    const baseQueryFilter = {
+      uploader: { $exists: true, $ne: null },
       videoUrl: { 
         $exists: true, 
         $ne: null, 
         $ne: '',
-        $not: /^uploads[\\\/]/,  // Exclude local file paths
-        $regex: /^https?:\/\//    // Only allow HTTP/HTTPS URLs
-      }
+        $not: /^uploads[\\\/]/,
+        $regex: /^https?:\/\//
+      },
+      processingStatus: { $nin: ['failed', 'error'] }
     };
     
-    // Only exclude videos that are explicitly failed or have invalid processing status
-    queryFilter.processingStatus = { $nin: ['failed', 'error'] };
-    
     // Add videoType filter if specified
-    if (videoType && videoType === 'yog') {
-      queryFilter.videoType = videoType;
+    if (videoType && (videoType.toLowerCase() === 'yog' || videoType.toLowerCase() === 'vayu')) {
+      baseQueryFilter.videoType = videoType.toLowerCase();
       console.log('📹 Filtering by videoType:', videoType);
     }
     
-    // Debug: Log the query filter
-    console.log('🔍 VideoRoutes: Query filter:', JSON.stringify(queryFilter));
+    let unwatchedVideos = [];
+    let watchedVideos = [];
+    let finalVideos = [];
     
-    // MODIFIED: Return all videos with optional videoType filter and valid uploaders
-    const [totalVideos, videos] = await Promise.all([
-      Video.countDocuments(queryFilter), // Count with filter
-      Video.find(queryFilter) // Find with filter
-        .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded') // Include HLS fields
+    // **NEW: Personalized feed for authenticated users**
+    if (userId) {
+      console.log('🎯 Getting personalized feed for user:', userId);
+      
+      // Step 1: Get user's watched video IDs (last 30 days)
+      const watchedVideoIds = await WatchHistory.getUserWatchedVideoIds(userId, 30);
+      console.log(`📊 User has watched ${watchedVideoIds.length} videos in last 30 days`);
+      
+      // Step 2: Get unwatched videos (preferred)
+      const unwatchedQuery = {
+        ...baseQueryFilter,
+        _id: { $nin: watchedVideoIds } // Exclude watched videos
+      };
+      
+      unwatchedVideos = await Video.find(unwatchedQuery)
+        .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded')
+        .populate('uploader', 'name profilePic googleId')
+        .populate('comments.user', 'name profilePic googleId')
+        .sort({ createdAt: -1 })
+        .limit(limitNum * 2) // Get more for buffer
+        .lean();
+      
+      console.log(`✅ Found ${unwatchedVideos.length} unwatched videos`);
+      
+      // Step 3: If not enough unwatched videos, add watched ones as fallback
+      if (unwatchedVideos.length < limitNum && watchedVideoIds.length > 0) {
+        console.log(`⚠️ Not enough unwatched videos (${unwatchedVideos.length}/${limitNum}), adding watched videos as fallback`);
+        
+        const watchedQuery = {
+          ...baseQueryFilter,
+          _id: { $in: watchedVideoIds }
+        };
+        
+        // Get watched videos sorted by oldest watched first (to show videos watched long ago)
+        const watchedHistory = await WatchHistory.find({
+          userId: userId,
+          videoId: { $in: watchedVideoIds }
+        })
+        .sort({ lastWatchedAt: 1 }) // Oldest first
+        .limit(limitNum - unwatchedVideos.length)
+        .select('videoId lastWatchedAt')
+        .lean();
+        
+        const oldestWatchedVideoIds = watchedHistory.map(h => h.videoId);
+        
+        watchedVideos = await Video.find({
+          ...baseQueryFilter,
+          _id: { $in: oldestWatchedVideoIds }
+        })
+        .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded')
+        .populate('uploader', 'name profilePic googleId')
+        .populate('comments.user', 'name profilePic googleId')
+        .lean();
+        
+        // Sort watched videos to match the order from watch history
+        watchedVideos.sort((a, b) => {
+          const aIndex = oldestWatchedVideoIds.indexOf(a._id);
+          const bIndex = oldestWatchedVideoIds.indexOf(b._id);
+          return aIndex - bIndex;
+        });
+        
+        console.log(`✅ Added ${watchedVideos.length} watched videos as fallback`);
+      }
+      
+      // Step 4: Combine unwatched and watched videos
+      finalVideos = [...unwatchedVideos, ...watchedVideos].slice(0, limitNum);
+      
+      // Step 5: Shuffle to avoid showing same order every time
+      finalVideos = finalVideos.sort(() => Math.random() - 0.5);
+      
+    } else {
+      // Regular feed for non-authenticated users
+      console.log('📹 Using regular feed (no authentication)');
+      
+      const skip = (pageNum - 1) * limitNum;
+      
+      const videos = await Video.find(baseQueryFilter)
+        .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded')
         .populate('uploader', 'name profilePic googleId')
         .populate('comments.user', 'name profilePic googleId')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(limit)
-        .lean()
-    ]);
+        .limit(limitNum)
+        .lean();
+      
+      finalVideos = videos;
+    }
 
-    // **NEW: Filter out videos with invalid uploader references**
-    const validVideos = videos.filter(video => {
-      // Check if uploader exists and has required fields
+    // **Filter out videos with invalid uploader references**
+    const validVideos = finalVideos.filter(video => {
       return video.uploader && 
              video.uploader._id && 
              video.uploader.name && 
              video.uploader.name.trim() !== '';
     });
 
-    console.log(`📹 Filtered out ${videos.length - validVideos.length} videos with invalid uploader references`);
+    console.log(`📹 Filtered out ${finalVideos.length - validVideos.length} videos with invalid uploader references`);
     console.log(`📹 Returning ${validVideos.length} valid videos`);
 
-    console.log('📹 Total videos found:', totalVideos);
-    console.log('📹 Videos returned:', validVideos.length);
-    
-    // Debug: Log first few video details
-    if (validVideos.length > 0) {
-      console.log('📹 First video details:', {
-        id: validVideos[0]._id,
-        name: validVideos[0].videoName,
-        status: validVideos[0].processingStatus,
-        type: validVideos[0].videoType
-      });
-    } else {
-      console.log('❌ No valid videos found in database!');
-    }
-
-    // Transform comments to match Flutter app expectations
-    // **FIX: Properly transform uploader data to use googleId for profile navigation**
+    // Transform videos to match Flutter app expectations
     const transformedVideos = validVideos.map(video => ({
       ...video,
-      // **FIX: Transform uploader to use googleId as id for correct profile navigation**
       uploader: {
         id: video.uploader?.googleId?.toString() || video.uploader?._id?.toString() || '',
         _id: video.uploader?._id?.toString() || '',
@@ -655,7 +753,7 @@ router.get('/', async (req, res) => {
         name: video.uploader?.name || 'Unknown User',
         profilePic: video.uploader?.profilePic || ''
       },
-      comments: video.comments.map(comment => ({
+      comments: (video.comments || []).map(comment => ({
         _id: comment._id,
         text: comment.text,
         userId: comment.user?.googleId || comment.user?._id || '',
@@ -663,29 +761,52 @@ router.get('/', async (req, res) => {
         createdAt: comment.createdAt,
         likes: comment.likes || 0,
         likedBy: comment.likedBy || []
-      }))
+      })),
+      // **NEW: Add isWatched flag if user is authenticated**
+      isWatched: userId && Array.isArray(watchedVideos) && watchedVideos.length > 0 
+        ? watchedVideos.some(w => w._id.toString() === video._id.toString()) 
+        : false
     }));
+    
+    // Get total count for pagination
+    let totalVideos = 0;
+    if (userId) {
+      // For personalized feed, count unwatched + watched videos
+      const watchedVideoIds = await WatchHistory.getUserWatchedVideoIds(userId, 30);
+      const unwatchedCount = await Video.countDocuments({
+        ...baseQueryFilter,
+        _id: { $nin: watchedVideoIds }
+      });
+      totalVideos = unwatchedCount + Math.min(watchedVideoIds.length, limitNum); // Approximate
+    } else {
+      // For regular feed, use actual count
+      totalVideos = await Video.countDocuments(baseQueryFilter);
+    }
     
     const response = {
       videos: transformedVideos,
-      hasMore: (pageNum * limitNum) < totalVideos,
+      hasMore: userId 
+        ? transformedVideos.length >= limitNum // For personalized feed, check if we got enough
+        : (pageNum * limitNum) < totalVideos, // For regular feed, use pagination
       total: totalVideos,
       currentPage: pageNum,
-      totalPages: Math.ceil(totalVideos / limitNum),
+      totalPages: userId ? Math.ceil(totalVideos / limitNum) : Math.ceil(totalVideos / limitNum),
       filters: {
         videoType: videoType || 'all',
-        format: 'mp4_and_hls'
+        format: 'mp4_and_hls',
+        personalized: !!userId
       },
-      message: `✅ Fetched ${validVideos.length} valid videos successfully${videoType ? ` (${videoType} type)` : ''}`
+      message: `✅ Fetched ${validVideos.length} valid videos successfully${userId ? ' (personalized feed)' : ''}${videoType ? ` (${videoType} type)` : ''}`
     };
     
-    // **NEW: Cache the response for 5 minutes (300 seconds)**
+    // **NEW: Cache the response (shorter TTL for personalized feeds)**
     if (redisService.getConnectionStatus()) {
-      await redisService.set(cacheKey, response, 300);
-      console.log(`✅ Cached response: ${cacheKey}`);
+      const ttl = userId ? 180 : 300; // 3 min for personalized, 5 min for regular
+      await redisService.set(cacheKey, response, ttl);
+      console.log(`✅ Cached response: ${cacheKey} (TTL: ${ttl}s)`);
     }
     
-    console.log(`✅ Found ${validVideos.length} valid videos (page ${page}, total: ${totalVideos})`);
+    console.log(`✅ Found ${validVideos.length} valid videos (page ${pageNum}, total: ${totalVideos})`);
     
     res.json(response);
   } catch (error) {
@@ -778,6 +899,61 @@ router.get('/:id', verifyToken, async (req, res) => {
     res.status(500).json({ 
       error: 'Failed to get video',
       details: error.message 
+    });
+  }
+});
+
+// **NEW: POST /api/videos/:id/watch - Track video watch for personalized feed**
+router.post('/:id/watch', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user?.id || req.user?.googleId;
+    const videoId = req.params.id;
+    const { duration = 0, completed = false } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    if (!videoId || !mongoose.Types.ObjectId.isValid(videoId)) {
+      return res.status(400).json({ error: 'Invalid video ID' });
+    }
+
+    console.log('📊 Tracking video watch:', { userId, videoId, duration, completed });
+
+    // Track watch history
+    const watchEntry = await WatchHistory.trackWatch(userId, videoId, {
+      duration,
+      completed
+    });
+
+    // Update video view count
+    await Video.findByIdAndUpdate(videoId, {
+      $inc: { views: 1 }
+    });
+
+    // **NEW: Invalidate user's personalized feed cache**
+    if (redisService.getConnectionStatus()) {
+      const cachePattern = `videos:feed:user:${userId}:*`;
+      await redisService.clearPattern(cachePattern);
+      console.log(`🧹 Cleared cache for user: ${userId}`);
+    }
+
+    res.json({
+      success: true,
+      message: 'Watch tracked successfully',
+      watchEntry: {
+        videoId: watchEntry.videoId,
+        watchedAt: watchEntry.watchedAt,
+        lastWatchedAt: watchEntry.lastWatchedAt,
+        watchCount: watchEntry.watchCount,
+        completed: watchEntry.completed
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error tracking watch:', error);
+    res.status(500).json({
+      error: 'Failed to track watch',
+      message: error.message
     });
   }
 });
