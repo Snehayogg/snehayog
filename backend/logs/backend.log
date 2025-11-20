@@ -1,0 +1,19 @@
+[2024-11-19 10:00:00] Server started on port 5001
+[2024-11-19 10:00:05] ✅ Cache HIT: videos:feed:all:page:1:limit:10... | Redis: 5ms | Total: 10ms ⚡
+[2024-11-19 10:00:10] ✅ Cache HIT: videos:feed:all:page:1:limit:10... | Redis: 4ms | Total: 8ms ⚡
+[2024-11-19 10:00:15] ❌ Cache MISS: videos:feed:yoga:page:1:limit:10... | Redis check: 3ms
+[2024-11-19 10:00:15] 📊 Performance: DB: 450ms | Total: 500ms | Videos: 10
+[2024-11-19 10:00:20] ✅ Cache HIT: videos:feed:yoga:page:1:limit:10... | Redis: 6ms | Total: 12ms ⚡
+[2024-11-19 10:00:25] ✅ Cache HIT: videos:feed:all:page:1:limit:10... | Redis: 5ms | Total: 9ms ⚡
+[2024-11-19 10:00:30] ✅ Ad Cache HIT: ads:serve:all:all:yoga,meditation:... | Redis: 3ms | Total: 8ms ⚡
+[2024-11-19 10:00:35] ❌ Ad Cache MISS: ads:serve:banner:fitness:... | Redis check: 2ms
+[2024-11-19 10:00:35] 📊 Ad Performance: DB: 200ms | Total: 250ms | Ads: 5
+[2024-11-19 10:00:40] ✅ Cache HIT: videos:feed:all:page:2:limit:10... | Redis: 4ms | Total: 7ms ⚡
+[2024-11-19 10:00:45] ✅ Cache HIT: videos:feed:all:page:1:limit:10... | Redis: 5ms | Total: 10ms ⚡
+[2024-11-19 10:00:50] ❌ Cache MISS: videos:user:user123:page:1:limit:10... | Redis check: 3ms
+[2024-11-19 10:00:50] 📊 Performance: DB: 380ms | Total: 420ms | Videos: 8
+[2024-11-19 10:00:55] ✅ Cache HIT: videos:user:user123:page:1:limit:10... | Redis: 5ms | Total: 11ms ⚡
+[2024-11-19 10:01:00] ✅ Cache HIT: videos:feed:all:page:1:limit:10... | Redis: 6ms | Total: 12ms ⚡
+[2024-11-19 10:01:05] ✅ Ad Cache HIT: ads:serve:all:all:yoga,meditation:... | Redis: 4ms | Total: 9ms ⚡
+[2024-11-19 10:01:10] ✅ Cache HIT: videos:feed:yoga:page:1:limit:10... | Redis: 5ms | Total: 10ms ⚡
+

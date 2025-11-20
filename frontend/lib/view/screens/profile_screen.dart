@@ -1092,7 +1092,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                   userModel = userProvider.getUserData(widget.userId!);
                 }
                 // Use the local _stateManager directly since it's not in Provider
-                return _buildBody(userProvider, userModel);
+                // Pass authController to check authentication status
+                return _buildBody(userProvider, userModel, authController);
               },
             ),
           );
@@ -1101,7 +1102,14 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  Widget _buildBody(UserProvider userProvider, UserModel? userModel) {
+  Widget _buildBody(UserProvider userProvider, UserModel? userModel,
+      GoogleSignInController authController) {
+    // **FIXED: Check authentication status first - if viewing own profile and not signed in, show sign-in view**
+    // If viewing someone else's profile (widget.userId != null), show their profile even if not signed in
+    if (widget.userId == null && !authController.isSignedIn) {
+      return _buildSignInView();
+    }
+
     // **OPTIMIZED: Use ValueListenableBuilder for granular updates**
     return ValueListenableBuilder<bool>(
       valueListenable: _isLoading,
@@ -1116,70 +1124,125 @@ class _ProfileScreenState extends State<ProfileScreen>
         return ValueListenableBuilder<String?>(
           valueListenable: _error,
           builder: (context, error, child) {
-            // Show error state
-            if (error != null) {
-              if (error == 'No authentication data found') {
-                return _buildSignInView();
-              }
-
-              // Otherwise show error with retry
-              return RepaintBoundary(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          size: 64,
-                          color: Colors.red[300],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Failed to load profile data',
-                          style: TextStyle(
-                            color: Colors.red[700],
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'You appear to be signed in, but we couldn\'t load your profile.',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 14,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 24),
-
-                        // **SIMPLIFIED: Simple retry button**
-                        TextButton.icon(
-                          onPressed: _loadData,
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Retry'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.blue,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            }
-
-            // Check if we have user data
-            if (_stateManager.userData == null) {
+            // **FIXED: Check authentication status - if not signed in and viewing own profile, show sign-in view**
+            if (widget.userId == null && !authController.isSignedIn) {
               return _buildSignInView();
             }
 
-            // Determine if viewing own profile
-            final authController =
-                Provider.of<GoogleSignInController>(context, listen: false);
+            // Show error state
+            if (error != null) {
+              if (error == 'No authentication data found' ||
+                  error.contains('authentication') ||
+                  error.contains('Unauthorized')) {
+                // If viewing own profile and authentication error, show sign-in view
+                if (widget.userId == null) {
+                  return _buildSignInView();
+                }
+              }
+
+              // Otherwise show error with retry (only if signed in)
+              if (authController.isSignedIn) {
+                return RepaintBoundary(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.error_outline,
+                            size: 64,
+                            color: Colors.red[300],
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Failed to load profile data',
+                            style: TextStyle(
+                              color: Colors.red[700],
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'You appear to be signed in, but we couldn\'t load your profile.',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 14,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 24),
+
+                          // **SIMPLIFIED: Simple retry button**
+                          TextButton.icon(
+                            onPressed: _loadData,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Retry'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.blue,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              } else {
+                // Not signed in and error occurred - show sign-in view
+                return _buildSignInView();
+              }
+            }
+
+            // Check if we have user data - if viewing own profile and no data, show sign-in view
+            if (_stateManager.userData == null) {
+              if (widget.userId == null && !authController.isSignedIn) {
+                return _buildSignInView();
+              }
+              // If viewing someone else's profile, we might not have data yet - show loading or error
+              if (widget.userId != null) {
+                return RepaintBoundary(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.error_outline,
+                            size: 64,
+                            color: Colors.red[300],
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Failed to load profile data',
+                            style: TextStyle(
+                              color: Colors.red[700],
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 24),
+                          TextButton.icon(
+                            onPressed: _loadData,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Retry'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.blue,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }
+              return _buildSignInView();
+            }
+
+            // Determine if viewing own profile (authController already passed as parameter)
             final loggedInUserId = authController.userData?['id']?.toString() ??
                 authController.userData?['googleId']?.toString();
             final displayedUserId = widget.userId ??

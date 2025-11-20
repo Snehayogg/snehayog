@@ -71,7 +71,61 @@ Response:
 }
 ```
 
-### Method 3: Log Analysis (Production)
+### Method 3: Quick Check Script (Recommended) ⚡
+
+**Easy way to check cache hit rate:**
+
+```bash
+# Auto-detect log file from common locations
+node check-cache-hit-rate.js
+
+# Or specify log file path
+node check-cache-hit-rate.js logs/backend.log
+
+# Or pipe log content
+cat logs/backend.log | node check-cache-hit-rate.js
+```
+
+**💡 Tip: If logs are in console, redirect to file first:**
+```bash
+# Start server with log redirection
+npm start > logs/backend.log 2>&1
+
+# Or in PowerShell (Windows)
+npm start *> logs/backend.log
+
+# Then run the script
+node check-cache-hit-rate.js logs/backend.log
+```
+
+**Output Example:**
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 Cache Performance Statistics
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📈 Overall Cache Performance:
+   Hit Rate: 85.5% ✅ Excellent
+   Hits: 171
+   Misses: 29
+   Total Requests: 200
+
+🎥 Video Cache Performance:
+   Hit Rate: 87.2% ✅ Excellent
+   Hits: 150
+   Misses: 22
+   Total Requests: 172
+
+📢 Ad Cache Performance:
+   Hit Rate: 82.1% ✅ Excellent
+   Hits: 23
+   Misses: 5
+   Total Requests: 28
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### Method 4: Manual Log Analysis (Alternative)
 
 **Count Cache HITs:**
 ```bash
@@ -83,7 +137,7 @@ grep "Cache HIT" logs/backend.log | wc -l
 grep "Cache MISS" logs/backend.log | wc -l
 ```
 
-**Calculate Cache Hit Rate:**
+**Calculate Cache Hit Rate (Linux/Mac):**
 ```bash
 # Total requests
 total=$(grep -E "Cache HIT|Cache MISS" logs/backend.log | wc -l)
@@ -94,6 +148,15 @@ hits=$(grep "Cache HIT" logs/backend.log | wc -l)
 # Hit rate percentage
 hit_rate=$((hits * 100 / total))
 echo "Cache Hit Rate: ${hit_rate}%"
+```
+
+**Calculate Cache Hit Rate (Windows PowerShell):**
+```powershell
+$hits = (Get-Content logs/backend.log | Select-String "Cache HIT").Count
+$misses = (Get-Content logs/backend.log | Select-String "Cache MISS").Count
+$total = $hits + $misses
+$hitRate = [math]::Round(($hits / $total) * 100, 2)
+Write-Host "Cache Hit Rate: $hitRate%"
 ```
 
 **View Performance Metrics:**

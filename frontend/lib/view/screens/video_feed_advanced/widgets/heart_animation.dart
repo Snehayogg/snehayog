@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -65,6 +63,7 @@ class _HeartBadge extends StatelessWidget {
     return Stack(
       alignment: Alignment.center,
       children: [
+        // Outer glow effect
         Container(
           width: iconSize * 2.5,
           height: iconSize * 2.5,
@@ -78,61 +77,64 @@ class _HeartBadge extends StatelessWidget {
             ),
             boxShadow: [
               BoxShadow(
-                color: accent.withOpacity(0.35),
+                color: accent.withValues(alpha: 0.35),
                 blurRadius: 35,
                 spreadRadius: 6,
               ),
             ],
           ),
         ),
-        ClipOval(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-            child: Container(
-              padding: EdgeInsets.all(iconSize * 0.45),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Colors.white.withOpacity(0.08),
-                    Colors.white.withOpacity(0.02),
-                  ],
-                ),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.2),
-                  width: 1.2,
-                ),
+        // Main heart badge with glass effect
+        Container(
+          padding: EdgeInsets.all(iconSize * 0.45),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withValues(alpha: 0.15),
+                Colors.white.withValues(alpha: 0.05),
+              ],
+            ),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.25),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.2),
+                blurRadius: 20,
+                spreadRadius: 2,
               ),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      const Color(0xFFFF6FB1),
-                      accent,
-                    ],
-                  ),
-                ),
-                child: Padding(
-                  padding: EdgeInsets.all(iconSize * 0.2),
-                  child: ShaderMask(
-                    shaderCallback: (rect) => const LinearGradient(
-                      colors: [
-                        Colors.white,
-                        Color(0xFFFFDADA),
-                      ],
-                    ).createShader(rect),
-                    blendMode: BlendMode.srcIn,
-                    child: Icon(
-                      Icons.favorite_rounded,
-                      size: iconSize,
-                      color: Colors.white,
-                    ),
-                  ),
+            ],
+          ),
+          child: DecoratedBox(
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFFFF6FB1),
+                  accent,
+                ],
+              ),
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(iconSize * 0.2),
+              child: ShaderMask(
+                shaderCallback: (rect) => const LinearGradient(
+                  colors: [
+                    Colors.white,
+                    Color(0xFFFFDADA),
+                  ],
+                ).createShader(rect),
+                blendMode: BlendMode.srcIn,
+                child: Icon(
+                  Icons.favorite_rounded,
+                  size: iconSize,
+                  color: Colors.white,
                 ),
               ),
             ),

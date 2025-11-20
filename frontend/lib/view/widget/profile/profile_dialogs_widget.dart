@@ -8,6 +8,7 @@ import 'package:vayu/view/screens/creator_revenue_screen.dart';
 import 'package:vayu/view/screens/creator_payout_dashboard.dart';
 import 'package:vayu/view/widget/feedback/feedback_dialog_widget.dart';
 import 'package:vayu/view/widget/report/report_dialog_widget.dart';
+import 'package:vayu/view/widget/profile/top_earners_bottom_sheet.dart';
 
 class ProfileDialogsWidget {
   static void showSettingsBottomSheet(
@@ -851,6 +852,15 @@ class ProfileDialogsWidget {
           ),
         ],
       ),
+    );
+  }
+
+  static void showTopEarnersBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const TopEarnersBottomSheet(),
     );
   }
 }

@@ -4,14 +4,14 @@ import 'package:http/http.dart' as http;
 class AppConfig {
   // **MANUAL: Development mode control**
   static const bool _isDevelopment =
-      false; // Default to production, flip to true only for local testing
+      true; // Set to true for local testing, false for production
 
   // **NEW: Smart URL selection with fallback**
   static String? _cachedBaseUrl;
 
   // Local development server (Wi‑Fi/LAN)
-  // Use laptop IP address when testing on phone: 192.168.0.198
-  static const String _localIpBaseUrl = 'http://192.168.0.198:5001';
+  // Use laptop IP address when testing on phone: 10.87.129.18
+  static const String _localIpBaseUrl = 'http://10.87.129.18:5001';
 
   // Primary production endpoints
   static const String _customDomainUrl = 'https://snehayog.site';
@@ -43,15 +43,39 @@ class AppConfig {
 
   // **NEW: Try snehayog.site first, then local IP, then Railway**
   static Future<String> getBaseUrlWithFallback() async {
-    if (_cachedBaseUrl != null) {
-      print('🔍 AppConfig: Using cached URL: $_cachedBaseUrl');
-      return _cachedBaseUrl!;
+    // **FIXED: In development mode, always check local server first (ignore cache)**
+    if (_isDevelopment) {
+      print(
+          '🔍 AppConfig: Development mode - Ignoring cache, checking local server first...');
+      _cachedBaseUrl = null; // Clear cache in development mode
+
+      // Try local server first
+      try {
+        print('🔍 AppConfig: Testing local IP server: $_localIpBaseUrl...');
+        final response = await http.get(
+          Uri.parse('$_localIpBaseUrl/api/health'),
+          headers: {'Content-Type': 'application/json'},
+        ).timeout(const Duration(seconds: 3));
+
+        if (response.statusCode == 200) {
+          print('✅ AppConfig: Local IP server accessible at $_localIpBaseUrl');
+          _cachedBaseUrl = _localIpBaseUrl;
+          return _localIpBaseUrl;
+        }
+      } catch (e) {
+        print('❌ AppConfig: Local IP server not accessible: $e');
+        print('⚠️ AppConfig: Will try production server as fallback...');
+      }
     }
 
-    print(
-        '🔍 AppConfig: getBaseUrlWithFallback() - Trying custom domain (snehayog.site) first...');
+    // If local server worked in dev mode, we already returned above
+    // Otherwise, continue to check other options
+    if (!_isDevelopment) {
+      print(
+          '🔍 AppConfig: Production mode - Trying custom domain (snehayog.site) first...');
+    }
 
-    // 1) Custom domain (snehayog.site) - first priority
+    // 2) Custom domain (snehayog.site) - second priority in dev, first in production
     try {
       print('🔍 AppConfig: Testing custom domain: $_customDomainUrl...');
       final response = await http.get(
@@ -68,11 +92,10 @@ class AppConfig {
       print('❌ AppConfig: Custom domain not accessible: $e');
     }
 
-    print(
-        '⚠️ AppConfig: Custom domain unreachable, trying local IP (192.168.0.198) as fallback...');
-
-    // 2) Local IP server (192.168.0.198:5001) - second priority (only in development)
-    if (_isDevelopment) {
+    // 3) Local IP server (192.168.0.198:5001) - fallback if not in development mode above
+    if (!_isDevelopment) {
+      print(
+          '⚠️ AppConfig: Custom domain unreachable, trying local IP (192.168.0.198) as fallback...');
       try {
         print('🔍 AppConfig: Testing local IP server: $_localIpBaseUrl...');
         final response = await http.get(
@@ -91,7 +114,7 @@ class AppConfig {
     }
 
     print(
-        '⚠️ AppConfig: Local IP unreachable, trying Railway URL as fallback...');
+        '⚠️ AppConfig: Previous options unreachable, trying Railway URL as fallback...');
 
     // 3) Railway URL - third priority
     try {
@@ -152,7 +175,8 @@ class AppConfig {
         ).timeout(const Duration(seconds: 4));
 
         if (response.statusCode == 200) {
-          print('✅ AppConfig: Local IP server is accessible at $_localIpBaseUrl');
+          print(
+              '✅ AppConfig: Local IP server is accessible at $_localIpBaseUrl');
           _cachedBaseUrl = _localIpBaseUrl;
           return _localIpBaseUrl;
         }

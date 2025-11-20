@@ -150,7 +150,193 @@ router.get('/profile', verifyToken, async (req, res) => {
   }
 });
 
+// ✅ TEST: Simple test endpoint (no auth) to verify route is accessible
+// **IMPORTANT: Must come BEFORE /:id route to avoid route conflicts**
+router.get('/top-earners-test', (req, res) => {
+  console.log('🧪 TEST: Top Earners test endpoint hit!');
+  console.log('🧪 Request URL:', req.originalUrl);
+  console.log('🧪 Request method:', req.method);
+  res.json({ message: 'Top Earners route is working!', timestamp: new Date().toISOString() });
+});
+
+// ✅ Route to get top earners from user's following list
+// **IMPORTANT: Must come BEFORE /:id route to avoid route conflicts**
+router.get('/top-earners-from-following', verifyToken, async (req, res) => {
+  try {
+    console.log('========================================');
+    console.log('💰💰💰 TOP EARNERS API CALLED 💰💰💰');
+    console.log('💰 Top Earners from Following API: Request received');
+    console.log('💰 Request method:', req.method);
+    console.log('💰 Request URL:', req.originalUrl);
+    console.log('💰 Request headers:', JSON.stringify(req.headers, null, 2));
+    console.log('💰 Top Earners API: Request user:', JSON.stringify(req.user, null, 2));
+    console.log('💰 Top Earners API: req.user.id:', req.user.id);
+    console.log('💰 Top Earners API: req.user.googleId:', req.user.googleId);
+    
+    // Try both id and googleId from req.user
+    const currentUserId = req.user.id || req.user.googleId;
+    console.log('💰 Top Earners API: Current user ID:', currentUserId);
+    console.log('💰 Top Earners API: Current user ID type:', typeof currentUserId);
+
+    if (!currentUserId) {
+      console.log('❌ Top Earners API: No user ID found in token');
+      return res.status(401).json({ error: 'Invalid token - no user ID' });
+    }
+
+    // Find current user - try multiple methods
+    let currentUser = await User.findOne({ googleId: currentUserId });
+    
+    if (!currentUser && req.user.email) {
+      // Fallback: Try finding by email
+      console.log('🔍 Top Earners API: Trying to find user by email:', req.user.email);
+      currentUser = await User.findOne({ email: req.user.email });
+    }
+    
+    if (!currentUser) {
+      // Try finding by MongoDB _id if currentUserId is ObjectId
+      try {
+        const mongoose = (await import('mongoose')).default;
+        if (mongoose.Types.ObjectId.isValid(currentUserId)) {
+          currentUser = await User.findById(currentUserId);
+        }
+      } catch (e) {
+        console.log('⚠️ Top Earners API: Error trying ObjectId lookup:', e);
+      }
+    }
+    
+    if (!currentUser) {
+      console.log('❌ Top Earners API: User not found');
+      console.log('🔍 Top Earners API: Searched with googleId:', currentUserId);
+      console.log('🔍 Top Earners API: Searched with email:', req.user.email);
+      // Debug: Show sample users
+      const sampleUsers = await User.find({}).select('googleId name email').limit(3);
+      console.log('🔍 Top Earners API: Sample users in DB:', sampleUsers.map(u => ({ 
+        googleId: u.googleId, 
+        name: u.name,
+        email: u.email
+      })));
+      return res.status(404).json({ 
+        error: 'User not found',
+        debug: {
+          searchedFor: currentUserId,
+          searchedForType: typeof currentUserId,
+          searchedEmail: req.user.email
+        }
+      });
+    }
+    console.log('✅ Top Earners API: User found:', currentUser.name);
+
+    // Get user's following list (array of ObjectIds)
+    const followingIds = currentUser.following || [];
+    console.log('💰 Top Earners API: Following IDs:', followingIds);
+    console.log('💰 Top Earners API: Following count:', followingIds.length);
+
+    if (followingIds.length === 0) {
+      console.log('ℹ️ Top Earners API: User is not following anyone');
+      return res.json({ topEarners: [], message: 'Not following anyone' });
+    }
+
+    console.log(`💰 Top Earners API: Calculating earnings for ${followingIds.length} users in following list`);
+
+    // Import AdImpression model
+    const AdImpression = (await import('../models/AdImpression.js')).default;
+    const Video = (await import('../models/Video.js')).default;
+
+    // Get all users that current user is following
+    const followingUsers = await User.find({
+      _id: { $in: followingIds }
+    }).select('googleId name email profilePic');
+
+    if (followingUsers.length === 0) {
+      return res.json({ topEarners: [] });
+    }
+
+    // Calculate earnings for each user in following list
+    const earningsPromises = followingUsers.map(async (user) => {
+      try {
+        // Get user's videos
+        const userVideos = await Video.find({ uploader: user._id }).select('_id');
+        const videoIds = userVideos.map(v => v._id);
+
+        if (videoIds.length === 0) {
+          return {
+            userId: user.googleId,
+            name: user.name,
+            email: user.email,
+            profilePic: user.profilePic || null,
+            totalEarnings: 0,
+            videoCount: 0
+          };
+        }
+
+        // Count ad impressions
+        const bannerImpressions = await AdImpression.countDocuments({
+          videoId: { $in: videoIds },
+          adType: 'banner',
+          impressionType: 'view'
+        });
+
+        const carouselImpressions = await AdImpression.countDocuments({
+          videoId: { $in: videoIds },
+          adType: 'carousel',
+          impressionType: 'view'
+        });
+
+        // Calculate revenue (same logic as revenue API)
+        const bannerCpm = 10; // ₹10 per 1000 impressions
+        const carouselCpm = 30; // ₹30 per 1000 impressions
+        
+        const bannerRevenueINR = (bannerImpressions / 1000) * bannerCpm;
+        const carouselRevenueINR = (carouselImpressions / 1000) * carouselCpm;
+        const totalRevenueINR = bannerRevenueINR + carouselRevenueINR;
+        const creatorRevenueINR = totalRevenueINR * 0.80; // 80% to creator
+
+        return {
+          userId: user.googleId,
+          name: user.name,
+          email: user.email,
+          profilePic: user.profilePic || null,
+          totalEarnings: creatorRevenueINR,
+          videoCount: videoIds.length,
+          bannerImpressions,
+          carouselImpressions
+        };
+      } catch (err) {
+        console.error(`❌ Error calculating earnings for user ${user.googleId}:`, err);
+        return null;
+      }
+    });
+
+    // Wait for all calculations
+    const earningsResults = await Promise.all(earningsPromises);
+    
+    // Filter out null results and sort by earnings (descending)
+    const topEarners = earningsResults
+      .filter(result => result !== null && result.totalEarnings > 0)
+      .sort((a, b) => b.totalEarnings - a.totalEarnings)
+      .map((earner, index) => ({
+        ...earner,
+        rank: index + 1
+      }));
+
+    console.log(`✅ Top Earners API: Found ${topEarners.length} top earners`);
+
+    res.json({
+      topEarners,
+      totalCount: topEarners.length
+    });
+  } catch (err) {
+    console.error('❌ Top earners error:', err);
+    console.error('❌ Top earners error stack:', err.stack);
+    res.status(500).json({ 
+      error: 'Failed to get top earners',
+      details: err.message 
+    });
+  }
+});
+
 // ✅ Route to get user profile by ID
+// **IMPORTANT: This must come AFTER all specific routes**
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -568,5 +754,7 @@ router.get('/location-permission', verifyToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to check location permission' });
   }
 });
+
+// Duplicate routes removed - moved before /:id route (see line 164)
 
 export default router;

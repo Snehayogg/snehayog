@@ -4,6 +4,7 @@ import 'package:vayu/core/managers/profile_state_manager.dart';
 import 'package:vayu/core/services/auto_scroll_settings.dart';
 import 'package:vayu/view/screens/creator_payout_dashboard.dart';
 import 'package:vayu/view/screens/creator_payment_setup_screen.dart';
+import 'package:vayu/view/widget/profile/profile_dialogs_widget.dart';
 
 class ProfileMenuWidget extends StatelessWidget {
   final ProfileStateManager stateManager;
@@ -127,6 +128,17 @@ class ProfileMenuWidget extends StatelessWidget {
                         },
                       });
                     }
+
+                    // Top Earners
+                    menuItems.add({
+                      'title': 'Top Earners',
+                      'icon': Icons.emoji_events,
+                      'color': const Color(0xFFFFD700),
+                      'onTap': () {
+                        Navigator.pop(context);
+                        ProfileDialogsWidget.showTopEarnersBottomSheet(context);
+                      },
+                    });
 
                     // Creator Dashboard
                     menuItems.add({

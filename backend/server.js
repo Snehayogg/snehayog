@@ -175,6 +175,18 @@ app.use('/hls', (err, req, res, next) => {
   }
 });
 
+// Health check endpoint (before routes)
+app.get('/api/health', (req, res) => {
+  console.log('🏥 Health check endpoint hit from:', req.ip);
+  res.json({ 
+    status: 'healthy',
+    service: 'vayug-backend',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
 // API Routes
 app.use('/api/users', userRoutes);
 app.use('/api/auth', authRoutes);
