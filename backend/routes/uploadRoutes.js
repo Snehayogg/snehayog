@@ -231,7 +231,7 @@ function normalizeVideoUrl(url) {
   // **FIX: Ensure proper URL format**
   if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
     // If it's a relative path, make it absolute
-    const baseUrl = process.env.SERVER_URL || 'http://192.168.0.199:5001';
+    const baseUrl = process.env.SERVER_URL || 'http://10.118.107.18:5001';
     normalizedUrl = `${baseUrl}/${normalizedUrl}`;
   }
   

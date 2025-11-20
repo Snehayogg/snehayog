@@ -3,11 +3,10 @@
     "relation": ["delegate_permission/common.handle_all_urls"],
     "target": {
       "namespace": "android_app",
-      "package_name": "com.your.app.package",
-      "sha256_cert_fingerprints": [
-        "PLACEHOLDER:FINGERPRINT:ADD:VALUES",
-        "ADD:MORE:FINGERPRINTS:IF:NEEDED"
-      ]
+      "package_name": "com.snehayog.app",
+      "sha256_cert_fingerprints":
+        ["D9:66:4C:FD:44:A1:7A:5A:B4:72:AF:8D:E0:AF:FE:7B:D1:8E:D9:52:F5:7F:06:D8:DF:6E:49:DE:DC:B0:11:E1",
+        "11:75:DF:E9:73:27:F4:DD:4F:AD:14:2C:F4:3F:D6:9D:7E:B1:86:85:A8:C3:48:BE:80:B7:06:A5:E7:E5:13:DC"]
     }
   }
 ]

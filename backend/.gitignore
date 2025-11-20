@@ -4,6 +4,7 @@
 .env.development
 .env.test
 .env.production
+public/.well-known/assetlinks.json
 
 # Keep the example file for reference
 !env.example

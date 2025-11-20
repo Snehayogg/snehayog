@@ -97,7 +97,7 @@ app.use('/.well-known', express.static(path.join(__dirname, 'public/.well-known'
 // **ENHANCED: CORS Configuration for Flutter app and Railway**
 app.use(cors({
   origin: [
-    'http://192.168.0.198:5001', // Local development
+    'http://10.118.107.18:5001', // Local development
     'https://snehayog.site', // Production web app
     'https://vayu.app',      // Public site that embeds/uses API
     'http://192.168.0.188:5001', // Local development (legacy)

@@ -324,21 +324,33 @@
 
         <div class="stats-grid">
             <div class="stat-card primary">
+                <div class="stat-icon">📹</div>
+                <div class="stat-number" id="totalVideos">-</div>
+                <div class="stat-label">Total Videos</div>
+            </div>
+            
+            <div class="stat-card success">
+                <div class="stat-icon">💰</div>
+                <div class="stat-number" id="totalCreatorEarnings">-</div>
+                <div class="stat-label">Total Creator Earnings</div>
+            </div>
+            
+            <div class="stat-card warning">
                 <div class="stat-icon">🤖</div>
                 <div class="stat-number" id="totalPayouts">-</div>
                 <div class="stat-label">Total Payouts</div>
+            </div>
+            
+            <div class="stat-card danger">
+                <div class="stat-icon">⏳</div>
+                <div class="stat-number" id="pendingPayouts">-</div>
+                <div class="stat-label">Pending</div>
             </div>
             
             <div class="stat-card success">
                 <div class="stat-icon">✅</div>
                 <div class="stat-number" id="successfulPayouts">-</div>
                 <div class="stat-label">Successful</div>
-            </div>
-            
-            <div class="stat-card warning">
-                <div class="stat-icon">⏳</div>
-                <div class="stat-number" id="pendingPayouts">-</div>
-                <div class="stat-label">Pending</div>
             </div>
             
             <div class="stat-card danger">
@@ -1179,17 +1191,26 @@
 
         async function loadPayoutStats() {
             try {
-                const response = await authorizedFetch(`${API_BASE}/creator-payouts/stats`);
-                if (response.ok) {
-                    const stats = await response.json();
-                    
+                const [payoutResponse, platformStatsResponse] = await Promise.all([
+                    authorizedFetch(`${API_BASE}/creator-payouts/stats`),
+                    authorizedFetch(`${API_BASE}/admin/stats`)
+                ]);
+                
+                if (payoutResponse && payoutResponse.ok) {
+                    const stats = await payoutResponse.json();
                     document.getElementById('totalPayouts').textContent = stats.total || 0;
                     document.getElementById('successfulPayouts').textContent = stats.successful || 0;
                     document.getElementById('pendingPayouts').textContent = stats.pending || 0;
                     document.getElementById('failedPayouts').textContent = stats.failed || 0;
                 }
+                
+                if (platformStatsResponse && platformStatsResponse.ok) {
+                    const platformStats = await platformStatsResponse.json();
+                    document.getElementById('totalVideos').textContent = formatNumber(platformStats.totalVideos || 0);
+                    document.getElementById('totalCreatorEarnings').textContent = formatCurrencyINR(platformStats.totalCreatorEarningsINR || 0);
+                }
             } catch (error) {
-                console.error('Error loading payout stats:', error);
+                console.error('Error loading stats:', error);
             }
         }
 

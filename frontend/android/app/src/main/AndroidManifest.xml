@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
@@ -64,6 +65,13 @@
                 <data android:scheme="https" android:host="www.snehayog.site" android:pathPattern="/video/.*" />
             </intent-filter>
         </activity>
+
+        <!-- Override AppLovin fullscreen activity to keep it resizable
+             and allow system-controlled orientation on large screens -->
+        <activity
+            android:name="com.applovin.adview.AppLovinFullscreenActivity"
+            tools:replace="android:screenOrientation"
+            android:screenOrientation="unspecified" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

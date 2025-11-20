@@ -478,4 +478,57 @@ router.get('/creators', requireAdminDashboardKey, async (req, res) => {
   }
 });
 
+// ✅ Route to get platform-wide statistics
+router.get('/stats', requireAdminDashboardKey, async (req, res) => {
+  try {
+    // Get total videos count
+    const totalVideos = await Video.countDocuments({});
+    
+    // Calculate total earnings across all creators
+    // Get all creators and their earnings
+    const creators = await User.find({}).select('_id').lean();
+    const creatorIds = creators.map(c => c._id);
+    
+    // Get all videos for all creators
+    const allVideos = await Video.find({ uploader: { $in: creatorIds } }).select('_id').lean();
+    const allVideoIds = allVideos.map(v => v._id);
+    
+    // Calculate total ad impressions and earnings
+    const bannerImpressions = await AdImpression.countDocuments({
+      videoId: { $in: allVideoIds },
+      adType: 'banner',
+      impressionType: 'view'
+    });
+    
+    const carouselImpressions = await AdImpression.countDocuments({
+      videoId: { $in: allVideoIds },
+      adType: 'carousel',
+      impressionType: 'view'
+    });
+    
+    // Calculate revenue (same logic as revenue API)
+    const bannerCpm = AD_CONFIG?.BANNER_CPM ?? 10; // ₹10 per 1000 impressions
+    const carouselCpm = AD_CONFIG?.DEFAULT_CPM ?? 30; // ₹30 per 1000 impressions
+    const creatorShare = AD_CONFIG?.CREATOR_REVENUE_SHARE ?? 0.8; // 80% to creator
+    
+    const bannerRevenueINR = (bannerImpressions / 1000) * bannerCpm;
+    const carouselRevenueINR = (carouselImpressions / 1000) * carouselCpm;
+    const totalGrossRevenueINR = bannerRevenueINR + carouselRevenueINR;
+    const totalCreatorEarningsINR = totalGrossRevenueINR * creatorShare;
+    
+    res.json({
+      success: true,
+      totalVideos,
+      totalCreatorEarningsINR: Math.round(totalCreatorEarningsINR * 100) / 100,
+      totalGrossRevenueINR: Math.round(totalGrossRevenueINR * 100) / 100,
+      bannerImpressions,
+      carouselImpressions,
+      totalAdImpressions: bannerImpressions + carouselImpressions
+    });
+  } catch (error) {
+    console.error('❌ Error loading platform stats:', error);
+    res.status(500).json({ success: false, error: 'Failed to load platform stats' });
+  }
+});
+
 export default router;

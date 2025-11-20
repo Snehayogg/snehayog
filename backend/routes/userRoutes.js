@@ -2,7 +2,51 @@ import express from 'express';
 import User from '../models/User.js';
 import { verifyToken } from '../utils/verifytoken.js';
 import jwt from 'jsonwebtoken'; // Added for token info endpoint
+import redisService from '../services/redisService.js';
 const router = express.Router();
+
+const PROFILE_CACHE_TTL = 60; // seconds
+const TOP_EARNERS_CACHE_TTL = 120; // seconds
+
+const getProfileCacheKey = (userId) =>
+  userId ? `profile:${userId}` : null;
+
+const getTopEarnersCacheKey = (userId) =>
+  userId ? `top_earners_following:${userId}` : null;
+
+const cacheResponse = async (key, data, ttl) => {
+  if (!key || !data) return;
+  try {
+    await redisService.set(key, data, ttl);
+  } catch (err) {
+    console.error('❌ Redis cache set error:', err.message);
+  }
+};
+
+const getCachedResponse = async (key) => {
+  if (!key) return null;
+  try {
+    return await redisService.get(key);
+  } catch (err) {
+    console.error('❌ Redis cache get error:', err.message);
+    return null;
+  }
+};
+
+const invalidateProfileCache = async (userIds) => {
+  const ids = Array.isArray(userIds) ? userIds : [userIds];
+  for (const id of ids) {
+    if (!id) continue;
+    const profileKey = getProfileCacheKey(id);
+    const topKey = getTopEarnersCacheKey(id);
+    try {
+      if (profileKey) await redisService.del(profileKey);
+      if (topKey) await redisService.del(topKey);
+    } catch (err) {
+      console.error('❌ Redis cache invalidate error:', err.message);
+    }
+  }
+};
 
 // ✅ Route to register/create user (for Google OAuth)
 router.post('/register', async (req, res) => {
@@ -107,6 +151,15 @@ router.get('/profile', verifyToken, async (req, res) => {
     // **DEBUG: Log the exact query being made**
     console.log('🔍 Profile API: Making query: User.findOne({ googleId: "' + currentUserId + '" })');
     
+    const profileCacheKey = getProfileCacheKey(currentUserId);
+    if (profileCacheKey) {
+      const cachedProfile = await getCachedResponse(profileCacheKey);
+      if (cachedProfile) {
+        console.log('⚡ Profile API: Cache hit for', currentUserId);
+        return res.json(cachedProfile);
+      }
+    }
+
     // Find current user
     const currentUser = await User.findOne({ googleId: currentUserId });
     console.log('🔍 Profile API: Query result:', currentUser);
@@ -130,7 +183,7 @@ router.get('/profile', verifyToken, async (req, res) => {
     
     console.log('✅ Profile API: User found successfully');
     
-    res.json({
+    const payload = {
       _id: currentUser._id, // MongoDB ObjectID
       id: currentUser.googleId,
       googleId: currentUser.googleId,
@@ -143,7 +196,13 @@ router.get('/profile', verifyToken, async (req, res) => {
       preferredCurrency: currentUser.preferredCurrency,
       preferredPaymentMethod: currentUser.preferredPaymentMethod,
       country: currentUser.country,
-    });
+    };
+
+    res.json(payload);
+
+    if (profileCacheKey) {
+      await cacheResponse(profileCacheKey, payload, PROFILE_CACHE_TTL);
+    }
   } catch (err) {
     console.error('Get profile error:', err);
     res.status(500).json({ error: 'Failed to get profile', details: err.message });
@@ -225,6 +284,16 @@ router.get('/top-earners-from-following', verifyToken, async (req, res) => {
       });
     }
     console.log('✅ Top Earners API: User found:', currentUser.name);
+
+    // Attempt cache
+    const topEarnersCacheKey = getTopEarnersCacheKey(currentUser.googleId);
+    if (topEarnersCacheKey) {
+      const cachedTopEarners = await getCachedResponse(topEarnersCacheKey);
+      if (cachedTopEarners) {
+        console.log('⚡ Top Earners API: Cache hit for', currentUser.googleId);
+        return res.json(cachedTopEarners);
+      }
+    }
 
     // Get user's following list (array of ObjectIds)
     const followingIds = currentUser.following || [];
@@ -321,10 +390,16 @@ router.get('/top-earners-from-following', verifyToken, async (req, res) => {
 
     console.log(`✅ Top Earners API: Found ${topEarners.length} top earners`);
 
-    res.json({
+    const payload = {
       topEarners,
       totalCount: topEarners.length
-    });
+    };
+
+    res.json(payload);
+
+    if (topEarnersCacheKey) {
+      await cacheResponse(topEarnersCacheKey, payload, TOP_EARNERS_CACHE_TTL);
+    }
   } catch (err) {
     console.error('❌ Top earners error:', err);
     console.error('❌ Top earners error stack:', err.stack);
@@ -340,6 +415,16 @@ router.get('/top-earners-from-following', verifyToken, async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    // Attempt cache using provided id (assumed googleId)
+    const cacheKeyGuess = getProfileCacheKey(id);
+    if (cacheKeyGuess) {
+      const cachedProfile = await getCachedResponse(cacheKeyGuess);
+      if (cachedProfile) {
+        console.log('⚡ User profile API: Cache hit for', id);
+        return res.json(cachedProfile);
+      }
+    }
+
     // First try to find by Google ID (primary identifier)
     let user = await User.findOne({ googleId: id });
 
@@ -356,7 +441,7 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json({
+    const payload = {
       _id: user._id, // MongoDB ObjectID
       id: user.googleId,
       name: user.name,
@@ -365,7 +450,14 @@ router.get('/:id', async (req, res) => {
       videos: user.videos,
       following: user.following?.length || 0,
       followers: user.followers?.length || 0,
-    });
+    };
+
+    res.json(payload);
+
+    const canonicalCacheKey = getProfileCacheKey(user.googleId);
+    if (canonicalCacheKey) {
+      await cacheResponse(canonicalCacheKey, payload, PROFILE_CACHE_TTL);
+    }
   } catch (err) {
     console.error('Get user by ID error:', err);
     res.status(500).json({ error: 'Failed to get user' });
@@ -393,6 +485,8 @@ router.post('/update-profile', async (req, res) => {
     }
 
     await user.save();
+
+    await invalidateProfileCache(user.googleId);
 
     res.json({ 
       message: 'Profile updated successfully',
@@ -471,6 +565,11 @@ router.post('/follow', verifyToken, async (req, res) => {
     userToFollow.followers.push(currentUser._id);
     await userToFollow.save();
 
+    await invalidateProfileCache([
+      currentUser.googleId || currentUserId,
+      userToFollow.googleId || userIdToFollow,
+    ]);
+
     res.json({ 
       message: 'Successfully followed user',
       following: currentUser.following.length,
@@ -531,6 +630,11 @@ router.post('/unfollow', verifyToken, async (req, res) => {
       id => id.toString() !== currentUser._id.toString()
     );
     await userToUnfollow.save();
+
+    await invalidateProfileCache([
+      currentUser.googleId || currentUserId,
+      userToUnfollow.googleId || userIdToUnfollow,
+    ]);
 
     res.json({ 
       message: 'Successfully unfollowed user',
