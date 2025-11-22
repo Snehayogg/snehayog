@@ -7,8 +7,13 @@ import mongoose from 'mongoose';
  */
 const WatchHistorySchema = new mongoose.Schema({
   userId: {
-    type: String, // Google ID
+    type: String, // Google ID (for authenticated users) or deviceId (for anonymous users)
     required: true,
+    index: true
+  },
+  isAuthenticated: {
+    type: Boolean,
+    default: false, // true if userId is Google ID, false if deviceId
     index: true
   },
   videoId: {
@@ -58,19 +63,22 @@ WatchHistorySchema.index({ videoId: 1, watchedAt: -1 });
 
 /**
  * Static method to get user's watched video IDs
- * @param {String} userId - Google ID of the user
- * @param {Number} days - Number of days to look back (optional, default: 30)
+ * @param {String} userId - Google ID or deviceId of the user
+ * @param {Number} days - Number of days to look back (optional, null = no limit)
  * @returns {Promise<Array>} Array of video ObjectIds
  */
-WatchHistorySchema.statics.getUserWatchedVideoIds = async function(userId, days = 30) {
+WatchHistorySchema.statics.getUserWatchedVideoIds = async function(userId, days = null) {
   try {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - days);
+    const query = { userId: userId };
     
-    const watchHistory = await this.find({
-      userId: userId,
-      lastWatchedAt: { $gte: cutoffDate }
-    }).select('videoId').lean();
+    // Only apply date filter if days is specified
+    if (days !== null && days > 0) {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - days);
+      query.lastWatchedAt = { $gte: cutoffDate };
+    }
+    
+    const watchHistory = await this.find(query).select('videoId').lean();
     
     return watchHistory.map(entry => entry.videoId);
   } catch (error) {
@@ -81,14 +89,14 @@ WatchHistorySchema.statics.getUserWatchedVideoIds = async function(userId, days 
 
 /**
  * Static method to track video watch
- * @param {String} userId - Google ID of the user
+ * @param {String} userId - Google ID or deviceId of the user
  * @param {String} videoId - Video ObjectId
- * @param {Object} options - Additional options (duration, completed)
+ * @param {Object} options - Additional options (duration, completed, isAuthenticated)
  * @returns {Promise<Object>} Watch history entry
  */
 WatchHistorySchema.statics.trackWatch = async function(userId, videoId, options = {}) {
   try {
-    const { duration = 0, completed = false } = options;
+    const { duration = 0, completed = false, isAuthenticated = false } = options;
     
     // Update or create watch history entry
     const watchEntry = await this.findOneAndUpdate(
@@ -97,7 +105,8 @@ WatchHistorySchema.statics.trackWatch = async function(userId, videoId, options 
         $set: {
           lastWatchedAt: new Date(),
           watchDuration: duration,
-          completed: completed
+          completed: completed,
+          isAuthenticated: isAuthenticated
         },
         $inc: { watchCount: 1 },
         $setOnInsert: {

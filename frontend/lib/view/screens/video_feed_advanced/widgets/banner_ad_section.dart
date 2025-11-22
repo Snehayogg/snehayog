@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:vayu/view/widget/ads/banner_ad_widget.dart';
 import 'package:vayu/view/widget/ads/google_admob_banner_widget.dart';

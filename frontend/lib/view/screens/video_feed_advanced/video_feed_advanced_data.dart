@@ -322,27 +322,37 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
   }) {
     if (videos.isEmpty) return <VideoModel>[];
 
-    final Map<String, VideoModel> seenFiltered = {};
-    final Map<String, VideoModel> repeatedVideos = {};
+    // **BACKEND-FIRST: Backend already filters watched videos and shuffles**
+    // Frontend only needs to:
+    // 1. Remove duplicates within the same batch
+    // 2. Preserve current video if needed
+    // 3. Rank by engagement (optional, backend already does some ranking)
+
+    final Map<String, VideoModel> uniqueVideos = {};
 
     for (final video in videos) {
       final key = videoIdentityKey(video);
       if (key.isEmpty) continue;
 
-      final alreadySeen = _seenVideoKeys.contains(key);
-      final shouldPreserve =
-          preserveVideoKey != null && key == preserveVideoKey;
-
-      if (alreadySeen && !shouldPreserve) {
-        repeatedVideos[key] = video;
-      } else {
-        seenFiltered[key] = video;
+      // Only check for duplicates in current batch, not seen videos
+      // Backend already filtered watched videos
+      if (!uniqueVideos.containsKey(key)) {
+        uniqueVideos[key] = video;
       }
     }
 
-    final rankedVideos =
-        VideoEngagementRanker.rankVideos(seenFiltered.values.toList());
+    if (uniqueVideos.isEmpty) {
+      AppLogger.log(
+          '⚠️ VideoFeedAdvanced: All videos are duplicates in this batch');
+      return <VideoModel>[];
+    }
 
+    final uniqueList = uniqueVideos.values.toList();
+
+    // **RANKING: Rank by engagement (backend already shuffles, but ranking helps)**
+    final rankedVideos = VideoEngagementRanker.rankVideos(uniqueList);
+
+    // **PRESERVE: Keep current video at the beginning if specified**
     if (preserveVideoKey != null) {
       final preserveIndex = rankedVideos.indexWhere(
         (video) => videoIdentityKey(video) == preserveVideoKey,
@@ -353,9 +363,8 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       }
     }
 
-    if (rankedVideos.isEmpty && repeatedVideos.isNotEmpty) {
-      rankedVideos.addAll(repeatedVideos.values);
-    }
+    AppLogger.log(
+        '🎲 VideoFeedAdvanced: Processed ${rankedVideos.length} videos (backend already filtered watched videos and shuffled)');
 
     return rankedVideos;
   }
@@ -371,22 +380,34 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     for (final video in videos) {
       final key = videoIdentityKey(video);
       if (key.isEmpty) continue;
+      // **FILTER: Skip seen videos completely**
       if (_seenVideoKeys.contains(key)) continue;
+      // **FILTER: Skip already loaded videos**
       if (existingKeys.contains(key)) continue;
+      // **FILTER: Skip duplicates in this batch**
       if (uniqueNewVideos.containsKey(key)) continue;
       uniqueNewVideos[key] = video;
     }
 
     if (uniqueNewVideos.isEmpty) return <VideoModel>[];
 
-    return VideoEngagementRanker.rankVideos(uniqueNewVideos.values.toList());
+    // **RANKING: Rank by engagement first**
+    final rankedVideos =
+        VideoEngagementRanker.rankVideos(uniqueNewVideos.values.toList());
+    // **SHUFFLE: Then shuffle to show random order**
+    rankedVideos.shuffle();
+    return rankedVideos;
   }
 
+  /// **BACKEND-FIRST: Mark video as seen (in-memory cache only)**
+  /// Backend handles persistent storage via WatchHistory
   void _markVideoAsSeen(VideoModel video) {
     final key = videoIdentityKey(video);
     if (key.isEmpty) return;
     if (_seenVideoKeys.add(key)) {
       AppLogger.log('👀 Marked video as seen: ${video.id} ($key)');
+      // **BACKEND-FIRST: Backend tracks this via WatchHistory API**
+      // No local storage needed - backend is source of truth
     }
   }
 

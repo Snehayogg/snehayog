@@ -11,6 +11,7 @@ import 'package:vayu/model/video_model.dart';
 import 'package:vayu/model/ad_model.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/ad_service.dart';
+import 'package:vayu/services/device_id_service.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/utils/app_logger.dart';
 
@@ -149,7 +150,15 @@ class VideoService {
             '🔍 VideoService: Filtering by videoType: $normalizedType');
       }
 
-      // **NEW: Get auth token for personalized feed (optional - don't fail if missing)**
+      // **BACKEND-FIRST: Get deviceId for anonymous users**
+      final deviceIdService = DeviceIdService();
+      final deviceId = await deviceIdService.getDeviceId();
+      if (deviceId.isNotEmpty) {
+        url += '&deviceId=$deviceId';
+        AppLogger.log('📱 VideoService: Using deviceId for personalized feed');
+      }
+
+      // **BACKEND-FIRST: Get auth token for authenticated users (optional - don't fail if missing)**
       Map<String, String> headers = {'Content-Type': 'application/json'};
       try {
         final token = await AuthService.getToken();

@@ -261,19 +261,19 @@ class _TopEarnersBottomSheetState extends State<TopEarnersBottomSheet> {
   }
 
   Widget _buildEmptyView() {
-    return Center(
+    return const Center(
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: EdgeInsets.all(24.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               Icons.people_outline,
               size: 64,
               color: Colors.grey,
             ),
-            const SizedBox(height: 16),
-            const Text(
+            SizedBox(height: 16),
+            Text(
               'No top earners found',
               style: TextStyle(
                 fontSize: 18,
@@ -281,8 +281,8 @@ class _TopEarnersBottomSheetState extends State<TopEarnersBottomSheet> {
                 color: Colors.black87,
               ),
             ),
-            const SizedBox(height: 8),
-            const Text(
+            SizedBox(height: 8),
+            Text(
               'Start following creators to see top earners',
               style: TextStyle(
                 fontSize: 14,

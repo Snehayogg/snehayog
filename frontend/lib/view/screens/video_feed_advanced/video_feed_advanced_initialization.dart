@@ -41,6 +41,10 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
         _errorMessage = null; // Clear any previous error
       });
 
+      // **BACKEND-FIRST: Backend handles all filtering via WatchHistory**
+      // No need to load from local storage - backend is source of truth
+      // Backend filters watched videos for ALL users (authenticated + anonymous via deviceId)
+      // Even after app reinstall, backend will filter watched videos correctly
       if (widget.initialVideos != null && widget.initialVideos!.isNotEmpty) {
         _videos = List.from(widget.initialVideos!);
         String? preserveKey;

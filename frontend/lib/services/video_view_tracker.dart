@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/services/authservices.dart';
+import 'package:vayu/services/device_id_service.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/core/services/http_client_service.dart';
 import 'package:vayu/core/constants/app_constants.dart';
@@ -85,34 +86,44 @@ class VideoViewTracker {
         headers['Authorization'] = 'Bearer $token';
       }
 
-      // **NEW: Track watch history for personalized feed (requires auth)**
-      if (token != null && token.isNotEmpty) {
-        try {
-          final watchUrl = Uri.parse('$_baseUrl/api/videos/$videoId/watch');
-          final watchResponse = await httpClientService.post(
-            watchUrl,
-            headers: headers,
-            body: json.encode({
-              'duration': effectiveDuration,
-              'completed': false, // Will be updated when video completes
-            }),
-          );
-
-          if (watchResponse.statusCode == 200) {
-            AppLogger.log(
-                '✅ VideoViewTracker: Watch history tracked successfully');
-            final watchData = json.decode(watchResponse.body);
-            AppLogger.log(
-                '   Watch count: ${watchData['watchEntry']?['watchCount'] ?? 1}');
-          } else {
-            AppLogger.log(
-                '⚠️ VideoViewTracker: Watch tracking failed (non-critical): ${watchResponse.statusCode}');
-          }
-        } catch (watchError) {
-          AppLogger.log(
-              '⚠️ VideoViewTracker: Error tracking watch (non-critical): $watchError');
-          // Don't fail view tracking if watch tracking fails
+      // **BACKEND-FIRST: Track watch history for personalized feed (all users)**
+      // Get deviceId for anonymous users
+      final deviceIdService = DeviceIdService();
+      final deviceId = await deviceIdService.getDeviceId();
+      
+      // Track watch for both authenticated and anonymous users
+      try {
+        final watchUrl = Uri.parse('$_baseUrl/api/videos/$videoId/watch');
+        final watchBody = <String, dynamic>{
+          'duration': effectiveDuration,
+          'completed': false, // Will be updated when video completes
+        };
+        
+        // **BACKEND-FIRST: Add deviceId for anonymous users**
+        if (deviceId.isNotEmpty && (token == null || token.isEmpty)) {
+          watchBody['deviceId'] = deviceId;
         }
+        
+        final watchResponse = await httpClientService.post(
+          watchUrl,
+          headers: headers,
+          body: json.encode(watchBody),
+        );
+
+        if (watchResponse.statusCode == 200) {
+          AppLogger.log(
+              '✅ VideoViewTracker: Watch history tracked successfully');
+          final watchData = json.decode(watchResponse.body);
+          AppLogger.log(
+              '   Watch count: ${watchData['watchEntry']?['watchCount'] ?? 1}');
+        } else {
+          AppLogger.log(
+              '⚠️ VideoViewTracker: Watch tracking failed (non-critical): ${watchResponse.statusCode}');
+        }
+      } catch (watchError) {
+        AppLogger.log(
+            '⚠️ VideoViewTracker: Error tracking watch (non-critical): $watchError');
+        // Don't fail view tracking if watch tracking fails
       }
 
       // Make API call to increment view (existing functionality)

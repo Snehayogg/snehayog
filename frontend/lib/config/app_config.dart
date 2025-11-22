@@ -10,8 +10,8 @@ class AppConfig {
   static String? _cachedBaseUrl;
 
   // Local development server (Wi‑Fi/LAN)
-  // Use laptop IP address when testing on phone: 10.118.107.18
-  static const String _localIpBaseUrl = 'http://10.118.107.18:5001';
+  // Use laptop IP address when testing on phone: 10.159.11.18
+  static const String _localIpBaseUrl = 'http://10.159.11.18:5001';
 
   // Primary production endpoints
   static const String _customDomainUrl = 'https://snehayog.site';

@@ -599,26 +599,41 @@ router.get('/', async (req, res) => {
       console.log('⚠️ Error checking token, using regular feed');
     }
 
-    const { videoType, page = 1, limit = 10 } = req.query;
-    console.log('📹 Fetching videos...', { videoType, page, limit, userId: userId ? 'authenticated' : 'anonymous' });
+    const { videoType, page = 1, limit = 10, deviceId } = req.query;
+    
+    // **BACKEND-FIRST: Use deviceId for anonymous users, userId for authenticated**
+    const userIdentifier = userId || deviceId; // Use userId if authenticated, else deviceId
+    const isAuthenticated = !!userId;
+    
+    console.log('📹 Fetching videos...', { 
+      videoType, 
+      page, 
+      limit, 
+      userId: userId ? 'authenticated' : 'anonymous',
+      deviceId: deviceId || 'none',
+      userIdentifier: userIdentifier || 'none'
+    });
     
     // Get query parameters for pagination
     const pageNum = parseInt(page) || 1;
     const limitNum = parseInt(limit) || 10;
     
-    // **NEW: Generate personalized cache key if user is authenticated**
-    const cacheKey = userId 
-      ? `videos:feed:user:${userId}:${videoType || 'all'}:page:${pageNum}:limit:${limitNum}`
-      : `videos:feed:${videoType || 'all'}:page:${pageNum}:limit:${limitNum}`;
+    // **IMPROVED: Don't cache shuffled results - cache raw data instead**
+    // This ensures different users get different random orders
+    // Cache key for unwatched video IDs (not shuffled results)
+    const unwatchedCacheKey = userIdentifier
+      ? `videos:unwatched:ids:${userIdentifier}:${videoType || 'all'}`
+      : null;
     
-    // **NEW: Try to get from Redis cache first**
-    if (redisService.getConnectionStatus()) {
-      const cached = await redisService.get(cacheKey);
-      if (cached) {
-        console.log(`✅ Cache HIT: ${cacheKey}`);
-        return res.json(cached);
+    // **NEW: Try to get unwatched video IDs from cache (not shuffled results)**
+    let cachedUnwatchedIds = null;
+    if (redisService.getConnectionStatus() && unwatchedCacheKey) {
+      cachedUnwatchedIds = await redisService.get(unwatchedCacheKey);
+      if (cachedUnwatchedIds) {
+        console.log(`✅ Cache HIT for unwatched IDs: ${unwatchedCacheKey}`);
+      } else {
+        console.log(`❌ Cache MISS for unwatched IDs: ${unwatchedCacheKey}`);
       }
-      console.log(`❌ Cache MISS: ${cacheKey}`);
     }
     
     // Build base query filter
@@ -644,31 +659,75 @@ router.get('/', async (req, res) => {
     let watchedVideos = [];
     let finalVideos = [];
     
-    // **NEW: Personalized feed for authenticated users**
-    if (userId) {
-      console.log('🎯 Getting personalized feed for user:', userId);
+    // **IMPROVED: Fisher-Yates shuffle algorithm for proper randomization**
+    function shuffleArray(array) {
+      const shuffled = [...array];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled;
+    }
+    
+    // **BACKEND-FIRST: Personalized feed for ALL users (authenticated + anonymous)**
+    if (userIdentifier) {
+      console.log('🎯 Getting personalized feed for user:', userIdentifier, isAuthenticated ? '(authenticated)' : '(anonymous)');
       
-      // Step 1: Get user's watched video IDs (last 30 days)
-      const watchedVideoIds = await WatchHistory.getUserWatchedVideoIds(userId, 30);
-      console.log(`📊 User has watched ${watchedVideoIds.length} videos in last 30 days`);
+      // Step 1: Get user's watched video IDs (NO LIMIT - backend-first approach)
+      // Remove 30-day limit to track all watched videos for better filtering
+      const watchedVideoIds = await WatchHistory.getUserWatchedVideoIds(userIdentifier, null);
+      console.log(`📊 User has watched ${watchedVideoIds.length} videos (all time)`);
       
-      // Step 2: Get unwatched videos (preferred)
-      const unwatchedQuery = {
-        ...baseQueryFilter,
-        _id: { $nin: watchedVideoIds } // Exclude watched videos
-      };
+      // Step 2: Get unwatched video IDs (use cache if available)
+      let unwatchedVideoIds = cachedUnwatchedIds;
       
-      unwatchedVideos = await Video.find(unwatchedQuery)
+      if (!unwatchedVideoIds) {
+        // Get unwatched video IDs from database
+        const unwatchedQuery = {
+          ...baseQueryFilter,
+          _id: { $nin: watchedVideoIds } // Exclude watched videos
+        };
+        
+        const unwatchedVideosRaw = await Video.find(unwatchedQuery)
+          .select('_id')
+          .lean();
+        
+        unwatchedVideoIds = unwatchedVideosRaw.map(v => v._id);
+        
+        // Cache unwatched video IDs for 5 minutes (not shuffled results)
+        if (redisService.getConnectionStatus() && unwatchedCacheKey) {
+          await redisService.set(unwatchedCacheKey, unwatchedVideoIds, 300);
+          console.log(`✅ Cached ${unwatchedVideoIds.length} unwatched video IDs`);
+        }
+      } else {
+        console.log(`✅ Using ${unwatchedVideoIds.length} cached unwatched video IDs`);
+      }
+      
+      // Step 3: Shuffle unwatched video IDs using Fisher-Yates algorithm
+      const shuffledUnwatchedIds = shuffleArray([...unwatchedVideoIds]);
+      const limitedUnwatchedIds = shuffledUnwatchedIds.slice(0, limitNum * 2); // Get more for buffer
+      
+      // Step 4: Fetch unwatched videos in shuffled order
+      if (limitedUnwatchedIds.length > 0) {
+        unwatchedVideos = await Video.find({
+          ...baseQueryFilter,
+          _id: { $in: limitedUnwatchedIds }
+        })
         .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded')
         .populate('uploader', 'name profilePic googleId')
         .populate('comments.user', 'name profilePic googleId')
-        .sort({ createdAt: -1 })
-        .limit(limitNum * 2) // Get more for buffer
         .lean();
+        
+        // Maintain shuffled order from IDs
+        const videoMap = new Map(unwatchedVideos.map(v => [v._id.toString(), v]));
+        unwatchedVideos = limitedUnwatchedIds
+          .map(id => videoMap.get(id.toString()))
+          .filter(Boolean);
+      }
       
-      console.log(`✅ Found ${unwatchedVideos.length} unwatched videos`);
+      console.log(`✅ Found ${unwatchedVideos.length} unwatched videos (shuffled)`);
       
-      // Step 3: If not enough unwatched videos, add watched ones as fallback
+      // Step 5: If not enough unwatched videos, add watched ones as fallback
       if (unwatchedVideos.length < limitNum && watchedVideoIds.length > 0) {
         console.log(`⚠️ Not enough unwatched videos (${unwatchedVideos.length}/${limitNum}), adding watched videos as fallback`);
         
@@ -679,7 +738,7 @@ router.get('/', async (req, res) => {
         
         // Get watched videos sorted by oldest watched first (to show videos watched long ago)
         const watchedHistory = await WatchHistory.find({
-          userId: userId,
+          userId: userIdentifier, // Use userIdentifier (works for both authenticated and anonymous)
           videoId: { $in: watchedVideoIds }
         })
         .sort({ lastWatchedAt: 1 }) // Oldest first
@@ -708,15 +767,17 @@ router.get('/', async (req, res) => {
         console.log(`✅ Added ${watchedVideos.length} watched videos as fallback`);
       }
       
-      // Step 4: Combine unwatched and watched videos
-      finalVideos = [...unwatchedVideos, ...watchedVideos].slice(0, limitNum);
+      // Step 5: Combine unwatched and watched videos (unwatched already shuffled)
+      // Shuffle watched videos separately using Fisher-Yates
+      const shuffledWatched = shuffleArray([...watchedVideos]);
+      finalVideos = [...unwatchedVideos, ...shuffledWatched].slice(0, limitNum);
       
-      // Step 5: Shuffle to avoid showing same order every time
-      finalVideos = finalVideos.sort(() => Math.random() - 0.5);
+      console.log(`✅ Final videos: ${unwatchedVideos.length} unwatched + ${shuffledWatched.length} watched = ${finalVideos.length} total`);
       
     } else {
-      // Regular feed for non-authenticated users
-      console.log('📹 Using regular feed (no authentication)');
+      // **BACKEND-FIRST: Even without userIdentifier, use regular feed**
+      // This handles edge cases where deviceId is not provided
+      console.log('📹 Using regular feed (no user identifier)');
       
       const skip = (pageNum - 1) * limitNum;
       
@@ -770,9 +831,9 @@ router.get('/', async (req, res) => {
     
     // Get total count for pagination
     let totalVideos = 0;
-    if (userId) {
+    if (userIdentifier) {
       // For personalized feed, count unwatched + watched videos
-      const watchedVideoIds = await WatchHistory.getUserWatchedVideoIds(userId, 30);
+      const watchedVideoIds = await WatchHistory.getUserWatchedVideoIds(userIdentifier, null);
       const unwatchedCount = await Video.countDocuments({
         ...baseQueryFilter,
         _id: { $nin: watchedVideoIds }
@@ -794,17 +855,13 @@ router.get('/', async (req, res) => {
       filters: {
         videoType: videoType || 'all',
         format: 'mp4_and_hls',
-        personalized: !!userId
+        personalized: !!userIdentifier
       },
-      message: `✅ Fetched ${validVideos.length} valid videos successfully${userId ? ' (personalized feed)' : ''}${videoType ? ` (${videoType} type)` : ''}`
+      message: `✅ Fetched ${validVideos.length} valid videos successfully${userIdentifier ? ' (personalized feed)' : ''}${videoType ? ` (${videoType} type)` : ''}`
     };
     
-    // **NEW: Cache the response (shorter TTL for personalized feeds)**
-    if (redisService.getConnectionStatus()) {
-      const ttl = userId ? 180 : 300; // 3 min for personalized, 5 min for regular
-      await redisService.set(cacheKey, response, ttl);
-      console.log(`✅ Cached response: ${cacheKey} (TTL: ${ttl}s)`);
-    }
+    // **IMPROVED: Don't cache shuffled results - only cache unwatched IDs (already done above)**
+    // This ensures different users get different random orders on each request
     
     console.log(`✅ Found ${validVideos.length} valid videos (page ${pageNum}, total: ${totalVideos})`);
     
@@ -903,27 +960,74 @@ router.get('/:id', verifyToken, async (req, res) => {
   }
 });
 
-// **NEW: POST /api/videos/:id/watch - Track video watch for personalized feed**
-router.post('/:id/watch', verifyToken, async (req, res) => {
+// **BACKEND-FIRST: POST /api/videos/:id/watch - Track video watch for personalized feed**
+// Supports both authenticated users (via token) and anonymous users (via deviceId)
+router.post('/:id/watch', async (req, res) => {
   try {
-    const userId = req.user?.id || req.user?.googleId;
+    // Try to get userId from token (authenticated users)
+    let userId = null;
+    let isAuthenticated = false;
+    
+    try {
+      const token = req.headers.authorization?.split(' ')[1];
+      if (token) {
+        // Try Google access token first
+        try {
+          const googleResponse = await fetch(`https://www.googleapis.com/oauth2/v2/userinfo?access_token=${token}`);
+          if (googleResponse.ok) {
+            const userInfo = await googleResponse.json();
+            userId = userInfo.id;
+            isAuthenticated = true;
+          } else {
+            // Try JWT token
+            const jwt = (await import('jsonwebtoken')).default;
+            const JWT_SECRET = process.env.JWT_SECRET;
+            if (JWT_SECRET) {
+              try {
+                const decoded = jwt.verify(token, JWT_SECRET);
+                userId = decoded.id || decoded.googleId;
+                isAuthenticated = true;
+              } catch (jwtError) {
+                // Token invalid - will use deviceId
+              }
+            }
+          }
+        } catch (tokenError) {
+          // Token verification failed - will use deviceId
+        }
+      }
+    } catch (error) {
+      // Error getting token - will use deviceId
+    }
+    
+    // **BACKEND-FIRST: Use deviceId for anonymous users**
+    const deviceId = req.body.deviceId || req.headers['x-device-id'];
+    const userIdentifier = userId || deviceId;
+    
     const videoId = req.params.id;
     const { duration = 0, completed = false } = req.body;
 
-    if (!userId) {
-      return res.status(401).json({ error: 'User not authenticated' });
+    if (!userIdentifier) {
+      return res.status(400).json({ error: 'User identifier (userId or deviceId) required' });
     }
 
     if (!videoId || !mongoose.Types.ObjectId.isValid(videoId)) {
       return res.status(400).json({ error: 'Invalid video ID' });
     }
 
-    console.log('📊 Tracking video watch:', { userId, videoId, duration, completed });
+    console.log('📊 Tracking video watch:', { 
+      userIdentifier, 
+      isAuthenticated: isAuthenticated ? 'authenticated' : 'anonymous',
+      videoId, 
+      duration, 
+      completed 
+    });
 
-    // Track watch history
-    const watchEntry = await WatchHistory.trackWatch(userId, videoId, {
+    // **BACKEND-FIRST: Track watch history for all users**
+    const watchEntry = await WatchHistory.trackWatch(userIdentifier, videoId, {
       duration,
-      completed
+      completed,
+      isAuthenticated
     });
 
     // Update video view count
@@ -931,11 +1035,11 @@ router.post('/:id/watch', verifyToken, async (req, res) => {
       $inc: { views: 1 }
     });
 
-    // **NEW: Invalidate user's personalized feed cache**
-    if (redisService.getConnectionStatus()) {
-      const cachePattern = `videos:feed:user:${userId}:*`;
+    // **BACKEND-FIRST: Invalidate user's personalized feed cache (for both authenticated and anonymous)**
+    if (redisService.getConnectionStatus() && userIdentifier) {
+      const cachePattern = `videos:feed:user:${userIdentifier}:*`;
       await redisService.clearPattern(cachePattern);
-      console.log(`🧹 Cleared cache for user: ${userId}`);
+      console.log(`🧹 Cleared cache for user: ${userIdentifier}`);
     }
 
     res.json({
