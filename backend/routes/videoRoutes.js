@@ -683,27 +683,36 @@ router.get('/', async (req, res) => {
       
       if (!unwatchedVideoIds) {
         // Get unwatched video IDs from database
+        // PERFORMANCE FIX: Limit query to reasonable number instead of loading all IDs
+        // This prevents memory issues and slow shuffling with thousands of videos
+        const maxIdsToFetch = Math.max(limitNum * 10, 200); // At least 10x limit, minimum 200 for variety
+        
+        // PERFORMANCE: $nin query is efficient for MongoDB
+        // If watchedVideoIds is very large (>1000), MongoDB handles it efficiently with indexes
         const unwatchedQuery = {
           ...baseQueryFilter,
-          _id: { $nin: watchedVideoIds } // Exclude watched videos
+          ...(watchedVideoIds.length > 0 && { _id: { $nin: watchedVideoIds } }) // Exclude watched videos if any
         };
         
         const unwatchedVideosRaw = await Video.find(unwatchedQuery)
           .select('_id')
+          .limit(maxIdsToFetch) // Limit the query to prevent loading thousands of IDs
           .lean();
         
         unwatchedVideoIds = unwatchedVideosRaw.map(v => v._id);
         
-        // Cache unwatched video IDs for 5 minutes (not shuffled results)
+        // Cache unwatched video IDs for 2 minutes (reduced from 5 min for faster updates)
+        // This ensures newly watched videos appear in feed sooner
         if (redisService.getConnectionStatus() && unwatchedCacheKey) {
-          await redisService.set(unwatchedCacheKey, unwatchedVideoIds, 300);
-          console.log(`✅ Cached ${unwatchedVideoIds.length} unwatched video IDs`);
+          await redisService.set(unwatchedCacheKey, unwatchedVideoIds, 120);
+          console.log(`✅ Cached ${unwatchedVideoIds.length} unwatched video IDs (limited to ${maxIdsToFetch}, TTL: 2min)`);
         }
       } else {
         console.log(`✅ Using ${unwatchedVideoIds.length} cached unwatched video IDs`);
       }
       
       // Step 3: Shuffle unwatched video IDs using Fisher-Yates algorithm
+      // Now shuffling a much smaller array (max 200-500 IDs instead of thousands)
       const shuffledUnwatchedIds = shuffleArray([...unwatchedVideoIds]);
       const limitedUnwatchedIds = shuffledUnwatchedIds.slice(0, limitNum * 2); // Get more for buffer
       
@@ -1035,11 +1044,17 @@ router.post('/:id/watch', async (req, res) => {
       $inc: { views: 1 }
     });
 
-    // **BACKEND-FIRST: Invalidate user's personalized feed cache (for both authenticated and anonymous)**
+    // **FIXED: Invalidate unwatched video IDs cache (matches new cache key pattern)**
     if (redisService.getConnectionStatus() && userIdentifier) {
-      const cachePattern = `videos:feed:user:${userIdentifier}:*`;
-      await redisService.clearPattern(cachePattern);
-      console.log(`🧹 Cleared cache for user: ${userIdentifier}`);
+      // Clear the unwatched IDs cache so user sees updated feed after watching
+      const unwatchedCachePattern = `videos:unwatched:ids:${userIdentifier}:*`;
+      await redisService.clearPattern(unwatchedCachePattern);
+      console.log(`🧹 Cleared unwatched IDs cache for user: ${userIdentifier}`);
+      
+      // Also clear old feed cache pattern for backward compatibility
+      const feedCachePattern = `videos:feed:user:${userIdentifier}:*`;
+      await redisService.clearPattern(feedCachePattern);
+      console.log(`🧹 Cleared feed cache for user: ${userIdentifier}`);
     }
 
     res.json({

@@ -199,9 +199,32 @@ class ProfileHeaderWidget extends StatelessWidget {
                         },
                       ),
                       const SizedBox(height: 8),
-                      // **SIMPLIFIED: Use same FollowButtonWidget as Yug tab**
+                      // **FIX: Show "How to earn" button for own profile, Follow button for others**
                       Builder(
                         builder: (context) {
+                          // Show "How to earn" button if callback is provided (own profile)
+                          if (onShowHowToEarn != null) {
+                            return ElevatedButton.icon(
+                              onPressed: onShowHowToEarn,
+                              icon:
+                                  const Icon(Icons.workspace_premium, size: 18),
+                              label: const Text('How to earn'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF10B981),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 10,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                elevation: 0,
+                              ),
+                            );
+                          }
+
+                          // Show Follow button for other users' profiles
                           final displayedUserId = userId ??
                               stateManager.userData?['googleId']?.toString() ??
                               stateManager.userData?['id']?.toString();

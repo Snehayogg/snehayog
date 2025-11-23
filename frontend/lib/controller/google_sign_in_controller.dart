@@ -36,8 +36,25 @@ class GoogleSignInController extends ChangeNotifier {
         print(
             '✅ GoogleSignInController: User data loaded: ${_userData?['email']}');
       } else {
-        print('ℹ️ GoogleSignInController: User is not logged in');
-        _userData = null;
+        print(
+            'ℹ️ GoogleSignInController: User is not logged in, attempting auto-login...');
+
+        // **NEW: Try auto-login with device ID (for persistent login after reinstall)**
+        try {
+          final autoLoginResult = await _authService.autoLoginWithDeviceId();
+          if (autoLoginResult != null) {
+            print('✅ GoogleSignInController: Auto-login successful!');
+            _userData = autoLoginResult;
+          } else {
+            print(
+                'ℹ️ GoogleSignInController: Auto-login not available - user needs to login manually');
+            _userData = null;
+          }
+        } catch (e) {
+          print(
+              '⚠️ GoogleSignInController: Auto-login failed (non-critical): $e');
+          _userData = null;
+        }
       }
     } catch (e) {
       print('⚠️ GoogleSignInController: Error during background init: $e');

@@ -96,6 +96,7 @@ class AuthService {
 
       // First, authenticate with backend to get JWT
       try {
+        // **OPTIMIZED: Reduced timeout for faster sign-in**
         final authResponse = await http
             .post(
               Uri.parse('${AppConfig.baseUrl}/api/auth'),
@@ -105,7 +106,7 @@ class AuthService {
                 'deviceId': deviceId, // **NEW: Send device ID to backend
               }),
             )
-            .timeout(const Duration(seconds: 10));
+            .timeout(const Duration(seconds: 8));
 
         AppLogger.log(
             '📡 Backend auth response status: ${authResponse.statusCode}');
@@ -133,13 +134,14 @@ class AuthService {
           Map<String, dynamic>? registeredUserData;
 
           try {
+            // **OPTIMIZED: Reduced timeout for faster sign-in**
             final registerResponse = await http
                 .post(
                   Uri.parse('${AppConfig.baseUrl}/api/users/register'),
                   headers: {'Content-Type': 'application/json'},
                   body: jsonEncode(userData),
                 )
-                .timeout(const Duration(seconds: 10));
+                .timeout(const Duration(seconds: 8));
 
             AppLogger.log(
                 '📡 User registration response status: ${registerResponse.statusCode}');
@@ -151,49 +153,11 @@ class AuthService {
               registeredUserData = regData['user'];
 
               // **FIX: Track referral code if present (for new users)**
+              // **OPTIMIZED: Make referral tracking non-blocking (fire and forget)**
               final isNewUser = regData['user']?['isNewUser'] ?? false;
               if (isNewUser) {
-                try {
-                  final prefs = await SharedPreferences.getInstance();
-                  final pendingRefCode =
-                      prefs.getString('pending_referral_code');
-
-                  if (pendingRefCode != null && pendingRefCode.isNotEmpty) {
-                    AppLogger.log('🎁 Tracking referral code: $pendingRefCode');
-
-                    // Track signup with referral code
-                    try {
-                      final trackResponse = await http
-                          .post(
-                            Uri.parse(
-                                '${AppConfig.baseUrl}/api/referrals/track'),
-                            headers: {'Content-Type': 'application/json'},
-                            body: jsonEncode({
-                              'code': pendingRefCode,
-                              'event': 'signup',
-                            }),
-                          )
-                          .timeout(const Duration(seconds: 5));
-
-                      if (trackResponse.statusCode == 200) {
-                        AppLogger.log('✅ Referral signup tracked successfully');
-                        // Clear the pending referral code after successful tracking
-                        await prefs.remove('pending_referral_code');
-                      } else {
-                        AppLogger.log(
-                          '⚠️ Referral tracking failed: ${trackResponse.statusCode}',
-                        );
-                      }
-                    } catch (trackError) {
-                      AppLogger.log(
-                        '⚠️ Error tracking referral: $trackError',
-                      );
-                      // Don't block sign-in if referral tracking fails
-                    }
-                  }
-                } catch (e) {
-                  AppLogger.log('⚠️ Error checking referral code: $e');
-                }
+                // Fire and forget - don't block sign-in completion
+                unawaited(_trackReferralCodeAsync());
               }
 
               // Show location onboarding for new users
@@ -453,10 +417,19 @@ class AuthService {
         return true;
       }
 
-      // If no token, user is not logged in
+      // If no token, try auto-login with device ID (for persistent login after reinstall)
       if (token == null || token.isEmpty) {
-        AppLogger.log('ℹ️ No JWT token found, user not logged in');
-        return false;
+        AppLogger.log(
+            'ℹ️ No JWT token found, attempting auto-login with device ID...');
+
+        // Try auto-login (non-blocking, don't wait for result)
+        unawaited(autoLoginWithDeviceId().then((userData) {
+          if (userData != null) {
+            AppLogger.log('✅ Auto-login successful - user session restored');
+          }
+        }));
+
+        return false; // Return false immediately, auto-login will restore session in background
       }
 
       // **OPTIMIZED: Return cached status immediately, verify in background**
@@ -838,6 +811,103 @@ class AuthService {
     }
   }
 
+  /// **NEW: Auto-login using device ID (for persistent login after reinstall)**
+  /// Attempts to restore user session if device ID indicates user logged in before
+  Future<Map<String, dynamic>?> autoLoginWithDeviceId() async {
+    try {
+      AppLogger.log('🔄 Attempting auto-login with device ID...');
+
+      // Check if device ID exists (user logged in before)
+      final deviceIdService = DeviceIdService();
+      final hasStoredDeviceId = await deviceIdService.hasStoredDeviceId();
+
+      if (!hasStoredDeviceId) {
+        AppLogger.log(
+            'ℹ️ No stored device ID found - user needs to login manually');
+        return null;
+      }
+
+      AppLogger.log('✅ Device ID found - attempting silent Google sign-in...');
+
+      // Try silent Google sign-in (works if user previously signed in)
+      final GoogleSignInAccount? googleUser =
+          await _googleSignIn.signInSilently();
+
+      if (googleUser == null) {
+        AppLogger.log(
+            'ℹ️ Silent sign-in failed - user needs to login manually');
+        return null;
+      }
+
+      AppLogger.log(
+          '✅ Silent Google sign-in successful for: ${googleUser.email}');
+
+      // Get ID token from Google
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+      final idToken = googleAuth.idToken;
+
+      if (idToken == null) {
+        AppLogger.log('❌ Failed to get ID token from Google');
+        return null;
+      }
+
+      // Get device ID
+      final deviceId = await deviceIdService.getDeviceId();
+
+      // Authenticate with backend to get JWT
+      final authResponse = await http
+          .post(
+            Uri.parse('${AppConfig.baseUrl}/api/auth'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'idToken': idToken,
+              'deviceId': deviceId,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (authResponse.statusCode == 200) {
+        final authData = jsonDecode(authResponse.body);
+        final token = authData['token'];
+
+        // Save JWT token
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('jwt_token', token);
+
+        // Save fallback user data
+        final fallbackData = {
+          'id': googleUser.id,
+          'googleId': googleUser.id,
+          'name': googleUser.displayName ?? 'User',
+          'email': googleUser.email,
+          'profilePic': googleUser.photoUrl,
+        };
+        await prefs.setString('fallback_user', jsonEncode(fallbackData));
+
+        AppLogger.log('✅ Auto-login successful! User: ${googleUser.email}');
+        AppLogger.log('✅ JWT token restored');
+
+        return {
+          'id': googleUser.id,
+          'googleId': googleUser.id,
+          'name': googleUser.displayName ?? 'User',
+          'email': googleUser.email,
+          'profilePic': googleUser.photoUrl,
+          'token': token,
+        };
+      } else {
+        AppLogger.log(
+            '❌ Backend authentication failed: ${authResponse.statusCode}');
+        return null;
+      }
+    } catch (e) {
+      AppLogger.log('⚠️ Auto-login failed (non-critical): $e');
+      // Don't throw - auto-login failure is not critical
+      return null;
+    }
+  }
+
   /// Re-authenticate with Google to get a fresh token
   Future<String?> _reauthenticateWithGoogle() async {
     try {
@@ -1009,5 +1079,42 @@ class AuthService {
   /// **TESTING: Check if location permission is granted**
   static Future<bool> checkLocationPermission() async {
     return await LocationOnboardingService.isLocationPermissionGranted();
+  }
+
+  /// **OPTIMIZED: Async referral tracking that doesn't block sign-in**
+  Future<void> _trackReferralCodeAsync() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final pendingRefCode = prefs.getString('pending_referral_code');
+
+      if (pendingRefCode == null || pendingRefCode.isEmpty) {
+        return;
+      }
+
+      AppLogger.log('🎁 Tracking referral code in background: $pendingRefCode');
+
+      final trackResponse = await http
+          .post(
+            Uri.parse('${AppConfig.baseUrl}/api/referrals/track'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'code': pendingRefCode,
+              'event': 'signup',
+            }),
+          )
+          .timeout(const Duration(seconds: 5));
+
+      if (trackResponse.statusCode == 200) {
+        AppLogger.log('✅ Referral signup tracked successfully');
+        await prefs.remove('pending_referral_code');
+      } else {
+        AppLogger.log(
+          '⚠️ Referral tracking failed: ${trackResponse.statusCode}',
+        );
+      }
+    } catch (trackError) {
+      AppLogger.log('⚠️ Error tracking referral: $trackError');
+      // Don't block sign-in if referral tracking fails
+    }
   }
 }

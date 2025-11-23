@@ -14,7 +14,9 @@ export const googleSignIn = async (req, res) => {
     console.log('🔍 userData.sub length:', userData.sub ? userData.sub.length : 'null');
     console.log('🔍 Device ID from request:', deviceId);
 
-    let user = await User.findOne({ googleId: userData.sub });
+    // **OPTIMIZED: Select only needed fields for faster query**
+    let user = await User.findOne({ googleId: userData.sub })
+      .select('googleId name email profilePic deviceIds videos');
     console.log('🔍 Auth Controller: Database lookup result:', user);
     
     if (!user) {

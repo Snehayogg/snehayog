@@ -10,8 +10,8 @@ class AppConfig {
   static String? _cachedBaseUrl;
 
   // Local development server (Wi‑Fi/LAN)
-  // Use laptop IP address when testing on phone: 10.159.11.18
-  static const String _localIpBaseUrl = 'http://10.159.11.18:5001';
+  // Use laptop IP address when testing on phone: 172.20.10.2
+  static const String _localIpBaseUrl = 'http://172.20.10.2:5001';
 
   // Primary production endpoints
   static const String _customDomainUrl = 'https://snehayog.site';
@@ -92,10 +92,10 @@ class AppConfig {
       print('❌ AppConfig: Custom domain not accessible: $e');
     }
 
-    // 3) Local IP server (192.168.0.198:5001) - fallback if not in development mode above
+    // 3) Local IP server (172.20.10.2:5001) - fallback if not in development mode above
     if (!_isDevelopment) {
       print(
-          '⚠️ AppConfig: Custom domain unreachable, trying local IP (192.168.0.198) as fallback...');
+          '⚠️ AppConfig: Custom domain unreachable, trying local IP (172.20.10.2) as fallback...');
       try {
         print('🔍 AppConfig: Testing local IP server: $_localIpBaseUrl...');
         final response = await http.get(
@@ -163,9 +163,9 @@ class AppConfig {
     }
 
     print(
-        '⚠️ AppConfig: Custom domain unreachable, trying local IP (192.168.0.198) as fallback...');
+        '⚠️ AppConfig: Custom domain unreachable, trying local IP (172.20.10.2) as fallback...');
 
-    // 2) Try local IP (192.168.0.198:5001) as fallback (only in development)
+    // 2) Try local IP (172.20.10.2:5001) as fallback (only in development)
     if (_isDevelopment) {
       try {
         print('🔍 AppConfig: Testing local IP server: $_localIpBaseUrl...');

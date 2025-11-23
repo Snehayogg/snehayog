@@ -126,7 +126,7 @@ flutter run
    ```dart
    static String get baseUrl => 
        kIsWeb ? 'https://snehayog-production.up.railway.app'
-       : 'http://192.168.0.190:5001';  // Your local IP
+       : 'http://172.20.10.2:5001';  // Your local IP
    ```
 
 ---

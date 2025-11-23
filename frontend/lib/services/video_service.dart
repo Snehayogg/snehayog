@@ -7,6 +7,7 @@ import 'package:video_player/video_player.dart';
 import 'package:flutter/material.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:video_compress/video_compress.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/model/video_model.dart';
 import 'package:vayu/model/ad_model.dart';
 import 'package:vayu/services/authservices.dart';
@@ -295,8 +296,36 @@ class VideoService {
     try {
       AppLogger.log('🔄 VideoService: Toggling like for video: $videoId');
 
+      // **FIX: Get user data and validate token before making request**
+      final userData = await _authService.getUserData();
+      if (userData == null) {
+        AppLogger.log('❌ VideoService: User not authenticated for like');
+        throw Exception('Please sign in to like videos');
+      }
+
+      // **FIX: Check if token exists and is valid**
+      final token = userData['token'];
+      if (token == null || token.toString().isEmpty) {
+        AppLogger.log('❌ VideoService: No token found for like');
+        throw Exception('Please sign in again to like videos');
+      }
+
+      // **FIX: Try to refresh token if it might be expired**
+      try {
+        final refreshedToken = await _authService.refreshTokenIfNeeded();
+        if (refreshedToken != null && refreshedToken != token) {
+          AppLogger.log('✅ VideoService: Token refreshed before like request');
+        }
+      } catch (e) {
+        AppLogger.log(
+            '⚠️ VideoService: Token refresh failed (non-critical): $e');
+      }
+
       final headers = await _getAuthHeaders();
       headers['Content-Type'] = 'application/json';
+
+      AppLogger.log(
+          '🔍 VideoService: Like request headers: ${headers.containsKey('Authorization') ? 'Authorization present' : 'No Authorization'}');
 
       final resolvedBaseUrl = await getBaseUrlWithFallback();
       final res = await http
@@ -307,21 +336,44 @@ class VideoService {
           )
           .timeout(const Duration(seconds: 15));
 
+      AppLogger.log('📡 VideoService: Like response status: ${res.statusCode}');
+
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
+        AppLogger.log('✅ VideoService: Like toggled successfully');
         return VideoModel.fromJson(data);
-      } else if (res.statusCode == 401) {
-        throw Exception('Please sign in to like videos');
+      } else if (res.statusCode == 401 || res.statusCode == 403) {
+        AppLogger.log(
+            '❌ VideoService: Authentication failed (${res.statusCode})');
+        // **FIX: Clear invalid token**
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove('jwt_token');
+          AppLogger.log('⚠️ VideoService: Cleared invalid token');
+        } catch (e) {
+          AppLogger.log('⚠️ VideoService: Error clearing token: $e');
+        }
+        throw Exception('Please sign in again to like videos');
       } else {
-        final error = json.decode(res.body);
-        throw Exception(error['error'] ?? 'Failed to toggle like');
+        final errorBody = res.body;
+        AppLogger.log(
+            '❌ VideoService: Like failed - Status: ${res.statusCode}, Body: $errorBody');
+        try {
+          final error = json.decode(errorBody);
+          throw Exception(error['error'] ?? 'Failed to like video');
+        } catch (e) {
+          throw Exception('Failed to like video (Status: ${res.statusCode})');
+        }
       }
     } catch (e) {
       AppLogger.log('❌ VideoService: Error toggling like: $e');
       if (e is TimeoutException) {
         throw Exception('Request timed out. Please try again.');
+      } else if (e.toString().contains('sign in') ||
+          e.toString().contains('authenticated')) {
+        rethrow; // Re-throw authentication errors as-is
       }
-      rethrow;
+      throw Exception('Failed to like video: ${e.toString()}');
     }
   }
 
@@ -689,17 +741,45 @@ class VideoService {
         throw Exception('Empty response from server');
       }
 
-      final responseData = json.decode(responseBody);
-
       AppLogger.log(
         '📡 VideoService: Upload response status: ${streamedResponse.statusCode}',
       );
-      AppLogger.log('📄 VideoService: Upload response body: $responseBody');
+      AppLogger.log(
+          '📄 VideoService: Upload response body (first 500 chars): ${responseBody.length > 500 ? responseBody.substring(0, 500) : responseBody}');
 
-      // **FIX: Validate response structure**
-      if (responseData == null) {
-        throw Exception('Invalid JSON response from server');
+      // **FIX: Handle non-JSON responses (e.g., HTML error pages from Cloudflare 524)**
+      Map<String, dynamic> responseData;
+      try {
+        responseData = json.decode(responseBody);
+      } catch (e) {
+        // Check if it's a Cloudflare error page or HTML response
+        if (responseBody.trim().startsWith('<') ||
+            responseBody.contains('<!DOCTYPE') ||
+            responseBody.contains('<html')) {
+          // HTML error page (likely Cloudflare 524 timeout)
+          if (streamedResponse.statusCode == 524 ||
+              responseBody.contains('524')) {
+            throw Exception(
+              'Upload timed out on server (524). The video file may be too large or the server is busy. Please try again with a smaller video or wait a few minutes.',
+            );
+          } else if (streamedResponse.statusCode >= 500) {
+            throw Exception(
+              'Server error (${streamedResponse.statusCode}). Please try again later.',
+            );
+          } else {
+            throw Exception(
+              'Invalid response from server. Please try again.',
+            );
+          }
+        } else {
+          // Other non-JSON response
+          throw Exception(
+            'Invalid response format from server. Please try again.',
+          );
+        }
       }
+
+      // responseData is guaranteed to be non-null here (json.decode would have thrown if invalid)
 
       if (streamedResponse.statusCode == 201) {
         final videoData = responseData['video'];
@@ -732,6 +812,22 @@ class VideoService {
         AppLogger.log(
             '❌ VideoService: Error details: ${responseData.toString()}');
 
+        // **FIX: Handle specific error codes**
+        if (streamedResponse.statusCode == 524) {
+          throw Exception(
+            'Upload timed out on server (524). The video file may be too large or the server is busy. Please try again with a smaller video or wait a few minutes.',
+          );
+        } else if (streamedResponse.statusCode == 413) {
+          throw Exception(
+            'File too large. Maximum size is 100MB.',
+          );
+        } else if (streamedResponse.statusCode == 401 ||
+            streamedResponse.statusCode == 403) {
+          throw Exception(
+            'Authentication failed. Please sign in again.',
+          );
+        }
+
         final errorMessage = responseData['error']?.toString() ??
             responseData['details']?.toString() ??
             'Failed to upload video (Status: ${streamedResponse.statusCode})';
@@ -746,6 +842,11 @@ class VideoService {
       } else if (e is SocketException) {
         throw Exception(
           'Could not connect to server. Please check if the server is running.',
+        );
+      } else if (e is FormatException) {
+        // Already handled above, but catch here to provide user-friendly message
+        throw Exception(
+          'Invalid response from server. Please try again.',
         );
       }
       rethrow;
