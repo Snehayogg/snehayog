@@ -310,24 +310,75 @@ class VideoService {
         throw Exception('Please sign in again to like videos');
       }
 
-      // **FIX: Try to refresh token if it might be expired**
+      // **FIX: Check if token is a fallback token (won't work with backend)**
+      if (token.toString().startsWith('temp_')) {
+        AppLogger.log(
+            '❌ VideoService: Fallback token detected - cannot like videos');
+        throw Exception(
+            'Please sign in with your Google account to like videos. Fallback session does not support this feature.');
+      }
+
+      // **FIX: Validate token format (should be JWT) - wrap in try-catch**
+      bool isTokenValid = false;
       try {
-        final refreshedToken = await _authService.refreshTokenIfNeeded();
-        if (refreshedToken != null && refreshedToken != token) {
-          AppLogger.log('✅ VideoService: Token refreshed before like request');
-        }
+        isTokenValid = _authService.isTokenValid(token);
       } catch (e) {
         AppLogger.log(
-            '⚠️ VideoService: Token refresh failed (non-critical): $e');
+            '❌ VideoService: Error validating token (may not be JWT): $e');
+        isTokenValid = false;
+      }
+
+      if (!isTokenValid) {
+        AppLogger.log('❌ VideoService: Token is invalid or expired');
+        // Try to refresh
+        try {
+          final refreshedToken = await _authService.refreshTokenIfNeeded();
+          if (refreshedToken == null) {
+            throw Exception('Please sign in again to like videos');
+          }
+          AppLogger.log('✅ VideoService: Token refreshed before like request');
+        } catch (e) {
+          AppLogger.log('❌ VideoService: Token refresh failed: $e');
+          throw Exception('Please sign in again to like videos');
+        }
+      } else {
+        // **FIX: Try to refresh token if it might be expiring soon**
+        try {
+          final refreshedToken = await _authService.refreshTokenIfNeeded();
+          if (refreshedToken != null && refreshedToken != token) {
+            AppLogger.log(
+                '✅ VideoService: Token refreshed before like request');
+          }
+        } catch (e) {
+          AppLogger.log(
+              '⚠️ VideoService: Token refresh failed (non-critical): $e');
+        }
       }
 
       final headers = await _getAuthHeaders();
       headers['Content-Type'] = 'application/json';
 
+      // **FIX: Log token info for debugging**
+      final tokenForLog =
+          headers['Authorization']?.toString().replaceAll('Bearer ', '') ??
+              'No token';
       AppLogger.log(
-          '🔍 VideoService: Like request headers: ${headers.containsKey('Authorization') ? 'Authorization present' : 'No Authorization'}');
+          '🔍 VideoService: Like request - Token present: ${headers.containsKey('Authorization')}');
+      AppLogger.log(
+          '🔍 VideoService: Like request - Token length: ${tokenForLog.length}');
+      AppLogger.log(
+          '🔍 VideoService: Like request - Token starts with: ${tokenForLog.length > 20 ? tokenForLog.substring(0, 20) : tokenForLog}');
+
+      // **FIX: Log user data for debugging**
+      AppLogger.log(
+          '🔍 VideoService: User data - googleId: ${userData['googleId']}');
+      AppLogger.log('🔍 VideoService: User data - id: ${userData['id']}');
+      AppLogger.log('🔍 VideoService: User data - email: ${userData['email']}');
 
       final resolvedBaseUrl = await getBaseUrlWithFallback();
+      AppLogger.log(
+          '🔍 VideoService: Like request URL: $resolvedBaseUrl/api/videos/$videoId/like');
+
       final res = await http
           .post(
             Uri.parse('$resolvedBaseUrl/api/videos/$videoId/like'),
@@ -337,6 +388,7 @@ class VideoService {
           .timeout(const Duration(seconds: 15));
 
       AppLogger.log('📡 VideoService: Like response status: ${res.statusCode}');
+      AppLogger.log('📡 VideoService: Like response body: ${res.body}');
 
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
@@ -354,14 +406,56 @@ class VideoService {
           AppLogger.log('⚠️ VideoService: Error clearing token: $e');
         }
         throw Exception('Please sign in again to like videos');
+      } else if (res.statusCode == 400) {
+        // **FIX: Handle 400 Bad Request (user not authenticated or missing googleId)**
+        final errorBody = res.body;
+        AppLogger.log(
+            '❌ VideoService: Bad request (${res.statusCode}), Body: $errorBody');
+        try {
+          final error = json.decode(errorBody);
+          final errorMsg = error['error'] ?? 'User not authenticated';
+          if (errorMsg.toString().contains('not authenticated') ||
+              errorMsg.toString().contains('User not found')) {
+            throw Exception('Please sign in again to like videos');
+          }
+          throw Exception(errorMsg.toString());
+        } catch (e) {
+          if (e.toString().contains('sign in')) {
+            rethrow;
+          }
+          throw Exception('Failed to like video: ${e.toString()}');
+        }
+      } else if (res.statusCode == 404) {
+        // **FIX: Handle 404 (video not found or user not found)**
+        final errorBody = res.body;
+        AppLogger.log(
+            '❌ VideoService: Not found (${res.statusCode}), Body: $errorBody');
+        try {
+          final error = json.decode(errorBody);
+          final errorMsg = error['error'] ?? 'Video or user not found';
+          if (errorMsg.toString().contains('User not found')) {
+            throw Exception(
+                'Please sign in again. Your account may not be registered.');
+          }
+          throw Exception(errorMsg.toString());
+        } catch (e) {
+          throw Exception('Failed to like video: ${e.toString()}');
+        }
       } else {
         final errorBody = res.body;
         AppLogger.log(
             '❌ VideoService: Like failed - Status: ${res.statusCode}, Body: $errorBody');
         try {
           final error = json.decode(errorBody);
-          throw Exception(error['error'] ?? 'Failed to like video');
+          final errorMsg =
+              error['error'] ?? error['message'] ?? 'Failed to like video';
+          throw Exception(errorMsg.toString());
         } catch (e) {
+          if (e is FormatException) {
+            // Response is not JSON, show raw error
+            throw Exception(
+                'Failed to like video: ${errorBody.length > 100 ? errorBody.substring(0, 100) : errorBody}');
+          }
           throw Exception('Failed to like video (Status: ${res.statusCode})');
         }
       }

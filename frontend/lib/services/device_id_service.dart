@@ -91,16 +91,14 @@ class DeviceIdService {
     }
   }
 
-  /// Check if device ID has been stored (user has logged in before)
-  /// **FIX: Uses backend verification to check if device ID has logged in before**
+  /// **IMPROVED: Check if device ID has been stored (user has logged in before)**
+  /// Uses backend verification to check if device ID has logged in before
   /// This works across app reinstalls since device ID is stored on backend
   Future<bool> hasStoredDeviceId() async {
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      // **FIX: Only check SharedPreferences flag (clears on reinstall)**
-      // Platform device ID always exists, so checking it doesn't tell us
-      // if user logged in before. We only check if flag is stored in current session.
+      // **FAST PATH: Check local flag first (for same session)**
       final hasStored = prefs.getBool(_deviceIdKey) ?? false;
       final storedId = prefs.getString(_deviceIdValueKey);
 
@@ -112,7 +110,7 @@ class DeviceIdService {
         return true;
       }
 
-      // **NEW: For reinstall scenario - verify with backend if device ID has logged in before**
+      // **REINSTALL SCENARIO: Verify with backend if device ID has logged in before**
       // Platform device IDs persist across reinstalls, so we can check backend
       try {
         final deviceInfo = DeviceInfoPlugin();
@@ -121,92 +119,97 @@ class DeviceIdService {
         if (defaultTargetPlatform == TargetPlatform.android) {
           final androidInfo = await deviceInfo.androidInfo;
           platformDeviceId = androidInfo.id;
-          // Android ID can be "9774d56d682e549c" (emulator) - check for valid ID
+          // Skip emulator ID and empty IDs
           if (platformDeviceId.isEmpty ||
               platformDeviceId == '9774d56d682e549c') {
-            platformDeviceId = null;
+            if (kDebugMode) {
+              print(
+                  '⚠️ DeviceIdService: Invalid Android ID (emulator or empty)');
+            }
+            return false;
           }
         } else if (defaultTargetPlatform == TargetPlatform.iOS) {
           final iosInfo = await deviceInfo.iosInfo;
           platformDeviceId = iosInfo.identifierForVendor;
+          if (platformDeviceId == null || platformDeviceId.isEmpty) {
+            if (kDebugMode) {
+              print(
+                  '⚠️ DeviceIdService: iOS identifierForVendor is null or empty');
+            }
+            return false;
+          }
+        } else {
+          if (kDebugMode) {
+            print('⚠️ DeviceIdService: Unsupported platform');
+          }
+          return false;
         }
 
-        if (platformDeviceId != null && platformDeviceId.isNotEmpty) {
-          // **VERIFY WITH BACKEND: Check if this device ID has logged in before**
-          try {
-            final baseUrl = AppConfig.baseUrl;
-            final response = await http
-                .post(
-                  Uri.parse('$baseUrl/api/auth/check-device'),
-                  headers: {'Content-Type': 'application/json'},
-                  body: jsonEncode({'deviceId': platformDeviceId}),
-                )
-                .timeout(const Duration(seconds: 5));
+        // **VERIFY WITH BACKEND: Check if this device ID has logged in before**
+        try {
+          // Use getBaseUrlWithFallback for better reliability
+          final baseUrl = await AppConfig.getBaseUrlWithFallback();
+          final response = await http
+              .post(
+                Uri.parse('$baseUrl/api/auth/check-device'),
+                headers: {'Content-Type': 'application/json'},
+                body: jsonEncode({'deviceId': platformDeviceId}),
+              )
+              .timeout(const Duration(seconds: 5));
 
-            if (response.statusCode == 200) {
-              final data = jsonDecode(response.body);
-              final hasLoggedIn = data['hasLoggedIn'] ?? false;
+          if (response.statusCode == 200) {
+            final data = jsonDecode(response.body);
+            final hasLoggedIn = data['hasLoggedIn'] ?? false;
 
-              if (hasLoggedIn) {
-                // Device ID found on backend - user logged in before
-                // Store it locally for future checks
-                await prefs.setBool(_deviceIdKey, true);
-                await prefs.setString(_deviceIdValueKey, platformDeviceId);
-                _cachedDeviceId = platformDeviceId;
-
-                if (kDebugMode) {
-                  print(
-                      '✅ DeviceIdService: Device ID verified with backend - user logged in before');
-                  print(
-                      '✅ DeviceIdService: Device ID: ${platformDeviceId.substring(0, 8)}...');
-                  print(
-                      '✅ DeviceIdService: User: ${data['userName'] ?? 'Unknown'}');
-                }
-
-                return true;
-              } else {
-                if (kDebugMode) {
-                  print(
-                      'ℹ️ DeviceIdService: Device ID not found on backend - first time login');
-                }
-                return false;
-              }
-            } else {
-              if (kDebugMode) {
-                print(
-                    '⚠️ DeviceIdService: Backend check failed: ${response.statusCode}');
-              }
-              // If backend check fails, fall back to permissive approach
-              // (allow access based on device ID existence)
+            if (hasLoggedIn) {
+              // Device ID found on backend - user logged in before
+              // Store it locally for future checks
               await prefs.setBool(_deviceIdKey, true);
               await prefs.setString(_deviceIdValueKey, platformDeviceId);
               _cachedDeviceId = platformDeviceId;
+
+              if (kDebugMode) {
+                print(
+                    '✅ DeviceIdService: Device ID verified with backend - user logged in before');
+                print(
+                    '✅ DeviceIdService: Device ID: ${platformDeviceId.substring(0, 8)}...');
+                print(
+                    '✅ DeviceIdService: User: ${data['userName'] ?? 'Unknown'}');
+              }
+
               return true;
+            } else {
+              if (kDebugMode) {
+                print(
+                    'ℹ️ DeviceIdService: Device ID not found on backend - first time login');
+              }
+              return false;
             }
-          } catch (e) {
+          } else {
             if (kDebugMode) {
-              print('⚠️ DeviceIdService: Error checking with backend: $e');
-              print('ℹ️ DeviceIdService: Falling back to permissive approach');
+              print(
+                  '⚠️ DeviceIdService: Backend check failed: ${response.statusCode}');
             }
-            // If backend is unreachable, fall back to permissive approach
-            // Store device ID and allow access
-            await prefs.setBool(_deviceIdKey, true);
-            await prefs.setString(_deviceIdValueKey, platformDeviceId);
-            _cachedDeviceId = platformDeviceId;
-            return true;
+            // **IMPROVED: Don't fall back to permissive approach - require login**
+            // This is more secure and prevents unauthorized access
+            return false;
           }
+        } catch (e) {
+          if (kDebugMode) {
+            print('⚠️ DeviceIdService: Error checking with backend: $e');
+            print(
+                'ℹ️ DeviceIdService: Backend unreachable - requiring login for security');
+          }
+          // **IMPROVED: Don't allow access if backend is unreachable**
+          // This is more secure - user should login when backend is available
+          return false;
         }
       } catch (e) {
         if (kDebugMode) {
           print('⚠️ DeviceIdService: Error getting platform device ID: $e');
         }
+        return false;
       }
-
-      if (kDebugMode) {
-        print('ℹ️ DeviceIdService: No valid device ID found - login required');
-      }
-
-      return false;
     } catch (e) {
       if (kDebugMode) {
         print('❌ DeviceIdService: Error checking stored device ID: $e');

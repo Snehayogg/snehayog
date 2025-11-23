@@ -119,7 +119,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           await _loadVideosFromCache(); // **FIXED: Wait for videos to load before hiding loading**
           _isLoading.value = false; // Hide loading after videos are loaded
 
-          // **FIXED: Only refresh in background if cache is older than 1 day**
+          // **OPTIMIZATION: Different cache refresh times for own profile vs other users**
           final prefs = await SharedPreferences.getInstance();
           final cacheKey = _getProfileCacheKey();
           final cachedTimestamp =
@@ -130,14 +130,22 @@ class _ProfileScreenState extends State<ProfileScreen>
             final cacheTime =
                 DateTime.fromMillisecondsSinceEpoch(cachedTimestamp);
             final age = DateTime.now().difference(cacheTime);
-            if (age.inDays < 1) {
+
+            // **OPTIMIZATION: Shorter cache time for other users (5 minutes) vs own profile (1 day)**
+            final isOtherUser = widget.userId != null;
+            final maxCacheAge = isOtherUser
+                ? const Duration(
+                    minutes: 5) // 5 minutes for other users (fresher data)
+                : const Duration(days: 1); // 1 day for own profile
+
+            if (age < maxCacheAge) {
               shouldRefresh = false;
               AppLogger.log(
-                '⚡ ProfileScreen: Cache is fresh (${age.inHours}h old, ${age.inDays} days), skipping background refresh',
+                '⚡ ProfileScreen: Cache is fresh (${age.inMinutes}m old for ${isOtherUser ? "other user" : "own profile"}), skipping background refresh',
               );
             } else {
               AppLogger.log(
-                '🔄 ProfileScreen: Cache is stale (${age.inDays} days old), will refresh in background',
+                '🔄 ProfileScreen: Cache is stale (${age.inMinutes}m old), will refresh in background',
               );
             }
           }
@@ -173,20 +181,47 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       AppLogger.log(
           '📡 ProfileScreen: ${forceRefresh ? "Force refreshing" : "No cache, loading"} from server');
-      await _stateManager.loadUserData(widget.userId);
 
-      if (_stateManager.userData != null) {
-        // Cache the loaded data
-        await _cacheProfileData(_stateManager.userData!);
+      // **OPTIMIZATION: Load profile data first, then videos in background**
+      try {
+        // Start loading profile data
+        await _stateManager.loadUserData(widget.userId);
 
-        // Load videos in parallel
-        _loadVideos();
+        if (_stateManager.userData != null) {
+          // Cache the loaded data
+          await _cacheProfileData(_stateManager.userData!);
 
-        // **SINGLE UPDATE: Only update loading state**
-        _isLoading.value = false;
-      } else {
-        // **BATCHED UPDATE: Update error and loading together**
-        _error.value = 'Failed to load profile data';
+          // **OPTIMIZATION: Get user ID and start loading videos in parallel**
+          final currentUserId = _stateManager.userData!['googleId'] ??
+              _stateManager.userData!['_id'] ??
+              _stateManager.userData!['id'];
+
+          if (currentUserId != null) {
+            // **OPTIMIZATION: Hide loading state as soon as profile data is ready**
+            // Videos will continue loading in background and update UI when ready
+            _isLoading.value = false;
+
+            // **OPTIMIZATION: Load videos in background without blocking UI**
+            _loadVideos(forceRefresh: forceRefresh).catchError((e) {
+              AppLogger.log(
+                  '⚠️ ProfileScreen: Error loading videos in background: $e');
+              // Don't show error - profile is already shown
+            });
+
+            AppLogger.log(
+                '✅ ProfileScreen: Profile data loaded, videos loading in background');
+          } else {
+            // If no user ID, wait for videos anyway (fallback)
+            await _loadVideos(forceRefresh: forceRefresh);
+            _isLoading.value = false;
+          }
+        } else {
+          _error.value = 'Failed to load profile data';
+          _isLoading.value = false;
+        }
+      } catch (e) {
+        AppLogger.log('❌ ProfileScreen: Error loading data: $e');
+        _error.value = e.toString();
         _isLoading.value = false;
       }
     } catch (e) {
@@ -246,10 +281,18 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  /// **SIMPLIFIED: Simple video loading from server**
-  Future<void> _loadVideos() async {
+  /// **OPTIMIZED: Load videos from server (can run in background)**
+  Future<void> _loadVideos({bool forceRefresh = false}) async {
     try {
-      if (_stateManager.userData == null) return;
+      if (_stateManager.userData == null) {
+        // **OPTIMIZATION: Wait briefly for profile data if not ready yet**
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (_stateManager.userData == null) {
+          AppLogger.log(
+              '⚠️ ProfileScreen: User data not ready, skipping video load');
+          return;
+        }
+      }
 
       final currentUserId = _stateManager.userData!['googleId'] ??
           _stateManager.userData!['_id'] ??
@@ -257,7 +300,25 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       if (currentUserId != null) {
         AppLogger.log(
-            '📡 ProfileScreen: Loading videos from server for user: $currentUserId');
+            '📡 ProfileScreen: Loading videos from server for user: $currentUserId (forceRefresh: $forceRefresh)');
+
+        // **FIX: If force refresh, clear video cache first**
+        if (forceRefresh) {
+          final prefs = await SharedPreferences.getInstance();
+          final cacheKey = _getProfileCacheKey();
+          await prefs.remove('profile_videos_cache_$cacheKey');
+          await prefs.remove('profile_videos_cache_timestamp_$cacheKey');
+
+          // Also clear smart cache
+          final smartCache = SmartCacheManager();
+          await smartCache.initialize();
+          if (smartCache.isInitialized) {
+            final videoCacheKey = 'video_profile_$currentUserId';
+            await smartCache.clearCacheByPattern(videoCacheKey);
+            AppLogger.log('🧹 ProfileScreen: Cleared video cache for refresh');
+          }
+        }
+
         await _stateManager.loadUserVideos(currentUserId);
 
         // Cache the videos
@@ -268,6 +329,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     } catch (e) {
       AppLogger.log('❌ ProfileScreen: Error loading videos: $e');
+      // **OPTIMIZATION: Don't throw error - let videos load in background**
+      // Profile is already shown, videos can fail silently
     }
   }
 
@@ -295,11 +358,42 @@ class _ProfileScreenState extends State<ProfileScreen>
     AppLogger.log(
         '🔄 ProfileScreen: Manual refresh - clearing cache and fetching from server');
 
-    // Clear cache to force fresh load
-    await _clearProfileCache();
+    try {
+      // Clear cache to force fresh load
+      await _clearProfileCache();
 
-    // Reload data with force refresh flag
-    await _loadData(forceRefresh: true);
+      // **FIX: Force refresh both user data and videos**
+      _isLoading.value = true;
+      _error.value = null;
+
+      // Reload user data with force refresh flag
+      await _loadData(forceRefresh: true);
+
+      // **FIX: Explicitly reload videos after user data is loaded**
+      if (_stateManager.userData != null) {
+        final currentUserId = _stateManager.userData!['googleId'] ??
+            _stateManager.userData!['_id'] ??
+            _stateManager.userData!['id'];
+
+        if (currentUserId != null) {
+          AppLogger.log(
+              '🔄 ProfileScreen: Refreshing videos for user: $currentUserId');
+
+          // **FIX: Force refresh videos (clear cache first)**
+          await _loadVideos(forceRefresh: true);
+
+          AppLogger.log(
+              '✅ ProfileScreen: Refreshed ${_stateManager.userVideos.length} videos');
+        }
+      }
+
+      _isLoading.value = false;
+      AppLogger.log('✅ ProfileScreen: Manual refresh completed');
+    } catch (e) {
+      AppLogger.log('❌ ProfileScreen: Error during refresh: $e');
+      _error.value = 'Failed to refresh: ${e.toString()}';
+      _isLoading.value = false;
+    }
   }
 
   @override

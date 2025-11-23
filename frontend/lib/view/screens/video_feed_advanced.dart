@@ -1653,7 +1653,30 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         video.likes = originalLikes;
       });
 
-      _showSnackBar('Failed to update like', isError: true);
+      // **FIX: Show actual error message from backend**
+      String errorMessage = 'Failed to like video';
+      final errorString = e.toString();
+
+      if (errorString.contains('sign in') ||
+          errorString.contains('authenticated')) {
+        errorMessage = 'Please sign in again to like videos';
+        // Optionally navigate to login
+        Future.delayed(const Duration(milliseconds: 500), () {
+          _navigateToLoginScreen();
+        });
+      } else if (errorString.contains('User not found')) {
+        errorMessage =
+            'Please sign in again. Your account may not be registered.';
+      } else if (errorString.contains('Video not found')) {
+        errorMessage = 'Video not found';
+      } else if (errorString.length > 100) {
+        // Extract meaningful part of error
+        errorMessage = errorString.substring(0, 100);
+      } else {
+        errorMessage = errorString.replaceAll('Exception: ', '');
+      }
+
+      _showSnackBar(errorMessage, isError: true);
     }
   }
 

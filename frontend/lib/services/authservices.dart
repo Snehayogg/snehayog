@@ -811,54 +811,110 @@ class AuthService {
     }
   }
 
-  /// **NEW: Auto-login using device ID (for persistent login after reinstall)**
+  /// **IMPROVED: Auto-login using device ID (for persistent login after reinstall)**
   /// Attempts to restore user session if device ID indicates user logged in before
+  /// Uses multiple fallback methods for Google Sign-In to improve reliability
   Future<Map<String, dynamic>?> autoLoginWithDeviceId() async {
     try {
       AppLogger.log('🔄 Attempting auto-login with device ID...');
 
-      // Check if device ID exists (user logged in before)
       final deviceIdService = DeviceIdService();
-      final hasStoredDeviceId = await deviceIdService.hasStoredDeviceId();
 
-      if (!hasStoredDeviceId) {
-        AppLogger.log(
-            'ℹ️ No stored device ID found - user needs to login manually');
+      // Step 1: Get device ID (works even after reinstall)
+      final deviceId = await deviceIdService.getDeviceId();
+      if (deviceId.isEmpty || deviceId.startsWith('fallback_')) {
+        AppLogger.log('❌ Invalid device ID - cannot auto-login');
         return null;
       }
 
-      AppLogger.log('✅ Device ID found - attempting silent Google sign-in...');
+      AppLogger.log('✅ Device ID retrieved: ${deviceId.substring(0, 8)}...');
 
-      // Try silent Google sign-in (works if user previously signed in)
-      final GoogleSignInAccount? googleUser =
-          await _googleSignIn.signInSilently();
-
-      if (googleUser == null) {
+      // Step 2: Check with backend if this device has logged in before
+      final hasStoredDeviceId = await deviceIdService.hasStoredDeviceId();
+      if (!hasStoredDeviceId) {
         AppLogger.log(
-            'ℹ️ Silent sign-in failed - user needs to login manually');
+            'ℹ️ Device ID not found on backend - first time login required');
         return null;
       }
 
       AppLogger.log(
-          '✅ Silent Google sign-in successful for: ${googleUser.email}');
+          '✅ Device ID verified with backend - attempting Google sign-in...');
 
-      // Get ID token from Google
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-      final idToken = googleAuth.idToken;
+      // Step 3: Try multiple Google Sign-In methods (improved reliability)
+      GoogleSignInAccount? googleUser;
 
-      if (idToken == null) {
-        AppLogger.log('❌ Failed to get ID token from Google');
+      // Method 1: Try silent sign-in (most reliable)
+      try {
+        googleUser = await _googleSignIn.signInSilently();
+        if (googleUser != null) {
+          AppLogger.log('✅ Silent sign-in successful');
+        }
+      } catch (e) {
+        AppLogger.log('⚠️ Silent sign-in failed: $e');
+      }
+
+      // Method 2: If silent fails, check current sign-in status
+      if (googleUser == null) {
+        try {
+          final isSignedIn = await _googleSignIn.isSignedIn();
+          if (isSignedIn) {
+            googleUser = await _googleSignIn.signInSilently();
+            if (googleUser != null) {
+              AppLogger.log('✅ Silent sign-in successful after status check');
+            }
+          }
+        } catch (e) {
+          AppLogger.log('⚠️ Check sign-in status failed: $e');
+        }
+      }
+
+      // Method 3: If still null, try getting current user
+      if (googleUser == null) {
+        try {
+          googleUser = _googleSignIn.currentUser;
+          if (googleUser != null) {
+            AppLogger.log('✅ Using current Google user');
+          }
+        } catch (e) {
+          AppLogger.log('⚠️ Get current user failed: $e');
+        }
+      }
+
+      if (googleUser == null) {
+        AppLogger.log(
+            '❌ No Google user available - user needs to sign in manually');
         return null;
       }
 
-      // Get device ID
-      final deviceId = await deviceIdService.getDeviceId();
+      AppLogger.log('✅ Google user found: ${googleUser.email}');
 
-      // Authenticate with backend to get JWT
+      // Step 4: Get ID token from Google
+      String? idToken;
+      try {
+        if (kIsWeb) {
+          final tokens = await GoogleSignInPlatform.instance
+              .getTokens(email: googleUser.email);
+          idToken = tokens.idToken;
+        } else {
+          final GoogleSignInAuthentication googleAuth =
+              await googleUser.authentication;
+          idToken = googleAuth.idToken;
+        }
+      } catch (e) {
+        AppLogger.log('❌ Failed to get ID token: $e');
+        return null;
+      }
+
+      if (idToken == null || idToken.isEmpty) {
+        AppLogger.log('❌ ID token is null or empty');
+        return null;
+      }
+
+      // Step 5: Authenticate with backend to get JWT
+      final resolvedBaseUrl = await AppConfig.getBaseUrlWithFallback();
       final authResponse = await http
           .post(
-            Uri.parse('${AppConfig.baseUrl}/api/auth'),
+            Uri.parse('$resolvedBaseUrl/api/auth'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
               'idToken': idToken,
@@ -870,6 +926,11 @@ class AuthService {
       if (authResponse.statusCode == 200) {
         final authData = jsonDecode(authResponse.body);
         final token = authData['token'];
+
+        if (token == null || token.toString().isEmpty) {
+          AppLogger.log('❌ JWT token is null or empty in response');
+          return null;
+        }
 
         // Save JWT token
         final prefs = await SharedPreferences.getInstance();
@@ -885,8 +946,11 @@ class AuthService {
         };
         await prefs.setString('fallback_user', jsonEncode(fallbackData));
 
+        // Mark device ID as stored locally
+        await deviceIdService.storeDeviceId();
+
         AppLogger.log('✅ Auto-login successful! User: ${googleUser.email}');
-        AppLogger.log('✅ JWT token restored');
+        AppLogger.log('✅ JWT token restored and device ID stored');
 
         return {
           'id': googleUser.id,
@@ -899,6 +963,7 @@ class AuthService {
       } else {
         AppLogger.log(
             '❌ Backend authentication failed: ${authResponse.statusCode}');
+        AppLogger.log('❌ Response body: ${authResponse.body}');
         return null;
       }
     } catch (e) {

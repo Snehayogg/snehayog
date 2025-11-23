@@ -4,6 +4,7 @@ import 'package:vayu/model/video_model.dart';
 import 'package:vayu/services/video_service.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/utils/app_logger.dart';
+import 'package:vayu/view/screens/login_screen.dart';
 
 /// **SIMPLE VIDEO SCREEN: No complex managers, no freezing**
 class VideoScreenSimple extends StatefulWidget {
@@ -261,7 +262,11 @@ class _VideoScreenSimpleState extends State<VideoScreenSimple> {
 
   /// **SIMPLE LIKE ACTION**
   void _handleLike(VideoModel video, int index) {
-    if (_currentUserId == null) return;
+    // **FIX: Navigate to login screen if user is not signed in**
+    if (_currentUserId == null) {
+      _navigateToLoginScreen();
+      return;
+    }
 
     setState(() {
       if (video.likedBy.contains(_currentUserId)) {
@@ -272,6 +277,13 @@ class _VideoScreenSimpleState extends State<VideoScreenSimple> {
         video.likes++;
       }
     });
+  }
+
+  /// **NAVIGATE TO LOGIN SCREEN**
+  void _navigateToLoginScreen() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+    );
   }
 
   @override

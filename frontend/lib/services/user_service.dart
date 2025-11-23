@@ -14,8 +14,11 @@ class UserService {
       throw Exception('Not authenticated');
     }
 
+    // **OPTIMIZATION: Use getBaseUrlWithFallback for better reliability**
+    final baseUrl = await VideoService.getBaseUrlWithFallback();
+
     final response = await httpClientService.get(
-      Uri.parse('${VideoService.baseUrl}/api/users/$id'),
+      Uri.parse('$baseUrl/api/users/$id'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
@@ -23,11 +26,15 @@ class UserService {
     );
 
     if (response.statusCode == 200) {
+      AppLogger.log('✅ UserService: Successfully loaded user: $id');
       return jsonDecode(response.body);
+    } else if (response.statusCode == 404) {
+      AppLogger.log('❌ UserService: User not found: $id');
+      throw Exception('User not found');
     } else {
       AppLogger.log(
           'Failed to load user. Status code: ${response.statusCode}, Body: ${response.body}');
-      throw Exception('Failed to load user');
+      throw Exception('Failed to load user (Status: ${response.statusCode})');
     }
   }
 
