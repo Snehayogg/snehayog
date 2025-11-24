@@ -26,6 +26,7 @@ import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'package:vayu/services/logout_service.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:vayu/view/screens/creator_payment_setup_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -64,6 +65,11 @@ class _ProfileScreenState extends State<ProfileScreen>
   // 0 => Your Videos, 1 => My Recommendations
   final ValueNotifier<int> _activeProfileTabIndex = ValueNotifier<int>(0);
   final List<Map<String, dynamic>> _recommendations = [];
+
+  // UPI ID status tracking
+  final ValueNotifier<bool> _hasUpiId = ValueNotifier<bool>(
+      false); // Default to false - show notice until confirmed
+  final ValueNotifier<bool> _isCheckingUpiId = ValueNotifier<bool>(false);
 
   @override
   void initState() {
@@ -119,6 +125,9 @@ class _ProfileScreenState extends State<ProfileScreen>
           await _loadVideosFromCache(); // **FIXED: Wait for videos to load before hiding loading**
           _isLoading.value = false; // Hide loading after videos are loaded
 
+          // **NEW: Check UPI ID status after cached data is loaded**
+          _checkUpiIdStatus();
+
           // **OPTIMIZATION: Different cache refresh times for own profile vs other users**
           final prefs = await SharedPreferences.getInstance();
           final cacheKey = _getProfileCacheKey();
@@ -162,11 +171,47 @@ class _ProfileScreenState extends State<ProfileScreen>
                   await _loadVideos();
                   AppLogger.log(
                       '✅ ProfileScreen: Background refresh completed');
+                } else {
+                  // **FIX: If refresh fails, show error but keep cached data visible**
+                  AppLogger.log(
+                      '⚠️ ProfileScreen: Background refresh returned null data');
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text(
+                          'Unable to refresh profile. Showing cached data.',
+                        ),
+                        backgroundColor: Colors.orange,
+                        duration: const Duration(seconds: 3),
+                        action: SnackBarAction(
+                          label: 'Retry',
+                          textColor: Colors.white,
+                          onPressed: () => _loadData(forceRefresh: true),
+                        ),
+                      ),
+                    );
+                  }
                 }
               } catch (e) {
                 AppLogger.log(
                     '⚠️ ProfileScreen: Background refresh failed: $e');
-                // Don't show error - user already has cached data
+                // **FIX: Show error to user with retry option**
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Failed to refresh: ${_getUserFriendlyError(e)}',
+                      ),
+                      backgroundColor: Colors.orange,
+                      duration: const Duration(seconds: 4),
+                      action: SnackBarAction(
+                        label: 'Retry',
+                        textColor: Colors.white,
+                        onPressed: () => _loadData(forceRefresh: true),
+                      ),
+                    ),
+                  );
+                }
               }
             });
           }
@@ -175,17 +220,40 @@ class _ProfileScreenState extends State<ProfileScreen>
         }
       }
 
-      // Step 2: No cache or force refresh - load from server
+      // Step 2: No cache or force refresh - load from server with retry
       _isLoading.value = true;
       _error.value = null;
 
       AppLogger.log(
           '📡 ProfileScreen: ${forceRefresh ? "Force refreshing" : "No cache, loading"} from server');
 
-      // **OPTIMIZATION: Load profile data first, then videos in background**
+      // **FIX: Load with retry mechanism**
+      await _loadDataWithRetry(forceRefresh: forceRefresh);
+    } catch (e) {
+      AppLogger.log('❌ ProfileScreen: Error loading data: $e');
+      // **BATCHED UPDATE: Update error and loading together**
+      _error.value = e.toString();
+      _isLoading.value = false;
+    }
+  }
+
+  /// **NEW: Load data with retry mechanism**
+  Future<void> _loadDataWithRetry(
+      {bool forceRefresh = false, int maxRetries = 2}) async {
+    int retryCount = 0;
+
+    while (retryCount <= maxRetries) {
       try {
-        // Start loading profile data
-        await _stateManager.loadUserData(widget.userId);
+        AppLogger.log(
+            '📡 ProfileScreen: Loading data (attempt ${retryCount + 1}/${maxRetries + 1})');
+
+        // Start loading profile data with timeout
+        await _stateManager.loadUserData(widget.userId).timeout(
+          const Duration(seconds: 15),
+          onTimeout: () {
+            throw Exception('Request timed out. Please check your connection.');
+          },
+        );
 
         if (_stateManager.userData != null) {
           // Cache the loaded data
@@ -201,34 +269,82 @@ class _ProfileScreenState extends State<ProfileScreen>
             // Videos will continue loading in background and update UI when ready
             _isLoading.value = false;
 
+            // **NEW: Check UPI ID status after user data is loaded**
+            _checkUpiIdStatus();
+
             // **OPTIMIZATION: Load videos in background without blocking UI**
             _loadVideos(forceRefresh: forceRefresh).catchError((e) {
               AppLogger.log(
                   '⚠️ ProfileScreen: Error loading videos in background: $e');
-              // Don't show error - profile is already shown
+              // **FIX: Show error for video loading failures**
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                        'Videos failed to load: ${_getUserFriendlyError(e)}'),
+                    backgroundColor: Colors.orange,
+                    duration: const Duration(seconds: 3),
+                    action: SnackBarAction(
+                      label: 'Retry',
+                      textColor: Colors.white,
+                      onPressed: () => _loadVideos(forceRefresh: true),
+                    ),
+                  ),
+                );
+              }
             });
 
             AppLogger.log(
                 '✅ ProfileScreen: Profile data loaded, videos loading in background');
+            return; // Success - exit retry loop
           } else {
             // If no user ID, wait for videos anyway (fallback)
             await _loadVideos(forceRefresh: forceRefresh);
             _isLoading.value = false;
+            return; // Success - exit retry loop
           }
         } else {
-          _error.value = 'Failed to load profile data';
-          _isLoading.value = false;
+          // **FIX: Better error message for null data**
+          throw Exception('Server returned empty profile data');
         }
       } catch (e) {
-        AppLogger.log('❌ ProfileScreen: Error loading data: $e');
-        _error.value = e.toString();
-        _isLoading.value = false;
+        retryCount++;
+        AppLogger.log(
+            '❌ ProfileScreen: Error loading data (attempt $retryCount): $e');
+
+        if (retryCount > maxRetries) {
+          // Max retries reached - show error
+          _error.value = _getUserFriendlyError(e);
+          _isLoading.value = false;
+          AppLogger.log('❌ ProfileScreen: Max retries reached, showing error');
+        } else {
+          // Wait before retry
+          AppLogger.log('🔄 ProfileScreen: Retrying in 1 second...');
+          await Future.delayed(const Duration(seconds: 1));
+        }
       }
-    } catch (e) {
-      AppLogger.log('❌ ProfileScreen: Error loading data: $e');
-      // **BATCHED UPDATE: Update error and loading together**
-      _error.value = e.toString();
-      _isLoading.value = false;
+    }
+  }
+
+  /// **NEW: Get user-friendly error message**
+  String _getUserFriendlyError(dynamic error) {
+    final errorString = error.toString().toLowerCase();
+
+    if (errorString.contains('timeout') || errorString.contains('timed out')) {
+      return 'Request timed out. Please check your connection and try again.';
+    } else if (errorString.contains('network') ||
+        errorString.contains('socket')) {
+      return 'Network error. Please check your internet connection.';
+    } else if (errorString.contains('unauthorized') ||
+        errorString.contains('401')) {
+      return 'Please sign in again to view your profile.';
+    } else if (errorString.contains('not found') ||
+        errorString.contains('404')) {
+      return 'Profile not found.';
+    } else if (errorString.contains('server') || errorString.contains('500')) {
+      return 'Server error. Please try again later.';
+    } else {
+      return 'Failed to load profile. Please try again.';
     }
   }
 
@@ -284,12 +400,30 @@ class _ProfileScreenState extends State<ProfileScreen>
   /// **OPTIMIZED: Load videos from server (can run in background)**
   Future<void> _loadVideos({bool forceRefresh = false}) async {
     try {
+      // **FIX: Better handling of null userData with retry**
       if (_stateManager.userData == null) {
-        // **OPTIMIZATION: Wait briefly for profile data if not ready yet**
-        await Future.delayed(const Duration(milliseconds: 100));
+        AppLogger.log('⚠️ ProfileScreen: User data not ready, waiting...');
+        // Wait with exponential backoff
+        for (int i = 0; i < 5; i++) {
+          await Future.delayed(Duration(milliseconds: 200 * (i + 1)));
+          if (_stateManager.userData != null) {
+            break;
+          }
+        }
+
         if (_stateManager.userData == null) {
           AppLogger.log(
-              '⚠️ ProfileScreen: User data not ready, skipping video load');
+              '⚠️ ProfileScreen: User data still not ready after waiting, skipping video load');
+          // **FIX: Show error instead of silently failing**
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Unable to load videos. Please refresh.'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
           return;
         }
       }
@@ -319,7 +453,12 @@ class _ProfileScreenState extends State<ProfileScreen>
           }
         }
 
-        await _stateManager.loadUserVideos(currentUserId);
+        await _stateManager.loadUserVideos(currentUserId).timeout(
+          const Duration(seconds: 20),
+          onTimeout: () {
+            throw Exception('Video loading timed out');
+          },
+        );
 
         // Cache the videos
         await _cacheVideos();
@@ -329,8 +468,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     } catch (e) {
       AppLogger.log('❌ ProfileScreen: Error loading videos: $e');
-      // **OPTIMIZATION: Don't throw error - let videos load in background**
-      // Profile is already shown, videos can fail silently
+      // **FIX: Re-throw error so it can be caught and shown to user**
+      rethrow;
     }
   }
 
@@ -536,6 +675,8 @@ class _ProfileScreenState extends State<ProfileScreen>
     _verifiedInstalled.dispose();
     _verifiedSignedUp.dispose();
     _activeProfileTabIndex.dispose();
+    _hasUpiId.dispose();
+    _isCheckingUpiId.dispose();
     _stateManager.dispose();
     super.dispose();
   }
@@ -1260,7 +1401,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'You appear to be signed in, but we couldn\'t load your profile.',
+                            error.isNotEmpty
+                                ? error
+                                : 'You appear to be signed in, but we couldn\'t load your profile.',
                             style: TextStyle(
                               color: Colors.grey[600],
                               fontSize: 14,
@@ -1269,14 +1412,33 @@ class _ProfileScreenState extends State<ProfileScreen>
                           ),
                           const SizedBox(height: 24),
 
-                          // **SIMPLIFIED: Simple retry button**
-                          TextButton.icon(
-                            onPressed: _loadData,
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Retry'),
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.blue,
-                            ),
+                          // **ENHANCED: Retry button with loading state**
+                          ValueListenableBuilder<bool>(
+                            valueListenable: _isLoading,
+                            builder: (context, isLoading, child) {
+                              return ElevatedButton.icon(
+                                onPressed: isLoading
+                                    ? null
+                                    : () => _loadData(forceRefresh: true),
+                                icon: isLoading
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2),
+                                      )
+                                    : const Icon(Icons.refresh),
+                                label: Text(isLoading ? 'Loading...' : 'Retry'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 12,
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ),
@@ -1318,14 +1480,45 @@ class _ProfileScreenState extends State<ProfileScreen>
                             ),
                             textAlign: TextAlign.center,
                           ),
-                          const SizedBox(height: 24),
-                          TextButton.icon(
-                            onPressed: _loadData,
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Retry'),
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.blue,
+                          if (error != null && error.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              error,
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 14,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
+                          ],
+                          const SizedBox(height: 24),
+                          // **ENHANCED: Retry button with loading state**
+                          ValueListenableBuilder<bool>(
+                            valueListenable: _isLoading,
+                            builder: (context, isLoading, child) {
+                              return ElevatedButton.icon(
+                                onPressed: isLoading
+                                    ? null
+                                    : () => _loadData(forceRefresh: true),
+                                icon: isLoading
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2),
+                                      )
+                                    : const Icon(Icons.refresh),
+                                label: Text(isLoading ? 'Loading...' : 'Retry'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 12,
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ),
@@ -1702,6 +1895,26 @@ class _ProfileScreenState extends State<ProfileScreen>
     return RepaintBoundary(
       child: Column(
         children: [
+          // UPI ID Notice Banner (only for own profile without UPI ID)
+          if (isViewingOwnProfile)
+            ValueListenableBuilder<bool>(
+              valueListenable: _isCheckingUpiId,
+              builder: (context, isChecking, child) {
+                if (isChecking) {
+                  return const SizedBox.shrink(); // Don't show while checking
+                }
+                return ValueListenableBuilder<bool>(
+                  valueListenable: _hasUpiId,
+                  builder: (context, hasUpi, child) {
+                    if (hasUpi) {
+                      return const SizedBox
+                          .shrink(); // Don't show if UPI ID is set
+                    }
+                    return _buildUpiIdNoticeBanner();
+                  },
+                );
+              },
+            ),
           // Stats Section
           ProfileStatsWidget(
             stateManager: _stateManager,
@@ -1986,6 +2199,99 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  /// **NEW: Build UPI ID Notice Banner**
+  Widget _buildUpiIdNoticeBanner() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF3CD), // Light yellow background
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFFFC107), // Yellow border
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFC107).withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.info_outline,
+              color: Color(0xFFFF9800),
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'UPI ID Required',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF856404),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Earning ke liye apna UPI ID add karein',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[800],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const CreatorPaymentSetupScreen(),
+                ),
+              ).then((_) {
+                // Refresh UPI ID status after returning from payment setup
+                _checkUpiIdStatus();
+              });
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF9800),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              elevation: 0,
+            ),
+            child: const Text(
+              'Add UPI ID',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<bool> _checkPaymentSetupStatus() async {
     try {
       // **FIX: Check user-specific flag first**
@@ -2106,6 +2412,73 @@ class _ProfileScreenState extends State<ProfileScreen>
         error: e.toString(),
       );
       return false;
+    }
+  }
+
+  // **NEW: Check UPI ID status for notice**
+  Future<void> _checkUpiIdStatus() async {
+    try {
+      // Only check for own profile
+      if (widget.userId != null) {
+        _hasUpiId.value = true; // Don't show notice for other users
+        return;
+      }
+
+      _isCheckingUpiId.value = true;
+
+      final userData = _stateManager.getUserData();
+      final token = userData?['token'];
+
+      if (token == null) {
+        AppLogger.log('⚠️ ProfileScreen: No token available for UPI ID check');
+        _hasUpiId.value =
+            false; // Show notice if not signed in (they need to sign in first)
+        _isCheckingUpiId.value = false;
+        return;
+      }
+
+      AppLogger.log('🔍 ProfileScreen: Checking UPI ID status...');
+      final response = await http.get(
+        Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/profile'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final paymentDetails = data['paymentDetails'];
+        final paymentMethod = data['creator']?['preferredPaymentMethod'];
+
+        AppLogger.log('🔍 ProfileScreen: Payment method: $paymentMethod');
+        AppLogger.log('🔍 ProfileScreen: Payment details: $paymentDetails');
+
+        // Check if UPI ID is set
+        if (paymentMethod == 'upi' && paymentDetails != null) {
+          final upiId = paymentDetails['upiId'];
+          final hasUpi = upiId != null && upiId.toString().trim().isNotEmpty;
+          _hasUpiId.value = hasUpi;
+          AppLogger.log(
+              '🔍 ProfileScreen: UPI ID status: ${hasUpi ? "SET" : "NOT SET"}');
+        } else {
+          // If payment method is not UPI or payment details don't exist, show notice
+          _hasUpiId.value = false;
+          AppLogger.log(
+              '🔍 ProfileScreen: No UPI payment method found - showing notice');
+        }
+      } else {
+        // If API fails, show notice (better to show than hide)
+        AppLogger.log(
+            '⚠️ ProfileScreen: API returned status ${response.statusCode} - showing notice');
+        _hasUpiId.value = false;
+      }
+    } catch (e) {
+      AppLogger.log('⚠️ ProfileScreen: Error checking UPI ID status: $e');
+      // On error, show notice (better to show than hide)
+      _hasUpiId.value = false;
+    } finally {
+      _isCheckingUpiId.value = false;
     }
   }
 

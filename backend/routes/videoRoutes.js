@@ -853,18 +853,20 @@ router.get('/', async (req, res) => {
       totalVideos = await Video.countDocuments(baseQueryFilter);
     }
     
+    const isPersonalizedFeed = !!userIdentifier;
+
     const response = {
       videos: transformedVideos,
-      hasMore: userId 
+      hasMore: isPersonalizedFeed 
         ? transformedVideos.length >= limitNum // For personalized feed, check if we got enough
         : (pageNum * limitNum) < totalVideos, // For regular feed, use pagination
       total: totalVideos,
       currentPage: pageNum,
-      totalPages: userId ? Math.ceil(totalVideos / limitNum) : Math.ceil(totalVideos / limitNum),
+      totalPages: Math.ceil(totalVideos / limitNum),
       filters: {
         videoType: videoType || 'all',
         format: 'mp4_and_hls',
-        personalized: !!userIdentifier
+        personalized: isPersonalizedFeed
       },
       message: `✅ Fetched ${validVideos.length} valid videos successfully${userIdentifier ? ' (personalized feed)' : ''}${videoType ? ` (${videoType} type)` : ''}`
     };

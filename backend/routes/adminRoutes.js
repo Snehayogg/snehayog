@@ -405,18 +405,12 @@ router.get('/creators', requireAdminDashboardKey, async (req, res) => {
       };
 
       const upiId = creator?.paymentDetails?.upiId || null;
-      const bankAccount = creator?.paymentDetails?.bankAccount || null;
       const paymentSummary = {
         preferredPaymentMethod: creator.preferredPaymentMethod || null,
         upiId,
-        bank: bankAccount
-          ? {
-              accountNumber: bankAccount.accountNumber,
-              ifscCode: bankAccount.ifscCode,
-              bankName: bankAccount.bankName,
-              accountHolderName: bankAccount.accountHolderName
-            }
-          : null
+        paypalEmail: creator?.paymentDetails?.paypalEmail || null,
+        stripeAccountId: creator?.paymentDetails?.stripeAccountId || null,
+        wiseEmail: creator?.paymentDetails?.wiseEmail || null
       };
 
       const earnings = earningsMap.get(id) || {

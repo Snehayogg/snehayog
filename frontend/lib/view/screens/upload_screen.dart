@@ -10,7 +10,6 @@ import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/logout_service.dart';
 import 'package:vayu/view/screens/create_ad_screen_refactored.dart';
 import 'package:vayu/view/screens/ad_management_screen.dart';
-import 'package:vayu/core/constants/interests.dart';
 import 'package:vayu/view/screens/upload_screen/widgets/upload_advanced_settings_section.dart';
 import 'package:vayu/utils/app_logger.dart';
 
@@ -87,6 +86,7 @@ class _UploadScreenState extends State<UploadScreen> {
   };
 
   // NEW: Category and Tags to align with ad targeting interests
+  static const String _defaultCategory = 'Others';
   final ValueNotifier<String?> _selectedCategory = ValueNotifier<String?>(null);
   final ValueNotifier<List<String>> _tags = ValueNotifier<List<String>>([]);
   final ValueNotifier<String?> _videoType = ValueNotifier<String?>(null);
@@ -480,7 +480,17 @@ class _UploadScreenState extends State<UploadScreen> {
 
   @override
   void initState() {
+    _selectedCategory.value = _defaultCategory;
     super.initState();
+  }
+
+  String _deriveTitleFromFile(File file) {
+    final normalizedPath = file.path.replaceAll('\\', '/');
+    final fileName = normalizedPath.split('/').last;
+    final dotIndex = fileName.lastIndexOf('.');
+    final baseName = dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName;
+    final cleaned = baseName.replaceAll(RegExp(r'[_\-]+'), ' ').trim();
+    return cleaned.isEmpty ? 'Untitled video' : cleaned;
   }
 
   /// **UPLOAD VIDEO METHOD** - Handles video upload with progress tracking
@@ -1007,6 +1017,8 @@ class _UploadScreenState extends State<UploadScreen> {
 
         // **BATCHED UPDATE: Update video selection**
         _selectedVideo.value = videoFile;
+        _titleController.text = _deriveTitleFromFile(videoFile);
+        _selectedCategory.value ??= _defaultCategory;
         _isProcessing.value = false;
 
         AppLogger.log('✅ Video selected: ${videoFile.path}');
@@ -1371,52 +1383,16 @@ class _UploadScreenState extends State<UploadScreen> {
                                 ),
                               ),
                               const SizedBox(height: 24),
-                              TextField(
-                                controller: _titleController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Video Title',
-                                  hintText: 'Enter a title for your video',
-                                  border: OutlineInputBorder(),
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              // NEW: Category selector
-                              ValueListenableBuilder<String?>(
-                                valueListenable: _selectedCategory,
-                                builder: (context, selectedCategory, _) {
-                                  return DropdownButtonFormField<String>(
-                                    initialValue: selectedCategory,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Video Category',
-                                      border: OutlineInputBorder(),
-                                      prefixIcon: Icon(Icons.category),
-                                      helperText:
-                                          'Choose a category to improve ad targeting',
-                                    ),
-                                    items: [
-                                      ...kInterestOptions
-                                          .where((c) => c != 'Custom Interest')
-                                          .map((c) => DropdownMenuItem<String>(
-                                                value: c,
-                                                child: Text(c),
-                                              )),
-                                      // **NEW: Add "Others" option at the end**
-                                      const DropdownMenuItem<String>(
-                                        value: 'Others',
-                                        child: Text('Others'),
-                                      ),
-                                    ],
-                                    onChanged: (val) {
-                                      // **NO setState: Use ValueNotifier**
-                                      _selectedCategory.value = val;
-                                    },
-                                  );
-                                },
-                              ),
-                              const SizedBox(height: 16),
                               UploadAdvancedSettingsSection(
                                 isExpanded: _showAdvancedSettings,
                                 onToggle: _toggleAdvancedSettings,
+                                titleController: _titleController,
+                                defaultCategory: _defaultCategory,
+                                selectedCategory: _selectedCategory,
+                                onCategoryChanged: (value) {
+                                  _selectedCategory.value =
+                                      value ?? _defaultCategory;
+                                },
                                 videoType: _videoType,
                                 onVideoTypeChanged: _handleVideoTypeChanged,
                                 linkController: _linkController,
@@ -1475,7 +1451,8 @@ class _UploadScreenState extends State<UploadScreen> {
                                         child: Column(
                                           children: [
                                             Container(
-                                              padding: const EdgeInsets.all(12.0),
+                                              padding:
+                                                  const EdgeInsets.all(12.0),
                                               decoration: BoxDecoration(
                                                 color: Colors.red.shade50,
                                                 borderRadius:
@@ -1497,7 +1474,8 @@ class _UploadScreenState extends State<UploadScreen> {
                                                     child: Text(
                                                       errorMessage,
                                                       style: TextStyle(
-                                                        color: Colors.red.shade700,
+                                                        color:
+                                                            Colors.red.shade700,
                                                         fontSize: 14,
                                                       ),
                                                     ),
@@ -1514,20 +1492,24 @@ class _UploadScreenState extends State<UploadScreen> {
                                                     ? null
                                                     : () {
                                                         // Clear error and retry upload
-                                                        _errorMessage.value = null;
+                                                        _errorMessage.value =
+                                                            null;
                                                         _uploadVideo();
                                                       },
                                                 icon: const Icon(Icons.refresh),
-                                                label: const Text('Retry Upload'),
+                                                label:
+                                                    const Text('Retry Upload'),
                                                 style: ElevatedButton.styleFrom(
                                                   backgroundColor: Colors.blue,
                                                   foregroundColor: Colors.white,
-                                                  padding: const EdgeInsets.symmetric(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
                                                     vertical: 12,
                                                   ),
                                                   shape: RoundedRectangleBorder(
                                                     borderRadius:
-                                                        BorderRadius.circular(8),
+                                                        BorderRadius.circular(
+                                                            8),
                                                   ),
                                                 ),
                                               ),

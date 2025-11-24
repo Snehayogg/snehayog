@@ -60,9 +60,6 @@ async function processPaymentByMethod(payout) {
       case 'upi':
         return await processUPIPayment(payout, user);
       
-      case 'bank_transfer':
-        return await processBankTransfer(payout, user);
-      
       case 'paypal':
         return await processPayPalPayment(payout, user);
       
@@ -102,31 +99,6 @@ async function processUPIPayment(payout, user) {
     };
   } catch (error) {
     throw new Error(`UPI payment failed: ${error.message}`);
-  }
-}
-
-// **NEW: Process bank transfer**
-async function processBankTransfer(payout, user) {
-  try {
-    const bankDetails = user.paymentDetails.bankAccount;
-    console.log(`🏦 Processing bank transfer to: ${bankDetails.accountNumber}`);
-    
-    // Here you would integrate with actual bank transfer API
-    // For now, we'll simulate the process
-    
-    // Simulate bank processing delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Generate bank reference
-    const reference = `BANK_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    return {
-      success: true,
-      reference: reference,
-      method: 'Bank Transfer'
-    };
-  } catch (error) {
-    throw new Error(`Bank transfer failed: ${error.message}`);
   }
 }
 

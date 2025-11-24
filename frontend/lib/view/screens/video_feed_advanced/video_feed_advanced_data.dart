@@ -521,6 +521,123 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     }
   }
 
+  /// Start over - reset to first video and reload feed from beginning
+  /// This allows users to restart the feed after watching all videos
+  Future<void> startOver() async {
+    AppLogger.log(
+        '🔄 VideoFeedAdvanced: _startOver() called - restarting from beginning');
+
+    if (_isLoading || _isRefreshing) {
+      AppLogger.log(
+        '⚠️ VideoFeedAdvanced: Already refreshing/loading, ignoring duplicate call',
+      );
+      return;
+    }
+
+    AppLogger.log('🛑 Stopping all videos before starting over...');
+    await _stopAllVideosAndClearControllers();
+
+    _isRefreshing = true;
+
+    try {
+      if (mounted) {
+        setState(() {
+          _isLoading = true;
+          _errorMessage = null;
+          _currentIndex = 0; // Reset to first video
+          _hasMore = true; // Reset hasMore flag
+        });
+      }
+
+      await _cacheManager.initialize();
+      await _cacheManager.invalidateVideoCache(
+        videoType: widget.videoType,
+      );
+
+      _currentPage = 1;
+      await _loadVideos(page: 1, append: false);
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = null;
+        });
+
+        // Navigate to first video
+        if (_pageController.hasClients) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _pageController.hasClients) {
+              _pageController.jumpToPage(0);
+              _currentIndex = 0;
+            }
+          });
+        }
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            if (_mainController?.currentIndex == 0) {
+              _tryAutoplayCurrent();
+            }
+          }
+        });
+      }
+
+      AppLogger.log(
+          '✅ VideoFeedAdvanced: Started over successfully - reset to first video');
+      _restoreRetainedControllersAfterRefresh();
+      _loadActiveAds();
+
+      AppLogger.log(
+        '🔄 VideoFeedAdvanced: Reloading carousel ads after start over...',
+      );
+      _carouselAdManager.loadCarouselAds();
+
+      if (mounted && _videos.isNotEmpty) {
+        _preloadVideo(0); // Preload first video
+        _preloadNearbyVideos();
+        _precacheThumbnails();
+      }
+    } catch (e) {
+      AppLogger.log('❌ VideoFeedAdvanced: Error starting over: $e');
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = e.toString();
+        });
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Failed to start over: ${_getUserFriendlyErrorMessage(e)}',
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: () {
+                startOver();
+              },
+            ),
+          ),
+        );
+      }
+    } finally {
+      _isRefreshing = false;
+    }
+  }
+
   Future<void> _stopAllVideosAndClearControllers() async {
     AppLogger.log('🛑 _stopAllVideosAndClearControllers: Starting cleanup...');
 

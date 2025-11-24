@@ -10,6 +10,7 @@ import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/user_service.dart';
 import 'package:vayu/core/managers/carousel_ad_manager.dart';
 import 'package:vayu/view/widget/comments_sheet_widget.dart';
+import 'package:vayu/services/comments/video_comments_data_source.dart';
 import 'package:vayu/services/active_ads_service.dart';
 import 'package:vayu/services/video_view_tracker.dart';
 import 'package:vayu/services/ad_refresh_notifier.dart';
@@ -1688,6 +1689,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   /// **HANDLE COMMENT: Open comment sheet**
   void _handleComment(VideoModel video) {
+    // **FIX: Check if user is signed in before opening comment sheet**
+    if (_currentUserId == null) {
+      _showSnackBar('Please sign in to view and add comments', isError: true);
+      Future.delayed(const Duration(milliseconds: 500), () {
+        _navigateToLoginScreen();
+      });
+      return;
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1698,6 +1708,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       builder: (context) => CommentsSheetWidget(
         video: video,
         videoService: _videoService,
+        dataSource: VideoCommentsDataSource(
+          videoId: video.id,
+          videoService: _videoService,
+        ),
         onCommentsUpdated: (updatedComments) {
           // Update video comments in the list
           setState(() {

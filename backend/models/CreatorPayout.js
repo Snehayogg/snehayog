@@ -73,22 +73,15 @@ const CreatorPayoutSchema = new mongoose.Schema({
     type: String,
     enum: [
       // Indian methods
-      'upi', 'bank_transfer', 'card_payment',
+      'upi', 'card_payment',
       // International methods
-      'paypal', 'stripe', 'wise', 'payoneer', 'bank_wire'
+      'paypal', 'stripe', 'wise', 'payoneer'
     ]
   },
   // **NEW: Payment Details based on method**
   paymentDetails: {
     // For UPI
     upiId: String,
-    // Bank Account (India)
-    bankAccount: {
-      accountNumber: String,
-      ifscCode: String,
-      accountHolderName: String,
-      bankName: String
-    },
     // **NEW: Card Payment Details**
     cardDetails: {
       cardNumber: String,
@@ -99,15 +92,7 @@ const CreatorPayoutSchema = new mongoose.Schema({
     // For International
     paypalEmail: String,
     stripeAccountId: String,
-    wiseEmail: String,
-    // For Bank Wire
-    internationalBank: {
-      accountNumber: String,
-      swiftCode: String,
-      routingNumber: String,
-      bankName: String,
-      accountHolderName: String
-    }
+    wiseEmail: String
   },
   paymentReference: {
     type: String,
@@ -228,14 +213,12 @@ CreatorPayoutSchema.virtual('formattedPayableAmount').get(function() {
 CreatorPayoutSchema.virtual('paymentMethodDisplay').get(function() {
   const methodNames = {
     'upi': 'UPI',
-    'bank_transfer': 'Bank Transfer',
     'paytm': 'Paytm',
     'phonepe': 'PhonePe',
     'paypal': 'PayPal',
     'stripe': 'Stripe',
     'wise': 'Wise',
-    'payoneer': 'Payoneer',
-    'bank_wire': 'International Bank Wire'
+    'payoneer': 'Payoneer'
   };
   return methodNames[this.paymentMethod] || this.paymentMethod;
 });

@@ -63,25 +63,41 @@ class _CommentsSheetWidgetState extends State<CommentsSheetWidget> {
   }
 
   Future<String?> _getCurrentUserId() async {
-    final controller =
-        Provider.of<GoogleSignInController>(context, listen: false);
-    return controller.userData?['id'];
+    try {
+      final controller =
+          Provider.of<GoogleSignInController>(context, listen: false);
+      // **FIX: Use googleId first, then fallback to id**
+      return controller.userData?['googleId'] ?? controller.userData?['id'];
+    } catch (e) {
+      print('❌ CommentsSheet: Error getting user ID: $e');
+      return null;
+    }
   }
 
   Future<void> _postComment() async {
     if (_controller.text.trim().isEmpty || _isPosting) return;
+
     setState(() => _isPosting = true);
     try {
+      // **FIX: Check if user is signed in first**
       final userId = await _getCurrentUserId();
-      if (userId == null) {
+      if (userId == null || userId.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please sign in')),
+          const SnackBar(
+            content: Text('Please sign in to comment'),
+            backgroundColor: Colors.red,
+          ),
         );
         setState(() => _isPosting = false);
         return;
       }
+
+      print(
+          '💬 CommentsSheet: Posting comment with userId: ${userId.substring(0, 8)}...');
+
       if (widget.dataSource != null) {
         // Generic path (ads or videos via data source)
+        print('💬 CommentsSheet: Using data source to post comment');
         await widget.dataSource!.postComment(content: _controller.text.trim());
         _controller.clear();
 
@@ -92,8 +108,10 @@ class _CommentsSheetWidgetState extends State<CommentsSheetWidget> {
           _comments = items.map((item) => Comment.fromJson(item)).toList();
         });
         _scrollToLatestComment();
-      } else {
+        print('✅ CommentsSheet: Comment posted successfully via data source');
+      } else if (widget.videoService != null && widget.video != null) {
         // Legacy video path
+        print('💬 CommentsSheet: Using legacy video service to post comment');
         final updatedComments = await widget.videoService!.addComment(
           widget.video!.id,
           _controller.text.trim(),
@@ -105,10 +123,35 @@ class _CommentsSheetWidgetState extends State<CommentsSheetWidget> {
         });
         _scrollToLatestComment();
         widget.onCommentsUpdated?.call(updatedComments);
+        print('✅ CommentsSheet: Comment posted successfully via legacy path');
+      } else {
+        throw Exception('No data source or video service available');
       }
     } catch (e) {
+      print('❌ CommentsSheet: Error posting comment: $e');
+      // **FIX: Show actual error message**
+      String errorMessage = 'Failed to post comment';
+      final errorString = e.toString();
+
+      if (errorString.contains('sign in') ||
+          errorString.contains('authenticated')) {
+        errorMessage = 'Please sign in to comment';
+      } else if (errorString.contains('User not found')) {
+        errorMessage = 'User not found. Please sign in again.';
+      } else if (errorString.contains('User ID not found')) {
+        errorMessage = 'User ID not found. Please sign in again.';
+      } else if (errorString.length > 100) {
+        errorMessage = errorString.substring(0, 100);
+      } else {
+        errorMessage = errorString.replaceAll('Exception: ', '');
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to post comment')),
+        SnackBar(
+          content: Text(errorMessage),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
       );
     } finally {
       setState(() => _isPosting = false);
@@ -221,112 +264,268 @@ class _CommentsSheetWidgetState extends State<CommentsSheetWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-        left: 16,
-        right: 16,
-        top: 16,
+    final screenHeight = MediaQuery.of(context).size.height;
+    final maxHeight = screenHeight * 0.7; // 70% of screen height
+
+    return Container(
+      constraints: BoxConstraints(maxHeight: maxHeight),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Drag handle
           Container(
             width: 40,
             height: 4,
-            margin: const EdgeInsets.only(bottom: 12),
+            margin: const EdgeInsets.symmetric(vertical: 12),
             decoration: BoxDecoration(
               color: Colors.grey[300],
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          const Text('Comments',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          if (_isLoading)
-            const Center(child: CircularProgressIndicator())
-          else if (_comments.isEmpty)
-            const Center(child: Text('No comments yet.'))
-          else
-            SizedBox(
-              height: 250,
-              child: ListView.builder(
-                controller: _scrollController,
-                itemCount: _comments.length,
-                itemBuilder: (context, index) {
-                  final comment = _comments[index];
-                  final currentUserId = Provider.of<GoogleSignInController>(
-                              context,
-                              listen: false)
-                          .userData?['googleId'] ??
-                      Provider.of<GoogleSignInController>(context,
-                              listen: false)
-                          .userData?['id'];
-                  final isOwnComment =
-                      currentUserId != null && comment.userId == currentUserId;
-
-                  return ListTile(
-                    leading: comment.userProfilePic.isNotEmpty
-                        ? CircleAvatar(
-                            backgroundImage:
-                                NetworkImage(comment.userProfilePic))
-                        : const CircleAvatar(child: Icon(Icons.person)),
-                    title: Text(comment.userName.isNotEmpty
-                        ? comment.userName
-                        : 'User'),
-                    subtitle: Text(comment.text),
-                    trailing: isOwnComment
-                        ? PopupMenuButton<String>(
-                            onSelected: (value) {
-                              if (value == 'delete') {
-                                _deleteComment(comment.id);
-                              }
-                            },
-                            itemBuilder: (context) => [
-                              const PopupMenuItem(
-                                value: 'delete',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.delete, color: Colors.red),
-                                    SizedBox(width: 8),
-                                    Text('Delete',
-                                        style: TextStyle(color: Colors.red)),
-                                  ],
+          // Header
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                const Text(
+                  'Comments',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.of(context).pop(),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          // Comment input - Moved to top for better visibility
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              border: Border(
+                bottom: BorderSide(color: Colors.grey[200]!),
+              ),
+            ),
+            padding: const EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 8,
+              bottom: 8,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(
+                      hintText: 'Add a comment...',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                    ),
+                    minLines: 1,
+                    maxLines: 3,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _isPosting
+                    ? const Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : IconButton(
+                        icon: Icon(
+                          Icons.send,
+                          color: _controller.text.trim().isNotEmpty
+                              ? Colors.blue
+                              : Colors.grey,
+                        ),
+                        onPressed:
+                            _controller.text.trim().isNotEmpty && !_isPosting
+                                ? _postComment
+                                : null,
+                      ),
+              ],
+            ),
+          ),
+          // Comments list or empty state - Flexible to allow text field to show
+          Flexible(
+            child: _isLoading
+                ? const SizedBox(
+                    height: 200,
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                : _comments.isEmpty
+                    ? const SizedBox(
+                        height: 200,
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.chat_bubble_outline,
+                                size: 64,
+                                color: Colors.grey,
+                              ),
+                              SizedBox(height: 16),
+                              Text(
+                                'No comments yet.',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.grey,
                                 ),
                               ),
                             ],
-                          )
-                        : null,
-                  );
-                },
-              ),
-            ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _controller,
-                  decoration: const InputDecoration(
-                    hintText: 'Add a comment...',
-                    border: OutlineInputBorder(),
-                  ),
-                  minLines: 1,
-                  maxLines: 3,
-                ),
-              ),
-              const SizedBox(width: 8),
-              _isPosting
-                  ? const CircularProgressIndicator(strokeWidth: 2)
-                  : IconButton(
-                      icon: const Icon(Icons.send),
-                      onPressed: _postComment,
-                    ),
-            ],
+                          ),
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: _scrollController,
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        itemCount: _comments.length,
+                        itemBuilder: (context, index) {
+                          final comment = _comments[index];
+                          final currentUserId =
+                              Provider.of<GoogleSignInController>(context,
+                                          listen: false)
+                                      .userData?['googleId'] ??
+                                  Provider.of<GoogleSignInController>(context,
+                                          listen: false)
+                                      .userData?['id'];
+                          final isOwnComment = currentUserId != null &&
+                              comment.userId == currentUserId;
+
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                CircleAvatar(
+                                  radius: 20,
+                                  backgroundImage:
+                                      comment.userProfilePic.isNotEmpty
+                                          ? NetworkImage(comment.userProfilePic)
+                                          : null,
+                                  child: comment.userProfilePic.isEmpty
+                                      ? const Icon(Icons.person)
+                                      : null,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            comment.userName.isNotEmpty
+                                                ? comment.userName
+                                                : 'User',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            _getTimeAgo(comment.createdAt),
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey[600],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        comment.text,
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (isOwnComment)
+                                  PopupMenuButton<String>(
+                                    icon: Icon(
+                                      Icons.more_vert,
+                                      size: 18,
+                                      color: Colors.grey[600],
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    onSelected: (value) {
+                                      if (value == 'delete') {
+                                        _deleteComment(comment.id);
+                                      }
+                                    },
+                                    itemBuilder: (context) => [
+                                      const PopupMenuItem(
+                                        value: 'delete',
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.delete,
+                                                color: Colors.red, size: 20),
+                                            SizedBox(width: 8),
+                                            Text('Delete',
+                                                style: TextStyle(
+                                                    color: Colors.red)),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
           ),
         ],
       ),
     );
+  }
+
+  String _getTimeAgo(DateTime? dateTime) {
+    if (dateTime == null) return '';
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inDays > 365) {
+      return '${(difference.inDays / 365).floor()}y ago';
+    } else if (difference.inDays > 30) {
+      return '${(difference.inDays / 30).floor()}mo ago';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
   }
 
   @override

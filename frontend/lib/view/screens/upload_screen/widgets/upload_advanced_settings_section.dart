@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:vayu/core/constants/interests.dart';
 
 class UploadAdvancedSettingsSection extends StatelessWidget {
   final ValueNotifier<bool> isExpanded;
   final VoidCallback onToggle;
+  final TextEditingController titleController;
+  final ValueNotifier<String?> selectedCategory;
+  final String defaultCategory;
+  final void Function(String?) onCategoryChanged;
   final ValueNotifier<String?> videoType;
   final void Function(String?) onVideoTypeChanged;
   final TextEditingController linkController;
@@ -15,6 +20,10 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
     super.key,
     required this.isExpanded,
     required this.onToggle,
+    required this.titleController,
+    required this.selectedCategory,
+    required this.defaultCategory,
+    required this.onCategoryChanged,
     required this.videoType,
     required this.onVideoTypeChanged,
     required this.linkController,
@@ -37,7 +46,7 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
             subtitle: const Text(
-              'Optional: configure paid videos, tags, and external links',
+              'Optional: configure metadata, paid videos, tags, and external links',
               style: TextStyle(fontSize: 12),
             ),
             trailing: ValueListenableBuilder<bool>(
@@ -66,6 +75,12 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    _buildAutoFillNotice(),
+                    const SizedBox(height: 16),
+                    _buildTitleField(),
+                    const SizedBox(height: 16),
+                    _buildCategorySelector(),
+                    const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -129,6 +144,79 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildAutoFillNotice() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.flash_on, size: 16, color: Colors.blue),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            'Quick uploads auto-fill the title from the filename and use your default category. Update below if you need custom metadata.',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.blueGrey.shade700,
+              height: 1.4,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTitleField() {
+    return TextField(
+      controller: titleController,
+      decoration: const InputDecoration(
+        labelText: 'Video Title',
+        hintText: 'Update the auto-generated title',
+        border: OutlineInputBorder(),
+        prefixIcon: Icon(Icons.title),
+      ),
+    );
+  }
+
+  Widget _buildCategorySelector() {
+    return ValueListenableBuilder<String?>(
+      valueListenable: selectedCategory,
+      builder: (context, currentValue, _) {
+        final options = [
+          ...kInterestOptions.where((c) => c != 'Custom Interest'),
+          if (!kInterestOptions.contains(defaultCategory)) defaultCategory,
+        ];
+        final effectiveValue = currentValue ??
+            (options.contains(defaultCategory)
+                ? defaultCategory
+                : options.first);
+        return DropdownButtonFormField<String>(
+          value: effectiveValue,
+          decoration: const InputDecoration(
+            labelText: 'Video Category',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.category),
+            helperText: 'Choose a category to improve targeting',
+          ),
+          items: options
+              .map(
+                (c) => DropdownMenuItem<String>(
+                  value: c,
+                  child: Text(c),
+                ),
+              )
+              .toList(),
+          onChanged: onCategoryChanged,
+        );
+      },
     );
   }
 

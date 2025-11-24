@@ -441,12 +441,12 @@ router.get('/recent', requireAdminDashboardKey, async (req, res) => {
 // **NEW: Helper function to get available payment methods by country**
 function _getAvailablePaymentMethods(country) {
   const methods = {
-    'IN': ['upi', 'bank_transfer', 'card_payment'],
-    'US': ['paypal', 'stripe', 'bank_wire', 'card_payment'],
-    'CA': ['paypal', 'stripe', 'bank_wire', 'card_payment'],
-    'GB': ['paypal', 'stripe', 'wise', 'bank_wire', 'card_payment'],
-    'DE': ['paypal', 'stripe', 'wise', 'bank_wire', 'card_payment'],
-    'AU': ['paypal', 'stripe', 'bank_wire', 'card_payment'],
+    'IN': ['upi', 'card_payment'],
+    'US': ['paypal', 'stripe', 'card_payment'],
+    'CA': ['paypal', 'stripe', 'card_payment'],
+    'GB': ['paypal', 'stripe', 'wise', 'card_payment'],
+    'DE': ['paypal', 'stripe', 'wise', 'card_payment'],
+    'AU': ['paypal', 'stripe', 'card_payment'],
     'default': ['paypal', 'stripe', 'wise', 'payoneer', 'card_payment']
   };
   
@@ -457,12 +457,10 @@ function _getAvailablePaymentMethods(country) {
 async function _processPayout(payout) {
   const processingTimes = {
     'upi': '2-4 hours',
-    'bank_transfer': '1-2 business days',
     'card_payment': '1-3 business days',
     'paypal': '1-3 business days',
     'stripe': '2-5 business days',
-    'wise': '1-2 business days',
-    'bank_wire': '3-7 business days'
+    'wise': '1-2 business days'
   };
 
   return {

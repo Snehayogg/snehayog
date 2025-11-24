@@ -168,6 +168,28 @@ class VideoProvider extends ChangeNotifier {
     await loadVideos(isInitialLoad: true, videoType: _currentVideoType);
   }
 
+  /// Start over - reset pagination and reload from beginning
+  /// This allows users to restart the feed after watching all videos
+  Future<void> startOver() async {
+    print('🔄 VideoProvider: Starting over - resetting to first page...');
+    _videos.clear();
+    _currentPage = AppConstants.initialPage;
+    _hasMore = true;
+    _errorMessage = null;
+    _loadState = VideoLoadState.initial;
+
+    // Invalidate cache to get fresh videos
+    try {
+      final cacheManager = SmartCacheManager();
+      await cacheManager.invalidateVideoCache(videoType: _currentVideoType);
+      print('🗑️ VideoProvider: Invalidated video cache for fresh start');
+    } catch (e) {
+      print('⚠️ VideoProvider: Failed to invalidate cache: $e');
+    }
+
+    await loadVideos(isInitialLoad: true, videoType: _currentVideoType);
+  }
+
   /// Toggle like for a video
   Future<void> toggleLike(String videoId, String userId) async {
     try {

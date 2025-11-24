@@ -693,6 +693,15 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
   void _handlePageChangeDebounced(int index) {
     if (!mounted || index == _currentIndex) return;
 
+    // **NEW: Automatically restart feed when reaching the end**
+    if (index >= _videos.length && !_isRefreshing) {
+      AppLogger.log(
+        '🔄 Reached end of feed at index $index, automatically restarting...',
+      );
+      startOver();
+      return;
+    }
+
     _lifecyclePaused = false;
 
     _lastAccessedLocal[_currentIndex] = DateTime.now();

@@ -121,34 +121,22 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     final videoIndex = index;
 
     if (videoIndex >= totalVideos) {
+      // Automatically restart the feed when reaching the end
+      // No buttons shown - seamless continuation
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_isRefreshing) {
+          startOver();
+        }
+      });
+
+      // Show loading indicator while restarting
       return Container(
         width: double.infinity,
         height: double.infinity,
         color: Colors.black,
         child: const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.video_library_outlined,
-                size: 64,
-                color: Colors.white54,
-              ),
-              SizedBox(height: 16),
-              Text(
-                'No more videos',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              SizedBox(height: 8),
-              Text(
-                'You\'ve reached the end!',
-                style: TextStyle(color: Colors.white54, fontSize: 14),
-              ),
-            ],
+          child: CircularProgressIndicator(
+            color: Colors.white,
           ),
         ),
       );

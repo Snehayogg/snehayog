@@ -422,14 +422,56 @@ class AuthService {
         AppLogger.log(
             'ℹ️ No JWT token found, attempting auto-login with device ID...');
 
-        // Try auto-login (non-blocking, don't wait for result)
-        unawaited(autoLoginWithDeviceId().then((userData) {
-          if (userData != null) {
-            AppLogger.log('✅ Auto-login successful - user session restored');
-          }
-        }));
+        // **IMPROVED: Wait for auto-login if device ID is recognized (for seamless reinstall experience)**
+        try {
+          final deviceIdService = DeviceIdService();
+          final deviceId = await deviceIdService.getDeviceId();
 
-        return false; // Return false immediately, auto-login will restore session in background
+          // Check if device ID is valid and might be recognized
+          if (deviceId.isNotEmpty && !deviceId.startsWith('fallback_')) {
+            // Check if device has logged in before (with timeout)
+            final hasStoredDeviceId = await deviceIdService
+                .hasStoredDeviceId()
+                .timeout(const Duration(seconds: 3), onTimeout: () => false);
+
+            if (hasStoredDeviceId) {
+              AppLogger.log(
+                  '✅ Device ID recognized - waiting for auto-login to complete...');
+              // Wait for auto-login with timeout (max 10 seconds)
+              final autoLoginResult = await autoLoginWithDeviceId()
+                  .timeout(const Duration(seconds: 10), onTimeout: () {
+                AppLogger.log('⚠️ Auto-login timed out');
+                return null;
+              });
+
+              if (autoLoginResult != null) {
+                AppLogger.log(
+                    '✅ Auto-login successful - user session restored');
+                return true; // User is now logged in
+              } else {
+                AppLogger.log(
+                    'ℹ️ Auto-login failed or cancelled - user needs to login manually');
+                return false;
+              }
+            } else {
+              AppLogger.log(
+                  'ℹ️ Device ID not recognized - first time login required');
+              return false;
+            }
+          } else {
+            AppLogger.log('ℹ️ Invalid device ID - first time login required');
+            return false;
+          }
+        } catch (e) {
+          AppLogger.log('⚠️ Error during auto-login check: $e');
+          // Fallback: try auto-login in background (non-blocking)
+          unawaited(autoLoginWithDeviceId().then((userData) {
+            if (userData != null) {
+              AppLogger.log('✅ Auto-login successful in background');
+            }
+          }));
+          return false;
+        }
       }
 
       // **OPTIMIZED: Return cached status immediately, verify in background**
@@ -813,7 +855,7 @@ class AuthService {
 
   /// **IMPROVED: Auto-login using device ID (for persistent login after reinstall)**
   /// Attempts to restore user session if device ID indicates user logged in before
-  /// Uses multiple fallback methods for Google Sign-In to improve reliability
+  /// Automatically triggers Google Sign-In if device ID is recognized but silent sign-in fails
   Future<Map<String, dynamic>?> autoLoginWithDeviceId() async {
     try {
       AppLogger.log('🔄 Attempting auto-login with device ID...');
@@ -838,12 +880,13 @@ class AuthService {
       }
 
       AppLogger.log(
-          '✅ Device ID verified with backend - attempting Google sign-in...');
+          '✅ Device ID verified with backend - user has logged in before');
+      AppLogger.log('🔄 Attempting to restore Google Sign-In session...');
 
       // Step 3: Try multiple Google Sign-In methods (improved reliability)
       GoogleSignInAccount? googleUser;
 
-      // Method 1: Try silent sign-in (most reliable)
+      // Method 1: Try silent sign-in (works if Google session is cached)
       try {
         googleUser = await _googleSignIn.signInSilently();
         if (googleUser != null) {
@@ -880,10 +923,26 @@ class AuthService {
         }
       }
 
+      // **NEW: Method 4: If device ID is recognized but no Google session exists,
+      // automatically trigger Google Sign-In (for seamless reinstall experience)
       if (googleUser == null) {
         AppLogger.log(
-            '❌ No Google user available - user needs to sign in manually');
-        return null;
+            '🔄 Device ID recognized but no Google session - automatically triggering sign-in...');
+        try {
+          // Automatically trigger Google Sign-In (will show account picker)
+          // This allows user to quickly select their account after reinstall
+          googleUser = await _googleSignIn.signIn();
+          if (googleUser != null) {
+            AppLogger.log(
+                '✅ Automatic sign-in successful: ${googleUser.email}');
+          } else {
+            AppLogger.log('ℹ️ User cancelled automatic sign-in');
+            return null;
+          }
+        } catch (e) {
+          AppLogger.log('❌ Automatic sign-in failed: $e');
+          return null;
+        }
       }
 
       AppLogger.log('✅ Google user found: ${googleUser.email}');

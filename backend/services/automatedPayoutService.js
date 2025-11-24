@@ -199,10 +199,6 @@ class AutomatedPayoutService {
       case 'upi':
         return user.paymentDetails?.upiId && user.paymentDetails.upiId.length > 0;
       
-      case 'bank_transfer':
-        return user.paymentDetails?.bankAccount?.accountNumber && 
-               user.paymentDetails?.bankAccount?.ifscCode;
-      
       case 'paypal':
         return user.paymentDetails?.paypalEmail && user.paymentDetails.paypalEmail.length > 0;
       

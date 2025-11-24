@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -9,6 +11,7 @@ import 'package:vayu/view/screens/video_screen.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/background_profile_preloader.dart';
 import 'package:vayu/services/location_onboarding_service.dart';
+import 'package:in_app_update/in_app_update.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -32,6 +35,7 @@ class _MainScreenState extends State<MainScreen>
   // **BACKGROUND PRELOADING: Preload profile data when user is on video feed**
   final BackgroundProfilePreloader _profilePreloader =
       BackgroundProfilePreloader();
+  bool _hasCheckedForUpdates = false;
 
   Future<void> _refreshVideoList() async {
     print('🔄 MainScreen: _refreshVideoList() called');
@@ -177,6 +181,47 @@ class _MainScreenState extends State<MainScreen>
     }
   }
 
+  /// **IN-APP UPDATE: Check for Google Play updates (flexible preferred)**
+  Future<void> _checkForAppUpdates() async {
+    if (_hasCheckedForUpdates || !mounted) return;
+    if (!Platform.isAndroid) {
+      _hasCheckedForUpdates = true;
+      return;
+    }
+
+    try {
+      final info = await InAppUpdate.checkForUpdate();
+      _hasCheckedForUpdates = true;
+
+      if (info.updateAvailability ==
+          UpdateAvailability.developerTriggeredUpdateInProgress) {
+        await InAppUpdate.completeFlexibleUpdate();
+        return;
+      }
+
+      if (info.updateAvailability == UpdateAvailability.updateAvailable) {
+        if (info.immediateUpdateAllowed) {
+          await InAppUpdate.performImmediateUpdate();
+        } else if (info.flexibleUpdateAllowed) {
+          final result = await InAppUpdate.startFlexibleUpdate();
+          if (result == AppUpdateResult.success) {
+            await InAppUpdate.completeFlexibleUpdate();
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Update installed, restarting...'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('In-app update check failed: $e');
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -203,6 +248,10 @@ class _MainScreenState extends State<MainScreen>
 
       // **LOCATION ONBOARDING: Check and show location permission request**
       _checkAndShowLocationOnboarding();
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkForAppUpdates();
     });
   }
 

@@ -40,20 +40,13 @@ const UserSchema = new mongoose.Schema({
   preferredPaymentMethod: {
     type: String,
     enum: [
-      'upi', 'bank_transfer', 'card_payment',
-      'paypal', 'stripe', 'wise', 'payoneer', 'bank_wire'
+      'upi', 'card_payment',
+      'paypal', 'stripe', 'wise', 'payoneer'
     ]
   },
   paymentDetails: {
     // UPI
     upiId: String,
-    // Bank Account (India)
-    bankAccount: {
-      accountNumber: String,
-      ifscCode: String,
-      accountHolderName: String,
-      bankName: String
-    },
     // **NEW: Card Payment Details**
     cardDetails: {
       cardNumber: String,
@@ -64,15 +57,7 @@ const UserSchema = new mongoose.Schema({
     // International
     paypalEmail: String,
     stripeAccountId: String,
-    wiseEmail: String,
-    // Bank Wire
-    internationalBank: {
-      accountNumber: String,
-      swiftCode: String,
-      routingNumber: String,
-      bankName: String,
-      accountHolderName: String
-    }
+    wiseEmail: String
   },
   country: {
     type: String,

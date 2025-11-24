@@ -29,18 +29,17 @@ class VideoActionsWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RepaintBoundary(
-      child: Consumer<GoogleSignInController>(
-        builder: (context, controller, child) {
-          final userData = controller.userData;
-          final userId = userData?['id'];
-          final isLiked = userId != null && video.likedBy.contains(userId);
+    return RepaintBoundary(child: Consumer<GoogleSignInController>(
+      builder: (context, controller, child) {
+        final userData = controller.userData;
+        final userId = userData?['id'];
+        final isLiked = userId != null && video.likedBy.contains(userId);
 
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Like button
-              _ActionButton(
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Like button
+            _ActionButton(
               icon: Icon(
                 isLiked ? Icons.favorite : Icons.favorite_border,
                 color: isLiked ? Colors.red : Colors.white,
@@ -99,7 +98,7 @@ class VideoActionsWidget extends StatelessWidget {
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) => CommentsSheetWidget(
         video: video,

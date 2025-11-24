@@ -488,28 +488,127 @@ class VideoService {
     String userId,
   ) async {
     try {
+      AppLogger.log('💬 VideoService: Adding comment to video: $videoId');
+
+      // **FIX: Validate inputs**
+      if (videoId.isEmpty) {
+        throw Exception('Video ID is required');
+      }
+      if (text.trim().isEmpty) {
+        throw Exception('Comment text cannot be empty');
+      }
+      if (userId.isEmpty) {
+        throw Exception('User ID is required. Please sign in to comment.');
+      }
+
+      // **FIX: Get user data and validate authentication**
+      final userData = await _authService.getUserData();
+      if (userData == null) {
+        AppLogger.log('❌ VideoService: User not authenticated for comment');
+        throw Exception('Please sign in to comment');
+      }
+
+      // **FIX: Use googleId from userData if userId doesn't match**
+      final googleId = userData['googleId'] ?? userData['id'];
+      final finalUserId = userId == googleId ? userId : googleId;
+
+      if (finalUserId == null || finalUserId.isEmpty) {
+        AppLogger.log('❌ VideoService: User ID not found in user data');
+        throw Exception('User ID not found. Please sign in again.');
+      }
+
+      AppLogger.log(
+          '💬 VideoService: Comment - userId: ${finalUserId.substring(0, 8)}..., text length: ${text.length}');
+
       final headers = await _getAuthHeaders();
+      headers['Content-Type'] = 'application/json';
+
       final resolvedBaseUrl = await getBaseUrlWithFallback();
+
+      // **FIX: Log request details**
+      AppLogger.log(
+          '💬 VideoService: Comment request URL: $resolvedBaseUrl/api/videos/$videoId/comments');
+      AppLogger.log(
+          '💬 VideoService: Comment request - Auth header present: ${headers.containsKey('Authorization')}');
       final res = await http
           .post(
             Uri.parse('$resolvedBaseUrl/api/videos/$videoId/comments'),
             headers: headers,
-            body: json.encode({'userId': userId, 'text': text}),
+            body: json.encode({'userId': finalUserId, 'text': text.trim()}),
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 15));
+
+      AppLogger.log(
+          '📡 VideoService: Comment response status: ${res.statusCode}');
+      AppLogger.log(
+          '📡 VideoService: Comment response body: ${res.body.length > 200 ? res.body.substring(0, 200) : res.body}');
 
       if (res.statusCode == 200) {
-        final List<dynamic> commentsJson = json.decode(res.body);
-        return commentsJson.map((json) => Comment.fromJson(json)).toList();
-      } else if (res.statusCode == 401) {
+        try {
+          final List<dynamic> commentsJson = json.decode(res.body);
+          final comments =
+              commentsJson.map((json) => Comment.fromJson(json)).toList();
+          AppLogger.log(
+              '✅ VideoService: Comment added successfully. Total comments: ${comments.length}');
+          return comments;
+        } catch (e) {
+          AppLogger.log('❌ VideoService: Error parsing comment response: $e');
+          throw Exception('Invalid response format from server');
+        }
+      } else if (res.statusCode == 401 || res.statusCode == 403) {
+        AppLogger.log(
+            '❌ VideoService: Authentication failed (${res.statusCode})');
         throw Exception('Please sign in again to add comments');
+      } else if (res.statusCode == 400) {
+        final errorBody = res.body;
+        AppLogger.log(
+            '❌ VideoService: Bad request (${res.statusCode}), Body: $errorBody');
+        try {
+          final error = json.decode(errorBody);
+          final errorMsg = error['error'] ?? 'Invalid request';
+          throw Exception(errorMsg.toString());
+        } catch (e) {
+          throw Exception(
+              'Invalid request: ${errorBody.length > 100 ? errorBody.substring(0, 100) : errorBody}');
+        }
+      } else if (res.statusCode == 404) {
+        final errorBody = res.body;
+        AppLogger.log(
+            '❌ VideoService: Not found (${res.statusCode}), Body: $errorBody');
+        try {
+          final error = json.decode(errorBody);
+          final errorMsg = error['error'] ?? 'Video or user not found';
+          if (errorMsg.toString().contains('User not found')) {
+            throw Exception('User not found. Please sign in again.');
+          }
+          throw Exception(errorMsg.toString());
+        } catch (e) {
+          throw Exception('Video or user not found');
+        }
       } else {
-        final error = json.decode(res.body);
-        throw Exception(error['error'] ?? 'Failed to add comment');
+        final errorBody = res.body;
+        AppLogger.log(
+            '❌ VideoService: Comment failed - Status: ${res.statusCode}, Body: $errorBody');
+        try {
+          final error = json.decode(errorBody);
+          final errorMsg =
+              error['error'] ?? error['message'] ?? 'Failed to add comment';
+          throw Exception(errorMsg.toString());
+        } catch (e) {
+          if (e is FormatException) {
+            throw Exception(
+                'Failed to add comment: ${errorBody.length > 100 ? errorBody.substring(0, 100) : errorBody}');
+          }
+          throw Exception('Failed to add comment (Status: ${res.statusCode})');
+        }
       }
     } catch (e) {
+      AppLogger.log('❌ VideoService: Error adding comment: $e');
       if (e is TimeoutException) {
         throw Exception('Request timed out. Please try again.');
+      } else if (e.toString().contains('sign in') ||
+          e.toString().contains('authenticated')) {
+        rethrow; // Re-throw authentication errors as-is
       }
       rethrow;
     }

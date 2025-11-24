@@ -6,6 +6,7 @@ class VideoLoadingStates extends StatelessWidget {
   final String? errorMessage;
   final VoidCallback onRefresh;
   final VoidCallback onTestApi;
+  final VoidCallback? onStartOver;
 
   const VideoLoadingStates({
     Key? key,
@@ -13,6 +14,7 @@ class VideoLoadingStates extends StatelessWidget {
     this.errorMessage,
     required this.onRefresh,
     required this.onTestApi,
+    this.onStartOver,
   }) : super(key: key);
 
   @override
@@ -27,7 +29,10 @@ class VideoLoadingStates extends StatelessWidget {
           onTestApi: onTestApi,
         );
       case VideoLoadState.noMore:
-        return const _NoMoreState();
+        return _NoMoreState(
+          onRefresh: onRefresh,
+          onStartOver: onStartOver,
+        );
       default:
         return const SizedBox.shrink();
     }
@@ -43,7 +48,7 @@ class _LoadingState extends StatelessWidget {
     return const Center(
       child: CircularProgressIndicator(color: Colors.white),
     );
-  } 
+  }
 }
 
 // Lightweight error state widget
@@ -110,37 +115,29 @@ class _ErrorState extends StatelessWidget {
 
 // Lightweight no more state widget
 class _NoMoreState extends StatelessWidget {
-  const _NoMoreState();
+  final VoidCallback onRefresh;
+  final VoidCallback? onStartOver;
+
+  const _NoMoreState({
+    required this.onRefresh,
+    this.onStartOver,
+  });
 
   @override
   Widget build(BuildContext context) {
+    // Automatically restart when reaching the end (no buttons shown)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (onStartOver != null) {
+        onStartOver!();
+      } else {
+        onRefresh();
+      }
+    });
+
+    // Show loading indicator while restarting
     return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.video_library,
-            size: 64,
-            color: Colors.white54,
-          ),
-          SizedBox(height: 16),
-          Text(
-            'No more videos',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-            ),
-          ),
-          SizedBox(height: 8),
-          Text(
-            'You\'ve reached the end of the video feed',
-            style: TextStyle(
-              color: Colors.white54,
-              fontSize: 14,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
+      child: CircularProgressIndicator(
+        color: Colors.white,
       ),
     );
   }

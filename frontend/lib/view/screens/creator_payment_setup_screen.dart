@@ -28,15 +28,9 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
 
   // Form controllers
   final _upiIdController = TextEditingController();
-  final _accountNumberController = TextEditingController();
-  final _ifscCodeController = TextEditingController();
-  final _bankNameController = TextEditingController();
-  final _accountHolderNameController = TextEditingController();
   final _paypalEmailController = TextEditingController();
   final _stripeAccountIdController = TextEditingController();
   final _wiseEmailController = TextEditingController();
-  final _swiftCodeController = TextEditingController();
-  final _routingNumberController = TextEditingController();
   final _panNumberController = TextEditingController();
   final _gstNumberController = TextEditingController();
   bool _showOptionalTaxInfo = false;
@@ -46,12 +40,12 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
 
   // Country and payment method mappings
   final Map<String, List<String>> _countryPaymentMethods = {
-    'IN': ['upi', 'bank_transfer'],
-    'US': ['paypal', 'stripe', 'bank_wire'],
-    'CA': ['paypal', 'stripe', 'bank_wire'],
-    'GB': ['paypal', 'stripe', 'wise', 'bank_wire'],
-    'DE': ['paypal', 'stripe', 'wise', 'bank_wire'],
-    'AU': ['paypal', 'stripe', 'bank_wire'],
+    'IN': ['upi'],
+    'US': ['paypal', 'stripe'],
+    'CA': ['paypal', 'stripe'],
+    'GB': ['paypal', 'stripe', 'wise'],
+    'DE': ['paypal', 'stripe', 'wise'],
+    'AU': ['paypal', 'stripe'],
     'default': ['paypal', 'stripe', 'wise', 'payoneer']
   };
 
@@ -173,19 +167,9 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
         final payment = data['paymentDetails'] as Map<String, dynamic>?;
         if (payment != null) {
           _upiIdController.text = payment['upiId'] ?? '';
-          _accountNumberController.text =
-              payment['bankAccount']?['accountNumber'] ?? '';
-          _ifscCodeController.text = payment['bankAccount']?['ifscCode'] ?? '';
-          _bankNameController.text = payment['bankAccount']?['bankName'] ?? '';
-          _accountHolderNameController.text =
-              payment['bankAccount']?['accountHolderName'] ?? '';
           _paypalEmailController.text = payment['paypalEmail'] ?? '';
           _stripeAccountIdController.text = payment['stripeAccountId'] ?? '';
           _wiseEmailController.text = payment['wiseEmail'] ?? '';
-          _swiftCodeController.text =
-              payment['internationalBank']?['swiftCode'] ?? '';
-          _routingNumberController.text =
-              payment['internationalBank']?['routingNumber'] ?? '';
         }
 
         final tax = data['taxInfo'] as Map<String, dynamic>?;
@@ -237,26 +221,12 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
           // Load existing payment details if available
           if (data['paymentDetails'] != null) {
             _upiIdController.text = data['paymentDetails']['upiId'] ?? '';
-            _accountNumberController.text =
-                data['paymentDetails']['bankAccount']?['accountNumber'] ?? '';
-            _ifscCodeController.text =
-                data['paymentDetails']['bankAccount']?['ifscCode'] ?? '';
-            _bankNameController.text =
-                data['paymentDetails']['bankAccount']?['bankName'] ?? '';
-            _accountHolderNameController.text = data['paymentDetails']
-                    ['bankAccount']?['accountHolderName'] ??
-                '';
             _paypalEmailController.text =
                 data['paymentDetails']['paypalEmail'] ?? '';
             _stripeAccountIdController.text =
                 data['paymentDetails']['stripeAccountId'] ?? '';
             _wiseEmailController.text =
                 data['paymentDetails']['wiseEmail'] ?? '';
-            _swiftCodeController.text =
-                data['paymentDetails']['internationalBank']?['swiftCode'] ?? '';
-            _routingNumberController.text = data['paymentDetails']
-                    ['internationalBank']?['routingNumber'] ??
-                '';
             _panNumberController.text = data['taxInfo']?['panNumber'] ?? '';
             _gstNumberController.text = data['taxInfo']?['gstNumber'] ?? '';
           }
@@ -360,15 +330,6 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
           paymentDetails['upiId'] = _upiIdController.text.trim();
           break;
 
-        case 'bank_transfer':
-          paymentDetails['bankAccount'] = {
-            'accountNumber': _accountNumberController.text.trim(),
-            'ifscCode': _ifscCodeController.text.trim(),
-            'bankName': _bankNameController.text.trim(),
-            'accountHolderName': _accountHolderNameController.text.trim(),
-          };
-          break;
-
         case 'paypal':
           paymentDetails['paypalEmail'] = _paypalEmailController.text.trim();
           break;
@@ -380,16 +341,6 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
 
         case 'wise':
           paymentDetails['wiseEmail'] = _wiseEmailController.text.trim();
-          break;
-
-        case 'bank_wire':
-          paymentDetails['internationalBank'] = {
-            'accountNumber': _accountNumberController.text.trim(),
-            'swiftCode': _swiftCodeController.text.trim(),
-            'routingNumber': _routingNumberController.text.trim(),
-            'bankName': _bankNameController.text.trim(),
-            'accountHolderName': _accountHolderNameController.text.trim(),
-          };
           break;
       }
 
@@ -1192,22 +1143,6 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
           items.add(_buildReviewItem('UPI ID', _upiIdController.text));
         }
         break;
-      case 'bank_transfer':
-        if (_accountNumberController.text.isNotEmpty) {
-          items.add(_buildReviewItem(
-              'Account Number', _accountNumberController.text));
-        }
-        if (_ifscCodeController.text.isNotEmpty) {
-          items.add(_buildReviewItem('IFSC Code', _ifscCodeController.text));
-        }
-        if (_bankNameController.text.isNotEmpty) {
-          items.add(_buildReviewItem('Bank Name', _bankNameController.text));
-        }
-        if (_accountHolderNameController.text.isNotEmpty) {
-          items.add(_buildReviewItem(
-              'Account Holder', _accountHolderNameController.text));
-        }
-        break;
       case 'paypal':
         if (_paypalEmailController.text.isNotEmpty) {
           items.add(
@@ -1223,26 +1158,6 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
       case 'wise':
         if (_wiseEmailController.text.isNotEmpty) {
           items.add(_buildReviewItem('Wise Email', _wiseEmailController.text));
-        }
-        break;
-      case 'bank_wire':
-        if (_accountNumberController.text.isNotEmpty) {
-          items.add(_buildReviewItem(
-              'Account Number', _accountNumberController.text));
-        }
-        if (_swiftCodeController.text.isNotEmpty) {
-          items.add(_buildReviewItem('SWIFT Code', _swiftCodeController.text));
-        }
-        if (_routingNumberController.text.isNotEmpty) {
-          items.add(_buildReviewItem(
-              'Routing Number', _routingNumberController.text));
-        }
-        if (_bankNameController.text.isNotEmpty) {
-          items.add(_buildReviewItem('Bank Name', _bankNameController.text));
-        }
-        if (_accountHolderNameController.text.isNotEmpty) {
-          items.add(_buildReviewItem(
-              'Account Holder', _accountHolderNameController.text));
         }
         break;
     }
@@ -1270,71 +1185,6 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
             }
             return null;
           },
-        );
-
-      case 'bank_transfer':
-        return Column(
-          children: [
-            TextFormField(
-              controller: _accountNumberController,
-              decoration: const InputDecoration(
-                labelText: 'Account Number',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.account_balance),
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter account number';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _ifscCodeController,
-              decoration: const InputDecoration(
-                labelText: 'IFSC Code',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.code),
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter IFSC code';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _bankNameController,
-              decoration: const InputDecoration(
-                labelText: 'Bank Name',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.account_balance),
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter bank name';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _accountHolderNameController,
-              decoration: const InputDecoration(
-                labelText: 'Account Holder Name',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.person),
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter account holder name';
-                }
-                return null;
-              },
-            ),
-          ],
         );
 
       case 'paypal':
@@ -1394,86 +1244,6 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
           },
         );
 
-      case 'bank_wire':
-        return Column(
-          children: [
-            TextFormField(
-              controller: _accountNumberController,
-              decoration: const InputDecoration(
-                labelText: 'Account Number',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.account_balance),
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter account number';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _swiftCodeController,
-              decoration: const InputDecoration(
-                labelText: 'SWIFT Code',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.code),
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter SWIFT code';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _routingNumberController,
-              decoration: const InputDecoration(
-                labelText: 'Routing Number',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.code),
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter routing number';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _bankNameController,
-              decoration: const InputDecoration(
-                labelText: 'Bank Name',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.account_balance),
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter bank name';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _accountHolderNameController,
-              decoration: const InputDecoration(
-                labelText: 'Account Holder Name',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.person),
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter account holder name';
-                }
-                return null;
-              },
-            ),
-          ],
-        );
-
       default:
         return const Text('Please select a payment method');
     }
@@ -1483,8 +1253,6 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
     switch (method) {
       case 'upi':
         return 'UPI';
-      case 'bank_transfer':
-        return 'Bank Transfer';
       case 'paypal':
         return 'PayPal';
       case 'stripe':
@@ -1493,8 +1261,6 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
         return 'Wise';
       case 'payoneer':
         return 'Payoneer';
-      case 'bank_wire':
-        return 'International Bank Wire';
       default:
         return method;
     }
@@ -1503,15 +1269,9 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
   @override
   void dispose() {
     _upiIdController.dispose();
-    _accountNumberController.dispose();
-    _ifscCodeController.dispose();
-    _bankNameController.dispose();
-    _accountHolderNameController.dispose();
     _paypalEmailController.dispose();
     _stripeAccountIdController.dispose();
     _wiseEmailController.dispose();
-    _swiftCodeController.dispose();
-    _routingNumberController.dispose();
     _panNumberController.dispose();
     _gstNumberController.dispose();
     super.dispose();
