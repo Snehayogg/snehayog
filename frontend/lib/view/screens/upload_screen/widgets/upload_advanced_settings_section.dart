@@ -199,7 +199,7 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
                 ? defaultCategory
                 : options.first);
         return DropdownButtonFormField<String>(
-          value: effectiveValue,
+          initialValue: effectiveValue,
           decoration: const InputDecoration(
             labelText: 'Video Category',
             border: OutlineInputBorder(),

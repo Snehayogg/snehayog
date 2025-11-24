@@ -23,7 +23,8 @@ class AuthService {
   // Global navigator key for accessing context
   static GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-  Future<Map<String, dynamic>?> signInWithGoogle() async {
+  Future<Map<String, dynamic>?> signInWithGoogle(
+      {bool forceAccountPicker = true}) async {
     try {
       AppLogger.log('🔐 Starting Google Sign-In process...');
 
@@ -46,19 +47,27 @@ class AuthService {
       // **NEW: Print configuration for debugging**
       GoogleSignInConfig.printConfig();
 
-      // Ensure previous account session is fully cleared so account chooser appears
-      try {
-        await _googleSignIn.signOut();
-        await _googleSignIn.disconnect();
-      } catch (e) {
-        AppLogger.log('ℹ️ Pre sign-in disconnect/signOut ignored: $e');
-      }
+      // **FIXED: Only clear session if we want to force account picker (manual sign-in)**
+      // This preserves Google session caching for auto-login flows
+      if (forceAccountPicker) {
+        AppLogger.log(
+            '🔄 Force account picker enabled - clearing previous session...');
+        try {
+          await _googleSignIn.signOut();
+          await _googleSignIn.disconnect();
+        } catch (e) {
+          AppLogger.log('ℹ️ Pre sign-in disconnect/signOut ignored: $e');
+        }
 
-      // Also clear any locally cached fallback to avoid auto-restoring prior account
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.remove('fallback_user');
-      } catch (_) {}
+        // Also clear any locally cached fallback to avoid auto-restoring prior account
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove('fallback_user');
+        } catch (_) {}
+      } else {
+        AppLogger.log(
+            'ℹ️ Preserving Google session cache for seamless sign-in');
+      }
 
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
@@ -192,9 +201,8 @@ class AuthService {
           await prefs.setString('fallback_user', jsonEncode(fallbackData));
           AppLogger.log('✅ Saved fallback_user with Google account data');
 
-          // **NEW: Store device ID after successful login**
-          await DeviceIdService().storeDeviceId();
-          AppLogger.log('✅ Device ID stored after successful login');
+          // **CRITICAL: ALWAYS store device ID after successful authentication**
+          await _ensureDeviceIdStored(deviceId);
 
           // Return combined user data
           return {
@@ -286,9 +294,8 @@ class AuthService {
                 body: jsonEncode(userData),
               );
 
-              // **NEW: Store device ID after successful retry login**
-              await DeviceIdService().storeDeviceId();
-              AppLogger.log('✅ Device ID stored after retry login');
+              // **CRITICAL: ALWAYS store device ID after successful retry authentication**
+              await _ensureDeviceIdStored(deviceId);
 
               return {
                 'id': googleUser.id,
@@ -339,9 +346,8 @@ class AuthService {
             'isFallback': true,
           }));
 
-      // **NEW: Store device ID after fallback login**
-      await DeviceIdService().storeDeviceId();
-      AppLogger.log('✅ Device ID stored after fallback login');
+      // **CRITICAL: ALWAYS store device ID even in fallback mode**
+      await _ensureDeviceIdStored(await DeviceIdService().getDeviceId());
 
       AppLogger.log('✅ Fallback session created successfully');
 
@@ -924,13 +930,14 @@ class AuthService {
       }
 
       // **NEW: Method 4: If device ID is recognized but no Google session exists,
-      // automatically trigger Google Sign-In (for seamless reinstall experience)
+      // automatically trigger Google Sign-In WITHOUT breaking session cache
       if (googleUser == null) {
         AppLogger.log(
             '🔄 Device ID recognized but no Google session - automatically triggering sign-in...');
         try {
-          // Automatically trigger Google Sign-In (will show account picker)
-          // This allows user to quickly select their account after reinstall
+          // **FIXED: Call signIn directly WITHOUT signOut/disconnect to preserve session cache**
+          // This allows Google to remember the account for future auto-logins
+          // We don't call signOut/disconnect here because we want to preserve caching
           googleUser = await _googleSignIn.signIn();
           if (googleUser != null) {
             AppLogger.log(
@@ -1005,8 +1012,8 @@ class AuthService {
         };
         await prefs.setString('fallback_user', jsonEncode(fallbackData));
 
-        // Mark device ID as stored locally
-        await deviceIdService.storeDeviceId();
+        // **CRITICAL: ALWAYS store device ID after successful auto-login**
+        await _ensureDeviceIdStored(deviceId);
 
         AppLogger.log('✅ Auto-login successful! User: ${googleUser.email}');
         AppLogger.log('✅ JWT token restored and device ID stored');
@@ -1203,6 +1210,44 @@ class AuthService {
   /// **TESTING: Check if location permission is granted**
   static Future<bool> checkLocationPermission() async {
     return await LocationOnboardingService.isLocationPermissionGranted();
+  }
+
+  /// **CRITICAL: Ensure device ID is ALWAYS stored after successful authentication**
+  /// This method guarantees deviceId storage even if backend calls fail
+  /// This is essential for auto-login to work after app reinstall
+  Future<void> _ensureDeviceIdStored(String deviceId) async {
+    try {
+      final deviceIdService = DeviceIdService();
+
+      // Store locally first (always succeeds)
+      await deviceIdService.storeDeviceId();
+      AppLogger.log(
+          '✅ Device ID stored locally: ${deviceId.substring(0, 8)}...');
+
+      // Try to verify with backend (non-blocking, doesn't fail if backend is down)
+      try {
+        final hasStored = await deviceIdService
+            .hasStoredDeviceId()
+            .timeout(const Duration(seconds: 3), onTimeout: () => false);
+
+        if (!hasStored) {
+          AppLogger.log(
+              '⚠️ Device ID not yet verified on backend, but stored locally');
+          AppLogger.log(
+              'ℹ️ Backend verification will happen on next app launch');
+        } else {
+          AppLogger.log('✅ Device ID verified on backend');
+        }
+      } catch (e) {
+        AppLogger.log('⚠️ Backend verification failed (non-critical): $e');
+        AppLogger.log(
+            'ℹ️ Device ID stored locally, will verify on next launch');
+      }
+    } catch (e) {
+      AppLogger.log('❌ CRITICAL: Failed to store device ID: $e');
+      // Don't throw - deviceId storage failure shouldn't break sign-in
+      // But log it as critical since it affects auto-login
+    }
   }
 
   /// **OPTIMIZED: Async referral tracking that doesn't block sign-in**
