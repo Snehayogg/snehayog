@@ -38,7 +38,7 @@ class AdMobConfig {
     // In production, use environment variables or configured IDs
     if (Platform.isAndroid) {
       return _productionBannerAdUnitIdAndroid ??
-          Platform.environment['ADMOB_BANNER_AD_UNIT_ID_ANDROID'];
+          Platform.environment['ca-app-pub-2359959043864469~1031962361'];
     } else if (Platform.isIOS) {
       return _productionBannerAdUnitIdIOS ??
           Platform.environment['ADMOB_BANNER_AD_UNIT_ID_IOS'];

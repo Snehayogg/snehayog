@@ -487,7 +487,7 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
       
       const result = {
         _id: videoObj._id?.toString(),
-        videoName: videoObj.videoName || 'Untitled Video',
+        videoName: (videoObj.videoName && videoObj.videoName.toString().trim()) || 'Untitled Video',
         videoUrl: normalizeUrl(videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || ''),
         thumbnailUrl: normalizeUrl(videoObj.thumbnailUrl || ''),
         description: videoObj.description || '',
@@ -2047,7 +2047,7 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
       const videoObj = video;
       const result = {
         _id: videoObj._id?.toString(),
-        videoName: videoObj.videoName || 'Untitled Video',
+        videoName: (videoObj.videoName && videoObj.videoName.toString().trim()) || 'Untitled Video',
         videoUrl: videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || '',
         thumbnailUrl: videoObj.thumbnailUrl || '',
         description: videoObj.description || '',

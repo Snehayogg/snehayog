@@ -47,11 +47,12 @@ class AuthService {
       // **NEW: Print configuration for debugging**
       GoogleSignInConfig.printConfig();
 
-      // **FIXED: Only clear session if we want to force account picker (manual sign-in)**
+      // **IMPROVED: Only clear Google session if we want to force account picker (manual sign-in)**
       // This preserves Google session caching for auto-login flows
+      // **FIXED: Don't clear fallback_user here - preserve it until successful sign-in**
       if (forceAccountPicker) {
         AppLogger.log(
-            '🔄 Force account picker enabled - clearing previous session...');
+            '🔄 Force account picker enabled - clearing previous Google session...');
         try {
           await _googleSignIn.signOut();
           await _googleSignIn.disconnect();
@@ -59,11 +60,9 @@ class AuthService {
           AppLogger.log('ℹ️ Pre sign-in disconnect/signOut ignored: $e');
         }
 
-        // Also clear any locally cached fallback to avoid auto-restoring prior account
-        try {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.remove('fallback_user');
-        } catch (_) {}
+        // **IMPROVED: Keep fallback_user until successful sign-in to prevent data loss**
+        // Only clear it after we have new valid token and user data
+        AppLogger.log('ℹ️ Preserving fallback_user until successful sign-in');
       } else {
         AppLogger.log(
             'ℹ️ Preserving Google session cache for seamless sign-in');
@@ -491,7 +490,7 @@ class AuthService {
     }
   }
 
-  /// **NEW: Verify token in background without blocking**
+  /// **IMPROVED: Verify token in background without blocking - tries refresh before removing**
   Future<void> _verifyTokenInBackground(String? token) async {
     if (token == null || token.isEmpty) return;
 
@@ -505,11 +504,23 @@ class AuthService {
       if (response.statusCode == 401 || response.statusCode == 403) {
         AppLogger.log(
             '⚠️ Token verification failed - unauthorized (${response.statusCode})');
-        // Check if token is actually expired before removing
+
+        // **IMPROVED: Try to refresh token before removing it**
+        final refreshedToken = await refreshTokenIfNeeded();
+        if (refreshedToken != null && refreshedToken != token) {
+          AppLogger.log('✅ Token refreshed successfully in background');
+          return; // Token was refreshed, keep session
+        }
+
+        // Only remove if token is actually expired AND refresh failed
         if (!isTokenValid(token)) {
           final prefs = await SharedPreferences.getInstance();
           await prefs.remove('jwt_token');
-          AppLogger.log('⚠️ Removed expired token');
+          AppLogger.log(
+              '⚠️ Removed expired token after refresh attempt failed');
+        } else {
+          AppLogger.log(
+              'ℹ️ Token is still valid according to expiry, keeping it (may be backend issue)');
         }
       } else if (response.statusCode == 200) {
         AppLogger.log('✅ Token verified successfully in background');
@@ -519,7 +530,21 @@ class AuthService {
       }
     } catch (e) {
       AppLogger.log('⚠️ Background token verification failed: $e');
-      // Keep session even if backend is unreachable - don't remove token on network errors
+      // **IMPROVED: Keep session even if backend is unreachable - don't remove token on network errors**
+      // Only remove if token is clearly expired (not just network issue)
+      try {
+        if (!isTokenValid(token)) {
+          AppLogger.log(
+              '⚠️ Token is expired and backend unreachable, removing token');
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove('jwt_token');
+        } else {
+          AppLogger.log(
+              'ℹ️ Network error but token still valid, keeping session');
+        }
+      } catch (_) {
+        // Ignore errors in expiry check
+      }
     }
   }
 
@@ -627,17 +652,27 @@ class AuthService {
       AppLogger.log('🔍 AuthService: Token found: ${'Yes'}');
       AppLogger.log('🔍 AuthService: Fallback user found: ${'Yes'}');
 
-      // **NEW: Validate JWT token before using it**
-      if (!skipTokenRefresh && !isTokenValid(token)) {
-        AppLogger.log('❌ AuthService: JWT token is invalid or expired');
+      // **IMPROVED: Validate JWT token before using it - be conservative about removal**
+      if (!skipTokenRefresh && token != null && !isTokenValid(token)) {
+        AppLogger.log('⚠️ AuthService: JWT token appears invalid or expired');
 
-        // Try to refresh the token
-        token = await refreshTokenIfNeeded();
-        if (token == null) {
-          AppLogger.log(
-              '❌ AuthService: Failed to refresh token, clearing invalid token');
-          await prefs.remove('jwt_token');
-          token = null;
+        // Try to refresh the token first
+        final refreshedToken = await refreshTokenIfNeeded();
+        if (refreshedToken != null) {
+          AppLogger.log('✅ AuthService: Token refreshed successfully');
+          token = refreshedToken;
+        } else {
+          // **IMPROVED: Only remove token if it's definitely expired (not just network issue)**
+          // Check expiry one more time to be sure
+          if (!isTokenValid(token)) {
+            AppLogger.log(
+                '❌ AuthService: Token is expired and refresh failed, clearing token');
+            await prefs.remove('jwt_token');
+            token = null;
+          } else {
+            AppLogger.log(
+                'ℹ️ AuthService: Token validation failed but token appears valid, keeping it (may be network issue)');
+          }
         }
       }
 
@@ -725,8 +760,20 @@ class AuthService {
         }
       } catch (e) {
         AppLogger.log('⚠️ Error fetching user profile from backend: $e');
-        // If backend is unreachable, use fallback data if available
-        AppLogger.log('🔄 Backend unreachable, using fallback user data');
+        // **IMPROVED: If backend is unreachable, use fallback data if available**
+        // Don't remove token on network errors - user might just be offline
+        final isNetworkError = e.toString().contains('SocketException') ||
+            e.toString().contains('Connection refused') ||
+            e.toString().contains('timeout') ||
+            e.toString().contains('Failed host lookup');
+
+        if (isNetworkError) {
+          AppLogger.log(
+              '🔄 Network error detected, using fallback user data (preserving session)');
+        } else {
+          AppLogger.log('🔄 Backend error, using fallback user data');
+        }
+
         if (fallbackDataMap != null) {
           final userData = fallbackDataMap;
           return {
@@ -736,6 +783,14 @@ class AuthService {
             'name': userData['name'],
             'email': userData['email'],
             'profilePic': userData['profilePic'],
+            'token': token,
+            'isFallback': true,
+          };
+        } else if (token != null && isTokenValid(token)) {
+          // **NEW: Even without fallback data, if token is valid, return minimal user info**
+          AppLogger.log(
+              'ℹ️ No fallback data but token is valid, returning minimal user info');
+          return {
             'token': token,
             'isFallback': true,
           };

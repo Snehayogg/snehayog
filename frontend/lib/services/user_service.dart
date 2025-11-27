@@ -61,8 +61,10 @@ class UserService {
       AppLogger.log(
           '🔍 Follow API Debug: Using token: ${token.substring(0, 10)}...');
 
+      final baseUrl = await VideoService.getBaseUrlWithFallback();
+
       final response = await httpClientService.post(
-        Uri.parse('${VideoService.baseUrl}/api/users/follow'),
+        Uri.parse('$baseUrl/api/users/follow'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -109,8 +111,10 @@ class UserService {
       AppLogger.log(
           '🔍 Unfollow API Debug: Making request to unfollow user: $trimmedUserId');
 
+      final baseUrl = await VideoService.getBaseUrlWithFallback();
+
       final response = await httpClientService.post(
-        Uri.parse('${VideoService.baseUrl}/api/users/unfollow'),
+        Uri.parse('$baseUrl/api/users/unfollow'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -149,9 +153,10 @@ class UserService {
         throw Exception('Not authenticated');
       }
 
+      final baseUrl = await VideoService.getBaseUrlWithFallback();
+
       final response = await httpClientService.get(
-        Uri.parse(
-            '${VideoService.baseUrl}/api/users/isfollowing/$trimmedUserId'),
+        Uri.parse('$baseUrl/api/users/isfollowing/$trimmedUserId'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -219,7 +224,8 @@ class UserService {
         throw Exception('Not authenticated');
       }
 
-      final url = '${VideoService.baseUrl}/api/users/$userId';
+      final baseUrl = await VideoService.getBaseUrlWithFallback();
+      final url = '$baseUrl/api/users/$userId';
       AppLogger.log('🔍 UserService: Making request to: $url');
       AppLogger.log(
           '🔍 UserService: Headers: Authorization: Bearer ${token.substring(0, 20)}...');

@@ -4,14 +4,14 @@ import 'package:http/http.dart' as http;
 class AppConfig {
   // **MANUAL: Development mode control**
   static const bool _isDevelopment =
-      true; // Set to true for local testing, false for production
+      false; // Set to true for local testing, false for production
 
   // **NEW: Smart URL selection with fallback**
   static String? _cachedBaseUrl;
 
   // Local development server (Wi‑Fi/LAN)
-  // Use laptop IP address when testing on phone: 172.20.10.2
-  static const String _localIpBaseUrl = 'http://172.20.10.2:5001';
+  // Use laptop IP address when testing on phone: 192.168.0.184
+  static const String _localIpBaseUrl = 'http://192.168.0.184:5001';
 
   // Primary production endpoints
   static const String _customDomainUrl = 'https://snehayog.site';

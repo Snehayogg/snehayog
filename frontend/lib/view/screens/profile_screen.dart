@@ -1243,6 +1243,18 @@ class _ProfileScreenState extends State<ProfileScreen>
       value: _stateManager,
       child: Consumer<GoogleSignInController>(
         builder: (context, authController, _) {
+          // **FIXED: Wait for auth initialization before rendering body**
+          if (authController.isLoading) {
+            return Scaffold(
+              key: _scaffoldKey,
+              backgroundColor: const Color(0xFFF8F9FA),
+              appBar: _buildAppBar(false),
+              body: RepaintBoundary(
+                child: _buildSkeletonLoading(),
+              ),
+            );
+          }
+
           // **FIX: Only sync with logged in user if viewing own profile (widget.userId is null)**
           // If widget.userId is provided, we're viewing someone else's profile - don't override it
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1339,6 +1351,13 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Widget _buildBody(UserProvider userProvider, UserModel? userModel,
       GoogleSignInController authController) {
+    // **FIXED: If auth is still loading, show skeleton instead of sign-in UI**
+    if (authController.isLoading) {
+      return RepaintBoundary(
+        child: _buildSkeletonLoading(),
+      );
+    }
+
     // **FIXED: Check authentication status first - if viewing own profile and not signed in, show sign-in view**
     // If viewing someone else's profile (widget.userId != null), show their profile even if not signed in
     if (widget.userId == null && !authController.isSignedIn) {
@@ -2426,7 +2445,30 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       _isCheckingUpiId.value = true;
 
+      // **FIX: First check local state (ProfileStateManager) for UPI ID**
+      // This ensures immediate update after saving UPI ID
       final userData = _stateManager.getUserData();
+      if (userData != null) {
+        final paymentDetails = userData['paymentDetails'];
+        final paymentMethod = userData['preferredPaymentMethod'];
+
+        // Check if UPI ID exists in local state
+        if (paymentMethod == 'upi' && paymentDetails != null) {
+          final upiId = paymentDetails['upiId'];
+          final hasUpiLocal =
+              upiId != null && upiId.toString().trim().isNotEmpty;
+
+          if (hasUpiLocal) {
+            // UPI ID found in local state - set immediately and skip API call
+            _hasUpiId.value = true;
+            AppLogger.log(
+                '✅ ProfileScreen: UPI ID found in local state - hiding notice');
+            _isCheckingUpiId.value = false;
+            return;
+          }
+        }
+      }
+
       final token = userData?['token'];
 
       if (token == null) {
@@ -2437,7 +2479,9 @@ class _ProfileScreenState extends State<ProfileScreen>
         return;
       }
 
-      AppLogger.log('🔍 ProfileScreen: Checking UPI ID status...');
+      // If not found in local state, verify with API
+      AppLogger.log(
+          '🔍 ProfileScreen: UPI ID not in local state, checking API...');
       final response = await http.get(
         Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/profile'),
         headers: {
@@ -2460,7 +2504,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           final hasUpi = upiId != null && upiId.toString().trim().isNotEmpty;
           _hasUpiId.value = hasUpi;
           AppLogger.log(
-              '🔍 ProfileScreen: UPI ID status: ${hasUpi ? "SET" : "NOT SET"}');
+              '🔍 ProfileScreen: UPI ID status from API: ${hasUpi ? "SET" : "NOT SET"}');
         } else {
           // If payment method is not UPI or payment details don't exist, show notice
           _hasUpiId.value = false;
@@ -2468,15 +2512,19 @@ class _ProfileScreenState extends State<ProfileScreen>
               '🔍 ProfileScreen: No UPI payment method found - showing notice');
         }
       } else {
-        // If API fails, show notice (better to show than hide)
+        // If API fails, check local state as fallback
+        final hasUpiLocal = _stateManager.hasUpiId;
+        _hasUpiId.value = hasUpiLocal;
         AppLogger.log(
-            '⚠️ ProfileScreen: API returned status ${response.statusCode} - showing notice');
-        _hasUpiId.value = false;
+            '⚠️ ProfileScreen: API returned status ${response.statusCode} - using local state: ${hasUpiLocal ? "HAS UPI" : "NO UPI"}');
       }
     } catch (e) {
       AppLogger.log('⚠️ ProfileScreen: Error checking UPI ID status: $e');
-      // On error, show notice (better to show than hide)
-      _hasUpiId.value = false;
+      // On error, check local state as fallback
+      final hasUpiLocal = _stateManager.hasUpiId;
+      _hasUpiId.value = hasUpiLocal;
+      AppLogger.log(
+          '⚠️ ProfileScreen: Using local state fallback: ${hasUpiLocal ? "HAS UPI" : "NO UPI"}');
     } finally {
       _isCheckingUpiId.value = false;
     }

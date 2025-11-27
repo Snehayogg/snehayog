@@ -99,7 +99,7 @@ class VideoOverlay extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    video.videoName,
+                    video.videoName.trim().isEmpty ? 'Untitled Video' : video.videoName,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 11,

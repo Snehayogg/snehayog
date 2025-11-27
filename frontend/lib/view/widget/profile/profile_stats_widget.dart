@@ -86,11 +86,6 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
       oldWidget.stateManager.removeListener(_onStateManagerChanged);
       _attachStateManagerListener();
     }
-
-    // Reload if parent indicates load state changed
-    if (widget.isVideosLoaded != oldWidget.isVideosLoaded) {
-      _loadEarnings();
-    }
   }
 
   void _attachStateManagerListener() {
@@ -102,8 +97,8 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
     final currentCount = widget.stateManager.userVideos.length;
     if (currentCount != _lastVideoCount) {
       _lastVideoCount = currentCount;
-      // **FIXED: Only recalculate if videos are actually loaded and count changed meaningfully**
-      if (widget.isVideosLoaded && currentCount > 0) {
+      // **FIXED: Only recalculate when videos finish loading (even if count is 0)**
+      if (!widget.stateManager.isVideosLoading) {
         _loadEarnings();
       }
     }
@@ -119,7 +114,7 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
   /// **ENHANCED: Works for any creator's videos (own profile or other creators)**
   Future<void> _loadEarnings() async {
     // **FIXED: Don't show 0 if videos are still loading**
-    if (!widget.isVideosLoaded) {
+    if (widget.stateManager.isVideosLoading) {
       // Keep loading state, don't set to 0 yet
       if (mounted) {
         setState(() {
@@ -265,15 +260,17 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
             // **FIXED: Also listen to UserProvider to get real-time follower count updates**
             return Consumer<UserProvider>(
               builder: (context, userProvider, child) {
+                final videosLoading = stateManager.isVideosLoading;
+                final videoCountValue =
+                    videosLoading ? '...' : stateManager.userVideos.length;
+
                 return Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     _buildStatColumn(
                       'Videos',
-                      widget.isVideosLoaded
-                          ? stateManager.userVideos.length
-                          : '...',
-                      isLoading: !widget.isVideosLoaded,
+                      videoCountValue,
+                      isLoading: videosLoading,
                     ),
                     Container(
                         width: 1, height: 40, color: const Color(0xFFE5E7EB)),

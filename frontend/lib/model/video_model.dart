@@ -66,7 +66,11 @@ class VideoModel {
 
       return VideoModel(
         id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
-        videoName: json['videoName']?.toString() ?? '',
+        videoName: () {
+          final nameValue = json['videoName'];
+          final name = nameValue != null ? nameValue.toString().trim() : '';
+          return name.isEmpty ? 'Untitled Video' : name;
+        }(),
         videoUrl: json['videoUrl']?.toString() ?? '',
         thumbnailUrl: json['thumbnailUrl']?.toString() ?? '',
         likes: (json['likes'] is int)

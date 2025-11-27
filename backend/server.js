@@ -100,7 +100,7 @@ app.use(cors({
     'http://10.118.107.18:5001', // Local development
     'https://snehayog.site', // Production web app
     'https://vayu.app',      // Public site that embeds/uses API
-    'http://192.168.0.188:5001', // Local development (legacy)
+    'http://192.168.0.184:5001', // Local development (LAN)
     'http://localhost:5001',      // Local development
     'http://10.0.2.2:5001',      // Android emulator
     'http://127.0.0.1:5001',     // Localhost alternative
