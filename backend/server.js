@@ -29,11 +29,13 @@ import adminRoutes from './routes/adminRoutes.js';
 import feedbackRoutes from './routes/feedbackRoutes.js';
 import referralRoutes from './routes/referralRoutes.js';
 import reportRoutes from './routes/reportRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
 
 // Import services
 import automatedPayoutService from './services/automatedPayoutService.js';
 import adCleanupService from './services/adCleanupService.js';
 import redisService from './services/redisService.js';
+import monthlyNotificationCron from './services/monthlyNotificationCron.js';
 
 // Import middleware
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
@@ -199,6 +201,7 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/referrals', referralRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // **FIX: Root route handler for referral links: https://snehayog.site/?ref=CODE
 // This handles referral links and tries to open the app
@@ -417,6 +420,9 @@ const gracefulShutdown = async (signal) => {
   console.log(`\n🛑 Received ${signal}, shutting down gracefully...`);
   
   try {
+    // Stop monthly notification cron job
+    monthlyNotificationCron.stop();
+    
     // Disconnect Redis
     if (redisService.getConnectionStatus()) {
       await redisService.disconnect();
@@ -462,6 +468,9 @@ const startServer = async () => {
         console.error('❌ Error in scheduled ad cleanup:', error);
       }
     });
+    
+    // Start monthly notification cron job (runs on 1st of every month at 9:00 AM)
+    monthlyNotificationCron.start();
     
     // Start HTTP server
     app.listen(PORT, HOST, () => {

@@ -27,9 +27,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/core/managers/shared_video_controller_pool.dart';
 import 'package:vayu/core/managers/video_controller_manager.dart';
 import 'package:vayu/utils/app_logger.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:vayu/services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase and notifications
+  try {
+    await Firebase.initializeApp();
+    final notificationService = NotificationService();
+    unawaited(notificationService.initialize()); // Initialize in background
+  } catch (e) {
+    print('⚠️ Error initializing Firebase: $e');
+  }
 
   // **OPTIMIZED: Start app immediately, initialize services in background**
   runApp(

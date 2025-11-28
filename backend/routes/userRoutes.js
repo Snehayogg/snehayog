@@ -444,6 +444,7 @@ router.get('/:id', async (req, res) => {
     const payload = {
       _id: user._id, // MongoDB ObjectID
       id: user.googleId,
+      googleId: user.googleId, // **FIXED: Also return googleId field explicitly for video endpoint**
       name: user.name,
       email: user.email,
       profilePic: user.profilePic,

@@ -82,6 +82,11 @@ const UserSchema = new mongoose.Schema({
     type: String,
     trim: true
   }],
+  // **NEW: FCM Token for push notifications**
+  fcmToken: {
+    type: String,
+    default: null
+  },
   // **NEW: Location Data**
   location: {
     latitude: {

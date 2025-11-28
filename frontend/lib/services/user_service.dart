@@ -9,20 +9,24 @@ class UserService {
   final AuthService _authService = AuthService();
 
   Future<Map<String, dynamic>> getUserById(String id) async {
+    // **FIXED: Make authentication optional for creator profiles**
+    // Backend /api/users/:id endpoint doesn't require authentication
     final token = (await _authService.getUserData())?['token'];
-    if (token == null) {
-      throw Exception('Not authenticated');
-    }
 
     // **OPTIMIZATION: Use getBaseUrlWithFallback for better reliability**
     final baseUrl = await VideoService.getBaseUrlWithFallback();
 
+    // **FIXED: Only include Authorization header if token exists**
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+    };
+    if (token != null) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+
     final response = await httpClientService.get(
       Uri.parse('$baseUrl/api/users/$id'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
+      headers: headers,
     );
 
     if (response.statusCode == 200) {

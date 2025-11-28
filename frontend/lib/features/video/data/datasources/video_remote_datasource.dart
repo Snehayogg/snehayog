@@ -86,10 +86,23 @@ class VideoRemoteDataSource {
   /// Fetches all videos uploaded by a specific user
   Future<List<VideoModel>> getUserVideos(String userId) async {
     try {
+      // **FIXED: Add authentication headers - backend endpoint requires verifyToken**
+      final auth = AuthService();
+      final userData = await auth.getUserData();
+      if (userData == null || userData['token'] == null) {
+        throw const UnauthorizedException(
+            'Please sign in to view creator videos');
+      }
+
+      final headers = {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ${userData['token']}',
+      };
+
       final url = '${NetworkHelper.videosEndpoint}/user/$userId';
 
       final response = await _makeRequest(
-        () => _httpClient.get(Uri.parse(url)),
+        () => _httpClient.get(Uri.parse(url), headers: headers),
         timeout: NetworkHelper.defaultTimeout,
       );
 
@@ -110,11 +123,17 @@ class VideoRemoteDataSource {
           }
           return VideoModel.fromJson(json);
         }).toList();
+      } else if (response.statusCode == 401 || response.statusCode == 403) {
+        // **FIXED: Handle authentication errors properly**
+        throw const UnauthorizedException(
+            'Please sign in to view creator videos');
       } else if (response.statusCode == 404) {
         return [];
       } else {
+        final error = json.decode(response.body);
         throw ServerException(
-          'Failed to fetch user videos: ${response.statusCode}',
+          error['error'] ??
+              'Failed to fetch user videos: ${response.statusCode}',
           code: response.statusCode.toString(),
         );
       }
@@ -316,6 +335,10 @@ class VideoRemoteDataSource {
         final response = await requestFn().timeout(timeout);
         if (response.statusCode == 200 || response.statusCode == 201) {
           return response;
+        }
+        // **FIXED: Don't retry on authentication errors (401/403) - they won't be fixed by retrying**
+        if (response.statusCode == 401 || response.statusCode == 403) {
+          return response; // Return immediately so caller can handle auth error
         }
         attempts++;
         if (attempts < maxRetries) {

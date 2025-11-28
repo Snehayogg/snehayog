@@ -105,20 +105,26 @@ class ProfileStateManager extends ChangeNotifier {
       AppLogger.log(
           '🔄 ProfileStateManager: Logged in user values: ${loggedInUser?.values.toList()}');
 
-      // Check if we have any authentication data
-      if (loggedInUser == null) {
+      // **FIXED: Allow loading creator profiles without authentication**
+      // Only require authentication for own profile (userId == null)
+      final bool isMyProfile = userId == null ||
+          (loggedInUser != null &&
+              (userId == loggedInUser['id'] ||
+                  userId == loggedInUser['googleId']));
+
+      if (isMyProfile && loggedInUser == null) {
         AppLogger.log(
-            '❌ ProfileStateManager: No authentication data available');
+            '❌ ProfileStateManager: No authentication data available for own profile');
         _isLoading = false;
         _error = 'No authentication data found';
         notifyListeners();
         return;
       }
 
-      final cacheKey = _resolveProfileCacheKey(userId, loggedInUser);
-      final bool isMyProfile = userId == null ||
-          userId == loggedInUser['id'] ||
-          userId == loggedInUser['googleId'];
+      // **FIXED: For creator profiles, use userId directly if no logged in user**
+      final cacheKey = loggedInUser != null
+          ? _resolveProfileCacheKey(userId, loggedInUser)
+          : 'user_profile_${userId ?? 'unknown'}';
 
       Map<String, dynamic>? userData;
 
@@ -136,8 +142,10 @@ class ProfileStateManager extends ChangeNotifier {
           cacheType: 'user_profile',
           maxAge: cacheTime,
           fetchFn: () async {
+            // **FIXED: Pass empty map if no logged in user for creator profiles**
+            final userForFetch = loggedInUser ?? <String, dynamic>{};
             final fetched =
-                await _fetchProfileData(userId, loggedInUser, cacheKey);
+                await _fetchProfileData(userId, userForFetch, cacheKey);
             if (fetched == null) {
               throw Exception('Profile not found for $cacheKey');
             }
@@ -145,7 +153,9 @@ class ProfileStateManager extends ChangeNotifier {
           },
         );
       } else {
-        userData = await _fetchProfileData(userId, loggedInUser, cacheKey);
+        // **FIXED: Pass empty map if no logged in user for creator profiles**
+        final userForFetch = loggedInUser ?? <String, dynamic>{};
+        userData = await _fetchProfileData(userId, userForFetch, cacheKey);
       }
 
       if (userData == null) {
@@ -197,6 +207,7 @@ class ProfileStateManager extends ChangeNotifier {
                   .catchError((e) {
                 AppLogger.log(
                     '⚠️ ProfileStateManager: Error populating UserProvider: $e');
+                return null; // Return null on error
               });
             } catch (e) {
               AppLogger.log(
@@ -236,20 +247,38 @@ class ProfileStateManager extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> _fetchProfileData(String? requestedUserId,
       Map<String, dynamic> loggedInUser, String cacheKey) async {
+    // **FIXED: Handle empty loggedInUser for creator profiles**
+    final bool hasLoggedInUser = loggedInUser.isNotEmpty &&
+        (loggedInUser.containsKey('id') ||
+            loggedInUser.containsKey('googleId'));
+
     final bool isMyProfile = requestedUserId == null ||
-        requestedUserId == loggedInUser['id'] ||
-        requestedUserId == loggedInUser['googleId'];
+        (hasLoggedInUser &&
+            (requestedUserId == loggedInUser['id'] ||
+                requestedUserId == loggedInUser['googleId']));
 
     AppLogger.log('🔄 ProfileStateManager: Is my profile: $isMyProfile');
     AppLogger.log(
         '🔄 ProfileStateManager: userId parameter: $requestedUserId (cacheKey: $cacheKey)');
-    AppLogger.log(
-        '🔄 ProfileStateManager: loggedInUser id: ${loggedInUser['id']}');
-    AppLogger.log(
-        '🔄 ProfileStateManager: loggedInUser googleId: ${loggedInUser['googleId']}');
+    if (hasLoggedInUser) {
+      AppLogger.log(
+          '🔄 ProfileStateManager: loggedInUser id: ${loggedInUser['id']}');
+      AppLogger.log(
+          '🔄 ProfileStateManager: loggedInUser googleId: ${loggedInUser['googleId']}');
+    } else {
+      AppLogger.log(
+          '🔄 ProfileStateManager: No logged in user (viewing creator profile)');
+    }
 
     Map<String, dynamic>? userData;
     if (isMyProfile) {
+      // **FIXED: Only access loggedInUser fields if user is logged in**
+      if (!hasLoggedInUser) {
+        AppLogger.log(
+            '❌ ProfileStateManager: Cannot load own profile without authentication');
+        return null;
+      }
+
       final myId = loggedInUser['googleId'] ?? loggedInUser['id'];
       try {
         final backendUser =
@@ -290,14 +319,25 @@ class ProfileStateManager extends ChangeNotifier {
         // **FIXED: getUserById returns Map, ensure all fields are present**
         userData = Map<String, dynamic>.from(otherUser);
 
-        // **NEW: Also add googleId and _id fields for compatibility if missing**
-        final userId = userData['googleId'] ??
-            userData['id'] ??
-            userData['_id'] ??
+        // **FIXED: Backend returns id: user.googleId (not a googleId field)**
+        // The backend /api/users/:id endpoint returns:
+        // - _id: MongoDB ObjectID
+        // - id: user.googleId (this is the actual googleId value)
+        // So we need to set googleId from the 'id' field
+        final actualGoogleId = userData['googleId'] ??
+            userData['id'] ?? // Backend returns id: user.googleId
             requestedUserId;
-        userData['googleId'] = userId;
-        userData['_id'] = userId;
-        userData['id'] = userId;
+
+        // Set googleId field (required by video endpoint)
+        userData['googleId'] = actualGoogleId;
+
+        // Preserve other fields
+        if (!userData.containsKey('id')) {
+          userData['id'] = actualGoogleId;
+        }
+
+        AppLogger.log(
+            '🔄 ProfileStateManager: Normalized user IDs - googleId: $actualGoogleId, _id: ${userData['_id']}');
 
         // **FIXED: Ensure followersCount is properly set (use both field names)**
         final followersCount =
@@ -312,9 +352,11 @@ class ProfileStateManager extends ChangeNotifier {
 
         AppLogger.log(
             '🔄 ProfileStateManager: Other user profile loaded: ${userData['name']}, followers: ${userData['followersCount']}');
-            } catch (e) {
+      } catch (e) {
         AppLogger.log(
             '⚠️ ProfileStateManager: Failed to fetch other user profile: $e');
+        // **FIXED: Re-throw error so it can be handled by retry mechanism**
+        rethrow;
       }
     }
 

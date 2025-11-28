@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
+import 'dart:convert';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'package:vayu/services/ad_service.dart';
@@ -52,7 +53,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     _loadRevenueData();
   }
 
-  Future<void> _loadRevenueData() async {
+  Future<void> _loadRevenueData({bool forceRefresh = false}) async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -65,7 +66,15 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         final userMap = Map<String, dynamic>.from(rawUserMap);
         final userId = (userMap['id'] ?? '').toString();
         final videosFuture = _videoService.getUserVideos(userId);
-        final revenueSummaryFuture = _adService.getCreatorRevenueSummary();
+
+        // **NEW: Try to load cached earnings data first (unless force refresh)**
+        Map<String, dynamic>? revenueData;
+        if (!forceRefresh) {
+          revenueData = await _loadCachedEarningsData(userId);
+          if (revenueData != null) {
+            AppLogger.log('⚡ CreatorRevenueScreen: Using cached earnings data');
+          }
+        }
 
         final videos = await videosFuture;
         if (!mounted) return;
@@ -73,15 +82,49 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
           _userVideos = videos;
         });
 
-        // Calculate revenue for all videos and fetch revenue summary in parallel
+        // Calculate revenue for all videos
         await _calculateTotalRevenue(userMap);
 
-        final revenueData = await revenueSummaryFuture;
+        // **CACHE-FIRST: Use cached data if available, otherwise fetch from server**
+        if (revenueData == null) {
+          final revenueSummaryFuture = _adService.getCreatorRevenueSummary();
+          revenueData = await revenueSummaryFuture;
+
+          // **NEW: Cache the fetched earnings data**
+          if (revenueData != null) {
+            await _cacheEarningsData(revenueData, userId);
+          }
+        }
+
         if (!mounted) return;
         setState(() {
           _revenueData = revenueData;
           _isLoading = false;
         });
+
+        // **BACKGROUND: Refresh earnings data in background if using cache**
+        if (!forceRefresh && revenueData != null) {
+          Future.microtask(() async {
+            try {
+              final freshRevenueData =
+                  await _adService.getCreatorRevenueSummary();
+              if (freshRevenueData != null && mounted) {
+                await _cacheEarningsData(freshRevenueData, userId);
+                if (mounted) {
+                  setState(() {
+                    _revenueData = freshRevenueData;
+                  });
+                  AppLogger.log(
+                      '✅ CreatorRevenueScreen: Earnings data refreshed in background');
+                }
+              }
+            } catch (e) {
+              AppLogger.log(
+                  '⚠️ CreatorRevenueScreen: Error refreshing earnings in background: $e');
+              // Don't show error - background refresh is optional
+            }
+          });
+        }
         return;
       }
 
@@ -93,6 +136,38 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         _errorMessage = 'Error loading revenue data: $e';
         _isLoading = false;
       });
+    }
+  }
+
+  /// **NEW: Load cached earnings data**
+  Future<Map<String, dynamic>?> _loadCachedEarningsData(String userId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = 'earnings_cache_$userId';
+      final cachedDataJson = prefs.getString(cacheKey);
+
+      if (cachedDataJson != null && cachedDataJson.isNotEmpty) {
+        return Map<String, dynamic>.from(json.decode(cachedDataJson));
+      }
+    } catch (e) {
+      AppLogger.log(
+          '❌ CreatorRevenueScreen: Error loading cached earnings data: $e');
+    }
+    return null;
+  }
+
+  /// **NEW: Cache earnings data**
+  Future<void> _cacheEarningsData(
+      Map<String, dynamic> earningsData, String userId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = 'earnings_cache_$userId';
+      await prefs.setString(cacheKey, json.encode(earningsData));
+      await prefs.setInt('earnings_cache_timestamp_$userId',
+          DateTime.now().millisecondsSinceEpoch);
+      AppLogger.log('✅ CreatorRevenueScreen: Earnings data cached');
+    } catch (e) {
+      AppLogger.log('❌ CreatorRevenueScreen: Error caching earnings data: $e');
     }
   }
 
@@ -289,7 +364,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         elevation: 0,
         actions: [
           IconButton(
-            onPressed: _loadRevenueData,
+            onPressed: () => _loadRevenueData(forceRefresh: true),
             icon: const Icon(Icons.refresh),
           ),
         ],
@@ -366,7 +441,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
             ),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: _loadRevenueData,
+              onPressed: () => _loadRevenueData(forceRefresh: true),
               child: const Text('Retry'),
             ),
           ],
@@ -537,8 +612,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   Widget _buildMonthlyViewsCard() {
     final cycleStart = _currentViewCycleStart;
     final nextReset = _nextViewResetDate;
-    final cycleEnd =
-        nextReset?.subtract(const Duration(days: 1));
+    final cycleEnd = nextReset?.subtract(const Duration(days: 1));
 
     return Card(
       elevation: 4,

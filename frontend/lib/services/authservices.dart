@@ -13,6 +13,7 @@ import 'package:vayu/config/google_sign_in_config.dart';
 import 'package:vayu/services/location_onboarding_service.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/services/device_id_service.dart';
+import 'package:vayu/services/notification_service.dart';
 
 class AuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
@@ -129,6 +130,16 @@ class AuthService {
           // Save JWT in shared preferences
           SharedPreferences prefs = await SharedPreferences.getInstance();
           await prefs.setString('jwt_token', authData['token']);
+
+          // **NEW: Retry saving FCM token after successful login**
+          try {
+            final notificationService = NotificationService();
+            if (notificationService.isInitialized) {
+              await notificationService.retrySaveToken();
+            }
+          } catch (e) {
+            AppLogger.log('⚠️ Error retrying FCM token save: $e');
+          }
 
           // Then register/update user profile
           final userData = {
