@@ -105,8 +105,9 @@ class NotificationService {
     // Stop any existing timer
     _retryTimer?.cancel();
 
-    // Check every 5 seconds if user is logged in and token needs to be saved
-    _retryTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+    // Check every 30 seconds if user is logged in and token needs to be saved
+    // Reduced frequency to avoid spamming backend
+    _retryTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
       if (_isRetrying) return; // Prevent concurrent retries
 
       // Only retry if we have FCM token but haven't saved it yet
@@ -138,7 +139,7 @@ class NotificationService {
       }
     });
 
-    print('🔄 Started periodic retry mechanism (checks every 5 seconds)');
+    print('🔄 Started periodic retry mechanism (checks every 30 seconds)');
   }
 
   /// Stop periodic retry mechanism

@@ -17,14 +17,17 @@ const router = express.Router();
 router.post('/token', verifyToken, async (req, res) => {
   try {
     const { fcmToken } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.id; // This is Google ID from verifyToken middleware
+    const googleId = req.user.googleId || userId;
 
     if (!fcmToken) {
       return res.status(400).json({ error: 'FCM token is required' });
     }
 
-    const user = await User.findById(userId);
+    // Find user by googleId (not MongoDB _id)
+    const user = await User.findOne({ googleId: googleId });
     if (!user) {
+      console.error(`❌ User not found with googleId: ${googleId}`);
       return res.status(404).json({ error: 'User not found' });
     }
 
@@ -39,6 +42,7 @@ router.post('/token', verifyToken, async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error saving FCM token:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({ error: 'Failed to save FCM token' });
   }
 });
