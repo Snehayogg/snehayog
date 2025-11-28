@@ -953,16 +953,48 @@ class AuthService {
 
       AppLogger.log(
           '✅ Device ID verified with backend - user has logged in before');
+
+      // **NEW: Get user email from backend for seamless auto-login**
+      String? userEmail;
+      try {
+        final resolvedBaseUrl = await AppConfig.getBaseUrlWithFallback();
+        final checkResponse = await http
+            .post(
+              Uri.parse('$resolvedBaseUrl/api/auth/check-device'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'deviceId': deviceId}),
+            )
+            .timeout(const Duration(seconds: 5));
+
+        if (checkResponse.statusCode == 200) {
+          final checkData = jsonDecode(checkResponse.body);
+          userEmail = checkData['userEmail'] as String?;
+          AppLogger.log(
+              '✅ User email retrieved from backend: ${userEmail?.substring(0, 5)}...');
+        }
+      } catch (e) {
+        AppLogger.log('⚠️ Failed to get user email from backend: $e');
+      }
+
       AppLogger.log('🔄 Attempting to restore Google Sign-In session...');
 
       // Step 3: Try multiple Google Sign-In methods (improved reliability)
       GoogleSignInAccount? googleUser;
 
       // Method 1: Try silent sign-in (works if Google session is cached)
+      // **IMPROVED: This will automatically use the previously linked Google account**
       try {
         googleUser = await _googleSignIn.signInSilently();
         if (googleUser != null) {
-          AppLogger.log('✅ Silent sign-in successful');
+          // **VERIFY: Check if the signed-in account matches the device ID's user**
+          if (userEmail != null &&
+              googleUser.email.toLowerCase() != userEmail.toLowerCase()) {
+            AppLogger.log(
+                '⚠️ Silent sign-in returned different account (${googleUser.email}) than device account ($userEmail)');
+            // Still proceed - user might have switched accounts
+          } else {
+            AppLogger.log('✅ Silent sign-in successful with matching account');
+          }
         }
       } catch (e) {
         AppLogger.log('⚠️ Silent sign-in failed: $e');
@@ -995,19 +1027,33 @@ class AuthService {
         }
       }
 
-      // **NEW: Method 4: If device ID is recognized but no Google session exists,
-      // automatically trigger Google Sign-In WITHOUT breaking session cache
+      // **IMPROVED: Method 4: If device ID is recognized but no Google session exists,
+      // automatically trigger Google Sign-In - Google will remember the account
+      // On Android, Google One Tap will automatically select the previously used account
+      // On iOS, Google will show account picker but will pre-select the previously used account
       if (googleUser == null) {
         AppLogger.log(
             '🔄 Device ID recognized but no Google session - automatically triggering sign-in...');
+        AppLogger.log(
+            'ℹ️ Google will automatically select the previously used account (${userEmail ?? "unknown"})');
         try {
-          // **FIXED: Call signIn directly WITHOUT signOut/disconnect to preserve session cache**
-          // This allows Google to remember the account for future auto-logins
-          // We don't call signOut/disconnect here because we want to preserve caching
+          // **IMPROVED: Call signIn - Google will automatically select the previously linked account**
+          // On Android: Google One Tap will show the correct account automatically
+          // On iOS: Account picker will pre-select the correct account
           googleUser = await _googleSignIn.signIn();
           if (googleUser != null) {
-            AppLogger.log(
-                '✅ Automatic sign-in successful: ${googleUser.email}');
+            // **VERIFY: Check if the selected account matches the device ID's user**
+            if (userEmail != null &&
+                googleUser.email.toLowerCase() != userEmail.toLowerCase()) {
+              AppLogger.log(
+                  '⚠️ User selected different account (${googleUser.email}) than device account ($userEmail)');
+              AppLogger.log(
+                  'ℹ️ Proceeding with selected account - user may have switched accounts');
+              // Still proceed - user's choice to use different account
+            } else {
+              AppLogger.log(
+                  '✅ Automatic sign-in successful with matching account: ${googleUser.email}');
+            }
           } else {
             AppLogger.log('ℹ️ User cancelled automatic sign-in');
             return null;

@@ -32,7 +32,8 @@ class VideoActionsWidget extends StatelessWidget {
     return RepaintBoundary(child: Consumer<GoogleSignInController>(
       builder: (context, controller, child) {
         final userData = controller.userData;
-        final userId = userData?['id'];
+        // **FIX: Prioritize googleId over id to match backend likedBy array**
+        final userId = userData?['googleId'] ?? userData?['id'];
         final isLiked = userId != null && video.likedBy.contains(userId);
 
         return Column(

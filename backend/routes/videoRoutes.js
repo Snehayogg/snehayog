@@ -28,6 +28,40 @@ const videoCachingMiddleware = (req, res, next) => {
 // Apply response header middleware to all video routes
 router.use(videoCachingMiddleware);
 
+// **HELPER: Convert likedBy ObjectIds to googleIds for frontend compatibility**
+async function convertLikedByToGoogleIds(likedByArray) {
+  if (!Array.isArray(likedByArray) || likedByArray.length === 0) {
+    return [];
+  }
+  
+  try {
+    // Batch query all users at once for efficiency
+    const users = await User.find({
+      _id: { $in: likedByArray }
+    }).select('googleId').lean();
+    
+    // Create a map of ObjectId -> googleId
+    const idMap = new Map();
+    users.forEach(user => {
+      if (user.googleId) {
+        idMap.set(user._id.toString(), user.googleId.toString());
+      }
+    });
+    
+    // Convert ObjectIds to googleIds, filter out any that don't have googleId
+    return likedByArray
+      .map(id => {
+        const idStr = id?.toString?.() || String(id);
+        return idMap.get(idStr) || null;
+      })
+      .filter(Boolean); // Remove nulls
+  } catch (error) {
+    console.error('❌ Error converting likedBy to googleIds:', error);
+    // Fallback: return empty array or original IDs as strings
+    return likedByArray.map(id => id?.toString?.() || String(id));
+  }
+}
+
 
 // DEBUG: Check database status - MUST BE FIRST ROUTE
 router.get('/debug-database', async (req, res) => {
@@ -475,7 +509,8 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
     }
 
     // **IMPROVED: Better data formatting and validation**
-    const videosWithUrls = validVideos.map(video => {
+    // **FIX: Convert to async to handle likedBy conversion**
+    const videosWithUrls = await Promise.all(validVideos.map(async (video) => {
       const videoObj = video.toObject();
       
       // **CRITICAL: Ensure all required fields are present**
@@ -484,6 +519,9 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
         if (!url) return url;
         return url.replace(/\\/g, '/');
       };
+      
+      // **FIX: Convert likedBy ObjectIds to googleIds**
+      const likedByGoogleIds = await convertLikedByToGoogleIds(videoObj.likedBy || []);
       
       const result = {
         _id: videoObj._id?.toString(),
@@ -513,7 +551,7 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
         hlsMasterPlaylistUrl: videoObj.hlsMasterPlaylistUrl || null,
         hlsPlaylistUrl: videoObj.hlsPlaylistUrl || null,
         isHLSEncoded: videoObj.isHLSEncoded || false,
-        likedBy: videoObj.likedBy || [],
+        likedBy: likedByGoogleIds, // **FIXED: Use googleIds instead of ObjectIds**
         comments: videoObj.comments || []
       };
       
@@ -528,7 +566,7 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
       });
       
       return result;
-    });
+    }));
 
     console.log('✅ Sending videos response:', {
       totalVideos: videosWithUrls.length,
@@ -814,28 +852,39 @@ router.get('/', async (req, res) => {
     console.log(`📹 Returning ${validVideos.length} valid videos`);
 
     // Transform videos to match Flutter app expectations
-    const transformedVideos = validVideos.map(video => ({
-      ...video,
-      uploader: {
-        id: video.uploader?.googleId?.toString() || video.uploader?._id?.toString() || '',
-        _id: video.uploader?._id?.toString() || '',
-        googleId: video.uploader?.googleId?.toString() || '',
-        name: video.uploader?.name || 'Unknown User',
-        profilePic: video.uploader?.profilePic || ''
-      },
-      comments: (video.comments || []).map(comment => ({
-        _id: comment._id,
-        text: comment.text,
-        userId: comment.user?.googleId || comment.user?._id || '',
-        userName: comment.user?.name || '',
-        createdAt: comment.createdAt,
-        likes: comment.likes || 0,
-        likedBy: comment.likedBy || []
-      })),
-      // **NEW: Add isWatched flag if user is authenticated**
-      isWatched: userId && Array.isArray(watchedVideos) && watchedVideos.length > 0 
-        ? watchedVideos.some(w => w._id.toString() === video._id.toString()) 
-        : false
+    // **FIX: Convert to async to handle likedBy conversion**
+    const transformedVideos = await Promise.all(validVideos.map(async (video) => {
+      // **FIX: Convert likedBy ObjectIds to googleIds**
+      const likedByGoogleIds = await convertLikedByToGoogleIds(video.likedBy || []);
+      
+      return {
+        ...video,
+        uploader: {
+          id: video.uploader?.googleId?.toString() || video.uploader?._id?.toString() || '',
+          _id: video.uploader?._id?.toString() || '',
+          googleId: video.uploader?.googleId?.toString() || '',
+          name: video.uploader?.name || 'Unknown User',
+          profilePic: video.uploader?.profilePic || ''
+        },
+        likedBy: likedByGoogleIds, // **FIXED: Use googleIds instead of ObjectIds**
+        comments: await Promise.all((video.comments || []).map(async (comment) => {
+          // **FIX: Convert comment likedBy ObjectIds to googleIds**
+          const commentLikedByGoogleIds = await convertLikedByToGoogleIds(comment.likedBy || []);
+          return {
+            _id: comment._id,
+            text: comment.text,
+            userId: comment.user?.googleId || comment.user?._id || '',
+            userName: comment.user?.name || '',
+            createdAt: comment.createdAt,
+            likes: comment.likes || 0,
+            likedBy: commentLikedByGoogleIds // **FIXED: Use googleIds for comment likes**
+          };
+        })),
+        // **NEW: Add isWatched flag if user is authenticated**
+        isWatched: userId && Array.isArray(watchedVideos) && watchedVideos.length > 0 
+          ? watchedVideos.some(w => w._id.toString() === video._id.toString()) 
+          : false
+      };
     }));
     
     // Get total count for pagination
@@ -910,6 +959,9 @@ router.get('/:id', verifyToken, async (req, res) => {
       return url.replace(/\\/g, '/');
     };
     
+    // **FIX: Convert likedBy ObjectIds to googleIds**
+    const likedByGoogleIds = await convertLikedByToGoogleIds(videoObj.likedBy || []);
+    
     const transformedVideo = {
       _id: videoObj._id?.toString(),
       videoName: videoObj.videoName || 'Untitled Video',
@@ -942,15 +994,19 @@ router.get('/:id', verifyToken, async (req, res) => {
       hlsMasterPlaylistUrl: videoObj.hlsMasterPlaylistUrl || null,
       hlsPlaylistUrl: videoObj.hlsPlaylistUrl || null,
       isHLSEncoded: videoObj.isHLSEncoded || false,
-      likedBy: videoObj.likedBy || [],
-      comments: videoObj.comments.map(comment => ({
-        _id: comment._id,
-        text: comment.text,
-        userId: comment.user?.googleId || comment.user?._id || '',
-        userName: comment.user?.name || '',
-        createdAt: comment.createdAt,
-        likes: comment.likes || 0,
-        likedBy: comment.likedBy || []
+      likedBy: likedByGoogleIds, // **FIXED: Use googleIds instead of ObjectIds**
+      comments: await Promise.all((videoObj.comments || []).map(async (comment) => {
+        // **FIX: Convert comment likedBy ObjectIds to googleIds**
+        const commentLikedByGoogleIds = await convertLikedByToGoogleIds(comment.likedBy || []);
+        return {
+          _id: comment._id,
+          text: comment.text,
+          userId: comment.user?.googleId || comment.user?._id || '',
+          userName: comment.user?.name || '',
+          createdAt: comment.createdAt,
+          likes: comment.likes || 0,
+          likedBy: commentLikedByGoogleIds // **FIXED: Use googleIds for comment likes**
+        };
       }))
     };
 
@@ -1121,48 +1177,115 @@ router.post('/:id/like', verifyToken, async (req, res) => {
     const userLikedIndex = likedByStrings.indexOf(userObjectId.toString());
     let wasLiked = false;
     
+    // **CRITICAL FIX: Use atomic MongoDB operations to update BOTH likedBy AND likes count simultaneously**
+    // This prevents race conditions and ensures data consistency
+    let updatedVideo;
     if (userLikedIndex > -1) {
-      // User has already liked - remove the like
-      video.likedBy.splice(userLikedIndex, 1);
-      video.likes = Math.max(0, video.likes - 1); // Decrement likes, ensure not negative
+      // User has already liked - remove the like (atomic $pull + $inc operations)
+      updatedVideo = await Video.findByIdAndUpdate(
+        videoId,
+        { 
+          $pull: { likedBy: userObjectId },
+          $inc: { likes: -1 } // Atomically decrement likes count
+        },
+        { new: true } // Return updated document
+      );
       wasLiked = false;
-      console.log('🔍 Like API: Removed like, new count:', video.likes);
+      console.log('🔍 Like API: Removed like (atomic operation)');
     } else {
-      // User hasn't liked - add the like
-      video.likedBy.push(userObjectId);
-      video.likes = video.likes + 1; // Increment likes
+      // User hasn't liked - add the like (atomic $push + $inc operations)
+      updatedVideo = await Video.findByIdAndUpdate(
+        videoId,
+        { 
+          $push: { likedBy: userObjectId },
+          $inc: { likes: 1 } // Atomically increment likes count
+        },
+        { new: true } // Return updated document
+      );
       wasLiked = true;
-      console.log('🔍 Like API: Added like, new count:', video.likes);
+      console.log('🔍 Like API: Added like (atomic operation)');
     }
 
-    await video.save();
-    console.log('✅ Like API: Video saved successfully');
+    if (!updatedVideo) {
+      console.log('❌ Like API: Video not found after update');
+      return res.status(404).json({ error: 'Video not found' });
+    }
 
-    // **NEW: Invalidate cache when video is liked/unliked**
+    // **FIX: Ensure likes count doesn't go negative (safety check)**
+    if (updatedVideo.likes < 0) {
+      console.log('⚠️ Like API: Likes count is negative, resetting to 0');
+      updatedVideo.likes = 0;
+      await updatedVideo.save();
+    }
+
+    // **FIX: Final sync check - ensure likes count matches likedBy length (should match with atomic ops)**
+    const actualLikedByLength = updatedVideo.likedBy.length;
+    if (updatedVideo.likes !== actualLikedByLength) {
+      console.log('⚠️ Like API: Syncing likes count with likedBy length', {
+        currentLikes: updatedVideo.likes,
+        likedByLength: actualLikedByLength
+      });
+      // Use atomic update to fix the count
+      updatedVideo = await Video.findByIdAndUpdate(
+        videoId,
+        { $set: { likes: actualLikedByLength } },
+        { new: true }
+      );
+    }
+
+    console.log('✅ Like API: Video updated successfully with atomic operations, likes:', updatedVideo.likes);
+
+    // **CRITICAL: Invalidate ALL caches when video is liked/unliked to ensure fresh data**
+    // This ensures likes persist even after app restart, just like Instagram/YouTube
     if (redisService.getConnectionStatus()) {
-      await invalidateCache([
-        'videos:feed:*', // Clear all video feed caches
-        VideoCacheKeys.single(videoId), // Clear single video cache
-        `videos:user:${video.uploader?.toString()}`, // Clear uploader's video cache
-      ]);
-      console.log('🧹 Cache invalidated after like/unlike');
+      try {
+        // Clear all possible cache patterns that might contain this video
+        await invalidateCache([
+          'videos:feed:*', // Clear all video feed caches
+          'videos:unwatched:ids:*', // Clear unwatched IDs cache (feed uses this)
+          VideoCacheKeys.single(videoId), // Clear single video cache
+          VideoCacheKeys.all(), // Clear all video caches
+          `videos:user:${updatedVideo.uploader?.toString()}`, // Clear uploader's video cache
+          `videos:user:*`, // Clear all user video caches
+        ]);
+        console.log('🧹 Cache invalidated after like/unlike - ensuring fresh data on next fetch');
+      } catch (cacheError) {
+        console.error('⚠️ Error invalidating cache (non-critical):', cacheError.message);
+        // Don't fail the request if cache invalidation fails
+      }
     }
 
-    // Return the updated video with populated fields
-    const updatedVideo = await Video.findById(videoId)
-      .populate('uploader', 'name profilePic googleId')
-      .populate('comments.user', 'name profilePic googleId');
+    // **FIX: Populate the updated video (already has latest data from atomic operation)**
+    await updatedVideo.populate('uploader', 'name profilePic googleId');
+    await updatedVideo.populate('comments.user', 'name profilePic googleId');
 
     // Transform comments to match Flutter app expectations
     const videoObj = updatedVideo.toObject();
     
+    // **FIX: Convert likedBy ObjectIds to googleIds**
+    const likedByGoogleIds = await convertLikedByToGoogleIds(videoObj.likedBy || []);
+    
+    // **CRITICAL: Ensure likes count matches likedBy length before sending response**
+    const finalLikesCount = Math.max(0, likedByGoogleIds.length);
+    const finalLikes = Math.max(0, parseInt(videoObj.likes) || 0);
+    
+    // Use the actual likedBy length as the source of truth for likes count
+    const correctLikesCount = finalLikesCount;
+    
+    console.log('🔍 Like API: Final response data', {
+      likes: correctLikesCount,
+      likedByLength: likedByGoogleIds.length,
+      likedByGoogleIds: likedByGoogleIds.length > 0 ? `${likedByGoogleIds.length} users` : 'empty',
+      videoId: videoObj._id?.toString()
+    });
+
     // **FIXED: Only send fields that frontend VideoModel expects**
     const transformedVideo = {
       _id: videoObj._id?.toString(),
       videoName: videoObj.videoName || '',
       videoUrl: videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || '',
       thumbnailUrl: videoObj.thumbnailUrl || '',
-      likes: parseInt(videoObj.likes) || 0,
+      likes: correctLikesCount, // **CRITICAL: Use likedBy length as source of truth**
       views: parseInt(videoObj.views) || 0,
       shares: parseInt(videoObj.shares) || 0,
       description: videoObj.description || '',
@@ -1175,18 +1298,22 @@ router.post('/:id/like', verifyToken, async (req, res) => {
         profilePic: videoObj.uploader?.profilePic || '',
       },
       uploadedAt: videoObj.uploadedAt?.toISOString?.() || new Date().toISOString(),
-      likedBy: videoObj.likedBy || [],
+      likedBy: likedByGoogleIds, // **FIXED: Use googleIds instead of ObjectIds**
       videoType: videoObj.videoType || 'reel',
       aspectRatio: parseFloat(videoObj.aspectRatio) || 9/16,
       duration: parseInt(videoObj.duration) || 0,
-      comments: videoObj.comments.map(comment => ({
-        _id: comment._id,
-        text: comment.text,
-        userId: comment.user?.googleId || comment.user?._id || '',
-        userName: comment.user?.name || '',
-        createdAt: comment.createdAt,
-        likes: comment.likes || 0,
-        likedBy: comment.likedBy || []
+      comments: await Promise.all((videoObj.comments || []).map(async (comment) => {
+        // **FIX: Convert comment likedBy ObjectIds to googleIds**
+        const commentLikedByGoogleIds = await convertLikedByToGoogleIds(comment.likedBy || []);
+        return {
+          _id: comment._id,
+          text: comment.text,
+          userId: comment.user?.googleId || comment.user?._id || '',
+          userName: comment.user?.name || '',
+          createdAt: comment.createdAt,
+          likes: comment.likes || 0,
+          likedBy: commentLikedByGoogleIds // **FIXED: Use googleIds for comment likes**
+        };
       })),
       link: videoObj.link || null,
       hlsMasterPlaylistUrl: videoObj.hlsMasterPlaylistUrl || null,
@@ -1269,16 +1396,36 @@ router.delete('/:id/like', verifyToken, async (req, res) => {
     await video.save();
     console.log('✅ Unlike API: Video saved successfully');
 
+    // **CRITICAL: Invalidate ALL caches when video is unliked to ensure fresh data**
+    // This ensures likes persist even after app restart, just like Instagram/YouTube
+    if (redisService.getConnectionStatus()) {
+      try {
+        // Clear all possible cache patterns that might contain this video
+        await invalidateCache([
+          'videos:feed:*', // Clear all video feed caches
+          'videos:unwatched:ids:*', // Clear unwatched IDs cache (feed uses this)
+          VideoCacheKeys.single(videoId), // Clear single video cache
+          VideoCacheKeys.all(), // Clear all video caches
+          `videos:user:${video.uploader?.toString()}`, // Clear uploader's video cache
+          `videos:user:*`, // Clear all user video caches
+        ]);
+        console.log('🧹 Cache invalidated after unlike - ensuring fresh data on next fetch');
+      } catch (cacheError) {
+        console.error('⚠️ Error invalidating cache (non-critical):', cacheError.message);
+        // Don't fail the request if cache invalidation fails
+      }
+    }
+
     // Return the updated video with populated fields
     const updatedVideo = await Video.findById(videoId)
       .populate('uploader', 'name profilePic googleId')
       .populate('comments.user', 'name profilePic googleId');
 
-    if (!updatedVideo) {
-      return res.status(404).json({ error: 'Video not found after update' });
-    }
-
     const videoObj = updatedVideo.toObject();
+    
+    // **FIX: Convert likedBy ObjectIds to googleIds**
+    const likedByGoogleIds = await convertLikedByToGoogleIds(videoObj.likedBy || []);
+    
     const transformedVideo = {
       _id: videoObj._id?.toString(),
       videoName: videoObj.videoName || '',
@@ -1297,18 +1444,22 @@ router.delete('/:id/like', verifyToken, async (req, res) => {
         profilePic: videoObj.uploader?.profilePic || '',
       },
       uploadedAt: videoObj.uploadedAt?.toISOString?.() || new Date().toISOString(),
-      likedBy: videoObj.likedBy || [],
+      likedBy: likedByGoogleIds, // **FIXED: Use googleIds instead of ObjectIds**
       videoType: videoObj.videoType || 'reel',
       aspectRatio: parseFloat(videoObj.aspectRatio) || 9/16,
       duration: parseInt(videoObj.duration) || 0,
-      comments: videoObj.comments.map(comment => ({
-        _id: comment._id,
-        text: comment.text,
-        userId: comment.user?.googleId || comment.user?._id || '',
-        userName: comment.user?.name || '',
-        createdAt: comment.createdAt,
-        likes: comment.likes || 0,
-        likedBy: comment.likedBy || []
+      comments: await Promise.all((videoObj.comments || []).map(async (comment) => {
+        // **FIX: Convert comment likedBy ObjectIds to googleIds**
+        const commentLikedByGoogleIds = await convertLikedByToGoogleIds(comment.likedBy || []);
+        return {
+          _id: comment._id,
+          text: comment.text,
+          userId: comment.user?.googleId || comment.user?._id || '',
+          userName: comment.user?.name || '',
+          createdAt: comment.createdAt,
+          likes: comment.likes || 0,
+          likedBy: commentLikedByGoogleIds // **FIXED: Use googleIds for comment likes**
+        };
       })),
       hlsMasterPlaylistUrl: videoObj.hlsMasterPlaylistUrl || null,
       hlsPlaylistUrl: videoObj.hlsPlaylistUrl || null,
@@ -1346,6 +1497,10 @@ router.get('/:id', async (req, res) => {
 
     // **FIXED: Ensure consistent data types and HLS URL handling**
     const videoObj = video.toObject();
+    
+    // **FIX: Convert likedBy ObjectIds to googleIds**
+    const likedByGoogleIds = await convertLikedByToGoogleIds(videoObj.likedBy || []);
+    
     const formattedVideo = {
       ...videoObj,
       // **FIXED: Ensure numeric fields are numbers**
@@ -1366,15 +1521,20 @@ router.get('/:id', async (req, res) => {
       hlsMasterPlaylistUrl: videoObj.hlsMasterPlaylistUrl || null,
       hlsPlaylistUrl: videoObj.hlsPlaylistUrl || null,
       isHLSEncoded: videoObj.isHLSEncoded || false,
+      likedBy: likedByGoogleIds, // **FIXED: Use googleIds instead of ObjectIds**
       // **FIXED: Transform comments to match Flutter app expectations**
-      comments: videoObj.comments.map(comment => ({
-        _id: comment._id,
-        text: comment.text,
-        userId: comment.user?.googleId || comment.user?._id || '',
-        userName: comment.user?.name || '',
-        createdAt: comment.createdAt,
-        likes: comment.likes || 0,
-        likedBy: comment.likedBy || []
+      comments: await Promise.all((videoObj.comments || []).map(async (comment) => {
+        // **FIX: Convert comment likedBy ObjectIds to googleIds**
+        const commentLikedByGoogleIds = await convertLikedByToGoogleIds(comment.likedBy || []);
+        return {
+          _id: comment._id,
+          text: comment.text,
+          userId: comment.user?.googleId || comment.user?._id || '',
+          userName: comment.user?.name || '',
+          createdAt: comment.createdAt,
+          likes: comment.likes || 0,
+          likedBy: commentLikedByGoogleIds // **FIXED: Use googleIds for comment likes**
+        };
       }))
     };
 
@@ -1478,14 +1638,18 @@ router.post('/:id/comments', async (req, res) => {
     
     const transformedVideo = {
       ...videoObj,
-      comments: videoObj.comments.map(comment => ({
-        _id: comment._id,
-        text: comment.text,
-        userId: comment.user?.googleId || comment.user?._id || '',
-        userName: comment.user?.name || 'User',
-        createdAt: comment.createdAt,
-        likes: comment.likes || 0,
-        likedBy: comment.likedBy || []
+      comments: await Promise.all((videoObj.comments || []).map(async (comment) => {
+        // **FIX: Convert comment likedBy ObjectIds to googleIds**
+        const commentLikedByGoogleIds = await convertLikedByToGoogleIds(comment.likedBy || []);
+        return {
+          _id: comment._id,
+          text: comment.text,
+          userId: comment.user?.googleId || comment.user?._id || '',
+          userName: comment.user?.name || 'User',
+          createdAt: comment.createdAt,
+          likes: comment.likes || 0,
+          likedBy: commentLikedByGoogleIds // **FIXED: Use googleIds for comment likes**
+        };
       }))
     };
     
@@ -1528,15 +1692,19 @@ router.get('/:videoId/comments', async (req, res) => {
     });
 
     // Transform comments to match Flutter app expectations
-    const transformedComments = video.comments.map(comment => ({
-      _id: comment._id,
-      text: comment.text,
-      userId: comment.user?.googleId || comment.user?._id || '',
-      userName: comment.user?.name || 'User',
-      userProfilePic: comment.user?.profilePic || '',
-      createdAt: comment.createdAt,
-      likes: comment.likes || 0,
-      likedBy: comment.likedBy || []
+    const transformedComments = await Promise.all((video.comments || []).map(async (comment) => {
+      // **FIX: Convert comment likedBy ObjectIds to googleIds**
+      const commentLikedByGoogleIds = await convertLikedByToGoogleIds(comment.likedBy || []);
+      return {
+        _id: comment._id,
+        text: comment.text,
+        userId: comment.user?.googleId || comment.user?._id || '',
+        userName: comment.user?.name || 'User',
+        userProfilePic: comment.user?.profilePic || '',
+        createdAt: comment.createdAt,
+        likes: comment.likes || 0,
+        likedBy: commentLikedByGoogleIds // **FIXED: Use googleIds for comment likes**
+      };
     }));
 
     console.log('📤 Sending comments response:', { 
@@ -1630,14 +1798,18 @@ router.delete('/:videoId/comments/:commentId', async (req, res) => {
     const videoObj = video.toObject();
     const transformedVideo = {
       ...videoObj,
-      comments: videoObj.comments.map(comment => ({
-        _id: comment._id,
-        text: comment.text,
-        userId: comment.user?.googleId || comment.user?._id || '',
-        userName: comment.user?.name || '',
-        createdAt: comment.createdAt,
-        likes: comment.likes || 0,
-        likedBy: comment.likedBy || []
+      comments: await Promise.all((videoObj.comments || []).map(async (comment) => {
+        // **FIX: Convert comment likedBy ObjectIds to googleIds**
+        const commentLikedByGoogleIds = await convertLikedByToGoogleIds(comment.likedBy || []);
+        return {
+          _id: comment._id,
+          text: comment.text,
+          userId: comment.user?.googleId || comment.user?._id || '',
+          userName: comment.user?.name || '',
+          createdAt: comment.createdAt,
+          likes: comment.likes || 0,
+          likedBy: commentLikedByGoogleIds // **FIXED: Use googleIds for comment likes**
+        };
       }))
     };
 
@@ -2043,8 +2215,13 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
     }
 
     // Transform videos to match frontend expectations
-    const transformedVideos = validVideos.map(video => {
+    // **FIX: Convert to async to handle likedBy conversion**
+    const transformedVideos = await Promise.all(validVideos.map(async (video) => {
       const videoObj = video;
+      
+      // **FIX: Convert likedBy ObjectIds to googleIds**
+      const likedByGoogleIds = await convertLikedByToGoogleIds(videoObj.likedBy || []);
+      
       const result = {
         _id: videoObj._id?.toString(),
         videoName: (videoObj.videoName && videoObj.videoName.toString().trim()) || 'Untitled Video',
@@ -2072,7 +2249,7 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
         hlsMasterPlaylistUrl: videoObj.hlsMasterPlaylistUrl || null,
         hlsPlaylistUrl: videoObj.hlsPlaylistUrl || null,
         isHLSEncoded: videoObj.isHLSEncoded || false,
-        likedBy: videoObj.likedBy || [],
+        likedBy: likedByGoogleIds, // **FIXED: Use googleIds instead of ObjectIds**
         comments: videoObj.comments || []
       };
       
@@ -2087,7 +2264,7 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
       });
       
       return result;
-    });
+    }));
 
     console.log('✅ Sending user videos response:', {
       totalVideos: transformedVideos.length,

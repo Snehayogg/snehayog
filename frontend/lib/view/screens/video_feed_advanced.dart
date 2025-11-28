@@ -166,9 +166,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       listen: false,
     );
     if (authController.isSignedIn && authController.userData != null) {
-      // User is signed in - update current user ID
-      final userId = authController.userData!['id'] ??
-          authController.userData!['googleId'];
+      // **FIX: Prioritize googleId over id to match backend likedBy array**
+      final userId = authController.userData!['googleId'] ??
+          authController.userData!['id'];
       if (userId != null && _currentUserId != userId) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
@@ -1622,13 +1622,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       return;
     }
 
-    // **FIXED: Store the original state before optimistic update**
+    // **OPTIMISTIC UPDATE: Update UI immediately for instant feedback (heart fills red instantly)**
     final wasLiked = video.likedBy.contains(_currentUserId);
     final originalLikes = video.likes;
     final originalLikedBy = List<String>.from(video.likedBy);
 
-    try {
-      // Optimistic UI update
+    // Update UI immediately (optimistic) - this makes heart fill red instantly
+    final videoIndex = _videos.indexWhere((v) => v.id == video.id);
+    if (videoIndex != -1) {
       setState(() {
         if (wasLiked) {
           // User is currently liking, so unlike
@@ -1640,19 +1641,34 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           video.likes++;
         }
       });
+    }
 
-      // **FIXED: Use toggle API which handles both like and unlike**
-      await _videoService.toggleLike(video.id);
+    try {
+      // **SYNC WITH BACKEND: Get actual data from backend (ensures persistence)**
+      final updatedVideo = await _videoService.toggleLike(video.id);
       AppLogger.log('✅ Successfully toggled like for video ${video.id}');
+
+      // **CRITICAL: Replace with backend response to ensure persistence**
+      if (videoIndex != -1) {
+        setState(() {
+          _videos[videoIndex] = updatedVideo;
+        });
+        AppLogger.log(
+            '✅ VideoFeedAdvanced: Synced with backend - likes: ${updatedVideo.likes}, likedBy: ${updatedVideo.likedBy.length}');
+      } else {
+        AppLogger.log('⚠️ VideoFeedAdvanced: Video not found in list for sync');
+      }
     } catch (e) {
       AppLogger.log('❌ Error handling like: $e');
 
-      // **FIXED: Revert to original state on error**
-      setState(() {
-        video.likedBy.clear();
-        video.likedBy.addAll(originalLikedBy);
-        video.likes = originalLikes;
-      });
+      // **REVERT: If backend fails, revert optimistic update**
+      if (videoIndex != -1) {
+        setState(() {
+          video.likedBy.clear();
+          video.likedBy.addAll(originalLikedBy);
+          video.likes = originalLikes;
+        });
+      }
 
       // **FIX: Show actual error message from backend**
       String errorMessage = 'Failed to like video';
@@ -1868,6 +1884,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   }
 
   /// **CHECK IF VIDEO IS LIKED**
+  /// **SIMPLIFIED: Just check if currentUserId is in likedBy array**
   bool _isLiked(VideoModel video) {
     return _currentUserId != null && video.likedBy.contains(_currentUserId);
   }
@@ -2006,9 +2023,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         }
 
         // **FIXED: Listen to auth state changes and update user ID**
+        // **FIX: Prioritize googleId over id to match backend likedBy array**
         if (isSignedIn && authController.userData != null) {
-          final userId = authController.userData!['id'] ??
-              authController.userData!['googleId'];
+          final userId = authController.userData!['googleId'] ??
+              authController.userData!['id'];
           if (userId != null && _currentUserId != userId) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) {

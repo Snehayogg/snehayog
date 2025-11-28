@@ -64,12 +64,14 @@ class _VideoScreenSimpleState extends State<VideoScreenSimple> {
   }
 
   /// **SIMPLE USER ID LOADING**
+  /// **FIX: Prioritize googleId over id to match backend likedBy array**
   Future<void> _loadCurrentUserId() async {
     try {
       final userData = await _authService.getUserData();
       if (mounted) {
         setState(() {
-          _currentUserId = userData?['id'];
+          // **FIX: Use googleId first to match backend likedBy array**
+          _currentUserId = userData?['googleId'] ?? userData?['id'];
         });
       }
     } catch (e) {
@@ -261,22 +263,58 @@ class _VideoScreenSimpleState extends State<VideoScreenSimple> {
   }
 
   /// **SIMPLE LIKE ACTION**
-  void _handleLike(VideoModel video, int index) {
+  /// **FIX: Sync with backend response to ensure likedBy persists**
+  Future<void> _handleLike(VideoModel video, int index) async {
     // **FIX: Navigate to login screen if user is not signed in**
     if (_currentUserId == null) {
       _navigateToLoginScreen();
       return;
     }
 
-    setState(() {
-      if (video.likedBy.contains(_currentUserId)) {
-        video.likedBy.remove(_currentUserId);
-        video.likes = (video.likes - 1).clamp(0, double.infinity).toInt();
-      } else {
-        video.likedBy.add(_currentUserId!);
-        video.likes++;
+    // **OPTIMISTIC UPDATE: Update UI immediately for instant feedback (heart fills red instantly)**
+    final wasLiked = video.likedBy.contains(_currentUserId);
+    final originalLikes = video.likes;
+    final originalLikedBy = List<String>.from(video.likedBy);
+
+    // Update UI immediately (optimistic) - this makes heart fill red instantly
+    if (mounted) {
+      setState(() {
+        if (wasLiked) {
+          // User is currently liking, so unlike
+          video.likedBy.remove(_currentUserId);
+          video.likes = (video.likes - 1).clamp(0, double.infinity).toInt();
+        } else {
+          // User is not currently liking, so like
+          video.likedBy.add(_currentUserId!);
+          video.likes++;
+        }
+      });
+    }
+
+    try {
+      // **SYNC WITH BACKEND: Get actual data from backend (ensures persistence)**
+      final updatedVideo = await _videoService.toggleLike(video.id);
+
+      // **CRITICAL: Replace with backend response to ensure persistence**
+      if (mounted) {
+        setState(() {
+          _videos[index] = updatedVideo;
+        });
+        AppLogger.log(
+            '✅ VideoScreenSimple: Synced with backend - likes: ${updatedVideo.likes}');
       }
-    });
+    } catch (e) {
+      AppLogger.log('❌ Error handling like: $e');
+
+      // **REVERT: If backend fails, revert optimistic update**
+      if (mounted) {
+        setState(() {
+          video.likedBy.clear();
+          video.likedBy.addAll(originalLikedBy);
+          video.likes = originalLikes;
+        });
+      }
+    }
   }
 
   /// **NAVIGATE TO LOGIN SCREEN**

@@ -77,7 +77,8 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
       final userData = await _authService.getUserData();
       if (userData != null) {
         setState(() {
-          _currentUserId = userData['id'] ?? userData['googleId'];
+          // **FIX: Prioritize googleId over id to match backend likedBy array**
+          _currentUserId = userData['googleId'] ?? userData['id'];
           _isLiked = _currentUserId != null &&
               widget.carouselAd.likedBy.contains(_currentUserId);
           _initiallyLiked = _isLiked;
@@ -161,7 +162,8 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
 
       final videoId = widget.videoId!;
       final adId = widget.carouselAd.id;
-      final userId = userData['id'] ?? '';
+      // **FIX: Prioritize googleId over id to match backend likedBy array**
+      final userId = userData['googleId'] ?? userData['id'] ?? '';
 
       if (videoId.isEmpty || adId.isEmpty) {
         AppLogger.log(

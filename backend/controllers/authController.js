@@ -110,14 +110,17 @@ export const checkDeviceId = async (req, res) => {
     console.log('🔍 Check Device ID: Checking device:', deviceId.substring(0, 8) + '...');
 
     // Find if any user has this device ID in their deviceIds array
-    const user = await User.findOne({ deviceIds: deviceId });
+    const user = await User.findOne({ deviceIds: deviceId })
+      .select('googleId name email profilePic deviceIds');
 
     if (user) {
       console.log('✅ Device ID found - user has logged in before:', user.googleId);
       return res.json({
         hasLoggedIn: true,
         userId: user.googleId,
-        userName: user.name
+        userName: user.name,
+        userEmail: user.email, // **NEW: Return email for seamless auto-login**
+        profilePic: user.profilePic // **NEW: Return profile pic**
       });
     } else {
       console.log('ℹ️ Device ID not found - user has not logged in before');
