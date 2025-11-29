@@ -1,4 +1,3 @@
-import cloudinary from 'cloudinary';
 import cloudflareR2Service from './cloudflareR2Service.js';
 import cloudflareStreamService from './cloudflareStreamService.js';
 import hlsEncodingService from './hlsEncodingService.js';
@@ -8,29 +7,20 @@ import { spawn } from 'child_process';
 
 class HybridVideoService {
   constructor() {
-    // Configure Cloudinary with fallback to old env var names
-    cloudinary.v2.config({
-      cloud_name: process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUD_NAME,
-      api_key: process.env.CLOUDINARY_API_KEY || process.env.CLOUD_KEY,
-      api_secret: process.env.CLOUDINARY_API_SECRET || process.env.CLOUD_SECRET
-    });
-    
-    // Log configuration status
-    const config = cloudinary.v2.config();
-    console.log('☁️ HybridVideoService: Cloudinary configuration:');
-    console.log('   cloud_name:', config.cloud_name ? '✅ Set' : '❌ Missing');
-    console.log('   api_key:', config.api_key ? '✅ Set' : '❌ Missing');
-    console.log('   api_secret:', config.api_secret ? '✅ Set' : '❌ Missing');
+    // HybridVideoService: Using Cloudflare Stream (FREE transcoding) with HLS fallback
+    console.log('☁️ HybridVideoService: Initialized');
+    console.log('   Primary: Cloudflare Stream (FREE transcoding)');
+    console.log('   Fallback: Local FFmpeg HLS encoding');
   }
 
   /**
    * Hybrid Processing: Cloudflare Stream (FREE Transcoding) → R2 (Storage + FREE Bandwidth)
-   * 98% cost savings vs Cloudinary setup! Transcoding is now FREE!
+   * 100% FREE transcoding! Falls back to local FFmpeg HLS if Stream fails.
    */
   async processVideoHybrid(videoPath, videoName, userId) {
     try {
       console.log('🚀 Starting Hybrid Processing (Cloudflare Stream → R2)...');
-      console.log('💰 Expected savings: 98% vs Cloudinary setup (FREE transcoding!)');
+      console.log('💰 FREE transcoding with Cloudflare Stream!');
       console.log('📁 Video path:', videoPath);
       console.log('📝 Video name:', videoName);
       console.log('👤 User ID:', userId);
@@ -62,54 +52,53 @@ class HybridVideoService {
       } catch (streamError) {
         console.error('❌ Cloudflare Stream processing failed:', streamError.message);
         console.error('❌ Error details:', streamError);
-        console.log('🔄 Falling back to Cloudinary processing...');
+        console.log('🔄 Falling back to Pure HLS Processing (FFmpeg → R2)...');
+        console.log('⏱️ Starting HLS fallback at:', new Date().toISOString());
         
-        // Fallback to Cloudinary
-        try {
-          console.log('⏱️ Starting Cloudinary fallback at:', new Date().toISOString());
-          processingResult = await this.processWithCloudinary(absoluteVideoPath, videoName, userId);
-          console.log('✅ Cloudinary fallback completed at:', new Date().toISOString());
-        } catch (cloudinaryError) {
-          console.error('❌ Cloudinary processing also failed:', cloudinaryError.message);
-          console.log('🔄 Falling back to Pure HLS Processing (FFmpeg → R2)...');
-          console.log('⏱️ Starting HLS fallback at:', new Date().toISOString());
-          
-          // Final fallback to pure HLS processing with timeout
-          console.log('🎬 Starting HLS encoding with 5-minute timeout...');
-          console.log('📁 Using video file for HLS encoding:', absoluteVideoPath);
-          const hlsResult = await Promise.race([
-            hlsEncodingService.convertToHLS(absoluteVideoPath, `${videoName}_${Date.now()}`, {
-              quality: 'medium',
-              resolution: '480p'
-            }),
-            new Promise((_, reject) => 
-              setTimeout(() => {
-                console.log('⏰ HLS encoding timeout after 5 minutes');
-                reject(new Error('HLS encoding timeout after 5 minutes'))
-              }, 5 * 60 * 1000)
-            )
-          ]);
-          console.log('✅ HLS fallback completed at:', new Date().toISOString());
-          
-          // Convert HLS result to processingResult format
-          processingResult = {
-            videoUrl: hlsResult.playlistUrl,
-            thumbnailUrl: hlsResult.thumbnailUrl || '',
-            cloudinaryPublicId: null,
-            streamVideoId: null,
-            duration: hlsResult.duration || 0,
-            size: hlsResult.size || 0,
-            format: 'HLS',
-            originalVideoInfo: hlsResult.originalVideoInfo || {},
-            aspectRatio: hlsResult.aspectRatio || 9/16,
-            width: hlsResult.width || 480,
-            height: hlsResult.height || 854,
-            isPortrait: true,
-            outputDir: hlsResult.outputDir,
-            localPath: null
-          };
-          console.log('✅ Fallback completed: Pure HLS processing successful');
-        }
+        // **FIX: Get original video info to preserve aspect ratio**
+        console.log('📊 Getting original video dimensions for HLS fallback...');
+        const originalVideoInfo = await this.getOriginalVideoInfo(absoluteVideoPath);
+        console.log('📊 Original video info:', {
+          width: originalVideoInfo.width,
+          height: originalVideoInfo.height,
+          aspectRatio: originalVideoInfo.aspectRatio
+        });
+        
+        // Fallback to pure HLS processing with timeout
+        console.log('🎬 Starting HLS encoding with 5-minute timeout (preserving aspect ratio)...');
+        console.log('📁 Using video file for HLS encoding:', absoluteVideoPath);
+        const hlsResult = await Promise.race([
+          hlsEncodingService.convertToHLS(absoluteVideoPath, `${videoName}_${Date.now()}`, {
+            quality: 'medium',
+            resolution: '480p',
+            originalVideoInfo: originalVideoInfo // Pass original info for aspect ratio preservation
+          }),
+          new Promise((_, reject) => 
+            setTimeout(() => {
+              console.log('⏰ HLS encoding timeout after 5 minutes');
+              reject(new Error('HLS encoding timeout after 5 minutes'))
+            }, 5 * 60 * 1000)
+          )
+        ]);
+        console.log('✅ HLS fallback completed at:', new Date().toISOString());
+        
+        // Convert HLS result to processingResult format
+        processingResult = {
+          videoUrl: hlsResult.playlistUrl,
+          thumbnailUrl: hlsResult.thumbnailUrl || '',
+          streamVideoId: null,
+          duration: originalVideoInfo.duration || 0,
+          size: hlsResult.size || 0,
+          format: 'HLS',
+          originalVideoInfo: originalVideoInfo,
+          aspectRatio: originalVideoInfo.aspectRatio,
+          width: originalVideoInfo.width,
+          height: originalVideoInfo.height,
+          isPortrait: originalVideoInfo.aspectRatio < 1.0,
+          outputDir: hlsResult.outputDir,
+          localPath: null
+        };
+        console.log('✅ Fallback completed: Pure HLS processing successful');
       }
       
       // Step 2: Handle video processing result based on processing method
@@ -149,31 +138,6 @@ class HybridVideoService {
             r2ThumbnailUrl = await this.uploadThumbnailImageToR2(thumbnailPath, videoName, userId);
           }
         }
-      } else if (processingResult.videoUrl && processingResult.videoUrl.includes('cloudinary') && processingResult.cloudinaryPublicId) {
-        // Cloudinary processing was successful (fallback)
-        console.log('📥 Downloading processed video from Cloudinary...');
-        localVideoPath = await cloudflareR2Service.downloadFromCloudinary(
-          processingResult.videoUrl, 
-          videoName
-        );
-        
-        // Step 3: Upload 480p video to Cloudflare R2 (FREE bandwidth!)
-        console.log('⏱️ Starting R2 video upload at:', new Date().toISOString());
-        r2VideoResult = await cloudflareR2Service.uploadVideoToR2(
-          localVideoPath, 
-          videoName, 
-          userId
-        );
-        console.log('✅ R2 video upload completed at:', new Date().toISOString());
-        
-        // Step 4: Upload thumbnail to R2
-        console.log('⏱️ Starting R2 thumbnail upload at:', new Date().toISOString());
-        r2ThumbnailUrl = await cloudflareR2Service.uploadThumbnailToR2(
-          processingResult.thumbnailUrl, 
-          videoName, 
-          userId
-        );
-        console.log('✅ R2 thumbnail upload completed at:', new Date().toISOString());
       } else {
         // HLS processing fallback was used
         console.log('📥 Using HLS processing result directly...');
@@ -227,23 +191,7 @@ class HybridVideoService {
         }
       }
       
-      // Step 6: **DELETE FROM CLOUDINARY** to avoid storage costs! (only if Cloudinary was used)
-      if (processingResult.cloudinaryPublicId) {
-        console.log('🗑️ Deleting video from Cloudinary (no longer needed)...');
-        try {
-          await cloudinary.v2.uploader.destroy(processingResult.cloudinaryPublicId, {
-            resource_type: 'video',
-            invalidate: true
-          });
-          console.log('✅ Video deleted from Cloudinary successfully');
-          console.log('💰 Cost saved: ~$0.02/GB/month in Cloudinary storage');
-        } catch (deleteError) {
-          console.warn('⚠️ Failed to delete video from Cloudinary:', deleteError.message);
-          console.warn('   Manual cleanup recommended to avoid storage costs');
-        }
-      }
-      
-      // Step 7: Cleanup temp files
+      // Step 6: Cleanup temp files
       if (localVideoPath) {
         await cloudflareR2Service.cleanupLocalFile(localVideoPath);
       }
@@ -256,20 +204,37 @@ class HybridVideoService {
       console.log('   - Stream storage: $0 (deleted after transfer)');
       console.log('   - R2 storage: ~$0.015/GB/month');
       console.log('   - R2 bandwidth: $0 (FREE forever!)');
-      console.log('   - Total savings: 98% vs Cloudinary setup!');
+      console.log('   - Total: 100% FREE transcoding!');
+      
+      // **FIX: Get original video info to include in result**
+      let originalVideoInfo = null;
+      try {
+        originalVideoInfo = await this.getOriginalVideoInfo(absoluteVideoPath);
+        console.log('📐 Original video info for result:', {
+          width: originalVideoInfo.width,
+          height: originalVideoInfo.height,
+          aspectRatio: originalVideoInfo.aspectRatio
+        });
+      } catch (error) {
+        console.warn('⚠️ Could not get original video info for result:', error.message);
+      }
       
       return {
         success: true,
         videoUrl: r2VideoResult.url,
         thumbnailUrl: r2ThumbnailUrl,
-        format: 'MP4 with Progressive Loading',
-        quality: '480p',
+        format: streamVideoId ? 'MP4 with Progressive Loading' : 'HLS (HTTP Live Streaming)',
+        quality: originalVideoInfo ? `${originalVideoInfo.height}p (original preserved)` : 'original',
         storage: 'Cloudflare R2',
         bandwidth: 'FREE Forever',
         size: r2VideoResult.size,
-        processing: streamVideoId ? 'Cloudflare Stream → R2 Hybrid' : 
-                   (processingResult.cloudinaryPublicId ? 'Cloudinary → R2 Hybrid' : 'HLS → R2'),
-        costSavings: streamVideoId ? '98%' : '93%'
+        processing: streamVideoId ? 'Cloudflare Stream → R2 Hybrid' : 'HLS → R2',
+        costSavings: '100% FREE transcoding',
+        // **NEW: Include original resolution in result**
+        width: originalVideoInfo?.width,
+        height: originalVideoInfo?.height,
+        aspectRatio: originalVideoInfo?.aspectRatio,
+        originalVideoInfo: originalVideoInfo
       };
       
     } catch (error) {
@@ -312,7 +277,6 @@ class HybridVideoService {
         videoUrl: streamResult.videoUrl,
         thumbnailUrl: streamResult.thumbnailUrl || '',
         streamVideoId: streamResult.videoId,
-        cloudinaryPublicId: null,
         duration: streamResult.duration,
         size: streamResult.size,
         format: streamResult.format,
@@ -327,86 +291,6 @@ class HybridVideoService {
     } catch (error) {
       console.error('❌ Cloudflare Stream processing error:', error);
       throw new Error(`Cloudflare Stream processing failed: ${error.message}`);
-    }
-  }
-
-  /**
-   * Process video to single 480p quality using Cloudinary (fallback)
-   */
-  async processWithCloudinary(videoPath, videoName, userId) {
-    try {
-      console.log('☁️ Processing video with Cloudinary while preserving aspect ratio...');
-      
-      // First, get original video info to determine aspect ratio
-      const originalVideoInfo = await this.getOriginalVideoInfo(videoPath);
-      console.log('📊 Original video info:', originalVideoInfo);
-      
-      // Upload and process while preserving original aspect ratio with timeout
-      console.log('☁️ Starting Cloudinary upload with 5-minute timeout...');
-      console.log('📁 Uploading file:', videoPath);
-      console.log('📊 File size:', fs.statSync(videoPath).size, 'bytes');
-      
-      const result = await Promise.race([
-        cloudinary.v2.uploader.upload(videoPath, {
-        resource_type: 'video',
-        folder: `temp-processing/${userId}`, // Temporary folder
-        public_id: `${videoName}_preserved_${Date.now()}`,
-        transformation: [
-          { 
-            // Simplified transformation - no complex processing
-            quality: 'auto',
-            fetch_format: 'mp4'
-          }
-        ],
-        overwrite: true,
-        // Simplified thumbnail generation
-        eager: [
-          { 
-            width: 320, 
-            height: 180, 
-            crop: 'fill', 
-            format: 'jpg'
-          }
-        ]
-        }),
-        new Promise((_, reject) => 
-          setTimeout(() => {
-            console.log('⏰ Cloudinary upload timeout after 5 minutes - forcing fallback to HLS');
-            reject(new Error('Cloudinary upload timeout after 5 minutes'))
-          }, 5 * 60 * 1000)
-        )
-      ]);
-
-      console.log('✅ Cloudinary processing completed');
-      console.log('🔗 Processed video URL:', result.secure_url);
-      console.log('📊 Video processing summary:');
-      console.log(`   - Original dimensions: ${originalVideoInfo.width}x${originalVideoInfo.height}`);
-      console.log(`   - Aspect ratio: ${originalVideoInfo.aspectRatio}`);
-      console.log('   - Quality: 480p equivalent (800k bitrate)');
-      console.log('   - Cost optimization: Single quality maintained');
-      
-      // Get thumbnail URL
-      const thumbnailUrl = result.eager && result.eager.length > 0 
-        ? result.eager[0].secure_url 
-        : result.secure_url.replace('/upload/', '/upload/w_320,h_180,c_fill,f_jpg/');
-
-      return {
-        videoUrl: result.secure_url,
-        thumbnailUrl: thumbnailUrl,
-        cloudinaryPublicId: result.public_id,
-        duration: result.duration,
-        size: result.bytes,
-        format: result.format,
-        originalVideoInfo: originalVideoInfo,
-        aspectRatio: originalVideoInfo.aspectRatio,
-        width: originalVideoInfo.width,
-        height: originalVideoInfo.height,
-        isPortrait: originalVideoInfo.isPortrait
-      };
-      
-    } catch (error) {
-      console.error('❌ Cloudinary processing error:', error);
-      throw new Error(`Cloudinary processing failed: ${error.message}`);
     }
   }
 
@@ -591,7 +475,7 @@ class HybridVideoService {
    */
   getCostEstimate(videoSizeInMB, expectedViews = 1000) {
     const streamProcessingCost = 0; // FREE! Cloudflare Stream transcoding is free
-    const cloudinaryProcessingCost = 0.001; // ~$0.001 per video (fallback)
+    const hlsProcessingCost = 0; // FREE! Local FFmpeg processing
     const r2StorageCostPerGB = 0.015; // $0.015 per GB per month
     const r2BandwidthCost = 0; // FREE!
     
@@ -600,12 +484,11 @@ class HybridVideoService {
     
     return {
       processing: streamProcessingCost, // FREE with Stream!
-      processingFallback: cloudinaryProcessingCost, // If Stream fails
+      processingFallback: hlsProcessingCost, // FREE with local FFmpeg!
       storagePerMonth: storageCostPerMonth,
       bandwidth: r2BandwidthCost,
       totalPerMonth: totalCostPerMonth,
-      savingsVsCurrent: '98%',
-      savingsVsCloudinary: '98%',
+      savingsVsCurrent: '100%',
       currency: 'USD'
     };
   }
@@ -627,16 +510,26 @@ class HybridVideoService {
         throw new Error(`Video validation failed: ${validation.error}`);
       }
       
-      // Step 2: Use LOCAL FFmpeg to create HLS segments (480p only)
-      console.log('🎬 Converting to HLS with FFmpeg (480p only)...');
+      // **FIX: Get original video info to preserve aspect ratio**
+      console.log('📊 Getting original video dimensions...');
+      const originalVideoInfo = await this.getOriginalVideoInfo(videoPath);
+      console.log('📊 Original video info:', {
+        width: originalVideoInfo.width,
+        height: originalVideoInfo.height,
+        aspectRatio: originalVideoInfo.aspectRatio
+      });
+      
+      // Step 2: Use LOCAL FFmpeg to create HLS segments (preserves original aspect ratio)
+      console.log('🎬 Converting to HLS with FFmpeg (preserving original aspect ratio)...');
       const videoId = `${videoName}_${Date.now()}`;
       const hlsResult = await hlsEncodingService.convertToHLS(
         videoPath,
         videoId,
         {
           quality: 'medium',    // 480p quality preset
-          resolution: '480p',   // Fixed 480p resolution
-          segmentDuration: 3    // 3-second segments for fast startup
+          resolution: '480p',   // Max height 480p (aspect ratio preserved)
+          segmentDuration: 3,   // 3-second segments for fast startup
+          originalVideoInfo: originalVideoInfo // Pass original info for aspect ratio preservation
         }
       );
       
@@ -684,14 +577,14 @@ class HybridVideoService {
       console.log('   - FFmpeg processing: $0 (local, FREE!)');
       console.log('   - R2 storage: ~$0.015/GB/month');
       console.log('   - R2 bandwidth: $0 (FREE forever!)');
-      console.log('   - Total savings: 100% vs Cloudinary processing!');
+      console.log('   - Total: 100% FREE processing!');
       
       return {
         success: true,
         videoUrl: r2HLSResult.playlistUrl,
         thumbnailUrl: thumbnailUrl,
         format: 'HLS (HTTP Live Streaming)',
-        quality: '480p (single quality)',
+        quality: '480p (max height, aspect ratio preserved)',
         segments: r2HLSResult.segments,
         totalFiles: r2HLSResult.totalFiles,
         storage: 'Cloudflare R2',
@@ -700,6 +593,11 @@ class HybridVideoService {
         costSavings: '100% vs any cloud processing',
         hlsPlaylistUrl: r2HLSResult.playlistUrl,
         isHLSEncoded: true,
+        // **FIX: Include original video dimensions to preserve aspect ratio**
+        aspectRatio: originalVideoInfo.aspectRatio,
+        width: originalVideoInfo.width,
+        height: originalVideoInfo.height,
+        originalVideoInfo: originalVideoInfo
       };
       
     } catch (error) {

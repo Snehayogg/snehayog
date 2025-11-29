@@ -8,7 +8,6 @@ import WatchHistory from '../models/WatchHistory.js';
 import fs from 'fs'; 
 import path from 'path';
 import { verifyToken } from '../utils/verifytoken.js';
-import { isCloudinaryConfigured } from '../config.js';
 import redisService from '../services/redisService.js';
 import { VideoCacheKeys, invalidateCache } from '../middleware/cacheMiddleware.js';
 // Lazy import to ensure env vars are loaded first
@@ -264,23 +263,8 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
     }
     console.log('✅ Upload: User found:', user.name);
 
-    // 5. Check Cloudinary configuration
-    console.log('🔍 Upload: Checking Cloudinary configuration...');
-    console.log('🔍 Upload: CLOUD_NAME:', process.env.CLOUD_NAME);
-    console.log('🔍 Upload: CLOUD_KEY:', process.env.CLOUD_KEY ? 'Set' : 'Missing');
-    console.log('🔍 Upload: CLOUD_SECRET:', process.env.CLOUD_SECRET ? 'Set' : 'Missing');
-    
-    if (!isCloudinaryConfigured()) {
-      console.log('❌ Upload: Cloudinary not configured');
-      fs.unlinkSync(req.file.path);
-      return res.status(500).json({ 
-        error: 'Video upload service not configured. Please contact administrator.',
-        details: 'Cloudinary API credentials are missing. Check CLOUDINARY_SETUP.md for setup instructions.',
-        solution: 'Create a .env file with CLOUD_NAME, CLOUD_KEY, and CLOUD_SECRET variables'
-      });
-    }
-    
-    console.log('✅ Upload: Cloudinary configuration verified');
+    // Video processing uses Cloudflare Stream (FREE transcoding) with HLS fallback
+    console.log('✅ Upload: Video processing service ready');
 
     // **NEW: Use Pure HLS Processing (FFmpeg → R2) for 100% FREE processing**
     console.log('🚀 Starting Pure HLS Video Processing (FFmpeg → R2)...');
@@ -304,6 +288,7 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
     }
     
     // **NEW: Create initial video record with pending status**
+    // **FIX: Save original dimensions to preserve aspect ratio**
     const video = new Video({
       videoName: videoName,
       description: description || '',
@@ -312,8 +297,14 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
       thumbnailUrl: '', // Will be generated during processing
       uploader: user._id,
       videoType: videoType || 'yog',
-      aspectRatio: videoValidation.width / videoValidation.height || 9/16,
+      aspectRatio: (videoValidation.width && videoValidation.height) 
+        ? videoValidation.width / videoValidation.height 
+        : 9/16, // Default to 9:16 (portrait) if dimensions unavailable
       duration: videoValidation.duration || 0,
+      originalResolution: {
+        width: videoValidation.width || 0,
+        height: videoValidation.height || 0
+      },
       processingStatus: 'pending',
       processingProgress: 0,
       isHLSEncoded: false, // Will be updated to true after HLS processing
@@ -337,26 +328,26 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
       console.log('🧹 Cache invalidated after video upload');
     }
     
-    // **NEW: Start Cloudinary processing in background (non-blocking)**
+    // **NEW: Start video processing in background (non-blocking)**
     processVideoHybrid(video._id, req.file.path, videoName, user._id.toString());
     
     // **NEW: Return immediate response**
     return res.status(201).json({
       success: true,
-      message: 'Video upload started. Processing via Cloudinary → R2 (93% cost savings!).',
+      message: 'Video upload started. Processing via Cloudflare Stream → R2 (100% FREE transcoding!).',
       video: {
         id: video._id,
         videoName: video.videoName,
         processingStatus: video.processingStatus,
         processingProgress: video.processingProgress,
         estimatedTime: '2-5 minutes',
-        format: 'MP4 (Progressive Loading)',
+        format: 'MP4 or HLS (depending on processing method)',
         quality: '480p (single quality)',
         costBreakdown: {
-          processing: '$0.001 (Cloudinary)',
+          processing: '$0 (FREE!)',
           storage: '$0.015/GB/month (R2)',
           bandwidth: '$0 (FREE forever!)',
-          savings: '93% vs pure Cloudinary'
+          savings: '100% FREE transcoding'
         }
       }
     });
@@ -408,6 +399,19 @@ async function processVideoToHLS(videoId, videoPath, videoName, userId) {
     video.processingProgress = 100;
     video.isHLSEncoded = true; // Using HLS format
     video.lowQualityUrl = hlsResult.videoUrl; // Single quality (480p)
+    
+    // **FIX: Preserve original aspect ratio and dimensions**
+    if (hlsResult.aspectRatio) {
+      video.aspectRatio = hlsResult.aspectRatio;
+      console.log(`📐 Preserved aspect ratio: ${hlsResult.aspectRatio}`);
+    }
+    if (hlsResult.width && hlsResult.height) {
+      video.originalResolution = {
+        width: hlsResult.width,
+        height: hlsResult.height
+      };
+      console.log(`📐 Preserved original dimensions: ${hlsResult.width}x${hlsResult.height}`);
+    }
     
     await video.save();
     console.log('🎉 Pure HLS processing completed for:', videoId);
@@ -2373,13 +2377,46 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
     video.processingStatus = 'completed';
     video.processingProgress = 100;
 
+    // **FIX: Preserve original aspect ratio and dimensions from hybridResult**
+    // Use original resolution from hybridResult if available, otherwise get from video file
+    if (hybridResult.originalVideoInfo && hybridResult.originalVideoInfo.width && hybridResult.originalVideoInfo.height) {
+      // Use original resolution from processing result
+      video.aspectRatio = hybridResult.aspectRatio || hybridResult.originalVideoInfo.aspectRatio;
+      video.originalResolution = {
+        width: hybridResult.originalVideoInfo.width,
+        height: hybridResult.originalVideoInfo.height
+      };
+      console.log(`📐 Preserved original dimensions from result: ${hybridResult.originalVideoInfo.width}x${hybridResult.originalVideoInfo.height}, aspect ratio: ${video.aspectRatio}`);
+    } else if (!video.originalResolution || !video.originalResolution.width) {
+      // Fallback: Get original video info if not already in video record
+      if (!hybridVideoService) {
+        const { default: service } = await import('../services/hybridVideoService.js');
+        hybridVideoService = service;
+      }
+      const originalVideoInfo = await hybridVideoService.getOriginalVideoInfo(videoPath);
+      
+      // Preserve original aspect ratio and dimensions
+      if (originalVideoInfo.width && originalVideoInfo.height) {
+        video.aspectRatio = originalVideoInfo.aspectRatio;
+        video.originalResolution = {
+          width: originalVideoInfo.width,
+          height: originalVideoInfo.height
+        };
+        console.log(`📐 Preserved original dimensions from file: ${originalVideoInfo.width}x${originalVideoInfo.height}, aspect ratio: ${originalVideoInfo.aspectRatio}`);
+      }
+    } else {
+      // Use existing aspect ratio if dimensions already saved
+      console.log(`📐 Using existing aspect ratio: ${video.aspectRatio}, dimensions: ${video.originalResolution.width}x${video.originalResolution.height}`);
+    }
+    
     // **NEW: Add hybrid metadata**
-    video.originalSize = hybridResult.size;
+    video.originalSize = hybridResult.size || video.originalSize;
     video.originalFormat = 'mp4';
-    video.originalResolution = {
-      width: 854,
-      height: 480
-    };
+
+    // **FIX: Use original resolution instead of calculating processed dimensions**
+    // Videos are now encoded at original resolution, not scaled to 480p
+    const processedWidth = video.originalResolution?.width || hybridResult.width || 854;
+    const processedHeight = video.originalResolution?.height || hybridResult.height || 480;
 
     // **NEW: Add single quality version**
     video.qualitiesGenerated = [{
@@ -2387,8 +2424,8 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
       url: hybridResult.videoUrl,
       size: hybridResult.size,
       resolution: {
-        width: 854,
-        height: 480
+        width: processedWidth,
+        height: processedHeight
       },
       bitrate: '800k',
       generatedAt: new Date()

@@ -1164,19 +1164,24 @@ class VideoService {
     }
   }
 
-  /// **Compress video**
+  /// **Compress video while preserving display (resolution/aspect) as much as possible**
+  /// Uses DefaultQuality so encoder mainly reduces bitrate, not dimensions.
   Future<File?> compressVideo(File videoFile) async {
     try {
-      AppLogger.log('🔄 VideoService: Compressing video...');
+      AppLogger.log(
+          '🔄 VideoService: Compressing video (preserve resolution)...');
 
       final MediaInfo? mediaInfo = await VideoCompress.compressVideo(
         videoFile.path,
-        quality: VideoQuality.MediumQuality,
+        quality: VideoQuality.DefaultQuality,
         deleteOrigin: false,
       );
 
       if (mediaInfo?.file != null) {
-        AppLogger.log('✅ VideoService: Video compressed successfully');
+        AppLogger.log(
+          '✅ VideoService: Video compressed successfully. '
+          'Original display (orientation/aspect ratio) should remain the same.',
+        );
         return mediaInfo!.file;
       } else {
         AppLogger.log('❌ VideoService: Video compression failed');

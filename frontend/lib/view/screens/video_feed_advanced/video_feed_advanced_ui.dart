@@ -453,7 +453,10 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         final screenHeight = constraints.maxHeight;
 
         final currentVideo = _videos[_currentIndex];
-        final double modelAspectRatio = currentVideo.aspectRatio;
+        // **FIX: Ensure aspect ratio is valid (greater than 0)**
+        double modelAspectRatio = currentVideo.aspectRatio > 0
+            ? currentVideo.aspectRatio
+            : 9.0 / 16.0; // Default to 9:16 if invalid
 
         final Size videoSize = controller.value.size;
         final int rotation = controller.value.rotationCorrection;
@@ -462,10 +465,14 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         AppLogger.log(
             '🎬 Video dimensions: ${videoSize.width}x${videoSize.height}');
         AppLogger.log('🎬 Rotation: $rotation degrees');
-        AppLogger.log('🎬 Using MODEL aspect ratio instead of detected ratio');
+        AppLogger.log(
+            '🎬 Using MODEL aspect ratio for display (preserved from 480p encoding)');
 
         _debugAspectRatio(controller);
 
+        // **FIX: Use model aspect ratio to determine portrait vs landscape**
+        // Portrait videos have aspect ratio < 1.0 (height > width)
+        // Landscape videos have aspect ratio >= 1.0 (width >= height)
         if (modelAspectRatio < 1.0) {
           return _buildPortraitVideoFromModel(
             controller,
@@ -496,32 +503,92 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     double screenHeight,
     double modelAspectRatio,
   ) {
-    final Size videoSize = controller.value.size;
-    final int rotation = controller.value.rotationCorrection;
+    // **FIX: Use original resolution from video model if available, otherwise use aspect ratio**
+    // This ensures videos display at their original resolution (1080x1920, etc.)
+    final currentVideo = _videos[_currentIndex];
 
-    double videoWidth = videoSize.width;
-    double videoHeight = videoSize.height;
+    // Try to get original resolution from video model
+    double? originalWidth;
+    double? originalHeight;
 
-    if (rotation == 90 || rotation == 270) {
-      videoWidth = videoSize.height;
-      videoHeight = videoSize.width;
+    // Check if video model has originalResolution field (from backend)
+    if (currentVideo.originalResolution != null) {
+      originalWidth = currentVideo.originalResolution!['width']?.toDouble();
+      originalHeight = currentVideo.originalResolution!['height']?.toDouble();
+    }
+
+    double displayWidth;
+    double displayHeight;
+
+    // If we have original resolution, use it; otherwise calculate from aspect ratio
+    if (originalWidth != null &&
+        originalHeight != null &&
+        originalWidth > 0 &&
+        originalHeight > 0) {
+      AppLogger.log(
+        '🎬 Using original resolution: ${originalWidth}x$originalHeight',
+      );
+
+      // Start with original dimensions
+      displayWidth = originalWidth;
+      displayHeight = originalHeight;
+
+      // Scale down to fit screen while maintaining aspect ratio
+      if (displayHeight > screenHeight) {
+        final scale = screenHeight / displayHeight;
+        displayHeight = screenHeight;
+        displayWidth = displayWidth * scale;
+      }
+      if (displayWidth > screenWidth) {
+        final scale = screenWidth / displayWidth;
+        displayWidth = screenWidth;
+        displayHeight = displayHeight * scale;
+      }
+    } else if (screenHeight > 0 && modelAspectRatio > 0) {
+      // Fallback: Calculate from aspect ratio
+      displayHeight = screenHeight;
+      displayWidth = displayHeight * modelAspectRatio;
+
+      // If video is wider than screen, scale down to fit screen width
+      if (displayWidth > screenWidth) {
+        displayWidth = screenWidth;
+        displayHeight = displayWidth / modelAspectRatio;
+      }
+    } else {
+      // Final fallback: Use controller size
+      final Size videoSize = controller.value.size;
+      final int rotation = controller.value.rotationCorrection;
+      displayWidth = videoSize.width;
+      displayHeight = videoSize.height;
+      if (rotation == 90 || rotation == 270) {
+        displayWidth = videoSize.height;
+        displayHeight = videoSize.width;
+      }
     }
 
     AppLogger.log(
-      '🎬 MODEL Portrait video - Original video size: ${videoWidth}x$videoHeight',
+      '🎬 MODEL Portrait video - Model aspect ratio: $modelAspectRatio',
     );
     AppLogger.log(
-        '🎬 MODEL Portrait video - Model aspect ratio: $modelAspectRatio');
+      '🎬 MODEL Portrait video - Original resolution: ${originalWidth ?? "N/A"}x${originalHeight ?? "N/A"}',
+    );
     AppLogger.log(
       '🎬 MODEL Portrait video - Screen size: ${screenWidth}x$screenHeight',
     );
+    AppLogger.log(
+      '🎬 MODEL Portrait video - Display size: ${displayWidth}x$displayHeight',
+    );
 
-    return FittedBox(
-      fit: BoxFit.contain,
-      child: SizedBox(
-        width: videoWidth,
-        height: videoHeight,
-        child: VideoPlayer(controller),
+    // **FIX: Use AspectRatio widget to ensure correct aspect ratio, then FittedBox for fitting**
+    return AspectRatio(
+      aspectRatio: modelAspectRatio,
+      child: FittedBox(
+        fit: BoxFit.contain,
+        child: SizedBox(
+          width: displayWidth,
+          height: displayHeight,
+          child: VideoPlayer(controller),
+        ),
       ),
     );
   }
@@ -532,32 +599,92 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     double screenHeight,
     double modelAspectRatio,
   ) {
-    final Size videoSize = controller.value.size;
-    final int rotation = controller.value.rotationCorrection;
+    // **FIX: Use original resolution from video model if available, otherwise use aspect ratio**
+    // This ensures videos display at their original resolution
+    final currentVideo = _videos[_currentIndex];
 
-    double videoWidth = videoSize.width;
-    double videoHeight = videoSize.height;
+    // Try to get original resolution from video model
+    double? originalWidth;
+    double? originalHeight;
 
-    if (rotation == 90 || rotation == 270) {
-      videoWidth = videoSize.height;
-      videoHeight = videoSize.width;
+    // Check if video model has originalResolution field (from backend)
+    if (currentVideo.originalResolution != null) {
+      originalWidth = currentVideo.originalResolution!['width']?.toDouble();
+      originalHeight = currentVideo.originalResolution!['height']?.toDouble();
+    }
+
+    double displayWidth;
+    double displayHeight;
+
+    // If we have original resolution, use it; otherwise calculate from aspect ratio
+    if (originalWidth != null &&
+        originalHeight != null &&
+        originalWidth > 0 &&
+        originalHeight > 0) {
+      AppLogger.log(
+        '🎬 Using original resolution: ${originalWidth}x$originalHeight',
+      );
+
+      // Start with original dimensions
+      displayWidth = originalWidth;
+      displayHeight = originalHeight;
+
+      // Scale down to fit screen while maintaining aspect ratio
+      if (displayWidth > screenWidth) {
+        final scale = screenWidth / displayWidth;
+        displayWidth = screenWidth;
+        displayHeight = displayHeight * scale;
+      }
+      if (displayHeight > screenHeight) {
+        final scale = screenHeight / displayHeight;
+        displayHeight = screenHeight;
+        displayWidth = displayWidth * scale;
+      }
+    } else if (screenWidth > 0 && modelAspectRatio > 0) {
+      // Fallback: Calculate from aspect ratio
+      displayWidth = screenWidth;
+      displayHeight = displayWidth / modelAspectRatio;
+
+      // If video is taller than screen, scale down to fit screen height
+      if (displayHeight > screenHeight) {
+        displayHeight = screenHeight;
+        displayWidth = displayHeight * modelAspectRatio;
+      }
+    } else {
+      // Final fallback: Use controller size
+      final Size videoSize = controller.value.size;
+      final int rotation = controller.value.rotationCorrection;
+      displayWidth = videoSize.width;
+      displayHeight = videoSize.height;
+      if (rotation == 90 || rotation == 270) {
+        displayWidth = videoSize.height;
+        displayHeight = videoSize.width;
+      }
     }
 
     AppLogger.log(
-      '🎬 MODEL Landscape video - Original video size: ${videoWidth}x$videoHeight',
+      '🎬 MODEL Landscape video - Model aspect ratio: $modelAspectRatio',
     );
     AppLogger.log(
-        '🎬 MODEL Landscape video - Model aspect ratio: $modelAspectRatio');
+      '🎬 MODEL Landscape video - Original resolution: ${originalWidth ?? "N/A"}x${originalHeight ?? "N/A"}',
+    );
     AppLogger.log(
       '🎬 MODEL Landscape video - Screen size: ${screenWidth}x$screenHeight',
     );
+    AppLogger.log(
+      '🎬 MODEL Landscape video - Display size: ${displayWidth}x$displayHeight',
+    );
 
-    return FittedBox(
-      fit: BoxFit.contain,
-      child: SizedBox(
-        width: videoWidth,
-        height: videoHeight,
-        child: VideoPlayer(controller),
+    // **FIX: Use AspectRatio widget to ensure correct aspect ratio, then FittedBox for fitting**
+    return AspectRatio(
+      aspectRatio: modelAspectRatio,
+      child: FittedBox(
+        fit: BoxFit.contain,
+        child: SizedBox(
+          width: displayWidth,
+          height: displayHeight,
+          child: VideoPlayer(controller),
+        ),
       ),
     );
   }

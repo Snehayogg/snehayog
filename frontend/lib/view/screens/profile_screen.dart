@@ -112,13 +112,20 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   /// **ENHANCED: Instant cache-first loading - show cached data immediately, refresh in background**
+  /// **CRITICAL: When forceRefresh=true, COMPLETELY bypass cache and fetch fresh data from server**
   Future<void> _loadData({bool forceRefresh = false}) async {
     try {
       AppLogger.log(
-          '🔄 ProfileScreen: Starting instant cache-first loading (forceRefresh: $forceRefresh)');
+          '🔄 ProfileScreen: Starting data loading (forceRefresh: $forceRefresh)');
 
-      // Step 1: Try cache first (unless forcing refresh)
-      if (!forceRefresh) {
+      // **CRITICAL: If forceRefresh=true, SKIP ALL cache checks and go directly to server**
+      // This ensures manual refresh ALWAYS shows latest data, never cached data
+      if (forceRefresh) {
+        AppLogger.log(
+            '🔄 ProfileScreen: FORCE REFRESH - bypassing ALL cache, fetching fresh data from server');
+        // Skip to Step 2 - load directly from server
+      } else {
+        // Step 1: Try cache first (only when NOT forcing refresh)
         final cachedData = await _loadCachedProfileData();
         if (cachedData != null) {
           AppLogger.log(
@@ -248,11 +255,12 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
 
       // Step 2: No cache or force refresh - load from server with retry
+      // **CRITICAL: When forceRefresh=true, we ALWAYS reach here and fetch from server**
       _isLoading.value = true;
       _error.value = null;
 
       AppLogger.log(
-          '📡 ProfileScreen: ${forceRefresh ? "Force refreshing" : "No cache, loading"} from server');
+          '📡 ProfileScreen: ${forceRefresh ? "FORCE REFRESH - fetching fresh data from server (NO CACHE)" : "No cache, loading from server"}');
 
       // **FIX: Load with retry mechanism**
       await _loadDataWithRetry(forceRefresh: forceRefresh);
@@ -265,6 +273,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   /// **NEW: Load data with retry mechanism**
+  /// **CRITICAL: When forceRefresh=true, NEVER use cache, ALWAYS fetch from server**
   Future<void> _loadDataWithRetry(
       {bool forceRefresh = false, int maxRetries = 3}) async {
     int retryCount = 0;
@@ -272,15 +281,18 @@ class _ProfileScreenState extends State<ProfileScreen>
     while (retryCount <= maxRetries) {
       try {
         AppLogger.log(
-            '📡 ProfileScreen: Loading data (attempt ${retryCount + 1}/${maxRetries + 1}) for ${widget.userId != null ? "creator" : "own"} profile');
+            '📡 ProfileScreen: Loading data (attempt ${retryCount + 1}/${maxRetries + 1}) for ${widget.userId != null ? "creator" : "own"} profile (forceRefresh: $forceRefresh)');
 
+        // **CRITICAL: When forceRefresh=true, loadUserData MUST bypass cache internally**
         // Start loading profile data with timeout
         // **FIXED: Longer timeout for creator profiles (20s) vs own profile (15s)**
         final timeoutDuration = widget.userId != null
             ? const Duration(seconds: 20)
             : const Duration(seconds: 15);
 
-        await _stateManager.loadUserData(widget.userId).timeout(
+        await _stateManager
+            .loadUserData(widget.userId, forceRefresh: forceRefresh)
+            .timeout(
           timeoutDuration,
           onTimeout: () {
             throw Exception('Request timed out. Please check your connection.');
@@ -288,8 +300,11 @@ class _ProfileScreenState extends State<ProfileScreen>
         );
 
         if (_stateManager.userData != null) {
-          // Cache the loaded data
-          await _cacheProfileData(_stateManager.userData!);
+          // **CRITICAL: NEVER cache during force refresh - we want fresh data shown immediately**
+          // Only cache after displaying fresh data (see line 344-348)
+          if (!forceRefresh) {
+            await _cacheProfileData(_stateManager.userData!);
+          }
 
           // **FIXED: For creator profiles, use widget.userId directly; for own profile, extract from userData**
           final currentUserId = widget.userId ??
@@ -307,27 +322,35 @@ class _ProfileScreenState extends State<ProfileScreen>
               _checkUpiIdStatus();
             }
 
-            // **OPTIMIZATION: Load videos in background without blocking UI**
-            _loadVideos(forceRefresh: forceRefresh).catchError((e) {
-              AppLogger.log(
-                  '⚠️ ProfileScreen: Error loading videos in background: $e');
-              // **FIX: Show error for video loading failures**
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                        'Videos failed to load: ${_getUserFriendlyError(e)}'),
-                    backgroundColor: Colors.orange,
-                    duration: const Duration(seconds: 3),
-                    action: SnackBarAction(
-                      label: 'Retry',
-                      textColor: Colors.white,
-                      onPressed: () => _loadVideos(forceRefresh: true),
+            // **CRITICAL: When forceRefresh=true, videos MUST also bypass cache**
+            // Load videos with forceRefresh flag to ensure fresh data from server
+            if (forceRefresh) {
+              // **CRITICAL: During force refresh, wait for videos to load before hiding loading state**
+              // This ensures user sees complete fresh data, not partial cached data
+              await _loadVideos(forceRefresh: true);
+            } else {
+              // **OPTIMIZATION: Load videos in background without blocking UI (normal load)**
+              _loadVideos(forceRefresh: false).catchError((e) {
+                AppLogger.log(
+                    '⚠️ ProfileScreen: Error loading videos in background: $e');
+                // **FIX: Show error for video loading failures**
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                          'Videos failed to load: ${_getUserFriendlyError(e)}'),
+                      backgroundColor: Colors.orange,
+                      duration: const Duration(seconds: 3),
+                      action: SnackBarAction(
+                        label: 'Retry',
+                        textColor: Colors.white,
+                        onPressed: () => _loadVideos(forceRefresh: true),
+                      ),
                     ),
-                  ),
-                );
-              }
-            });
+                  );
+                }
+              });
+            }
 
             // **NEW: Refresh earnings data in background (only for own profile)**
             _refreshEarningsData(forceRefresh: forceRefresh).catchError((e) {
@@ -335,6 +358,14 @@ class _ProfileScreenState extends State<ProfileScreen>
                   '⚠️ ProfileScreen: Error refreshing earnings data: $e');
               // Don't show error to user - earnings refresh is optional
             });
+
+            // **CRITICAL: After successful force refresh, cache the fresh data for next time**
+            // This caches AFTER displaying fresh data to user, so next load can use cache
+            if (forceRefresh) {
+              await _cacheProfileData(_stateManager.userData!);
+              AppLogger.log(
+                  '✅ ProfileScreen: Fresh profile data cached after force refresh (data already shown to user)');
+            }
 
             AppLogger.log(
                 '✅ ProfileScreen: Profile data loaded, videos and earnings loading in background');
@@ -442,6 +473,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   /// **OPTIMIZED: Load videos from server (can run in background)**
+  /// **CRITICAL: When forceRefresh=true, COMPLETELY bypass cache and fetch fresh data from server**
   Future<void> _loadVideos({bool forceRefresh = false}) async {
     try {
       // **FIX: Better handling of null userData with retry**
@@ -484,37 +516,26 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       if (userIdForVideos != null) {
         AppLogger.log(
-            '📡 ProfileScreen: Loading videos from server for user: $userIdForVideos (forceRefresh: $forceRefresh, viewing creator: ${widget.userId != null})');
+            '📡 ProfileScreen: Loading videos for user: $userIdForVideos (forceRefresh: $forceRefresh${forceRefresh ? " - BYPASSING ALL CACHE, fetching fresh from server" : ""}, viewing creator: ${widget.userId != null})');
 
-        // **FIX: If force refresh, clear video cache first**
-        if (forceRefresh) {
-          final prefs = await SharedPreferences.getInstance();
-          final cacheKey = _getProfileCacheKey();
-          await prefs.remove('profile_videos_cache_$cacheKey');
-          await prefs.remove('profile_videos_cache_timestamp_$cacheKey');
-
-          // Also clear smart cache
-          final smartCache = SmartCacheManager();
-          await smartCache.initialize();
-          if (smartCache.isInitialized) {
-            final videoCacheKey = 'video_profile_$userIdForVideos';
-            await smartCache.clearCacheByPattern(videoCacheKey);
-            AppLogger.log('🧹 ProfileScreen: Cleared video cache for refresh');
-          }
-        }
-
-        await _stateManager.loadUserVideos(userIdForVideos).timeout(
+        // **CRITICAL: loadUserVideos with forceRefresh=true MUST bypass cache internally**
+        // This ensures manual refresh always shows latest videos from server
+        await _stateManager
+            .loadUserVideos(userIdForVideos, forceRefresh: forceRefresh)
+            .timeout(
           const Duration(seconds: 20),
           onTimeout: () {
             throw Exception('Video loading timed out');
           },
         );
 
-        // Cache the videos
+        // **CRITICAL: Cache videos AFTER loading (even on force refresh)**
+        // This ensures fresh data is displayed immediately to user, then cached for future use
+        // During force refresh, we show fresh data first, then cache it for next time
         await _cacheVideos();
 
         AppLogger.log(
-            '✅ ProfileScreen: Loaded ${_stateManager.userVideos.length} videos');
+            '✅ ProfileScreen: Loaded ${_stateManager.userVideos.length} videos${forceRefresh ? " (fresh from server, not cache)" : ""}');
       }
     } catch (e) {
       AppLogger.log('❌ ProfileScreen: Error loading videos: $e');
@@ -543,22 +564,57 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   /// **ENHANCED: Manual refresh - clear cache and fetch fresh data from server**
+  /// **CRITICAL: When user manually refreshes, ALWAYS show latest data from server, NEVER use cache**
   Future<void> _refreshData() async {
     AppLogger.log(
-        '🔄 ProfileScreen: Manual refresh - clearing cache and fetching from server');
+        '🔄 ProfileScreen: Manual refresh - clearing ALL caches and fetching fresh data from server (NO CACHE WILL BE USED)');
 
     try {
-      // Clear cache to force fresh load
+      // **CRITICAL: Clear ALL caches first - profile cache, video cache, and SmartCache**
+      // This ensures no cached data can leak through during manual refresh
       await _clearProfileCache();
 
-      // **FIX: Force refresh both user data and videos**
+      // **NEW: Clear SmartCache for videos before refresh**
+      try {
+        final smartCache = SmartCacheManager();
+        await smartCache.initialize();
+        if (smartCache.isInitialized) {
+          // Clear video cache for current user
+          final currentUserId = widget.userId ??
+              _stateManager.userData?['googleId'] ??
+              _stateManager.userData?['id'];
+
+          if (currentUserId != null) {
+            final videoCacheKey = 'video_profile_$currentUserId';
+            await smartCache.clearCacheByPattern(videoCacheKey);
+            AppLogger.log(
+                '🧹 ProfileScreen: Cleared SmartCache video cache: $videoCacheKey');
+          }
+
+          // Also clear profile cache from SmartCache
+          if (currentUserId != null) {
+            final profileCacheKey = 'user_profile_$currentUserId';
+            await smartCache.clearCacheByPattern(profileCacheKey);
+            AppLogger.log(
+                '🧹 ProfileScreen: Cleared SmartCache profile cache: $profileCacheKey');
+          }
+        }
+      } catch (e) {
+        AppLogger.log(
+            '⚠️ ProfileScreen: Error clearing SmartCache during refresh: $e');
+        // Continue with refresh even if SmartCache clearing fails
+      }
+
+      // **CRITICAL: Set loading state BEFORE fetching - user should see loading indicator**
       _isLoading.value = true;
       _error.value = null;
 
-      // Reload user data with force refresh flag
+      // **CRITICAL: Force refresh user data - this COMPLETELY bypasses cache**
+      // forceRefresh: true ensures _loadData() skips ALL cache checks
       await _loadData(forceRefresh: true);
 
-      // **FIX: Explicitly reload videos after user data is loaded**
+      // **CRITICAL: Explicitly reload videos with forceRefresh AFTER user data is loaded**
+      // This ensures videos are also fetched fresh from server, not from cache
       if (_stateManager.userData != null) {
         final currentUserId = _stateManager.userData!['googleId'] ??
             _stateManager.userData!['_id'] ??
@@ -566,13 +622,13 @@ class _ProfileScreenState extends State<ProfileScreen>
 
         if (currentUserId != null) {
           AppLogger.log(
-              '🔄 ProfileScreen: Refreshing videos for user: $currentUserId');
+              '🔄 ProfileScreen: Force refreshing videos for user: $currentUserId (bypassing ALL caches - fetching from server)');
 
-          // **FIX: Force refresh videos (clear cache first)**
+          // **CRITICAL: Force refresh videos - this bypasses cache and fetches fresh data**
           await _loadVideos(forceRefresh: true);
 
           AppLogger.log(
-              '✅ ProfileScreen: Refreshed ${_stateManager.userVideos.length} videos');
+              '✅ ProfileScreen: Refreshed ${_stateManager.userVideos.length} videos from server (fresh data, not cache)');
         }
       }
 
@@ -580,7 +636,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       await _refreshEarningsData(forceRefresh: true);
 
       _isLoading.value = false;
-      AppLogger.log('✅ ProfileScreen: Manual refresh completed');
+      AppLogger.log(
+          '✅ ProfileScreen: Manual refresh completed - ALL data fetched fresh from server (NO CACHE USED)');
     } catch (e) {
       AppLogger.log('❌ ProfileScreen: Error during refresh: $e');
       _error.value = 'Failed to refresh: ${e.toString()}';
@@ -2732,11 +2789,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       Future.microtask(() async {
         try {
           final earningsData = await _adService.getCreatorRevenueSummary();
-          if (earningsData != null) {
-            await _cacheEarningsData(earningsData);
-            AppLogger.log(
-                '✅ ProfileScreen: Earnings data refreshed and cached');
-          }
+          await _cacheEarningsData(earningsData);
+          AppLogger.log('✅ ProfileScreen: Earnings data refreshed and cached');
         } catch (e) {
           AppLogger.log('⚠️ ProfileScreen: Error refreshing earnings data: $e');
           // Don't throw - earnings refresh is optional

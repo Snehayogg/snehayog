@@ -62,19 +62,43 @@ class HLSEncodingService {
         high: { crf: 20, audioBitrate: '128k' }   // Higher quality, larger file
       };
 
-      // **SINGLE QUALITY MODE: Only 480p resolution supported**
-      // This ensures cost optimization and consistent quality across all videos
-      const resolutionPresets = {
-        '480p': { width: 854, height: 480, bitrate: '800k' },
-      };
-
-      // Always use 480p resolution (single quality mode)
-      const selectedResolution = resolutionPresets['480p'];
+      // **FIX: Use original resolution instead of fixed 480p**
+      // Calculate bitrate based on original resolution for better quality
+      const originalVideoInfo = options.originalVideoInfo;
+      let selectedResolution;
+      let targetBitrate = '800k'; // Default bitrate
+      
+      if (originalVideoInfo && originalVideoInfo.width && originalVideoInfo.height) {
+        const originalWidth = originalVideoInfo.width;
+        const originalHeight = originalVideoInfo.height;
+        
+        // Calculate bitrate based on resolution (higher resolution = higher bitrate)
+        if (originalHeight > 1080) {
+          targetBitrate = '5000k'; // 1080p+ videos
+        } else if (originalHeight > 720) {
+          targetBitrate = '3000k'; // 720p-1080p videos
+        } else if (originalHeight > 480) {
+          targetBitrate = '1500k'; // 480p-720p videos
+        } else {
+          targetBitrate = '800k'; // Below 480p
+        }
+        
+        selectedResolution = {
+          width: originalWidth,
+          height: originalHeight,
+          bitrate: targetBitrate
+        };
+      } else {
+        // Fallback to 480p if original info not available
+        targetBitrate = '800k';
+        selectedResolution = { width: 854, height: 480, bitrate: targetBitrate };
+      }
+      
       const selectedQuality = qualityPresets[quality] || qualityPresets.medium;
       
       console.log('🎬 HLS Encoding Configuration:');
       console.log(`   Quality: ${quality} (CRF: ${selectedQuality.crf})`);
-      console.log(`   Resolution: 480p (${selectedResolution.width}x${selectedResolution.height})`);
+      console.log(`   Resolution: ${selectedResolution.width}x${selectedResolution.height} (original preserved)`);
       console.log(`   Bitrate: ${selectedResolution.bitrate}`);
       console.log(`   Segment Duration: ${segmentDuration}s`);
 
@@ -91,8 +115,8 @@ class HLSEncodingService {
           '-profile:v', 'baseline',    // Baseline profile for maximum compatibility
           '-level', '3.1',             // H.264 level for broad device support
           '-crf', selectedQuality.crf.toString(),
-          '-maxrate', selectedResolution?.bitrate || '800k', // Bitrate constraint
-          '-bufsize', `${parseInt(selectedResolution?.bitrate || '800k') * 2}k`, // Buffer size
+          '-maxrate', targetBitrate, // Bitrate constraint based on resolution
+          '-bufsize', `${parseInt(targetBitrate) * 2}k`, // Buffer size (2x bitrate)
           '-sc_threshold', '0',        // Disable scene change detection
           '-g', '48',                  // GOP size for 3-second segments
           '-keyint_min', '48',         // Minimum keyframe interval
@@ -118,11 +142,36 @@ class HLSEncodingService {
           '-pix_fmt', 'yuv420p'       // Pixel format for maximum compatibility
         ]);
 
-      // Add 480p resolution scaling (preserves aspect ratio, no black bars)
-      // Scale to fit within 480p while maintaining original aspect ratio
-      command = command
-        .videoFilters(`scale='min(${selectedResolution.width},iw)':'min(${selectedResolution.height},ih)':force_original_aspect_ratio=decrease`)
-        .size(`${selectedResolution.width}x${selectedResolution.height}`);
+      // **FIX: Preserve original resolution - encode at original dimensions**
+      // Only scale down if video is extremely large (optional optimization for very large files)
+      // For most videos, keep original resolution (1080x1920, etc.)
+      const originalVideoInfoForScaling = options.originalVideoInfo;
+      
+      if (originalVideoInfoForScaling && originalVideoInfoForScaling.width && originalVideoInfoForScaling.height) {
+        const originalWidth = originalVideoInfoForScaling.width;
+        const originalHeight = originalVideoInfoForScaling.height;
+        
+        console.log(`📐 Original video dimensions: ${originalWidth}x${originalHeight}`);
+        
+        // Only scale down if video is larger than 1080p (optional optimization)
+        // This preserves original resolution for most videos (1080x1920, 720x1280, etc.)
+        if (originalHeight > 1080) {
+          console.log(`📐 Video is larger than 1080p, scaling down to 1080p while preserving aspect ratio`);
+          command = command
+            .videoFilters(`scale=-2:1080:force_original_aspect_ratio=decrease`);
+        } else {
+          console.log(`📐 Preserving original resolution: ${originalWidth}x${originalHeight}`);
+          // No scaling - encode at original resolution
+          // FFmpeg will encode at original dimensions automatically
+        }
+      } else {
+        // Fallback: If original info not available, use original video dimensions
+        console.log(`📐 Original video info not available, encoding at original resolution`);
+        // No scaling filter - FFmpeg will use original dimensions
+      }
+      
+      // **REMOVED: .size() call that was forcing fixed dimensions**
+      // We don't set .size() to allow FFmpeg to maintain the original resolution
 
       // Add output
       command = command.output(playlistPath);

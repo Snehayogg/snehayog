@@ -91,10 +91,8 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
           revenueData = await revenueSummaryFuture;
 
           // **NEW: Cache the fetched earnings data**
-          if (revenueData != null) {
-            await _cacheEarningsData(revenueData, userId);
-          }
-        }
+          await _cacheEarningsData(revenueData, userId);
+                }
 
         if (!mounted) return;
         setState(() {
@@ -103,12 +101,12 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         });
 
         // **BACKGROUND: Refresh earnings data in background if using cache**
-        if (!forceRefresh && revenueData != null) {
+        if (!forceRefresh) {
           Future.microtask(() async {
             try {
               final freshRevenueData =
                   await _adService.getCreatorRevenueSummary();
-              if (freshRevenueData != null && mounted) {
+              if (mounted) {
                 await _cacheEarningsData(freshRevenueData, userId);
                 if (mounted) {
                   setState(() {

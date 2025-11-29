@@ -16,6 +16,8 @@ class VideoModel {
   List<Comment> comments;
   final String? link;
   final double earnings;
+  // **NEW: Original video resolution (width x height)**
+  final Map<String, dynamic>? originalResolution;
   // HLS Streaming fields
   final String? hlsMasterPlaylistUrl;
   final String? hlsPlaylistUrl;
@@ -58,6 +60,7 @@ class VideoModel {
         'completed', // Default to completed for backward compatibility
     this.processingProgress = 100,
     this.processingError,
+    this.originalResolution, // **NEW: Original video resolution**
   }) : comments = comments; // **FIXED: Initialize the field**
 
   factory VideoModel.fromJson(Map<String, dynamic> json) {
@@ -338,6 +341,21 @@ class VideoModel {
             : int.tryParse(json['processingProgress']?.toString() ?? '100') ??
                 100,
         processingError: json['processingError']?.toString(),
+        // **NEW: Parse original resolution from backend**
+        originalResolution: () {
+          try {
+            if (json['originalResolution'] == null) {
+              return null;
+            }
+            if (json['originalResolution'] is Map<String, dynamic>) {
+              return Map<String, dynamic>.from(json['originalResolution']);
+            }
+            return null;
+          } catch (e) {
+            print('⚠️ VideoModel: Error parsing originalResolution: $e');
+            return null;
+          }
+        }(),
       );
     } catch (e, stackTrace) {
       print('❌ VideoModel.fromJson Error: $e');

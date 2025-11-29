@@ -2,6 +2,7 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import FormData from 'form-data';
+import { spawn } from 'child_process';
 
 class CloudflareStreamService {
   constructor() {
@@ -32,6 +33,16 @@ class CloudflareStreamService {
         throw new Error('Cloudflare Stream credentials not configured');
       }
 
+      // **FIX: Get original video info BEFORE uploading to Stream**
+      // This ensures we preserve original dimensions even if Stream returns different values
+      console.log('📊 Getting original video dimensions before processing...');
+      const originalVideoInfo = await this.getOriginalVideoInfo(videoPath);
+      console.log('📊 Original video info:', {
+        width: originalVideoInfo.width,
+        height: originalVideoInfo.height,
+        aspectRatio: originalVideoInfo.aspectRatio
+      });
+
       // Step 1: Upload video to Stream
       const uploadResult = await this.uploadVideo(videoPath, videoName, userId);
       console.log('✅ Video uploaded to Stream');
@@ -42,10 +53,10 @@ class CloudflareStreamService {
       const transcodedVideo = await this.waitForTranscoding(uploadResult.videoId);
       console.log('✅ Transcoding completed');
       
-      // Step 3: Get video info
+      // Step 3: Get video info from Stream
       const videoInfo = await this.getVideoInfo(uploadResult.videoId);
       
-      // Step 4: Download the transcoded video (480p quality)
+      // Step 4: Download the transcoded video
       console.log('📥 Downloading transcoded video from Stream...');
       const downloadedPath = await this.downloadTranscodedVideo(
         transcodedVideo.videoId,
@@ -53,26 +64,36 @@ class CloudflareStreamService {
         userId
       );
       
+      // **FIX: Use original video dimensions instead of Stream's transcoded dimensions**
+      // Stream may transcode to different resolution, but we want to preserve original
+      const finalWidth = originalVideoInfo.width || videoInfo.width || 480;
+      const finalHeight = originalVideoInfo.height || videoInfo.height || 854;
+      const finalAspectRatio = originalVideoInfo.aspectRatio || 
+        (finalWidth && finalHeight ? finalWidth / finalHeight : 9/16);
+      
+      console.log('📐 Final video dimensions (preserved from original):', {
+        width: finalWidth,
+        height: finalHeight,
+        aspectRatio: finalAspectRatio
+      });
+      
       return {
         videoId: transcodedVideo.videoId,
         videoUrl: transcodedVideo.playbackUrl, // HLS playback URL
         downloadUrl: transcodedVideo.downloadUrl, // Direct download URL
         localPath: downloadedPath,
-        duration: videoInfo.duration || 0,
+        duration: originalVideoInfo.duration || videoInfo.duration || 0,
         size: videoInfo.size || 0,
         format: 'mp4',
-        width: videoInfo.width || 480,
-        height: videoInfo.height || 854,
-        aspectRatio: videoInfo.width && videoInfo.height ? 
-          videoInfo.width / videoInfo.height : 9/16,
-        isPortrait: videoInfo.width && videoInfo.height ? 
-          (videoInfo.width / videoInfo.height) < 1.0 : true,
+        width: finalWidth,
+        height: finalHeight,
+        aspectRatio: finalAspectRatio,
+        isPortrait: finalAspectRatio < 1.0,
         originalVideoInfo: {
-          width: videoInfo.width || 480,
-          height: videoInfo.height || 854,
-          aspectRatio: videoInfo.width && videoInfo.height ? 
-            videoInfo.width / videoInfo.height : 9/16,
-          duration: videoInfo.duration || 0
+          width: finalWidth,
+          height: finalHeight,
+          aspectRatio: finalAspectRatio,
+          duration: originalVideoInfo.duration || videoInfo.duration || 0
         }
       };
       
@@ -279,6 +300,135 @@ class CloudflareStreamService {
     } catch (error) {
       console.warn('⚠️ Failed to delete video from Stream:', error.response?.data || error.message);
       return false;
+    }
+  }
+
+  /**
+   * Get original video information from video file using ffprobe
+   * This preserves original dimensions before Stream processing
+   */
+  async getOriginalVideoInfo(videoPath) {
+    try {
+      return new Promise((resolve, reject) => {
+        // Check if ffprobe is available first
+        const ffprobeCheck = spawn('ffprobe', ['-version']);
+        
+        ffprobeCheck.on('error', (error) => {
+          console.log('⚠️ FFprobe not available, using fallback video info');
+          resolve({
+            width: 1080,
+            height: 1920,
+            aspectRatio: 9/16,
+            duration: 0,
+            codec: 'unknown',
+            format: 'mp4'
+          });
+        });
+        
+        ffprobeCheck.on('close', (code) => {
+          if (code !== 0) {
+            console.log('⚠️ FFprobe not working, using fallback video info');
+            resolve({
+              width: 1080,
+              height: 1920,
+              aspectRatio: 9/16,
+              duration: 0,
+              codec: 'unknown',
+              format: 'mp4'
+            });
+            return;
+          }
+          
+          // FFprobe is available, proceed with normal detection
+          const ffprobe = spawn('ffprobe', [
+            '-v', 'quiet',
+            '-print_format', 'json',
+            '-show_format',
+            '-show_streams',
+            videoPath
+          ]);
+
+          let output = '';
+          let errorOutput = '';
+
+          ffprobe.stdout.on('data', (data) => {
+            output += data.toString();
+          });
+
+          ffprobe.stderr.on('data', (data) => {
+            errorOutput += data.toString();
+          });
+
+          ffprobe.on('close', (code) => {
+            if (code !== 0) {
+              console.log('⚠️ FFprobe failed, using fallback video info');
+              resolve({
+                width: 1080,
+                height: 1920,
+                aspectRatio: 9/16,
+                duration: 0,
+                codec: 'unknown',
+                format: 'mp4'
+              });
+              return;
+            }
+
+            try {
+              const info = JSON.parse(output);
+              const videoStream = info.streams.find(stream => stream.codec_type === 'video');
+              
+              if (!videoStream) {
+                console.log('⚠️ No video stream found, using fallback video info');
+                resolve({
+                  width: 1080,
+                  height: 1920,
+                  aspectRatio: 9/16,
+                  duration: 0,
+                  codec: 'unknown',
+                  format: 'mp4'
+                });
+                return;
+              }
+
+              const width = parseInt(videoStream.width);
+              const height = parseInt(videoStream.height);
+              const aspectRatio = width / height;
+              
+              console.log('📊 Original video dimensions:', { width, height, aspectRatio });
+              
+              resolve({
+                width,
+                height,
+                aspectRatio,
+                duration: parseFloat(info.format.duration) || 0,
+                size: parseInt(info.format.size) || 0,
+                isPortrait: aspectRatio < 1.0,
+                isLandscape: aspectRatio >= 1.0
+              });
+            } catch (parseError) {
+              console.log('⚠️ Failed to parse video info, using fallback');
+              resolve({
+                width: 1080,
+                height: 1920,
+                aspectRatio: 9/16,
+                duration: 0,
+                codec: 'unknown',
+                format: 'mp4'
+              });
+            }
+          });
+        });
+      });
+    } catch (error) {
+      console.log('⚠️ Error getting original video info, using fallback:', error.message);
+      return {
+        width: 1080,
+        height: 1920,
+        aspectRatio: 9/16,
+        duration: 0,
+        codec: 'unknown',
+        format: 'mp4'
+      };
     }
   }
 

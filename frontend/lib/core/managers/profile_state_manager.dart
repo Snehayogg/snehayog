@@ -84,7 +84,7 @@ class ProfileStateManager extends ChangeNotifier {
   bool get isVideosLoading => _isVideosLoading;
 
   // Profile management
-  Future<void> loadUserData(String? userId) async {
+  Future<void> loadUserData(String? userId, {bool forceRefresh = false}) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -128,7 +128,7 @@ class ProfileStateManager extends ChangeNotifier {
 
       Map<String, dynamic>? userData;
 
-      if (_smartCacheInitialized) {
+      if (_smartCacheInitialized && !forceRefresh) {
         AppLogger.log(
             '🧠 ProfileStateManager: Attempting smart cache fetch for $cacheKey (isMyProfile: $isMyProfile)');
 
@@ -153,6 +153,16 @@ class ProfileStateManager extends ChangeNotifier {
           },
         );
       } else {
+        if (forceRefresh) {
+          AppLogger.log(
+              '🔄 ProfileStateManager: forceRefresh=true, bypassing SmartCache for $cacheKey');
+          // **FIX: Clear SmartCache for profile data when forceRefresh is true**
+          if (_smartCacheInitialized) {
+            AppLogger.log(
+                '🧹 ProfileStateManager: Clearing SmartCache profile cache: $cacheKey');
+            await _smartCacheManager.clearCacheByPattern(cacheKey);
+          }
+        }
         // **FIXED: Pass empty map if no logged in user for creator profiles**
         final userForFetch = loggedInUser ?? <String, dynamic>{};
         userData = await _fetchProfileData(userId, userForFetch, cacheKey);
@@ -421,9 +431,10 @@ class ProfileStateManager extends ChangeNotifier {
     return videos;
   }
 
-  Future<void> loadUserVideos(String? userId) async {
+  Future<void> loadUserVideos(String? userId,
+      {bool forceRefresh = false}) async {
     AppLogger.log(
-        '🔄 ProfileStateManager: loadUserVideos called with userId: $userId');
+        '🔄 ProfileStateManager: loadUserVideos called with userId: $userId, forceRefresh: $forceRefresh');
 
     _isVideosLoading = true;
     notifyListeners();
@@ -434,11 +445,32 @@ class ProfileStateManager extends ChangeNotifier {
           userId == loggedInUser?['id'] ||
           userId == loggedInUser?['googleId'];
 
+      // **FIX: Clear SmartCache if forceRefresh is true**
+      if (forceRefresh) {
+        await _ensureSmartCacheInitialized();
+        if (_smartCacheInitialized) {
+          String? resolvedId;
+          if (isMyProfile) {
+            resolvedId = loggedInUser?['googleId']?.toString() ??
+                loggedInUser?['id']?.toString();
+          } else {
+            resolvedId = userId;
+          }
+          if (resolvedId != null && resolvedId.trim().isNotEmpty) {
+            final smartCacheKey = _resolveVideoCacheKey(resolvedId.trim());
+            AppLogger.log(
+                '🧹 ProfileStateManager: Clearing SmartCache for forceRefresh: $smartCacheKey');
+            await _smartCacheManager.clearCacheByPattern(smartCacheKey);
+          }
+        }
+      }
+
       // **FIXED: Properly check feature flag using FeatureFlags.instance**
       if (FeatureFlags.instance.isEnabled(Features.smartVideoCaching)) {
         await _loadUserVideosWithCaching(
           userId,
           isMyProfile: isMyProfile,
+          forceRefresh: forceRefresh,
         );
       } else {
         await _loadUserVideosDirect(
@@ -479,10 +511,11 @@ class ProfileStateManager extends ChangeNotifier {
   Future<void> _loadUserVideosWithCaching(
     String? userId, {
     required bool isMyProfile,
+    bool forceRefresh = false,
   }) async {
     try {
       AppLogger.log(
-          '🔄 ProfileStateManager: Loading videos with smart caching for userId: $userId');
+          '🔄 ProfileStateManager: Loading videos with smart caching for userId: $userId, forceRefresh: $forceRefresh');
 
       final loggedInUser = await _authService.getUserData();
       String? resolvedId;
@@ -505,6 +538,19 @@ class ProfileStateManager extends ChangeNotifier {
       }
 
       await _ensureSmartCacheInitialized();
+
+      // **FIX: If forceRefresh is true, bypass cache and fetch directly**
+      if (forceRefresh) {
+        AppLogger.log(
+            '🔄 ProfileStateManager: forceRefresh=true, bypassing cache and fetching fresh videos');
+        final videos = await _fetchVideosFromServer(
+          targetUserId,
+          isMyProfile: isMyProfile,
+        );
+        _userVideos = videos;
+        notifyListeners();
+        return;
+      }
 
       if (_smartCacheInitialized) {
         final smartCacheKey = _resolveVideoCacheKey(targetUserId);
