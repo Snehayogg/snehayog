@@ -15,6 +15,7 @@ import 'package:vayu/services/ad_service.dart';
 import 'package:vayu/services/device_id_service.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/utils/app_logger.dart';
+import 'package:vayu/services/connectivity_service.dart';
 
 /// **OPTIMIZED VideoService - Single source of truth for all video operations**
 /// Merged from VideoService, BaseVideoService, and InstagramVideoService
@@ -293,6 +294,16 @@ class VideoService {
 
   /// **Toggle like for a video (like/unlike)**
   Future<VideoModel> toggleLike(String videoId) async {
+    // **CONNECTIVITY CHECK: Verify internet before like operation**
+    final hasInternet = await ConnectivityService.hasInternetConnection();
+    if (!hasInternet) {
+      throw Exception(
+        ConnectivityService.getNetworkErrorMessage(
+          Exception('No internet connection'),
+        ),
+      );
+    }
+
     try {
       AppLogger.log('🔄 VideoService: Toggling like for video: $videoId');
 

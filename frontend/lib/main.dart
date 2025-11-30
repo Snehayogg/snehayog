@@ -193,11 +193,21 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       case AppLifecycleState.resumed:
         ErrorLoggingService.logAppLifecycle('Resumed');
         mainController.setAppInForeground(true);
-        // **HOT UI: Restore state when app resumes**
         hotUIManager.handleAppLifecycleChange(state);
+        // **NEW: Restore tab index when app resumes (if different from current)**
+        mainController.restoreLastTabIndex().then((restoredIndex) {
+          // restoreLastTabIndex already sets _currentIndex and notifies
+          // Just ensure UI reflects the change if needed
+          if (restoredIndex != mainController.currentIndex) {
+            // This shouldn't happen as restoreLastTabIndex sets it, but safety check
+            mainController.changeIndex(restoredIndex);
+          }
+        });
         break;
       case AppLifecycleState.inactive:
         ErrorLoggingService.logAppLifecycle('Inactive');
+        // **NEW: Save tab index when app becomes inactive (going to background)**
+        mainController.saveStateForBackground();
         // **NEW: Pause all videos when app becomes inactive**
         _pauseAllVideosGlobally();
         hotUIManager.handleAppLifecycleChange(state);
@@ -205,10 +215,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       case AppLifecycleState.paused:
         ErrorLoggingService.logAppLifecycle('Paused');
         mainController.setAppInForeground(false);
+        // **NEW: Save tab index when app is paused (minimized)**
+        mainController.saveStateForBackground();
         // **NEW: Pause all videos when app is paused (minimized)**
         _pauseAllVideosGlobally();
-        // **NEW: Save navigation state before going to background**
-        mainController.saveStateForBackground();
         // **HOT UI: Preserve state when app goes to background**
         hotUIManager.handleAppLifecycleChange(state);
         break;

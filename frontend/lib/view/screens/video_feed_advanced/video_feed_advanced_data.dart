@@ -108,6 +108,20 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
   /// **NEW: Load videos from API (separate method for background refresh)**
   Future<void> _loadVideosFromAPI({int page = 1, bool append = false}) async {
     try {
+      // **CONNECTIVITY CHECK: Verify internet connection before API call**
+      final hasInternet = await ConnectivityService.hasInternetConnection();
+      if (!hasInternet) {
+        AppLogger.log('📡 VideoFeedAdvanced: No internet connection detected');
+        if (mounted) {
+          setState(() {
+            _errorMessage =
+                'No internet connection. Please check your network settings.';
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
       AppLogger.log('🔍 VideoFeedAdvanced: Loading videos from API');
       final response = await _videoService.getVideos(
         page: page,
@@ -308,9 +322,20 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     } catch (e) {
       AppLogger.log('❌ Error loading videos: $e');
       AppLogger.log('❌ Error stack trace: ${StackTrace.current}');
+
+      // **IMPROVED: Better error handling with connectivity service**
       if (mounted) {
+        String errorMsg;
+        if (ConnectivityService.isNetworkError(e)) {
+          errorMsg = ConnectivityService.getNetworkErrorMessage(e);
+        } else {
+          errorMsg = _getUserFriendlyErrorMessage(e);
+        }
+
         setState(() {
+          _errorMessage = errorMsg;
           _hasMore = false;
+          _isLoading = false;
         });
       }
     }

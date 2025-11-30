@@ -355,4 +355,9 @@ class MainController extends ChangeNotifier {
     print('💾 MainController: Saving state before app goes to background');
     await _saveCurrentTabIndex();
   }
+
+  /// **NEW: Public method to save current tab index (can be called from anywhere)**
+  Future<void> saveCurrentTabIndex() async {
+    await _saveCurrentTabIndex();
+  }
 }

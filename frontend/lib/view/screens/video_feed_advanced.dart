@@ -20,6 +20,8 @@ import 'package:vayu/services/ad_impression_service.dart';
 import 'package:vayu/view/widget/ads/carousel_ad_widget.dart';
 import 'package:vayu/view/screens/video_feed_advanced/widgets/banner_ad_section.dart';
 import 'package:vayu/view/screens/video_feed_advanced/widgets/heart_animation.dart';
+import 'package:vayu/services/connectivity_service.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/view/screens/profile_screen.dart';
 import 'package:vayu/view/screens/login_screen.dart';
@@ -1582,21 +1584,26 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   /// **GET USER-FRIENDLY ERROR MESSAGE: Convert technical errors to user-friendly messages**
   String _getUserFriendlyErrorMessage(dynamic error) {
+    // Use ConnectivityService for network error detection
+    if (ConnectivityService.isNetworkError(error)) {
+      return ConnectivityService.getNetworkErrorMessage(error);
+    }
+
     final errorString = error.toString().toLowerCase();
 
-    if (errorString.contains('network') || errorString.contains('connection')) {
-      return 'Network connection issue';
-    } else if (errorString.contains('timeout')) {
-      return 'Request timed out';
+    if (errorString.contains('timeout')) {
+      return 'Request timed out. Please check your internet connection.';
     } else if (errorString.contains('404')) {
       return 'Videos not found';
     } else if (errorString.contains('500')) {
-      return 'Server error';
+      return 'Server error. Please try again later.';
     } else if (errorString.contains('unauthorized') ||
         errorString.contains('401')) {
-      return 'Authentication required';
+      return 'Authentication required. Please sign in again.';
+    } else if (errorString.contains('403')) {
+      return 'Access denied. You may not have permission for this action.';
     } else {
-      return 'Unable to load videos';
+      return 'Unable to load videos. Please try again.';
     }
   }
 
@@ -1617,7 +1624,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   /// **HANDLE LIKE: With API integration**
   Future<void> _handleLike(VideoModel video, int index) async {
+    AppLogger.log('🔴 ========== LIKE BUTTON CLICKED ==========');
+    AppLogger.log('🔴 Video ID: ${video.id}');
+    AppLogger.log('🔴 Video Name: ${video.videoName}');
+    AppLogger.log('🔴 Current User ID: $_currentUserId');
+    AppLogger.log('🔴 Current Likes: ${video.likes}');
+    AppLogger.log('🔴 Current LikedBy: ${video.likedBy.length} users');
+
     if (_currentUserId == null) {
+      AppLogger.log('❌ Like Handler: User not logged in, navigating to login');
       _navigateToLoginScreen();
       return;
     }
@@ -1627,47 +1642,77 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     final originalLikes = video.likes;
     final originalLikedBy = List<String>.from(video.likedBy);
 
+    AppLogger.log(
+        '🔴 Like Handler: Current state - wasLiked: $wasLiked, originalLikes: $originalLikes');
+
     // Update UI immediately (optimistic) - this makes heart fill red instantly
     final videoIndex = _videos.indexWhere((v) => v.id == video.id);
     if (videoIndex != -1) {
+      AppLogger.log(
+          '🔴 Like Handler: Updating UI optimistically (before API call)');
       setState(() {
         if (wasLiked) {
           // User is currently liking, so unlike
           video.likedBy.remove(_currentUserId);
           video.likes = (video.likes - 1).clamp(0, double.infinity).toInt();
+          AppLogger.log(
+              '🔴 Like Handler: Optimistic UNLIKE - new count: ${video.likes}');
         } else {
           // User is not currently liking, so like
           video.likedBy.add(_currentUserId!);
           video.likes++;
+          AppLogger.log(
+              '🔴 Like Handler: Optimistic LIKE - new count: ${video.likes}');
         }
       });
+    } else {
+      AppLogger.log('⚠️ Like Handler: Video not found in _videos list!');
     }
 
     try {
+      AppLogger.log('🔴 Like Handler: Calling API to sync with backend...');
+      AppLogger.log('🔴 Like Handler: API call starting at ${DateTime.now()}');
+
       // **SYNC WITH BACKEND: Get actual data from backend (ensures persistence)**
       final updatedVideo = await _videoService.toggleLike(video.id);
+
+      AppLogger.log('🔴 Like Handler: API call completed at ${DateTime.now()}');
       AppLogger.log('✅ Successfully toggled like for video ${video.id}');
+      AppLogger.log(
+          '🔴 Like Handler: Backend response - likes: ${updatedVideo.likes}, likedBy: ${updatedVideo.likedBy.length}');
 
       // **CRITICAL: Replace with backend response to ensure persistence**
       if (videoIndex != -1) {
+        AppLogger.log(
+            '🔴 Like Handler: Updating video in list with backend response');
         setState(() {
           _videos[videoIndex] = updatedVideo;
         });
         AppLogger.log(
             '✅ VideoFeedAdvanced: Synced with backend - likes: ${updatedVideo.likes}, likedBy: ${updatedVideo.likedBy.length}');
+        AppLogger.log('🔴 Like Handler: UI updated with backend data');
       } else {
         AppLogger.log('⚠️ VideoFeedAdvanced: Video not found in list for sync');
       }
+
+      AppLogger.log('🔴 ========== LIKE SUCCESSFUL ==========');
     } catch (e) {
+      AppLogger.log('🔴 ========== LIKE ERROR ==========');
       AppLogger.log('❌ Error handling like: $e');
+      AppLogger.log('❌ Error type: ${e.runtimeType}');
+      AppLogger.log('❌ Error details: ${e.toString()}');
 
       // **REVERT: If backend fails, revert optimistic update**
+      AppLogger.log(
+          '🔴 Like Handler: Reverting optimistic update due to error');
       if (videoIndex != -1) {
         setState(() {
           video.likedBy.clear();
           video.likedBy.addAll(originalLikedBy);
           video.likes = originalLikes;
         });
+        AppLogger.log(
+            '🔴 Like Handler: Reverted to original state - likes: ${video.likes}');
       }
 
       // **FIX: Show actual error message from backend**
@@ -1694,6 +1739,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       }
 
       _showSnackBar(errorMessage, isError: true);
+      AppLogger.log('🔴 ========== LIKE FAILED ==========');
     }
   }
 
@@ -2071,6 +2117,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
                           : _videos.isEmpty
                               ? _buildEmptyState()
                               : _buildVideoFeed(),
+                  // **OFFLINE INDICATOR: Show when no internet connection**
+                  _buildOfflineIndicator(),
                 ],
               ),
             );

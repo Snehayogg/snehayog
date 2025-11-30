@@ -1146,4 +1146,53 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
       autoPlay: true,
     );
   }
+
+  /// **OFFLINE INDICATOR: Shows when device has no internet connection**
+  Widget _buildOfflineIndicator() {
+    return StreamBuilder<List<ConnectivityResult>>(
+      stream: ConnectivityService.connectivityStream,
+      initialData: ConnectivityService.lastKnownResult,
+      builder: (context, snapshot) {
+        final connectivityResults = snapshot.data ?? [ConnectivityResult.none];
+        final isOffline = ConnectivityService.isOffline(connectivityResults);
+
+        if (!isOffline) {
+          return const SizedBox.shrink();
+        }
+
+        return Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: SafeArea(
+            bottom: false,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              color: Colors.orange.shade700,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.wifi_off,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'No internet connection',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }

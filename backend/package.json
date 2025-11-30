@@ -15,7 +15,12 @@
     "fix:urls": "node scripts/fix-malformed-urls.js",
     "fix:urls:dry": "node scripts/fix-malformed-urls.js --dry-run",
     "analyze:videos": "node scripts/migrateCloudinaryToR2.js",
-    "cleanup:failed": "node scripts/migrateCloudinaryToR2.js --delete-failed"
+    "cleanup:failed": "node scripts/migrateCloudinaryToR2.js --delete-failed",
+    "test:like": "node scripts/test-like-endpoint.js",
+    "test:like:dryrun": "node scripts/test-like-endpoint-dryrun.js",
+    "get:video:id": "node scripts/get-test-video-id.js",
+    "check:likes": "node scripts/check-like-requests.js",
+    "monitor:likes": "node scripts/monitor-like-requests.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.891.0",
