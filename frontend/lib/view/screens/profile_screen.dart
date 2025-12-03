@@ -20,13 +20,11 @@ import 'package:vayu/view/widget/profile/profile_videos_widget.dart';
 import 'package:vayu/view/widget/profile/profile_menu_widget.dart';
 import 'package:vayu/view/widget/profile/profile_dialogs_widget.dart';
 import 'package:vayu/controller/main_controller.dart';
-import 'package:vayu/model/video_model.dart';
 import 'package:vayu/core/managers/shared_video_controller_pool.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'package:vayu/services/logout_service.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:vayu/view/screens/creator_payment_setup_screen.dart';
 import 'package:vayu/services/ad_service.dart';
 import 'package:vayu/services/authservices.dart';
 
@@ -425,57 +423,11 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   /// **ENHANCED: Load videos from cache - use cache if exists, only fetch from server if no cache**
   Future<void> _loadVideosFromCache() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cacheKey = _getProfileCacheKey();
-      final cachedVideosJson =
-          prefs.getString('profile_videos_cache_$cacheKey');
-
-      if (cachedVideosJson != null && cachedVideosJson.isNotEmpty) {
-        final List<dynamic> cached = json.decode(cachedVideosJson) as List;
-        if (cached.isNotEmpty) {
-          final videos = cached.map((v) => VideoModel.fromJson(v)).toList();
-          AppLogger.log(
-              '⚡ ProfileScreen: Loaded ${videos.length} cached videos for $cacheKey (no server fetch)');
-
-          final viewedUserId =
-              widget.userId ?? _stateManager.userData?['googleId'];
-          final cachedOwnerId =
-              videos.isNotEmpty ? videos.first.uploader.id : null;
-
-          if (viewedUserId != null &&
-              cachedOwnerId != null &&
-              cachedOwnerId.trim().isNotEmpty &&
-              cachedOwnerId == viewedUserId) {
-            _stateManager.setVideos(videos);
-            AppLogger.log(
-                '⚡ ProfileScreen: Using cached videos for $viewedUserId');
-            // **NEW: Always refresh videos in background to get fresh view counts**
-            // We still use cached list for instant UI, but views will be updated from server.
-            _loadVideos(forceRefresh: true).catchError((e) {
-              AppLogger.log(
-                  '⚠️ ProfileScreen: Background video refresh (for fresh view counts) failed: $e');
-            });
-            return;
-          }
-
-          AppLogger.log(
-              'ℹ️ ProfileScreen: Cached videos belong to $cachedOwnerId but viewing $viewedUserId. Fetching fresh data.');
-        } else {
-          AppLogger.log(
-              'ℹ️ ProfileScreen: Cached videos empty; fetching from server');
-        }
-      } else {
-        AppLogger.log(
-            'ℹ️ ProfileScreen: No video cache found; fetching from server');
-      }
-
-      // No cache or cache mismatch → load from server
-      await _loadVideos();
-    } catch (e) {
-      AppLogger.log('❌ ProfileScreen: Error loading videos from cache: $e');
-      await _loadVideos();
-    }
+    // **SIMPLIFIED: Always load videos via ProfileStateManager logic**
+    // Local SharedPreferences video cache is no longer used.
+    AppLogger.log(
+        'ℹ️ ProfileScreen: _loadVideosFromCache -> delegating to _loadVideos()');
+    await _loadVideos();
   }
 
   /// **OPTIMIZED: Load videos from server (can run in background)**
@@ -522,10 +474,11 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       if (userIdForVideos != null) {
         AppLogger.log(
-            '📡 ProfileScreen: Loading videos for user: $userIdForVideos (forceRefresh: $forceRefresh${forceRefresh ? " - BYPASSING ALL CACHE, fetching fresh from server" : ""}, viewing creator: ${widget.userId != null})');
+            '📡 ProfileScreen: Loading videos for user: $userIdForVideos (forceRefresh: $forceRefresh, viewing creator: ${widget.userId != null})');
 
-        // **CRITICAL: loadUserVideos with forceRefresh=true MUST bypass cache internally**
-        // This ensures manual refresh always shows latest videos from server
+        // Respect the incoming forceRefresh flag:
+        // - forceRefresh=true  → bypass SmartCache for videos (manual pull‑to‑refresh, delete, etc.)
+        // - forceRefresh=false → allow SmartCache/video caching to work for faster loads
         await _stateManager
             .loadUserVideos(userIdForVideos, forceRefresh: forceRefresh)
             .timeout(
@@ -535,11 +488,6 @@ class _ProfileScreenState extends State<ProfileScreen>
           },
         );
 
-        // **CRITICAL: Cache videos AFTER loading (even on force refresh)**
-        // This ensures fresh data is displayed immediately to user, then cached for future use
-        // During force refresh, we show fresh data first, then cache it for next time
-        await _cacheVideos();
-
         AppLogger.log(
             '✅ ProfileScreen: Loaded ${_stateManager.userVideos.length} videos${forceRefresh ? " (fresh from server, not cache)" : ""}');
       }
@@ -547,31 +495,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       AppLogger.log('❌ ProfileScreen: Error loading videos: $e');
       // **FIX: Re-throw error so it can be caught and shown to user**
       rethrow;
-    }
-  }
-
-  /// **SIMPLIFIED: Cache videos to SharedPreferences**
-  Future<void> _cacheVideos() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cacheKey = _getProfileCacheKey();
-
-      // **CRITICAL: Do NOT cache view counts**
-      // We want views to always be fresh from server, not from local cache.
-      // So we remove the 'views' field before saving each video to SharedPreferences.
-      final videosJson = _stateManager.userVideos.map((v) {
-        final jsonMap = v.toJson();
-        jsonMap.remove('views');
-        return jsonMap;
-      }).toList();
-      await prefs.setString(
-          'profile_videos_cache_$cacheKey', json.encode(videosJson));
-      await prefs.setInt('profile_videos_cache_timestamp_$cacheKey',
-          DateTime.now().millisecondsSinceEpoch);
-
-      AppLogger.log('✅ ProfileScreen: Videos cached successfully');
-    } catch (e) {
-      AppLogger.log('❌ ProfileScreen: Error caching videos: $e');
     }
   }
 
@@ -1031,11 +954,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (!shouldDelete) return;
 
       await _stateManager.deleteSelectedVideos();
-
-      // **ENHANCED: Update videos cache immediately after deletion (no server fetch needed)**
-      await _cacheVideos();
-      AppLogger.log(
-          '✅ ProfileScreen: Updated videos cache immediately after deletion');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2058,6 +1976,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       child: Column(
         children: [
           // UPI ID Notice Banner (only for own profile without UPI ID)
+          // Shown near the top, more compact for better use of vertical space.
           if (isViewingOwnProfile)
             ValueListenableBuilder<bool>(
               valueListenable: _isCheckingUpiId,
@@ -2077,7 +1996,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 );
               },
             ),
-          // Stats Section
+          // Stats Section (kept tight under banner for compact layout)
           ProfileStatsWidget(
             stateManager: _stateManager,
             userId: widget.userId,
@@ -2099,7 +2018,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 : null,
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
 
           // Action Buttons Section
           RepaintBoundary(
@@ -2201,7 +2120,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   Widget _ProfileTabs(
       {required int activeIndex, required ValueChanged<int> onSelect}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Row(
         children: [
           Expanded(
@@ -2364,8 +2283,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   /// **NEW: Build UPI ID Notice Banner**
   Widget _buildUpiIdNoticeBanner() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: const Color(0xFFFFF3CD), // Light yellow background
         borderRadius: BorderRadius.circular(12),
@@ -2381,75 +2300,16 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
         ],
       ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFC107).withOpacity(0.2),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.info_outline,
-              color: Color(0xFFFF9800),
-              size: 24,
-            ),
+      child: Center(
+        child: Text(
+          'Earning ke liye apna UPI ID add karein',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[900],
+            fontWeight: FontWeight.w500,
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'UPI ID Required',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF856404),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Earning ke liye apna UPI ID add karein',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[800],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const CreatorPaymentSetupScreen(),
-                ),
-              ).then((_) {
-                // Refresh UPI ID status after returning from payment setup
-                _checkUpiIdStatus();
-              });
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF9800),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              elevation: 0,
-            ),
-            child: const Text(
-              'Add UPI ID',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -2587,6 +2447,22 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
 
       _isCheckingUpiId.value = true;
+
+      // **NEW: If payment setup is already completed (any method), don't show UPI banner**
+      try {
+        final hasPaymentSetup = await _checkPaymentSetupStatus();
+        if (hasPaymentSetup) {
+          _hasUpiId.value = true;
+          _isCheckingUpiId.value = false;
+          AppLogger.log(
+              '✅ ProfileScreen: Payment setup already completed, hiding UPI notice');
+          return;
+        }
+      } catch (e) {
+        AppLogger.log(
+            '⚠️ ProfileScreen: Error checking payment setup status for UPI notice: $e');
+        // Fall through to detailed UPI check
+      }
 
       // **FIX: First check local state (ProfileStateManager) for UPI ID**
       // This ensures immediate update after saving UPI ID

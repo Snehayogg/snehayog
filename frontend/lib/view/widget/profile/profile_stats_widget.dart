@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/core/managers/profile_state_manager.dart';
 import 'package:vayu/core/providers/user_provider.dart';
 import 'package:vayu/core/services/profile_screen_logger.dart';
@@ -38,44 +37,7 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
   void initState() {
     super.initState();
     _attachStateManagerListener();
-    // **NEW: Try to load cached earnings first, then calculate if needed**
-    _loadEarningsFromCache();
     _loadEarnings();
-  }
-
-  /// **NEW: Load earnings from cache if available (non-blocking)**
-  Future<void> _loadEarningsFromCache() async {
-    final cacheKey = _getEarningsCacheKey();
-    if (cacheKey == null) return;
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cachedEarningsJson = prefs.getString('earnings_cache_$cacheKey');
-      final cachedTimestamp =
-          prefs.getInt('earnings_cache_timestamp_$cacheKey');
-
-      if (cachedEarningsJson != null && cachedTimestamp != null) {
-        final cacheTime = DateTime.fromMillisecondsSinceEpoch(cachedTimestamp);
-        final age = DateTime.now().difference(cacheTime);
-
-        // Use cache if it's less than 1 day old
-        if (age.inDays < 1) {
-          final cachedEarnings = double.tryParse(cachedEarningsJson) ?? 0.0;
-          if (mounted) {
-            setState(() {
-              _earnings = cachedEarnings;
-              _isLoadingEarnings = false;
-            });
-          }
-          AppLogger.log(
-            '💰 ProfileStatsWidget: Loaded cached earnings on init: ₹${cachedEarnings.toStringAsFixed(2)}',
-          );
-        }
-      }
-    } catch (e) {
-      AppLogger.log(
-          '⚠️ ProfileStatsWidget: Error loading cached earnings on init: $e');
-    }
   }
 
   @override
@@ -134,42 +96,7 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
       return;
     }
 
-    // **NEW: Try to load from cache first**
-    final cacheKey = _getEarningsCacheKey();
-    if (cacheKey != null) {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final cachedEarningsJson = prefs.getString('earnings_cache_$cacheKey');
-        final cachedTimestamp =
-            prefs.getInt('earnings_cache_timestamp_$cacheKey');
-
-        if (cachedEarningsJson != null && cachedTimestamp != null) {
-          final cacheTime =
-              DateTime.fromMillisecondsSinceEpoch(cachedTimestamp);
-          final age = DateTime.now().difference(cacheTime);
-
-          // Use cache if it's less than 1 day old
-          if (age.inDays < 1) {
-            final cachedEarnings = double.tryParse(cachedEarningsJson) ?? 0.0;
-            AppLogger.log(
-              '💰 ProfileStatsWidget: Using cached earnings: ₹${cachedEarnings.toStringAsFixed(2)} (${age.inHours}h old)',
-            );
-            if (mounted) {
-              setState(() {
-                _earnings = cachedEarnings;
-                _isLoadingEarnings = false;
-              });
-            }
-            return; // Exit early with cached value
-          }
-        }
-      } catch (e) {
-        AppLogger.log(
-            '⚠️ ProfileStatsWidget: Error loading cached earnings: $e');
-      }
-    }
-
-    // Cache miss or expired - calculate earnings
+    // Always calculate earnings from the current video list
     if (mounted) {
       setState(() {
         _isLoadingEarnings = true;
@@ -192,22 +119,6 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
         '💰 ProfileStatsWidget: Earnings calculated: ₹${totalRevenue.toStringAsFixed(2)} for $viewingUserId',
       );
 
-      // **NEW: Cache the calculated earnings**
-      if (cacheKey != null) {
-        try {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString(
-              'earnings_cache_$cacheKey', totalRevenue.toString());
-          await prefs.setInt(
-            'earnings_cache_timestamp_$cacheKey',
-            DateTime.now().millisecondsSinceEpoch,
-          );
-          AppLogger.log('✅ ProfileStatsWidget: Earnings cached for $cacheKey');
-        } catch (e) {
-          AppLogger.log('⚠️ ProfileStatsWidget: Error caching earnings: $e');
-        }
-      }
-
       if (mounted) {
         setState(() {
           _earnings = totalRevenue;
@@ -224,18 +135,6 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
         });
       }
     }
-  }
-
-  /// **NEW: Get cache key for earnings based on userId and video count**
-  String? _getEarningsCacheKey() {
-    final userId = widget.userId ??
-        widget.stateManager.userData?['googleId'] ??
-        widget.stateManager.userData?['id'];
-    if (userId == null) return null;
-
-    final videoCount = widget.stateManager.userVideos.length;
-    // Include video count in cache key so cache invalidates when videos change
-    return '${userId}_$videoCount';
   }
 
   @override

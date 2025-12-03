@@ -12,6 +12,7 @@ import 'package:vayu/view/screens/create_ad_screen_refactored.dart';
 import 'package:vayu/view/screens/ad_management_screen.dart';
 import 'package:vayu/view/screens/upload_screen/widgets/upload_advanced_settings_section.dart';
 import 'package:vayu/utils/app_logger.dart';
+import 'package:video_player/video_player.dart';
 
 class UploadScreen extends StatefulWidget {
   final VoidCallback? onVideoUploaded; // Add callback for video upload success
@@ -1013,6 +1014,24 @@ class _UploadScreenState extends State<UploadScreen> {
               'Video file is too large. Maximum size is 100MB';
           _isProcessing.value = false;
           return;
+        }
+
+        // **NEW: Enforce minimum duration (8 seconds) for user uploads**
+        try {
+          final controller = VideoPlayerController.file(videoFile);
+          await controller.initialize();
+          final durationSeconds = controller.value.duration.inSeconds;
+          await controller.dispose();
+
+          if (durationSeconds < 8) {
+            _errorMessage.value =
+                'Video is too short. Minimum length is 8 seconds.';
+            _isProcessing.value = false;
+            return;
+          }
+        } catch (e) {
+          AppLogger.log('❌ UploadScreen: Error checking video duration: $e');
+          // On error, just fall through and allow upload instead of blocking.
         }
 
         // **BATCHED UPDATE: Update video selection**

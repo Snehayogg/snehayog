@@ -21,7 +21,6 @@ class VideoEngagementRanker {
       final engagementScore = _computeEngagementScore(video, stats);
       final recencyScore = _computeRecencyScore(video, recencyStats);
 
-
       const double recencyWeight = 0.6; // Prioritise new videos
       const double engagementWeight = 0.4;
 
@@ -79,11 +78,12 @@ class VideoEngagementRanker {
   }
 
   static double _estimateWatchTime(VideoModel video) {
+    // **SIMPLIFIED: Use only duration as a proxy for watch potential.**
+    // We intentionally do NOT multiply by views here to avoid over‑boosting
+    // already-popular videos; views can be used separately if needed.
     final durationSeconds = video.duration.inSeconds;
     final clampedDuration = durationSeconds.clamp(1, 60 * 60).toDouble();
-    final views = video.views;
-    final clampedViews = views.clamp(0, 1000000000).toDouble();
-    return clampedDuration * clampedViews;
+    return clampedDuration;
   }
 
   /// **RECENCY SCORE: 0 (oldest) → 1 (newest)**
