@@ -27,6 +27,7 @@ import 'package:vayu/services/logout_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:vayu/services/ad_service.dart';
 import 'package:vayu/services/authservices.dart';
+import 'package:vayu/view/search/video_creator_search_delegate.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -1844,6 +1845,19 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   List<Widget> _buildAppBarActions(ProfileStateManager stateManager) {
     final actions = <Widget>[
+      IconButton(
+        icon: const Icon(
+          Icons.search,
+          color: Color(0xFF1A1A1A),
+        ),
+        tooltip: 'Search videos & creators',
+        onPressed: () {
+          showSearch(
+            context: context,
+            delegate: VideoCreatorSearchDelegate(),
+          );
+        },
+      ),
       _buildChatSupportAction(),
     ];
 

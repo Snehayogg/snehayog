@@ -200,11 +200,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // **FIX: Allow autoplay when opened from ProfileScreen OR when on Yug tab**
-      final bool shouldAttemptAutoplay = _openedFromProfile ||
-          (_mainController?.currentIndex == 0 &&
-              !_mainController!.isMediaPickerActive &&
-              !_mainController!.recentlyReturnedFromPicker);
+      // **FIX: Allow autoplay when opened from ProfileScreen OR when on Yug tab AND screen is visible**
+      final bool isYugTabActive = _mainController?.currentIndex == 0 &&
+          !_mainController!.isMediaPickerActive &&
+          !_mainController!.recentlyReturnedFromPicker;
+
+      final bool shouldAttemptAutoplay =
+          _openedFromProfile || (isYugTabActive && _isScreenVisible);
 
       if (shouldAttemptAutoplay) {
         // **FIX: Ensure screen is visible when opened from ProfileScreen**

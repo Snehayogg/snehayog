@@ -10,8 +10,8 @@ class AppConfig {
   static String? _cachedBaseUrl;
 
   // Local development server (Wi‑Fi/LAN)
-  // Use laptop IP address when testing on phone: 192.168.0.184
-  static const String _localIpBaseUrl = 'http://192.168.0.184:5001';
+  // Use laptop IP address when testing on phone: 192.168.0.199
+  static const String _localIpBaseUrl = 'http://192.168.0.199:5001';
 
   // Primary production endpoints
   static const String _customDomainUrl = 'https://snehayog.site';
@@ -43,8 +43,10 @@ class AppConfig {
 
   // **UPDATED: Try custom domain first, then Railway, then local server**
   static Future<String> getBaseUrlWithFallback() async {
-    // Clear cache to ensure fresh check
-    _cachedBaseUrl = null;
+    // **FIX: Use cache if available (don't clear it every time!)**
+    if (_cachedBaseUrl != null) {
+      return _cachedBaseUrl!;
+    }
 
     print('🔍 AppConfig: Starting server connectivity check...');
     print('🔍 AppConfig: Order: Custom Domain → Railway → Local Server');

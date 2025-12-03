@@ -30,6 +30,7 @@ import feedbackRoutes from './routes/feedbackRoutes.js';
 import referralRoutes from './routes/referralRoutes.js';
 import reportRoutes from './routes/reportRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
+import searchRoutes from './routes/searchRoutes.js';
 
 // Import services
 import automatedPayoutService from './services/automatedPayoutService.js';
@@ -202,6 +203,7 @@ app.use('/api/feedback', feedbackRoutes);
 app.use('/api/referrals', referralRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/search', searchRoutes);
 
 // **FIX: Root route handler for referral links: https://snehayog.site/?ref=CODE
 // This handles referral links and tries to open the app

@@ -105,7 +105,8 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   final Map<int, ValueNotifier<int>> _currentHorizontalPage = {};
 
   // Screen visibility
-  bool _isScreenVisible = true;
+  bool _isScreenVisible =
+      false; // **FIX: Start as false, only set true when Yug tab is actually visible**
   bool _lifecyclePaused = false;
 
   // Double tap animations
