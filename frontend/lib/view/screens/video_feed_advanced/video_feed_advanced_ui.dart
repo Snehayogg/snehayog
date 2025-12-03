@@ -208,7 +208,8 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 if (firstFrameReady ||
                     _forceMountPlayer[index]?.value == true) {
                   return Positioned.fill(
-                    child: _buildVideoPlayer(controller, isActive, index),
+                    child:
+                        _buildVideoPlayer(controller, isActive, index, video),
                   );
                 }
                 return const SizedBox.shrink();
@@ -435,24 +436,32 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     VideoPlayerController controller,
     bool isActive,
     int index,
+    VideoModel video,
   ) {
     return RepaintBoundary(
       child: Container(
         width: double.infinity,
         height: double.infinity,
         color: Colors.black,
-        child: Center(child: _buildVideoWithCorrectAspectRatio(controller)),
+        child: Center(
+          child: _buildVideoWithCorrectAspectRatio(
+            controller,
+            video,
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildVideoWithCorrectAspectRatio(VideoPlayerController controller) {
+  Widget _buildVideoWithCorrectAspectRatio(
+    VideoPlayerController controller,
+    VideoModel currentVideo,
+  ) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final screenWidth = constraints.maxWidth;
         final screenHeight = constraints.maxHeight;
 
-        final currentVideo = _videos[_currentIndex];
         // **FIX: Ensure aspect ratio is valid (greater than 0)**
         double modelAspectRatio = currentVideo.aspectRatio > 0
             ? currentVideo.aspectRatio
@@ -479,6 +488,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             screenWidth,
             screenHeight,
             modelAspectRatio,
+            currentVideo,
           );
         } else {
           return _buildLandscapeVideoFromModel(
@@ -486,6 +496,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             screenWidth,
             screenHeight,
             modelAspectRatio,
+            currentVideo,
           );
         }
       },
@@ -502,11 +513,10 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     double screenWidth,
     double screenHeight,
     double modelAspectRatio,
+    VideoModel currentVideo,
   ) {
     // **FIX: Use original resolution from video model if available, otherwise use aspect ratio**
     // This ensures videos display at their original resolution (1080x1920, etc.)
-    final currentVideo = _videos[_currentIndex];
-
     // Try to get original resolution from video model
     double? originalWidth;
     double? originalHeight;
@@ -598,11 +608,10 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     double screenWidth,
     double screenHeight,
     double modelAspectRatio,
+    VideoModel currentVideo,
   ) {
     // **FIX: Use original resolution from video model if available, otherwise use aspect ratio**
     // This ensures videos display at their original resolution
-    final currentVideo = _videos[_currentIndex];
-
     // Try to get original resolution from video model
     double? originalWidth;
     double? originalHeight;

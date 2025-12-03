@@ -346,46 +346,70 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         (uri.scheme == 'https' &&
             uri.host == 'snehayog.site' &&
             (uri.path.startsWith('/video') || uri.path == '/'))) {
-      // **FIX: Better video ID extraction from deep links**
+      // **ENHANCED: Robust video ID extraction from deep links**
       String? videoId;
 
-      // Try query parameter first
+      // **METHOD 1: Try query parameter first (e.g., ?id=abc123)**
       if (uri.queryParameters.containsKey('id')) {
         videoId = uri.queryParameters['id']?.trim();
+        if (videoId?.isNotEmpty == true) {
+          print('🎬 Deep link: Found video ID in query parameter: $videoId');
+        }
       }
 
-      // If no query param, try path segments
-      if (videoId == null || videoId.isEmpty) {
-        if (uri.pathSegments.isNotEmpty) {
-          // For 'snehayog://video/abc123', pathSegments = ['video', 'abc123']
-          // For 'https://snehayog.site/video/abc123', pathSegments = ['video', 'abc123']
-          final lastSegment = uri.pathSegments.last;
+      // **METHOD 2: Try path segments (e.g., /video/abc123)**
+      if ((videoId == null || videoId.isEmpty) && uri.pathSegments.isNotEmpty) {
+        final segments = uri.pathSegments;
+
+        // Find 'video' segment and get the next segment as ID
+        final videoIndex =
+            segments.indexWhere((s) => s.toLowerCase() == 'video');
+        if (videoIndex != -1 && videoIndex < segments.length - 1) {
+          videoId = segments[videoIndex + 1].trim();
+          print('🎬 Deep link: Found video ID in path segments: $videoId');
+        } else if (segments.isNotEmpty) {
+          // Fallback: use last segment if it's not 'video'
+          final lastSegment = segments.last;
           if (lastSegment.isNotEmpty &&
-              lastSegment != 'video' &&
+              lastSegment.toLowerCase() != 'video' &&
               lastSegment != '/') {
             videoId = lastSegment.trim();
+            print(
+                '🎬 Deep link: Using last path segment as video ID: $videoId');
           }
         }
       }
 
-      // **FIX: Also try extracting from full path if pathSegments didn't work**
+      // **METHOD 3: Extract from full path string (e.g., /video/abc123)**
       if ((videoId == null || videoId.isEmpty) && uri.path.isNotEmpty) {
-        // Extract ID from path like '/video/abc123'
         final pathParts =
             uri.path.split('/').where((p) => p.isNotEmpty).toList();
-        if (pathParts.length >= 2 && pathParts[0] == 'video') {
-          videoId = pathParts[1].trim();
+        if (pathParts.isNotEmpty) {
+          final videoIndex =
+              pathParts.indexWhere((p) => p.toLowerCase() == 'video');
+          if (videoIndex != -1 && videoIndex < pathParts.length - 1) {
+            videoId = pathParts[videoIndex + 1].trim();
+            print('🎬 Deep link: Extracted video ID from path: $videoId');
+          } else if (pathParts.length == 1 &&
+              pathParts[0].toLowerCase() != 'video') {
+            // Single segment that's not 'video' might be the ID
+            videoId = pathParts[0].trim();
+            print(
+                '🎬 Deep link: Using single path segment as video ID: $videoId');
+          }
         }
       }
 
+      // **VALIDATION: Ensure video ID is valid**
       if (videoId != null && videoId.isNotEmpty && videoId != '/') {
-        print('🎬 Deep link: Opening video with ID: $videoId');
-        print('🎬 Deep link: Full URI: $uri');
-        print('🎬 Deep link: Path segments: ${uri.pathSegments}');
+        print('✅ Deep link: Valid video ID extracted: $videoId');
+        print('🔗 Deep link: Full URI: $uri');
+        print('🔗 Deep link: Path segments: ${uri.pathSegments}');
         _navigateToVideo(videoId);
       } else {
         // If it's a referral root link without a specific video, just open home
-        print('ℹ️ Referral/root link received, opening home');
+        print('ℹ️ Deep link: No valid video ID found, opening home');
+        print('🔗 Deep link: URI was: $uri');
         if (mounted) Navigator.pushNamed(context, '/home');
       }
     }

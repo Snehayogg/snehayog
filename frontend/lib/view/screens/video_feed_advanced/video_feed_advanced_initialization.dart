@@ -139,15 +139,24 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
 
           if (mounted) {
             // **CRITICAL: Find video by ID after ranking (videos may have been reordered)**
+            // Use robust ID comparison to handle various formats
             int correctIndex = 0;
-            final foundIndex = _videos.indexWhere(
-              (v) => v.id.trim() == targetVideoId || v.id == targetVideoId,
-            );
+            final normalizedTargetId = targetVideoId.trim().toLowerCase();
+
+            final foundIndex = _videos.indexWhere((v) {
+              final normalizedVideoId = v.id.trim().toLowerCase();
+              return normalizedVideoId == normalizedTargetId ||
+                  v.id.trim() == targetVideoId ||
+                  v.id == targetVideoId;
+            });
 
             if (foundIndex == -1) {
               // Video not in list, insert it at the beginning
               AppLogger.log(
                 '📌 VideoFeedAdvanced: Deep link video not in loaded list, inserting at index 0',
+              );
+              AppLogger.log(
+                '🔍 VideoFeedAdvanced: Target video ID: $targetVideoId, Video name: ${targetVideo.videoName}',
               );
               _videos.insert(0, targetVideo);
               correctIndex = 0;
@@ -155,8 +164,18 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
               // Video already in list, use its index
               correctIndex = foundIndex;
               AppLogger.log(
-                '✅ VideoFeedAdvanced: Found deep link video at index $correctIndex',
+                '✅ VideoFeedAdvanced: Found deep link video at index $correctIndex (ID: ${_videos[foundIndex].id}, Name: ${_videos[foundIndex].videoName})',
               );
+
+              // **ENSURE: Verify it's the correct video by comparing IDs**
+              final foundVideo = _videos[foundIndex];
+              if (foundVideo.id.trim() != targetVideo.id.trim()) {
+                AppLogger.log(
+                  '⚠️ VideoFeedAdvanced: ID mismatch - replacing video at index $correctIndex',
+                );
+                // Replace with fetched video to ensure we have latest data
+                _videos[correctIndex] = targetVideo;
+              }
             }
 
             // **CRITICAL: Update currentIndex BEFORE PageController operations**
@@ -198,15 +217,125 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
             AppLogger.log(
               '✅ VideoFeedAdvanced: Deep link video ready at index $_currentIndex (ID: $targetVideoId, videoName: ${targetVideo.videoName})',
             );
+
+            // **CRITICAL: Set loading to false and ensure video autoplays after positioning**
+            setState(() {
+              _isLoading = false;
+              _errorMessage = null;
+            });
+
+            // **CRITICAL: Ensure video preloading and autoplay for deep link video**
+            if (_videos.isNotEmpty && correctIndex < _videos.length) {
+              // **CRITICAL: Mark screen as visible for deep link videos (they should autoplay)**
+              _isScreenVisible = true;
+              _ensureWakelockForVisibility();
+
+              // Mark current video as seen
+              _markCurrentVideoAsSeen();
+
+              // Start video preloading (will include the deep link video)
+              _startVideoPreloading();
+
+              // **CRITICAL: Force autoplay of deep link video after positioning**
+              // Use WidgetsBinding callback to ensure UI is ready
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted &&
+                    _currentIndex == correctIndex &&
+                    _videos.isNotEmpty) {
+                  // First attempt: immediate autoplay
+                  Future.delayed(const Duration(milliseconds: 100), () {
+                    if (mounted && _currentIndex == correctIndex) {
+                      AppLogger.log(
+                        '🎬 VideoFeedAdvanced: Attempting autoplay for deep link video at index $_currentIndex (ID: ${_videos[correctIndex].id}, Name: ${_videos[correctIndex].videoName})',
+                      );
+                      _tryAutoplayCurrent();
+                    }
+                  });
+
+                  // Second attempt: after video preloads (more reliable)
+                  Future.delayed(const Duration(milliseconds: 500), () {
+                    if (mounted && _currentIndex == correctIndex) {
+                      AppLogger.log(
+                        '🎬 VideoFeedAdvanced: Second autoplay attempt for deep link video',
+                      );
+                      _tryAutoplayCurrent();
+
+                      // **FORCE PLAY: If video still not playing, force it**
+                      if (_controllerPool.containsKey(correctIndex)) {
+                        final controller = _controllerPool[correctIndex];
+                        if (controller != null &&
+                            controller.value.isInitialized &&
+                            !controller.value.isPlaying) {
+                          AppLogger.log(
+                            '🎬 VideoFeedAdvanced: Forcing play for deep link video (controller ready but not playing)',
+                          );
+                          _pauseAllOtherVideos(correctIndex);
+                          try {
+                            controller.setVolume(1.0);
+                            controller.play();
+                            _controllerStates[correctIndex] = true;
+                            _userPaused[correctIndex] = false;
+                            AppLogger.log(
+                              '✅ VideoFeedAdvanced: Deep link video force play successful',
+                            );
+                          } catch (e) {
+                            AppLogger.log(
+                              '❌ VideoFeedAdvanced: Error forcing play: $e',
+                            );
+                          }
+                        }
+                      }
+                    }
+                  });
+                }
+              });
+            }
           }
         } catch (e) {
           AppLogger.log(
             '⚠️ VideoFeedAdvanced: Error fetching deep link video: $e, falling back to regular load',
           );
-          // Fallback to regular video load
+
+          // **ENHANCED: Show user-friendly error message**
+          if (mounted) {
+            setState(() {
+              _errorMessage = 'Video not found. Loading feed instead...';
+            });
+          }
+
+          // **FALLBACK: Load regular videos and try to find the video in the feed**
           await _loadVideos(page: 1);
           if (mounted) {
+            // Clear error message
+            setState(() {
+              _errorMessage = null;
+            });
+
+            // **ENHANCED: Try to verify and set correct index after loading**
             _verifyAndSetCorrectIndex();
+
+            // **IF VIDEO NOT FOUND: Show error to user**
+            if (widget.initialVideoId != null && _videos.isNotEmpty) {
+              final targetVideoId = widget.initialVideoId!.trim();
+              final videoFound = _videos.any(
+                (v) => v.id.trim() == targetVideoId || v.id == targetVideoId,
+              );
+
+              if (!videoFound && mounted) {
+                AppLogger.log(
+                  '❌ VideoFeedAdvanced: Video $targetVideoId not found in feed',
+                );
+                // Show snackbar to user
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content:
+                        const Text('Video not found. Showing feed instead.'),
+                    backgroundColor: Colors.orange,
+                    duration: const Duration(seconds: 3),
+                  ),
+                );
+              }
+            }
           }
         }
       } else {

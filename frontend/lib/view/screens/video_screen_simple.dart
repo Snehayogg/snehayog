@@ -64,13 +64,12 @@ class _VideoScreenSimpleState extends State<VideoScreenSimple> {
   }
 
   /// **SIMPLE USER ID LOADING**
-  /// **FIX: Prioritize googleId over id to match backend likedBy array**
+  /// Use googleId as the single source of truth for likes (backend returns likedBy as googleIds)
   Future<void> _loadCurrentUserId() async {
     try {
       final userData = await _authService.getUserData();
       if (mounted) {
         setState(() {
-          // **FIX: Use googleId first to match backend likedBy array**
           _currentUserId = userData?['googleId'] ?? userData?['id'];
         });
       }

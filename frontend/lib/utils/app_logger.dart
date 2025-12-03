@@ -5,7 +5,14 @@ import 'package:flutter/foundation.dart';
 class AppLogger {
   static const bool _debugMode = kDebugMode; // Use kDebugMode from foundation
 
-  static void log(String message) {
-    if (_debugMode) print(message);
+  /// [isError] can be used by callers to flag important / error logs.
+  /// For now we just prefix the message, but this keeps the API flexible.
+  static void log(String message, {bool isError = false}) {
+    if (!_debugMode) return;
+
+    final formatted = isError ? '❌ [ERROR] $message' : message;
+
+    // Use debugPrint to avoid long line truncation issues in some tools.
+    debugPrint(formatted);
   }
 }

@@ -275,18 +275,46 @@ class VideoService {
     }
   }
 
-  /// **Get video by ID**
+  /// **Get video by ID - Enhanced with better error handling**
   Future<VideoModel> getVideoById(String id) async {
     try {
+      // **VALIDATION: Ensure video ID is not empty**
+      if (id.trim().isEmpty) {
+        throw Exception('Video ID cannot be empty');
+      }
+
       final resolvedBaseUrl = await getBaseUrlWithFallback();
-      final res = await http.get(Uri.parse('$resolvedBaseUrl/api/videos/$id'));
+      final videoId = id.trim();
+      final url = '$resolvedBaseUrl/api/videos/$videoId';
+
+      AppLogger.log('📡 VideoService: Fetching video by ID: $videoId');
+
+      final res = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 15), onTimeout: () {
+        throw Exception('Request timed out. Please check your connection.');
+      });
+
       if (res.statusCode == 200) {
-        return VideoModel.fromJson(json.decode(res.body));
+        final videoData = json.decode(res.body);
+        final video = VideoModel.fromJson(videoData);
+        AppLogger.log(
+          '✅ VideoService: Successfully fetched video: ${video.videoName} (ID: ${video.id})',
+        );
+        return video;
+      } else if (res.statusCode == 404) {
+        AppLogger.log('❌ VideoService: Video not found (404): $videoId');
+        throw Exception('Video not found. It may have been deleted.');
       } else {
         final error = json.decode(res.body);
-        throw Exception(error['error'] ?? 'Failed to load video');
+        final errorMessage = error['error'] ?? 'Failed to load video';
+        AppLogger.log(
+          '❌ VideoService: Error fetching video (${res.statusCode}): $errorMessage',
+        );
+        throw Exception(errorMessage);
       }
     } catch (e) {
+      AppLogger.log('❌ VideoService: Exception fetching video by ID: $e');
       if (e is Exception) rethrow;
       throw Exception('Network error: $e');
     }

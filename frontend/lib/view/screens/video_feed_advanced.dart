@@ -72,6 +72,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         WidgetsBindingObserver,
         AutomaticKeepAliveClientMixin,
         VideoFeedStateFieldsMixin {
+  /// Tracks whether a like operation is already in progress for a given video.
+  /// Prevents duplicate like/unlike calls and double increments.
+  final Map<String, bool> _likeInProgress = {};
+
   @override
   bool get wantKeepAlive => true;
 
@@ -168,7 +172,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       listen: false,
     );
     if (authController.isSignedIn && authController.userData != null) {
-      // **FIX: Prioritize googleId over id to match backend likedBy array**
+      // Use googleId as the single source of truth for likes (backend returns likedBy as googleIds)
       final userId = authController.userData!['googleId'] ??
           authController.userData!['id'];
       if (userId != null && _currentUserId != userId) {
@@ -366,11 +370,18 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   bool get _openedFromProfile =>
       widget.initialVideos != null && widget.initialVideos!.isNotEmpty;
 
+  bool get _openedFromDeepLink =>
+      widget.initialVideoId != null && widget.initialVideos == null;
+
   bool _shouldAutoplayForContext(String context) {
     if (!_allowAutoplay(context)) {
       return false;
     }
-    if (_openedFromProfile) {
+    // **ENHANCED: Allow autoplay for profile videos and deep links**
+    if (_openedFromProfile || _openedFromDeepLink) {
+      AppLogger.log(
+        '✅ Autoplay allowed ($context): ${_openedFromProfile ? "opened from profile" : "opened from deep link"}',
+      );
       return true;
     }
     final bool isVideoTabActive =
@@ -1618,7 +1629,16 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       _showHeartAnimation[index]?.value = false;
     });
 
-    // Handle the like
+    // If the video is already liked by the current user, only show animation.
+    // Double-tap should act as "like", not toggle like/unlike twice.
+    if (_currentUserId != null && video.likedBy.contains(_currentUserId)) {
+      AppLogger.log(
+        '🔴 DoubleTap Like: Video already liked by current user – showing animation only',
+      );
+      return;
+    }
+
+    // Handle the like (will respect _likeInProgress guard below)
     await _handleLike(video, index);
   }
 
@@ -1630,6 +1650,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     AppLogger.log('🔴 Current User ID: $_currentUserId');
     AppLogger.log('🔴 Current Likes: ${video.likes}');
     AppLogger.log('🔴 Current LikedBy: ${video.likedBy.length} users');
+
+    // Guard against multiple rapid taps / concurrent calls for the same video.
+    if (_likeInProgress[video.id] == true) {
+      AppLogger.log(
+        '⚠️ Like Handler: Like already in progress for video ${video.id}, ignoring duplicate tap',
+      );
+      return;
+    }
 
     if (_currentUserId == null) {
       AppLogger.log('❌ Like Handler: User not logged in, navigating to login');
@@ -1670,18 +1698,19 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
 
     try {
+      _likeInProgress[video.id] = true;
       AppLogger.log('🔴 Like Handler: Calling API to sync with backend...');
       AppLogger.log('🔴 Like Handler: API call starting at ${DateTime.now()}');
 
       // **SYNC WITH BACKEND: Get actual data from backend (ensures persistence)**
-      final updatedVideo = await _videoService.toggleLike(video.id);
+      VideoModel updatedVideo = await _videoService.toggleLike(video.id);
 
       AppLogger.log('🔴 Like Handler: API call completed at ${DateTime.now()}');
       AppLogger.log('✅ Successfully toggled like for video ${video.id}');
       AppLogger.log(
           '🔴 Like Handler: Backend response - likes: ${updatedVideo.likes}, likedBy: ${updatedVideo.likedBy.length}');
 
-      // **CRITICAL: Replace with backend response to ensure persistence**
+      // **CRITICAL: Replace with backend response to ensure persistence (trust backend counts)**
       if (videoIndex != -1) {
         AppLogger.log(
             '🔴 Like Handler: Updating video in list with backend response');
@@ -1740,6 +1769,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
       _showSnackBar(errorMessage, isError: true);
       AppLogger.log('🔴 ========== LIKE FAILED ==========');
+    } finally {
+      // Always clear in-progress flag so future likes work.
+      _likeInProgress[video.id] = false;
+      AppLogger.log(
+        '🔄 Like Handler: Cleared in-progress flag for video ${video.id}',
+      );
     }
   }
 
