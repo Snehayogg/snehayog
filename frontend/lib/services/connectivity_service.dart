@@ -129,16 +129,17 @@ class ConnectivityService {
 
     if (errorString.contains('failed host lookup') ||
         errorString.contains('network is unreachable')) {
-      return 'Cannot reach server. Please check your internet connection.';
+      return 'No internet connection. Please check your network.';
     }
 
     if (errorString.contains('connection refused')) {
       return 'Server connection refused. Please try again later.';
     }
 
+    // Treat timeouts as slow internet for a simpler UX message
     if (errorString.contains('connection timed out') ||
         errorString.contains('timeout')) {
-      return 'Connection timed out. Please check your internet and try again.';
+      return 'Slow internet connection. Please try again.';
     }
 
     if (errorString.contains('no internet') ||

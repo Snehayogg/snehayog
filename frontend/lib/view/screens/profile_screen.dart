@@ -450,6 +450,12 @@ class _ProfileScreenState extends State<ProfileScreen>
             _stateManager.setVideos(videos);
             AppLogger.log(
                 '⚡ ProfileScreen: Using cached videos for $viewedUserId');
+            // **NEW: Always refresh videos in background to get fresh view counts**
+            // We still use cached list for instant UI, but views will be updated from server.
+            _loadVideos(forceRefresh: true).catchError((e) {
+              AppLogger.log(
+                  '⚠️ ProfileScreen: Background video refresh (for fresh view counts) failed: $e');
+            });
             return;
           }
 
@@ -550,8 +556,14 @@ class _ProfileScreenState extends State<ProfileScreen>
       final prefs = await SharedPreferences.getInstance();
       final cacheKey = _getProfileCacheKey();
 
-      final videosJson =
-          _stateManager.userVideos.map((v) => v.toJson()).toList();
+      // **CRITICAL: Do NOT cache view counts**
+      // We want views to always be fresh from server, not from local cache.
+      // So we remove the 'views' field before saving each video to SharedPreferences.
+      final videosJson = _stateManager.userVideos.map((v) {
+        final jsonMap = v.toJson();
+        jsonMap.remove('views');
+        return jsonMap;
+      }).toList();
       await prefs.setString(
           'profile_videos_cache_$cacheKey', json.encode(videosJson));
       await prefs.setInt('profile_videos_cache_timestamp_$cacheKey',

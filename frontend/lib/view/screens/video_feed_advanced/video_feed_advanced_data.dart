@@ -113,9 +113,13 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       if (!hasInternet) {
         AppLogger.log('📡 VideoFeedAdvanced: No internet connection detected');
         if (mounted) {
+          // Don't block the whole UI – just show a lightweight snackbar.
+          // This covers both no-internet and very slow/unstable connections.
+          _showSnackBar(
+            'Slow internet connection. Please check your network.',
+            isError: true,
+          );
           setState(() {
-            _errorMessage =
-                'No internet connection. Please check your network settings.';
             _isLoading = false;
           });
         }
@@ -325,18 +329,21 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
 
       // **IMPROVED: Better error handling with connectivity service**
       if (mounted) {
-        String errorMsg;
         if (ConnectivityService.isNetworkError(e)) {
-          errorMsg = ConnectivityService.getNetworkErrorMessage(e);
+          // For slow / bad internet we only show a snackbar, don't block the feed.
+          final errorMsg = ConnectivityService.getNetworkErrorMessage(e);
+          _showSnackBar(errorMsg, isError: true);
+          setState(() {
+            _isLoading = false;
+          });
         } else {
-          errorMsg = _getUserFriendlyErrorMessage(e);
+          final errorMsg = _getUserFriendlyErrorMessage(e);
+          setState(() {
+            _errorMessage = errorMsg;
+            _hasMore = false;
+            _isLoading = false;
+          });
         }
-
-        setState(() {
-          _errorMessage = errorMsg;
-          _hasMore = false;
-          _isLoading = false;
-        });
       }
     }
   }
