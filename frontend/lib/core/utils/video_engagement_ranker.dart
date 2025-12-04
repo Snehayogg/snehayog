@@ -6,8 +6,6 @@ import 'package:vayu/utils/app_logger.dart';
 class VideoEngagementRanker {
   VideoEngagementRanker._();
 
-  static final math.Random _random = math.Random();
-
   static List<VideoModel> rankVideos(List<VideoModel> videos) {
     if (videos.length <= 1) {
       return List<VideoModel>.from(videos);
@@ -21,35 +19,37 @@ class VideoEngagementRanker {
       final engagementScore = _computeEngagementScore(video, stats);
       final recencyScore = _computeRecencyScore(video, recencyStats);
 
-      const double recencyWeight = 0.6; // Prioritise new videos
-      const double engagementWeight = 0.4;
-
-      final combinedScore =
-          (recencyWeight * recencyScore) + (engagementWeight * engagementScore);
-
-      // Keep a tiny epsilon so that completely cold videos still participate
-      final weight = combinedScore > 0 ? combinedScore : 1e-6;
-      final randomValue = _random.nextDouble().clamp(1e-9, 0.999999999);
-      final key = -math.log(randomValue) / weight;
       ranked.add(
         _RankedVideo(
           video: video,
-          score: combinedScore,
+          score: 0.0, // Not used in new algorithm
           engagementScore: engagementScore,
           recencyScore: recencyScore,
-          key: key,
+          key: 0.0, // Not used in new algorithm
         ),
       );
     }
 
-    ranked.sort((a, b) => a.key.compareTo(b.key));
+    // **FIXED: FIRST PRIORITY = LATEST VIDEOS**
+    // Sort by recency first (newest first), then use engagement as tie-breaker
+    ranked.sort((a, b) {
+      // Primary sort: by recency (newest first) - this is FIRST PRIORITY
+      final recencyCompare = b.recencyScore.compareTo(a.recencyScore);
+      if (recencyCompare != 0) {
+        return recencyCompare;
+      }
+
+      // Secondary sort: by engagement (higher engagement first) - tie-breaker for same recency
+      return b.engagementScore.compareTo(a.engagementScore);
+    });
 
     AppLogger.log(
-        '🎯 VideoEngagementRanker: Ranked ${ranked.length} videos by recency + engagement');
+        '🎯 VideoEngagementRanker: Ranked ${ranked.length} videos (FIRST PRIORITY: Latest videos)');
     for (var i = 0; i < ranked.length; i++) {
       final entry = ranked[i];
+      final videoAge = DateTime.now().difference(entry.video.uploadedAt);
       AppLogger.log(
-          '   ${i + 1}. ${entry.video.videoName} • combined=${entry.score.toStringAsFixed(4)} • recency=${entry.recencyScore.toStringAsFixed(3)} • engagement=${entry.engagementScore.toStringAsFixed(3)}');
+          '   ${i + 1}. ${entry.video.videoName} • age=${videoAge.inHours}h • recency=${entry.recencyScore.toStringAsFixed(3)} • engagement=${entry.engagementScore.toStringAsFixed(3)}');
     }
 
     return ranked.map((entry) => entry.video).toList();

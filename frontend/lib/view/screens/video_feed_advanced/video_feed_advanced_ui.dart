@@ -462,10 +462,12 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         final screenWidth = constraints.maxWidth;
         final screenHeight = constraints.maxHeight;
 
-        // **FIX: Ensure aspect ratio is valid (greater than 0)**
+        // **FIX: Use video's actual aspect ratio from controller if model doesn't have one**
+        // This ensures ALL videos display in their original aspect ratio regardless of size, duration, etc.
         double modelAspectRatio = currentVideo.aspectRatio > 0
             ? currentVideo.aspectRatio
-            : 9.0 / 16.0; // Default to 9:16 if invalid
+            : _getDetectedAspectRatio(
+                controller); // Use detected ratio from video controller
 
         final Size videoSize = controller.value.size;
         final int rotation = controller.value.rotationCorrection;
@@ -506,6 +508,33 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
   bool _isPortraitVideo(double aspectRatio) {
     const double portraitThreshold = 0.7;
     return aspectRatio < portraitThreshold;
+  }
+
+  /// **Get detected aspect ratio from video controller**
+  /// This ensures videos display in their original aspect ratio even if model doesn't have one
+  double _getDetectedAspectRatio(VideoPlayerController controller) {
+    try {
+      final Size videoSize = controller.value.size;
+      final int rotation = controller.value.rotationCorrection;
+
+      double videoWidth = videoSize.width;
+      double videoHeight = videoSize.height;
+
+      if (rotation == 90 || rotation == 270) {
+        videoWidth = videoSize.height;
+        videoHeight = videoSize.width;
+      }
+
+      if (videoWidth > 0 && videoHeight > 0) {
+        final double aspectRatio = videoWidth / videoHeight;
+        return aspectRatio > 0
+            ? aspectRatio
+            : 9.0 / 16.0; // Fallback if invalid
+      }
+    } catch (e) {
+      AppLogger.log('⚠️ Error detecting aspect ratio: $e');
+    }
+    return 9.0 / 16.0; // Final fallback
   }
 
   Widget _buildPortraitVideoFromModel(

@@ -7,8 +7,9 @@ import compression from 'compression';
 import { fileURLToPath } from 'url';
 import cron from 'node-cron';
 
-// Disable noisy console.log in production
-if (process.env.NODE_ENV === 'production') {
+// **FIX: Don't disable console.log in production - we need it for Railway debugging**
+// Only disable if explicitly requested via DISABLE_CONSOLE_LOG=true
+if (process.env.DISABLE_CONSOLE_LOG === 'true') {
   // eslint-disable-next-line no-console
   console.log = () => {};
 }
@@ -179,6 +180,18 @@ app.use('/hls', (err, req, res, next) => {
 });
 
 // Health check endpoint (before routes)
+// **FIX: Add both /health and /api/health for Railway compatibility**
+app.get('/health', (req, res) => {
+  console.log('🏥 Health check endpoint hit from:', req.ip);
+  res.json({ 
+    status: 'healthy',
+    service: 'vayug-backend',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
 app.get('/api/health', (req, res) => {
   console.log('🏥 Health check endpoint hit from:', req.ip);
   res.json({ 

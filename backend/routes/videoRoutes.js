@@ -679,6 +679,7 @@ router.get('/', async (req, res) => {
     }
     
     // Build base query filter
+    // **FIX: Show ALL videos with valid URLs regardless of processing status, size, duration, etc.**
     const baseQueryFilter = {
       uploader: { $exists: true, $ne: null },
       videoUrl: { 
@@ -687,8 +688,9 @@ router.get('/', async (req, res) => {
         $ne: '',
         $not: /^uploads[\\\/]/,
         $regex: /^https?:\/\//
-      },
-      processingStatus: { $nin: ['failed', 'error'] }
+      }
+      // **REMOVED: processingStatus filter - show all videos with valid URLs**
+      // Videos will be visible regardless of processing status, size, duration, aspect ratio
     };
     
     // Add videoType filter if specified
