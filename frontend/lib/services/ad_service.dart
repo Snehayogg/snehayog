@@ -721,7 +721,7 @@ class AdService {
     }
   }
 
-  // **NEW: Get creator revenue summary**
+  // **NEW: Get creator revenue summary - FAST & SIMPLE**
   Future<Map<String, dynamic>> getCreatorRevenueSummary() async {
     try {
       final userData = await _authService.getUserData();
@@ -729,11 +729,15 @@ class AdService {
         throw Exception('User not authenticated');
       }
 
+      // **FIX: Use async base URL resolver for proper server detection**
+      final baseUrl = await AppConfig.getBaseUrlWithFallback();
+      final userId = userData['googleId'] ?? userData['id'];
+
+      // **FIX: Add timeout to prevent hanging (8 seconds)**
       final response = await httpClientService.get(
-        Uri.parse(
-          '$baseUrl/api/ads/creator/revenue/${userData['googleId'] ?? userData['id']}',
-        ),
+        Uri.parse('$baseUrl/api/ads/creator/revenue/$userId'),
         headers: {'Authorization': 'Bearer ${userData['token']}'},
+        timeout: const Duration(seconds: 8),
       );
 
       if (response.statusCode == 200) {

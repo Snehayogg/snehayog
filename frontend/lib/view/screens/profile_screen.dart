@@ -351,11 +351,9 @@ class _ProfileScreenState extends State<ProfileScreen>
               });
             }
 
-            // **NEW: Refresh earnings data in background (only for own profile)**
+            // **FAST: Load earnings in parallel (non-blocking)**
             _refreshEarningsData(forceRefresh: forceRefresh).catchError((e) {
-              AppLogger.log(
-                  '⚠️ ProfileScreen: Error refreshing earnings data: $e');
-              // Don't show error to user - earnings refresh is optional
+              // Silent fail - earnings are optional
             });
 
             // **CRITICAL: After successful force refresh, cache the fresh data for next time**
@@ -568,8 +566,10 @@ class _ProfileScreenState extends State<ProfileScreen>
         }
       }
 
-      // **NEW: Refresh earnings data after manual refresh (only for own profile)**
-      await _refreshEarningsData(forceRefresh: true);
+      // **FAST: Refresh earnings after manual refresh**
+      _refreshEarningsData(forceRefresh: true).catchError((e) {
+        // Silent fail
+      });
 
       _isLoading.value = false;
       AppLogger.log(
@@ -2614,7 +2614,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     return 'own_profile';
   }
 
-  /// **NEW: Cache earnings/revenue data**
+  /// **SIMPLIFIED: Cache earnings - simple timestamp only**
   Future<void> _cacheEarningsData(Map<String, dynamic> earningsData) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -2623,22 +2623,22 @@ class _ProfileScreenState extends State<ProfileScreen>
           _stateManager.userData?['id'];
 
       if (userId == null) {
-        AppLogger.log('⚠️ ProfileScreen: Cannot cache earnings - no userId');
         return;
       }
 
       final cacheKey = 'earnings_cache_$userId';
-      await prefs.setString(cacheKey, json.encode(earningsData));
-      await prefs.setInt('earnings_cache_timestamp_$userId',
-          DateTime.now().millisecondsSinceEpoch);
+      final timestampKey = 'earnings_cache_timestamp_$userId';
 
-      AppLogger.log('✅ ProfileScreen: Earnings data cached successfully');
+      await prefs.setString(cacheKey, json.encode(earningsData));
+      await prefs.setInt(timestampKey, DateTime.now().millisecondsSinceEpoch);
+
+      AppLogger.log('✅ ProfileScreen: Earnings cached');
     } catch (e) {
-      AppLogger.log('❌ ProfileScreen: Error caching earnings data: $e');
+      AppLogger.log('❌ ProfileScreen: Error caching earnings: $e');
     }
   }
 
-  /// **NEW: Load cached earnings/revenue data**
+  /// **SIMPLIFIED: Fast earnings cache - simple 5-minute check**
   Future<Map<String, dynamic>?> _loadCachedEarningsData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -2651,19 +2651,50 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
 
       final cacheKey = 'earnings_cache_$userId';
-      final cachedDataJson = prefs.getString(cacheKey);
+      final timestampKey = 'earnings_cache_timestamp_$userId';
+      final oldMonthKey =
+          'earnings_cache_month_$userId'; // **OLD KEY - clean up if exists**
 
-      if (cachedDataJson != null && cachedDataJson.isNotEmpty) {
-        AppLogger.log('⚡ ProfileScreen: Loading earnings from cache');
-        return Map<String, dynamic>.from(json.decode(cachedDataJson));
+      final cachedDataJson = prefs.getString(cacheKey);
+      final cachedTimestamp = prefs.getInt(timestampKey);
+
+      // **CLEANUP: Remove old month key if it exists (from previous code version)**
+      if (prefs.containsKey(oldMonthKey)) {
+        await prefs.remove(oldMonthKey);
+        AppLogger.log('🧹 ProfileScreen: Removed old month key');
+      }
+
+      if (cachedTimestamp != null && cachedDataJson != null) {
+        final cacheTime = DateTime.fromMillisecondsSinceEpoch(cachedTimestamp);
+        final now = DateTime.now();
+        final age = now.difference(cacheTime);
+
+        // **MONTH CHECK: If cache is from different month, invalidate it**
+        if (cacheTime.month != now.month || cacheTime.year != now.year) {
+          AppLogger.log(
+              '🔄 ProfileScreen: Earnings cache is from different month (${cacheTime.month}/${cacheTime.year} vs ${now.month}/${now.year}) - invalidating');
+          await prefs.remove(cacheKey);
+          await prefs.remove(timestampKey);
+          return null;
+        }
+
+        // **SIMPLE: Check if cache is fresh (5 minutes)**
+        if (age < const Duration(minutes: 5)) {
+          // Cache is fresh and from current month - use it
+          return Map<String, dynamic>.from(json.decode(cachedDataJson));
+        } else {
+          // Cache is stale - clear it
+          await prefs.remove(cacheKey);
+          await prefs.remove(timestampKey);
+        }
       }
     } catch (e) {
-      AppLogger.log('❌ ProfileScreen: Error loading cached earnings data: $e');
+      AppLogger.log('❌ ProfileScreen: Error loading cached earnings: $e');
     }
     return null;
   }
 
-  /// **NEW: Refresh earnings data - load from cache first, then refresh in background**
+  /// **FIXED: Fast earnings refresh with month reset detection**
   Future<void> _refreshEarningsData({bool forceRefresh = false}) async {
     try {
       // Only refresh earnings for own profile
@@ -2676,31 +2707,70 @@ class _ProfileScreenState extends State<ProfileScreen>
         return;
       }
 
-      // **CACHE-FIRST: Try to load from cache first (unless force refresh)**
-      if (!forceRefresh) {
-        final cachedEarnings = await _loadCachedEarningsData();
-        if (cachedEarnings != null) {
-          AppLogger.log('⚡ ProfileScreen: Using cached earnings data');
-          // Cache is available - will be used by CreatorRevenueScreen
-          return;
+      final now = DateTime.now();
+      final prefs = await SharedPreferences.getInstance();
+      final userId = widget.userId ??
+          _stateManager.userData?['googleId'] ??
+          _stateManager.userData?['id'];
+
+      // **MONTH RESET: Check if cache is from different month - always force refresh**
+      if (userId != null) {
+        final timestampKey = 'earnings_cache_timestamp_$userId';
+        final cachedTimestamp = prefs.getInt(timestampKey);
+
+        if (cachedTimestamp != null) {
+          final cacheTime =
+              DateTime.fromMillisecondsSinceEpoch(cachedTimestamp);
+          // **FIX: Force refresh if month changed (not just day 1)**
+          if (cacheTime.month != now.month || cacheTime.year != now.year) {
+            AppLogger.log(
+                '🔄 ProfileScreen: Month changed - forcing fresh earnings calculation');
+            forceRefresh = true;
+            // Clear earnings cache when month changes
+            await prefs.remove('earnings_cache_$userId');
+            await prefs.remove(timestampKey);
+            AppLogger.log(
+                '🧹 ProfileScreen: Cleared earnings cache (month changed)');
+          }
         }
       }
 
-      // **BACKGROUND: Refresh earnings data in background**
-      AppLogger.log('💰 ProfileScreen: Refreshing earnings data...');
+      // **MONTH RESET: Also check if it's the 1st of the month - always force refresh**
+      if (now.day == 1) {
+        AppLogger.log(
+            '🔄 ProfileScreen: Month start detected - forcing fresh earnings calculation');
+        forceRefresh = true;
+        if (userId != null) {
+          await prefs.remove('earnings_cache_$userId');
+          await prefs.remove('earnings_cache_timestamp_$userId');
+          AppLogger.log(
+              '🧹 ProfileScreen: Cleared earnings cache at month start');
+        }
+      }
+
+      // **SIMPLE CACHE: Check if cache is fresh (5 minutes) - but skip if month start**
+      if (!forceRefresh) {
+        final cachedEarnings = await _loadCachedEarningsData();
+        if (cachedEarnings != null) {
+          AppLogger.log('⚡ ProfileScreen: Using cached earnings (fast)');
+          return; // Cache is fresh, skip API call
+        }
+      }
+
+      // **FAST: Load earnings in parallel (non-blocking)**
+      AppLogger.log('💰 ProfileScreen: Loading fresh earnings...');
       Future.microtask(() async {
         try {
           final earningsData = await _adService.getCreatorRevenueSummary();
           await _cacheEarningsData(earningsData);
-          AppLogger.log('✅ ProfileScreen: Earnings data refreshed and cached');
+          AppLogger.log('✅ ProfileScreen: Earnings loaded (fresh data)');
         } catch (e) {
-          AppLogger.log('⚠️ ProfileScreen: Error refreshing earnings data: $e');
-          // Don't throw - earnings refresh is optional
+          AppLogger.log('⚠️ ProfileScreen: Earnings load failed: $e');
+          // Silent fail - earnings are optional
         }
       });
     } catch (e) {
-      AppLogger.log('⚠️ ProfileScreen: Error in _refreshEarningsData: $e');
-      // Don't throw - earnings refresh is optional
+      AppLogger.log('⚠️ ProfileScreen: Earnings refresh error: $e');
     }
   }
 
@@ -2715,20 +2785,13 @@ class _ProfileScreenState extends State<ProfileScreen>
       await prefs.remove('profile_videos_cache_$cacheKey');
       await prefs.remove('profile_videos_cache_timestamp_$cacheKey');
 
-      // **NEW: Clear earnings cache for this user**
-      // Clear all earnings cache entries that match this user's ID
+      // **SIMPLIFIED: Clear earnings cache**
       final userId = widget.userId ??
           _stateManager.userData?['googleId'] ??
           _stateManager.userData?['id'];
       if (userId != null) {
-        // Get all keys and remove earnings cache entries for this user
-        final allKeys = prefs.getKeys();
-        for (final key in allKeys) {
-          if (key.startsWith('earnings_cache_$userId')) {
-            await prefs.remove(key);
-            AppLogger.log('🧹 ProfileScreen: Cleared earnings cache: $key');
-          }
-        }
+        await prefs.remove('earnings_cache_$userId');
+        await prefs.remove('earnings_cache_timestamp_$userId');
       }
 
       ProfileScreenLogger.logDebugInfo(

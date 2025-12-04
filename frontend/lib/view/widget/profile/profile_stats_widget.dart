@@ -4,7 +4,11 @@ import 'package:vayu/core/managers/profile_state_manager.dart';
 import 'package:vayu/core/providers/user_provider.dart';
 import 'package:vayu/core/services/profile_screen_logger.dart';
 import 'package:vayu/services/earnings_service.dart';
+import 'package:vayu/services/authservices.dart';
+import 'package:vayu/config/app_config.dart';
 import 'package:vayu/utils/app_logger.dart';
+import 'dart:convert';
+import 'package:vayu/core/services/http_client_service.dart';
 
 class ProfileStatsWidget extends StatefulWidget {
   final ProfileStateManager stateManager;
@@ -32,6 +36,7 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
   double _earnings = 0.0;
   bool _isLoadingEarnings = true;
   int _lastVideoCount = -1;
+  final AuthService _authService = AuthService();
 
   @override
   void initState() {
@@ -72,8 +77,8 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
     super.dispose();
   }
 
-  /// **FIXED: Load earnings with caching - check cache first, then calculate if needed**
-  /// **ENHANCED: Works for any creator's videos (own profile or other creators)**
+  /// **FIXED: Load monthly earnings from backend API (not all-time)**
+  /// **ENHANCED: Uses backend API which calculates current month earnings correctly**
   Future<void> _loadEarnings() async {
     // **FIXED: Don't show 0 if videos are still loading**
     if (widget.stateManager.isVideosLoading) {
@@ -86,17 +91,52 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
       return;
     }
 
-    if (widget.stateManager.userVideos.isEmpty) {
+    // **FIX: Only load earnings for own profile (userId is null)**
+    // For other creators, show 0 or use fallback calculation
+    if (widget.userId != null) {
+      // Viewing someone else's profile - use fallback calculation
+      if (widget.stateManager.userVideos.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _isLoadingEarnings = false;
+            _earnings = 0.0;
+          });
+        }
+        return;
+      }
+
+      // Fallback: Calculate from videos (all-time for other creators)
       if (mounted) {
         setState(() {
-          _isLoadingEarnings = false;
-          _earnings = 0.0;
+          _isLoadingEarnings = true;
         });
+      }
+
+      try {
+        final totalRevenue =
+            await EarningsService.calculateCreatorTotalRevenueForVideos(
+          widget.stateManager.userVideos,
+        );
+
+        if (mounted) {
+          setState(() {
+            _earnings = totalRevenue;
+            _isLoadingEarnings = false;
+          });
+        }
+      } catch (e) {
+        AppLogger.log('❌ ProfileStatsWidget: Error calculating earnings: $e');
+        if (mounted) {
+          setState(() {
+            _earnings = 0.0;
+            _isLoadingEarnings = false;
+          });
+        }
       }
       return;
     }
 
-    // Always calculate earnings from the current video list
+    // **OWN PROFILE: Use backend API for monthly earnings**
     if (mounted) {
       setState(() {
         _isLoadingEarnings = true;
@@ -104,35 +144,117 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
     }
 
     try {
-      final videoCount = widget.stateManager.userVideos.length;
-      final viewingUserId = widget.userId ?? 'own profile';
+      final userData = await _authService.getUserData();
+      if (userData == null) {
+        AppLogger.log(
+            '⚠️ ProfileStatsWidget: No user data, showing 0 earnings');
+        if (mounted) {
+          setState(() {
+            _earnings = 0.0;
+            _isLoadingEarnings = false;
+          });
+        }
+        return;
+      }
+
+      final userId = userData['googleId'] ?? userData['id'];
+      if (userId == null) {
+        AppLogger.log('⚠️ ProfileStatsWidget: No userId, showing 0 earnings');
+        if (mounted) {
+          setState(() {
+            _earnings = 0.0;
+            _isLoadingEarnings = false;
+          });
+        }
+        return;
+      }
+
       AppLogger.log(
-        '💰 ProfileStatsWidget: Calculating earnings for $videoCount videos (viewing: $viewingUserId)',
+          '💰 ProfileStatsWidget: Loading monthly earnings from backend API for user: $userId');
+
+      // **FIX: Use backend API which returns current month earnings**
+      final baseUrl = await AppConfig.getBaseUrlWithFallback();
+      final response = await httpClientService.get(
+        Uri.parse('$baseUrl/api/ads/creator/revenue/$userId'),
+        headers: {
+          'Authorization': 'Bearer ${userData['token']}',
+        },
+        timeout: const Duration(seconds: 8),
       );
 
-      final totalRevenue =
-          await EarningsService.calculateCreatorTotalRevenueForVideos(
-        widget.stateManager.userVideos,
-      );
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body) as Map<String, dynamic>;
+        // **USE CURRENT MONTH EARNINGS (not all-time)**
+        final thisMonthEarnings =
+            (data['thisMonth'] as num?)?.toDouble() ?? 0.0;
 
-      AppLogger.log(
-        '💰 ProfileStatsWidget: Earnings calculated: ₹${totalRevenue.toStringAsFixed(2)} for $viewingUserId',
-      );
+        AppLogger.log(
+          '💰 ProfileStatsWidget: Monthly earnings loaded: ₹${thisMonthEarnings.toStringAsFixed(2)} (this month)',
+        );
 
-      if (mounted) {
-        setState(() {
-          _earnings = totalRevenue;
-          _isLoadingEarnings = false;
-        });
+        if (mounted) {
+          setState(() {
+            _earnings = thisMonthEarnings;
+            _isLoadingEarnings = false;
+          });
+        }
+      } else {
+        AppLogger.log(
+            '⚠️ ProfileStatsWidget: API returned status ${response.statusCode}');
+        // Fallback to local calculation
+        if (widget.stateManager.userVideos.isNotEmpty) {
+          final totalRevenue =
+              await EarningsService.calculateCreatorTotalRevenueForVideos(
+            widget.stateManager.userVideos,
+          );
+          if (mounted) {
+            setState(() {
+              _earnings = totalRevenue;
+              _isLoadingEarnings = false;
+            });
+          }
+        } else {
+          if (mounted) {
+            setState(() {
+              _earnings = 0.0;
+              _isLoadingEarnings = false;
+            });
+          }
+        }
       }
     } catch (e, stackTrace) {
-      AppLogger.log('❌ ProfileStatsWidget: Error calculating earnings: $e');
+      AppLogger.log('❌ ProfileStatsWidget: Error loading earnings: $e');
       AppLogger.log('Stack trace: $stackTrace');
-      if (mounted) {
-        setState(() {
-          _earnings = 0.0;
-          _isLoadingEarnings = false; // Always set to false on error
-        });
+      // Fallback to local calculation on error
+      if (widget.stateManager.userVideos.isNotEmpty) {
+        try {
+          final totalRevenue =
+              await EarningsService.calculateCreatorTotalRevenueForVideos(
+            widget.stateManager.userVideos,
+          );
+          if (mounted) {
+            setState(() {
+              _earnings = totalRevenue;
+              _isLoadingEarnings = false;
+            });
+          }
+        } catch (fallbackError) {
+          AppLogger.log(
+              '❌ ProfileStatsWidget: Fallback calculation also failed: $fallbackError');
+          if (mounted) {
+            setState(() {
+              _earnings = 0.0;
+              _isLoadingEarnings = false;
+            });
+          }
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _earnings = 0.0;
+            _isLoadingEarnings = false;
+          });
+        }
       }
     }
   }

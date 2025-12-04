@@ -67,6 +67,39 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         final userId = (userMap['id'] ?? '').toString();
         final videosFuture = _videoService.getUserVideos(userId);
 
+        // **MONTH RESET: Check if cache is from different month - always force refresh**
+        final now = DateTime.now();
+        final prefs = await SharedPreferences.getInstance();
+        final timestampKey = 'earnings_cache_timestamp_$userId';
+        final cachedTimestamp = prefs.getInt(timestampKey);
+
+        if (cachedTimestamp != null) {
+          final cacheTime =
+              DateTime.fromMillisecondsSinceEpoch(cachedTimestamp);
+          // **FIX: Force refresh if month changed (not just day 1)**
+          if (cacheTime.month != now.month || cacheTime.year != now.year) {
+            AppLogger.log(
+                '🔄 CreatorRevenueScreen: Month changed - forcing fresh earnings calculation');
+            forceRefresh = true;
+            // Clear earnings cache when month changes
+            await prefs.remove('earnings_cache_$userId');
+            await prefs.remove(timestampKey);
+            AppLogger.log(
+                '🧹 CreatorRevenueScreen: Cleared earnings cache (month changed)');
+          }
+        }
+
+        // **MONTH RESET: Also check if it's the 1st of the month - always force refresh**
+        if (now.day == 1) {
+          AppLogger.log(
+              '🔄 CreatorRevenueScreen: Month start detected - forcing fresh earnings calculation');
+          forceRefresh = true;
+          await prefs.remove('earnings_cache_$userId');
+          await prefs.remove(timestampKey);
+          AppLogger.log(
+              '🧹 CreatorRevenueScreen: Cleared earnings cache at month start');
+        }
+
         // **NEW: Try to load cached earnings data first (unless force refresh)**
         Map<String, dynamic>? revenueData;
         if (!forceRefresh) {
@@ -92,7 +125,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
 
           // **NEW: Cache the fetched earnings data**
           await _cacheEarningsData(revenueData, userId);
-                }
+        }
 
         if (!mounted) return;
         setState(() {
@@ -137,35 +170,69 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     }
   }
 
-  /// **NEW: Load cached earnings data**
+  /// **FIXED: Load cached earnings with month validation**
   Future<Map<String, dynamic>?> _loadCachedEarningsData(String userId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final cacheKey = 'earnings_cache_$userId';
-      final cachedDataJson = prefs.getString(cacheKey);
+      final timestampKey = 'earnings_cache_timestamp_$userId';
+      final oldMonthKey =
+          'earnings_cache_month_$userId'; // **OLD KEY - clean up if exists**
 
-      if (cachedDataJson != null && cachedDataJson.isNotEmpty) {
-        return Map<String, dynamic>.from(json.decode(cachedDataJson));
+      final cachedDataJson = prefs.getString(cacheKey);
+      final cachedTimestamp = prefs.getInt(timestampKey);
+
+      // **CLEANUP: Remove old month key if it exists (from previous code version)**
+      if (prefs.containsKey(oldMonthKey)) {
+        await prefs.remove(oldMonthKey);
+        AppLogger.log('🧹 CreatorRevenueScreen: Removed old month key');
+      }
+
+      if (cachedTimestamp != null && cachedDataJson != null) {
+        final cacheTime = DateTime.fromMillisecondsSinceEpoch(cachedTimestamp);
+        final now = DateTime.now();
+        final age = now.difference(cacheTime);
+
+        // **MONTH CHECK: If cache is from different month, invalidate it**
+        if (cacheTime.month != now.month || cacheTime.year != now.year) {
+          AppLogger.log(
+              '🔄 CreatorRevenueScreen: Earnings cache is from different month (${cacheTime.month}/${cacheTime.year} vs ${now.month}/${now.year}) - invalidating');
+          await prefs.remove(cacheKey);
+          await prefs.remove(timestampKey);
+          return null;
+        }
+
+        // **SIMPLE: Check if cache is fresh (5 minutes)**
+        if (age < const Duration(minutes: 5)) {
+          // Cache is fresh and from current month - use it
+          return Map<String, dynamic>.from(json.decode(cachedDataJson));
+        } else {
+          // Cache is stale - clear it
+          await prefs.remove(cacheKey);
+          await prefs.remove(timestampKey);
+        }
       }
     } catch (e) {
       AppLogger.log(
-          '❌ CreatorRevenueScreen: Error loading cached earnings data: $e');
+          '❌ CreatorRevenueScreen: Error loading cached earnings: $e');
     }
     return null;
   }
 
-  /// **NEW: Cache earnings data**
+  /// **SIMPLIFIED: Cache earnings - simple timestamp only**
   Future<void> _cacheEarningsData(
       Map<String, dynamic> earningsData, String userId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final cacheKey = 'earnings_cache_$userId';
+      final timestampKey = 'earnings_cache_timestamp_$userId';
+
       await prefs.setString(cacheKey, json.encode(earningsData));
-      await prefs.setInt('earnings_cache_timestamp_$userId',
-          DateTime.now().millisecondsSinceEpoch);
-      AppLogger.log('✅ CreatorRevenueScreen: Earnings data cached');
+      await prefs.setInt(timestampKey, DateTime.now().millisecondsSinceEpoch);
+
+      AppLogger.log('✅ CreatorRevenueScreen: Earnings cached');
     } catch (e) {
-      AppLogger.log('❌ CreatorRevenueScreen: Error caching earnings data: $e');
+      AppLogger.log('❌ CreatorRevenueScreen: Error caching earnings: $e');
     }
   }
 
@@ -468,8 +535,8 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
 
           const SizedBox(height: 16),
 
-          // **NEW: Important Note for Creators**
-          _buildImportantNoteCard(),
+          // **NEW: Previous Month Earnings Section**
+          _buildPreviousMonthEarningsCard(),
 
           const SizedBox(height: 24),
 
@@ -501,16 +568,18 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   Widget _buildRevenueOverviewCard() {
-    // Use unified EarningsService-based totals for consistency across app
-    final creatorRevenue = _totalRevenue;
-    final grossRevenue = _grossRevenue;
-    final platformFee =
+    // **FIXED: Use current month earnings from backend API (not all-time)**
+    final thisMonth = (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
+    final lastMonth = (_revenueData?['lastMonth'] as num?)?.toDouble() ?? 0.0;
+
+    // **FIXED: Calculate gross and platform fee from current month earnings**
+    final creatorRevenue = thisMonth; // Use current month earnings
+    final grossRevenue =
+        thisMonth / AppConfig.creatorRevenueShare; // Reverse calculate gross
+    final calculatedPlatformFee =
         (grossRevenue - creatorRevenue).clamp(0.0, double.infinity);
     final platformSharePercent =
         (AppConfig.platformRevenueShare * 100).toStringAsFixed(0);
-    // Keep monthly values from backend (or 0.0 if not provided)
-    final thisMonth = _revenueData?['thisMonth'] ?? 0.0;
-    final lastMonth = _revenueData?['lastMonth'] ?? 0.0;
 
     return Card(
       elevation: 4,
@@ -548,7 +617,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                 Expanded(
                   child: _buildRevenueStat(
                     'Platform Fee ($platformSharePercent%)',
-                    '₹${platformFee.toStringAsFixed(2)}',
+                    '₹${calculatedPlatformFee.toStringAsFixed(2)}',
                     Icons.account_balance,
                     Colors.red,
                   ),
@@ -695,13 +764,268 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     return '${date.day} $monthName ${date.year}';
   }
 
+  /// **NEW: Previous Month Earnings Card - Detailed breakdown**
+  Widget _buildPreviousMonthEarningsCard() {
+    final lastMonth = (_revenueData?['lastMonth'] as num?)?.toDouble() ?? 0.0;
+    final now = DateTime.now();
+    final lastMonthDate = DateTime(
+      now.month == 1 ? now.year - 1 : now.year,
+      now.month == 1 ? 12 : now.month - 1,
+      1,
+    );
+    final lastMonthName = _getMonthName(lastMonthDate.month);
+    final lastMonthYear = lastMonthDate.year;
+
+    // Calculate gross and platform fee for last month
+    final lastMonthGross =
+        lastMonth > 0 ? lastMonth / AppConfig.creatorRevenueShare : 0.0;
+    final lastMonthPlatformFee =
+        (lastMonthGross - lastMonth).clamp(0.0, double.infinity);
+
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // **FIX: Make header responsive to prevent overflow**
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.history,
+                        color: Colors.orange[700],
+                        size: 24,
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          'Previous Month Earnings',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange[700],
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '$lastMonthName $lastMonthYear',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.orange[700],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            if (lastMonth == 0.0)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.inbox_outlined,
+                        size: 48,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'No earnings in $lastMonthName',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Start creating content to earn!',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else ...[
+              // Main earnings display
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.orange.withOpacity(0.2),
+                    width: 1,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      'Total Earnings',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '₹${lastMonth.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange[700],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Breakdown
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildPreviousMonthStat(
+                      'Gross Revenue',
+                      '₹${lastMonthGross.toStringAsFixed(2)}',
+                      Icons.receipt_long,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildPreviousMonthStat(
+                      'Platform Fee',
+                      '₹${lastMonthPlatformFee.toStringAsFixed(2)}',
+                      Icons.account_balance,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              // Comparison with current month
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'This Month',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[700],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    Text(
+                      '₹${((_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green[700],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPreviousMonthStat(String label, String value, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: Colors.grey[600], size: 20),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getMonthName(int month) {
+    const monthNames = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December'
+    ];
+    return monthNames[month - 1];
+  }
+
   Widget _buildRevenueAnalyticsCard() {
+    // **FIXED: Use current month earnings from backend API (not all-time)**
+    final thisMonth = (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
+    final thisMonthGross =
+        thisMonth > 0 ? thisMonth / AppConfig.creatorRevenueShare : 0.0;
+    final thisMonthPlatformFee =
+        (thisMonthGross - thisMonth).clamp(0.0, double.infinity);
+
+    // Get video count and analytics (for display purposes)
     final analytics = _getRevenueAnalytics();
-    final creatorRevenue = analytics['creator_revenue'] ?? 0.0;
-    final grossRevenue = analytics['gross_revenue'] ?? 0.0;
-    final platformFee = analytics['platform_fee'] ?? 0.0;
     final totalVideos = analytics['total_videos'] ?? 0;
-    final averageRevenue = analytics['average_revenue_per_video'] ?? 0.0;
+    final averageRevenue = totalVideos > 0
+        ? thisMonth / totalVideos
+        : 0.0; // Average per video for current month
     final topPerformingVideoName = analytics['top_performing_video'] as String?;
     final topPerformingRevenue = analytics['top_performing_revenue'] ?? 0.0;
 
@@ -712,20 +1036,41 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Revenue Analytics',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              children: [
+                const Text(
+                  'Revenue Analytics',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'This Month',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.blue[700],
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             _buildAnalyticsRow(
-                'Creator Earnings', '₹${creatorRevenue.toStringAsFixed(2)}'),
+                'Creator Earnings', '₹${thisMonth.toStringAsFixed(2)}'),
             _buildAnalyticsRow(
-                'Gross Revenue', '₹${grossRevenue.toStringAsFixed(2)}'),
+                'Gross Revenue', '₹${thisMonthGross.toStringAsFixed(2)}'),
             _buildAnalyticsRow(
-                'Platform Fee', '₹${platformFee.toStringAsFixed(2)}'),
+                'Platform Fee', '₹${thisMonthPlatformFee.toStringAsFixed(2)}'),
             _buildAnalyticsRow('Total Videos', totalVideos.toString()),
             _buildAnalyticsRow('Average Revenue per Video',
                 '₹${averageRevenue.toStringAsFixed(2)}'),
@@ -765,8 +1110,11 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   Widget _buildRevenueBreakdownCard() {
-    final grossRevenue = _grossRevenue;
-    final creatorRevenue = _totalRevenue;
+    // **FIXED: Use current month earnings from backend API (not all-time)**
+    final thisMonth = (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
+    final creatorRevenue = thisMonth; // Current month creator earnings
+    final grossRevenue =
+        thisMonth > 0 ? thisMonth / AppConfig.creatorRevenueShare : 0.0;
     final platformFee =
         (grossRevenue - creatorRevenue).clamp(0.0, double.infinity);
     final hasRevenue = grossRevenue > 0.0;
@@ -1314,94 +1662,6 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildImportantNoteCard() {
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Important Note for Creators',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // How they earn
-            _buildInfoRow(
-              Icons.monetization_on,
-              'How to Earn',
-              'Post original gaming or educational content. Every ad impression pays you money.',
-            ),
-
-            const SizedBox(height: 8),
-
-            // Payment schedule
-            _buildInfoRow(
-              Icons.calendar_today,
-              'Payment Schedule',
-              'Money is sent to your bank account every 1st of the month.',
-            ),
-
-            const SizedBox(height: 8),
-
-            // No criteria
-            _buildInfoRow(
-              Icons.check_circle,
-              'No Monetization Criteria',
-              'No minimum requirements. Every ad impression counts and pays you.',
-            ),
-
-            const SizedBox(height: 8),
-
-            // Payment setup
-            _buildInfoRow(
-              Icons.account_balance,
-              'Setup Payment Details',
-              'Go to Profile → clicks → Earnings → Payment Setup to add your bank account details for payments.',
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(IconData icon, String title, String description) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, color: Colors.green, size: 20),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                description,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey[700],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }
