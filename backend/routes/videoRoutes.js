@@ -738,8 +738,10 @@ router.get('/', async (req, res) => {
           ...(watchedVideoIds.length > 0 && { _id: { $nin: watchedVideoIds } }) // Exclude watched videos if any
         };
         
+        // **PRIORITY: Sort by createdAt DESC to prioritize recent videos**
         const unwatchedVideosRaw = await Video.find(unwatchedQuery)
-          .select('_id')
+          .select('_id createdAt')
+          .sort({ createdAt: -1 }) // **NEW: Recent videos first**
           .limit(maxIdsToFetch) // Limit the query to prevent loading thousands of IDs
           .lean();
         
@@ -755,10 +757,23 @@ router.get('/', async (req, res) => {
         console.log(`✅ Using ${unwatchedVideoIds.length} cached unwatched video IDs`);
       }
       
-      // Step 3: Shuffle unwatched video IDs using Fisher-Yates algorithm
-      // Now shuffling a much smaller array (max 200-500 IDs instead of thousands)
-      const shuffledUnwatchedIds = shuffleArray([...unwatchedVideoIds]);
-      const limitedUnwatchedIds = shuffledUnwatchedIds.slice(0, limitNum * 2); // Get more for buffer
+      // Step 3: Weighted shuffle to prioritize recent videos while maintaining variety
+      // Recent videos (first 50%) get higher priority, but we still shuffle for variety
+      const recentCount = Math.min(Math.floor(unwatchedVideoIds.length * 0.5), limitNum * 3);
+      const recentIds = unwatchedVideoIds.slice(0, recentCount); // Most recent videos
+      const olderIds = unwatchedVideoIds.slice(recentCount); // Older videos
+      
+      // Shuffle recent and older videos separately, then combine with recent first
+      const shuffledRecent = shuffleArray([...recentIds]);
+      const shuffledOlder = shuffleArray([...olderIds]);
+      
+      // Combine: 70% recent, 30% older for variety
+      const combinedIds = [
+        ...shuffledRecent.slice(0, Math.floor(limitNum * 2 * 0.7)),
+        ...shuffledOlder.slice(0, Math.floor(limitNum * 2 * 0.3))
+      ];
+      
+      const limitedUnwatchedIds = combinedIds.slice(0, limitNum * 2); // Get more for buffer
       
       // Step 4: Fetch unwatched videos in shuffled order
       if (limitedUnwatchedIds.length > 0) {
