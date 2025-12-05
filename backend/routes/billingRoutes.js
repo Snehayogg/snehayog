@@ -7,16 +7,42 @@ import { getRazorpayConfig } from '../config/razorpay.js';
 
 const router = express.Router();
 
-// **NEW: Initialize Razorpay with config**
+// **NEW: Initialize Razorpay with config (only if configured)**
 const config = getRazorpayConfig();
-const razorpay = new Razorpay({
-  key_id: config.keyId,
-  key_secret: config.keySecret,
-});
+let razorpay = null;
+
+if (config.isConfigured) {
+  try {
+    razorpay = new Razorpay({
+      key_id: config.keyId,
+      key_secret: config.keySecret,
+    });
+    console.log('✅ Razorpay initialized successfully');
+  } catch (error) {
+    console.error('❌ Failed to initialize Razorpay:', error);
+    razorpay = null;
+  }
+} else {
+  console.warn('⚠️ Razorpay not configured - payment routes will return errors');
+}
+
+// **Helper function to check if Razorpay is available**
+const checkRazorpayAvailable = (res) => {
+  if (!razorpay || !config.isConfigured) {
+    return res.status(503).json({ 
+      error: 'Payment service is currently unavailable. Razorpay is not configured.' 
+    });
+  }
+  return null;
+};
 
 // POST /billing/create-order - Create Razorpay order
 router.post('/create-order', async (req, res) => {
   try {
+    // **FIX: Check if Razorpay is configured**
+    const unavailable = checkRazorpayAvailable(res);
+    if (unavailable) return unavailable;
+    
     console.log('🔍 Billing: Creating Razorpay order...');
     console.log('🔍 Billing: Request body:', req.body);
     
@@ -298,6 +324,13 @@ router.get('/payment-cancelled', (req, res) => {
 // POST /billing/verify-payment - Verify Razorpay payment
 router.post('/verify-payment', async (req, res) => {
   try {
+    // **FIX: Check if Razorpay is configured**
+    if (!config.isConfigured || !process.env.RAZORPAY_KEY_SECRET) {
+      return res.status(503).json({ 
+        error: 'Payment service is currently unavailable. Razorpay is not configured.' 
+      });
+    }
+    
     const {
       razorpay_order_id,
       razorpay_payment_id,
@@ -343,6 +376,14 @@ router.post('/verify-payment', async (req, res) => {
 // **NEW: POST /billing/webhook - Handle Razorpay webhooks**
 router.post('/webhook', async (req, res) => {
   try {
+    // **FIX: Check if Razorpay is configured**
+    if (!config.isConfigured || !process.env.RAZORPAY_WEBHOOK_SECRET) {
+      console.warn('⚠️ Billing: Webhook received but Razorpay is not configured');
+      return res.status(503).json({ 
+        error: 'Payment service is currently unavailable. Razorpay is not configured.' 
+      });
+    }
+    
     console.log('🔍 Billing: Webhook received from Razorpay');
     console.log('🔍 Billing: Webhook body:', req.body);
 
