@@ -59,14 +59,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Check required environment variables (support both MONGO_URI and MONGODB_URI)
+// **FIX: Don't exit early - allow server to start for healthcheck even if DB is missing**
 const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
 if (!mongoUri) {
-  console.error('❌ Missing required environment variable: MONGO_URI or MONGODB_URI');
-  process.exit(1);
+  console.warn('⚠️ Missing environment variable: MONGO_URI or MONGODB_URI');
+  console.warn('⚠️ Server will start but database features will be unavailable');
+} else {
+  // Set the environment variable for consistency
+  process.env.MONGO_URI = mongoUri;
 }
-
-// Set the environment variable for consistency
-process.env.MONGO_URI = mongoUri;
 
 // Port and Host configuration
 const PORT = process.env.PORT || 5001;
@@ -461,41 +462,69 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 // Start server
 const startServer = async () => {
   try {
-    // Connect to database
-    await databaseManager.connect();
-    
-    // **NEW: Connect to Redis for caching (non-blocking - app works without Redis)**
-    const redisConnected = await redisService.connect();
-    if (redisConnected) {
-      console.log('✅ Redis connected successfully - Caching enabled');
-    } else {
-      console.log('⚠️ Redis connection failed - App will continue without caching');
-    }
-    
-    // Start automated payout service
-    automatedPayoutService.startScheduler();
-    
-    // Start ad cleanup cron job (run every hour at minute 0)
-    cron.schedule('0 * * * *', async () => {
-      try {
-        await adCleanupService.runCleanup();
-      } catch (error) {
-        console.error('❌ Error in scheduled ad cleanup:', error);
-      }
-    });
-    
-    // Start monthly notification cron job (runs on 1st of every month at 9:00 AM)
-    monthlyNotificationCron.start();
-    
-    // Start HTTP server
+    // **FIX: Start HTTP server FIRST so healthcheck works immediately**
+    // Database connection will happen in background (non-blocking)
     app.listen(PORT, HOST, () => {
       console.log(`🚀 Server running on ${HOST}:${PORT}`);
-      console.log(`📊 Redis Status: ${redisService.getConnectionStatus() ? '✅ Connected' : '❌ Disconnected'}`);
+      console.log('✅ Server is ready to accept connections');
+      console.log('🔌 Database connecting in background...');
     });
+    
+    // **FIX: Connect to database in background (non-blocking)**
+    // This allows healthcheck to work even if database is slow/failing
+    if (mongoUri) {
+      databaseManager.connect()
+        .then(() => {
+          console.log('✅ Database connected successfully');
+          // Start services that require database
+          automatedPayoutService.startScheduler();
+          
+          // Start ad cleanup cron job (run every hour at minute 0)
+          cron.schedule('0 * * * *', async () => {
+            try {
+              await adCleanupService.runCleanup();
+            } catch (error) {
+              console.error('❌ Error in scheduled ad cleanup:', error);
+            }
+          });
+          
+          // Start monthly notification cron job (runs on 1st of every month at 9:00 AM)
+          monthlyNotificationCron.start();
+        })
+        .catch((error) => {
+          console.error('❌ Database connection failed:', error.message);
+          console.log('⚠️ App will continue running - database features unavailable');
+          console.log('⚠️ Database will retry connection automatically');
+        });
+    } else {
+      console.warn('⚠️ No MongoDB URI - skipping database connection');
+      console.warn('⚠️ Database features will be unavailable');
+    }
+    
+    // **FIX: Connect to Redis in background (non-blocking)**
+    redisService.connect()
+      .then((redisConnected) => {
+        if (redisConnected) {
+          console.log('✅ Redis connected successfully - Caching enabled');
+        } else {
+          console.log('⚠️ Redis connection failed - App will continue without caching');
+        }
+      })
+      .catch((error) => {
+        console.error('❌ Redis connection error:', error.message);
+        console.log('⚠️ App will continue without Redis caching');
+      });
     
   } catch (error) {
     console.error('❌ Failed to start server:', error);
-    process.exit(1);
+    // **FIX: Only exit on critical errors (like port already in use)**
+    if (error.code === 'EADDRINUSE') {
+      console.error('❌ Port already in use - exiting');
+      process.exit(1);
+    } else {
+      console.error('⚠️ Server started with errors - healthcheck should still work');
+      // Don't exit - allow healthcheck to work
+    }
   }
 };
 

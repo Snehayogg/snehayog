@@ -13,8 +13,10 @@ class DatabaseManager {
       await mongoose.connect(process.env.MONGO_URI, {
         useNewUrlParser: true,
         useUnifiedTopology: true,
-        serverSelectionTimeoutMS: 5000,
+        // **FIX: Increase timeout for Railway (network can be slower)**
+        serverSelectionTimeoutMS: 30000, // 30 seconds (was 5s)
         socketTimeoutMS: 45000,
+        connectTimeoutMS: 30000, // 30 seconds connection timeout
       });
       
       this.isConnected = true;

@@ -138,45 +138,54 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
           await _loadVideos(page: 1);
 
           if (mounted) {
-            // **CRITICAL: Find video by ID after ranking (videos may have been reordered)**
-            // Use robust ID comparison to handle various formats
-            int correctIndex = 0;
+            // **FIX: For shared/deep link videos, ALWAYS put target video at index 0**
+            // This ensures the correct video plays regardless of where it appears in the feed
             final normalizedTargetId = targetVideoId.trim().toLowerCase();
 
-            final foundIndex = _videos.indexWhere((v) {
+            // Remove video from list if it exists (to avoid duplicates)
+            _videos.removeWhere((v) {
               final normalizedVideoId = v.id.trim().toLowerCase();
               return normalizedVideoId == normalizedTargetId ||
                   v.id.trim() == targetVideoId ||
                   v.id == targetVideoId;
             });
 
-            if (foundIndex == -1) {
-              // Video not in list, insert it at the beginning
-              AppLogger.log(
-                '📌 VideoFeedAdvanced: Deep link video not in loaded list, inserting at index 0',
-              );
-              AppLogger.log(
-                '🔍 VideoFeedAdvanced: Target video ID: $targetVideoId, Video name: ${targetVideo.videoName}',
-              );
-              _videos.insert(0, targetVideo);
-              correctIndex = 0;
-            } else {
-              // Video already in list, use its index
-              correctIndex = foundIndex;
-              AppLogger.log(
-                '✅ VideoFeedAdvanced: Found deep link video at index $correctIndex (ID: ${_videos[foundIndex].id}, Name: ${_videos[foundIndex].videoName})',
-              );
+            // **CRITICAL: Always insert shared video at index 0 BEFORE any ranking**
+            _videos.insert(0, targetVideo);
 
-              // **ENSURE: Verify it's the correct video by comparing IDs**
-              final foundVideo = _videos[foundIndex];
-              if (foundVideo.id.trim() != targetVideo.id.trim()) {
-                AppLogger.log(
-                  '⚠️ VideoFeedAdvanced: ID mismatch - replacing video at index $correctIndex',
-                );
-                // Replace with fetched video to ensure we have latest data
-                _videos[correctIndex] = targetVideo;
-              }
+            // **CRITICAL: Re-rank videos but preserve deep link video at index 0**
+            // Use preserveVideoKey to ensure deep link video stays at position 0
+            final deepLinkVideoKey = videoIdentityKey(targetVideo);
+            _videos = _rankVideosWithEngagement(
+              _videos,
+              preserveVideoKey: deepLinkVideoKey.isNotEmpty
+                  ? deepLinkVideoKey
+                  : targetVideoId,
+            );
+
+            // **VERIFY: Ensure deep link video is still at index 0 after ranking**
+            final verifyIndex = _videos.indexWhere((v) =>
+                v.id.trim() == targetVideoId ||
+                v.id == targetVideoId ||
+                videoIdentityKey(v) == deepLinkVideoKey);
+
+            final correctIndex = verifyIndex != -1 ? verifyIndex : 0;
+
+            // If ranking moved the video, move it back to index 0
+            if (correctIndex != 0 && correctIndex < _videos.length) {
+              final videoToMove = _videos.removeAt(correctIndex);
+              _videos.insert(0, videoToMove);
+              AppLogger.log(
+                '🔧 VideoFeedAdvanced: Moved deep link video back to index 0 after ranking',
+              );
             }
+
+            AppLogger.log(
+              '✅ VideoFeedAdvanced: Deep link video ready at index 0 (ID: $targetVideoId, Name: ${targetVideo.videoName})',
+            );
+            AppLogger.log(
+              '📊 VideoFeedAdvanced: Total videos after insertion and ranking: ${_videos.length}',
+            );
 
             // **CRITICAL: Update currentIndex BEFORE PageController operations**
             _currentIndex = correctIndex;
