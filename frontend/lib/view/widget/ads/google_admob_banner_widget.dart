@@ -131,8 +131,7 @@ class _GoogleAdMobBannerWidgetState extends State<GoogleAdMobBannerWidget> {
     final width = widget.width ?? MediaQuery.of(context).size.width * 0.8;
     final height = widget.height ?? widget.adSize.height.toDouble();
     final margin = widget.margin ?? const EdgeInsets.only(top: 1, left: 16);
-    final borderRadius =
-        widget.borderRadius ?? BorderRadius.circular(12);
+    final borderRadius = widget.borderRadius ?? BorderRadius.circular(12);
 
     return SafeArea(
       child: Align(
@@ -154,4 +153,3 @@ class _GoogleAdMobBannerWidgetState extends State<GoogleAdMobBannerWidget> {
     );
   }
 }
-

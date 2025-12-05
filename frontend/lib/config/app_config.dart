@@ -10,7 +10,6 @@ class AppConfig {
   static String? _cachedBaseUrl;
 
   // Local development server (Wi‑Fi/LAN)
-  // Use laptop IP address when testing on phone: 192.168.0.199
   static const String _localIpBaseUrl = 'http://192.168.0.199:5001';
 
   // Primary production endpoints

@@ -23,10 +23,19 @@ class AdMobConfig {
   // Format: ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX
   static String? _admobAppId;
 
+  // **Flag to force production ads even in debug mode**
+  static bool _forceProductionAds = true; // Default to true to use real ads
+
+  /// Force production ads even in debug mode (for testing real ads)
+  static void setForceProductionAds(bool force) {
+    _forceProductionAds = force;
+  }
+
   /// Get banner ad unit ID for current platform
   static String? getBannerAdUnitId() {
-    // In debug mode, use test IDs
-    if (kDebugMode) {
+    // **FIX: Use production ads if forced OR in release mode**
+    // In debug mode, use test IDs UNLESS production ads are forced
+    if (kDebugMode && !_forceProductionAds) {
       if (Platform.isAndroid) {
         return _testBannerAdUnitIdAndroid;
       } else if (Platform.isIOS) {
@@ -35,10 +44,10 @@ class AdMobConfig {
       return null;
     }
 
-    // In production, use environment variables or configured IDs
+    // In production OR when forced, use production IDs
     if (Platform.isAndroid) {
       return _productionBannerAdUnitIdAndroid ??
-          Platform.environment['ca-app-pub-2359959043864469~1031962361'];
+          Platform.environment['ADMOB_BANNER_AD_UNIT_ID_ANDROID'];
     } else if (Platform.isIOS) {
       return _productionBannerAdUnitIdIOS ??
           Platform.environment['ADMOB_BANNER_AD_UNIT_ID_IOS'];
