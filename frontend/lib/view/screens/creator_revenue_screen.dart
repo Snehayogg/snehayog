@@ -64,7 +64,15 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
       final userData = await _authService.getUserData();
       if (userData case final Map<String, dynamic> rawUserMap) {
         final userMap = Map<String, dynamic>.from(rawUserMap);
-        final userId = (userMap['id'] ?? '').toString();
+        // **FIXED: Use googleId instead of id - backend expects googleId**
+        final userId = (userMap['googleId'] ?? userMap['id'] ?? '').toString();
+
+        if (userId.isEmpty) {
+          throw Exception('User ID not found. Please sign in again.');
+        }
+
+        AppLogger.log(
+            '🔍 CreatorRevenueScreen: Loading videos for userId: $userId');
         final videosFuture = _videoService.getUserVideos(userId);
 
         // **MONTH RESET: Check if cache is from different month - always force refresh**
@@ -128,6 +136,11 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         }
 
         if (!mounted) return;
+
+        // **DEBUG: Log revenue data to verify API response**
+        AppLogger.log(
+            '💰 CreatorRevenueScreen: Revenue data received - thisMonth: ₹${((revenueData['thisMonth'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2)}, lastMonth: ₹${((revenueData['lastMonth'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2)}');
+
         setState(() {
           _revenueData = revenueData;
           _isLoading = false;
@@ -163,8 +176,21 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         _isLoading = false;
       });
     } catch (e) {
+      AppLogger.log('❌ CreatorRevenueScreen: Error loading revenue data: $e');
+
+      // **FIXED: Better error handling for 401 errors**
+      String errorMessage = 'Error loading revenue data: $e';
+      if (e.toString().contains('401') ||
+          e.toString().contains('Unauthorized')) {
+        errorMessage =
+            'Please sign in again to view your revenue. Your session may have expired.';
+      } else if (e.toString().contains('Failed to fetch user videos')) {
+        errorMessage =
+            'Unable to load your videos. Please check your connection and try again.';
+      }
+
       setState(() {
-        _errorMessage = 'Error loading revenue data: $e';
+        _errorMessage = errorMessage;
         _isLoading = false;
       });
     }
@@ -239,20 +265,25 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   _VideoStats _getVideoStats(VideoModel video) =>
       _videoStatsMap[video.id] ?? const _VideoStats(0.0, 0);
 
-  /// **FIXED: Get total ad VIEWS (not impressions) - for display purposes**
+  /// **FIXED: Get total ad VIEWS for current month (not impressions) - for display purposes**
   Future<int> _getTotalAdImpressionsForVideo(String videoId) async {
     try {
-      // **FIXED: Use VIEWS for display (consistent with revenue calculation)**
-      final bannerViews = await _adImpressionService.getBannerAdViews(videoId);
+      // **FIXED: Get current month views only**
+      final now = DateTime.now();
+      final currentMonth = now.month - 1; // 0-indexed for backend
+      final currentYear = now.year;
 
-      final carouselViews =
-          await _adImpressionService.getCarouselAdViews(videoId);
+      final bannerViews = await _adImpressionService.getBannerAdViewsForMonth(
+          videoId, currentMonth, currentYear);
+
+      final carouselViews = await _adImpressionService
+          .getCarouselAdViewsForMonth(videoId, currentMonth, currentYear);
 
       // Total views = Banner + Carousel
       final totalViews = bannerViews + carouselViews;
 
       AppLogger.log(
-          '📊 Video $videoId: Banner VIEWS: $bannerViews, Carousel VIEWS: $carouselViews, Total VIEWS: $totalViews');
+          '📊 Video $videoId (Current Month ${now.month}/${currentYear}): Banner VIEWS: $bannerViews, Carousel VIEWS: $carouselViews, Total VIEWS: $totalViews');
 
       return totalViews;
     } catch (e) {
@@ -261,11 +292,24 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     }
   }
 
-  /// Calculate total revenue from all videos
+  /// Calculate total revenue from all videos (current month only)
   Future<void> _calculateTotalRevenue(Map<String, dynamic> userData) async {
     try {
+      // **FIXED: Calculate only current month earnings**
+      final now = DateTime.now();
+      final currentMonth = now.month - 1; // 0-indexed for backend
+      final currentYear = now.year;
+
+      AppLogger.log(
+          '💰 CreatorRevenueScreen: Calculating current month (${now.month}/${currentYear}) earnings for ${_userVideos.length} videos');
+
       final statsFutures = _userVideos.map((video) async {
-        final earningsFuture = EarningsService.calculateVideoRevenue(video.id);
+        // **FIXED: Use current month earnings calculation**
+        final earningsFuture = EarningsService.calculateVideoRevenueForMonth(
+          video.id,
+          currentMonth,
+          currentYear,
+        );
         final viewsFuture = _getTotalAdImpressionsForVideo(video.id);
 
         final grossEarnings = await earningsFuture;
@@ -568,14 +612,22 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   Widget _buildRevenueOverviewCard() {
-    // **FIXED: Use current month earnings from backend API (not all-time)**
-    final thisMonth = (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
+    // **FIXED: Use calculated total revenue from individual videos if backend API returns 0**
+    // This ensures consistency - if individual videos show earnings, overview should too
+    final backendThisMonth =
+        (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
     final lastMonth = (_revenueData?['lastMonth'] as num?)?.toDouble() ?? 0.0;
 
+    // **FIX: Use calculated _totalRevenue if backend returns 0 (backend API issue workaround)**
+    // _totalRevenue is the sum of all individual video earnings which are showing correctly
+    final thisMonth = backendThisMonth > 0 ? backendThisMonth : _totalRevenue;
+
     // **FIXED: Calculate gross and platform fee from current month earnings**
-    final creatorRevenue = thisMonth; // Use current month earnings
-    final grossRevenue =
-        thisMonth / AppConfig.creatorRevenueShare; // Reverse calculate gross
+    final creatorRevenue =
+        thisMonth; // Use current month earnings (calculated if backend is 0)
+    final grossRevenue = thisMonth > 0
+        ? thisMonth / AppConfig.creatorRevenueShare
+        : _grossRevenue; // Use calculated gross if thisMonth is from _totalRevenue
     final calculatedPlatformFee =
         (grossRevenue - creatorRevenue).clamp(0.0, double.infinity);
     final platformSharePercent =
@@ -1013,10 +1065,15 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   Widget _buildRevenueAnalyticsCard() {
-    // **FIXED: Use current month earnings from backend API (not all-time)**
-    final thisMonth = (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
-    final thisMonthGross =
-        thisMonth > 0 ? thisMonth / AppConfig.creatorRevenueShare : 0.0;
+    // **FIXED: Use calculated total revenue if backend API returns 0**
+    final backendThisMonth =
+        (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
+    final thisMonth = backendThisMonth > 0 ? backendThisMonth : _totalRevenue;
+    final thisMonthGross = thisMonth > 0
+        ? (backendThisMonth > 0
+            ? thisMonth / AppConfig.creatorRevenueShare
+            : _grossRevenue)
+        : 0.0;
     final thisMonthPlatformFee =
         (thisMonthGross - thisMonth).clamp(0.0, double.infinity);
 
@@ -1110,11 +1167,17 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   Widget _buildRevenueBreakdownCard() {
-    // **FIXED: Use current month earnings from backend API (not all-time)**
-    final thisMonth = (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
-    final creatorRevenue = thisMonth; // Current month creator earnings
-    final grossRevenue =
-        thisMonth > 0 ? thisMonth / AppConfig.creatorRevenueShare : 0.0;
+    // **FIXED: Use calculated total revenue if backend API returns 0**
+    final backendThisMonth =
+        (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
+    final thisMonth = backendThisMonth > 0 ? backendThisMonth : _totalRevenue;
+    final creatorRevenue =
+        thisMonth; // Current month creator earnings (calculated if backend is 0)
+    final grossRevenue = thisMonth > 0
+        ? (backendThisMonth > 0
+            ? thisMonth / AppConfig.creatorRevenueShare
+            : _grossRevenue)
+        : 0.0;
     final platformFee =
         (grossRevenue - creatorRevenue).clamp(0.0, double.infinity);
     final hasRevenue = grossRevenue > 0.0;

@@ -74,6 +74,9 @@ class _ProfileScreenState extends State<ProfileScreen>
       false); // Default to false - show notice until confirmed
   final ValueNotifier<bool> _isCheckingUpiId = ValueNotifier<bool>(false);
 
+  // **NEW: Refresh counter to force ProfileStatsWidget to reload earnings**
+  int _earningsRefreshCounter = 0;
+
   @override
   void initState() {
     super.initState();
@@ -569,6 +572,11 @@ class _ProfileScreenState extends State<ProfileScreen>
       // **FAST: Refresh earnings after manual refresh**
       _refreshEarningsData(forceRefresh: true).catchError((e) {
         // Silent fail
+      });
+
+      // **NEW: Increment refresh counter to force ProfileStatsWidget to reload earnings**
+      setState(() {
+        _earningsRefreshCounter++;
       });
 
       _isLoading.value = false;
@@ -2016,6 +2024,8 @@ class _ProfileScreenState extends State<ProfileScreen>
             userId: widget.userId,
             isVideosLoaded: _stateManager.userVideos.isNotEmpty,
             isFollowersLoaded: true,
+            refreshKey:
+                _earningsRefreshCounter, // **NEW: Pass refresh key to force reload**
             onFollowersTap: () {
               // **SIMPLIFIED: Simple followers tap**
               AppLogger.log('🔄 ProfileScreen: Followers tapped');

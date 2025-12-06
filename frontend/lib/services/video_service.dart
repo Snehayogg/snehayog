@@ -766,13 +766,29 @@ class VideoService {
   /// **Get user videos**
   Future<List<VideoModel>> getUserVideos(String userId) async {
     try {
+      // **FIXED: Validate userId before making request**
+      if (userId.isEmpty) {
+        throw Exception('User ID is empty. Please sign in again.');
+      }
+
       final resolvedBaseUrl = await getBaseUrlWithFallback();
       final url = '$resolvedBaseUrl/api/videos/user/$userId';
+
+      AppLogger.log('📡 VideoService: Fetching videos for userId: $userId');
+      AppLogger.log('📡 VideoService: URL: $url');
+
       final headers = await _getAuthHeaders();
+
+      // **DEBUG: Log token presence (without exposing full token)**
+      final hasToken = headers.containsKey('Authorization') &&
+          headers['Authorization']?.isNotEmpty == true;
+      AppLogger.log('📡 VideoService: Auth token present: $hasToken');
 
       final response = await http
           .get(Uri.parse(url), headers: headers)
           .timeout(const Duration(seconds: 30));
+
+      AppLogger.log('📡 VideoService: Response status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final List<dynamic> videoList = json.decode(response.body);
@@ -841,7 +857,14 @@ class VideoService {
         return videos;
       } else if (response.statusCode == 404) {
         return [];
+      } else if (response.statusCode == 401) {
+        AppLogger.log(
+            '❌ VideoService: 401 Unauthorized - Token may be expired or invalid');
+        throw Exception(
+            'Failed to fetch user videos: 401 - Please sign in again');
       } else {
+        AppLogger.log(
+            '❌ VideoService: Failed to fetch user videos - Status: ${response.statusCode}, Body: ${response.body}');
         throw Exception('Failed to fetch user videos: ${response.statusCode}');
       }
     } catch (e) {

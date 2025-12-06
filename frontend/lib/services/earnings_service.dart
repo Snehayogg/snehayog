@@ -77,6 +77,36 @@ class EarningsService {
     return _applyCreatorShare(gross);
   }
 
+  /// Calculate revenue for a single video for current month only
+  static Future<double> calculateVideoRevenueForMonth(
+    String videoId,
+    int month,
+    int year, {
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    try {
+      final bannerViews = await _adImpressionService
+          .getBannerAdViewsForMonth(videoId, month, year)
+          .timeout(timeout, onTimeout: () => 0);
+
+      final carouselViews = await _adImpressionService
+          .getCarouselAdViewsForMonth(videoId, month, year)
+          .timeout(timeout, onTimeout: () => 0);
+
+      final bannerRevenue = (bannerViews / 1000.0) * AppConfig.bannerCpm;
+      final carouselRevenue = (carouselViews / 1000.0) * AppConfig.fixedCpm;
+      final total = bannerRevenue + carouselRevenue;
+
+      AppLogger.log(
+          '💰 EarningsService: video=$videoId month=$month/$year bannerViews=$bannerViews carouselViews=$carouselViews total=₹${total.toStringAsFixed(2)}');
+      return total;
+    } catch (e) {
+      AppLogger.log(
+          '❌ EarningsService: error calculating revenue for $videoId (month $month/$year): $e');
+      return 0.0;
+    }
+  }
+
   /// Expose helpers so UI layers can convert gross to creator/platform shares
   static double creatorShareFromGross(double grossAmount) =>
       _applyCreatorShare(grossAmount);

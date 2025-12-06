@@ -6,6 +6,7 @@ import Video from '../models/Video.js';
 import CreatorPayout from '../models/CreatorPayout.js';
 import AdImpression from '../models/AdImpression.js';
 import { AD_CONFIG } from '../constants/index.js';
+import RecommendationService from '../services/recommendationService.js';
 
 const router = express.Router();
 
@@ -478,6 +479,19 @@ router.get('/stats', requireAdminDashboardKey, async (req, res) => {
     // Get total videos count
     const totalVideos = await Video.countDocuments({});
     
+    // **NEW: Get daily upload count (videos uploaded today)**
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const dailyUploadCount = await Video.countDocuments({
+      createdAt: {
+        $gte: today,
+        $lt: tomorrow
+      }
+    });
+    
     // Calculate total earnings across all creators
     // Get all creators and their earnings
     const creators = await User.find({}).select('_id').lean();
@@ -513,6 +527,7 @@ router.get('/stats', requireAdminDashboardKey, async (req, res) => {
     res.json({
       success: true,
       totalVideos,
+      dailyUploadCount, // **NEW: Daily upload count**
       totalCreatorEarningsINR: Math.round(totalCreatorEarningsINR * 100) / 100,
       totalGrossRevenueINR: Math.round(totalGrossRevenueINR * 100) / 100,
       bannerImpressions,
@@ -522,6 +537,125 @@ router.get('/stats', requireAdminDashboardKey, async (req, res) => {
   } catch (error) {
     console.error('❌ Error loading platform stats:', error);
     res.status(500).json({ success: false, error: 'Failed to load platform stats' });
+  }
+});
+
+// **NEW: Admin endpoint to get all videos with search/filter**
+router.get('/videos', requireAdminDashboardKey, async (req, res) => {
+  try {
+    const { search, limit = 50, skip = 0 } = req.query;
+    const query = {};
+    
+    if (search && search.trim()) {
+      const searchRegex = new RegExp(search.trim(), 'i');
+      query.$or = [
+        { videoName: searchRegex },
+        { description: searchRegex }
+      ];
+    }
+    
+    const videos = await Video.find(query)
+      .populate('uploader', 'name email googleId')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip(parseInt(skip))
+      .lean();
+    
+    const totalCount = await Video.countDocuments(query);
+    
+    res.json({
+      success: true,
+      videos: videos.map(v => ({
+        _id: v._id,
+        videoName: v.videoName,
+        description: v.description,
+        views: v.views || 0,
+        likes: v.likes || 0,
+        createdAt: v.createdAt,
+        uploader: v.uploader ? {
+          name: v.uploader.name,
+          email: v.uploader.email,
+          googleId: v.uploader.googleId
+        } : null,
+        videoUrl: v.videoUrl,
+        thumbnailUrl: v.thumbnailUrl
+      })),
+      totalCount,
+      limit: parseInt(limit),
+      skip: parseInt(skip)
+    });
+  } catch (error) {
+    console.error('❌ Error loading videos:', error);
+    res.status(500).json({ success: false, error: 'Failed to load videos' });
+  }
+});
+
+// **NEW: Admin endpoint to delete any video**
+router.delete('/videos/:videoId', requireAdminDashboardKey, async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    
+    const video = await Video.findById(videoId);
+    if (!video) {
+      return res.status(404).json({ success: false, error: 'Video not found' });
+    }
+    
+    // Remove video from user's videos array
+    if (video.uploader) {
+      await User.findByIdAndUpdate(video.uploader, {
+        $pull: { videos: videoId }
+      });
+    }
+    
+    // Delete the video
+    await Video.findByIdAndDelete(videoId);
+    
+    console.log(`✅ Admin deleted video: ${videoId} - ${video.videoName}`);
+    
+    res.json({
+      success: true,
+      message: 'Video deleted successfully',
+      deletedVideo: {
+        id: videoId,
+        name: video.videoName
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error deleting video:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete video' });
+  }
+});
+
+// **NEW: Admin endpoint to manually trigger recommendation score recalculation**
+router.post('/recalculate-scores', requireAdminDashboardKey, async (req, res) => {
+  try {
+    const { onlyOutdated = false, maxAgeMinutes = 15, limit = null } = req.body;
+    
+    console.log('🔄 Admin triggered score recalculation:', {
+      onlyOutdated,
+      maxAgeMinutes,
+      limit
+    });
+    
+    const stats = await RecommendationService.recalculateAllScores({
+      batchSize: 100,
+      onlyOutdated: onlyOutdated === true,
+      maxAgeMinutes: parseInt(maxAgeMinutes) || 15,
+      limit: limit ? parseInt(limit) : null
+    });
+    
+    res.json({
+      success: true,
+      message: 'Score recalculation completed',
+      stats
+    });
+  } catch (error) {
+    console.error('❌ Error in admin score recalculation:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to recalculate scores',
+      message: error.message 
+    });
   }
 });
 

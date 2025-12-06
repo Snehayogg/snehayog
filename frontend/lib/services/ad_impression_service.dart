@@ -353,4 +353,80 @@ class AdImpressionService {
       return 0;
     }
   }
+
+  /// **NEW: Get banner ad VIEWS for current month only**
+  Future<int> getBannerAdViewsForMonth(
+      String videoId, int month, int year) async {
+    try {
+      AppLogger.log(
+          '👁️ AdImpressionService: Getting banner ad VIEWS for current month (${month}/${year}) for video: $videoId');
+
+      final userData = await _authService.getUserData();
+      if (userData == null) {
+        AppLogger.log('❌ AdImpressionService: No authenticated user found');
+        return 0;
+      }
+
+      final url =
+          '${AppConfig.baseUrl}/api/ads/views/video/$videoId/banner?month=$month&year=$year';
+      AppLogger.log('👁️ AdImpressionService: API URL: $url');
+
+      final response = await httpClientService.get(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer ${userData['token']}',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final count = data['count'] ?? 0;
+        AppLogger.log(
+            '👁️ AdImpressionService: Banner VIEWS count for ${month}/${year}: $count');
+        return count;
+      } else {
+        AppLogger.log(
+            '❌ AdImpressionService: Failed to get banner views - Status: ${response.statusCode}');
+        return 0;
+      }
+    } catch (e) {
+      AppLogger.log(
+          '❌ AdImpressionService: Error getting banner ad views for month: $e');
+      return 0;
+    }
+  }
+
+  /// **NEW: Get carousel ad VIEWS for current month only**
+  Future<int> getCarouselAdViewsForMonth(
+      String videoId, int month, int year) async {
+    try {
+      AppLogger.log(
+          '👁️ AdImpressionService: Getting carousel ad VIEWS for current month (${month}/${year}) for video: $videoId');
+
+      final userData = await _authService.getUserData();
+      if (userData == null) return 0;
+
+      final url =
+          '${AppConfig.baseUrl}/api/ads/views/video/$videoId/carousel?month=$month&year=$year';
+      final response = await httpClientService.get(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer ${userData['token']}',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final count = data['count'] ?? 0;
+        AppLogger.log(
+            '👁️ AdImpressionService: Carousel VIEWS count for ${month}/${year}: $count');
+        return count;
+      }
+
+      return 0;
+    } catch (e) {
+      AppLogger.log('❌ Error getting carousel ad views for month: $e');
+      return 0;
+    }
+  }
 }

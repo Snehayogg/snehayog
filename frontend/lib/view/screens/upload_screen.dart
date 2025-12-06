@@ -5,6 +5,9 @@ import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'package:vayu/controller/main_controller.dart';
 import 'dart:io';
 import 'dart:async';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
+import 'package:http/http.dart' as http;
 import 'package:vayu/services/video_service.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/logout_service.dart';
@@ -12,6 +15,7 @@ import 'package:vayu/view/screens/create_ad_screen_refactored.dart';
 import 'package:vayu/view/screens/ad_management_screen.dart';
 import 'package:vayu/view/screens/upload_screen/widgets/upload_advanced_settings_section.dart';
 import 'package:vayu/utils/app_logger.dart';
+import 'package:vayu/config/app_config.dart';
 import 'package:video_player/video_player.dart';
 
 class UploadScreen extends StatefulWidget {
@@ -492,6 +496,18 @@ class _UploadScreenState extends State<UploadScreen> {
     final baseName = dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName;
     final cleaned = baseName.replaceAll(RegExp(r'[_\-]+'), ' ').trim();
     return cleaned.isEmpty ? 'Untitled video' : cleaned;
+  }
+
+  /// **NEW: Calculate SHA-256 hash of video file for duplicate detection**
+  Future<String> _calculateFileHash(File file) async {
+    try {
+      final bytes = await file.readAsBytes();
+      final hash = sha256.convert(bytes);
+      return hash.toString();
+    } catch (e) {
+      AppLogger.log('❌ UploadScreen: Error calculating file hash: $e');
+      rethrow;
+    }
   }
 
   /// **UPLOAD VIDEO METHOD** - Handles video upload with progress tracking
@@ -1032,6 +1048,64 @@ class _UploadScreenState extends State<UploadScreen> {
         } catch (e) {
           AppLogger.log('❌ UploadScreen: Error checking video duration: $e');
           // On error, just fall through and allow upload instead of blocking.
+        }
+
+        // **NEW: Calculate video hash and check for duplicates**
+        AppLogger.log(
+            '🔍 UploadScreen: Calculating video hash for duplicate detection...');
+        try {
+          final videoHash = await _calculateFileHash(videoFile);
+          AppLogger.log(
+              '✅ UploadScreen: Video hash calculated: ${videoHash.substring(0, 16)}...');
+
+          // **NEW: Check with backend if this video already exists**
+          final token = userData['token'];
+          if (token != null) {
+            try {
+              final baseUrl = await AppConfig.getBaseUrlWithFallback();
+              final response = await http
+                  .post(
+                Uri.parse('$baseUrl/api/videos/check-duplicate'),
+                headers: {
+                  'Authorization': 'Bearer $token',
+                  'Content-Type': 'application/json',
+                },
+                body: json.encode({'videoHash': videoHash}),
+              )
+                  .timeout(
+                const Duration(seconds: 10),
+                onTimeout: () {
+                  throw TimeoutException('Duplicate check timed out');
+                },
+              );
+
+              if (response.statusCode == 200) {
+                final data = json.decode(response.body);
+                if (data['isDuplicate'] == true) {
+                  final existingVideoName =
+                      data['existingVideoName'] ?? 'Unknown';
+                  _errorMessage.value =
+                      'You have already uploaded this video: "$existingVideoName". Please select a different video.';
+                  _isProcessing.value = false;
+                  AppLogger.log(
+                      '⚠️ UploadScreen: Duplicate video detected: $existingVideoName');
+                  return;
+                }
+                AppLogger.log(
+                    '✅ UploadScreen: No duplicate found, proceeding with upload');
+              } else {
+                AppLogger.log(
+                    '⚠️ UploadScreen: Duplicate check failed with status ${response.statusCode}, continuing anyway');
+                // Continue with upload if check fails
+              }
+            } catch (e) {
+              AppLogger.log('⚠️ UploadScreen: Error checking duplicate: $e');
+              // Continue with upload if check fails (don't block user)
+            }
+          }
+        } catch (e) {
+          AppLogger.log('⚠️ UploadScreen: Error calculating hash: $e');
+          // Continue with upload if hash calculation fails (don't block user)
         }
 
         // **BATCHED UPDATE: Update video selection**

@@ -7,6 +7,7 @@ import Comment from '../models/Comment.js';
 import WatchHistory from '../models/WatchHistory.js';
 import fs from 'fs'; 
 import path from 'path';
+import crypto from 'crypto';
 import { verifyToken } from '../utils/verifytoken.js';
 import redisService from '../services/redisService.js';
 import { VideoCacheKeys, invalidateCache } from '../middleware/cacheMiddleware.js';
@@ -26,6 +27,18 @@ const videoCachingMiddleware = (req, res, next) => {
 
 // Apply response header middleware to all video routes
 router.use(videoCachingMiddleware);
+
+// **NEW: Helper function to calculate video file hash for duplicate detection**
+async function calculateVideoHash(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filePath);
+    
+    stream.on('data', (data) => hash.update(data));
+    stream.on('end', () => resolve(hash.digest('hex')));
+    stream.on('error', (err) => reject(err));
+  });
+}
 
 // **HELPER: Convert likedBy ObjectIds to googleIds for frontend compatibility**
 async function convertLikedByToGoogleIds(likedByArray) {
@@ -122,6 +135,166 @@ router.get('/debug-database', async (req, res) => {
   }
 });
 
+// **NEW: Cache Management Endpoints**
+// GET /api/videos/cache/status - Check cache status
+router.get('/cache/status', async (req, res) => {
+  try {
+    const { userId, deviceId, videoType } = req.query;
+    
+    if (!redisService.getConnectionStatus()) {
+      return res.json({
+        redisConnected: false,
+        message: 'Redis is not connected',
+        cacheKeys: []
+      });
+    }
+
+    const userIdentifier = userId || deviceId;
+    const cachePatterns = {
+      unwatchedIds: userIdentifier 
+        ? `videos:unwatched:ids:${userIdentifier}:${videoType || 'all'}`
+        : null,
+      feed: `videos:feed:${videoType || 'all'}`,
+      allVideos: 'videos:*',
+      allUnwatched: 'videos:unwatched:ids:*'
+    };
+
+    const cacheStatus = {};
+    
+    // Check each cache key
+    for (const [name, pattern] of Object.entries(cachePatterns)) {
+      if (!pattern) continue;
+      
+      try {
+        // Get all keys matching pattern
+        const keys = await redisService.client.keys(pattern);
+        const keysWithTTL = await Promise.all(
+          keys.map(async (key) => {
+            const ttl = await redisService.ttl(key);
+            const exists = await redisService.exists(key);
+            return {
+              key,
+              exists,
+              ttl: ttl > 0 ? `${ttl} seconds` : ttl === -1 ? 'No expiry' : 'Expired',
+              ttlSeconds: ttl
+            };
+          })
+        );
+        
+        cacheStatus[name] = {
+          pattern,
+          keysFound: keys.length,
+          keys: keysWithTTL
+        };
+      } catch (error) {
+        cacheStatus[name] = {
+          pattern,
+          error: error.message
+        };
+      }
+    }
+
+    // Get Redis stats
+    const redisStats = await redisService.getStats();
+
+    res.json({
+      redisConnected: true,
+      redisStats,
+      cacheStatus,
+      timestamp: new Date().toISOString(),
+      message: 'Cache status retrieved successfully'
+    });
+  } catch (error) {
+    console.error('❌ Error checking cache status:', error);
+    res.status(500).json({ 
+      error: 'Failed to check cache status',
+      message: error.message 
+    });
+  }
+});
+
+// POST /api/videos/cache/clear - Clear video cache
+router.post('/cache/clear', async (req, res) => {
+  try {
+    const { pattern, userId, deviceId, videoType, clearAll } = req.body;
+    
+    if (!redisService.getConnectionStatus()) {
+      return res.json({
+        success: false,
+        message: 'Redis is not connected - cannot clear cache'
+      });
+    }
+
+    let clearedCount = 0;
+    const clearedPatterns = [];
+
+    if (clearAll) {
+      // Clear all video-related cache
+      const patterns = [
+        'videos:*',
+        'videos:feed:*',
+        'videos:unwatched:ids:*',
+        'video:*'
+      ];
+      
+      for (const p of patterns) {
+        const count = await redisService.clearPattern(p);
+        clearedCount += count;
+        if (count > 0) {
+          clearedPatterns.push({ pattern: p, keysCleared: count });
+        }
+      }
+    } else if (pattern) {
+      // Clear specific pattern
+      const count = await redisService.clearPattern(pattern);
+      clearedCount += count;
+      clearedPatterns.push({ pattern, keysCleared: count });
+    } else {
+      // Clear based on user/device
+      const userIdentifier = userId || deviceId;
+      const patterns = [];
+      
+      if (userIdentifier) {
+        patterns.push(`videos:unwatched:ids:${userIdentifier}:*`);
+        patterns.push(`videos:feed:user:${userIdentifier}:*`);
+      }
+      
+      if (videoType) {
+        patterns.push(`videos:feed:${videoType}`);
+        patterns.push(`videos:unwatched:ids:*:${videoType}`);
+      }
+      
+      if (patterns.length === 0) {
+        // Default: clear all video cache
+        patterns.push('videos:*');
+        patterns.push('videos:unwatched:ids:*');
+      }
+      
+      for (const p of patterns) {
+        const count = await redisService.clearPattern(p);
+        clearedCount += count;
+        if (count > 0) {
+          clearedPatterns.push({ pattern: p, keysCleared: count });
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Cleared ${clearedCount} cache keys`,
+      clearedCount,
+      clearedPatterns,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Error clearing cache:', error);
+    res.status(500).json({ 
+      error: 'Failed to clear cache',
+      message: error.message 
+    });
+  }
+});
+
 // **NEW: Data validation middleware to ensure consistent types**
 const validateVideoData = (req, res, next) => {
   try {
@@ -182,6 +355,48 @@ const upload = multer({
     } else {
       cb(new Error('Invalid file type. Only video files are allowed.'), false);
     }
+  }
+});
+
+// **NEW: POST /api/videos/check-duplicate - Check if video already exists before upload**
+router.post('/check-duplicate', verifyToken, async (req, res) => {
+  try {
+    const { videoHash } = req.body;
+    const googleId = req.user.googleId;
+    
+    if (!videoHash) {
+      return res.status(400).json({ error: 'Video hash is required' });
+    }
+
+    console.log('🔍 Duplicate check: Checking for video hash:', videoHash);
+    console.log('🔍 Duplicate check: User Google ID:', googleId);
+
+    const user = await User.findOne({ googleId });
+    if (!user) {
+      console.log('❌ Duplicate check: User not found');
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const existingVideo = await Video.findOne({
+      uploader: user._id,
+      videoHash: videoHash
+    });
+
+    if (existingVideo) {
+      console.log('⚠️ Duplicate check: Duplicate video found:', existingVideo.videoName);
+      return res.json({
+        isDuplicate: true,
+        existingVideoId: existingVideo._id,
+        existingVideoName: existingVideo.videoName,
+        message: 'You have already uploaded this video.'
+      });
+    }
+
+    console.log('✅ Duplicate check: No duplicate found');
+    return res.json({ isDuplicate: false });
+  } catch (error) {
+    console.error('❌ Error checking duplicate:', error);
+    res.status(500).json({ error: 'Failed to check duplicate' });
   }
 });
 
@@ -263,6 +478,38 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
     }
     console.log('✅ Upload: User found:', user.name);
 
+    // **NEW: Calculate video hash for duplicate detection**
+    console.log('🔍 Upload: Calculating video hash for duplicate detection...');
+    let videoHash;
+    try {
+      videoHash = await calculateVideoHash(req.file.path);
+      console.log('✅ Upload: Video hash calculated:', videoHash.substring(0, 16) + '...');
+    } catch (hashError) {
+      console.error('❌ Upload: Error calculating video hash:', hashError);
+      fs.unlinkSync(req.file.path);
+      return res.status(500).json({ error: 'Failed to calculate video hash' });
+    }
+
+    // **NEW: Check if same video already exists for this user**
+    const existingVideo = await Video.findOne({
+      uploader: user._id,
+      videoHash: videoHash
+    });
+
+    if (existingVideo) {
+      console.log('⚠️ Upload: Duplicate video detected!');
+      console.log('   Existing video:', existingVideo.videoName, '(ID:', existingVideo._id + ')');
+      // Delete uploaded file
+      fs.unlinkSync(req.file.path);
+      return res.status(409).json({
+        error: 'Duplicate video detected',
+        message: 'You have already uploaded this video.',
+        existingVideoId: existingVideo._id,
+        existingVideoName: existingVideo.videoName
+      });
+    }
+    console.log('✅ Upload: No duplicate found, proceeding with upload');
+
     // Video processing uses Cloudflare Stream (FREE transcoding) with HLS fallback
     console.log('✅ Upload: Video processing service ready');
 
@@ -308,6 +555,7 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
       processingStatus: 'pending',
       processingProgress: 0,
       isHLSEncoded: false, // Will be updated to true after HLS processing
+      videoHash: videoHash, // **NEW: Store video hash for duplicate detection**
       likes: 0, views: 0, shares: 0, likedBy: [], comments: [],
       uploadedAt: new Date()
     });
@@ -478,13 +726,14 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
     });
 
     // **IMPROVED: Get videos directly from Video collection using uploader field**
+    // **UPDATED: Sort by recommendation score (finalScore) instead of createdAt**
     const videos = await Video.find({ 
       uploader: user._id,
       videoUrl: { $exists: true, $ne: null, $ne: '' }, // Ensure video URL exists and is not empty
       processingStatus: { $nin: ['failed', 'error'] } // Only exclude explicitly failed videos
     })
       .populate('uploader', 'name profilePic googleId')
-      .sort({ createdAt: -1 }); // Latest videos first
+      .sort({ finalScore: -1, createdAt: -1 }); // Sort by recommendation score first, then by creation date
 
     // **NEW: Filter out videos with invalid uploader references**
     const validVideos = videos.filter(video => {
@@ -667,19 +916,13 @@ router.get('/', async (req, res) => {
       ? `videos:unwatched:ids:${userIdentifier}:${videoType || 'all'}`
       : null;
     
-    // **NEW: Try to get unwatched video IDs from cache (not shuffled results)**
-    let cachedUnwatchedIds = null;
-    if (redisService.getConnectionStatus() && unwatchedCacheKey) {
-      cachedUnwatchedIds = await redisService.get(unwatchedCacheKey);
-      if (cachedUnwatchedIds) {
-        console.log(`✅ Cache HIT for unwatched IDs: ${unwatchedCacheKey}`);
-      } else {
-        console.log(`❌ Cache MISS for unwatched IDs: ${unwatchedCacheKey}`);
-      }
-    }
+    // **FIXED: DISABLE CACHE - Always fetch fresh unwatched videos for variety**
+    // Cache was causing same videos to appear repeatedly
+    // Now we always fetch fresh unwatched videos to ensure variety
+    console.log('🔄 Always fetching fresh unwatched videos (cache disabled for variety)');
     
     // Build base query filter
-    // **FIX: Show ALL videos with valid URLs regardless of processing status, size, duration, etc.**
+    // **FIXED: Only show completed videos with valid URLs that can actually play**
     const baseQueryFilter = {
       uploader: { $exists: true, $ne: null },
       videoUrl: { 
@@ -688,9 +931,8 @@ router.get('/', async (req, res) => {
         $ne: '',
         $not: /^uploads[\\\/]/,
         $regex: /^https?:\/\//
-      }
-      // **REMOVED: processingStatus filter - show all videos with valid URLs**
-      // Videos will be visible regardless of processing status, size, duration, aspect ratio
+      },
+      processingStatus: 'completed' // **FIXED: Only show completed videos that can actually play**
     };
     
     // Add videoType filter if specified
@@ -702,15 +944,30 @@ router.get('/', async (req, res) => {
     let unwatchedVideos = [];
     let watchedVideos = [];
     let finalVideos = [];
+    let unwatchedVideoIds = []; // **FIXED: Declare outside if block for hasMore calculation**
     
-    // **IMPROVED: Fisher-Yates shuffle algorithm for proper randomization**
-    function shuffleArray(array) {
-      const shuffled = [...array];
-      for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
-      return shuffled;
+    // **NEW: Simple sort by finalScore - uses new balanced recommendation system**
+    // Videos are already sorted by finalScore from database query
+    // Just return the top N videos based on recommendation score
+    function getTopVideosByScore(videos, limit) {
+      if (videos.length === 0) return [];
+      
+      // Sort by finalScore (descending), then by createdAt (descending) as tiebreaker
+      const sorted = [...videos].sort((a, b) => {
+        const scoreA = a.finalScore || 0;
+        const scoreB = b.finalScore || 0;
+        
+        if (scoreB !== scoreA) {
+          return scoreB - scoreA; // Higher score first
+        }
+        
+        // Tiebreaker: newer videos first
+        const dateA = new Date(a.createdAt || a.uploadedAt || 0).getTime();
+        const dateB = new Date(b.createdAt || b.uploadedAt || 0).getTime();
+        return dateB - dateA;
+      });
+      
+      return sorted.slice(0, limit);
     }
     
     // **BACKEND-FIRST: Personalized feed for ALL users (authenticated + anonymous)**
@@ -722,14 +979,32 @@ router.get('/', async (req, res) => {
       const watchedVideoIds = await WatchHistory.getUserWatchedVideoIds(userIdentifier, null);
       console.log(`📊 User has watched ${watchedVideoIds.length} videos (all time)`);
       
-      // Step 2: Get unwatched video IDs (use cache if available)
-      let unwatchedVideoIds = cachedUnwatchedIds;
-      
-      if (!unwatchedVideoIds) {
-        // Get unwatched video IDs from database
-        // PERFORMANCE FIX: Limit query to reasonable number instead of loading all IDs
-        // This prevents memory issues and slow shuffling with thousands of videos
-        const maxIdsToFetch = Math.max(limitNum * 10, 200); // At least 10x limit, minimum 200 for variety
+      // Step 2: ALWAYS fetch fresh unwatched video IDs (cache disabled for variety)
+      // **FIXED: Always fetch fresh - no cache check**
+      // This ensures different videos every time, preventing loops
+      {
+        // **SCALABLE: Dynamic pool size based on total videos for 5000+ videos**
+        // First, get total video count to determine optimal pool size
+        const totalVideoCount = await Video.countDocuments(baseQueryFilter);
+        console.log(`📊 Total videos in database: ${totalVideoCount}`);
+        
+        // **SCALABLE: Adaptive pool size calculation**
+        // For 5000+ videos: fetch more IDs to ensure variety
+        // Formula: min(50x limit, 30% of total, max 5000)
+        // This ensures:
+        // - Small libraries (<1000): fetch 50x limit (1000 IDs for limit=20)
+        // - Medium libraries (1000-5000): fetch 30% of total
+        // - Large libraries (5000+): fetch max 5000 IDs (still manageable)
+        const adaptiveMultiplier = totalVideoCount < 1000 ? 50 : 
+                                   totalVideoCount < 5000 ? Math.ceil(totalVideoCount * 0.3 / limitNum) : 
+                                   Math.ceil(5000 / limitNum);
+        const maxIdsToFetch = Math.min(
+          limitNum * adaptiveMultiplier, 
+          Math.ceil(totalVideoCount * 0.3), // Max 30% of total videos
+          5000 // Hard cap for memory safety
+        );
+        
+        console.log(`📊 Adaptive pool size: ${maxIdsToFetch} IDs (${adaptiveMultiplier}x limit, ${((maxIdsToFetch/totalVideoCount)*100).toFixed(1)}% of total)`);
         
         // PERFORMANCE: $nin query is efficient for MongoDB
         // If watchedVideoIds is very large (>1000), MongoDB handles it efficiently with indexes
@@ -738,22 +1013,97 @@ router.get('/', async (req, res) => {
           ...(watchedVideoIds.length > 0 && { _id: { $nin: watchedVideoIds } }) // Exclude watched videos if any
         };
         
+<<<<<<< Updated upstream
         // **PRIORITY: Sort by createdAt DESC to prioritize recent videos**
         const unwatchedVideosRaw = await Video.find(unwatchedQuery)
           .select('_id createdAt')
           .sort({ createdAt: -1 }) // **NEW: Recent videos first**
           .limit(maxIdsToFetch) // Limit the query to prevent loading thousands of IDs
+=======
+        // **FIXED: Fetch more videos and shuffle to ensure variety**
+        // Fetch 2x more IDs than needed, then shuffle to break deterministic order
+        const fetchLimit = Math.min(maxIdsToFetch * 2, totalVideoCount);
+        
+        const unwatchedVideosRaw = await Video.find(unwatchedQuery)
+          .select('_id finalScore uploader')
+          .sort({ finalScore: -1, createdAt: -1 }) // Sort by recommendation score first
+          .limit(fetchLimit) // Fetch more for variety
+          .populate('uploader', '_id googleId')
+>>>>>>> Stashed changes
           .lean();
         
-        unwatchedVideoIds = unwatchedVideosRaw.map(v => v._id);
+        // **NEW: Shuffle the IDs to break deterministic order**
+        // This ensures different videos show even with same scores
+        const allIds = unwatchedVideosRaw.map(v => v._id);
         
-        // Cache unwatched video IDs for 2 minutes (reduced from 5 min for faster updates)
-        // This ensures newly watched videos appear in feed sooner
-        if (redisService.getConnectionStatus() && unwatchedCacheKey) {
-          await redisService.set(unwatchedCacheKey, unwatchedVideoIds, 120);
-          console.log(`✅ Cached ${unwatchedVideoIds.length} unwatched video IDs (limited to ${maxIdsToFetch}, TTL: 2min)`);
+        // Fisher-Yates shuffle for proper randomization
+        for (let i = allIds.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [allIds[i], allIds[j]] = [allIds[j], allIds[i]];
         }
+        
+        // Take first maxIdsToFetch after shuffling
+        unwatchedVideoIds = allIds.slice(0, maxIdsToFetch);
+        
+        console.log(`🎲 Shuffled ${allIds.length} IDs, selected top ${unwatchedVideoIds.length} for variety`);
+        
+        // **DEBUG: Check variety in fetched unwatched video IDs**
+        if (unwatchedVideosRaw.length > 0) {
+          const uniqueUploadersInPool = new Set(
+            unwatchedVideosRaw
+              .map(v => v.uploader?._id?.toString() || v.uploader?.googleId || 'unknown')
+              .filter(id => id !== 'unknown')
+          );
+          console.log(`📊 Unwatched pool variety: ${uniqueUploadersInPool.size} unique uploaders in ${unwatchedVideosRaw.length} videos`);
+          
+          if (userId) {
+            const currentUser = await User.findOne({ googleId: userId }).select('_id').lean();
+            if (currentUser) {
+              const ownVideosInPool = unwatchedVideosRaw.filter(
+                v => v.uploader?._id?.toString() === currentUser._id.toString()
+              ).length;
+              console.log(`📊 Own videos in unwatched pool: ${ownVideosInPool} out of ${unwatchedVideosRaw.length}`);
+              
+              // **FIX: If pool has only own videos, clear cache and log warning**
+              if (ownVideosInPool === unwatchedVideosRaw.length && unwatchedVideosRaw.length > 0) {
+                console.log('⚠️ WARNING: Unwatched pool contains only user\'s own videos! This indicates a problem with video variety.');
+                if (redisService.getConnectionStatus() && unwatchedCacheKey) {
+                  await redisService.del(unwatchedCacheKey);
+                  console.log('🧹 Cleared unwatched video IDs cache to force fresh fetch');
+                }
+              }
+            }
+          }
+        }
+        
+        // **FIXED: CACHE DISABLED - Always fetch fresh for maximum variety**
+        // Cache was causing same videos to appear repeatedly
+        // Now we skip caching to ensure fresh videos every time
+        console.log(`✅ Fetched ${unwatchedVideoIds.length} fresh unwatched video IDs (cache disabled for variety)`);
+      }
+      
+      // Step 3: Fetch unwatched videos with full metadata for diversity algorithm
+      // **SCALABLE: Adaptive pool size for diversity algorithm with pagination support**
+      // For large libraries (5000+), use larger pool for better variety
+      // Use pagination offset to get different videos on each page
+      const totalVideoCount = await Video.countDocuments(baseQueryFilter);
+      const adaptivePoolMultiplier = totalVideoCount > 2000 ? 20 : 15; // Larger pool for big libraries
+      const poolSize = Math.min(unwatchedVideoIds.length, limitNum * adaptivePoolMultiplier);
+      
+      // **FIXED: Better pagination with fresh fetch for each page**
+      // For page > 1, we need to fetch fresh unwatched videos excluding already watched ones
+      // This ensures different videos on each page
+      const paginationOffsetForPool = (pageNum - 1) * limitNum;
+      
+      // **FIXED: For pagination, fetch fresh unwatched videos excluding already shown**
+      // Instead of slicing cached array, fetch fresh videos for this page
+      let availableIds = [];
+      
+      if (pageNum === 1) {
+        // First page: use the already fetched unwatchedVideoIds
+        availableIds = unwatchedVideoIds.slice(0, poolSize);
       } else {
+<<<<<<< Updated upstream
         console.log(`✅ Using ${unwatchedVideoIds.length} cached unwatched video IDs`);
       }
       
@@ -778,87 +1128,242 @@ router.get('/', async (req, res) => {
       // Step 4: Fetch unwatched videos in shuffled order
       if (limitedUnwatchedIds.length > 0) {
         unwatchedVideos = await Video.find({
+=======
+        // Subsequent pages: fetch fresh unwatched videos with pagination
+        // This ensures we get different videos, not same cached ones
+        const unwatchedQuery = {
+>>>>>>> Stashed changes
           ...baseQueryFilter,
-          _id: { $in: limitedUnwatchedIds }
-        })
-        .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded')
-        .populate('uploader', 'name profilePic googleId')
-        .populate('comments.user', 'name profilePic googleId')
-        .lean();
-        
-        // Maintain shuffled order from IDs
-        const videoMap = new Map(unwatchedVideos.map(v => [v._id.toString(), v]));
-        unwatchedVideos = limitedUnwatchedIds
-          .map(id => videoMap.get(id.toString()))
-          .filter(Boolean);
-      }
-      
-      console.log(`✅ Found ${unwatchedVideos.length} unwatched videos (shuffled)`);
-      
-      // Step 5: If not enough unwatched videos, add watched ones as fallback
-      if (unwatchedVideos.length < limitNum && watchedVideoIds.length > 0) {
-        console.log(`⚠️ Not enough unwatched videos (${unwatchedVideos.length}/${limitNum}), adding watched videos as fallback`);
-        
-        const watchedQuery = {
-          ...baseQueryFilter,
-          _id: { $in: watchedVideoIds }
+          ...(watchedVideoIds.length > 0 && { _id: { $nin: watchedVideoIds } })
         };
         
-        // Get watched videos sorted by oldest watched first (to show videos watched long ago)
-        const watchedHistory = await WatchHistory.find({
-          userId: userIdentifier, // Use userIdentifier (works for both authenticated and anonymous)
-          videoId: { $in: watchedVideoIds }
-        })
-        .sort({ lastWatchedAt: 1 }) // Oldest first
-        .limit(limitNum - unwatchedVideos.length)
-        .select('videoId lastWatchedAt')
-        .lean();
+        const freshUnwatched = await Video.find(unwatchedQuery)
+          .select('_id finalScore')
+          .sort({ finalScore: -1, createdAt: -1 })
+          .skip(paginationOffsetForPool)
+          .limit(poolSize)
+          .lean();
         
-        const oldestWatchedVideoIds = watchedHistory.map(h => h.videoId);
-        
-        watchedVideos = await Video.find({
-          ...baseQueryFilter,
-          _id: { $in: oldestWatchedVideoIds }
-        })
-        .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded')
-        .populate('uploader', 'name profilePic googleId')
-        .populate('comments.user', 'name profilePic googleId')
-        .lean();
-        
-        // Sort watched videos to match the order from watch history
-        watchedVideos.sort((a, b) => {
-          const aIndex = oldestWatchedVideoIds.indexOf(a._id);
-          const bIndex = oldestWatchedVideoIds.indexOf(b._id);
-          return aIndex - bIndex;
-        });
-        
-        console.log(`✅ Added ${watchedVideos.length} watched videos as fallback`);
+        availableIds = freshUnwatched.map(v => v._id);
+        console.log(`📄 Page ${pageNum}: Fetched ${availableIds.length} fresh unwatched video IDs (offset: ${paginationOffsetForPool})`);
       }
       
-      // Step 5: Combine unwatched and watched videos (unwatched already shuffled)
-      // Shuffle watched videos separately using Fisher-Yates
-      const shuffledWatched = shuffleArray([...watchedVideos]);
-      finalVideos = [...unwatchedVideos, ...shuffledWatched].slice(0, limitNum);
+      const idsToUse = Math.min(poolSize, availableIds.length);
       
-      console.log(`✅ Final videos: ${unwatchedVideos.length} unwatched + ${shuffledWatched.length} watched = ${finalVideos.length} total`);
+      console.log(`📊 Fetching top ${idsToUse} unwatched videos by recommendation score (offset: ${paginationOffsetForPool})`);
+      
+      // Step 4: Fetch unwatched videos sorted by finalScore
+      if (availableIds.length > 0) {
+        unwatchedVideos = await Video.find({
+          ...baseQueryFilter,
+          _id: { $in: availableIds }
+        })
+        .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded category tags keywords createdAt finalScore')
+        .populate('uploader', 'name profilePic googleId')
+        .populate('comments.user', 'name profilePic googleId')
+        .sort({ finalScore: -1, createdAt: -1 }) // Sort by recommendation score
+        .limit(idsToUse)
+        .lean();
+      }
+      
+      console.log(`✅ Found ${unwatchedVideos.length} unwatched videos sorted by recommendation score`);
+      
+      // **DEBUG: Check variety in unwatched videos**
+      if (unwatchedVideos.length > 0) {
+        const uniqueUploaders = new Set(unwatchedVideos.map(v => v.uploader?._id?.toString() || 'unknown'));
+        console.log(`📊 Unwatched videos variety: ${uniqueUploaders.size} unique uploaders out of ${unwatchedVideos.length} videos`);
+        if (uniqueUploaders.size === 1 && userId) {
+          console.log('⚠️ WARNING: Only one uploader found in unwatched videos - possible cache issue or limited content');
+        }
+      }
+      
+      // **FIXED: More aggressive randomization to prevent same videos**
+      // Use 30% randomness instead of 10% for better variety
+      if (unwatchedVideos.length > 0) {
+        unwatchedVideos = unwatchedVideos.sort((a, b) => {
+          const scoreA = a.finalScore || 0;
+          const scoreB = b.finalScore || 0;
+          
+          // **INCREASED: 30% randomness for better variety (was 10%)**
+          const randomFactor = (Math.random() - 0.5) * 0.3;
+          const adjustedScoreA = scoreA * (1 + randomFactor);
+          const adjustedScoreB = scoreB * (1 - randomFactor);
+          
+          // Primary sort: adjusted score (70% deterministic, 30% random)
+          if (Math.abs(adjustedScoreB - adjustedScoreA) > 0.001) {
+            return adjustedScoreB - adjustedScoreA;
+          }
+          
+          // Tiebreaker: add more randomness
+          const tiebreakerRandom = Math.random() - 0.5;
+          if (Math.abs(tiebreakerRandom) > 0.1) {
+            return tiebreakerRandom;
+          }
+          
+          // Final tiebreaker: newer videos first
+          const dateA = new Date(a.createdAt || a.uploadedAt || 0).getTime();
+          const dateB = new Date(b.createdAt || b.uploadedAt || 0).getTime();
+          return dateB - dateA;
+        });
+      }
+      
+      // Step 4.5: Get top videos by score with variety enforcement
+      let topUnwatchedVideos = getTopVideosByScore(unwatchedVideos, limitNum * 2); // Get more for variety filtering
+      
+      // **NEW: Enforce variety - limit own videos to max 30% of feed**
+      if (topUnwatchedVideos.length > 0 && userId) {
+        try {
+          const currentUser = await User.findOne({ googleId: userId }).select('_id').lean();
+          if (currentUser) {
+            const ownVideos = topUnwatchedVideos.filter(
+              v => v.uploader?._id?.toString() === currentUser._id.toString()
+            );
+            const otherVideos = topUnwatchedVideos.filter(
+              v => v.uploader?._id?.toString() !== currentUser._id.toString()
+            );
+            
+            // Limit own videos to max 30% of feed (minimum 1 if available)
+            const maxOwnVideos = Math.max(1, Math.floor(limitNum * 0.3));
+            if (ownVideos.length > maxOwnVideos) {
+              console.log(`⚠️ Limiting own videos: ${ownVideos.length} -> ${maxOwnVideos} (30% max for variety)`);
+              const limitedOwnVideos = ownVideos.slice(0, maxOwnVideos);
+              // Mix: 30% own + 70% others, sorted by score
+              topUnwatchedVideos = [...limitedOwnVideos, ...otherVideos]
+                .sort((a, b) => {
+                  const scoreA = a.finalScore || 0;
+                  const scoreB = b.finalScore || 0;
+                  if (Math.abs(scoreB - scoreA) > 0.001) return scoreB - scoreA;
+                  const dateA = new Date(a.createdAt || a.uploadedAt || 0).getTime();
+                  const dateB = new Date(b.createdAt || b.uploadedAt || 0).getTime();
+                  return dateB - dateA;
+                })
+                .slice(0, limitNum);
+            } else {
+              // If own videos are already within limit, just take top N
+              topUnwatchedVideos = topUnwatchedVideos.slice(0, limitNum);
+            }
+          }
+        } catch (userError) {
+          console.log('⚠️ Could not check user for variety enforcement:', userError.message);
+          topUnwatchedVideos = topUnwatchedVideos.slice(0, limitNum);
+        }
+      } else {
+        topUnwatchedVideos = topUnwatchedVideos.slice(0, limitNum);
+      }
+      
+      // **FIXED: REMOVED watched videos fallback - only use unwatched videos**
+      // This ensures we always show fresh, unwatched content
+      // If not enough unwatched videos, return what we have (don't add watched videos)
+      if (topUnwatchedVideos.length < limitNum) {
+        console.log(`⚠️ Only ${topUnwatchedVideos.length} unwatched videos available (requested ${limitNum}) - returning unwatched only for variety`);
+        // Don't add watched videos - keep feed fresh with only unwatched content
+      }
+      
+      watchedVideos = []; // Always empty - only use unwatched videos
+      
+      // Step 6: Combine unwatched and watched videos with randomization
+      const combinedVideos = [...topUnwatchedVideos, ...watchedVideos];
+      
+      // **FIXED: More aggressive randomization to prevent same order every time**
+      finalVideos = combinedVideos
+        .sort((a, b) => {
+          const scoreA = a.finalScore || 0;
+          const scoreB = b.finalScore || 0;
+          
+          // **INCREASED: 30% randomness for better variety (was 10%)**
+          const randomFactor = (Math.random() - 0.5) * 0.3;
+          const adjustedScoreA = scoreA * (1 + randomFactor);
+          const adjustedScoreB = scoreB * (1 - randomFactor);
+          
+          // Primary sort: adjusted score (70% deterministic, 30% random)
+          if (Math.abs(adjustedScoreB - adjustedScoreA) > 0.001) {
+            return adjustedScoreB - adjustedScoreA;
+          }
+          
+          // Tiebreaker: add more randomness
+          const tiebreakerRandom = Math.random() - 0.5;
+          if (Math.abs(tiebreakerRandom) > 0.1) {
+            return tiebreakerRandom;
+          }
+          
+          // Final tiebreaker: newer videos first
+          const dateA = new Date(a.createdAt || a.uploadedAt || 0).getTime();
+          const dateB = new Date(b.createdAt || b.uploadedAt || 0).getTime();
+          return dateB - dateA;
+        })
+        .slice(0, limitNum);
+      
+      console.log(`✅ Final videos (sorted by recommendation score): ${topUnwatchedVideos.length} unwatched + ${watchedVideos.length} watched = ${finalVideos.length} total`);
+      
+      // **DEBUG: Check final variety**
+      if (finalVideos.length > 0) {
+        const finalUniqueUploaders = new Set(finalVideos.map(v => v.uploader?._id?.toString() || v.uploader?.googleId || 'unknown'));
+        const currentUserGoogleId = userId || null;
+        const ownVideosCount = currentUserGoogleId 
+          ? finalVideos.filter(v => v.uploader?.googleId === currentUserGoogleId).length 
+          : 0;
+        console.log(`📊 Final feed variety: ${finalUniqueUploaders.size} unique uploaders, ${ownVideosCount} own videos out of ${finalVideos.length} total`);
+        
+        if (ownVideosCount === finalVideos.length && finalVideos.length > 0) {
+          console.log('⚠️ WARNING: Feed contains only user\'s own videos! Clearing cache and retrying...');
+          // Clear cache to force fresh fetch
+          if (redisService.getConnectionStatus() && unwatchedCacheKey) {
+            await redisService.del(unwatchedCacheKey);
+            console.log('🧹 Cleared unwatched video IDs cache');
+          }
+        }
+      }
       
     } else {
-      // **BACKEND-FIRST: Even without userIdentifier, use regular feed**
-      // This handles edge cases where deviceId is not provided
-      console.log('📹 Using regular feed (no user identifier)');
+      // **NEW: Regular feed sorted by recommendation score with randomization**
+      console.log('📹 Using regular feed (no user identifier) - sorted by recommendation score with randomization');
       
       const skip = (pageNum - 1) * limitNum;
       
+      // Fetch more videos for randomization
+      const fetchLimit = limitNum * 3; // Fetch 3x for variety
+      
       const videos = await Video.find(baseQueryFilter)
-        .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded')
+        .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded category tags keywords createdAt finalScore')
         .populate('uploader', 'name profilePic googleId')
         .populate('comments.user', 'name profilePic googleId')
-        .sort({ createdAt: -1 })
+        .sort({ finalScore: -1, createdAt: -1 }) // Sort by recommendation score first, then by creation date
         .skip(skip)
-        .limit(limitNum)
+        .limit(fetchLimit)
         .lean();
       
-      finalVideos = videos;
+      // **FIXED: More aggressive randomization to prevent same videos always showing**
+      if (videos.length > 0) {
+        const randomizedVideos = videos.sort((a, b) => {
+          const scoreA = a.finalScore || 0;
+          const scoreB = b.finalScore || 0;
+          
+          // **INCREASED: 30% randomness for better variety (was 10%)**
+          const randomFactor = (Math.random() - 0.5) * 0.3;
+          const adjustedScoreA = scoreA * (1 + randomFactor);
+          const adjustedScoreB = scoreB * (1 - randomFactor);
+          
+          // Primary sort: adjusted score (70% deterministic, 30% random)
+          if (Math.abs(adjustedScoreB - adjustedScoreA) > 0.001) {
+            return adjustedScoreB - adjustedScoreA;
+          }
+          
+          // Tiebreaker: add more randomness
+          const tiebreakerRandom = Math.random() - 0.5;
+          if (Math.abs(tiebreakerRandom) > 0.1) {
+            return tiebreakerRandom;
+          }
+          
+          // Final tiebreaker: newer videos first
+          const dateA = new Date(a.createdAt || a.uploadedAt || 0).getTime();
+          const dateB = new Date(b.createdAt || b.uploadedAt || 0).getTime();
+          return dateB - dateA;
+        });
+        
+        finalVideos = randomizedVideos.slice(0, limitNum);
+      } else {
+        finalVideos = videos;
+      }
     }
 
     // **Filter out videos with invalid uploader references**
@@ -924,11 +1429,12 @@ router.get('/', async (req, res) => {
     }
     
     const isPersonalizedFeed = !!userIdentifier;
+    const paginationOffset = isPersonalizedFeed ? (pageNum - 1) * limitNum : 0; // Calculate offset for personalized feed
 
-    const response = {
+      const response = {
       videos: transformedVideos,
       hasMore: isPersonalizedFeed 
-        ? transformedVideos.length >= limitNum // For personalized feed, check if we got enough
+        ? (transformedVideos.length >= limitNum && (unwatchedVideoIds.length > paginationOffset + limitNum || totalVideos > pageNum * limitNum)) // **SCALABLE: Check if more unwatched videos exist based on pagination offset**
         : (pageNum * limitNum) < totalVideos, // For regular feed, use pagination
       total: totalVideos,
       currentPage: pageNum,
@@ -1848,7 +2354,7 @@ router.delete('/:videoId/comments/:commentId', async (req, res) => {
 router.post('/:id/increment-view', async (req, res) => {
   try {
     const videoId = req.params.id;
-    const { userId, duration = 4 } = req.body;
+    const { userId, duration = 2 } = req.body; // **CHANGED: Reduced from 4 to 2 seconds for more lenient view counting**
 
     console.log('🎯 View increment request:', {
       videoId,
@@ -2199,15 +2705,16 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
     console.log('✅ User found:', user.name);
     
     // Get user's videos with population
+    // **UPDATED: Sort by recommendation score (finalScore) instead of createdAt**
     const videos = await Video.find({ 
       uploader: user._id,
       videoUrl: { $exists: true, $ne: null, $ne: '' }, // Ensure video URL exists and is not empty
       processingStatus: { $nin: ['failed', 'error'] } // Only exclude explicitly failed videos
     })
-      .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded')
+      .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded finalScore')
       .populate('uploader', 'name profilePic googleId')
       .populate('comments.user', 'name profilePic googleId')
-      .sort({ createdAt: -1 })
+      .sort({ finalScore: -1, createdAt: -1 }) // Sort by recommendation score first, then by creation date
       .lean();
     
     // **NEW: Filter out videos with invalid uploader references**

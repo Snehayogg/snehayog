@@ -1208,16 +1208,16 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               color: Colors.orange.shade700,
-              child: Row(
+              child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
+                   Icon(
                     Icons.wifi_off,
                     color: Colors.white,
                     size: 20,
                   ),
-                  const SizedBox(width: 8),
-                  const Text(
+                   SizedBox(width: 8),
+                   Text(
                     'No internet connection',
                     style: TextStyle(
                       color: Colors.white,

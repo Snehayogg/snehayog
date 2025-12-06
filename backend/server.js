@@ -38,6 +38,7 @@ import automatedPayoutService from './services/automatedPayoutService.js';
 import adCleanupService from './services/adCleanupService.js';
 import redisService from './services/redisService.js';
 import monthlyNotificationCron from './services/monthlyNotificationCron.js';
+import recommendationScoreCron from './services/recommendationScoreCron.js';
 
 // Import middleware
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
@@ -436,8 +437,9 @@ const gracefulShutdown = async (signal) => {
   console.log(`\n🛑 Received ${signal}, shutting down gracefully...`);
   
   try {
-    // Stop monthly notification cron job
+    // Stop cron jobs
     monthlyNotificationCron.stop();
+    recommendationScoreCron.stop();
     
     // Disconnect Redis
     if (redisService.getConnectionStatus()) {
@@ -490,6 +492,9 @@ const startServer = async () => {
           
           // Start monthly notification cron job (runs on 1st of every month at 9:00 AM)
           monthlyNotificationCron.start();
+          
+          // Start recommendation score recalculation cron job (runs every 15 minutes)
+          recommendationScoreCron.start();
         })
         .catch((error) => {
           console.error('❌ Database connection failed:', error.message);

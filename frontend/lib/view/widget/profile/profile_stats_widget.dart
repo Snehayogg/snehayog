@@ -17,6 +17,7 @@ class ProfileStatsWidget extends StatefulWidget {
   final bool isFollowersLoaded;
   final VoidCallback? onFollowersTap;
   final VoidCallback? onEarningsTap;
+  final int? refreshKey; // **NEW: Key to force refresh when profile refreshes**
 
   const ProfileStatsWidget({
     super.key,
@@ -26,6 +27,7 @@ class ProfileStatsWidget extends StatefulWidget {
     required this.isFollowersLoaded,
     this.onFollowersTap,
     this.onEarningsTap,
+    this.refreshKey, // **NEW: Optional refresh key**
   });
 
   @override
@@ -53,6 +55,14 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
       oldWidget.stateManager.removeListener(_onStateManagerChanged);
       _attachStateManagerListener();
     }
+
+    // **NEW: Reload earnings if refresh key changed (profile was refreshed)**
+    if (widget.refreshKey != null &&
+        widget.refreshKey != oldWidget.refreshKey) {
+      AppLogger.log(
+          '🔄 ProfileStatsWidget: Refresh key changed, reloading earnings...');
+      _loadEarnings(forceRefresh: true);
+    }
   }
 
   void _attachStateManagerListener() {
@@ -79,7 +89,7 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
 
   /// **FIXED: Load monthly earnings from backend API (not all-time)**
   /// **ENHANCED: Uses backend API which calculates current month earnings correctly**
-  Future<void> _loadEarnings() async {
+  Future<void> _loadEarnings({bool forceRefresh = false}) async {
     // **FIXED: Don't show 0 if videos are still loading**
     if (widget.stateManager.isVideosLoading) {
       // Keep loading state, don't set to 0 yet
@@ -174,8 +184,18 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
 
       // **FIX: Use backend API which returns current month earnings**
       final baseUrl = await AppConfig.getBaseUrlWithFallback();
+
+      // **FIX: Add timestamp to prevent caching when force refresh**
+      final uri = forceRefresh
+          ? Uri.parse(
+              '$baseUrl/api/ads/creator/revenue/$userId?_t=${DateTime.now().millisecondsSinceEpoch}')
+          : Uri.parse('$baseUrl/api/ads/creator/revenue/$userId');
+
+      AppLogger.log(
+          '📡 ProfileStatsWidget: Fetching earnings from: $uri (forceRefresh: $forceRefresh)');
+
       final response = await httpClientService.get(
-        Uri.parse('$baseUrl/api/ads/creator/revenue/$userId'),
+        uri,
         headers: {
           'Authorization': 'Bearer ${userData['token']}',
         },
@@ -183,7 +203,28 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
       );
 
       if (response.statusCode == 200) {
+        // **DEBUG: Log raw response to diagnose issues**
+        AppLogger.log(
+            '🔍 ProfileStatsWidget: API response body: ${response.body}');
+
+        if (response.body.isEmpty) {
+          AppLogger.log('⚠️ ProfileStatsWidget: Empty response body from API');
+          if (mounted) {
+            setState(() {
+              _earnings = 0.0;
+              _isLoadingEarnings = false;
+            });
+          }
+          return;
+        }
+
         final data = json.decode(response.body) as Map<String, dynamic>;
+
+        // **DEBUG: Log full response data**
+        AppLogger.log(
+          '🔍 ProfileStatsWidget: Full API response - thisMonth: ${data['thisMonth']}, lastMonth: ${data['lastMonth']}, totalRevenue: ${data['totalRevenue']}, adRevenue: ${data['adRevenue']}',
+        );
+
         // **USE CURRENT MONTH EARNINGS (not all-time)**
         final thisMonthEarnings =
             (data['thisMonth'] as num?)?.toDouble() ?? 0.0;
@@ -200,18 +241,31 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
         }
       } else {
         AppLogger.log(
-            '⚠️ ProfileStatsWidget: API returned status ${response.statusCode}');
+            '⚠️ ProfileStatsWidget: API returned status ${response.statusCode}, body: ${response.body}');
         // Fallback to local calculation
         if (widget.stateManager.userVideos.isNotEmpty) {
-          final totalRevenue =
-              await EarningsService.calculateCreatorTotalRevenueForVideos(
-            widget.stateManager.userVideos,
-          );
-          if (mounted) {
-            setState(() {
-              _earnings = totalRevenue;
-              _isLoadingEarnings = false;
-            });
+          try {
+            final totalRevenue =
+                await EarningsService.calculateCreatorTotalRevenueForVideos(
+              widget.stateManager.userVideos,
+            );
+            AppLogger.log(
+                '💰 ProfileStatsWidget: Using fallback calculation: ₹${totalRevenue.toStringAsFixed(2)}');
+            if (mounted) {
+              setState(() {
+                _earnings = totalRevenue;
+                _isLoadingEarnings = false;
+              });
+            }
+          } catch (e) {
+            AppLogger.log(
+                '❌ ProfileStatsWidget: Fallback calculation failed: $e');
+            if (mounted) {
+              setState(() {
+                _earnings = 0.0;
+                _isLoadingEarnings = false;
+              });
+            }
           }
         } else {
           if (mounted) {
@@ -225,13 +279,33 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
     } catch (e, stackTrace) {
       AppLogger.log('❌ ProfileStatsWidget: Error loading earnings: $e');
       AppLogger.log('Stack trace: $stackTrace');
+
+      // **DEBUG: Log more details about the error**
+      if (e.toString().contains('timeout') ||
+          e.toString().contains('TimeoutException')) {
+        AppLogger.log(
+            '⚠️ ProfileStatsWidget: Request timed out - API might be slow');
+      } else if (e.toString().contains('SocketException') ||
+          e.toString().contains('network')) {
+        AppLogger.log(
+            '⚠️ ProfileStatsWidget: Network error - check internet connection');
+      } else if (e.toString().contains('FormatException') ||
+          e.toString().contains('json')) {
+        AppLogger.log(
+            '⚠️ ProfileStatsWidget: JSON parsing error - API response might be malformed');
+      }
+
       // Fallback to local calculation on error
       if (widget.stateManager.userVideos.isNotEmpty) {
         try {
+          AppLogger.log(
+              '🔄 ProfileStatsWidget: Attempting fallback calculation from videos...');
           final totalRevenue =
               await EarningsService.calculateCreatorTotalRevenueForVideos(
             widget.stateManager.userVideos,
           );
+          AppLogger.log(
+              '💰 ProfileStatsWidget: Fallback calculation result: ₹${totalRevenue.toStringAsFixed(2)}');
           if (mounted) {
             setState(() {
               _earnings = totalRevenue;
@@ -249,6 +323,8 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
           }
         }
       } else {
+        AppLogger.log(
+            '⚠️ ProfileStatsWidget: No videos available for fallback calculation');
         if (mounted) {
           setState(() {
             _earnings = 0.0;

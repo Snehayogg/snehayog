@@ -184,6 +184,31 @@ const videoSchema = new mongoose.Schema({
   isHLSEncoded: {
     type: Boolean,
     default: false
+  },
+  
+  // **NEW: Video hash for duplicate detection**
+  videoHash: {
+    type: String,
+    index: true, // For faster duplicate checks
+    sparse: true
+  },
+  
+  // **NEW: Recommendation system fields**
+  totalWatchTime: {
+    type: Number,
+    default: 0, // Total watch time in seconds (aggregated from WatchHistory)
+    description: 'Total watch time across all users for recommendation scoring'
+  },
+  finalScore: {
+    type: Number,
+    default: 0, // Final recommendation score (calculated periodically)
+    index: true, // Indexed for efficient sorting
+    description: 'Balanced recommendation score: 60% watch score + 20% engagement + 20% shares, multiplied by recency boost'
+  },
+  scoreUpdatedAt: {
+    type: Date,
+    default: Date.now,
+    description: 'Timestamp when finalScore was last calculated'
   }
 }, {
   timestamps: true
@@ -193,6 +218,10 @@ const videoSchema = new mongoose.Schema({
 videoSchema.index({ uploader: 1, uploadedAt: -1 });
 videoSchema.index({ processingStatus: 1 });
 videoSchema.index({ 'qualitiesGenerated.quality': 1 });
+// **NEW: Compound index for faster duplicate queries**
+videoSchema.index({ uploader: 1, videoHash: 1 });
+// **NEW: Index for recommendation system - sort by finalScore**
+videoSchema.index({ finalScore: -1 });
 
 // **NEW: Virtual field to check if video has multiple qualities**
 videoSchema.virtual('hasMultipleQualities').get(function() {
@@ -233,8 +262,7 @@ videoSchema.methods.addQualityVersion = function(quality, url, metadata) {
   return this.save();
 };
 
-// **NEW: Method to increment view count (Instagram Reels style)**
-videoSchema.methods.incrementView = function(userId, duration = 4) {
+videoSchema.methods.incrementView = function(userId, duration = 2) { // **CHANGED: Reduced from 4 to 2 seconds for more lenient view counting**
   // Find existing view record for this user
   const existingView = this.viewDetails.find(view => 
     view.user.toString() === userId.toString()

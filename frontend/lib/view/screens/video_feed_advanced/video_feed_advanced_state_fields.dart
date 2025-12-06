@@ -96,9 +96,20 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   int get _infiniteScrollThreshold => 5;
   bool _isLoadingMore = false;
   int _currentPage = 1;
-  int get _videosPerPage => 5;
+  int get _videosPerPage =>
+      20; // **FIXED: Increased from 5 to 20 for better variety**
   bool _hasMore = true;
   int? _totalVideos;
+
+  // **MEMORY MANAGEMENT: Limit videos in memory to prevent memory issues**
+  // Keep max 300 videos (15 pages) - removes old videos automatically
+  // Each VideoModel ~5-10KB, so 300 videos = ~1.5-3MB (safe)
+  // For 5000+ videos, this prevents 50MB+ memory usage
+  static const int _maxVideosInMemory =
+      300; // **SCALABLE: Adjust based on device memory**
+  static const int _videosCleanupThreshold =
+      250; // Start cleanup when reaching this
+  static const int _videosKeepRange = 100; // Keep current ± 100 videos
 
   // Carousel ads
   List<CarouselAdModel> _carouselAds = [];
@@ -129,6 +140,10 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   bool _wakelockEnabled = false;
   bool _wasSignedIn = false;
   bool _pendingAutoplayAfterLogin = false;
+
+  // **NEW: Track when screen was first opened to delay sign-in prompts**
+  DateTime? _screenFirstOpenedAt;
+  Duration get _signInPromptDelay => const Duration(minutes: 5);
 
   String videoIdentityKey(VideoModel video) {
     if (video.id.isNotEmpty) return video.id;

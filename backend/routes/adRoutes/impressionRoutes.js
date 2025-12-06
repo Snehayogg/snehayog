@@ -471,17 +471,34 @@ router.post('/impressions/carousel/view', async (req, res) => {
 router.get('/views/video/:videoId/banner', async (req, res) => {
   try {
     const { videoId } = req.params;
+    const { month, year } = req.query; // Optional month/year filtering
 
     console.log(`👁️ Getting banner ad VIEWS (for revenue) for video: ${videoId}`);
 
-    // **FIXED: Count only VIEWS (isViewed = true), not impressions**
-    const viewCount = await AdImpression.countDocuments({
+    // Build query with optional month filtering
+    const query = {
       videoId: videoId,
       adType: 'banner',
       isViewed: true
-    });
+    };
 
-    console.log(`✅ Banner VIEWS for video ${videoId}: ${viewCount}`);
+    // **NEW: Add month filtering if month and year provided**
+    if (month && year) {
+      const monthNum = parseInt(month);
+      const yearNum = parseInt(year);
+      const startDate = new Date(yearNum, monthNum, 1);
+      const endDate = new Date(yearNum, monthNum + 1, 1);
+      query.timestamp = {
+        $gte: startDate,
+        $lt: endDate
+      };
+      console.log(`📅 Filtering banner views for month ${month}/${year}`);
+    }
+
+    // **FIXED: Count only VIEWS (isViewed = true), not impressions**
+    const viewCount = await AdImpression.countDocuments(query);
+
+    console.log(`✅ Banner VIEWS for video ${videoId}: ${viewCount}${month && year ? ` (Month: ${month}/${year})` : ' (All-time)'}`);
 
     res.status(200).json({ count: viewCount });
   } catch (error) {
@@ -497,17 +514,34 @@ router.get('/views/video/:videoId/banner', async (req, res) => {
 router.get('/views/video/:videoId/carousel', async (req, res) => {
   try {
     const { videoId } = req.params;
+    const { month, year } = req.query; // Optional month/year filtering
 
     console.log(`👁️ Getting carousel ad VIEWS (for revenue) for video: ${videoId}`);
 
-    // **FIXED: Count only VIEWS (isViewed = true), not impressions**
-    const viewCount = await AdImpression.countDocuments({
+    // Build query with optional month filtering
+    const query = {
       videoId: videoId,
       adType: 'carousel',
       isViewed: true
-    });
+    };
 
-    console.log(`✅ Carousel VIEWS for video ${videoId}: ${viewCount}`);
+    // **NEW: Add month filtering if month and year provided**
+    if (month && year) {
+      const monthNum = parseInt(month);
+      const yearNum = parseInt(year);
+      const startDate = new Date(yearNum, monthNum, 1);
+      const endDate = new Date(yearNum, monthNum + 1, 1);
+      query.timestamp = {
+        $gte: startDate,
+        $lt: endDate
+      };
+      console.log(`📅 Filtering carousel views for month ${month}/${year}`);
+    }
+
+    // **FIXED: Count only VIEWS (isViewed = true), not impressions**
+    const viewCount = await AdImpression.countDocuments(query);
+
+    console.log(`✅ Carousel VIEWS for video ${videoId}: ${viewCount}${month && year ? ` (Month: ${month}/${year})` : ' (All-time)'}`);
 
     res.status(200).json({ count: viewCount });
   } catch (error) {

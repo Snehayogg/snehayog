@@ -732,6 +732,14 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
     _currentIndex = index;
     _autoAdvancedForIndex.remove(index);
+
+    // **MEMORY MANAGEMENT: Periodic cleanup on page change**
+    // Cleanup every 10 pages to prevent memory buildup
+    if (index % 10 == 0 &&
+        _videos.length > VideoFeedStateFieldsMixin._videosCleanupThreshold) {
+      _cleanupOldVideosFromList();
+    }
+
     _reprimeWindowIfNeeded();
 
     final activeController = _controllerPool[_currentIndex];

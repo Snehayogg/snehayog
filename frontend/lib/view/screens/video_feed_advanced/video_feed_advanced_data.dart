@@ -205,6 +205,10 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         setState(() {
           if (rankedNewVideos.isNotEmpty) {
             _videos.addAll(rankedNewVideos);
+
+            // **MEMORY MANAGEMENT: Cleanup old videos to prevent memory issues**
+            // Remove videos that are far from current index to keep memory usage low
+            _cleanupOldVideosFromList();
           }
           _currentPage = currentPage;
           final bool inferredHasMore =
@@ -446,6 +450,133 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
   void _markCurrentVideoAsSeen() {
     if (_currentIndex < 0 || _currentIndex >= _videos.length) return;
     _markVideoAsSeen(_videos[_currentIndex]);
+  }
+
+  /// **MEMORY MANAGEMENT: Cleanup old videos from list to prevent memory issues**
+  /// Removes videos that are far from current index, keeping only a sliding window
+  void _cleanupOldVideosFromList() {
+    // Only cleanup if we have more videos than threshold
+    if (_videos.length <= VideoFeedStateFieldsMixin._videosCleanupThreshold) {
+      return; // No cleanup needed yet
+    }
+
+    final currentIndex = _currentIndex;
+    final keepStart =
+        (currentIndex - VideoFeedStateFieldsMixin._videosKeepRange)
+            .clamp(0, _videos.length);
+    final keepEnd = (currentIndex + VideoFeedStateFieldsMixin._videosKeepRange)
+        .clamp(0, _videos.length);
+
+    // Calculate how many videos to remove
+    final videosToRemove =
+        _videos.length - VideoFeedStateFieldsMixin._maxVideosInMemory;
+
+    if (videosToRemove > 0) {
+      // **STRATEGY: Remove videos from the beginning (oldest)**
+      // Keep videos around current index, remove from start
+      final removeCount =
+          (keepStart > 0) ? keepStart.clamp(0, videosToRemove) : videosToRemove;
+
+      if (removeCount > 0) {
+        // Remove old videos from start
+        _videos.removeRange(0, removeCount);
+
+        // **CRITICAL: Adjust current index after removal**
+        _currentIndex =
+            (_currentIndex - removeCount).clamp(0, _videos.length - 1);
+
+        // Also cleanup related state maps
+        _cleanupVideoStateMaps(removeCount);
+
+        AppLogger.log(
+          '🧹 Memory cleanup: Removed $removeCount old videos, kept ${_videos.length} videos (current index: $_currentIndex)',
+        );
+      }
+    }
+  }
+
+  /// **MEMORY MANAGEMENT: Cleanup state maps when videos are removed**
+  void _cleanupVideoStateMaps(int removedCount) {
+    // Shift all indices in state maps
+    final keysToUpdate = <int, dynamic>{};
+    final keysToRemove = <int>[];
+
+    // Update controller pool indices
+    for (final key in _controllerPool.keys.toList()) {
+      if (key < removedCount) {
+        // Dispose controllers for removed videos
+        try {
+          _controllerPool[key]?.dispose();
+        } catch (_) {}
+        keysToRemove.add(key);
+      } else {
+        // Shift index
+        final newKey = key - removedCount;
+        keysToUpdate[newKey] = _controllerPool[key];
+        keysToRemove.add(key);
+      }
+    }
+
+    // Apply updates
+    for (final key in keysToRemove) {
+      _controllerPool.remove(key);
+      _controllerStates.remove(key);
+      _userPaused.remove(key);
+      _isBuffering.remove(key);
+      _preloadedVideos.remove(key);
+      _loadingVideos.remove(key);
+      _firstFrameReady.remove(key);
+      _forceMountPlayer.remove(key);
+      _showHeartAnimation.remove(key);
+      _bufferingListeners.remove(key);
+      _videoEndListeners.remove(key);
+      _lastAccessedLocal.remove(key);
+      _initializingVideos.remove(key);
+      _preloadRetryCount.remove(key);
+      _wasPlayingBeforeNavigation.remove(key);
+    }
+
+    // Add shifted entries
+    _controllerPool.addAll(
+        keysToUpdate.map((k, v) => MapEntry(k, v as VideoPlayerController)));
+
+    // Also cleanup ValueNotifiers
+    for (final key in keysToRemove) {
+      _isBufferingVN[key]?.dispose();
+      _isBufferingVN.remove(key);
+      _firstFrameReady[key]?.dispose();
+      _forceMountPlayer[key]?.dispose();
+    }
+
+    // Shift remaining ValueNotifiers
+    final bufferingVNToUpdate = <int, ValueNotifier<bool>>{};
+    final firstFrameToUpdate = <int, ValueNotifier<bool>>{};
+    final forceMountToUpdate = <int, ValueNotifier<bool>>{};
+
+    for (final entry in _isBufferingVN.entries) {
+      if (entry.key >= removedCount) {
+        bufferingVNToUpdate[entry.key - removedCount] = entry.value;
+      }
+    }
+    for (final entry in _firstFrameReady.entries) {
+      if (entry.key >= removedCount) {
+        firstFrameToUpdate[entry.key - removedCount] = entry.value;
+      }
+    }
+    for (final entry in _forceMountPlayer.entries) {
+      if (entry.key >= removedCount) {
+        forceMountToUpdate[entry.key - removedCount] = entry.value;
+      }
+    }
+
+    _isBufferingVN.clear();
+    _isBufferingVN.addAll(bufferingVNToUpdate);
+    _firstFrameReady.clear();
+    _firstFrameReady.addAll(firstFrameToUpdate);
+    _forceMountPlayer.clear();
+    _forceMountPlayer.addAll(forceMountToUpdate);
+
+    AppLogger.log('🧹 Cleaned up state maps for $removedCount removed videos');
   }
 
   Future<void> refreshVideos() async {

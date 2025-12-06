@@ -83,6 +83,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   void initState() {
     super.initState();
 
+    // **NEW: Track when screen was first opened for sign-in prompt delay**
+    _screenFirstOpenedAt = DateTime.now();
+
     // Add app lifecycle observer
     WidgetsBinding.instance.addObserver(this);
 
@@ -1662,8 +1665,18 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
 
     if (_currentUserId == null) {
-      AppLogger.log('❌ Like Handler: User not logged in, navigating to login');
-      _navigateToLoginScreen();
+      AppLogger.log('❌ Like Handler: User not logged in');
+      // **NEW: Only show sign-in prompt if 5 minutes have passed**
+      if (_canShowSignInPrompt()) {
+        _navigateToLoginScreen();
+      } else {
+        final timeRemaining = _signInPromptDelay -
+            DateTime.now().difference(_screenFirstOpenedAt!);
+        final minutesRemaining = timeRemaining.inMinutes;
+        AppLogger.log(
+          '⏱️ Sign-in prompt delayed for like action. Time remaining: ${minutesRemaining}m',
+        );
+      }
       return;
     }
 
@@ -1753,10 +1766,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       if (errorString.contains('sign in') ||
           errorString.contains('authenticated')) {
         errorMessage = 'Please sign in again to like videos';
-        // Optionally navigate to login
-        Future.delayed(const Duration(milliseconds: 500), () {
-          _navigateToLoginScreen();
-        });
+        // **NEW: Only show sign-in prompt if 5 minutes have passed**
+        if (_canShowSignInPrompt()) {
+          Future.delayed(const Duration(milliseconds: 500), () {
+            _navigateToLoginScreen();
+          });
+        }
       } else if (errorString.contains('User not found')) {
         errorMessage =
             'Please sign in again. Your account may not be registered.';
@@ -1780,7 +1795,29 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
   }
 
+  /// **NEW: Check if 5 minutes have passed since screen was first opened**
+  bool _canShowSignInPrompt() {
+    if (_screenFirstOpenedAt == null) {
+      // If timestamp is not set, allow showing prompt (fallback)
+      return true;
+    }
+    final timeSinceOpened = DateTime.now().difference(_screenFirstOpenedAt!);
+    return timeSinceOpened >= _signInPromptDelay;
+  }
+
   void _navigateToLoginScreen() {
+    // **NEW: Only show sign-in prompt if 5 minutes have passed**
+    if (!_canShowSignInPrompt()) {
+      final timeRemaining =
+          _signInPromptDelay - DateTime.now().difference(_screenFirstOpenedAt!);
+      final minutesRemaining = timeRemaining.inMinutes;
+      final secondsRemaining = timeRemaining.inSeconds % 60;
+      AppLogger.log(
+        '⏱️ Sign-in prompt delayed. Time remaining: ${minutesRemaining}m ${secondsRemaining}s',
+      );
+      return;
+    }
+
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
     );
@@ -1790,10 +1827,20 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   void _handleComment(VideoModel video) {
     // **FIX: Check if user is signed in before opening comment sheet**
     if (_currentUserId == null) {
-      _showSnackBar('Please sign in to view and add comments', isError: true);
-      Future.delayed(const Duration(milliseconds: 500), () {
-        _navigateToLoginScreen();
-      });
+      // **NEW: Only show sign-in prompt if 5 minutes have passed**
+      if (_canShowSignInPrompt()) {
+        _showSnackBar('Please sign in to view and add comments', isError: true);
+        Future.delayed(const Duration(milliseconds: 500), () {
+          _navigateToLoginScreen();
+        });
+      } else {
+        final timeRemaining = _signInPromptDelay -
+            DateTime.now().difference(_screenFirstOpenedAt!);
+        final minutesRemaining = timeRemaining.inMinutes;
+        AppLogger.log(
+          '⏱️ Sign-in prompt delayed for comment action. Time remaining: ${minutesRemaining}m',
+        );
+      }
       return;
     }
 

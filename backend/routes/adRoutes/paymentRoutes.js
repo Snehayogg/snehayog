@@ -131,27 +131,16 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
     // Calculate monthly revenue
     const currentMonth = new Date().getMonth();
     const currentYear = new Date().getFullYear();
+    const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+    const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
     
-    // Filter videos from current month and last month
-    const currentMonthVideos = userVideos.filter(video => {
-      const videoDate = new Date(video.uploadedAt || video.createdAt);
-      return videoDate.getMonth() === currentMonth && videoDate.getFullYear() === currentYear;
-    });
+    // **FIXED: Count impressions for ALL videos in current month (not just videos uploaded this month)**
+    // This ensures earnings from older videos that get views in current month are included
     
-    const lastMonthVideos = userVideos.filter(video => {
-      const videoDate = new Date(video.uploadedAt || video.createdAt);
-      const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
-      const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
-      return videoDate.getMonth() === lastMonth && videoDate.getFullYear() === lastMonthYear;
-    });
-
-    // **MONTHLY REVENUE: Based on ACTUAL ad impressions (realtime)**
-    const currentMonthVideoIds = currentMonthVideos.map(v => v._id);
-    const lastMonthVideoIds = lastMonthVideos.map(v => v._id);
-    
-    // **Current Month** - Count actual impressions
+    // **Current Month** - Count actual impressions for ALL videos (regardless of upload date)
+    // Filter by timestamp only - this counts impressions that happened in current month
     const currentMonthBannerImpressions = await AdImpression.countDocuments({
-      videoId: { $in: currentMonthVideoIds },
+      videoId: { $in: videoIds }, // Use ALL video IDs, not just current month videos
       adType: 'banner',
       impressionType: 'view',
       timestamp: {
@@ -161,7 +150,7 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
     });
     
     const currentMonthCarouselImpressions = await AdImpression.countDocuments({
-      videoId: { $in: currentMonthVideoIds },
+      videoId: { $in: videoIds }, // Use ALL video IDs, not just current month videos
       adType: 'carousel',
       impressionType: 'view',
       timestamp: {
@@ -175,12 +164,19 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
     const currentMonthTotalRevenue = currentMonthBannerRevenue + currentMonthCarouselRevenue;
     const currentMonthCreatorRevenue = currentMonthTotalRevenue * 0.80;
     
-    // **Last Month** - Count actual impressions
-    const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
-    const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+    console.log('💰 Current Month Revenue Calculation:', {
+      totalVideos: videoIds.length,
+      currentMonthBannerImpressions,
+      currentMonthCarouselImpressions,
+      currentMonthBannerRevenue: currentMonthBannerRevenue.toFixed(2),
+      currentMonthCarouselRevenue: currentMonthCarouselRevenue.toFixed(2),
+      currentMonthCreatorRevenue: currentMonthCreatorRevenue.toFixed(2),
+      note: 'Counting impressions for ALL videos in current month (not just videos uploaded this month)'
+    });
     
+    // **Last Month** - Count actual impressions for ALL videos (regardless of upload date)
     const lastMonthBannerImpressions = await AdImpression.countDocuments({
-      videoId: { $in: lastMonthVideoIds },
+      videoId: { $in: videoIds }, // Use ALL video IDs, not just last month videos
       adType: 'banner',
       impressionType: 'view',
       timestamp: {
@@ -190,7 +186,7 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
     });
     
     const lastMonthCarouselImpressions = await AdImpression.countDocuments({
-      videoId: { $in: lastMonthVideoIds },
+      videoId: { $in: videoIds }, // Use ALL video IDs, not just last month videos
       adType: 'carousel',
       impressionType: 'view',
       timestamp: {
