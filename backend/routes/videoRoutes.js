@@ -1013,13 +1013,6 @@ router.get('/', async (req, res) => {
           ...(watchedVideoIds.length > 0 && { _id: { $nin: watchedVideoIds } }) // Exclude watched videos if any
         };
         
-<<<<<<< Updated upstream
-        // **PRIORITY: Sort by createdAt DESC to prioritize recent videos**
-        const unwatchedVideosRaw = await Video.find(unwatchedQuery)
-          .select('_id createdAt')
-          .sort({ createdAt: -1 }) // **NEW: Recent videos first**
-          .limit(maxIdsToFetch) // Limit the query to prevent loading thousands of IDs
-=======
         // **FIXED: Fetch more videos and shuffle to ensure variety**
         // Fetch 2x more IDs than needed, then shuffle to break deterministic order
         const fetchLimit = Math.min(maxIdsToFetch * 2, totalVideoCount);
@@ -1029,7 +1022,6 @@ router.get('/', async (req, res) => {
           .sort({ finalScore: -1, createdAt: -1 }) // Sort by recommendation score first
           .limit(fetchLimit) // Fetch more for variety
           .populate('uploader', '_id googleId')
->>>>>>> Stashed changes
           .lean();
         
         // **NEW: Shuffle the IDs to break deterministic order**
@@ -1103,41 +1095,14 @@ router.get('/', async (req, res) => {
         // First page: use the already fetched unwatchedVideoIds
         availableIds = unwatchedVideoIds.slice(0, poolSize);
       } else {
-<<<<<<< Updated upstream
-        console.log(`✅ Using ${unwatchedVideoIds.length} cached unwatched video IDs`);
-      }
-      
-      // Step 3: Weighted shuffle to prioritize recent videos while maintaining variety
-      // Recent videos (first 50%) get higher priority, but we still shuffle for variety
-      const recentCount = Math.min(Math.floor(unwatchedVideoIds.length * 0.5), limitNum * 3);
-      const recentIds = unwatchedVideoIds.slice(0, recentCount); // Most recent videos
-      const olderIds = unwatchedVideoIds.slice(recentCount); // Older videos
-      
-      // Shuffle recent and older videos separately, then combine with recent first
-      const shuffledRecent = shuffleArray([...recentIds]);
-      const shuffledOlder = shuffleArray([...olderIds]);
-      
-      // Combine: 70% recent, 30% older for variety
-      const combinedIds = [
-        ...shuffledRecent.slice(0, Math.floor(limitNum * 2 * 0.7)),
-        ...shuffledOlder.slice(0, Math.floor(limitNum * 2 * 0.3))
-      ];
-      
-      const limitedUnwatchedIds = combinedIds.slice(0, limitNum * 2); // Get more for buffer
-      
-      // Step 4: Fetch unwatched videos in shuffled order
-      if (limitedUnwatchedIds.length > 0) {
-        unwatchedVideos = await Video.find({
-=======
         // Subsequent pages: fetch fresh unwatched videos with pagination
         // This ensures we get different videos, not same cached ones
-        const unwatchedQuery = {
->>>>>>> Stashed changes
+        const unwatchedQueryPagination = {
           ...baseQueryFilter,
           ...(watchedVideoIds.length > 0 && { _id: { $nin: watchedVideoIds } })
         };
         
-        const freshUnwatched = await Video.find(unwatchedQuery)
+        const freshUnwatched = await Video.find(unwatchedQueryPagination)
           .select('_id finalScore')
           .sort({ finalScore: -1, createdAt: -1 })
           .skip(paginationOffsetForPool)
