@@ -80,26 +80,30 @@ class RecommendationService {
   
   /**
    * Calculate Recency Boost
-   * Fresh content gets a healthy push, old content gradually reduced
+   * Balanced approach: Newer videos get a slight boost, but it doesn't dominate
+   * More balanced than before to ensure older quality content still gets shown
    * 
    * @param {Date} uploadedAt - Video upload date
-   * @returns {Number} Recency boost multiplier (typically 0.1 to 1.0)
+   * @returns {Number} Recency boost multiplier (typically 0.7 to 1.0)
    */
   static calculateRecencyBoost(uploadedAt) {
-    if (!uploadedAt) return 0.1; // Default low boost for missing date
+    if (!uploadedAt) return 0.7; // Default reasonable boost for missing date
     
     const now = new Date();
     const uploadDate = new Date(uploadedAt);
     const ageInDays = (now - uploadDate) / (1000 * 60 * 60 * 24);
     
-    // Formula: 1 / (1 + ageInDays * 0.1)
-    // New content (0 days) → 1.0 boost
-    // 10 days old → ~0.5 boost
-    // 30 days old → ~0.25 boost
-    // 90 days old → ~0.1 boost
-    const recencyBoost = 1 / (1 + ageInDays * 0.1);
+    // More balanced formula: 0.7 + 0.3 / (1 + ageInDays * 0.05)
+    // New content (0 days) → 1.0 boost (slight advantage)
+    // 10 days old → ~0.9 boost
+    // 30 days old → ~0.83 boost
+    // 90 days old → ~0.76 boost
+    // 180 days old → ~0.73 boost
+    // Very old content → ~0.7 boost (still competitive, not penalized too much)
+    // This ensures fresh content is discovered but doesn't completely hide older quality content
+    const recencyBoost = 0.7 + (0.3 / (1 + ageInDays * 0.05));
     
-    return Math.max(recencyBoost, 0.1); // Minimum 0.1 boost
+    return Math.max(recencyBoost, 0.7); // Minimum 0.7 boost (more balanced)
   }
   
   /**
@@ -217,6 +221,124 @@ class RecommendationService {
     }
   }
   
+  /**
+   * Calculate diversity-aware feed ordering
+   * Ensures no same creator appears back-to-back while maintaining score-based ranking
+   * 
+   * @param {Array} videos - Array of video objects with finalScore and uploader
+   * @param {Object} options - Options for ordering
+   * @param {Number} options.randomness - Randomness factor (0-1, default: 0.15 for 15%)
+   * @param {Number} options.minCreatorSpacing - Minimum videos between same creator (default: 2)
+   * @returns {Array} Ordered array of videos with creator diversity
+   */
+  static orderFeedWithDiversity(videos, options = {}) {
+    const {
+      randomness = 0.15, // 15% controlled randomness
+      minCreatorSpacing = 2 // Minimum 2 videos between same creator
+    } = options;
+
+    if (!videos || videos.length === 0) return [];
+
+    // Create a copy to avoid mutating original
+    let remaining = videos.map((v, idx) => ({
+      ...v,
+      originalIndex: idx
+    }));
+
+    const ordered = [];
+    const creatorLastPositions = new Map(); // Track last position of each creator
+    let position = 0;
+
+    while (remaining.length > 0) {
+      // Filter candidates that can be placed at current position
+      const candidates = remaining.filter(video => {
+        const creatorId = video.uploader?._id?.toString() || 
+                         video.uploader?.googleId?.toString() || 
+                         video.uploader?.id?.toString() || 
+                         'unknown';
+        const lastPosition = creatorLastPositions.get(creatorId);
+        
+        // Check spacing requirement
+        if (lastPosition !== undefined) {
+          const spacing = position - lastPosition - 1;
+          if (spacing < minCreatorSpacing) {
+            return false;
+          }
+        }
+        return true;
+      });
+
+      let selected;
+
+      if (candidates.length === 0) {
+        // No candidates meet spacing requirement, relax constraint and take best available
+        // This prevents infinite loops when same creator has many videos
+        const relaxedCandidates = remaining.filter(video => {
+          const creatorId = video.uploader?._id?.toString() || 
+                           video.uploader?.googleId?.toString() || 
+                           video.uploader?.id?.toString() || 
+                           'unknown';
+          const lastPosition = creatorLastPositions.get(creatorId);
+          return lastPosition === undefined || (position - lastPosition - 1) >= 1;
+        });
+
+        if (relaxedCandidates.length > 0) {
+          candidates.push(...relaxedCandidates);
+        } else {
+          // Still none? Just take the first remaining video
+          selected = remaining[0];
+        }
+      }
+
+      if (!selected && candidates.length > 0) {
+        // Score-based selection with controlled randomness
+        candidates.forEach(candidate => {
+          const baseScore = candidate.finalScore || 0;
+          const randomAdjustment = (Math.random() - 0.5) * randomness;
+          candidate.adjustedScore = baseScore * (1 + randomAdjustment);
+        });
+
+        // Sort by adjusted score (descending)
+        candidates.sort((a, b) => {
+          const scoreDiff = b.adjustedScore - a.adjustedScore;
+          if (Math.abs(scoreDiff) > 0.001) {
+            return scoreDiff;
+          }
+          // Tiebreaker: add more randomness
+          return Math.random() - 0.5;
+        });
+
+        selected = candidates[0];
+      }
+
+      if (!selected) {
+        selected = remaining[0];
+      }
+
+      // Add selected video to ordered list
+      ordered.push(selected);
+
+      // Update creator position tracking
+      const creatorId = selected.uploader?._id?.toString() || 
+                       selected.uploader?.googleId?.toString() || 
+                       selected.uploader?.id?.toString() || 
+                       'unknown';
+      creatorLastPositions.set(creatorId, position);
+
+      // Remove from remaining
+      remaining = remaining.filter(v => {
+        const vId = v._id?.toString() || v._id;
+        const sId = selected._id?.toString() || selected._id;
+        return vId !== sId;
+      });
+
+      position++;
+    }
+
+    // Remove temporary properties
+    return ordered.map(({ originalIndex, adjustedScore, ...video }) => video);
+  }
+
   /**
    * Recalculate scores for all videos (or a batch)
    * 

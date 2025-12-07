@@ -147,6 +147,60 @@ WatchHistorySchema.statics.hasUserWatched = async function(userId, videoId) {
 };
 
 /**
+ * Clear old watch history for a user (older than specified days)
+ * Used when user has watched most videos to reset feed variety
+ * 
+ * @param {String} userId - Google ID or deviceId of the user
+ * @param {Number} days - Delete watch history older than X days (default: 30)
+ * @returns {Promise<Object>} Result with count of deleted entries
+ */
+WatchHistorySchema.statics.clearOldWatchHistory = async function(userId, days = 30) {
+  try {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+    
+    const result = await this.deleteMany({
+      userId: userId,
+      lastWatchedAt: { $lt: cutoffDate }
+    });
+    
+    console.log(`🧹 Cleared ${result.deletedCount} old watch history entries (older than ${days} days) for user: ${userId}`);
+    
+    return {
+      deletedCount: result.deletedCount,
+      cutoffDate: cutoffDate,
+      userId: userId
+    };
+  } catch (error) {
+    console.error('❌ Error clearing old watch history:', error);
+    throw error;
+  }
+};
+
+/**
+ * Clear all watch history for a user
+ * Used when user has watched almost all videos
+ * 
+ * @param {String} userId - Google ID or deviceId of the user
+ * @returns {Promise<Object>} Result with count of deleted entries
+ */
+WatchHistorySchema.statics.clearAllWatchHistory = async function(userId) {
+  try {
+    const result = await this.deleteMany({ userId: userId });
+    
+    console.log(`🧹 Cleared all watch history (${result.deletedCount} entries) for user: ${userId}`);
+    
+    return {
+      deletedCount: result.deletedCount,
+      userId: userId
+    };
+  } catch (error) {
+    console.error('❌ Error clearing all watch history:', error);
+    throw error;
+  }
+};
+
+/**
  * Instance method to check if watch is recent (within X days)
  * @param {Number} days - Number of days (default: 30)
  * @returns {Boolean} True if watched recently

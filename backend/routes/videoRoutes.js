@@ -11,11 +11,10 @@ import crypto from 'crypto';
 import { verifyToken } from '../utils/verifytoken.js';
 import redisService from '../services/redisService.js';
 import { VideoCacheKeys, invalidateCache } from '../middleware/cacheMiddleware.js';
+import RecommendationService from '../services/recommendationService.js';
 // Lazy import to ensure env vars are loaded first
 let hybridVideoService;
 const router = express.Router();
-
-
 
 
 const videoCachingMiddleware = (req, res, next) => {
@@ -976,7 +975,7 @@ router.get('/', async (req, res) => {
       
       // Step 1: Get user's watched video IDs (NO LIMIT - backend-first approach)
       // Remove 30-day limit to track all watched videos for better filtering
-      const watchedVideoIds = await WatchHistory.getUserWatchedVideoIds(userIdentifier, null);
+      let watchedVideoIds = await WatchHistory.getUserWatchedVideoIds(userIdentifier, null);
       console.log(`📊 User has watched ${watchedVideoIds.length} videos (all time)`);
       
       // Step 2: ALWAYS fetch fresh unwatched video IDs (cache disabled for variety)
@@ -987,6 +986,33 @@ router.get('/', async (req, res) => {
         // First, get total video count to determine optimal pool size
         const totalVideoCount = await Video.countDocuments(baseQueryFilter);
         console.log(`📊 Total videos in database: ${totalVideoCount}`);
+        
+        // **NEW: Auto-reset watch history if user has watched too many videos**
+        // This ensures users always have fresh content to discover
+        if (watchedVideoIds.length > 0 && totalVideoCount > 0) {
+          const watchedPercentage = (watchedVideoIds.length / totalVideoCount) * 100;
+          
+          // If user has watched >95% of videos, completely reset watch history
+          if (watchedPercentage > 95) {
+            console.log(`🔄 User has watched ${watchedPercentage.toFixed(1)}% of videos (>95%) - resetting ALL watch history for fresh feed`);
+            const resetResult = await WatchHistory.clearAllWatchHistory(userIdentifier);
+            console.log(`✅ Reset complete: Cleared ${resetResult.deletedCount} watch history entries`);
+            
+            // Refresh watched video IDs (should be empty now)
+            watchedVideoIds = [];
+          } 
+          // If user has watched >80% of videos, clear old watch history (older than 30 days)
+          else if (watchedPercentage > 80) {
+            console.log(`🔄 User has watched ${watchedPercentage.toFixed(1)}% of videos (>80%) - clearing old watch history (30+ days old)`);
+            const clearResult = await WatchHistory.clearOldWatchHistory(userIdentifier, 30);
+            console.log(`✅ Old history cleared: Removed ${clearResult.deletedCount} entries`);
+            
+            // Refresh watched video IDs (excluding recently cleared entries)
+            const refreshedWatchedIds = await WatchHistory.getUserWatchedVideoIds(userIdentifier, null);
+            watchedVideoIds = refreshedWatchedIds;
+            console.log(`📊 Updated: User has ${watchedVideoIds.length} watched videos remaining`);
+          }
+        }
         
         // **SCALABLE: Adaptive pool size calculation**
         // For 5000+ videos: fetch more IDs to ensure variety
@@ -1012,6 +1038,26 @@ router.get('/', async (req, res) => {
           ...baseQueryFilter,
           ...(watchedVideoIds.length > 0 && { _id: { $nin: watchedVideoIds } }) // Exclude watched videos if any
         };
+        
+        // **NEW: If user has watched too many videos, exclude own videos from initial pool**
+        // This prevents own videos from dominating when user has watched most content
+        if (userId && watchedVideoIds.length > 0 && totalVideoCount > 0) {
+          const watchedPercentage = (watchedVideoIds.length / totalVideoCount) * 100;
+          
+          // If user has watched >70% of videos, exclude own videos from initial unwatched pool
+          // This ensures variety even when they've seen most content
+          if (watchedPercentage > 70) {
+            try {
+              const currentUser = await User.findOne({ googleId: userId }).select('_id').lean();
+              if (currentUser) {
+                unwatchedQuery.uploader = { $ne: currentUser._id };
+                console.log(`📊 User has watched ${watchedPercentage.toFixed(1)}% of videos - excluding own videos from initial pool for better variety`);
+              }
+            } catch (userError) {
+              console.log('⚠️ Could not check user for pool filtering:', userError.message);
+            }
+          }
+        }
         
         // **FIXED: Fetch more videos and shuffle to ensure variety**
         // Fetch 2x more IDs than needed, then shuffle to break deterministic order
@@ -1133,6 +1179,47 @@ router.get('/', async (req, res) => {
       
       console.log(`✅ Found ${unwatchedVideos.length} unwatched videos sorted by recommendation score`);
       
+      // **NEW: Fallback handling when no unwatched videos are found**
+      // This happens when user has watched ALL videos (100% watched)
+      if (unwatchedVideos.length === 0 && watchedVideoIds.length > 0) {
+        const currentWatchedPercentage = (watchedVideoIds.length / totalVideoCount) * 100;
+        console.log(`⚠️ No unwatched videos found! User has watched ${currentWatchedPercentage.toFixed(1)}% of videos`);
+        
+        // If user has watched 100% (or very close), reset watch history completely
+        if (currentWatchedPercentage >= 100 || watchedVideoIds.length >= totalVideoCount) {
+          console.log(`🔄 User has watched ALL videos (100%) - resetting watch history for fresh feed`);
+          const resetResult = await WatchHistory.clearAllWatchHistory(userIdentifier);
+          console.log(`✅ Reset complete: Cleared ${resetResult.deletedCount} watch history entries`);
+          
+          // Now fetch all videos as unwatched (since history is reset)
+          watchedVideoIds = [];
+          const allVideos = await Video.find(baseQueryFilter)
+            .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded category tags keywords createdAt finalScore')
+            .populate('uploader', 'name profilePic googleId')
+            .populate('comments.user', 'name profilePic googleId')
+            .sort({ finalScore: -1, createdAt: -1 })
+            .limit(limitNum * 3) // Fetch more for variety
+            .lean();
+          
+          unwatchedVideos = allVideos;
+          console.log(`✅ After reset: Found ${unwatchedVideos.length} videos (now all unwatched)`);
+        } else {
+          // Edge case: No unwatched videos but percentage is <100%
+          // This might happen if all unwatched videos are filtered out (e.g., processing failed)
+          console.log(`⚠️ Edge case: No unwatched videos but watched percentage is ${currentWatchedPercentage.toFixed(1)}%`);
+          // Fallback: Show all videos regardless of watch status (user will see watched videos again)
+          unwatchedVideos = await Video.find(baseQueryFilter)
+            .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded category tags keywords createdAt finalScore')
+            .populate('uploader', 'name profilePic googleId')
+            .populate('comments.user', 'name profilePic googleId')
+            .sort({ finalScore: -1, createdAt: -1 })
+            .limit(limitNum * 3)
+            .lean();
+          
+          console.log(`✅ Fallback: Showing ${unwatchedVideos.length} videos (including watched ones)`);
+        }
+      }
+      
       // **DEBUG: Check variety in unwatched videos**
       if (unwatchedVideos.length > 0) {
         const uniqueUploaders = new Set(unwatchedVideos.map(v => v.uploader?._id?.toString() || 'unknown'));
@@ -1142,48 +1229,19 @@ router.get('/', async (req, res) => {
         }
       }
       
-      // **FIXED: More aggressive randomization to prevent same videos**
-      // Use 30% randomness instead of 10% for better variety
-      if (unwatchedVideos.length > 0) {
-        unwatchedVideos = unwatchedVideos.sort((a, b) => {
-          const scoreA = a.finalScore || 0;
-          const scoreB = b.finalScore || 0;
-          
-          // **INCREASED: 30% randomness for better variety (was 10%)**
-          const randomFactor = (Math.random() - 0.5) * 0.3;
-          const adjustedScoreA = scoreA * (1 + randomFactor);
-          const adjustedScoreB = scoreB * (1 - randomFactor);
-          
-          // Primary sort: adjusted score (70% deterministic, 30% random)
-          if (Math.abs(adjustedScoreB - adjustedScoreA) > 0.001) {
-            return adjustedScoreB - adjustedScoreA;
-          }
-          
-          // Tiebreaker: add more randomness
-          const tiebreakerRandom = Math.random() - 0.5;
-          if (Math.abs(tiebreakerRandom) > 0.1) {
-            return tiebreakerRandom;
-          }
-          
-          // Final tiebreaker: newer videos first
-          const dateA = new Date(a.createdAt || a.uploadedAt || 0).getTime();
-          const dateB = new Date(b.createdAt || b.uploadedAt || 0).getTime();
-          return dateB - dateA;
-        });
-      }
-      
-      // Step 4.5: Get top videos by score with variety enforcement
-      let topUnwatchedVideos = getTopVideosByScore(unwatchedVideos, limitNum * 2); // Get more for variety filtering
+      // **NEW: Use diversity-aware ordering with controlled randomness**
+      // Fetch more videos (2x limit) to ensure we have enough for diversity filtering
+      let candidateVideos = getTopVideosByScore(unwatchedVideos, limitNum * 2);
       
       // **NEW: Enforce variety - limit own videos to max 30% of feed**
-      if (topUnwatchedVideos.length > 0 && userId) {
+      if (candidateVideos.length > 0 && userId) {
         try {
           const currentUser = await User.findOne({ googleId: userId }).select('_id').lean();
           if (currentUser) {
-            const ownVideos = topUnwatchedVideos.filter(
+            const ownVideos = candidateVideos.filter(
               v => v.uploader?._id?.toString() === currentUser._id.toString()
             );
-            const otherVideos = topUnwatchedVideos.filter(
+            const otherVideos = candidateVideos.filter(
               v => v.uploader?._id?.toString() !== currentUser._id.toString()
             );
             
@@ -1192,71 +1250,76 @@ router.get('/', async (req, res) => {
             if (ownVideos.length > maxOwnVideos) {
               console.log(`⚠️ Limiting own videos: ${ownVideos.length} -> ${maxOwnVideos} (30% max for variety)`);
               const limitedOwnVideos = ownVideos.slice(0, maxOwnVideos);
-              // Mix: 30% own + 70% others, sorted by score
-              topUnwatchedVideos = [...limitedOwnVideos, ...otherVideos]
-                .sort((a, b) => {
-                  const scoreA = a.finalScore || 0;
-                  const scoreB = b.finalScore || 0;
-                  if (Math.abs(scoreB - scoreA) > 0.001) return scoreB - scoreA;
-                  const dateA = new Date(a.createdAt || a.uploadedAt || 0).getTime();
-                  const dateB = new Date(b.createdAt || b.uploadedAt || 0).getTime();
-                  return dateB - dateA;
-                })
-                .slice(0, limitNum);
-            } else {
-              // If own videos are already within limit, just take top N
-              topUnwatchedVideos = topUnwatchedVideos.slice(0, limitNum);
+              candidateVideos = [...limitedOwnVideos, ...otherVideos];
             }
           }
         } catch (userError) {
           console.log('⚠️ Could not check user for variety enforcement:', userError.message);
-          topUnwatchedVideos = topUnwatchedVideos.slice(0, limitNum);
         }
+      }
+      
+      // **CRITICAL: Final safety check - filter out any watched videos that might have slipped through**
+      // This is a double-check to ensure watched videos are NEVER shown (unless watch history was reset)
+      // Skip this check if watch history was just reset (watchedVideoIds is empty)
+      if (watchedVideoIds.length > 0) {
+        finalVideos = candidateVideos.filter(video => {
+          const videoId = video._id?.toString();
+          return !watchedVideoIds.some(watchedId => watchedId.toString() === videoId);
+        });
       } else {
-        topUnwatchedVideos = topUnwatchedVideos.slice(0, limitNum);
+        // Watch history was reset - all videos are now unwatched
+        finalVideos = candidateVideos;
       }
       
-      // **FIXED: REMOVED watched videos fallback - only use unwatched videos**
-      // This ensures we always show fresh, unwatched content
-      // If not enough unwatched videos, return what we have (don't add watched videos)
-      if (topUnwatchedVideos.length < limitNum) {
-        console.log(`⚠️ Only ${topUnwatchedVideos.length} unwatched videos available (requested ${limitNum}) - returning unwatched only for variety`);
-        // Don't add watched videos - keep feed fresh with only unwatched content
+      // **NEW: Final fallback - if still no videos, fetch all videos regardless of watch status**
+      // This ensures user always sees something (edge case: all videos watched but reset failed)
+      if (finalVideos.length === 0) {
+        console.log(`⚠️ CRITICAL: Still no videos after filtering! Fetching all videos as last resort`);
+        const allVideosFallback = await Video.find(baseQueryFilter)
+          .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded category tags keywords createdAt finalScore')
+          .populate('uploader', 'name profilePic googleId')
+          .populate('comments.user', 'name profilePic googleId')
+          .sort({ finalScore: -1, createdAt: -1 })
+          .limit(limitNum * 2)
+          .lean();
+        
+        finalVideos = allVideosFallback;
+        console.log(`✅ Last resort: Showing ${finalVideos.length} videos (all videos, watch history ignored)`);
       }
       
-      watchedVideos = []; // Always empty - only use unwatched videos
+      // **NEW: Apply diversity-aware ordering - ensures no same creator back-to-back**
+      // This method maintains score-based ranking while enforcing creator diversity
+      finalVideos = RecommendationService.orderFeedWithDiversity(finalVideos, {
+        randomness: 0.15, // 15% controlled randomness for freshness
+        minCreatorSpacing: 2 // Minimum 2 videos between same creator
+      }).slice(0, limitNum);
       
-      // Step 6: Combine unwatched and watched videos with randomization
-      const combinedVideos = [...topUnwatchedVideos, ...watchedVideos];
+      console.log(`✅ Applied diversity-aware ordering: ${finalVideos.length} videos ordered with creator spacing`);
       
-      // **FIXED: More aggressive randomization to prevent same order every time**
-      finalVideos = combinedVideos
-        .sort((a, b) => {
-          const scoreA = a.finalScore || 0;
-          const scoreB = b.finalScore || 0;
-          
-          // **INCREASED: 30% randomness for better variety (was 10%)**
-          const randomFactor = (Math.random() - 0.5) * 0.3;
-          const adjustedScoreA = scoreA * (1 + randomFactor);
-          const adjustedScoreB = scoreB * (1 - randomFactor);
-          
-          // Primary sort: adjusted score (70% deterministic, 30% random)
-          if (Math.abs(adjustedScoreB - adjustedScoreA) > 0.001) {
-            return adjustedScoreB - adjustedScoreA;
+      // **DEBUG: Verify creator diversity in final feed**
+      if (finalVideos.length > 1) {
+        const creatorSequence = finalVideos.map(v => {
+          return v.uploader?._id?.toString() || 
+                 v.uploader?.googleId?.toString() || 
+                 v.uploader?.id?.toString() || 
+                 'unknown';
+        });
+        
+        // Check for back-to-back same creators (should be 0)
+        let backToBackCount = 0;
+        for (let i = 1; i < creatorSequence.length; i++) {
+          if (creatorSequence[i] === creatorSequence[i - 1]) {
+            backToBackCount++;
           }
-          
-          // Tiebreaker: add more randomness
-          const tiebreakerRandom = Math.random() - 0.5;
-          if (Math.abs(tiebreakerRandom) > 0.1) {
-            return tiebreakerRandom;
-          }
-          
-          // Final tiebreaker: newer videos first
-          const dateA = new Date(a.createdAt || a.uploadedAt || 0).getTime();
-          const dateB = new Date(b.createdAt || b.uploadedAt || 0).getTime();
-          return dateB - dateA;
-        })
-        .slice(0, limitNum);
+        }
+        
+        const uniqueCreators = new Set(creatorSequence).size;
+        console.log(`📊 Final feed diversity: ${uniqueCreators} unique creators, ${backToBackCount} back-to-back duplicates (should be 0)`);
+        
+        if (backToBackCount > 0) {
+          console.log('⚠️ WARNING: Found back-to-back same creators in feed - diversity enforcement may need adjustment');
+        }
+      }
       
       console.log(`✅ Final videos (sorted by recommendation score): ${topUnwatchedVideos.length} unwatched + ${watchedVideos.length} watched = ${finalVideos.length} total`);
       
@@ -1297,35 +1360,14 @@ router.get('/', async (req, res) => {
         .limit(fetchLimit)
         .lean();
       
-      // **FIXED: More aggressive randomization to prevent same videos always showing**
+      // **NEW: Apply diversity-aware ordering for regular feed too**
       if (videos.length > 0) {
-        const randomizedVideos = videos.sort((a, b) => {
-          const scoreA = a.finalScore || 0;
-          const scoreB = b.finalScore || 0;
-          
-          // **INCREASED: 30% randomness for better variety (was 10%)**
-          const randomFactor = (Math.random() - 0.5) * 0.3;
-          const adjustedScoreA = scoreA * (1 + randomFactor);
-          const adjustedScoreB = scoreB * (1 - randomFactor);
-          
-          // Primary sort: adjusted score (70% deterministic, 30% random)
-          if (Math.abs(adjustedScoreB - adjustedScoreA) > 0.001) {
-            return adjustedScoreB - adjustedScoreA;
-          }
-          
-          // Tiebreaker: add more randomness
-          const tiebreakerRandom = Math.random() - 0.5;
-          if (Math.abs(tiebreakerRandom) > 0.1) {
-            return tiebreakerRandom;
-          }
-          
-          // Final tiebreaker: newer videos first
-          const dateA = new Date(a.createdAt || a.uploadedAt || 0).getTime();
-          const dateB = new Date(b.createdAt || b.uploadedAt || 0).getTime();
-          return dateB - dateA;
-        });
+        finalVideos = RecommendationService.orderFeedWithDiversity(videos, {
+          randomness: 0.15, // 15% controlled randomness
+          minCreatorSpacing: 2 // Minimum 2 videos between same creator
+        }).slice(0, limitNum);
         
-        finalVideos = randomizedVideos.slice(0, limitNum);
+        console.log(`✅ Applied diversity-aware ordering to regular feed: ${finalVideos.length} videos`);
       } else {
         finalVideos = videos;
       }

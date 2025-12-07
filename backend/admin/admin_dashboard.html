@@ -401,6 +401,25 @@
         </div>
 
         <div class="dashboard-section">
+            <h2 class="section-title">💰 Current Month Earnings</h2>
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="loadMonthlyEarnings()">
+                    🔄 Load Current Month Earnings
+                </button>
+            </div>
+            <div id="currentMonthEarnings">
+                <p>Click "Load Current Month Earnings" to view all creators' earnings for this month</p>
+            </div>
+        </div>
+
+        <div class="dashboard-section">
+            <h2 class="section-title">📅 Previous Month Earnings</h2>
+            <div id="previousMonthEarnings">
+                <p>Previous month earnings will be displayed when you load monthly earnings</p>
+            </div>
+        </div>
+
+        <div class="dashboard-section">
             <h2 class="section-title">📋 Recent Payouts</h2>
             <div id="recentPayouts">
                 <p>Loading recent payouts...</p>
@@ -559,6 +578,7 @@
 
         const API_BASE = detectApiBase();
         let creatorData = [];
+        let monthlyEarningsData = {}; // Map of creatorId -> {thisMonth, lastMonth}
 
         const MARKED_CREATORS_STORAGE_KEY = 'vayu_admin_marked_creators';
         let markedCreators = new Set();
@@ -770,12 +790,6 @@
                 const name = escapeHtml(creator.name || 'Unknown');
                 const email = escapeHtml(creator.email || '—');
                 const googleId = escapeHtml(creator.googleId || '—');
-                const country = escapeHtml(creator.country || 'IN');
-
-                const paymentMethodRaw = creator.paymentDetails?.preferredPaymentMethod
-                    ? creator.paymentDetails.preferredPaymentMethod.replace(/_/g, ' ').toUpperCase()
-                    : '—';
-                const paymentMethod = paymentMethodRaw === '—' ? paymentMethodRaw : escapeHtml(paymentMethodRaw);
 
                 const upiIdRaw = creator.paymentDetails?.upiId || '—';
                 const upiId = upiIdRaw === '—' ? upiIdRaw : escapeHtml(upiIdRaw);
@@ -788,6 +802,24 @@
                 const pendingAmount = Number(creator.pendingEarningsINR || 0);
                 const isMarked = isCreatorMarked(creator.id);
                 const encodedId = encodeURIComponent(creator.id);
+
+                // Get monthly earnings data
+                const monthlyData = monthlyEarningsData[creator.id] || { 
+                    thisMonth: 0, 
+                    lastMonth: 0,
+                    currentMonthGrossRevenue: 0,
+                    currentMonthTotalAdViews: 0,
+                    currentMonthTotalViews: 0
+                };
+                
+                // Use current month data for these columns
+                const currentMonthTotalViews = monthlyData.currentMonthTotalViews || 0;
+                const currentMonthTotalAdViews = monthlyData.currentMonthTotalAdViews || 0;
+                const currentMonthEarnings = monthlyData.thisMonth || 0;
+                const currentMonthGrossRevenue = monthlyData.currentMonthGrossRevenue || 0;
+                const currentMonthPlatformRevenue = currentMonthGrossRevenue - currentMonthEarnings;
+                
+                const previousMonthEarnings = monthlyData.lastMonth || 0;
 
                 const markedBadge = formatCurrencyINR(
                     pendingAmount > 0 ? pendingAmount : netEarnings
@@ -825,15 +857,15 @@
                             <small>${email}</small><br>
                             <small>Google ID: ${googleId}</small>
                         </td>
-                        <td>${country}</td>
                         <td>${creator.totalVideos}</td>
-                        <td>${formatNumber(creator.totalViews)}</td>
-                        <td>${formatNumber(totalAdViews)}</td>
-                        <td>${formatCurrencyINR(netEarnings)}</td>
-                        <td>${formatCurrencyINR(grossEarnings)}</td>
-                        <td>${formatCurrencyINR(platformRevenue)}</td>
+                        <td>${formatNumber(currentMonthTotalViews)}</td>
+                        <td>${formatNumber(currentMonthTotalAdViews)}</td>
+                        <td>${formatCurrencyINR(currentMonthEarnings)}</td>
+                        <td>${formatCurrencyINR(currentMonthGrossRevenue)}</td>
+                        <td>${formatCurrencyINR(currentMonthPlatformRevenue)}</td>
                         <td>${pendingCell}</td>
-                        <td>${paymentMethod}</td>
+                        <td style="font-weight: bold; color: #28a745;">${formatCurrencyINR(currentMonthEarnings)}</td>
+                        <td style="font-weight: bold; color: #ff9800;">${formatCurrencyINR(previousMonthEarnings)}</td>
                         <td>
                             ${upiId !== '—' ? `
                                 <div>
@@ -842,7 +874,6 @@
                                 </div>
                             ` : '—'}
                         </td>
-                        <td>${formatDate(creator.lastPayoutAt)}</td>
                     </tr>
                 `;
             }).join('');
@@ -853,17 +884,16 @@
                         <thead>
                                 <tr>
                                     <th>Creator</th>
-                                    <th>Country</th>
                                     <th>Videos</th>
-                                    <th>Total Views</th>
-                                    <th>Ad Views</th>
-                                    <th>Net Earnings (₹)</th>
-                                    <th>Gross Revenue (₹)</th>
-                                    <th>Platform Share (₹)</th>
+                                    <th>Total Views (Current Month)</th>
+                                    <th>Ad Views (Current Month)</th>
+                                    <th>Net Earnings (₹) (Current Month)</th>
+                                    <th>Gross Revenue (₹) (Current Month)</th>
+                                    <th>Platform Share (₹) (Current Month)</th>
                                     <th>Pending</th>
-                                    <th>Preferred Method</th>
+                                    <th>Current Month Earnings (₹)</th>
+                                    <th>Previous Month Earnings (₹)</th>
                                     <th>UPI ID</th>
-                                    <th>Last Payout</th>
                                 </tr>
                         </thead>
                         <tbody>
@@ -949,13 +979,38 @@
             const container = document.getElementById('creatorsList');
             try {
                 container.innerHTML = '<p>Loading creators...</p>';
-                const response = await authorizedFetch(`${API_BASE}/admin/creators`);
-                if (!response || !response.ok) {
+                
+                // Load creators and monthly earnings in parallel
+                const [creatorsResponse, monthlyResponse] = await Promise.all([
+                    authorizedFetch(`${API_BASE}/admin/creators`),
+                    authorizedFetch(`${API_BASE}/admin/creators/monthly-earnings`)
+                ]);
+                
+                if (!creatorsResponse || !creatorsResponse.ok) {
                     container.innerHTML = '<p class="error-message">Failed to load creators list</p>';
                     return;
                 }
-                const data = await response.json();
-                creatorData = data.creators || [];
+                
+                const creatorsData = await creatorsResponse.json();
+                creatorData = creatorsData.creators || [];
+                
+                // Process monthly earnings data
+                if (monthlyResponse && monthlyResponse.ok) {
+                    const monthlyData = await monthlyResponse.json();
+                    if (monthlyData.success && monthlyData.creators) {
+                        monthlyEarningsData = {};
+                        monthlyData.creators.forEach(creator => {
+                            monthlyEarningsData[creator.creatorId] = {
+                                thisMonth: creator.thisMonth || 0,
+                                lastMonth: creator.lastMonth || 0,
+                                currentMonthGrossRevenue: creator.currentMonthGrossRevenue || 0,
+                                currentMonthTotalAdViews: creator.currentMonthTotalAdViews || 0,
+                                currentMonthTotalViews: creator.currentMonthTotalViews || 0
+                            };
+                        });
+                    }
+                }
+                
                 renderCreators(creatorData);
                 // Re-apply current filters after data refresh
                 filterCreators();
@@ -1198,6 +1253,9 @@
                 
                 // Load recent payouts
                 await loadRecentPayouts();
+                
+                // Load monthly earnings
+                await loadMonthlyEarnings();
                 
                 setLoading(false);
             } catch (error) {
@@ -1528,6 +1586,149 @@
         function nextVideoPage() {
             currentVideoPage++;
             loadVideos();
+        }
+
+        // **NEW: Load monthly earnings for all creators**
+        async function loadMonthlyEarnings() {
+            const currentContainer = document.getElementById('currentMonthEarnings');
+            const previousContainer = document.getElementById('previousMonthEarnings');
+            
+            try {
+                currentContainer.innerHTML = '<p>Loading monthly earnings...</p>';
+                previousContainer.innerHTML = '<p>Loading...</p>';
+                
+                const response = await authorizedFetch(`${API_BASE}/admin/creators/monthly-earnings`);
+                if (!response || !response.ok) {
+                    currentContainer.innerHTML = '<p class="error-message">Failed to load monthly earnings</p>';
+                    previousContainer.innerHTML = '<p class="error-message">Failed to load monthly earnings</p>';
+                    return;
+                }
+                
+                const data = await response.json();
+                if (!data.success) {
+                    currentContainer.innerHTML = '<p class="error-message">Failed to load monthly earnings</p>';
+                    previousContainer.innerHTML = '<p class="error-message">Failed to load monthly earnings</p>';
+                    return;
+                }
+                
+                const creators = data.creators || [];
+                const currentMonth = data.currentMonth || 'N/A';
+                const lastMonth = data.lastMonth || 'N/A';
+                const totalThisMonth = data.totalThisMonth || 0;
+                const totalLastMonth = data.totalLastMonth || 0;
+                
+                // Render current month earnings
+                if (creators.length === 0) {
+                    currentContainer.innerHTML = '<p>No creators found</p>';
+                    previousContainer.innerHTML = '<p>No creators found</p>';
+                    return;
+                }
+                
+                // Current Month Table
+                const currentMonthRows = creators.map((creator, index) => {
+                    const name = escapeHtml(creator.name || 'Unknown');
+                    const email = escapeHtml(creator.email || '—');
+                    const googleId = escapeHtml(creator.googleId || '—');
+                    const earnings = creator.thisMonth || 0;
+                    
+                    return `
+                        <tr>
+                            <td>${index + 1}</td>
+                            <td>
+                                <strong>${name}</strong><br>
+                                <small>${email}</small><br>
+                                <small>Google ID: ${googleId}</small>
+                            </td>
+                            <td>${formatNumber(creator.currentMonthBannerViews || 0)}</td>
+                            <td>${formatNumber(creator.currentMonthCarouselViews || 0)}</td>
+                            <td style="font-weight: bold; color: #28a745;">${formatCurrencyINR(earnings)}</td>
+                        </tr>
+                    `;
+                }).join('');
+                
+                currentContainer.innerHTML = `
+                    <div style="margin-bottom: 20px; padding: 15px; background: #e7f3ff; border-radius: 10px; border-left: 4px solid #2196F3;">
+                        <h3 style="margin: 0 0 10px 0; color: #1976D2;">Month: ${currentMonth}</h3>
+                        <p style="margin: 0; font-size: 1.2rem; font-weight: bold; color: #28a745;">
+                            Total Earnings: ${formatCurrencyINR(totalThisMonth)}
+                        </p>
+                        <p style="margin: 5px 0 0 0; color: #666;">
+                            ${creators.length} creators
+                        </p>
+                    </div>
+                    <div style="overflow-x: auto;">
+                        <table class="payout-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Creator</th>
+                                    <th>Banner Views</th>
+                                    <th>Carousel Views</th>
+                                    <th>Earnings (₹)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${currentMonthRows}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+                
+                // Previous Month Table
+                const previousMonthRows = creators.map((creator, index) => {
+                    const name = escapeHtml(creator.name || 'Unknown');
+                    const email = escapeHtml(creator.email || '—');
+                    const googleId = escapeHtml(creator.googleId || '—');
+                    const earnings = creator.lastMonth || 0;
+                    
+                    return `
+                        <tr>
+                            <td>${index + 1}</td>
+                            <td>
+                                <strong>${name}</strong><br>
+                                <small>${email}</small><br>
+                                <small>Google ID: ${googleId}</small>
+                            </td>
+                            <td>${formatNumber(creator.lastMonthBannerViews || 0)}</td>
+                            <td>${formatNumber(creator.lastMonthCarouselViews || 0)}</td>
+                            <td style="font-weight: bold; color: #ff9800;">${formatCurrencyINR(earnings)}</td>
+                        </tr>
+                    `;
+                }).join('');
+                
+                previousContainer.innerHTML = `
+                    <div style="margin-bottom: 20px; padding: 15px; background: #fff3e0; border-radius: 10px; border-left: 4px solid #ff9800;">
+                        <h3 style="margin: 0 0 10px 0; color: #f57c00;">Month: ${lastMonth}</h3>
+                        <p style="margin: 0; font-size: 1.2rem; font-weight: bold; color: #ff9800;">
+                            Total Earnings: ${formatCurrencyINR(totalLastMonth)}
+                        </p>
+                        <p style="margin: 5px 0 0 0; color: #666;">
+                            ${creators.length} creators
+                        </p>
+                    </div>
+                    <div style="overflow-x: auto;">
+                        <table class="payout-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Creator</th>
+                                    <th>Banner Views</th>
+                                    <th>Carousel Views</th>
+                                    <th>Earnings (₹)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${previousMonthRows}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+                
+            } catch (error) {
+                console.error('Error loading monthly earnings:', error);
+                currentContainer.innerHTML = `<p class="error-message">Error loading monthly earnings: ${error.message}</p>`;
+                previousContainer.innerHTML = `<p class="error-message">Error loading monthly earnings: ${error.message}</p>`;
+            }
         }
     </script>
 </body>

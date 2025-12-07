@@ -3,8 +3,7 @@ import 'package:http/http.dart' as http;
 /// Optimized app configuration for better performance and smaller size
 class AppConfig {
   // **MANUAL: Development mode control**
-  static const bool _isDevelopment =
-      true; // Set to true for local testing, false for production
+  static const bool _isDevelopment = true; // Set to true for local testing, false for production
 
   // **NEW: Smart URL selection with fallback**
   static String? _cachedBaseUrl;

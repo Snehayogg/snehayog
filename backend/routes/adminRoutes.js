@@ -540,6 +540,191 @@ router.get('/stats', requireAdminDashboardKey, async (req, res) => {
   }
 });
 
+// **NEW: Admin endpoint to get monthly earnings for all creators**
+router.get('/creators/monthly-earnings', requireAdminDashboardKey, async (req, res) => {
+  try {
+    const creators = await User.find({}).select('_id googleId name email').lean();
+    const creatorIds = creators.map(c => c._id);
+    
+    // Get all videos for all creators
+    const allVideos = await Video.find({ uploader: { $in: creatorIds } }).select('_id uploader').lean();
+    
+    // Group videos by creator
+    const videosByCreator = new Map();
+    allVideos.forEach(video => {
+      const creatorId = String(video.uploader);
+      if (!videosByCreator.has(creatorId)) {
+        videosByCreator.set(creatorId, []);
+      }
+      videosByCreator.get(creatorId).push(video._id);
+    });
+    
+    // Calculate current month and last month
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+    const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+    
+    const currentMonthStart = new Date(currentYear, currentMonth, 1);
+    const currentMonthEnd = new Date(currentYear, currentMonth + 1, 1);
+    const lastMonthStart = new Date(lastMonthYear, lastMonth, 1);
+    const lastMonthEnd = new Date(lastMonthYear, lastMonth + 1, 1);
+    
+    const bannerCpm = AD_CONFIG?.BANNER_CPM ?? 10;
+    const carouselCpm = AD_CONFIG?.DEFAULT_CPM ?? 30;
+    const creatorShare = AD_CONFIG?.CREATOR_REVENUE_SHARE ?? 0.8;
+    
+    // Calculate monthly earnings for each creator
+    const monthlyEarnings = await Promise.all(
+      creators.map(async (creator) => {
+        const creatorId = String(creator._id);
+        const videoIds = videosByCreator.get(creatorId) || [];
+        
+        if (videoIds.length === 0) {
+          return {
+            creatorId: creatorId,
+            googleId: creator.googleId,
+            name: creator.name,
+            email: creator.email,
+            thisMonth: 0,
+            lastMonth: 0,
+            currentMonthGrossRevenue: 0,
+            currentMonthTotalAdViews: 0,
+            currentMonthTotalViews: 0,
+            lastMonthBannerViews: 0,
+            lastMonthCarouselViews: 0,
+            lastMonthTotalAdViews: 0,
+            lastMonthGrossRevenue: 0
+          };
+        }
+        
+        // Convert videoIds to ObjectIds if they're strings
+        const mongoose = (await import('mongoose')).default;
+        const videoObjectIds = videoIds.map(id => {
+          if (typeof id === 'string') {
+            return new mongoose.Types.ObjectId(id);
+          }
+          return id;
+        });
+        
+        // Current month impressions
+        const currentMonthBanner = await AdImpression.countDocuments({
+          videoId: { $in: videoObjectIds },
+          adType: 'banner',
+          impressionType: 'view',
+          timestamp: { $gte: currentMonthStart, $lt: currentMonthEnd }
+        });
+        
+        const currentMonthCarousel = await AdImpression.countDocuments({
+          videoId: { $in: videoObjectIds },
+          adType: 'carousel',
+          impressionType: 'view',
+          timestamp: { $gte: currentMonthStart, $lt: currentMonthEnd }
+        });
+        
+        // Last month impressions
+        const lastMonthBanner = await AdImpression.countDocuments({
+          videoId: { $in: videoObjectIds },
+          adType: 'banner',
+          impressionType: 'view',
+          timestamp: { $gte: lastMonthStart, $lt: lastMonthEnd }
+        });
+        
+        const lastMonthCarousel = await AdImpression.countDocuments({
+          videoId: { $in: videoObjectIds },
+          adType: 'carousel',
+          impressionType: 'view',
+          timestamp: { $gte: lastMonthStart, $lt: lastMonthEnd }
+        });
+        
+        // Calculate revenue
+        const currentMonthBannerRevenue = (currentMonthBanner / 1000) * bannerCpm;
+        const currentMonthCarouselRevenue = (currentMonthCarousel / 1000) * carouselCpm;
+        const currentMonthGrossRevenue = currentMonthBannerRevenue + currentMonthCarouselRevenue;
+        const currentMonthTotal = currentMonthGrossRevenue * creatorShare;
+        
+        const lastMonthBannerRevenue = (lastMonthBanner / 1000) * bannerCpm;
+        const lastMonthCarouselRevenue = (lastMonthCarousel / 1000) * carouselCpm;
+        const lastMonthGrossRevenue = lastMonthBannerRevenue + lastMonthCarouselRevenue;
+        const lastMonthTotal = lastMonthGrossRevenue * creatorShare;
+        
+        // Calculate current month video views from viewDetails using aggregation
+        const viewStats = await Video.aggregate([
+          {
+            $match: {
+              _id: { $in: videoObjectIds }
+            }
+          },
+          {
+            $unwind: {
+              path: '$viewDetails',
+              preserveNullAndEmptyArrays: true
+            }
+          },
+          {
+            $match: {
+              'viewDetails.lastViewedAt': {
+                $gte: currentMonthStart,
+                $lt: currentMonthEnd
+              }
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              totalViews: {
+                $sum: {
+                  $ifNull: ['$viewDetails.viewCount', 1]
+                }
+              }
+            }
+          }
+        ]);
+        
+        const currentMonthTotalViews = viewStats.length > 0 ? (viewStats[0].totalViews || 0) : 0;
+        
+        return {
+          creatorId: creatorId,
+          googleId: creator.googleId,
+          name: creator.name,
+          email: creator.email,
+          thisMonth: Math.round(currentMonthTotal * 100) / 100,
+          lastMonth: Math.round(lastMonthTotal * 100) / 100,
+          currentMonthGrossRevenue: Math.round(currentMonthGrossRevenue * 100) / 100,
+          lastMonthGrossRevenue: Math.round(lastMonthGrossRevenue * 100) / 100,
+          currentMonthBannerViews: currentMonthBanner,
+          currentMonthCarouselViews: currentMonthCarousel,
+          currentMonthTotalAdViews: currentMonthBanner + currentMonthCarousel,
+          currentMonthTotalViews: currentMonthTotalViews,
+          lastMonthBannerViews: lastMonthBanner,
+          lastMonthCarouselViews: lastMonthCarousel,
+          lastMonthTotalAdViews: lastMonthBanner + lastMonthCarousel
+        };
+      })
+    );
+    
+    // Sort by current month earnings (descending)
+    monthlyEarnings.sort((a, b) => b.thisMonth - a.thisMonth);
+    
+    // Calculate totals
+    const totalThisMonth = monthlyEarnings.reduce((sum, c) => sum + c.thisMonth, 0);
+    const totalLastMonth = monthlyEarnings.reduce((sum, c) => sum + c.lastMonth, 0);
+    
+    res.json({
+      success: true,
+      currentMonth: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`,
+      lastMonth: `${lastMonthYear}-${String(lastMonth + 1).padStart(2, '0')}`,
+      totalThisMonth: Math.round(totalThisMonth * 100) / 100,
+      totalLastMonth: Math.round(totalLastMonth * 100) / 100,
+      creators: monthlyEarnings
+    });
+  } catch (error) {
+    console.error('❌ Error loading monthly earnings:', error);
+    res.status(500).json({ success: false, error: 'Failed to load monthly earnings' });
+  }
+});
+
 // **NEW: Admin endpoint to get all videos with search/filter**
 router.get('/videos', requireAdminDashboardKey, async (req, res) => {
   try {
