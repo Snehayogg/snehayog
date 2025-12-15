@@ -402,7 +402,7 @@ class VideoProvider extends ChangeNotifier {
 
   /// Filter videos by type (yug/vayu)
   Future<void> filterVideosByType(String videoType) async {
-    if (videoType != 'yug' && videoType != 'vayu') {
+    if (videoType != 'yog' && videoType != 'vayu') {
       print('⚠️ VideoProvider: Invalid videoType: $videoType');
       return;
     }
@@ -413,12 +413,12 @@ class VideoProvider extends ChangeNotifier {
 
   /// Get yug videos only (alias for legacy yog)
   Future<void> loadYugVideos() async {
-    await filterVideosByType('yug');
+    await filterVideosByType('yog');
   }
 
   /// Legacy alias maintained for compatibility
   Future<void> loadYogVideos() async {
-    await filterVideosByType('yug');
+    await filterVideosByType('yog');
   }
 
   /// Load all videos (no filter)

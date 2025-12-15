@@ -118,7 +118,7 @@ class _VideoScreenState extends State<VideoScreen> {
     // Only use videoType when loading from API (no initialVideos)
     final String? videoType =
         widget.initialVideos == null || widget.initialVideos!.isEmpty
-            ? 'yug'
+            ? 'yog'
             : null;
 
     return VideoFeedAdvanced(

@@ -70,9 +70,17 @@ if (!mongoUri) {
   process.env.MONGO_URI = mongoUri;
 }
 
-// Port and Host configuration
-const PORT = process.env.PORT || 5001;
+// Port and Host configuration - PRODUCTION SAFE
+// Railway injects process.env.PORT (typically 8080)
+// Must use 0.0.0.0 to accept connections from Railway's proxy
+const PORT = parseInt(process.env.PORT, 10) || 5001;
 const HOST = process.env.HOST || '0.0.0.0'; // Railway requires 0.0.0.0
+
+// Validate port is a valid number
+if (isNaN(PORT) || PORT < 1 || PORT > 65535) {
+  console.error(`❌ Invalid PORT: ${PORT}. Must be 1-65535`);
+  process.exit(1);
+}
 
 // Asset Links dynamic response (avoid committing real fingerprints)
 const assetLinksPackageName = process.env.ANDROID_ASSETLINKS_PACKAGE_NAME;
@@ -103,9 +111,7 @@ app.use('/.well-known', express.static(path.join(__dirname, 'public/.well-known'
 // **ENHANCED: CORS Configuration for Flutter app and Railway**
 app.use(cors({
   origin: [
-    'http://10.118.107.18:5001', // Local development
     'https://snehayog.site', // Production web app
-    'https://vayu.app',      // Public site that embeds/uses API
     'http://192.168.0.184:5001', // Local development (LAN)
     'http://localhost:5001',      // Local development
     'http://10.0.2.2:5001',      // Android emulator
@@ -461,15 +467,59 @@ const gracefulShutdown = async (signal) => {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
-// Start server
+// Start server - PRODUCTION SAFE with proper error handling
 const startServer = async () => {
   try {
+    // Log server configuration for debugging
+    console.log('🔍 Server Configuration:');
+    console.log(`   PORT: ${PORT} (from ${process.env.PORT ? 'process.env.PORT' : 'fallback'})`);
+    console.log(`   HOST: ${HOST}`);
+    console.log(`   NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`   Railway: ${process.env.RAILWAY_ENVIRONMENT ? 'YES' : 'NO'}`);
+    
     // **FIX: Start HTTP server FIRST so healthcheck works immediately**
     // Database connection will happen in background (non-blocking)
-    app.listen(PORT, HOST, () => {
-      console.log(`🚀 Server running on ${HOST}:${PORT}`);
+    const server = app.listen(PORT, HOST, () => {
+      const addr = server.address();
+      console.log(`🚀 Server running on ${addr.address}:${addr.port}`);
       console.log('✅ Server is ready to accept connections');
+      
+      // Log Railway-specific info
+      if (process.env.RAILWAY_ENVIRONMENT) {
+        console.log(`🚂 Railway environment detected`);
+        console.log(`🔌 Railway will forward traffic to: ${HOST}:${PORT}`);
+      }
+      
       console.log('🔌 Database connecting in background...');
+    });
+    
+    // Handle server binding errors
+    server.on('error', (error) => {
+      if (error.code === 'EADDRINUSE') {
+        console.error(`❌ Port ${PORT} is already in use`);
+        console.error(`   Another process may be using this port`);
+        process.exit(1);
+      } else if (error.code === 'EACCES') {
+        console.error(`❌ Permission denied binding to port ${PORT}`);
+        console.error(`   Try using a port > 1024 or run with elevated privileges`);
+        process.exit(1);
+      } else {
+        console.error(`❌ Server binding error: ${error.message}`);
+        throw error;
+      }
+    });
+    
+    // Verify successful binding
+    server.on('listening', () => {
+      const addr = server.address();
+      console.log(`✅ Server successfully bound to ${addr.address}:${addr.port}`);
+      
+      // Verify port matches what we requested
+      if (addr.port === PORT) {
+        console.log(`✅ Port binding verified: ${PORT}`);
+      } else {
+        console.warn(`⚠️ Port mismatch: requested ${PORT}, bound to ${addr.port}`);
+      }
     });
     
     // **FIX: Connect to database in background (non-blocking)**
@@ -522,9 +572,15 @@ const startServer = async () => {
     
   } catch (error) {
     console.error('❌ Failed to start server:', error);
+    console.error('❌ Error details:', {
+      code: error.code,
+      message: error.message,
+      stack: error.stack
+    });
+    
     // **FIX: Only exit on critical errors (like port already in use)**
-    if (error.code === 'EADDRINUSE') {
-      console.error('❌ Port already in use - exiting');
+    if (error.code === 'EADDRINUSE' || error.code === 'EACCES') {
+      console.error('❌ Critical binding error - exiting');
       process.exit(1);
     } else {
       console.error('⚠️ Server started with errors - healthcheck should still work');

@@ -60,7 +60,7 @@ class AppEnvironmentConfig {
 
   /// Production environment configuration
   static const Map<String, dynamic> _productionConfig = {
-    'apiBaseUrl': 'https://snehayog.site',
+    'apiBaseUrl': 'https://api.snehayog.site',
     'enableLogging': false,
     'enableDebugMode': false,
     'videoCacheSize': 500 * 1024 * 1024, // 500MB

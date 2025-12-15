@@ -172,7 +172,7 @@ class VideoRemoteDataSource {
       // Add other fields
       request.fields['videoName'] = title;
       request.fields['description'] = description;
-      request.fields['videoType'] = 'yug';
+      request.fields['videoType'] = 'yog';
       if (link != null && link.isNotEmpty) {
         request.fields['link'] = link;
       }

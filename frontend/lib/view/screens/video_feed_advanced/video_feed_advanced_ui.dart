@@ -107,6 +107,21 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
           ),
+          // **NEW: Add debug info button for troubleshooting**
+          if (_errorMessage != null && _errorMessage!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                'Error: ${_errorMessage!.length > 100 ? _errorMessage!.substring(0, 100) + "..." : _errorMessage!}',
+                style: const TextStyle(
+                  color: Colors.red,
+                  fontSize: 12,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1211,13 +1226,13 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                   Icon(
+                  Icon(
                     Icons.wifi_off,
                     color: Colors.white,
                     size: 20,
                   ),
-                   SizedBox(width: 8),
-                   Text(
+                  SizedBox(width: 8),
+                  Text(
                     'No internet connection',
                     style: TextStyle(
                       color: Colors.white,

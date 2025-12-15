@@ -51,7 +51,7 @@ class VideoRepositoryImpl implements VideoRepository {
                     .toList(),
                 videoType: model.videoType,
                 link: model.link,
-                isLongVideo: model.videoType == 'yug',
+                isLongVideo: model.videoType == 'yog',
               ))
           .toList();
 
@@ -128,7 +128,7 @@ class VideoRepositoryImpl implements VideoRepository {
                     .toList(),
                 videoType: model.videoType,
                 link: model.link,
-                isLongVideo: model.videoType == 'yug',
+                isLongVideo: model.videoType == 'yog',
               ))
           .toList();
     } catch (e) {

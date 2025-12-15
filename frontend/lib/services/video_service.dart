@@ -1,5 +1,4 @@
 import 'dart:convert';
-// import 'dart:typed_data';
 import 'dart:async';
 import 'dart:io';
 import 'package:http/http.dart' as http;
@@ -17,8 +16,6 @@ import 'package:vayu/config/app_config.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/services/connectivity_service.dart';
 
-/// **OPTIMIZED VideoService - Single source of truth for all video operations**
-/// Merged from VideoService, BaseVideoService, and InstagramVideoService
 /// Eliminates code duplication and provides consistent API
 class VideoService {
   static final GlobalKey<NavigatorState> navigatorKey =
@@ -145,11 +142,11 @@ class VideoService {
 
       String url = '$baseUrl/api/videos?page=$page&limit=$limit';
       final normalizedType = videoType?.toLowerCase();
-      if (normalizedType != null &&
-          (normalizedType == 'yug' || normalizedType == 'vayu')) {
-        url += '&videoType=$normalizedType';
-        AppLogger.log(
-            '🔍 VideoService: Filtering by videoType: $normalizedType');
+      // **FIXED: Use 'yog' consistently in both frontend and backend**
+      String? apiVideoType = normalizedType;
+      if (normalizedType == 'yog' || normalizedType == 'vayu') {
+        url += '&videoType=$apiVideoType';
+        AppLogger.log('🔍 VideoService: Filtering by videoType: $apiVideoType');
       }
 
       // **BACKEND-FIRST: Get deviceId for anonymous users**
@@ -185,13 +182,26 @@ class VideoService {
         final Map<String, dynamic> responseData = json.decode(response.body);
         final List<dynamic> videoList = responseData['videos'] ?? [];
 
-        // **FIX: Validate video list exists and log if empty**
+        // **ENHANCED: Detailed logging for empty video list debugging**
         if (videoList.isEmpty) {
           AppLogger.log(
             '⚠️ VideoService: Empty video list received from API (page: $page, videoType: $videoType)',
           );
           AppLogger.log(
               '⚠️ VideoService: Response data keys: ${responseData.keys.toList()}');
+          AppLogger.log(
+              '⚠️ VideoService: Full response: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
+          AppLogger.log(
+              '⚠️ VideoService: Has more: ${responseData['hasMore']}, Total: ${responseData['total']}, Current page: ${responseData['currentPage']}');
+
+          // **NEW: Check if backend has any videos at all**
+          if (responseData['total'] != null && responseData['total'] == 0) {
+            AppLogger.log(
+                '⚠️ VideoService: Backend reports 0 total videos in database!');
+          }
+        } else {
+          AppLogger.log(
+              '✅ VideoService: Received ${videoList.length} videos from API (page: $page, videoType: $videoType)');
         }
 
         final videos = videoList.map((json) {
@@ -260,10 +270,28 @@ class VideoService {
           'totalPages': responseData['totalPages'] ?? 1,
         };
       } else {
+        // **ENHANCED: Better error handling for non-200 responses**
         AppLogger.log(
           '❌ VideoService: API returned status ${response.statusCode}',
         );
-        throw Exception('Failed to load videos: ${response.statusCode}');
+        AppLogger.log(
+          '❌ VideoService: Response body: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}',
+        );
+
+        // **NEW: Try to parse error message from backend**
+        String errorMessage = 'Failed to load videos: ${response.statusCode}';
+        try {
+          final errorData = json.decode(response.body);
+          if (errorData['error'] != null) {
+            errorMessage = errorData['error'].toString();
+          } else if (errorData['message'] != null) {
+            errorMessage = errorData['message'].toString();
+          }
+        } catch (_) {
+          // Not JSON, use default message
+        }
+
+        throw Exception(errorMessage);
       }
     } catch (e) {
       AppLogger.log('❌ VideoService: Error in getVideos: $e');
@@ -952,7 +980,7 @@ class VideoService {
       // **Add fields**
       request.fields['videoName'] = title;
       // Description intentionally omitted from upload flow
-      String resolvedVideoType = 'yug';
+      String resolvedVideoType = 'yog';
       if (link != null && link.isNotEmpty) {
         request.fields['link'] = link;
       }
@@ -1262,13 +1290,31 @@ class VideoService {
       if (userData == null) {
         throw Exception('User not authenticated');
       }
-      if (userData['token'] == null) {
-        throw Exception('Authentication token not found');
+
+      // **CRITICAL FIX: Always get token using AuthService.getToken() (most reliable source)**
+      String? token = await AuthService.getToken();
+
+      // Fallback to userData token if AuthService doesn't have it
+      if (token == null || token.isEmpty) {
+        AppLogger.log(
+            '⚠️ VideoService: Token not found via AuthService, checking userData...');
+        token = userData['token'];
       }
+
+      // Final check - if still no token, throw error
+      if (token == null || token.isEmpty) {
+        AppLogger.log(
+            '❌ VideoService: No token found via AuthService or userData');
+        throw Exception(
+            'Authentication token not found. Please sign in again.');
+      }
+
+      AppLogger.log(
+          '✅ VideoService: Token retrieved successfully (length: ${token.length})');
 
       return {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${userData['token']}',
+        'Authorization': 'Bearer $token',
       };
     } catch (e) {
       AppLogger.log('❌ VideoService: Error getting auth headers: $e');
@@ -1279,24 +1325,68 @@ class VideoService {
   /// **Optimized HTTP request with retry logic**
   Future<http.Response> _makeRequest(
     Future<http.Response> Function() requestFn, {
-    int maxRetries = maxRetries,
-    Duration retryDelay = const Duration(seconds: retryDelay),
+    int maxRetries = 2,
+    Duration retryDelay = const Duration(seconds: 1),
     Duration timeout = const Duration(seconds: 15),
   }) async {
     int attempts = 0;
+    Exception? lastException;
+
     while (attempts < maxRetries) {
       try {
         final response = await requestFn().timeout(timeout);
+
+        // **FIX: Return response even if not 200 - let caller handle it**
+        // Only retry on network errors, not HTTP errors
         if (response.statusCode == 200) return response;
-        attempts++;
-        if (attempts < maxRetries) await Future.delayed(retryDelay * attempts);
+
+        // **NEW: Log non-200 responses but don't retry (they're valid HTTP responses)**
+        AppLogger.log(
+          '⚠️ VideoService: Non-200 response (${response.statusCode}), attempt ${attempts + 1}/$maxRetries',
+        );
+
+        // **FIX: Return response even if not 200 - backend errors should be handled by caller**
+        // Only retry on actual network failures (socket errors, timeouts)
+        if (response.statusCode >= 500) {
+          // Server error - might be temporary, retry
+          attempts++;
+          if (attempts < maxRetries) {
+            AppLogger.log('🔄 VideoService: Retrying after server error...');
+            await Future.delayed(retryDelay * attempts);
+            continue;
+          }
+        }
+
+        // Return the response (even if error) - let caller decide what to do
+        return response;
       } catch (e) {
+        lastException = e is Exception ? e : Exception(e.toString());
         attempts++;
-        if (attempts >= maxRetries) rethrow;
-        await Future.delayed(retryDelay * attempts);
+
+        AppLogger.log(
+          '❌ VideoService: Request failed (attempt $attempts/$maxRetries): $lastException',
+        );
+
+        // **FIX: Only retry on network-related errors, not all errors**
+        if (attempts < maxRetries &&
+            (e.toString().contains('timeout') ||
+                e.toString().contains('socket') ||
+                e.toString().contains('connection') ||
+                e.toString().contains('network'))) {
+          AppLogger.log('🔄 VideoService: Retrying after network error...');
+          await Future.delayed(retryDelay * attempts);
+          continue;
+        }
+
+        // If not retryable or max retries reached, throw
+        if (attempts >= maxRetries) {
+          rethrow;
+        }
       }
     }
-    throw Exception('Request failed after $maxRetries attempts');
+
+    throw lastException ??
+        Exception('Request failed after $maxRetries attempts');
   }
 
   // **AD INTEGRATION METHODS - From original VideoService**
@@ -1415,7 +1505,7 @@ class VideoService {
     String title, {
     String description = '',
     String link = '',
-    String videoType = 'yug',
+    String videoType = 'yog',
     String category = '',
     List<String> tags = const [],
   }) async {

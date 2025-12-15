@@ -178,12 +178,16 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     } catch (e) {
       AppLogger.log('❌ CreatorRevenueScreen: Error loading revenue data: $e');
 
-      // **FIXED: Better error handling for 401 errors**
+      // **FIXED: Better error handling for authentication errors**
       String errorMessage = 'Error loading revenue data: $e';
       if (e.toString().contains('401') ||
           e.toString().contains('Unauthorized')) {
         errorMessage =
             'Please sign in again to view your revenue. Your session may have expired.';
+      } else if (e.toString().contains('Authentication token not found') ||
+          e.toString().contains('token not found')) {
+        errorMessage =
+            'Authentication token not found. Please sign in again to view your revenue.';
       } else if (e.toString().contains('Failed to fetch user videos')) {
         errorMessage =
             'Unable to load your videos. Please check your connection and try again.';
@@ -612,22 +616,22 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   Widget _buildRevenueOverviewCard() {
-    // **FIXED: Use calculated total revenue from individual videos if backend API returns 0**
-    // This ensures consistency - if individual videos show earnings, overview should too
+    // **FIXED: Always use backend API value (same as ProfileStatsWidget)**
+    // Both screens should show same earnings from backend API
     final backendThisMonth =
         (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
     final lastMonth = (_revenueData?['lastMonth'] as num?)?.toDouble() ?? 0.0;
 
-    // **FIX: Use calculated _totalRevenue if backend returns 0 (backend API issue workaround)**
-    // _totalRevenue is the sum of all individual video earnings which are showing correctly
-    final thisMonth = backendThisMonth > 0 ? backendThisMonth : _totalRevenue;
+    // **FIXED: Always use backend API value (no fallback to _totalRevenue)**
+    // This ensures consistency between ProfileStatsWidget and CreatorRevenueScreen
+    final thisMonth = backendThisMonth;
 
     // **FIXED: Calculate gross and platform fee from current month earnings**
     final creatorRevenue =
         thisMonth; // Use current month earnings (calculated if backend is 0)
     final grossRevenue = thisMonth > 0
         ? thisMonth / AppConfig.creatorRevenueShare
-        : _grossRevenue; // Use calculated gross if thisMonth is from _totalRevenue
+        : 0.0; // Always calculate from backend API value
     final calculatedPlatformFee =
         (grossRevenue - creatorRevenue).clamp(0.0, double.infinity);
     final platformSharePercent =
@@ -1065,15 +1069,12 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   Widget _buildRevenueAnalyticsCard() {
-    // **FIXED: Use calculated total revenue if backend API returns 0**
+    // **FIXED: Always use backend API value (same as ProfileStatsWidget)**
     final backendThisMonth =
         (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
-    final thisMonth = backendThisMonth > 0 ? backendThisMonth : _totalRevenue;
-    final thisMonthGross = thisMonth > 0
-        ? (backendThisMonth > 0
-            ? thisMonth / AppConfig.creatorRevenueShare
-            : _grossRevenue)
-        : 0.0;
+    final thisMonth = backendThisMonth; // Always use backend API value
+    final thisMonthGross =
+        thisMonth > 0 ? thisMonth / AppConfig.creatorRevenueShare : 0.0;
     final thisMonthPlatformFee =
         (thisMonthGross - thisMonth).clamp(0.0, double.infinity);
 
@@ -1167,17 +1168,14 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   Widget _buildRevenueBreakdownCard() {
-    // **FIXED: Use calculated total revenue if backend API returns 0**
+    // **FIXED: Always use backend API value (same as ProfileStatsWidget)**
     final backendThisMonth =
         (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
-    final thisMonth = backendThisMonth > 0 ? backendThisMonth : _totalRevenue;
+    final thisMonth = backendThisMonth; // Always use backend API value
     final creatorRevenue =
-        thisMonth; // Current month creator earnings (calculated if backend is 0)
-    final grossRevenue = thisMonth > 0
-        ? (backendThisMonth > 0
-            ? thisMonth / AppConfig.creatorRevenueShare
-            : _grossRevenue)
-        : 0.0;
+        thisMonth; // Current month creator earnings from backend
+    final grossRevenue =
+        thisMonth > 0 ? thisMonth / AppConfig.creatorRevenueShare : 0.0;
     final platformFee =
         (grossRevenue - creatorRevenue).clamp(0.0, double.infinity);
     final hasRevenue = grossRevenue > 0.0;

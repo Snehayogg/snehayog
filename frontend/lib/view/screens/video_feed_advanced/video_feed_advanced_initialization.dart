@@ -60,10 +60,21 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
             _videos.isNotEmpty ? videoIdentityKey(_videos.first) : null;
 
         // **FIX: Rank videos and find correct index AFTER ranking**
-        _videos = _rankVideosWithEngagement(
+        final rankedVideos = _rankVideosWithEngagement(
           _videos,
           preserveVideoKey: preserveKey,
         );
+
+        // **CRITICAL FIX: If all videos were filtered out, use original videos as fallback**
+        final videosToUse =
+            rankedVideos.isEmpty && _videos.isNotEmpty ? _videos : rankedVideos;
+
+        if (rankedVideos.isEmpty && _videos.isNotEmpty) {
+          AppLogger.log(
+              '⚠️ VideoFeedAdvanced: All ${_videos.length} initial videos were filtered out! Using original videos as fallback.');
+        }
+
+        _videos = videosToUse;
 
         if (mounted) {
           // **FIX: Find correct index AFTER ranking (videos may have been reordered)**
@@ -156,12 +167,22 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
             // **CRITICAL: Re-rank videos but preserve deep link video at index 0**
             // Use preserveVideoKey to ensure deep link video stays at position 0
             final deepLinkVideoKey = videoIdentityKey(targetVideo);
-            _videos = _rankVideosWithEngagement(
+            final rankedVideos = _rankVideosWithEngagement(
               _videos,
               preserveVideoKey: deepLinkVideoKey.isNotEmpty
                   ? deepLinkVideoKey
                   : targetVideoId,
             );
+
+            // **CRITICAL FIX: If all videos were filtered out, use original videos as fallback**
+            _videos = rankedVideos.isEmpty && _videos.isNotEmpty
+                ? _videos
+                : rankedVideos;
+
+            if (rankedVideos.isEmpty && _videos.isNotEmpty) {
+              AppLogger.log(
+                  '⚠️ VideoFeedAdvanced: All videos were filtered out after deep link! Using original videos as fallback.');
+            }
 
             // **VERIFY: Ensure deep link video is still at index 0 after ranking**
             final verifyIndex = _videos.indexWhere((v) {
@@ -431,6 +452,19 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
             AppLogger.log(
               '🚀 VideoFeedAdvanced: Progressive render after videos loaded: ${_videos.length}',
             );
+
+            // **CRITICAL FIX: Set _isScreenVisible = true when videos are loaded for Yug tab**
+            // This ensures autoplay works when Yug tab is first loaded
+            if (!_openedFromProfile &&
+                _mainController?.currentIndex == 0 &&
+                !_isScreenVisible) {
+              _isScreenVisible = true;
+              _ensureWakelockForVisibility();
+              AppLogger.log(
+                '✅ VideoFeedAdvanced: Yug tab videos loaded - setting _isScreenVisible = true',
+              );
+            }
+
             _startVideoPreloading();
             _loadFollowingUsers();
           }
@@ -691,7 +725,7 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
       }
 
       await _carouselAdManager.loadCarouselAds();
-      if (widget.videoType == 'yug' || widget.videoType == 'vayu') {
+      if (widget.videoType == 'yog' || widget.videoType == 'vayu') {
         await _loadCarouselAds();
       }
     } catch (e) {

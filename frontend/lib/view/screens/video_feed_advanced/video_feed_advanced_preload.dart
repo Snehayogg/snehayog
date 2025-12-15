@@ -1069,7 +1069,9 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
   void _tryAutoplayCurrentImmediate(int index) {
     if (_videos.isEmpty || _isLoading) return;
     if (index != _currentIndex) return; // Make sure index hasn't changed
-    if (!_allowAutoplay('tryAutoplayCurrentImmediate')) return;
+    // **CRITICAL FIX: Use _shouldAutoplayForContext instead of _allowAutoplay**
+    // This ensures Yug tab visibility is checked before autoplay
+    if (!_shouldAutoplayForContext('tryAutoplayCurrentImmediate')) return;
 
     final controller = _controllerPool[index];
     if (controller != null &&
@@ -1086,7 +1088,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         controller.setVolume(1.0);
       } catch (_) {}
 
-      if (!_allowAutoplay('autoplay immediate')) return;
+      // **CRITICAL FIX: Use _shouldAutoplayForContext instead of _allowAutoplay**
+      if (!_shouldAutoplayForContext('autoplay immediate')) return;
 
       _pauseAllOtherVideos(index);
 

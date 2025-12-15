@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
@@ -39,6 +41,7 @@ import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'package:vayu/services/earnings_service.dart';
 import 'package:vayu/core/utils/video_engagement_ranker.dart';
 import 'package:vayu/config/admob_config.dart';
+import 'package:path_provider/path_provider.dart';
 
 part 'video_feed_advanced/video_feed_advanced_state_fields.dart';
 part 'video_feed_advanced/video_feed_advanced_playback.dart';
@@ -47,6 +50,43 @@ part 'video_feed_advanced/video_feed_advanced_initialization.dart';
 part 'video_feed_advanced/video_feed_advanced_data.dart';
 part 'video_feed_advanced/video_feed_advanced_preload.dart';
 part 'video_feed_advanced/video_feed_advanced_ui.dart';
+
+// #region agent log
+// Debug logging helper for instrumentation
+Future<void> _debugLog(String location, String message,
+    Map<String, dynamic> data, String hypothesisId) async {
+  try {
+    final payload = {
+      'id': 'log_${DateTime.now().millisecondsSinceEpoch}_${hypothesisId}',
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+      'location': location,
+      'message': message,
+      'data': data,
+      'sessionId': 'debug-session',
+      'runId': 'run1',
+      'hypothesisId': hypothesisId,
+    };
+    // Try to write to workspace log file (for desktop/web)
+    try {
+      final logFile = File(r'c:\Users\sanje\apps\Vayu\.cursor\debug.log');
+      await logFile.writeAsString('${jsonEncode(payload)}\n',
+          mode: FileMode.append);
+    } catch (_) {
+      // Fallback: write to app documents directory
+      try {
+        final appDir = await getApplicationDocumentsDirectory();
+        final logFile = File('${appDir.path}/debug.log');
+        await logFile.writeAsString('${jsonEncode(payload)}\n',
+            mode: FileMode.append);
+      } catch (_) {
+        // If both fail, at least log to console
+        AppLogger.log(
+            '🔍 DEBUG [$hypothesisId]: $message - ${jsonEncode(data)}');
+      }
+    }
+  } catch (_) {}
+}
+// #endregion
 
 class VideoFeedAdvanced extends StatefulWidget {
   final int? initialIndex;
@@ -72,8 +112,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         WidgetsBindingObserver,
         AutomaticKeepAliveClientMixin,
         VideoFeedStateFieldsMixin {
-  /// Tracks whether a like operation is already in progress for a given video.
-  /// Prevents duplicate like/unlike calls and double increments.
   final Map<String, bool> _likeInProgress = {};
 
   @override
@@ -207,6 +245,16 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       final bool isYugTabActive = _mainController?.currentIndex == 0 &&
           !_mainController!.isMediaPickerActive &&
           !_mainController!.recentlyReturnedFromPicker;
+
+      // **CRITICAL FIX: Set _isScreenVisible = true when Yug tab is active (not opened from profile)**
+      // This ensures videos autoplay when Yug tab is first loaded
+      if (!_openedFromProfile && isYugTabActive && !_isScreenVisible) {
+        _isScreenVisible = true;
+        _ensureWakelockForVisibility();
+        AppLogger.log(
+          '✅ VideoFeedAdvanced: Yug tab active - setting _isScreenVisible = true',
+        );
+      }
 
       final bool shouldAttemptAutoplay =
           _openedFromProfile || (isYugTabActive && _isScreenVisible);
@@ -2189,6 +2237,20 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             WidgetsBinding.instance.addPostFrameCallback((_) {
               _handleVisibilityChange(isVideoTabActive);
             });
+
+            // #region agent log
+            _debugLog(
+                'video_feed_advanced.dart:2207',
+                'UI build condition check',
+                {
+                  'isLoading': _isLoading,
+                  'errorMessage': _errorMessage,
+                  'videosLength': _videos.length,
+                  'willShowEmpty':
+                      !_isLoading && _errorMessage == null && _videos.isEmpty,
+                },
+                'E');
+            // #endregion
 
             return Scaffold(
               backgroundColor: Colors.black,

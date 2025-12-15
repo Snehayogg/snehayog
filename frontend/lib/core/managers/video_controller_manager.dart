@@ -271,7 +271,7 @@ class VideoControllerManager {
       uploader: Uploader(id: 'legacy', name: 'Legacy', profilePic: ''),
       uploadedAt: DateTime.now(),
       likedBy: [],
-      videoType: 'yug',
+      videoType: 'yog',
       aspectRatio: 9 / 16,
       duration: const Duration(seconds: 0),
       comments: [],

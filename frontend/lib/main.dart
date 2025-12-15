@@ -111,7 +111,6 @@ Future<void> _splashPrefetch() async {
     final cacheManager = SmartCacheManager();
     await cacheManager.initialize();
 
-    // Warm up TLS/DNS with a lightweight health ping (best-effort)
     unawaited(() async {
       try {
         final base = await vsvc.VideoService.getBaseUrlWithFallback();
@@ -123,13 +122,13 @@ Future<void> _splashPrefetch() async {
     }());
 
     // Cache the first page in SmartCacheManager for instant loading
-    const cacheKey = 'videos_page_1_yug';
+    const cacheKey = 'videos_page_1_yog';
     final result = await cacheManager.get<Map<String, dynamic>>(
       cacheKey,
       fetchFn: () async {
         print('🚀 SplashPrefetch: Fetching first page for cache');
         return await videoService.getVideos(
-            page: 1, limit: 6, videoType: 'yug');
+            page: 1, limit: 6, videoType: 'yog');
       },
       cacheType: 'videos',
       maxAge: const Duration(minutes: 15), // Cache for 15 minutes

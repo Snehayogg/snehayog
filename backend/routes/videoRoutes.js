@@ -97,6 +97,57 @@ router.get('/debug-database', async (req, res) => {
     ]);
     console.log('🔍 DEBUG: Videos by user:', userCounts);
     
+    // **NEW: Count videos by videoType**
+    const videoTypeStats = await Video.aggregate([
+      {
+        $group: {
+          _id: '$videoType',
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $sort: { count: -1 }
+      }
+    ]);
+    console.log('🔍 DEBUG: Videos by videoType:', JSON.stringify(videoTypeStats, null, 2));
+    
+    // Count videos with null/undefined videoType
+    const nullVideoTypeCount = await Video.countDocuments({
+      $or: [
+        { videoType: null },
+        { videoType: { $exists: false } }
+      ]
+    });
+    if (nullVideoTypeCount > 0) {
+      console.log(`🔍 DEBUG: Videos with null/undefined videoType: ${nullVideoTypeCount}`);
+    }
+    
+    // Count completed videos by videoType (videos that can be shown)
+    const completedVideoTypeStats = await Video.aggregate([
+      {
+        $match: {
+          processingStatus: 'completed',
+          videoUrl: { 
+            $exists: true, 
+            $ne: null, 
+            $ne: '',
+            $not: /^uploads[\\\/]/,
+            $regex: /^https?:\/\//
+          }
+        }
+      },
+      {
+        $group: {
+          _id: '$videoType',
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $sort: { count: -1 }
+      }
+    ]);
+    console.log('🔍 DEBUG: Completed videos by videoType (showable):', JSON.stringify(completedVideoTypeStats, null, 2));
+    
     // Get sample videos with detailed URL information
     const sampleVideos = await Video.find({})
       .select('videoName uploader createdAt processingStatus videoType videoUrl thumbnailUrl hlsPlaylistUrl hlsMasterPlaylistUrl isHLSEncoded')
@@ -124,6 +175,9 @@ router.get('/debug-database', async (req, res) => {
       totalVideos,
       statusCounts,
       userCounts,
+      videoTypeStats,
+      nullVideoTypeCount,
+      completedVideoTypeStats,
       sampleVideos,
       brokenVideos,
       timestamp: new Date().toISOString()
@@ -842,7 +896,111 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
   }
 });
 
+// Get all videos - SIMPLE feed (latest + light randomness)
+// - Only completed & playable videos
+// - Optional videoType filter (yog / vayu)
+// - Sorted by createdAt DESC, then lightly shuffled within the page
+router.get('/', async (req, res) => {
+  try {
+    console.log('📹 SIMPLE GET /api/videos called');
 
+    const { videoType, page = 1, limit = 10 } = req.query;
+
+    // Pagination params (safe bounds)
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 10)); // 1..50
+
+    // Base filter: only completed videos with real HTTP/HTTPS URLs
+    const filter = {
+      uploader: { $exists: true, $ne: null },
+      videoUrl: {
+        $exists: true,
+        $ne: null,
+        $ne: '',
+        $not: /^uploads[\\\/]/,
+        $regex: /^https?:\/\//
+      },
+      processingStatus: 'completed'
+    };
+
+    // Optional videoType filter
+    if (videoType) {
+      const normalizedType = String(videoType).toLowerCase();
+      const normalizedVideoType = normalizedType === 'vayug' ? 'vayu' : normalizedType;
+
+      if (normalizedVideoType === 'yog' || normalizedVideoType === 'vayu') {
+        filter.videoType = normalizedVideoType;
+        console.log(`📹 Filtering by videoType: ${normalizedVideoType}`);
+      } else {
+        console.log(`⚠️ Unknown videoType: ${videoType}, showing all videos`);
+      }
+    }
+
+    const skip = (pageNum - 1) * limitNum;
+
+    // Fetch data + total count in parallel
+    const [videos, total] = await Promise.all([
+      Video.find(filter)
+        .populate('uploader', 'googleId name profileImageUrl')
+        .sort({ createdAt: -1 }) // latest first
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Video.countDocuments(filter)
+    ]);
+
+    // Light randomness: shuffle only within this page's set
+    for (let i = videos.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [videos[i], videos[j]] = [videos[j], videos[i]];
+    }
+
+    const hasMore = pageNum * limitNum < total;
+
+    const sanitizedVideos = videos.map(video => ({
+      _id: video._id,
+      videoName: video.videoName,
+      description: video.description || '',
+      videoUrl: video.videoUrl,
+      thumbnailUrl: video.thumbnailUrl || '',
+      videoType: video.videoType || 'yog',
+      uploader: video.uploader ? {
+        _id: video.uploader._id,
+        googleId: video.uploader.googleId,
+        name: video.uploader.name,
+        profileImageUrl: video.uploader.profileImageUrl || ''
+      } : null,
+      likes: video.likes || 0,
+      views: video.views || 0,
+      shares: video.shares || 0,
+      createdAt: video.createdAt,
+      uploadedAt: video.uploadedAt || video.createdAt,
+      duration: video.duration || 0,
+      aspectRatio: video.aspectRatio || (9 / 16),
+      finalScore: video.finalScore || 0,
+      processingStatus: video.processingStatus || 'completed',
+      isHLSEncoded: video.isHLSEncoded || false,
+      hlsPlaylistUrl: video.hlsPlaylistUrl || video.videoUrl,
+      hlsMasterPlaylistUrl: video.hlsMasterPlaylistUrl || '',
+      lowQualityUrl: video.lowQualityUrl || video.videoUrl
+    }));
+
+    return res.json({
+      videos: sanitizedVideos,
+      page: pageNum,
+      limit: limitNum,
+      total,
+      hasMore,
+      isPersonalized: false
+    });
+  } catch (error) {
+    console.error('❌ SIMPLE /api/videos error:', error);
+    return res.status(500).json({
+      error: 'Failed to fetch videos',
+      details: error.message
+    });
+  }
+});
 
 
 // Get all videos (optimized for performance) - SUPPORTS MP4 AND HLS
@@ -851,6 +1009,14 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
 // **NOTE: verifyToken is optional - if provided, returns personalized feed; otherwise, regular feed**
 router.get('/', async (req, res) => {
   try {
+    // **NEW: Log that endpoint was hit**
+    console.log('📹 GET /api/videos endpoint called');
+    console.log('📹 Request query:', req.query);
+    console.log('📹 Request headers:', {
+      authorization: req.headers.authorization ? 'Present' : 'Missing',
+      'user-agent': req.headers['user-agent']?.substring(0, 50) || 'Unknown',
+    });
+    
     // Try to get user from token (optional authentication)
     let userId = null;
     try {
@@ -868,13 +1034,25 @@ router.get('/', async (req, res) => {
             // Try JWT token
             const jwt = (await import('jsonwebtoken')).default;
             const JWT_SECRET = process.env.JWT_SECRET;
-            if (JWT_SECRET) {
+            
+            // **NEW: Check if JWT_SECRET exists**
+            if (!JWT_SECRET) {
+              console.log('⚠️ JWT_SECRET not found in environment, skipping JWT verification');
+            } else if (JWT_SECRET) {
               try {
                 const decoded = jwt.verify(token, JWT_SECRET);
                 userId = decoded.id || decoded.googleId;
                 console.log('✅ JWT token verified for personalized feed:', userId);
               } catch (jwtError) {
-                // Token invalid - continue without user
+                // **ENHANCED: Log JWT error details for debugging**
+                console.log('⚠️ JWT verification failed:', {
+                  error: jwtError.message,
+                  tokenExpired: jwtError.name === 'TokenExpiredError',
+                  invalidSignature: jwtError.message.includes('signature'),
+                  jwtSecretExists: !!JWT_SECRET,
+                  jwtSecretLength: JWT_SECRET ? JWT_SECRET.length : 0,
+                });
+                // Token invalid - continue without user (this is OK for optional auth)
                 console.log('⚠️ Token verification failed, using regular feed');
               }
             }
@@ -883,10 +1061,12 @@ router.get('/', async (req, res) => {
           // Token verification failed - continue without personalized feed
           console.log('⚠️ Token verification failed, using regular feed:', tokenError.message);
         }
+      } else {
+        console.log('ℹ️ No token provided, using regular feed');
       }
     } catch (error) {
       // Error getting token - continue without personalized feed
-      console.log('⚠️ Error checking token, using regular feed');
+      console.log('⚠️ Error checking token, using regular feed:', error.message);
     }
 
     const { videoType, page = 1, limit = 10, deviceId } = req.query;
@@ -895,6 +1075,7 @@ router.get('/', async (req, res) => {
     const userIdentifier = userId || deviceId; // Use userId if authenticated, else deviceId
     const isAuthenticated = !!userId;
     
+    // **NEW: Log before proceeding**
     console.log('📹 Fetching videos...', { 
       videoType, 
       page, 
@@ -934,10 +1115,66 @@ router.get('/', async (req, res) => {
       processingStatus: 'completed' // **FIXED: Only show completed videos that can actually play**
     };
     
+    // **DEBUG: Check videoType distribution in database BEFORE filtering**
+    try {
+      const videoTypeStats = await Video.aggregate([
+        {
+          $match: {
+            uploader: { $exists: true, $ne: null },
+            videoUrl: { 
+              $exists: true, 
+              $ne: null, 
+              $ne: '',
+              $not: /^uploads[\\\/]/,
+              $regex: /^https?:\/\//
+            },
+            processingStatus: 'completed'
+          }
+        },
+        {
+          $group: {
+            _id: '$videoType',
+            count: { $sum: 1 }
+          }
+        },
+        {
+          $sort: { count: -1 }
+        }
+      ]);
+      console.log('📊 Database videoType distribution:', JSON.stringify(videoTypeStats, null, 2));
+      
+      // Also check null/undefined videoType
+      const nullVideoTypeCount = await Video.countDocuments({
+        ...baseQueryFilter,
+        $or: [
+          { videoType: null },
+          { videoType: { $exists: false } }
+        ]
+      });
+      if (nullVideoTypeCount > 0) {
+        console.log(`📊 Videos with null/undefined videoType: ${nullVideoTypeCount}`);
+      }
+    } catch (err) {
+      console.log('⚠️ Error checking videoType stats:', err.message);
+    }
+    
     // Add videoType filter if specified
-    if (videoType && (videoType.toLowerCase() === 'yog' || videoType.toLowerCase() === 'vayu')) {
-      baseQueryFilter.videoType = videoType.toLowerCase();
-      console.log('📹 Filtering by videoType:', videoType);
+    // **FIXED: Use 'yog' consistently in both frontend and backend**
+    if (videoType) {
+      const normalizedType = videoType.toLowerCase();
+      // Normalize 'vayug' to 'vayu' for consistency (keep 'yog' as is)
+      const normalizedVideoType = normalizedType === 'vayug' ? 'vayu' : normalizedType;
+      
+      if (normalizedVideoType === 'yog' || normalizedVideoType === 'vayu') {
+        baseQueryFilter.videoType = normalizedVideoType;
+        console.log(`📹 Filtering by videoType: ${normalizedVideoType}`);
+        
+        // **DEBUG: Check how many videos match this filter**
+        const matchingCount = await Video.countDocuments(baseQueryFilter);
+        console.log(`📊 Videos matching videoType='${normalizedVideoType}': ${matchingCount}`);
+      } else {
+        console.log(`⚠️ Unknown videoType: ${videoType}, showing all videos`);
+      }
     }
     
     let unwatchedVideos = [];
@@ -1383,6 +1620,28 @@ router.get('/', async (req, res) => {
 
     console.log(`📹 Filtered out ${finalVideos.length - validVideos.length} videos with invalid uploader references`);
     console.log(`📹 Returning ${validVideos.length} valid videos`);
+    
+    // **DEBUG: Log detailed breakdown if no videos found**
+    if (validVideos.length === 0) {
+      console.log('❌ DEBUG: No valid videos found! Breakdown:');
+      console.log(`   - finalVideos.length: ${finalVideos.length}`);
+      console.log(`   - baseQueryFilter: ${JSON.stringify(baseQueryFilter)}`);
+      console.log(`   - userIdentifier: ${userIdentifier || 'none'}`);
+      console.log(`   - watchedVideoIds.length: ${watchedVideoIds?.length || 0}`);
+      console.log(`   - unwatchedVideoIds.length: ${unwatchedVideoIds?.length || 0}`);
+      
+      // Check if all videos are being filtered out
+      const totalMatchingFilter = await Video.countDocuments(baseQueryFilter);
+      console.log(`   - Total videos matching baseQueryFilter: ${totalMatchingFilter}`);
+      
+      if (userIdentifier && watchedVideoIds?.length > 0) {
+        const unwatchedCount = await Video.countDocuments({
+          ...baseQueryFilter,
+          _id: { $nin: watchedVideoIds }
+        });
+        console.log(`   - Unwatched videos count: ${unwatchedCount}`);
+      }
+    }
 
     // Transform videos to match Flutter app expectations
     // **FIX: Convert to async to handle likedBy conversion**
@@ -1457,14 +1716,118 @@ router.get('/', async (req, res) => {
     // **IMPROVED: Don't cache shuffled results - only cache unwatched IDs (already done above)**
     // This ensures different users get different random orders on each request
     
+    // **DEBUG: Comprehensive video availability check**
+    console.log(`📊 VIDEO AVAILABILITY DEBUG:`);
+    console.log(`   - validVideos.length: ${validVideos.length}`);
+    console.log(`   - transformedVideos.length: ${transformedVideos.length}`);
+    console.log(`   - totalVideos (from query): ${totalVideos}`);
+    console.log(`   - videoType filter: ${videoType || 'none'}`);
+    console.log(`   - userIdentifier: ${userIdentifier || 'none'}`);
+    console.log(`   - isPersonalizedFeed: ${isPersonalizedFeed}`);
+
+    // Check video URL distribution
+    if (transformedVideos.length > 0) {
+      const cloudflareUrls = transformedVideos.filter(v => v.videoUrl && v.videoUrl.includes('cdn.snehayog.site'));
+      const cloudinaryUrls = transformedVideos.filter(v => v.videoUrl && v.videoUrl.includes('cloudinary.com'));
+      const otherUrls = transformedVideos.filter(v => v.videoUrl && !v.videoUrl.includes('cdn.snehayog.site') && !v.videoUrl.includes('cloudinary.com'));
+      const missingUrls = transformedVideos.filter(v => !v.videoUrl || v.videoUrl === '');
+      
+      console.log(`   📹 Video URL Distribution:`);
+      console.log(`      - Cloudflare (cdn.snehayog.site): ${cloudflareUrls.length}`);
+      console.log(`      - Cloudinary: ${cloudinaryUrls.length}`);
+      console.log(`      - Other: ${otherUrls.length}`);
+      console.log(`      - Missing URLs: ${missingUrls.length}`);
+      
+      if (cloudflareUrls.length > 0) {
+        console.log(`      - Sample Cloudflare URL: ${cloudflareUrls[0].videoUrl?.substring(0, 80)}...`);
+      }
+      if (cloudinaryUrls.length > 0) {
+        console.log(`      - Sample Cloudinary URL: ${cloudinaryUrls[0].videoUrl?.substring(0, 80)}...`);
+      }
+      if (missingUrls.length > 0) {
+        console.log(`      ⚠️ Videos with missing URLs: ${missingUrls.map(v => v.videoName || v._id).join(', ')}`);
+      }
+    } else {
+      // **CRITICAL: No videos in response - check why**
+      console.log(`   ❌ NO VIDEOS IN RESPONSE! Checking filters...`);
+      
+      // Check baseQueryFilter match
+      const baseFilterCount = await Video.countDocuments(baseQueryFilter);
+      console.log(`   - Videos matching baseQueryFilter: ${baseFilterCount}`);
+      console.log(`   - baseQueryFilter: ${JSON.stringify(baseQueryFilter, null, 2)}`);
+      
+      // Check without videoType filter
+      const withoutVideoTypeFilter = { ...baseQueryFilter };
+      delete withoutVideoTypeFilter.videoType;
+      const withoutVideoTypeCount = await Video.countDocuments(withoutVideoTypeFilter);
+      console.log(`   - Videos without videoType filter: ${withoutVideoTypeCount}`);
+      
+      // Check processingStatus distribution
+      const statusCounts = await Video.aggregate([
+        {
+          $match: {
+            uploader: { $exists: true, $ne: null },
+            videoUrl: { 
+              $exists: true, 
+              $ne: null, 
+              $ne: '',
+              $not: /^uploads[\\\/]/,
+              $regex: /^https?:\/\//
+            }
+          }
+        },
+        {
+          $group: {
+            _id: '$processingStatus',
+            count: { $sum: 1 }
+          }
+        }
+      ]);
+      console.log(`   - Processing status distribution: ${JSON.stringify(statusCounts)}`);
+      
+      // Check videoType distribution for completed videos
+      const videoTypeCounts = await Video.aggregate([
+        {
+          $match: {
+            uploader: { $exists: true, $ne: null },
+            videoUrl: { 
+              $exists: true, 
+              $ne: null, 
+              $ne: '',
+              $not: /^uploads[\\\/]/,
+              $regex: /^https?:\/\//
+            },
+            processingStatus: 'completed'
+          }
+        },
+        {
+          $group: {
+            _id: '$videoType',
+            count: { $sum: 1 }
+          }
+        }
+      ]);
+      console.log(`   - VideoType distribution (completed only): ${JSON.stringify(videoTypeCounts)}`);
+    }
+    
     console.log(`✅ Found ${validVideos.length} valid videos (page ${pageNum}, total: ${totalVideos})`);
     
     res.json(response);
   } catch (error) {
     console.error('❌ Error fetching videos:', error);
+    console.error('❌ Error stack:', error.stack);
+    console.error('❌ Error details:', {
+      name: error.name,
+      message: error.message,
+      code: error.code,
+    });
+    
+    // **NEW: Send detailed error response for debugging**
     res.status(500).json({ 
       error: 'Failed to fetch videos',
-      message: error.message 
+      message: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      timestamp: new Date().toISOString()
     });
   }
 });

@@ -434,7 +434,7 @@ class AdTargetingService {
     }
 
     // Default based on video type
-    if (videoType == 'yug') return 'yoga';
+    if (videoType == 'yog') return 'yoga';
     if (videoType == 'fitness') return 'fitness';
     if (videoType == 'cooking') return 'cooking';
 

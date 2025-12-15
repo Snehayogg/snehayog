@@ -87,6 +87,41 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
     super.dispose();
   }
 
+  /// **NEW: Calculate current month earnings from videos (same logic as CreatorRevenueScreen)**
+  Future<double> _calculateCurrentMonthEarnings() async {
+    try {
+      final now = DateTime.now();
+      final currentMonth = now.month - 1; // 0-indexed for backend
+      final currentYear = now.year;
+
+      AppLogger.log(
+          '💰 ProfileStatsWidget: Calculating current month (${now.month}/${currentYear}) earnings for ${widget.stateManager.userVideos.length} videos');
+
+      double totalCreatorEarnings = 0.0;
+
+      for (final video in widget.stateManager.userVideos) {
+        final grossEarnings =
+            await EarningsService.calculateVideoRevenueForMonth(
+          video.id,
+          currentMonth,
+          currentYear,
+        );
+        final creatorEarnings =
+            EarningsService.creatorShareFromGross(grossEarnings);
+        totalCreatorEarnings += creatorEarnings;
+      }
+
+      AppLogger.log(
+          '💰 ProfileStatsWidget: Current month earnings calculated: ₹${totalCreatorEarnings.toStringAsFixed(2)}');
+
+      return totalCreatorEarnings;
+    } catch (e) {
+      AppLogger.log(
+          '❌ ProfileStatsWidget: Error calculating current month earnings: $e');
+      return 0.0;
+    }
+  }
+
   /// **FIXED: Load monthly earnings from backend API (not all-time)**
   /// **ENHANCED: Uses backend API which calculates current month earnings correctly**
   Future<void> _loadEarnings({bool forceRefresh = false}) async {
@@ -242,18 +277,15 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
       } else {
         AppLogger.log(
             '⚠️ ProfileStatsWidget: API returned status ${response.statusCode}, body: ${response.body}');
-        // Fallback to local calculation
+        // **FIXED: Fallback to CURRENT MONTH calculation (not all-time)**
         if (widget.stateManager.userVideos.isNotEmpty) {
           try {
-            final totalRevenue =
-                await EarningsService.calculateCreatorTotalRevenueForVideos(
-              widget.stateManager.userVideos,
-            );
+            final currentMonthRevenue = await _calculateCurrentMonthEarnings();
             AppLogger.log(
-                '💰 ProfileStatsWidget: Using fallback calculation: ₹${totalRevenue.toStringAsFixed(2)}');
+                '💰 ProfileStatsWidget: Using fallback calculation (CURRENT MONTH): ₹${currentMonthRevenue.toStringAsFixed(2)}');
             if (mounted) {
               setState(() {
-                _earnings = totalRevenue;
+                _earnings = currentMonthRevenue;
                 _isLoadingEarnings = false;
               });
             }
@@ -295,20 +327,17 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
             '⚠️ ProfileStatsWidget: JSON parsing error - API response might be malformed');
       }
 
-      // Fallback to local calculation on error
+      // **FIXED: Fallback to CURRENT MONTH calculation on error (not all-time)**
       if (widget.stateManager.userVideos.isNotEmpty) {
         try {
           AppLogger.log(
-              '🔄 ProfileStatsWidget: Attempting fallback calculation from videos...');
-          final totalRevenue =
-              await EarningsService.calculateCreatorTotalRevenueForVideos(
-            widget.stateManager.userVideos,
-          );
+              '🔄 ProfileStatsWidget: Attempting fallback calculation (CURRENT MONTH) from videos...');
+          final currentMonthRevenue = await _calculateCurrentMonthEarnings();
           AppLogger.log(
-              '💰 ProfileStatsWidget: Fallback calculation result: ₹${totalRevenue.toStringAsFixed(2)}');
+              '💰 ProfileStatsWidget: Fallback calculation result (CURRENT MONTH): ₹${currentMonthRevenue.toStringAsFixed(2)}');
           if (mounted) {
             setState(() {
-              _earnings = totalRevenue;
+              _earnings = currentMonthRevenue;
               _isLoadingEarnings = false;
             });
           }

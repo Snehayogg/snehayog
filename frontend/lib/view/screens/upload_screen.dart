@@ -587,7 +587,7 @@ class _UploadScreenState extends State<UploadScreen> {
       _updateProgressPhase('upload');
 
       final String serverVideoType =
-          _videoType.value == 'paid' ? 'vayu' : 'yug';
+          _videoType.value == 'paid' ? 'vayu' : 'yog';
 
       AppLogger.log(
           '🎯 UploadScreen: Using videoType=$serverVideoType (selection: ${_videoType.value ?? 'default'})');

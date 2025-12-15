@@ -12,7 +12,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       if (useCache && !append && page == 1) {
         try {
           await _cacheManager.initialize();
-          final cacheKey = 'videos_page_${page}_${widget.videoType ?? 'yug'}';
+          final cacheKey = 'videos_page_${page}_${widget.videoType ?? 'yog'}';
 
           // **Use peek to get cached data without triggering fetch**
           final cachedData = await _cacheManager.peek<Map<String, dynamic>>(
@@ -43,17 +43,28 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
                     : null,
               );
 
+              // **CRITICAL FIX: If all cached videos were filtered out, use original cached videos as fallback**
+              final videosToUse =
+                  rankedVideos.isEmpty && cachedVideos.isNotEmpty
+                      ? cachedVideos
+                      : rankedVideos;
+
+              if (rankedVideos.isEmpty && cachedVideos.isNotEmpty) {
+                AppLogger.log(
+                    '⚠️ VideoFeedAdvanced: All ${cachedVideos.length} cached videos were filtered out! Using original cached videos as fallback.');
+              }
+
               // Find saved video index
               int? restoredIndex;
               if (savedVideoId != null) {
                 restoredIndex =
-                    rankedVideos.indexWhere((v) => v.id == savedVideoId);
+                    videosToUse.indexWhere((v) => v.id == savedVideoId);
                 if (restoredIndex == -1) restoredIndex = null;
               }
 
               if (mounted) {
                 setState(() {
-                  _videos = rankedVideos;
+                  _videos = videosToUse;
                   if (restoredIndex != null) {
                     _currentIndex = restoredIndex;
                   } else {
@@ -107,16 +118,29 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
 
   /// **NEW: Load videos from API (separate method for background refresh)**
   Future<void> _loadVideosFromAPI({int page = 1, bool append = false}) async {
+    // #region agent log
+    _debugLog(
+        'video_feed_advanced_data.dart:109',
+        '_loadVideosFromAPI called',
+        {
+          'page': page,
+          'append': append,
+          'videoType': widget.videoType,
+        },
+        'F');
+    // #endregion
+
     try {
       // **CONNECTIVITY CHECK: Verify internet connection before API call**
-      final hasInternet = await ConnectivityService.hasInternetConnection();
-      if (!hasInternet) {
-        AppLogger.log('📡 VideoFeedAdvanced: No internet connection detected');
+      // **FIXED: Only block if truly no network connectivity, not on timeout/false positives**
+      final hasNetwork = await ConnectivityService.hasNetworkConnectivity();
+      if (!hasNetwork) {
+        // Only block if there's truly no network interface (WiFi/Mobile off)
+        AppLogger.log(
+            '📡 VideoFeedAdvanced: No network connectivity detected (WiFi/Mobile off)');
         if (mounted) {
-          // Don't block the whole UI – just show a lightweight snackbar.
-          // This covers both no-internet and very slow/unstable connections.
           _showSnackBar(
-            'Slow internet connection. Please check your network.',
+            'No internet connection. Please check your network.',
             isError: true,
           );
           setState(() {
@@ -126,7 +150,20 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         return;
       }
 
+      // **FIXED: Don't block on internet check failure - proceed with API call anyway**
+      // The actual API call will handle real connectivity issues
+      final hasInternet = await ConnectivityService.hasInternetConnection();
+      if (!hasInternet) {
+        AppLogger.log(
+            '📡 VideoFeedAdvanced: Internet check failed, but network exists - proceeding with API call');
+        // Don't block - proceed with API call and let it handle errors
+      }
+
       AppLogger.log('🔍 VideoFeedAdvanced: Loading videos from API');
+      AppLogger.log('   - page: $page');
+      AppLogger.log('   - limit: $_videosPerPage');
+      AppLogger.log('   - videoType: ${widget.videoType}');
+
       final response = await _videoService.getVideos(
         page: page,
         limit: _videosPerPage,
@@ -135,9 +172,107 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
 
       AppLogger.log('✅ VideoFeedAdvanced: Successfully loaded videos from API');
       AppLogger.log(
+          '🔍 VideoFeedAdvanced: Response received, checking structure...');
+      AppLogger.log(
           '🔍 VideoFeedAdvanced: Response keys: ${response.keys.toList()}');
+      AppLogger.log(
+          '🔍 VideoFeedAdvanced: Response type: ${response.runtimeType}');
+      AppLogger.log(
+          '🔍 VideoFeedAdvanced: Response["videos"] type: ${response['videos']?.runtimeType}');
+      AppLogger.log(
+          '🔍 VideoFeedAdvanced: Response["videos"] is List: ${response['videos'] is List}');
+      AppLogger.log(
+          '🔍 VideoFeedAdvanced: Response["videos"] length: ${(response['videos'] as List?)?.length ?? 'null'}');
 
-      final newVideos = response['videos'] as List<VideoModel>;
+      // **CRITICAL: Safe type casting with error handling**
+      // **FIX: After HTTP serialization, videos come as List<Map>, not List<VideoModel>**
+      List<VideoModel> newVideos;
+      try {
+        final videosList = response['videos'];
+        if (videosList == null) {
+          AppLogger.log('❌ VideoFeedAdvanced: response["videos"] is NULL!');
+          newVideos = <VideoModel>[];
+        } else if (videosList is List) {
+          // **FIX: Convert List<Map<String, dynamic>> to List<VideoModel> using fromJson**
+          AppLogger.log(
+              '🔍 VideoFeedAdvanced: videosList is List, length: ${videosList.length}');
+          if (videosList.isNotEmpty) {
+            final firstItem = videosList.first;
+            AppLogger.log(
+                '🔍 VideoFeedAdvanced: First item type: ${firstItem.runtimeType}');
+            AppLogger.log(
+                '🔍 VideoFeedAdvanced: First item is VideoModel: ${firstItem is VideoModel}');
+            AppLogger.log(
+                '🔍 VideoFeedAdvanced: First item is Map: ${firstItem is Map<String, dynamic>}');
+
+            if (firstItem is VideoModel) {
+              // Already VideoModel objects (VideoService already converts them)
+              newVideos = videosList.cast<VideoModel>();
+              AppLogger.log(
+                  '✅ VideoFeedAdvanced: Videos already VideoModel objects (from VideoService), length: ${newVideos.length}');
+            } else if (firstItem is Map<String, dynamic>) {
+              // Convert Map to VideoModel using fromJson (most common case after HTTP)
+              newVideos = videosList
+                  .map((item) {
+                    try {
+                      return VideoModel.fromJson(item as Map<String, dynamic>);
+                    } catch (e) {
+                      AppLogger.log(
+                          '❌ VideoFeedAdvanced: Error parsing video: $e');
+                      AppLogger.log(
+                          '   Video data: ${item.toString().substring(0, 200)}');
+                      return null;
+                    }
+                  })
+                  .whereType<VideoModel>()
+                  .toList();
+              AppLogger.log(
+                  '✅ VideoFeedAdvanced: Converted ${newVideos.length} videos from Map to VideoModel (${videosList.length - newVideos.length} failed to parse)');
+            } else {
+              AppLogger.log(
+                  '❌ VideoFeedAdvanced: Unknown video item type: ${firstItem.runtimeType}');
+              newVideos = <VideoModel>[];
+            }
+          } else {
+            newVideos = <VideoModel>[];
+            AppLogger.log('⚠️ VideoFeedAdvanced: Videos list is empty');
+          }
+        } else {
+          AppLogger.log(
+              '❌ VideoFeedAdvanced: response["videos"] is not a List! Type: ${videosList.runtimeType}');
+          newVideos = <VideoModel>[];
+        }
+      } catch (e, stackTrace) {
+        AppLogger.log('❌ VideoFeedAdvanced: Error parsing videos list: $e');
+        AppLogger.log('   Stack trace: $stackTrace');
+        AppLogger.log(
+            '   Response["videos"] type: ${response['videos']?.runtimeType}');
+        AppLogger.log(
+            '   Response["videos"] length: ${(response['videos'] as List?)?.length ?? 'null'}');
+        if (response['videos'] is List &&
+            (response['videos'] as List).isNotEmpty) {
+          AppLogger.log(
+              '   First video item type: ${(response['videos'] as List).first.runtimeType}');
+          AppLogger.log(
+              '   First video item (first 200 chars): ${(response['videos'] as List).first.toString().substring(0, 200)}');
+        }
+        newVideos = <VideoModel>[];
+      }
+
+      // **CRITICAL DEBUG: Log immediately after parsing**
+      AppLogger.log(
+          '🔍 VideoFeedAdvanced: Parsed newVideos list length: ${newVideos.length}');
+      if (newVideos.isEmpty) {
+        AppLogger.log(
+            '⚠️ VideoFeedAdvanced: newVideos list is EMPTY after parsing!');
+        AppLogger.log('   Response total: ${response['total']}');
+        AppLogger.log('   Response hasMore: ${response['hasMore']}');
+      } else {
+        AppLogger.log(
+            '✅ VideoFeedAdvanced: newVideos list has ${newVideos.length} videos');
+        AppLogger.log('   First video ID: ${newVideos.first.id}');
+        AppLogger.log('   First video name: ${newVideos.first.videoName}');
+      }
       final hasMore = response['hasMore'] as bool? ?? false;
       final total = response['total'] as int? ?? 0;
       final currentPage = response['currentPage'] as int? ?? page;
@@ -147,6 +282,20 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
               ? videoIdentityKey(_videos[_currentIndex])
               : null;
       final preserveKey = existingCurrentKey;
+
+      // #region agent log
+      _debugLog(
+          'video_feed_advanced_data.dart:140',
+          'API response parsed',
+          {
+            'newVideosCount': newVideos.length,
+            'hasMore': hasMore,
+            'total': total,
+            'currentPage': currentPage,
+            'videoType': widget.videoType,
+          },
+          'F');
+      // #endregion
 
       AppLogger.log('📊 Video Loading Complete:');
       AppLogger.log('   New Videos Loaded: ${newVideos.length}');
@@ -158,19 +307,180 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         AppLogger.log(
           '⚠️ VideoFeedAdvanced: Empty videos received, invalidating cache to prevent stale data',
         );
+        AppLogger.log(
+          '⚠️ VideoFeedAdvanced: Debug info - page: $page, total: $total, hasMore: $hasMore, videoType: ${widget.videoType}',
+        );
+
         try {
           await _cacheManager.initialize();
           await _cacheManager.invalidateVideoCache(
             videoType: widget.videoType,
           );
 
-          AppLogger.log('🔄 VideoFeedAdvanced: Retrying with force refresh...');
-          final retryResponse = await _videoService.getVideos(
-            page: page,
-            limit: _videosPerPage,
-            videoType: widget.videoType,
+          AppLogger.log(
+              '🔄 VideoFeedAdvanced: Retrying with force refresh (no cache)...');
+
+          // **NEW: Try without videoType filter first to see if videos exist**
+          Map<String, dynamic> retryResponse;
+          try {
+            retryResponse = await _videoService.getVideos(
+              page: page,
+              limit: _videosPerPage,
+              videoType: widget.videoType,
+            );
+          } catch (error) {
+            AppLogger.log(
+                '❌ VideoFeedAdvanced: Retry with videoType failed: $error');
+            // **FALLBACK: Try without videoType filter**
+            AppLogger.log(
+                '🔄 VideoFeedAdvanced: Retrying without videoType filter...');
+            retryResponse = await _videoService.getVideos(
+              page: page,
+              limit: _videosPerPage,
+              videoType: null, // Try without filter
+            );
+          }
+
+          // **FIX: Parse retry videos using VideoModel.fromJson (same as main parsing)**
+          List<VideoModel> retryVideos;
+          try {
+            final retryVideosList = retryResponse['videos'];
+            if (retryVideosList == null) {
+              AppLogger.log(
+                  '❌ VideoFeedAdvanced: retryResponse["videos"] is NULL!');
+              retryVideos = <VideoModel>[];
+            } else if (retryVideosList is List) {
+              if (retryVideosList.isNotEmpty) {
+                final firstItem = retryVideosList.first;
+                if (firstItem is VideoModel) {
+                  retryVideos = retryVideosList.cast<VideoModel>();
+                } else if (firstItem is Map<String, dynamic>) {
+                  retryVideos = retryVideosList
+                      .map((item) {
+                        try {
+                          return VideoModel.fromJson(
+                              item as Map<String, dynamic>);
+                        } catch (e) {
+                          AppLogger.log(
+                              '❌ VideoFeedAdvanced: Error parsing retry video: $e');
+                          return null;
+                        }
+                      })
+                      .whereType<VideoModel>()
+                      .toList();
+                  AppLogger.log(
+                      '✅ VideoFeedAdvanced: Converted ${retryVideos.length} retry videos from Map to VideoModel');
+                } else {
+                  AppLogger.log(
+                      '❌ VideoFeedAdvanced: Unknown retry video item type: ${firstItem.runtimeType}');
+                  retryVideos = <VideoModel>[];
+                }
+              } else {
+                retryVideos = <VideoModel>[];
+              }
+            } else {
+              AppLogger.log(
+                  '❌ VideoFeedAdvanced: retryResponse["videos"] is not a List! Type: ${retryVideosList.runtimeType}');
+              retryVideos = <VideoModel>[];
+            }
+          } catch (e, stackTrace) {
+            AppLogger.log(
+                '❌ VideoFeedAdvanced: Error parsing retry videos: $e');
+            AppLogger.log('   Stack trace: $stackTrace');
+            retryVideos = <VideoModel>[];
+          }
+
+          AppLogger.log(
+            '📊 VideoFeedAdvanced: Retry result - ${retryVideos.length} videos, total: ${retryResponse['total']}, hasMore: ${retryResponse['hasMore']}',
           );
-          final retryVideos = retryResponse['videos'] as List<VideoModel>;
+
+          // **CRITICAL FIX: If retry with videoType returns empty, try without videoType filter**
+          if (retryVideos.isEmpty && widget.videoType != null) {
+            AppLogger.log(
+              '⚠️ VideoFeedAdvanced: Retry with videoType returned empty, trying without videoType filter...',
+            );
+            try {
+              final fallbackResponse = await _videoService.getVideos(
+                page: page,
+                limit: _videosPerPage,
+                videoType: null, // Try without filter
+              );
+              // **FIX: Parse fallback videos using VideoModel.fromJson (same as main parsing)**
+              List<VideoModel> fallbackVideos;
+              try {
+                final fallbackVideosList = fallbackResponse['videos'];
+                if (fallbackVideosList == null) {
+                  AppLogger.log(
+                      '❌ VideoFeedAdvanced: fallbackResponse["videos"] is NULL!');
+                  fallbackVideos = <VideoModel>[];
+                } else if (fallbackVideosList is List) {
+                  if (fallbackVideosList.isNotEmpty) {
+                    final firstItem = fallbackVideosList.first;
+                    if (firstItem is VideoModel) {
+                      fallbackVideos = fallbackVideosList.cast<VideoModel>();
+                    } else if (firstItem is Map<String, dynamic>) {
+                      fallbackVideos = fallbackVideosList
+                          .map((item) {
+                            try {
+                              return VideoModel.fromJson(
+                                  item as Map<String, dynamic>);
+                            } catch (e) {
+                              AppLogger.log(
+                                  '❌ VideoFeedAdvanced: Error parsing fallback video: $e');
+                              return null;
+                            }
+                          })
+                          .whereType<VideoModel>()
+                          .toList();
+                      AppLogger.log(
+                          '✅ VideoFeedAdvanced: Converted ${fallbackVideos.length} fallback videos from Map to VideoModel');
+                    } else {
+                      AppLogger.log(
+                          '❌ VideoFeedAdvanced: Unknown fallback video item type: ${firstItem.runtimeType}');
+                      fallbackVideos = <VideoModel>[];
+                    }
+                  } else {
+                    fallbackVideos = <VideoModel>[];
+                  }
+                } else {
+                  AppLogger.log(
+                      '❌ VideoFeedAdvanced: fallbackResponse["videos"] is not a List! Type: ${fallbackVideosList.runtimeType}');
+                  fallbackVideos = <VideoModel>[];
+                }
+              } catch (e, stackTrace) {
+                AppLogger.log(
+                    '❌ VideoFeedAdvanced: Error parsing fallback videos: $e');
+                AppLogger.log('   Stack trace: $stackTrace');
+                fallbackVideos = <VideoModel>[];
+              }
+              if (fallbackVideos.isNotEmpty) {
+                AppLogger.log(
+                  '✅ VideoFeedAdvanced: Fallback without videoType successful, got ${fallbackVideos.length} videos',
+                );
+                if (mounted) {
+                  final rankedFallbackVideos = _rankVideosWithEngagement(
+                    fallbackVideos,
+                    preserveVideoKey: existingCurrentKey,
+                  );
+                  setState(() {
+                    _videos = rankedFallbackVideos;
+                    _currentIndex = 0;
+                    _currentPage =
+                        fallbackResponse['currentPage'] as int? ?? page;
+                    _hasMore = fallbackResponse['hasMore'] as bool? ?? false;
+                    _totalVideos = fallbackResponse['total'] as int? ?? 0;
+                    // **CRITICAL FIX: Clear error message when videos are successfully loaded**
+                    _errorMessage = null;
+                  });
+                  _markCurrentVideoAsSeen();
+                  return;
+                }
+              }
+            } catch (fallbackError) {
+              AppLogger.log(
+                  '❌ VideoFeedAdvanced: Fallback without videoType failed: $fallbackError');
+            }
+          }
 
           if (retryVideos.isNotEmpty) {
             AppLogger.log(
@@ -187,6 +497,8 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
                 _currentPage = retryResponse['currentPage'] as int? ?? page;
                 _hasMore = retryResponse['hasMore'] as bool? ?? false;
                 _totalVideos = retryResponse['total'] as int? ?? 0;
+                // **CRITICAL FIX: Clear error message when videos are successfully loaded**
+                _errorMessage = null;
               });
               _markCurrentVideoAsSeen();
               return;
@@ -215,6 +527,10 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
               hasMore || newVideos.length == _videosPerPage;
           _hasMore = inferredHasMore;
           _totalVideos = total;
+          // **CRITICAL FIX: Clear error message when videos are successfully loaded**
+          if (_videos.isNotEmpty) {
+            _errorMessage = null;
+          }
         });
 
         _markCurrentVideoAsSeen();
@@ -233,14 +549,66 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
           } catch (_) {}
         }
 
+        // #region agent log
+        _debugLog(
+            'video_feed_advanced_data.dart:310',
+            'Before ranking',
+            {
+              'inputVideosCount': newVideos.length,
+              'preserveKey': preserveKey,
+              'preserveVideoId': preserveVideoId,
+            },
+            'A');
+        // #endregion
+
+        AppLogger.log(
+            '🔍 VideoFeedAdvanced: Before ranking - newVideos.length: ${newVideos.length}');
         final rankedVideos = _rankVideosWithEngagement(
           newVideos,
           preserveVideoKey: preserveKey ?? (preserveVideoId),
         );
+        AppLogger.log(
+            '🔍 VideoFeedAdvanced: After ranking - rankedVideos.length: ${rankedVideos.length}');
+
+        // #region agent log
+        _debugLog(
+            'video_feed_advanced_data.dart:318',
+            'After ranking',
+            {
+              'inputVideosCount': newVideos.length,
+              'rankedVideosCount': rankedVideos.length,
+              'filteredOut': newVideos.length - rankedVideos.length,
+            },
+            'A');
+        // #endregion
+
+        // **DEBUG: Log video counts after ranking**
+        AppLogger.log('🔍 VideoFeedAdvanced: After ranking:');
+        AppLogger.log('   Input videos: ${newVideos.length}');
+        AppLogger.log('   Ranked videos: ${rankedVideos.length}');
+
+        // **CRITICAL FIX: If all videos were filtered out, use original videos as fallback**
+        final videosToUse = rankedVideos.isEmpty && newVideos.isNotEmpty
+            ? newVideos
+            : rankedVideos;
+
+        if (rankedVideos.isEmpty && newVideos.isNotEmpty) {
+          AppLogger.log(
+              '   ⚠️ WARNING: All ${newVideos.length} videos were filtered out! Using original videos as fallback.');
+          if (newVideos.isNotEmpty) {
+            AppLogger.log('   First video ID: ${newVideos.first.id}');
+            AppLogger.log(
+                '   First video key: ${videoIdentityKey(newVideos.first)}');
+            AppLogger.log(
+                '   First video videoUrl: ${newVideos.first.videoUrl}');
+            AppLogger.log(
+                '   First video videoName: ${newVideos.first.videoName}');
+          }
+        }
 
         int? nextIndex;
         if (preserveKey != null) {
-          final candidateIndex = rankedVideos.indexWhere(
+          final candidateIndex = videosToUse.indexWhere(
             (video) => videoIdentityKey(video) == preserveKey,
           );
           if (candidateIndex != -1) {
@@ -248,7 +616,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
           }
         } else if (preserveVideoId != null) {
           // **NEW: Try to find by video ID**
-          final candidateIndex = rankedVideos.indexWhere(
+          final candidateIndex = videosToUse.indexWhere(
             (video) => video.id == preserveVideoId,
           );
           if (candidateIndex != -1) {
@@ -258,7 +626,14 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
 
         if (mounted) {
           setState(() {
-            _videos = rankedVideos;
+            _videos = videosToUse;
+            // **DEBUG: Log final state**
+            AppLogger.log('✅ VideoFeedAdvanced: State updated:');
+            AppLogger.log('   _videos.length: ${_videos.length}');
+            AppLogger.log('   _errorMessage: $_errorMessage');
+            AppLogger.log('   _isLoading: $_isLoading');
+            AppLogger.log('   _currentIndex: $_currentIndex');
+
             if (nextIndex != null) {
               _currentIndex = nextIndex;
             } else if (_currentIndex >= _videos.length) {
@@ -269,6 +644,8 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
                 hasMore || newVideos.length == _videosPerPage;
             _hasMore = inferredHasMore;
             _totalVideos = total;
+            // **CRITICAL FIX: Clear error message when videos are successfully loaded**
+            _errorMessage = null;
           });
 
           // **NEW: Update page controller if index changed**
@@ -284,9 +661,31 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         _markCurrentVideoAsSeen();
 
         // **FIX: Ensure isLoading is set to false after videos are loaded**
+        // #region agent log
+        _debugLog(
+            'video_feed_advanced_data.dart:363',
+            'Checking isLoading state',
+            {
+              'mounted': mounted,
+              'isLoading': _isLoading,
+              'videosLength': _videos.length,
+            },
+            'D');
+        // #endregion
+
         if (mounted && _isLoading) {
           setState(() {
             _isLoading = false;
+
+            // #region agent log
+            _debugLog(
+                'video_feed_advanced_data.dart:369',
+                'isLoading set to false',
+                {
+                  'videosLength': _videos.length,
+                },
+                'D');
+            // #endregion
           });
         }
       }
@@ -358,6 +757,33 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
   }) {
     if (videos.isEmpty) return <VideoModel>[];
 
+    AppLogger.log(
+        '🔍 _rankVideosWithEngagement: Processing ${videos.length} videos');
+
+    // **TEMPORARY DEBUG: Log first video details to check if IDs are valid**
+    if (videos.isNotEmpty) {
+      final firstVideo = videos.first;
+      AppLogger.log('🔍 _rankVideosWithEngagement: First video details:');
+      AppLogger.log('   ID: "${firstVideo.id}"');
+      AppLogger.log('   ID isEmpty: ${firstVideo.id.isEmpty}');
+      AppLogger.log('   videoUrl: "${firstVideo.videoUrl}"');
+      AppLogger.log('   videoUrl isEmpty: ${firstVideo.videoUrl.isEmpty}');
+      AppLogger.log('   videoName: "${firstVideo.videoName}"');
+      AppLogger.log('   videoName isEmpty: ${firstVideo.videoName.isEmpty}');
+      final testKey = videoIdentityKey(firstVideo);
+      AppLogger.log('   videoIdentityKey: "$testKey"');
+      AppLogger.log('   videoIdentityKey isEmpty: ${testKey.isEmpty}');
+    }
+
+    // #region agent log
+    _debugLog(
+        'video_feed_advanced_data.dart:462',
+        'Ranking started',
+        {
+          'inputVideosCount': videos.length,
+        },
+        'A');
+
     // **BACKEND-FIRST: Backend already filters watched videos and shuffles**
     // Frontend only needs to:
     // 1. Remove duplicates within the same batch
@@ -365,19 +791,74 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     // 3. Rank by engagement (optional, backend already does some ranking)
 
     final Map<String, VideoModel> uniqueVideos = {};
+    int emptyKeyCount = 0;
+    int duplicateCount = 0;
 
     for (final video in videos) {
       final key = videoIdentityKey(video);
-      if (key.isEmpty) continue;
+
+      // #region agent log
+      if (key.isEmpty) {
+        _debugLog(
+            'video_feed_advanced_data.dart:477',
+            'Empty key detected',
+            {
+              'videoId': video.id,
+              'videoUrl': video.videoUrl,
+              'videoName': video.videoName,
+            },
+            'A');
+      }
+      // #endregion
+
+      if (key.isEmpty) {
+        emptyKeyCount++;
+        AppLogger.log(
+            '⚠️ Video has empty key: id=${video.id}, videoUrl=${video.videoUrl}, videoName=${video.videoName}');
+        continue;
+      }
 
       // Only check for duplicates in current batch, not seen videos
       // Backend already filtered watched videos
       if (!uniqueVideos.containsKey(key)) {
         uniqueVideos[key] = video;
+      } else {
+        duplicateCount++;
+        AppLogger.log(
+            '⚠️ Duplicate video found: key=$key, videoName=${video.videoName}');
       }
     }
 
+    // #region agent log
+    _debugLog(
+        'video_feed_advanced_data.dart:495',
+        'Ranking results',
+        {
+          'emptyKeyCount': emptyKeyCount,
+          'duplicateCount': duplicateCount,
+          'uniqueVideosCount': uniqueVideos.length,
+          'inputVideosCount': videos.length,
+        },
+        'A');
+    // #endregion
+
+    AppLogger.log('🔍 _rankVideosWithEngagement: Results:');
+    AppLogger.log('   Empty keys: $emptyKeyCount');
+    AppLogger.log('   Duplicates: $duplicateCount');
+    AppLogger.log('   Unique videos: ${uniqueVideos.length}');
+
     if (uniqueVideos.isEmpty) {
+      // #region agent log
+      _debugLog(
+          'video_feed_advanced_data.dart:503',
+          'All videos filtered out',
+          {
+            'emptyKeyCount': emptyKeyCount,
+            'duplicateCount': duplicateCount,
+          },
+          'A');
+      // #endregion
+
       AppLogger.log(
           '⚠️ VideoFeedAdvanced: All videos are duplicates in this batch');
       return <VideoModel>[];
@@ -932,7 +1413,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
 
       await _loadActiveAds();
 
-      if (widget.videoType == 'yug') {
+      if (widget.videoType == 'yog') {
         await _loadCarouselAds();
       }
 

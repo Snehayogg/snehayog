@@ -729,6 +729,28 @@ class AdService {
         throw Exception('User not authenticated');
       }
 
+      // **CRITICAL FIX: Always get token using AuthService.getToken() (most reliable source)**
+      String? token = await AuthService.getToken();
+
+      // Fallback to userData token if AuthService doesn't have it
+      if (token == null || token.isEmpty) {
+        AppLogger.log(
+            '⚠️ AdService: Token not found via AuthService, checking userData...');
+        token = userData['token'];
+      }
+
+      // Final check - if still no token, throw error
+      if (token == null || token.isEmpty) {
+        AppLogger.log(
+            '❌ AdService: No token found via AuthService or userData');
+        AppLogger.log('❌ AdService: UserData keys: ${userData.keys.toList()}');
+        throw Exception(
+            'Authentication token not found. Please sign in again.');
+      }
+
+      AppLogger.log(
+          '✅ AdService: Token retrieved successfully (length: ${token.length})');
+
       // **FIX: Use async base URL resolver for proper server detection**
       final baseUrl = await AppConfig.getBaseUrlWithFallback();
       final userId = userData['googleId'] ?? userData['id'];
@@ -736,7 +758,7 @@ class AdService {
       // **FIX: Add timeout to prevent hanging (8 seconds)**
       final response = await httpClientService.get(
         Uri.parse('$baseUrl/api/ads/creator/revenue/$userId'),
-        headers: {'Authorization': 'Bearer ${userData['token']}'},
+        headers: {'Authorization': 'Bearer $token'},
         timeout: const Duration(seconds: 8),
       );
 

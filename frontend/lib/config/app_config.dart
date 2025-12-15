@@ -9,12 +9,11 @@ class AppConfig {
   static String? _cachedBaseUrl;
 
   // Local development server (Wi‑Fi/LAN)
-  static const String _localIpBaseUrl = 'http://192.168.0.199:5001';
+  static const String _localIpBaseUrl = 'http://192.168.0.185:5001';
 
   // Primary production endpoints
-  static const String _customDomainUrl = 'https://snehayog.site';
-  static const String _railwayUrl =
-      'https://snehayog-production.up.railway.app';
+  static const String _customDomainUrl = 'https://api.snehayog.site';
+  static const String _railwayUrl = 'https://snehayog-production.up.railway.app';
 
   // **NEW: Clear cache method for development**
   static void clearCache() {
