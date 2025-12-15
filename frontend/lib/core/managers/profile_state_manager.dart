@@ -566,6 +566,7 @@ class ProfileStateManager extends ChangeNotifier {
               targetUserId,
               isMyProfile: isMyProfile,
             );
+            // **NOTE: Keep views in cache for initial display, but refresh them after loading**
             return {
               'videos':
                   videos.map((video) => video.toJson()).toList(growable: false),
@@ -578,7 +579,42 @@ class ProfileStateManager extends ChangeNotifier {
           final hydratedVideos = _deserializeCachedVideos(payload);
           _userVideos = hydratedVideos;
           AppLogger.log(
-              '⚡ ProfileStateManager: Smart cache served ${_userVideos.length} videos');
+              '⚡ ProfileStateManager: Smart cache served ${_userVideos.length} videos (refreshing view counts from server)');
+
+          // **FIX: Refresh view counts from server in background - views are not cached, always fetch fresh**
+          Future.microtask(() async {
+            try {
+              final freshVideos = await _fetchVideosFromServer(
+                targetUserId,
+                isMyProfile: isMyProfile,
+              );
+
+              // Update view counts for cached videos with fresh data
+              final videoMap = <String, VideoModel>{};
+              for (final freshVideo in freshVideos) {
+                videoMap[freshVideo.id] = freshVideo;
+              }
+
+              // Update view counts in cached videos
+              for (int i = 0; i < _userVideos.length; i++) {
+                final cachedVideo = _userVideos[i];
+                final freshVideo = videoMap[cachedVideo.id];
+                if (freshVideo != null) {
+                  _userVideos[i] =
+                      cachedVideo.copyWith(views: freshVideo.views);
+                }
+              }
+
+              notifyListeners();
+              AppLogger.log(
+                  '✅ ProfileStateManager: View counts refreshed from server');
+            } catch (e) {
+              AppLogger.log(
+                  '⚠️ ProfileStateManager: Error refreshing view counts: $e');
+              // Continue with cached views if refresh fails
+            }
+          });
+
           notifyListeners();
           return;
         }

@@ -42,6 +42,7 @@ import 'package:vayu/services/earnings_service.dart';
 import 'package:vayu/core/utils/video_engagement_ranker.dart';
 import 'package:vayu/config/admob_config.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:vayu/view/screens/profile_screen.dart';
 
 part 'video_feed_advanced/video_feed_advanced_state_fields.dart';
 part 'video_feed_advanced/video_feed_advanced_playback.dart';

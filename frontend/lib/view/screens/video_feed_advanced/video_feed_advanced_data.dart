@@ -869,6 +869,13 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     // **RANKING: Rank by engagement (backend already shuffles, but ranking helps)**
     final rankedVideos = VideoEngagementRanker.rankVideos(uniqueList);
 
+    // **YUG TAB RANDOMIZATION: Shuffle order for Yug feed while preserving current video if needed**
+    if (widget.videoType == 'yog') {
+      AppLogger.log(
+          '🎲 _rankVideosWithEngagement: Shuffling videos for Yug tab (videoType=yog)');
+      rankedVideos.shuffle();
+    }
+
     // **PRESERVE: Keep current video at the beginning if specified**
     if (preserveVideoKey != null) {
       final preserveIndex = rankedVideos.indexWhere(

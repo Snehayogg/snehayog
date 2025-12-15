@@ -496,7 +496,7 @@ class _MainScreenState extends State<MainScreen>
                         index: 1,
                         currentIndex: mainController.currentIndex,
                         icon: Icons.video_camera_front_rounded,
-                        label: 'Vayug',
+                        label: 'Vayu',
                         onTap: () => _handleNavTap(1, mainController),
                         mainController: mainController,
                       ),

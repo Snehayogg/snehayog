@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:vayu/utils/responsive_helper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vayu/view/screens/creator_revenue_screen.dart';
 import 'dart:convert';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/core/managers/profile_state_manager.dart';
@@ -28,6 +27,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:vayu/services/ad_service.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/view/search/video_creator_search_delegate.dart';
+import 'package:vayu/services/earnings_service.dart';
+import 'package:vayu/model/video_model.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -87,10 +88,18 @@ class _ProfileScreenState extends State<ProfileScreen>
     // Ensure context is set early for providers that may be used during loads
     // It will be set again in didChangeDependencies
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _stateManager.setContext(context);
+      if (mounted) {
+        _stateManager.setContext(context);
+        // **FIX: Ensure data loads on first attempt even if cache fails**
+        // Call _loadData() in postFrameCallback to ensure context is ready
+        if (_stateManager.userData == null) {
+          _loadData();
+        }
+      }
     });
 
-    // **SIMPLIFIED: Simple cache-first loading**
+    // **FIX: Always attempt initial load, even if cache exists**
+    // This ensures data loads on first attempt
     _loadData();
     // Load referral stats
     _loadReferralStats();
@@ -2030,16 +2039,8 @@ class _ProfileScreenState extends State<ProfileScreen>
               // **SIMPLIFIED: Simple followers tap**
               AppLogger.log('🔄 ProfileScreen: Followers tapped');
             },
-            onEarningsTap: isViewingOwnProfile
-                ? () async {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const CreatorRevenueScreen(),
-                      ),
-                    );
-                  }
-                : null,
+            // Profile screen: disable earnings bottom sheet tap
+            onEarningsTap: null,
           ),
 
           const SizedBox(height: 16),
@@ -2835,5 +2836,269 @@ class _ProfileScreenState extends State<ProfileScreen>
     } catch (e) {
       ProfileScreenLogger.logWarning('Error clearing profile cache: $e');
     }
+  }
+}
+
+/// **NEW: Earnings Bottom Sheet Content Widget**
+class EarningsBottomSheetContent extends StatefulWidget {
+  final List<VideoModel> videos;
+  final ScrollController scrollController;
+
+  const EarningsBottomSheetContent({
+    super.key,
+    required this.videos,
+    required this.scrollController,
+  });
+
+  @override
+  State<EarningsBottomSheetContent> createState() =>
+      _EarningsBottomSheetContentState();
+}
+
+class _EarningsBottomSheetContentState
+    extends State<EarningsBottomSheetContent> {
+  final Map<String, double> _videoEarnings = {};
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEarnings();
+  }
+
+  Future<void> _loadEarnings() async {
+    setState(() => _isLoading = true);
+    try {
+      // Always limit the number of concurrent requests so UI doesn't feel stuck
+      final now = DateTime.now();
+      final currentMonth = now.month - 1; // 0-indexed for backend
+      final currentYear = now.year;
+
+      // To keep loading time reasonable, cap the number of videos we query
+      final videosToLoad = widget.videos.take(50).toList();
+
+      await Future.wait(
+        videosToLoad.map((video) async {
+          try {
+            final grossEarnings =
+                await EarningsService.calculateVideoRevenueForMonth(
+              video.id,
+              currentMonth,
+              currentYear,
+            );
+            final creatorEarnings =
+                EarningsService.creatorShareFromGross(grossEarnings);
+            _videoEarnings[video.id] = creatorEarnings;
+          } catch (e) {
+            _videoEarnings[video.id] = 0.0;
+          }
+        }),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+
+    if (difference.inDays == 0) {
+      return 'Today';
+    } else if (difference.inDays == 1) {
+      return 'Yesterday';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays} days ago';
+    } else if (difference.inDays < 30) {
+      final weeks = (difference.inDays / 7).floor();
+      return '$weeks week${weeks > 1 ? 's' : ''} ago';
+    } else if (difference.inDays < 365) {
+      final months = (difference.inDays / 30).floor();
+      return '$months month${months > 1 ? 's' : ''} ago';
+    } else {
+      final years = (difference.inDays / 365).floor();
+      return '$years year${years > 1 ? 's' : ''} ago';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    double totalEarnings = 0.0;
+    _videoEarnings.values.forEach((earnings) => totalEarnings += earnings);
+
+    return Column(
+      children: [
+        // Header
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.grey[100],
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(20),
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.account_balance_wallet,
+                  color: Colors.black87, size: 24),
+              const SizedBox(width: 12),
+              const Text(
+                'Video Earnings',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '₹${totalEarnings.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF10B981),
+                ),
+              ),
+              const SizedBox(width: 12),
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close, color: Colors.black54),
+              ),
+            ],
+          ),
+        ),
+        Divider(color: Colors.grey[300], height: 1),
+
+        // Content
+        Expanded(
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : widget.videos.isEmpty
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(32.0),
+                        child: Text(
+                          'No videos found',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: widget.scrollController,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: widget.videos.length,
+                      itemBuilder: (context, index) {
+                        final video = widget.videos[index];
+                        final earnings = _videoEarnings[video.id] ?? 0.0;
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                                color: Colors.grey.shade200, width: 1),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.05),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Video name
+                              Text(
+                                video.videoName,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 12),
+
+                              // Stats row
+                              Row(
+                                children: [
+                                  // Views
+                                  Expanded(
+                                    child: _buildStatItem(
+                                      icon: Icons.visibility,
+                                      label: 'Views',
+                                      value: '${video.views}',
+                                      color: Colors.blue,
+                                    ),
+                                  ),
+
+                                  // Upload date
+                                  Expanded(
+                                    child: _buildStatItem(
+                                      icon: Icons.calendar_today,
+                                      label: 'Uploaded',
+                                      value: _formatDate(video.uploadedAt),
+                                      color: Colors.orange,
+                                    ),
+                                  ),
+
+                                  // Earnings
+                                  Expanded(
+                                    child: _buildStatItem(
+                                      icon: Icons.account_balance_wallet,
+                                      label: 'Earnings',
+                                      value: '₹${earnings.toStringAsFixed(2)}',
+                                      color: const Color(0xFF10B981),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatItem({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Column(
+      children: [
+        Icon(icon, size: 20, color: color),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.grey.shade600,
+          ),
+        ),
+      ],
+    );
   }
 }

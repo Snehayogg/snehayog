@@ -840,10 +840,38 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
   }
 
   Widget _buildEarningsLabel(VideoModel video) {
-    return FutureBuilder<double>(
-      future: _calculateEarningsFromAdViews(video),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+    // **NOTE: Show earnings label for all videos - earnings API will return 0 for non-owned videos**
+    // The backend API handles ownership checks, so we can safely show the label
+    // If the video doesn't belong to the user, earnings will just be 0.00
+
+    return GestureDetector(
+      onTap: () => _showEarningsBottomSheet(),
+      child: FutureBuilder<double>(
+        future: _calculateEarningsFromAdViews(video),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: Colors.green.withOpacity(0.6),
+                  width: 1,
+                ),
+              ),
+              child: const Text(
+                '...',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            );
+          }
+
+          final earnings = snapshot.data ?? 0.0;
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
@@ -854,38 +882,17 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 width: 1,
               ),
             ),
-            child: const Text(
-              '...',
-              style: TextStyle(
+            child: Text(
+              '₹${earnings.toStringAsFixed(2)}',
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 9,
                 fontWeight: FontWeight.w600,
               ),
             ),
           );
-        }
-
-        final earnings = snapshot.data ?? 0.0;
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.3),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: Colors.green.withOpacity(0.6),
-              width: 1,
-            ),
-          ),
-          child: Text(
-            '₹${earnings.toStringAsFixed(2)}',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        );
-      },
+        },
+      ),
     );
   }
 
@@ -1246,6 +1253,44 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           ),
         );
       },
+    );
+  }
+
+  /// **NEW: Show Earnings Bottom Sheet with video details**
+  Future<void> _showEarningsBottomSheet() async {
+    // Show earnings only for the CURRENT video user is watching in Yug tab
+    if (_currentIndex < 0 || _currentIndex >= _videos.length) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Current video not found'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final currentVideo = _videos[_currentIndex];
+
+    if (!mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        expand: false,
+        // Yug tab: compact bottom sheet for single-video earnings
+        initialChildSize: 0.5, // 50% of screen height by default
+        minChildSize: 0.3, // Can be dragged down to 30%
+        maxChildSize: 0.9, // Can be expanded up to 90%
+        builder: (context, scrollController) => EarningsBottomSheetContent(
+          videos: [currentVideo],
+          scrollController: scrollController,
+        ),
+      ),
     );
   }
 }
