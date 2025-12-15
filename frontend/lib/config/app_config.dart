@@ -3,7 +3,8 @@ import 'package:http/http.dart' as http;
 /// Optimized app configuration for better performance and smaller size
 class AppConfig {
   // **MANUAL: Development mode control**
-  static const bool _isDevelopment = false; // Set to true for local testing, false for production
+  static const bool _isDevelopment =
+      false; // Set to true for local testing, false for production
 
   // **NEW: Smart URL selection with fallback**
   static String? _cachedBaseUrl;
@@ -13,7 +14,8 @@ class AppConfig {
 
   // Primary production endpoints
   static const String _customDomainUrl = 'https://api.snehayog.site';
-  static const String _railwayUrl = 'https://snehayog-production.up.railway.app';
+  static const String _railwayUrl =
+      'https://snehayog-production.up.railway.app';
 
   // **NEW: Clear cache method for development**
   static void clearCache() {
@@ -40,6 +42,14 @@ class AppConfig {
 
   // **UPDATED: Try custom domain first, then Railway, then local server**
   static Future<String> getBaseUrlWithFallback() async {
+    // In explicit development mode, always use local server and skip remote checks
+    if (_isDevelopment) {
+      print(
+          '🔍 AppConfig: Development mode enabled, forcing local server: $_localIpBaseUrl');
+      _cachedBaseUrl = _localIpBaseUrl;
+      return _localIpBaseUrl;
+    }
+
     // **FIX: Use cache if available (don't clear it every time!)**
     if (_cachedBaseUrl != null) {
       return _cachedBaseUrl!;
@@ -114,10 +124,17 @@ class AppConfig {
 
   // **UPDATED: Check server connectivity - Custom Domain → Railway → Local Server**
   static Future<String> checkAndUpdateServerUrl() async {
+    // In explicit development mode, always use local server
+    if (_isDevelopment) {
+      print(
+          '🔍 AppConfig: Development mode enabled, forcing local server in checkAndUpdateServerUrl: $_localIpBaseUrl');
+      _cachedBaseUrl = _localIpBaseUrl;
+      return _localIpBaseUrl;
+    }
+
     print('🔍 AppConfig: Checking server connectivity...');
     print('🔍 AppConfig: Order: Custom Domain → Railway → Local Server');
 
-    // 1) Custom domain (snehayog.site) - FIRST PRIORITY
     try {
       print('🔍 AppConfig: [1/3] Testing custom domain: $_customDomainUrl...');
       final response = await http.get(

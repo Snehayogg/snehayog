@@ -121,12 +121,20 @@ class _VideoScreenState extends State<VideoScreen> {
             ? 'yog'
             : null;
 
-    return VideoFeedAdvanced(
-      key: _videoFeedKey,
-      initialIndex: widget.initialIndex,
-      initialVideos: widget.initialVideos,
-      initialVideoId: widget.initialVideoId,
-      videoType: videoType,
+    // Wrap in Scaffold + SafeArea so UI matches Yug tab full-screen layout
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        top: false,
+        bottom: false,
+        child: VideoFeedAdvanced(
+          key: _videoFeedKey,
+          initialIndex: widget.initialIndex,
+          initialVideos: widget.initialVideos,
+          initialVideoId: widget.initialVideoId,
+          videoType: videoType,
+        ),
+      ),
     );
   }
 }

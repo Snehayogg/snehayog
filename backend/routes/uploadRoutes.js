@@ -2,6 +2,8 @@ import express from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs/promises';
+import fsSync from 'fs';
+import crypto from 'crypto';
 import mongoose from 'mongoose';
 import Video from '../models/Video.js';
 import User from '../models/User.js';
@@ -11,6 +13,22 @@ import { verifyToken } from '../utils/verifytoken.js';
 import cloudinary from '../config/cloudinary.js';
 
 const router = express.Router();
+
+/**
+ * Calculate SHA256 hash of a file
+ * @param {string} filePath - Path to the file
+ * @returns {Promise<string>} - Hex string of the hash
+ */
+async function calculateFileHash(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fsSync.createReadStream(filePath);
+    
+    stream.on('data', (data) => hash.update(data));
+    stream.on('end', () => resolve(hash.digest('hex')));
+    stream.on('error', (error) => reject(error));
+  });
+}
 
 // **NEW: Configure multer for image uploads**
 const imageStorage = multer.diskStorage({
@@ -141,6 +159,48 @@ router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    // **NEW: Calculate file hash for duplicate detection**
+    console.log('🔍 Calculating video file hash for duplicate detection...');
+    let videoHash;
+    try {
+      videoHash = await calculateFileHash(videoPath);
+      console.log('✅ Video hash calculated:', videoHash.substring(0, 16) + '...');
+    } catch (hashError) {
+      console.error('❌ Error calculating file hash:', hashError);
+      await fs.unlink(videoPath);
+      return res.status(500).json({ 
+        error: 'Failed to process video file',
+        details: 'Error calculating file hash'
+      });
+    }
+
+    // **NEW: Check for duplicate video (same user, same hash)**
+    const existingVideo = await Video.findOne({ 
+      uploader: user._id,
+      videoHash: videoHash
+    });
+
+    if (existingVideo) {
+      console.log('⚠️ Duplicate video detected:', {
+        existingVideoId: existingVideo._id,
+        existingVideoName: existingVideo.videoName,
+        hash: videoHash.substring(0, 16) + '...'
+      });
+      
+      // Clean up uploaded file
+      await fs.unlink(videoPath);
+      
+      return res.status(409).json({ 
+        error: 'Duplicate video detected',
+        message: 'You have already uploaded this video',
+        existingVideo: {
+          id: existingVideo._id,
+          videoName: existingVideo.videoName,
+          uploadedAt: existingVideo.uploadedAt
+        }
+      });
+    }
+
     // **NEW: Get video dimensions safely**
     const videoInfo = await hybridVideoService.getOriginalVideoInfo(videoPath);
     const aspectRatio = videoInfo.width && videoInfo.height ? 
@@ -171,7 +231,8 @@ router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
       },
       processingStatus: 'pending',
       processingProgress: 0,
-      link: link || '' // **FIX: Include link field from request body**
+      link: link || '', // **FIX: Include link field from request body**
+      videoHash: videoHash // **NEW: Save hash for duplicate detection**
     });
 
     // **NEW: Save video record first**
