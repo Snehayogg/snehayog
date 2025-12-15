@@ -19,8 +19,9 @@ class VideoViewTracker {
 
   // **NEW: Track recent views to prevent rapid repeat spam**
   final Map<String, DateTime> _recentViews = <String, DateTime>{};
+  // **RELAXED**: Allow repeat views after a short cooldown instead of 1 minute
   static const Duration _minViewInterval =
-      Duration(minutes: 1); // Minimum 1 minute between views
+      Duration(seconds: 10); // Minimum 10 seconds between views
 
   /// Increment view count for a video after 2 seconds of playback
   /// Returns true if view was counted, false if already at max or error
@@ -46,14 +47,9 @@ class VideoViewTracker {
       final userId = userData['id'];
       AppLogger.log('🎯 VideoViewTracker: User ID: $userId');
 
-      // **NEW: Prevent self-view counting**
-      if (videoUploaderId != null && videoUploaderId == userId) {
-        AppLogger.log(
-            '🚫 VideoViewTracker: User is viewing their own video - view not counted');
-        AppLogger.log(
-            '🚫 VideoViewTracker: Video uploader: $videoUploaderId, Current user: $userId');
-        return false;
-      }
+      // **RELAXED RULE**: Allow creators to test their own videos
+      // Self-views will now be counted like normal views so creators
+      // can verify that view counts are updating correctly.
 
       // **NEW: Check for rapid repeat spam**
       final viewKey = '${videoId}_$userId';
@@ -90,7 +86,7 @@ class VideoViewTracker {
       // Get deviceId for anonymous users
       final deviceIdService = DeviceIdService();
       final deviceId = await deviceIdService.getDeviceId();
-      
+
       // Track watch for both authenticated and anonymous users
       try {
         final watchUrl = Uri.parse('$_baseUrl/api/videos/$videoId/watch');
@@ -98,12 +94,12 @@ class VideoViewTracker {
           'duration': effectiveDuration,
           'completed': false, // Will be updated when video completes
         };
-        
+
         // **BACKEND-FIRST: Add deviceId for anonymous users**
         if (deviceId.isNotEmpty && (token == null || token.isEmpty)) {
           watchBody['deviceId'] = deviceId;
         }
-        
+
         final watchResponse = await httpClientService.post(
           watchUrl,
           headers: headers,
