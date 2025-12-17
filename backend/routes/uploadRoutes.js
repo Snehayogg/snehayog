@@ -10,7 +10,7 @@ import User from '../models/User.js';
 // Lazy import to ensure env vars are loaded first
 let hybridVideoService;
 import { verifyToken } from '../utils/verifytoken.js';
-import cloudinary from '../config/cloudinary.js';
+import cloudflareR2Service from '../services/cloudflareR2Service.js';
 
 const router = express.Router();
 
@@ -572,7 +572,7 @@ router.get('/videos', verifyToken, async (req, res) => {
   }
 });
 
-// **NEW: Upload image for ads**
+// **NEW: Upload image for ads (Cloudflare R2 instead of Cloudinary)**
 router.post('/image', verifyToken, imageUpload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
@@ -580,72 +580,42 @@ router.post('/image', verifyToken, imageUpload.single('image'), async (req, res)
     }
 
     const imagePath = req.file.path;
-    console.log('🖼️ Starting ad image upload to Cloudinary...');
+    const mimeType = req.file.mimetype || 'image/jpeg';
+    const ext = path.extname(imagePath).toLowerCase();
+
+    console.log('🖼️ Starting ad image upload to Cloudflare R2...');
     console.log('📁 File path:', imagePath);
     console.log('📊 File size:', (req.file.size / 1024 / 1024).toFixed(2), 'MB');
+    console.log('📄 MIME type:', mimeType);
 
     try {
-      // **ENHANCED: Check Cloudinary configuration first**
-      const hasCloudinaryConfig = (process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUD_NAME) &&
-                                  (process.env.CLOUDINARY_API_KEY || process.env.CLOUD_KEY) &&
-                                  (process.env.CLOUDINARY_API_SECRET || process.env.CLOUD_SECRET);
-      
-      if (!hasCloudinaryConfig) {
-        console.error('❌ Cloudinary configuration missing:');
-        console.error('   CLOUDINARY_CLOUD_NAME:', !!process.env.CLOUDINARY_CLOUD_NAME);
-        console.error('   CLOUDINARY_API_KEY:');
-        console.error('   CLOUDINARY_API_SECRET:');
-        console.error('   CLOUD_NAME:', !!process.env.CLOUD_NAME);
-        console.error('   CLOUD_KEY:');
-        console.error('   CLOUD_SECRET:');
-        
-        throw new Error('Cloudinary configuration is incomplete. Please check environment variables.');
-      }
+      // Determine uploader for directory structure
+      const userId = req.user?.id || req.user?.googleId || 'anonymous';
+      const fileName = path.basename(imagePath, ext);
+      const key = `ads/images/${userId}/${fileName}${ext}`;
 
-      console.log('☁️ Cloudinary config check passed, uploading image...');
-      
-      // Upload to Cloudinary
-      const result = await cloudinary.uploader.upload(imagePath, {
-        resource_type: 'image',
-        folder: 'snehayog/ads/images',
-        transformation: [
-          { quality: 'auto:good' },
-          { fetch_format: 'auto' }
-        ],
-        // **NEW: Add timeout and retry options**
-        timeout: 30000, // 30 second timeout
-      });
+      const result = await cloudflareR2Service.uploadFileToR2(
+        imagePath,
+        key,
+        mimeType
+      );
 
-      console.log('✅ Ad image uploaded to Cloudinary successfully');
-      console.log('🔗 Image URL:', result.secure_url);
+      console.log('✅ Ad image uploaded to Cloudflare R2 successfully');
+      console.log('🔗 Image URL:', result.url);
+      console.log('🗝️ R2 Key:', result.key);
 
       // Clean up temp file
       await fs.unlink(imagePath);
 
       res.status(200).json({
         success: true,
-        url: result.secure_url,
-        publicId: result.public_id,
-        message: 'Image uploaded successfully'
+        url: result.url,
+        key: result.key,
+        message: 'Image uploaded successfully',
       });
+    } catch (r2Error) {
+      console.error('❌ Cloudflare R2 upload failed:', r2Error);
 
-    } catch (cloudinaryError) {
-      console.error('❌ Cloudinary upload failed:', cloudinaryError);
-      console.error('❌ Error details:', JSON.stringify(cloudinaryError, null, 2));
-      
-      // **ENHANCED: Provide specific error messages based on error type**
-      let userFriendlyError = 'Failed to upload image to cloud storage';
-      
-      if (cloudinaryError.message?.includes('Invalid API key')) {
-        userFriendlyError = 'Cloud storage configuration error. Please contact support.';
-      } else if (cloudinaryError.message?.includes('timeout')) {
-        userFriendlyError = 'Upload timeout. Please check your internet connection and try again.';
-      } else if (cloudinaryError.message?.includes('file size')) {
-        userFriendlyError = 'Image file is too large. Please use an image smaller than 10MB.';
-      } else if (cloudinaryError.message?.includes('format')) {
-        userFriendlyError = 'Invalid image format. Please use JPG, PNG, or WebP.';
-      }
-      
       // Clean up temp file on error
       try {
         await fs.unlink(imagePath);
@@ -653,22 +623,29 @@ router.post('/image', verifyToken, imageUpload.single('image'), async (req, res)
         console.error('❌ Error cleaning up temp file:', unlinkError);
       }
 
+      let userFriendlyError = 'Failed to upload image to cloud storage';
+      const msg = r2Error.message || '';
+      if (msg.includes('timeout')) {
+        userFriendlyError =
+          'Upload timeout. Please check your internet connection and try again.';
+      } else if (msg.includes('file size') || msg.includes('too large')) {
+        userFriendlyError =
+          'Image file is too large. Please use an image smaller than 10MB.';
+      } else if (msg.includes('Only image files are allowed')) {
+        userFriendlyError =
+          'Invalid image format. Please use JPG, PNG, GIF, or WebP.';
+      }
+
       res.status(500).json({
         error: userFriendlyError,
-        details: cloudinaryError.message,
-        debug: {
-          hasCloudName: !!process.env.CLOUDINARY_CLOUD_NAME,
-          hasApiKey: !!process.env.CLOUDINARY_API_KEY,
-          hasApiSecret: !!process.env.CLOUDINARY_API_SECRET,
-        }
+        details: msg,
       });
     }
-
   } catch (error) {
     console.error('❌ Error in image upload route:', error);
-    res.status(500).json({ 
-      error: 'Image upload failed', 
-      details: error.message 
+    res.status(500).json({
+      error: 'Image upload failed',
+      details: error.message,
     });
   }
 });

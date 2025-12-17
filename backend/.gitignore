@@ -7,6 +7,7 @@
 public/.well-known/assetlinks.json
 serviceAccountKey.json
 app-ads.txt
+firebaseServiceAccount.json
 
 # Keep the example file for reference
 !env.example

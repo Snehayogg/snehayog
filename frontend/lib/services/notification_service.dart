@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/config/app_config.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 /// Top-level function for handling background messages
 @pragma('vm:entry-point')
@@ -26,6 +27,17 @@ class NotificationService {
   bool _initialized = false;
   Timer? _retryTimer;
   bool _isRetrying = false;
+  final FlutterLocalNotificationsPlugin _localNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+  bool _localNotificationsInitialized = false;
+
+  static const AndroidNotificationChannel _androidChannel =
+      AndroidNotificationChannel(
+    'default',
+    'General Notifications',
+    description: 'General app notifications',
+    importance: Importance.high,
+  );
 
   /// Initialize Firebase and FCM
   Future<void> initialize() async {
@@ -34,9 +46,12 @@ class NotificationService {
     }
 
     try {
-      // Initialize Firebase
+      // Initialize Firebase (idempotent if already initialized in main.dart)
       await Firebase.initializeApp();
-      print('✅ Firebase initialized');
+      print('✅ Firebase initialized (NotificationService)');
+
+      // Initialize local notifications (for foreground messages)
+      await _initializeLocalNotifications();
 
       // Initialize Firebase Messaging
       _messaging = FirebaseMessaging.instance;
@@ -63,14 +78,14 @@ class NotificationService {
       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
       // Handle foreground messages
-      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
         print('📱 Foreground message received: ${message.messageId}');
         print('📱 Title: ${message.notification?.title}');
         print('📱 Body: ${message.notification?.body}');
         print('📱 Data: ${message.data}');
 
-        // You can show a local notification here using flutter_local_notifications
-        // For now, we'll just log it
+        // Show a local notification when app is in foreground
+        await _showLocalNotification(message);
       });
 
       // Handle notification taps when app is in background
@@ -140,6 +155,35 @@ class NotificationService {
     });
 
     print('🔄 Started periodic retry mechanism (checks every 30 seconds)');
+  }
+
+  /// Initialize local notifications (used for foreground FCM messages)
+  Future<void> _initializeLocalNotifications() async {
+    if (_localNotificationsInitialized) return;
+
+    try {
+      const androidInitSettings =
+          AndroidInitializationSettings('@mipmap/ic_launcher');
+
+      const initSettings = InitializationSettings(
+        android: androidInitSettings,
+      );
+
+      await _localNotificationsPlugin.initialize(
+        initSettings,
+      );
+
+      // Create Android notification channel to match backend channelId "default"
+      final androidPlatform =
+          _localNotificationsPlugin.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+      await androidPlatform?.createNotificationChannel(_androidChannel);
+
+      _localNotificationsInitialized = true;
+      print('✅ Local notifications initialized');
+    } catch (e) {
+      print('⚠️ Failed to initialize local notifications: $e');
+    }
   }
 
   /// Stop periodic retry mechanism
@@ -242,6 +286,42 @@ class NotificationService {
         default:
           print('📱 Unknown notification type: ${data['type']}');
       }
+    }
+  }
+
+  /// Show a local notification for foreground messages
+  Future<void> _showLocalNotification(RemoteMessage message) async {
+    if (!_localNotificationsInitialized) {
+      return;
+    }
+
+    try {
+      final notification = message.notification;
+      final title = notification?.title ?? message.data['title'] ?? 'Vayu';
+      final body = notification?.body ?? message.data['body'] ?? '';
+
+      final androidDetails = AndroidNotificationDetails(
+        _androidChannel.id,
+        _androidChannel.name,
+        channelDescription: _androidChannel.description,
+        importance: Importance.high,
+        priority: Priority.high,
+        playSound: true,
+      );
+
+      final details = NotificationDetails(
+        android: androidDetails,
+      );
+
+      await _localNotificationsPlugin.show(
+        message.hashCode,
+        title,
+        body,
+        details,
+        payload: jsonEncode(message.data),
+      );
+    } catch (e) {
+      print('⚠️ Failed to show local notification: $e');
     }
   }
 

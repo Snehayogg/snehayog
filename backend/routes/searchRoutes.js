@@ -22,17 +22,23 @@ router.get('/videos', async (req, res) => {
     // **FIX: Escape special regex characters for safe searching**
     const escapedQuery = escapeRegex(q);
     // eslint-disable-next-line no-console
-    console.log(`🔍 searchRoutes: Searching videos with query="${q}" (escaped="${escapedQuery}")`);
+    console.log(
+      `🔍 searchRoutes: Searching videos with query="${q}" (escaped="${escapedQuery}")`,
+    );
 
     const videos = await Video.find({
       videoName: { $regex: escapedQuery, $options: 'i' },
     })
       .sort({ uploadedAt: -1 })
       .limit(limit)
+      // **NEW: Populate uploader so frontend has name/profilePic like main feed**
+      .populate('uploader', 'googleId name profilePic')
       .lean();
 
     // eslint-disable-next-line no-console
-    console.log(`✅ searchRoutes: Found ${videos.length} videos for query="${q}"`);
+    console.log(
+      `✅ searchRoutes: Found ${videos.length} videos for query="${q}"`,
+    );
 
     return res.json({ videos });
   } catch (err) {

@@ -1,7 +1,14 @@
 import admin from 'firebase-admin';
 import User from '../models/User.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// Initialize Firebase Admin (will use service account from environment)
+// ES module equivalents of __filename/__dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Initialize Firebase Admin (will use service account from environment or local file)
 let firebaseInitialized = false;
 
 const initializeFirebase = () => {
@@ -10,23 +17,48 @@ const initializeFirebase = () => {
   }
 
   try {
-    // Check if Firebase credentials are provided via environment variable
-    const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT;
-    
-    if (!serviceAccount) {
-      console.warn('⚠️ FIREBASE_SERVICE_ACCOUNT not found. Notifications will be disabled.');
+    let serviceAccountJson = null;
+
+    // 1) Prefer environment variable in production (Railway, etc.)
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+      try {
+        serviceAccountJson = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+        console.log('✅ Firebase Admin: Loaded service account from FIREBASE_SERVICE_ACCOUNT env');
+      } catch (e) {
+        console.error('❌ Firebase Admin: Invalid FIREBASE_SERVICE_ACCOUNT JSON:', e.message);
+      }
+    }
+
+    // 2) Fallback to local config file for local development
+    if (!serviceAccountJson) {
+      try {
+        const jsonPath = path.join(__dirname, '../config/firebaseServiceAccount.json');
+        if (fs.existsSync(jsonPath)) {
+          const raw = fs.readFileSync(jsonPath, 'utf8');
+          serviceAccountJson = JSON.parse(raw);
+          console.log('✅ Firebase Admin: Loaded service account from firebaseServiceAccount.json');
+        }
+      } catch (e) {
+        console.error('❌ Firebase Admin: Error reading firebaseServiceAccount.json:', e.message);
+      }
+    }
+
+    if (!serviceAccountJson) {
+      console.warn(
+        '⚠️ Firebase Admin: No service account configured (FIREBASE_SERVICE_ACCOUNT env or config/firebaseServiceAccount.json). Notifications will be disabled.'
+      );
       return;
     }
 
-    // Parse the service account JSON
-    const serviceAccountJson = JSON.parse(serviceAccount);
-    
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccountJson)
     });
 
     firebaseInitialized = true;
-    console.log('✅ Firebase Admin initialized successfully');
+    console.log(
+      '✅ Firebase Admin initialized successfully for project:',
+      serviceAccountJson.project_id || '(unknown project)'
+    );
   } catch (error) {
     console.error('❌ Error initializing Firebase Admin:', error.message);
     console.warn('⚠️ Push notifications will be disabled');
