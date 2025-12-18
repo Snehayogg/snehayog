@@ -394,11 +394,11 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
                 );
                 // Show snackbar to user
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
+                  const SnackBar(
                     content:
-                        const Text('Video not found. Showing feed instead.'),
+                        Text('Video not found. Showing feed instead.'),
                     backgroundColor: Colors.orange,
-                    duration: const Duration(seconds: 3),
+                    duration: Duration(seconds: 3),
                   ),
                 );
               }

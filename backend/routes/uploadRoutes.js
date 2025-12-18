@@ -57,12 +57,17 @@ const imageUpload = multer({
   fileFilter: (req, file, cb) => {
     const allowedMimeTypes = [
       'image/jpeg',
-      'image/jpg', 
+      'image/jpg',
       'image/png',
       'image/gif',
-      'image/webp'
+      'image/webp',
+      'image/heic',
+      'image/heif',
+      'image/avif',
+      'image/bmp',
+      'image/tiff'
     ];
-    
+
     if (allowedMimeTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {

@@ -87,6 +87,24 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
     try {
       final video = _videos[index];
 
+      // **NEW: Skip VideoPlayer setup for image-based entries (product images)**
+      final lowerUrl =
+          (video.videoUrl.isNotEmpty ? video.videoUrl : video.thumbnailUrl)
+              .toLowerCase();
+      final isImageEntry = lowerUrl.endsWith('.jpg') ||
+          lowerUrl.endsWith('.jpeg') ||
+          lowerUrl.endsWith('.png') ||
+          lowerUrl.endsWith('.gif') ||
+          lowerUrl.endsWith('.webp');
+
+      if (isImageEntry) {
+        AppLogger.log(
+            '🖼️ Preload: Detected image-based entry at index $index (id=${video.id}), skipping VideoPlayer initialization');
+        _preloadedVideos.add(index);
+        _loadingVideos.remove(index);
+        return;
+      }
+
       videoUrl = await _resolvePlayableUrl(video);
       if (videoUrl == null || videoUrl.isEmpty) {
         AppLogger.log(

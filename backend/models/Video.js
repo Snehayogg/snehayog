@@ -75,6 +75,12 @@ const videoSchema = new mongoose.Schema({
     type: String,
     default: 'yog'
   },
+  // **NEW: Media type for feed entries (video vs image)**
+  mediaType: {
+  type: String,
+  enum: ['video', 'image'],
+  default: 'video'
+  },
   // **NEW: Category and tags for ad targeting**
   category: {
     type: String,

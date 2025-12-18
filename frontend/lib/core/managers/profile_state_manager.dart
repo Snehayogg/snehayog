@@ -8,7 +8,7 @@ import 'package:vayu/core/providers/video_provider.dart';
 import 'package:vayu/core/providers/user_provider.dart';
 import 'package:vayu/model/video_model.dart';
 import 'package:vayu/services/authservices.dart';
-import 'package:vayu/services/cloudinary_service.dart';
+import 'package:vayu/services/cloudflare_r2_service.dart';
 import 'package:vayu/services/user_service.dart';
 import 'package:vayu/services/payment_setup_service.dart';
 import 'package:vayu/services/video_service.dart';
@@ -604,7 +604,6 @@ class ProfileStateManager extends ChangeNotifier {
                       cachedVideo.copyWith(views: freshVideo.views);
                 }
               }
-
               notifyListeners();
               AppLogger.log(
                   '✅ ProfileStateManager: View counts refreshed from server');
@@ -758,7 +757,7 @@ class ProfileStateManager extends ChangeNotifier {
         // It's a local file path, need to upload it first
         AppLogger.log(
             '📤 ProfileStateManager: Uploading local file to cloud storage...');
-        final cloudinaryService = CloudinaryService();
+        final cloudinaryService = CloudflareR2Service();
         final uploadedUrl = await cloudinaryService.uploadImage(
           File(profilePicPath),
           folder: 'snehayog/profile',

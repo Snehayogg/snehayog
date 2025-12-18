@@ -79,7 +79,7 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
       );
     }
 
-    Future<Map<String, dynamic>> _search() async {
+    Future<Map<String, dynamic>> search() async {
       final videos = await _searchService.searchVideos(q);
       final creators = await _searchService.searchCreators(q);
       return <String, dynamic>{
@@ -89,7 +89,7 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
     }
 
     return FutureBuilder<Map<String, dynamic>>(
-      future: _search(),
+      future: search(),
       builder:
           (BuildContext context, AsyncSnapshot<Map<String, dynamic>> snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {

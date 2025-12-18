@@ -17,6 +17,7 @@ import 'package:vayu/view/screens/upload_screen/widgets/upload_advanced_settings
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:video_player/video_player.dart';
+import 'package:vayu/services/cloudflare_r2_service.dart';
 
 class UploadScreen extends StatefulWidget {
   final VoidCallback? onVideoUploaded; // Add callback for video upload success
@@ -46,6 +47,7 @@ class _UploadScreenState extends State<UploadScreen> {
   final TextEditingController _linkController = TextEditingController();
   final VideoService _videoService = VideoService();
   final AuthService _authService = AuthService();
+  final CloudflareR2Service _cloudflareService = CloudflareR2Service();
 
   // Timer for unified progress tracking
   Timer? _progressTimer;
@@ -90,11 +92,11 @@ class _UploadScreenState extends State<UploadScreen> {
     },
   };
 
-  // NEW: Category and Tags to align with ad targeting interests
+  // NEW: Category, video type, and tags to align with ad targeting interests
   static const String _defaultCategory = 'Others';
   final ValueNotifier<String?> _selectedCategory = ValueNotifier<String?>(null);
-  final ValueNotifier<List<String>> _tags = ValueNotifier<List<String>>([]);
   final ValueNotifier<String?> _videoType = ValueNotifier<String?>(null);
+  final ValueNotifier<List<String>> _tags = ValueNotifier<List<String>>([]);
   final ValueNotifier<bool> _showAdvancedSettings = ValueNotifier<bool>(false);
   final TextEditingController _tagInputController = TextEditingController();
 
@@ -461,10 +463,6 @@ class _UploadScreenState extends State<UploadScreen> {
     _showAdvancedSettings.value = !_showAdvancedSettings.value;
   }
 
-  void _handleVideoTypeChanged(String? value) {
-    _videoType.value = value;
-  }
-
   void _handleAddTag(String text) {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
@@ -520,12 +518,12 @@ class _UploadScreenState extends State<UploadScreen> {
 
     // **BATCHED UPDATE: Use ValueNotifiers instead of setState**
     if (_selectedVideo.value == null) {
-      _errorMessage.value = 'Please select a video first';
+      _errorMessage.value = 'Please select a video or product image first';
       return;
     }
 
     if (_titleController.text.isEmpty) {
-      _errorMessage.value = 'Please enter a title for the video';
+      _errorMessage.value = 'Please enter a title for your content';
       return;
     }
 
@@ -536,11 +534,41 @@ class _UploadScreenState extends State<UploadScreen> {
     // Validate category selection before uploading
     if (_selectedCategory.value == null || _selectedCategory.value!.isEmpty) {
       _isUploading.value = false;
-      _errorMessage.value = 'Please select a video category';
+      _errorMessage.value = 'Please select a category';
       return;
     }
 
     try {
+      // Detect whether the selected file is an image or a video
+      final selectedFile = _selectedVideo.value!;
+      final normalizedPath = selectedFile.path.replaceAll('\\', '/');
+      final fileNameLower = normalizedPath.split('/').last.toLowerCase();
+      final extension =
+          fileNameLower.contains('.') ? fileNameLower.split('.').last : '';
+      const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+      final bool isImageUpload = imageExtensions.contains(extension);
+
+      // For product image uploads, destination URL is mandatory
+      if (isImageUpload) {
+        final destinationUrl = _linkController.text.trim();
+        if (!_isValidUrl(destinationUrl)) {
+          _isUploading.value = false;
+          _errorMessage.value =
+              'For product image uploads, please enter a valid product or website URL starting with http:// or https://. '
+              'This URL will be used for the Visit Now button.';
+          return;
+        }
+
+        AppLogger.log(
+            '🖼️ UploadScreen: Detected image upload, starting product image flow...');
+
+        // Start unified progress tracking for image as well
+        _startUnifiedProgress();
+
+        await _uploadProductImage(selectedFile, destinationUrl);
+        return;
+      }
+
       AppLogger.log('🚀 Starting HLS video upload...');
       AppLogger.log('📁 Video path: ${_selectedVideo.value?.path}');
       AppLogger.log('📝 Title: ${_titleController.text}');
@@ -586,11 +614,11 @@ class _UploadScreenState extends State<UploadScreen> {
       // Update to upload phase
       _updateProgressPhase('upload');
 
-      final String serverVideoType =
-          _videoType.value == 'paid' ? 'vayu' : 'yog';
+      // All uploads are currently treated as free (Yug tab) content.
+      const String serverVideoType = 'yog';
 
       AppLogger.log(
-          '🎯 UploadScreen: Using videoType=$serverVideoType (selection: ${_videoType.value ?? 'default'})');
+          '🎯 UploadScreen: Using videoType=$serverVideoType (free/Yug by default)');
 
       final uploadedVideo = await runZoned(
         () => _videoService.uploadVideo(
@@ -603,7 +631,7 @@ class _UploadScreenState extends State<UploadScreen> {
           'upload_metadata': {
             'category': _selectedCategory.value,
             'tags': _tags.value,
-            if (_videoType.value != null) 'videoType': serverVideoType,
+            'videoType': serverVideoType,
           }
         },
       ).timeout(
@@ -665,7 +693,7 @@ class _UploadScreenState extends State<UploadScreen> {
         _linkController.clear();
         _selectedCategory.value = null;
         _tags.value = [];
-        _videoType.value = null;
+        // Video type selection removed; all uploads default to free (Yug).
         _showAdvancedSettings.value = false;
 
         // Stop unified progress tracking
@@ -730,6 +758,115 @@ class _UploadScreenState extends State<UploadScreen> {
         _stopUnifiedProgress();
       }
     }
+  }
+
+  /// **UPLOAD PRODUCT IMAGE METHOD** - Handles image upload + Visit Now URL
+  Future<void> _uploadProductImage(
+      File imageFile, String destinationUrl) async {
+    try {
+      AppLogger.log('🖼️ UploadScreen: Starting product image upload...');
+
+      // Move to upload phase in unified progress UI
+      _updateProgressPhase('upload');
+
+      // Upload image via existing backend route (Cloudflare R2 behind the scenes)
+      final imageUrl = await _cloudflareService.uploadImage(
+        imageFile,
+        folder: 'snehayog/ads/images',
+      );
+
+      AppLogger.log(
+          '✅ UploadScreen: Product image uploaded successfully: $imageUrl');
+      AppLogger.log(
+          '🔗 UploadScreen: Associated Visit Now URL: $destinationUrl');
+
+      // Create feed entry in backend so image appears in Yug feed & profile like videos
+      final userData = await _authService.getUserData();
+      final token = userData?['token'];
+      if (token == null || token.isEmpty) {
+        throw Exception('User not authenticated. Please sign in again.');
+      }
+
+      final baseUrl = await AppConfig.getBaseUrlWithFallback();
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/videos/image'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+            body: json.encode({
+              'imageUrl': imageUrl,
+              'videoName': _titleController.text.trim().isNotEmpty
+                  ? _titleController.text.trim()
+                  : 'Product Image',
+              'link': destinationUrl,
+              'videoType':
+                  _videoType.value == 'paid' ? 'vayu' : 'yog', // Yug / Vayu tab
+              'category': _selectedCategory.value,
+              'tags': _tags.value,
+            }),
+          )
+          .timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          throw TimeoutException('Creating image feed entry timed out');
+        },
+      );
+
+      if (response.statusCode != 201) {
+        AppLogger.log(
+            '❌ UploadScreen: Failed to create image feed entry: ${response.statusCode} ${response.body}');
+        throw Exception('Failed to create image feed entry');
+      }
+
+      AppLogger.log(
+          '✅ UploadScreen: Image feed entry created successfully in backend');
+
+      // Mark progress as completed
+      _updateProgressPhase('completed');
+
+      // Clear form state (re-use same behavior as successful video upload)
+      _selectedVideo.value = null;
+      _titleController.clear();
+      _linkController.clear();
+      _selectedCategory.value = null;
+      _tags.value = [];
+      _showAdvancedSettings.value = false;
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Product image uploaded successfully. Visit Now will open your product/website URL.',
+            ),
+          ),
+        );
+      }
+
+      // Trigger feed/profile refresh if callback is provided (same as video uploads)
+      if (widget.onVideoUploaded != null) {
+        AppLogger.log(
+            '🔄 UploadScreen: Triggering onVideoUploaded after product image upload');
+        widget.onVideoUploaded!();
+      }
+    } catch (e, stackTrace) {
+      AppLogger.log('❌ UploadScreen: Error uploading product image: $e');
+      AppLogger.log('Stack trace: $stackTrace');
+      _errorMessage.value = 'Error uploading product image: ${e.toString()}';
+    }
+  }
+
+  /// **Validate external URL for Visit Now button**
+  bool _isValidUrl(String url) {
+    if (url.isEmpty) return false;
+    final trimmed = url.trim();
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null) return false;
+    if (!uri.hasScheme || (uri.scheme != 'http' && uri.scheme != 'https')) {
+      return false;
+    }
+    return uri.host.isNotEmpty;
   }
 
   /// **NEW: Wait for video processing to complete**
@@ -1007,7 +1144,20 @@ class _UploadScreenState extends State<UploadScreen> {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowMultiple: false,
-        allowedExtensions: ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm'],
+        allowedExtensions: [
+          'mp4',
+          'avi',
+          'mov',
+          'wmv',
+          'flv',
+          'webm',
+          // Image extensions for product images
+          'jpg',
+          'jpeg',
+          'png',
+          'gif',
+          'webp',
+        ],
       );
       if (mounted) {
         Provider.of<MainController>(context, listen: false)
@@ -1019,102 +1169,159 @@ class _UploadScreenState extends State<UploadScreen> {
         _isProcessing.value = true;
         _errorMessage.value = null;
 
-        final videoFile = File(result.files.single.path!);
+        final filePath = result.files.single.path!;
+        final pickedFile = File(filePath);
+        final normalizedPath = filePath.replaceAll('\\', '/');
+        final fileNameLower = normalizedPath.split('/').last.toLowerCase();
+        final extension =
+            fileNameLower.contains('.') ? fileNameLower.split('.').last : '';
 
-        final fileSize = await videoFile.length();
-        const maxSize = 100 * 1024 * 1024;
+        const videoExtensions = [
+          'mp4',
+          'avi',
+          'mov',
+          'wmv',
+          'flv',
+          'webm',
+        ];
+        const imageExtensions = [
+          'jpg',
+          'jpeg',
+          'png',
+          'gif',
+          'webp',
+        ];
 
-        if (fileSize > maxSize) {
-          // **BATCHED UPDATE: Update both values**
+        final bool isVideo = videoExtensions.contains(extension);
+        final bool isImage = imageExtensions.contains(extension);
+
+        if (!isVideo && !isImage) {
           _errorMessage.value =
-              'Video file is too large. Maximum size is 100MB';
+              'Please select a valid video or image file (MP4 / JPG / PNG / WebP).';
           _isProcessing.value = false;
           return;
         }
 
-        // **NEW: Enforce minimum duration (8 seconds) for user uploads**
-        try {
-          final controller = VideoPlayerController.file(videoFile);
-          await controller.initialize();
-          final durationSeconds = controller.value.duration.inSeconds;
-          await controller.dispose();
+        final fileSize = await pickedFile.length();
 
-          if (durationSeconds < 8) {
+        if (isVideo) {
+          const maxVideoSize = 100 * 1024 * 1024;
+          if (fileSize > maxVideoSize) {
             _errorMessage.value =
-                'Video is too short. Minimum length is 8 seconds.';
+                'Video file is too large. Maximum size is 100MB';
             _isProcessing.value = false;
             return;
           }
-        } catch (e) {
-          AppLogger.log('❌ UploadScreen: Error checking video duration: $e');
-          // On error, just fall through and allow upload instead of blocking.
-        }
 
-        // **NEW: Calculate video hash and check for duplicates**
-        AppLogger.log(
-            '🔍 UploadScreen: Calculating video hash for duplicate detection...');
-        try {
-          final videoHash = await _calculateFileHash(videoFile);
-          AppLogger.log(
-              '✅ UploadScreen: Video hash calculated: ${videoHash.substring(0, 16)}...');
+          // **NEW: Enforce minimum duration (8 seconds) for user uploads**
+          try {
+            final controller = VideoPlayerController.file(pickedFile);
+            await controller.initialize();
+            final durationSeconds = controller.value.duration.inSeconds;
+            await controller.dispose();
 
-          // **NEW: Check with backend if this video already exists**
-          final token = userData['token'];
-          if (token != null) {
-            try {
-              final baseUrl = await AppConfig.getBaseUrlWithFallback();
-              final response = await http
-                  .post(
-                Uri.parse('$baseUrl/api/videos/check-duplicate'),
-                headers: {
-                  'Authorization': 'Bearer $token',
-                  'Content-Type': 'application/json',
-                },
-                body: json.encode({'videoHash': videoHash}),
-              )
-                  .timeout(
-                const Duration(seconds: 10),
-                onTimeout: () {
-                  throw TimeoutException('Duplicate check timed out');
-                },
-              );
-
-              if (response.statusCode == 200) {
-                final data = json.decode(response.body);
-                if (data['isDuplicate'] == true) {
-                  final existingVideoName =
-                      data['existingVideoName'] ?? 'Unknown';
-                  _errorMessage.value =
-                      'You have already uploaded this video: "$existingVideoName". Please select a different video.';
-                  _isProcessing.value = false;
-                  AppLogger.log(
-                      '⚠️ UploadScreen: Duplicate video detected: $existingVideoName');
-                  return;
-                }
-                AppLogger.log(
-                    '✅ UploadScreen: No duplicate found, proceeding with upload');
-              } else {
-                AppLogger.log(
-                    '⚠️ UploadScreen: Duplicate check failed with status ${response.statusCode}, continuing anyway');
-                // Continue with upload if check fails
-              }
-            } catch (e) {
-              AppLogger.log('⚠️ UploadScreen: Error checking duplicate: $e');
-              // Continue with upload if check fails (don't block user)
+            if (durationSeconds < 8) {
+              _errorMessage.value =
+                  'Video is too short. Minimum length is 8 seconds.';
+              _isProcessing.value = false;
+              return;
             }
+          } catch (e) {
+            AppLogger.log('❌ UploadScreen: Error checking video duration: $e');
+            // On error, just fall through and allow upload instead of blocking.
           }
-        } catch (e) {
-          AppLogger.log('⚠️ UploadScreen: Error calculating hash: $e');
-          // Continue with upload if hash calculation fails (don't block user)
+
+          // **NEW: Calculate video hash and check for duplicates**
+          AppLogger.log(
+              '🔍 UploadScreen: Calculating video hash for duplicate detection...');
+          try {
+            final videoHash = await _calculateFileHash(pickedFile);
+            AppLogger.log(
+                '✅ UploadScreen: Video hash calculated: ${videoHash.substring(0, 16)}...');
+
+            // **NEW: Check with backend if this video already exists**
+            final token = userData['token'];
+            if (token != null) {
+              try {
+                final baseUrl = await AppConfig.getBaseUrlWithFallback();
+                final response = await http
+                    .post(
+                  Uri.parse('$baseUrl/api/videos/check-duplicate'),
+                  headers: {
+                    'Authorization': 'Bearer $token',
+                    'Content-Type': 'application/json',
+                  },
+                  body: json.encode({'videoHash': videoHash}),
+                )
+                    .timeout(
+                  const Duration(seconds: 10),
+                  onTimeout: () {
+                    throw TimeoutException('Duplicate check timed out');
+                  },
+                );
+
+                if (response.statusCode == 200) {
+                  final data = json.decode(response.body);
+                  if (data['isDuplicate'] == true) {
+                    final existingVideoName =
+                        data['existingVideoName'] ?? 'Unknown';
+                    _errorMessage.value =
+                        'You have already uploaded this video: "$existingVideoName". Please select a different video.';
+                    _isProcessing.value = false;
+                    AppLogger.log(
+                        '⚠️ UploadScreen: Duplicate video detected: $existingVideoName');
+                    return;
+                  }
+                  AppLogger.log(
+                      '✅ UploadScreen: No duplicate found, proceeding with upload');
+                } else {
+                  AppLogger.log(
+                      '⚠️ UploadScreen: Duplicate check failed with status ${response.statusCode}, continuing anyway');
+                  // Continue with upload if check fails
+                }
+              } catch (e) {
+                AppLogger.log('⚠️ UploadScreen: Error checking duplicate: $e');
+                // Continue with upload if check fails (don't block user)
+              }
+            }
+          } catch (e) {
+            AppLogger.log('⚠️ UploadScreen: Error calculating hash: $e');
+            // Continue with upload if hash calculation fails (don't block user)
+          }
+        } else if (isImage) {
+          // Image-specific size validation (10MB limit)
+          const maxImageSize = 10 * 1024 * 1024;
+          if (fileSize > maxImageSize) {
+            _errorMessage.value =
+                'Image file is too large. Maximum size is 10MB';
+            _isProcessing.value = false;
+            return;
+          }
+
+          AppLogger.log(
+              '🖼️ UploadScreen: Product image selected for upload: $fileNameLower');
+
+          // Ensure advanced settings are visible so user can add destination URL
+          _showAdvancedSettings.value = true;
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Product image selected. Please add your product/website URL in the External Link field.',
+                ),
+              ),
+            );
+          }
         }
 
-        // **BATCHED UPDATE: Update video selection**
-        _selectedVideo.value = videoFile;
-        _titleController.text = _deriveTitleFromFile(videoFile);
+        // **BATCHED UPDATE: Update media selection**
+        _selectedVideo.value = pickedFile;
+        _titleController.text = _deriveTitleFromFile(pickedFile);
         _selectedCategory.value ??= _defaultCategory;
         _isProcessing.value = false;
 
-        AppLogger.log('✅ Video selected: ${videoFile.path}');
+        AppLogger.log('✅ Media selected: ${pickedFile.path}');
         AppLogger.log(
           '📏 File size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB',
         );
@@ -1144,7 +1351,6 @@ class _UploadScreenState extends State<UploadScreen> {
     _elapsedSeconds.dispose();
     _selectedCategory.dispose();
     _tags.dispose();
-    _videoType.dispose();
     _showAdvancedSettings.dispose();
     super.dispose();
   }
@@ -1377,7 +1583,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                   ),
                                   const SizedBox(width: 8),
                                   const Text(
-                                    'Upload Video',
+                                    'Upload',
                                     style: TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold,
@@ -1430,7 +1636,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                                   MainAxisAlignment.center,
                                               children: [
                                                 const Icon(
-                                                  Icons.video_file,
+                                                  Icons.perm_media,
                                                   size: 48,
                                                   color: Colors.blue,
                                                 ),
@@ -1454,13 +1660,13 @@ class _UploadScreenState extends State<UploadScreen> {
                                                   MainAxisAlignment.center,
                                               children: [
                                                 Icon(
-                                                  Icons.video_library,
+                                                  Icons.perm_media,
                                                   size: 48,
                                                   color: Colors.grey,
                                                 ),
                                                 SizedBox(height: 16),
                                                 Text(
-                                                  'No video selected',
+                                                  'No video or product image selected',
                                                   style: TextStyle(
                                                     fontSize: 16,
                                                     color: Colors.grey,
@@ -1486,8 +1692,6 @@ class _UploadScreenState extends State<UploadScreen> {
                                   _selectedCategory.value =
                                       value ?? _defaultCategory;
                                 },
-                                videoType: _videoType,
-                                onVideoTypeChanged: _handleVideoTypeChanged,
                                 linkController: _linkController,
                                 tagInputController: _tagInputController,
                                 tags: _tags,
@@ -1620,7 +1824,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                     child: ElevatedButton.icon(
                                       onPressed: () => _pickVideo(),
                                       icon: const Icon(Icons.video_library),
-                                      label: const Text('Select Video'),
+                                      label: const Text('Select Media'),
                                       style: ElevatedButton.styleFrom(
                                         padding: const EdgeInsets.symmetric(
                                           vertical: 16,
@@ -1658,7 +1862,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                           label: Text(
                                             isUploading
                                                 ? 'Uploading...'
-                                                : 'Upload Video',
+                                                : 'Upload Media',
                                           ),
                                           style: ElevatedButton.styleFrom(
                                             backgroundColor: Colors.blue,

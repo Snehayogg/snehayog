@@ -664,13 +664,19 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
   Future<bool> _validateImageFile(File file) async {
     try {
       final fileName = file.path.split('/').last.toLowerCase();
-      if (!fileName.endsWith('.jpg') &&
-          !fileName.endsWith('.jpeg') &&
-          !fileName.endsWith('.png') &&
-          !fileName.endsWith('.gif') &&
-          !fileName.endsWith('.webp')) {
+      final isSupported = fileName.endsWith('.jpg') ||
+          fileName.endsWith('.jpeg') ||
+          fileName.endsWith('.png') ||
+          fileName.endsWith('.gif') ||
+          fileName.endsWith('.webp') ||
+          fileName.endsWith('.heic') ||
+          fileName.endsWith('.heif') ||
+          fileName.endsWith('.avif') ||
+          fileName.endsWith('.bmp');
+
+      if (!isSupported) {
         widget.onError(
-            'Please select a valid image file (JPG, PNG, GIF, or WebP)');
+            'Please select a valid image file (JPG, PNG, GIF, WebP, HEIC/HEIF, AVIF, or BMP)');
         return false;
       }
 

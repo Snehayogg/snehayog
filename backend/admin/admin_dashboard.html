@@ -332,7 +332,7 @@
             <div class="stat-card success">
                 <div class="stat-icon">💰</div>
                 <div class="stat-number" id="totalCreatorEarnings">-</div>
-                <div class="stat-label">Total Creator Earnings</div>
+                <div class="stat-label">Current Month Creator Earnings</div>
             </div>
             
             <div class="stat-card warning">
@@ -1267,11 +1267,13 @@
 
         async function loadPayoutStats() {
             try {
-                const [payoutResponse, platformStatsResponse] = await Promise.all([
+                const [payoutResponse, platformStatsResponse, monthlyEarningsResponse] = await Promise.all([
                     authorizedFetch(`${API_BASE}/creator-payouts/stats`),
-                    authorizedFetch(`${API_BASE}/admin/stats`)
+                    authorizedFetch(`${API_BASE}/admin/stats`),
+                    authorizedFetch(`${API_BASE}/admin/creators/monthly-earnings`)
                 ]);
                 
+                // Payout status cards
                 if (payoutResponse && payoutResponse.ok) {
                     const stats = await payoutResponse.json();
                     document.getElementById('totalPayouts').textContent = stats.total || 0;
@@ -1280,12 +1282,26 @@
                     document.getElementById('failedPayouts').textContent = stats.failed || 0;
                 }
                 
+                // Platform-level stats (videos + daily uploads)
+                let platformStats = null;
                 if (platformStatsResponse && platformStatsResponse.ok) {
-                    const platformStats = await platformStatsResponse.json();
+                    platformStats = await platformStatsResponse.json();
                     document.getElementById('totalVideos').textContent = formatNumber(platformStats.totalVideos || 0);
-                    document.getElementById('totalCreatorEarnings').textContent = formatCurrencyINR(platformStats.totalCreatorEarningsINR || 0);
                     document.getElementById('dailyUploads').textContent = formatNumber(platformStats.dailyUploadCount || 0);
                 }
+
+                // Revenue card: show *current month* creator earnings
+                let currentMonthCreatorEarnings = 0;
+                if (monthlyEarningsResponse && monthlyEarningsResponse.ok) {
+                    const monthlyData = await monthlyEarningsResponse.json();
+                    currentMonthCreatorEarnings = monthlyData.totalThisMonth || 0;
+                } else if (platformStats && typeof platformStats.totalCreatorEarningsINR === 'number') {
+                    // Fallback: use lifetime earnings only if monthly API fails
+                    currentMonthCreatorEarnings = platformStats.totalCreatorEarningsINR || 0;
+                }
+
+                document.getElementById('totalCreatorEarnings').textContent =
+                    formatCurrencyINR(currentMonthCreatorEarnings || 0);
             } catch (error) {
                 console.error('Error loading stats:', error);
             }

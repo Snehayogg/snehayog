@@ -12,7 +12,7 @@ import 'package:vayu/services/ad_service.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'package:vayu/services/logout_service.dart';
-import 'package:vayu/services/cloudinary_service.dart';
+import 'package:vayu/services/cloudflare_r2_service.dart';
 import 'package:vayu/services/ad_refresh_notifier.dart';
 import 'package:vayu/model/ad_model.dart';
 import 'package:vayu/controller/main_controller.dart';
@@ -95,7 +95,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
   // Services
   final AdService _adService = AdService();
   final AuthService _authService = AuthService();
-  final CloudinaryService _cloudinaryService = CloudinaryService();
+  final CloudflareR2Service _cloudflareService = CloudflareR2Service();
   final ScrollController _scrollController = ScrollController();
   // Cache user future to avoid rebuilding FutureBuilder on every setState
   Future<Map<String, dynamic>?>? _userFuture;
@@ -485,11 +485,18 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
   }
 
   Widget _buildCreateAdForm() {
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+
     return SingleChildScrollView(
       key: const PageStorageKey('createAdScroll'),
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       controller: _scrollController,
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        16 + bottomPadding,
+      ),
       child: Form(
         key: _formKey,
         child: Column(
@@ -1678,15 +1685,17 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
           _errorMessage = null;
         });
 
+        // Immediately reset the form for a fresh experience
+        _showFreshAdScreen();
+        _notifyVideoFeedRefresh();
+
+        // Then show payment options (doesn't depend on current form fields)
         PaymentHandlerWidget.showPaymentOptions(
           context,
           AdModel.fromJson(result['ad']),
           result['invoice'],
           () {
-            // Show a fresh create-ad screen instead of popping back
-            _showFreshAdScreen();
-            // Trigger video feed refresh to show new ads
-            _notifyVideoFeedRefresh();
+            // Payment completed – nothing extra to reset here
           },
         );
       } else {
@@ -1920,7 +1929,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
     try {
       if (_selectedAdType == 'banner' && _selectedImage != null) {
         AppLogger.log('🔄 CreateAdScreen: Uploading banner image...');
-        final imageUrl = await _cloudinaryService.uploadImage(_selectedImage!);
+        final imageUrl = await _cloudflareService.uploadImage(_selectedImage!);
         mediaUrls.add(imageUrl);
         AppLogger.log('✅ CreateAdScreen: Banner image uploaded: $imageUrl');
       } else if (_selectedAdType == 'carousel') {
@@ -1933,7 +1942,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
             AppLogger.log(
               '🔄 CreateAdScreen: Uploading carousel image ${i + 1}/${_selectedImages.length}...',
             );
-            final imageUrl = await _cloudinaryService.uploadImage(image);
+            final imageUrl = await _cloudflareService.uploadImage(image);
             mediaUrls.add(imageUrl);
             AppLogger.log(
               '✅ CreateAdScreen: Carousel image ${i + 1} uploaded: $imageUrl',
@@ -1949,7 +1958,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
             '🔄 CreateAdScreen: Video file size: ${await _selectedVideo!.length()} bytes',
           );
 
-          final result = await _cloudinaryService.uploadVideoForAd(
+          final result = await _cloudflareService.uploadVideoForAd(
             _selectedVideo!,
           );
           AppLogger.log('🔄 CreateAdScreen: Video upload result: $result');

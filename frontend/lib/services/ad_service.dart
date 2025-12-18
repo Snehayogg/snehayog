@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:vayu/model/ad_model.dart';
 import 'package:vayu/services/authservices.dart';
-import 'package:vayu/services/cloudinary_service.dart';
+import 'package:vayu/services/cloudflare_r2_service.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/core/managers/smart_cache_manager.dart';
 import 'package:vayu/services/active_ads_service.dart';
@@ -17,7 +17,7 @@ class AdService {
 
   static String get baseUrl => AppConfig.baseUrl;
   final AuthService _authService = AuthService();
-  final CloudinaryService _cloudinaryService = CloudinaryService();
+  final CloudflareR2Service _cloudflareService = CloudflareR2Service();
   // final RazorpayService _razorpayService = RazorpayService();  // Temporarily commented
   final SmartCacheManager _cacheManager = SmartCacheManager();
   final ActiveAdsService _activeAdsService = ActiveAdsService();
@@ -660,12 +660,12 @@ class AdService {
   Future<String> uploadAdMedia(File file, String mediaType) async {
     try {
       if (mediaType == 'image') {
-        return await _cloudinaryService.uploadImage(
+        return await _cloudflareService.uploadImage(
           file,
           folder: 'snehayog/ads/images',
         );
       } else if (mediaType == 'video') {
-        final result = await _cloudinaryService.uploadVideo(
+        final result = await _cloudflareService.uploadVideo(
           file,
           folder: 'snehayog/ads/videos',
         );
@@ -688,7 +688,9 @@ class AdService {
 
       if (pathSegments.length >= 3 && pathSegments[1] == 'upload') {
         final publicId = pathSegments.sublist(3).join('/');
-        return await _cloudinaryService.deleteMedia(publicId, mediaType);
+        // NOTE: Media deletion now happens server-side for Cloudflare R2.
+        // This method is kept for API compatibility but simply returns true.
+        return true;
       }
 
       return false;

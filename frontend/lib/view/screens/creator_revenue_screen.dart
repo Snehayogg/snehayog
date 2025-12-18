@@ -287,7 +287,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
       final totalViews = bannerViews + carouselViews;
 
       AppLogger.log(
-          '📊 Video $videoId (Current Month ${now.month}/${currentYear}): Banner VIEWS: $bannerViews, Carousel VIEWS: $carouselViews, Total VIEWS: $totalViews');
+          '📊 Video $videoId (Current Month ${now.month}/$currentYear): Banner VIEWS: $bannerViews, Carousel VIEWS: $carouselViews, Total VIEWS: $totalViews');
 
       return totalViews;
     } catch (e) {
@@ -305,7 +305,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
       final currentYear = now.year;
 
       AppLogger.log(
-          '💰 CreatorRevenueScreen: Calculating current month (${now.month}/${currentYear}) earnings for ${_userVideos.length} videos');
+          '💰 CreatorRevenueScreen: Calculating current month (${now.month}/$currentYear) earnings for ${_userVideos.length} videos');
 
       final statsFutures = _userVideos.map((video) async {
         // **FIXED: Use current month earnings calculation**

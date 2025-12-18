@@ -32,6 +32,7 @@ import referralRoutes from './routes/referralRoutes.js';
 import reportRoutes from './routes/reportRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import searchRoutes from './routes/searchRoutes.js';
+import appConfigRoutes from './routes/appConfigRoutes.js';
 
 // Import services
 import automatedPayoutService from './services/automatedPayoutService.js';
@@ -42,6 +43,7 @@ import recommendationScoreCron from './services/recommendationScoreCron.js';
 
 // Import middleware
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import { apiVersioning } from './middleware/apiVersioning.js';
 
 const app = express();
 app.set('etag', 'strong');
@@ -212,19 +214,28 @@ app.get('/api/health', (req, res) => {
 });
 
 // API Routes
-app.use('/api/users', userRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/ads', createCacheMiddleware('public, max-age=180, stale-while-revalidate=600'), adRoutes);
-app.use('/api/billing', billingRoutes);
-app.use('/api/creator-payouts', creatorPayoutRoutes);
-app.use('/api/videos', createCacheMiddleware('public, max-age=180, stale-while-revalidate=600'), videoRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/upload', uploadRoutes);
-app.use('/api/feedback', feedbackRoutes);
-app.use('/api/referrals', referralRoutes);
-app.use('/api/reports', reportRoutes);
-app.use('/api/notifications', notificationRoutes);
-app.use('/api/search', searchRoutes);
+// Note: /api/app-config is excluded from API versioning as it's needed for version detection
+app.use('/api/app-config', appConfigRoutes);
+
+// Apply API versioning to all other API routes
+// Create a router group for versioned routes
+const apiRouter = express.Router();
+apiRouter.use('/users', userRoutes);
+apiRouter.use('/auth', authRoutes);
+apiRouter.use('/ads', createCacheMiddleware('public, max-age=180, stale-while-revalidate=600'), adRoutes);
+apiRouter.use('/billing', billingRoutes);
+apiRouter.use('/creator-payouts', creatorPayoutRoutes);
+apiRouter.use('/videos', createCacheMiddleware('public, max-age=180, stale-while-revalidate=600'), videoRoutes);
+apiRouter.use('/admin', adminRoutes);
+apiRouter.use('/upload', uploadRoutes);
+apiRouter.use('/feedback', feedbackRoutes);
+apiRouter.use('/referrals', referralRoutes);
+apiRouter.use('/reports', reportRoutes);
+apiRouter.use('/notifications', notificationRoutes);
+apiRouter.use('/search', searchRoutes);
+
+// Apply versioning middleware to the API router
+app.use('/api', apiVersioning, apiRouter);
 
 // **FIX: Root route handler for referral links: https://snehayog.site/?ref=CODE
 // This handles referral links and tries to open the app

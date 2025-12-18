@@ -95,7 +95,7 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
       final currentYear = now.year;
 
       AppLogger.log(
-          '💰 ProfileStatsWidget: Calculating current month (${now.month}/${currentYear}) earnings for ${widget.stateManager.userVideos.length} videos');
+          '💰 ProfileStatsWidget: Calculating current month (${now.month}/$currentYear) earnings for ${widget.stateManager.userVideos.length} videos');
 
       double totalCreatorEarnings = 0.0;
 

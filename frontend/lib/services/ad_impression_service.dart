@@ -359,7 +359,7 @@ class AdImpressionService {
       String videoId, int month, int year) async {
     try {
       AppLogger.log(
-          '👁️ AdImpressionService: Getting banner ad VIEWS for current month (${month}/${year}) for video: $videoId');
+          '👁️ AdImpressionService: Getting banner ad VIEWS for current month ($month/$year) for video: $videoId');
 
       final userData = await _authService.getUserData();
       if (userData == null) {
@@ -382,7 +382,7 @@ class AdImpressionService {
         final data = json.decode(response.body);
         final count = data['count'] ?? 0;
         AppLogger.log(
-            '👁️ AdImpressionService: Banner VIEWS count for ${month}/${year}: $count');
+            '👁️ AdImpressionService: Banner VIEWS count for $month/$year: $count');
         return count;
       } else {
         AppLogger.log(
@@ -401,7 +401,7 @@ class AdImpressionService {
       String videoId, int month, int year) async {
     try {
       AppLogger.log(
-          '👁️ AdImpressionService: Getting carousel ad VIEWS for current month (${month}/${year}) for video: $videoId');
+          '👁️ AdImpressionService: Getting carousel ad VIEWS for current month ($month/$year) for video: $videoId');
 
       final userData = await _authService.getUserData();
       if (userData == null) return 0;
@@ -419,7 +419,7 @@ class AdImpressionService {
         final data = json.decode(response.body);
         final count = data['count'] ?? 0;
         AppLogger.log(
-            '👁️ AdImpressionService: Carousel VIEWS count for ${month}/${year}: $count');
+            '👁️ AdImpressionService: Carousel VIEWS count for $month/$year: $count');
         return count;
       }
 

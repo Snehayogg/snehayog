@@ -113,7 +113,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Text(
-                'Error: ${_errorMessage!.length > 100 ? _errorMessage!.substring(0, 100) + "..." : _errorMessage!}',
+                'Error: ${_errorMessage!.length > 100 ? "${_errorMessage!.substring(0, 100)}..." : _errorMessage!}',
                 style: const TextStyle(
                   color: Colors.red,
                   fontSize: 12,

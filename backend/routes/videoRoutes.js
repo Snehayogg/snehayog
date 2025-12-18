@@ -597,6 +597,7 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
       thumbnailUrl: '', // Will be generated during processing
       uploader: user._id,
       videoType: videoType || 'yog',
+      mediaType: 'video',
       aspectRatio: (videoValidation.width && videoValidation.height) 
         ? videoValidation.width / videoValidation.height 
         : 9/16, // Default to 9:16 (portrait) if dimensions unavailable
@@ -661,6 +662,97 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
     return res.status(500).json({ 
       error: 'Video upload failed', 
       details: error.message 
+    });
+  }
+});
+
+// **NEW: Create image-based feed entry (product image) without video processing**
+// This allows product images to appear in Yug feed & profile like regular videos.
+router.post('/image', verifyToken, async (req, res) => {
+  try {
+    const { imageUrl, videoName, link, videoType, category, tags } = req.body || {};
+
+    if (!imageUrl || typeof imageUrl !== 'string' || !imageUrl.trim()) {
+      return res.status(400).json({ error: 'imageUrl is required' });
+    }
+
+    const trimmedUrl = imageUrl.trim();
+    if (!/^https?:\/\//i.test(trimmedUrl)) {
+      return res.status(400).json({ error: 'imageUrl must be a valid HTTP/HTTPS URL' });
+    }
+
+    const googleId = req.user.googleId;
+    if (!googleId) {
+      return res.status(401).json({ error: 'Google ID not found in token' });
+    }
+
+    const user = await User.findOne({ googleId });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const now = new Date();
+
+    const video = new Video({
+      videoName: (videoName && String(videoName).trim()) || 'Product Image',
+      description: '',
+      link: (link && String(link).trim()) || '',
+      videoUrl: trimmedUrl,
+      thumbnailUrl: trimmedUrl,
+      uploader: user._id,
+      videoType: (videoType && String(videoType).toLowerCase() === 'vayu') ? 'vayu' : 'yog',
+      mediaType: 'image',
+      aspectRatio: 9 / 16,
+      duration: 0,
+      processingStatus: 'completed',
+      processingProgress: 100,
+      isHLSEncoded: false,
+      likes: 0,
+      views: 0,
+      shares: 0,
+      likedBy: [],
+      comments: [],
+      uploadedAt: now,
+      createdAt: now,
+      updatedAt: now,
+      ...(category ? { category: String(category).toLowerCase().trim() } : {}),
+      ...(Array.isArray(tags) && tags.length
+        ? { tags: tags.map((t) => String(t).toLowerCase().trim()).filter(Boolean) }
+        : {}),
+    });
+
+    await video.save();
+    user.videos.push(video._id);
+    await user.save();
+
+    if (redisService.getConnectionStatus()) {
+      await invalidateCache([
+        'videos:feed:*',
+        `videos:user:${user.googleId}`,
+        VideoCacheKeys.all(),
+      ]);
+      console.log('🧹 Cache invalidated after image feed entry creation');
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: 'Image feed entry created successfully',
+      video: {
+        id: video._id,
+        videoName: video.videoName,
+        videoUrl: video.videoUrl,
+        thumbnailUrl: video.thumbnailUrl,
+        link: video.link,
+        videoType: video.videoType,
+        mediaType: video.mediaType,
+        uploadedAt: video.uploadedAt,
+      },
+    });
+  } catch (error) {
+    console.error('❌ Error creating image feed entry:', error);
+    return res.status(500).json({
+      error: 'Failed to create image feed entry',
+      details: error.message,
     });
   }
 });
@@ -744,9 +836,9 @@ async function processVideoToHLS(videoId, videoPath, videoName, userId) {
 // Single 480p quality for cost optimization
 // 100% FREE processing + FREE bandwidth = Maximum savings!
 
-// Get videos by user ID (consistently use googleId)
-// **NEW: Redis caching integrated**
-router.get('/user/:googleId', verifyToken, async (req, res) => {
+  // Get videos by user ID (consistently use googleId)
+  // **NEW: Redis caching integrated**
+  router.get('/user/:googleId', verifyToken, async (req, res) => {
   try {
     const { googleId } = req.params;
     console.log('🎬 Fetching videos for googleId:', googleId);
@@ -841,6 +933,7 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
         duration: parseInt(videoObj.duration) || 0,
         aspectRatio: parseFloat(videoObj.aspectRatio) || 9/16,
         videoType: videoObj.videoType || 'reel',
+        mediaType: videoObj.mediaType || 'video',
         link: videoObj.link || null,
         uploadedAt: videoObj.uploadedAt?.toISOString?.() || new Date().toISOString(),
         createdAt: videoObj.createdAt?.toISOString?.() || new Date().toISOString(),
@@ -964,6 +1057,7 @@ router.get('/', async (req, res) => {
       videoUrl: video.videoUrl,
       thumbnailUrl: video.thumbnailUrl || '',
       videoType: video.videoType || 'yog',
+      mediaType: video.mediaType || 'video',
       uploader: video.uploader ? {
         _id: video.uploader._id,
         googleId: video.uploader.googleId,

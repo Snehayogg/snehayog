@@ -2926,7 +2926,9 @@ class _EarningsBottomSheetContentState
   @override
   Widget build(BuildContext context) {
     double totalEarnings = 0.0;
-    _videoEarnings.values.forEach((earnings) => totalEarnings += earnings);
+    for (var earnings in _videoEarnings.values) {
+      totalEarnings += earnings;
+    }
 
     return Column(
       children: [

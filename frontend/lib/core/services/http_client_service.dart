@@ -124,8 +124,14 @@ class HttpClientService {
   }
 
   /// Make a multipart request using the shared client
-  Future<http.StreamedResponse> send(http.BaseRequest request) async {
-    return await client.send(request);
+  /// Uses a higher timeout suitable for uploads to prevent infinite hangs.
+  Future<http.StreamedResponse> send(
+    http.BaseRequest request, {
+    Duration? timeout,
+  }) async {
+    return await client
+        .send(request)
+        .timeout(timeout ?? AppConfig.uploadTimeout);
   }
 
   /// Make a request with retry logic and connection pooling

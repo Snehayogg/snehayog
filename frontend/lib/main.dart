@@ -76,6 +76,13 @@ void _checkServerConnectivity() async {
     AppConfig.clearCache();
     final workingUrl = await AppConfig.checkAndUpdateServerUrl();
     print('✅ Main: Using server URL: $workingUrl');
+    print('✅ Main: All API calls will go to: $workingUrl');
+    
+    // In development mode, verify local server is accessible
+    if (workingUrl.contains('192.168') || workingUrl.contains('localhost') || workingUrl.contains('127.0.0.1')) {
+      print('🔧 Main: LOCAL SERVER MODE - Make sure backend is running!');
+      print('🔧 Main: Test connection: $workingUrl/api/health');
+    }
   } catch (e) {
     print('❌ Main: Error checking server connectivity: $e');
   }

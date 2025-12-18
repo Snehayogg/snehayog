@@ -64,13 +64,18 @@ class CloudinaryService {
 
       // **NEW: Validate file extension**
       final fileName = imageFile.path.split('/').last.toLowerCase();
-      if (!fileName.endsWith('.jpg') &&
-          !fileName.endsWith('.jpeg') &&
-          !fileName.endsWith('.png') &&
-          !fileName.endsWith('.gif') &&
-          !fileName.endsWith('.webp')) {
+      final isSupported = fileName.endsWith('.jpg') ||
+          fileName.endsWith('.jpeg') ||
+          fileName.endsWith('.png') ||
+          fileName.endsWith('.gif') ||
+          fileName.endsWith('.webp') ||
+          fileName.endsWith('.heic') ||
+          fileName.endsWith('.heif') ||
+          fileName.endsWith('.avif') ||
+          fileName.endsWith('.bmp');
+      if (!isSupported) {
         throw Exception(
-            'Invalid image file type. Only JPG, PNG, GIF, and WebP are supported');
+            'Invalid image file type. Supported: JPG, PNG, GIF, WebP, HEIC/HEIF, AVIF, BMP');
       }
 
       AppLogger.log('🔍 CloudinaryService: Starting image upload...');
@@ -108,6 +113,12 @@ class CloudinaryService {
         mimeType = 'image/gif';
       } else if (fileName.endsWith('.webp')) {
         mimeType = 'image/webp';
+      } else if (fileName.endsWith('.heic') || fileName.endsWith('.heif')) {
+        mimeType = 'image/heic';
+      } else if (fileName.endsWith('.avif')) {
+        mimeType = 'image/avif';
+      } else if (fileName.endsWith('.bmp')) {
+        mimeType = 'image/bmp';
       } else if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) {
         mimeType = 'image/jpeg';
       }

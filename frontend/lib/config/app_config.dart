@@ -10,7 +10,10 @@ class AppConfig {
   static String? _cachedBaseUrl;
 
   // Local development server (Wi‑Fi/LAN)
-  static const String _localIpBaseUrl = 'http://192.168.0.185:5001';
+  // **IMPORTANT**: Update this IP to match your local machine's IP address
+  // Find your IP: Windows: ipconfig | Linux/Mac: ifconfig or ip addr
+  // Make sure your phone/emulator is on the same Wi‑Fi network
+  static const String _localIpBaseUrl = 'http://192.168.0.198:5001';
 
   // Primary production endpoints
   static const String _customDomainUrl = 'https://api.snehayog.site';
@@ -19,20 +22,31 @@ class AppConfig {
 
   // **NEW: Clear cache method for development**
   static void clearCache() {
+    print('🔄 AppConfig: Clearing cached URL');
     _cachedBaseUrl = null;
+    if (_isDevelopment) {
+      print(
+          '🔧 AppConfig: Development mode - will use local server on next request');
+    }
   }
 
   // Backend API configuration with smart fallback
   static String get baseUrl {
+    // **FIXED: In development mode, ALWAYS use local server and ignore cache**
+    if (_isDevelopment) {
+      print(
+          '🔧 AppConfig.baseUrl: DEVELOPMENT MODE - Using local server: $_localIpBaseUrl');
+      print(
+          '🔧 AppConfig.baseUrl: Make sure your backend is running on $_localIpBaseUrl');
+      // Clear cache to ensure we always use local server in dev mode
+      _cachedBaseUrl = _localIpBaseUrl;
+      return _localIpBaseUrl;
+    }
+
+    // Production mode: use cache if available
     if (_cachedBaseUrl != null) {
       print('🔍 AppConfig: Using cached URL: $_cachedBaseUrl');
       return _cachedBaseUrl!;
-    }
-
-    // Use local server in explicit development mode, otherwise prefer custom domain
-    if (_isDevelopment) {
-      print('🔍 AppConfig: No cached URL, development mode -> local server');
-      return _localIpBaseUrl;
     }
 
     print('🔍 AppConfig: No cached URL, defaulting to custom domain');
@@ -44,8 +58,9 @@ class AppConfig {
   static Future<String> getBaseUrlWithFallback() async {
     // In explicit development mode, always use local server and skip remote checks
     if (_isDevelopment) {
-      print(
-          '🔍 AppConfig: Development mode enabled, forcing local server: $_localIpBaseUrl');
+      print('🔧 AppConfig.getBaseUrlWithFallback: DEVELOPMENT MODE');
+      print('🔧 Forcing local server: $_localIpBaseUrl');
+      print('🔧 Make sure your backend is running on $_localIpBaseUrl');
       _cachedBaseUrl = _localIpBaseUrl;
       return _localIpBaseUrl;
     }
@@ -126,8 +141,10 @@ class AppConfig {
   static Future<String> checkAndUpdateServerUrl() async {
     // In explicit development mode, always use local server
     if (_isDevelopment) {
+      print('🔧 AppConfig.checkAndUpdateServerUrl: DEVELOPMENT MODE');
       print(
-          '🔍 AppConfig: Development mode enabled, forcing local server in checkAndUpdateServerUrl: $_localIpBaseUrl');
+          '🔧 Skipping connectivity check, forcing local server: $_localIpBaseUrl');
+      print('🔧 Make sure your backend is running on $_localIpBaseUrl');
       _cachedBaseUrl = _localIpBaseUrl;
       return _localIpBaseUrl;
     }

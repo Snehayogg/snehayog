@@ -49,9 +49,6 @@ class CloudflareR2Service {
     return directR2Url;
   }
 
-  /**
-   * Download video from Cloudinary URL
-   */
   async downloadFromCloudinary(cloudinaryUrl, fileName) {
     try {
       console.log('📥 Downloading processed video from Cloudinary...');
@@ -100,10 +97,7 @@ class CloudflareR2Service {
     }
   }
 
-  /**
-   * Upload video file to Cloudflare R2 (S3-compatible)
-   * Returns custom domain URL (cdn.snehayog.com) if configured
-   */
+  
   async uploadVideoToR2(filePath, fileName, userId) {
     try {
       console.log('📤 Uploading video to Cloudflare R2 (S3-compatible)...');

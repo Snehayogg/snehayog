@@ -58,7 +58,7 @@ Future<void> _debugLog(String location, String message,
     Map<String, dynamic> data, String hypothesisId) async {
   try {
     final payload = {
-      'id': 'log_${DateTime.now().millisecondsSinceEpoch}_${hypothesisId}',
+      'id': 'log_${DateTime.now().millisecondsSinceEpoch}_$hypothesisId',
       'timestamp': DateTime.now().millisecondsSinceEpoch,
       'location': location,
       'message': message,

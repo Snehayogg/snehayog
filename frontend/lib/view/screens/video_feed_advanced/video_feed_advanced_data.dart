@@ -867,7 +867,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     final uniqueList = uniqueVideos.values.toList();
 
     // **RANKING: Rank by engagement (backend already shuffles, but ranking helps)**
-    final rankedVideos = VideoEngagementRanker.rankVideos(uniqueList);
+    var rankedVideos = VideoEngagementRanker.rankVideos(uniqueList);
 
     // **YUG TAB RANDOMIZATION: Shuffle order for Yug feed while preserving current video if needed**
     if (widget.videoType == 'yog') {
@@ -875,6 +875,9 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
           '🎲 _rankVideosWithEngagement: Shuffling videos for Yug tab (videoType=yog)');
       rankedVideos.shuffle();
     }
+
+    // **CREATOR DIVERSITY: Avoid long streaks from the same creator**
+    rankedVideos = _applyCreatorDiversity(rankedVideos, maxConsecutive: 2);
 
     // **PRESERVE: Keep current video at the beginning if specified**
     if (preserveVideoKey != null) {
@@ -916,10 +919,14 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     if (uniqueNewVideos.isEmpty) return <VideoModel>[];
 
     // **RANKING: Rank by engagement first**
-    final rankedVideos =
+    var rankedVideos =
         VideoEngagementRanker.rankVideos(uniqueNewVideos.values.toList());
     // **SHUFFLE: Then shuffle to show random order**
     rankedVideos.shuffle();
+
+    // **CREATOR DIVERSITY: Avoid long streaks from same creator in newly loaded batch**
+    rankedVideos = _applyCreatorDiversity(rankedVideos, maxConsecutive: 2);
+
     return rankedVideos;
   }
 
@@ -933,6 +940,56 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       // **BACKEND-FIRST: Backend tracks this via WatchHistory API**
       // No local storage needed - backend is source of truth
     }
+  }
+
+  /// **CREATOR DIVERSITY: Limit how many consecutive videos from the same creator can appear**
+  List<VideoModel> _applyCreatorDiversity(
+    List<VideoModel> rankedVideos, {
+    int maxConsecutive = 2,
+  }) {
+    if (rankedVideos.length <= 1 || maxConsecutive <= 0) {
+      return rankedVideos;
+    }
+
+    String _creatorIdOf(VideoModel v) =>
+        v.uploader.googleId?.trim().isNotEmpty == true
+            ? v.uploader.googleId!.trim()
+            : v.uploader.id.trim();
+
+    final result = <VideoModel>[];
+    final remaining = List<VideoModel>.from(rankedVideos);
+
+    while (remaining.isNotEmpty) {
+      int pickIndex = 0;
+
+      if (result.isNotEmpty) {
+        final lastCreator = _creatorIdOf(result.last);
+
+        // Count how many of the last videos are from the same creator
+        int streak = 0;
+        for (int i = result.length - 1; i >= 0; i--) {
+          if (_creatorIdOf(result[i]) == lastCreator) {
+            streak++;
+          } else {
+            break;
+          }
+        }
+
+        if (streak >= maxConsecutive) {
+          // Try to find a video from a different creator
+          final idx = remaining.indexWhere(
+            (v) => _creatorIdOf(v) != lastCreator,
+          );
+          if (idx != -1) {
+            pickIndex = idx;
+          }
+        }
+      }
+
+      result.add(remaining.removeAt(pickIndex));
+    }
+
+    return result;
   }
 
   void _markCurrentVideoAsSeen() {
