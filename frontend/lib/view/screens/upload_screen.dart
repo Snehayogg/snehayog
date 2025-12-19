@@ -17,7 +17,6 @@ import 'package:vayu/view/screens/upload_screen/widgets/upload_advanced_settings
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:video_player/video_player.dart';
-import 'package:vayu/services/cloudflare_r2_service.dart';
 
 class UploadScreen extends StatefulWidget {
   final VoidCallback? onVideoUploaded; // Add callback for video upload success
@@ -47,7 +46,6 @@ class _UploadScreenState extends State<UploadScreen> {
   final TextEditingController _linkController = TextEditingController();
   final VideoService _videoService = VideoService();
   final AuthService _authService = AuthService();
-  final CloudflareR2Service _cloudflareService = CloudflareR2Service();
 
   // Timer for unified progress tracking
   Timer? _progressTimer;
@@ -518,7 +516,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
     // **BATCHED UPDATE: Use ValueNotifiers instead of setState**
     if (_selectedVideo.value == null) {
-      _errorMessage.value = 'Please select a video or product image first';
+      _errorMessage.value = 'Please select a video first';
       return;
     }
 
@@ -539,36 +537,6 @@ class _UploadScreenState extends State<UploadScreen> {
     }
 
     try {
-      // Detect whether the selected file is an image or a video
-      final selectedFile = _selectedVideo.value!;
-      final normalizedPath = selectedFile.path.replaceAll('\\', '/');
-      final fileNameLower = normalizedPath.split('/').last.toLowerCase();
-      final extension =
-          fileNameLower.contains('.') ? fileNameLower.split('.').last : '';
-      const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-      final bool isImageUpload = imageExtensions.contains(extension);
-
-      // For product image uploads, destination URL is mandatory
-      if (isImageUpload) {
-        final destinationUrl = _linkController.text.trim();
-        if (!_isValidUrl(destinationUrl)) {
-          _isUploading.value = false;
-          _errorMessage.value =
-              'For product image uploads, please enter a valid product or website URL starting with http:// or https://. '
-              'This URL will be used for the Visit Now button.';
-          return;
-        }
-
-        AppLogger.log(
-            '🖼️ UploadScreen: Detected image upload, starting product image flow...');
-
-        // Start unified progress tracking for image as well
-        _startUnifiedProgress();
-
-        await _uploadProductImage(selectedFile, destinationUrl);
-        return;
-      }
-
       AppLogger.log('🚀 Starting HLS video upload...');
       AppLogger.log('📁 Video path: ${_selectedVideo.value?.path}');
       AppLogger.log('📝 Title: ${_titleController.text}');
@@ -758,115 +726,6 @@ class _UploadScreenState extends State<UploadScreen> {
         _stopUnifiedProgress();
       }
     }
-  }
-
-  /// **UPLOAD PRODUCT IMAGE METHOD** - Handles image upload + Visit Now URL
-  Future<void> _uploadProductImage(
-      File imageFile, String destinationUrl) async {
-    try {
-      AppLogger.log('🖼️ UploadScreen: Starting product image upload...');
-
-      // Move to upload phase in unified progress UI
-      _updateProgressPhase('upload');
-
-      // Upload image via existing backend route (Cloudflare R2 behind the scenes)
-      final imageUrl = await _cloudflareService.uploadImage(
-        imageFile,
-        folder: 'snehayog/ads/images',
-      );
-
-      AppLogger.log(
-          '✅ UploadScreen: Product image uploaded successfully: $imageUrl');
-      AppLogger.log(
-          '🔗 UploadScreen: Associated Visit Now URL: $destinationUrl');
-
-      // Create feed entry in backend so image appears in Yug feed & profile like videos
-      final userData = await _authService.getUserData();
-      final token = userData?['token'];
-      if (token == null || token.isEmpty) {
-        throw Exception('User not authenticated. Please sign in again.');
-      }
-
-      final baseUrl = await AppConfig.getBaseUrlWithFallback();
-      final response = await http
-          .post(
-            Uri.parse('$baseUrl/api/videos/image'),
-            headers: {
-              'Authorization': 'Bearer $token',
-              'Content-Type': 'application/json',
-            },
-            body: json.encode({
-              'imageUrl': imageUrl,
-              'videoName': _titleController.text.trim().isNotEmpty
-                  ? _titleController.text.trim()
-                  : 'Product Image',
-              'link': destinationUrl,
-              'videoType':
-                  _videoType.value == 'paid' ? 'vayu' : 'yog', // Yug / Vayu tab
-              'category': _selectedCategory.value,
-              'tags': _tags.value,
-            }),
-          )
-          .timeout(
-        const Duration(seconds: 15),
-        onTimeout: () {
-          throw TimeoutException('Creating image feed entry timed out');
-        },
-      );
-
-      if (response.statusCode != 201) {
-        AppLogger.log(
-            '❌ UploadScreen: Failed to create image feed entry: ${response.statusCode} ${response.body}');
-        throw Exception('Failed to create image feed entry');
-      }
-
-      AppLogger.log(
-          '✅ UploadScreen: Image feed entry created successfully in backend');
-
-      // Mark progress as completed
-      _updateProgressPhase('completed');
-
-      // Clear form state (re-use same behavior as successful video upload)
-      _selectedVideo.value = null;
-      _titleController.clear();
-      _linkController.clear();
-      _selectedCategory.value = null;
-      _tags.value = [];
-      _showAdvancedSettings.value = false;
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Product image uploaded successfully. Visit Now will open your product/website URL.',
-            ),
-          ),
-        );
-      }
-
-      // Trigger feed/profile refresh if callback is provided (same as video uploads)
-      if (widget.onVideoUploaded != null) {
-        AppLogger.log(
-            '🔄 UploadScreen: Triggering onVideoUploaded after product image upload');
-        widget.onVideoUploaded!();
-      }
-    } catch (e, stackTrace) {
-      AppLogger.log('❌ UploadScreen: Error uploading product image: $e');
-      AppLogger.log('Stack trace: $stackTrace');
-      _errorMessage.value = 'Error uploading product image: ${e.toString()}';
-    }
-  }
-
-  /// **Validate external URL for Visit Now button**
-  bool _isValidUrl(String url) {
-    if (url.isEmpty) return false;
-    final trimmed = url.trim();
-    final uri = Uri.tryParse(trimmed);
-    if (uri == null) return false;
-    if (!uri.hasScheme || (uri.scheme != 'http' && uri.scheme != 'https')) {
-      return false;
-    }
-    return uri.host.isNotEmpty;
   }
 
   /// **NEW: Wait for video processing to complete**
@@ -1151,12 +1010,6 @@ class _UploadScreenState extends State<UploadScreen> {
           'wmv',
           'flv',
           'webm',
-          // Image extensions for product images
-          'jpg',
-          'jpeg',
-          'png',
-          'gif',
-          'webp',
         ],
       );
       if (mounted) {
@@ -1184,20 +1037,12 @@ class _UploadScreenState extends State<UploadScreen> {
           'flv',
           'webm',
         ];
-        const imageExtensions = [
-          'jpg',
-          'jpeg',
-          'png',
-          'gif',
-          'webp',
-        ];
 
         final bool isVideo = videoExtensions.contains(extension);
-        final bool isImage = imageExtensions.contains(extension);
 
-        if (!isVideo && !isImage) {
+        if (!isVideo) {
           _errorMessage.value =
-              'Please select a valid video or image file (MP4 / JPG / PNG / WebP).';
+              'Please select a valid video file (MP4, AVI, MOV, WMV, FLV, or WebM).';
           _isProcessing.value = false;
           return;
         }
@@ -1287,31 +1132,6 @@ class _UploadScreenState extends State<UploadScreen> {
           } catch (e) {
             AppLogger.log('⚠️ UploadScreen: Error calculating hash: $e');
             // Continue with upload if hash calculation fails (don't block user)
-          }
-        } else if (isImage) {
-          // Image-specific size validation (10MB limit)
-          const maxImageSize = 10 * 1024 * 1024;
-          if (fileSize > maxImageSize) {
-            _errorMessage.value =
-                'Image file is too large. Maximum size is 10MB';
-            _isProcessing.value = false;
-            return;
-          }
-
-          AppLogger.log(
-              '🖼️ UploadScreen: Product image selected for upload: $fileNameLower');
-
-          // Ensure advanced settings are visible so user can add destination URL
-          _showAdvancedSettings.value = true;
-
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Product image selected. Please add your product/website URL in the External Link field.',
-                ),
-              ),
-            );
           }
         }
 
@@ -1666,7 +1486,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                                 ),
                                                 SizedBox(height: 16),
                                                 Text(
-                                                  'No video or product image selected',
+                                                  'No video selected',
                                                   style: TextStyle(
                                                     fontSize: 16,
                                                     color: Colors.grey,
