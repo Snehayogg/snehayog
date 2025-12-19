@@ -818,8 +818,16 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         continue;
       }
 
-      // Only check for duplicates in current batch, not seen videos
-      // Backend already filtered watched videos
+      // **FRONTEND SAFETY NET**: Skip videos already seen in this session
+      // (except the one we're explicitly trying to preserve).
+      if (_seenVideoKeys.contains(key) && key != preserveVideoKey) {
+        AppLogger.log(
+            '👀 Skipping already-seen video from ranking: id=${video.id}, key=$key');
+        continue;
+      }
+
+      // Only check for duplicates in current batch
+      // Backend already filters watched videos, this is just an extra safety layer.
       if (!uniqueVideos.containsKey(key)) {
         uniqueVideos[key] = video;
       } else {
@@ -937,8 +945,9 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     if (key.isEmpty) return;
     if (_seenVideoKeys.add(key)) {
       AppLogger.log('👀 Marked video as seen: ${video.id} ($key)');
-      // **BACKEND-FIRST: Backend tracks this via WatchHistory API**
-      // No local storage needed - backend is source of truth
+      // **BACKEND-FIRST + LOCAL CACHE: Backend stores WatchHistory, local set avoids cached repeats**
+      // Persist seen keys so that cached first-page data after app reopen doesn't re-show watched videos
+      _saveSeenVideoKeysToStorage();
     }
   }
 
@@ -951,7 +960,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       return rankedVideos;
     }
 
-    String _creatorIdOf(VideoModel v) =>
+    String creatorIdOf(VideoModel v) =>
         v.uploader.googleId?.trim().isNotEmpty == true
             ? v.uploader.googleId!.trim()
             : v.uploader.id.trim();
@@ -963,12 +972,12 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       int pickIndex = 0;
 
       if (result.isNotEmpty) {
-        final lastCreator = _creatorIdOf(result.last);
+        final lastCreator = creatorIdOf(result.last);
 
         // Count how many of the last videos are from the same creator
         int streak = 0;
         for (int i = result.length - 1; i >= 0; i--) {
-          if (_creatorIdOf(result[i]) == lastCreator) {
+          if (creatorIdOf(result[i]) == lastCreator) {
             streak++;
           } else {
             break;
@@ -978,7 +987,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         if (streak >= maxConsecutive) {
           // Try to find a video from a different creator
           final idx = remaining.indexWhere(
-            (v) => _creatorIdOf(v) != lastCreator,
+            (v) => creatorIdOf(v) != lastCreator,
           );
           if (idx != -1) {
             pickIndex = idx;

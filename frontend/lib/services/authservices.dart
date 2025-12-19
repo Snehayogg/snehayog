@@ -141,6 +141,36 @@ class AuthService {
             AppLogger.log('⚠️ Error retrying FCM token save: $e');
           }
 
+          // **PROFESSIONAL: Sync watch history after login to merge anonymous and authenticated history**
+          // This ensures watched videos don't appear again after login
+          try {
+            final syncResponse = await http
+                .post(
+                  Uri.parse(
+                      '${AppConfig.baseUrl}/api/videos/sync-watch-history'),
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ${authData['token']}',
+                  },
+                  body: jsonEncode({
+                    'deviceId': deviceId,
+                  }),
+                )
+                .timeout(const Duration(seconds: 5));
+
+            if (syncResponse.statusCode == 200) {
+              final syncData = jsonDecode(syncResponse.body);
+              AppLogger.log(
+                  '✅ Watch history synced successfully: ${syncData['syncedCount']} videos');
+            } else {
+              AppLogger.log(
+                  '⚠️ Watch history sync failed: ${syncResponse.statusCode}');
+            }
+          } catch (e) {
+            // Non-critical - don't fail login if sync fails
+            AppLogger.log('⚠️ Error syncing watch history (non-critical): $e');
+          }
+
           // Then register/update user profile
           final userData = {
             'googleId': googleUser.id,

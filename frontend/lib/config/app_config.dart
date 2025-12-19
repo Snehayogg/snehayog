@@ -11,7 +11,7 @@ class AppConfig {
 
   // Local development server (Wi‑Fi/LAN)
   // **IMPORTANT**: Update this IP to match your local machine's IP address
-  // Find your IP: Windows: ipconfig | Linux/Mac: ifconfig or ip addr
+  // Find your IP: Windows: ipconfig | Linux/Mac: ifconfig or ip address
   // Make sure your phone/emulator is on the same Wi‑Fi network
   static const String _localIpBaseUrl = 'http://192.168.0.198:5001';
 

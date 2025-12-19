@@ -52,7 +52,9 @@ const WatchHistorySchema = new mongoose.Schema({
 // Index for finding user's watch history
 WatchHistorySchema.index({ userId: 1, watchedAt: -1 });
 
-// Unique index to prevent duplicate entries (one user can watch a video multiple times)
+// **PROFESSIONAL: Unique index to prevent duplicate entries per user-video pair**
+// This allows same video to be tracked for different users (userId vs deviceId)
+// But prevents duplicate entries for same user-video combination
 WatchHistorySchema.index({ userId: 1, videoId: 1 }, { unique: true });
 
 // Index for finding recently watched videos
@@ -83,6 +85,36 @@ WatchHistorySchema.statics.getUserWatchedVideoIds = async function(userId, days 
     return watchHistory.map(entry => entry.videoId);
   } catch (error) {
     console.error('❌ Error getting user watched video IDs:', error);
+    return [];
+  }
+};
+
+/**
+ * Static method to get user's least-recently-watched video IDs
+ * Used when user has watched (almost) all videos so we can resurface
+ * old content instead of showing only recent uploads.
+ *
+ * @param {String} userId - Google ID or deviceId of the user
+ * @param {Number} limit - Max number of video IDs to return
+ * @param {Number} skip - How many entries to skip (for pagination)
+ * @returns {Promise<Array>} Array of video ObjectIds ordered by lastWatchedAt ASC
+ */
+WatchHistorySchema.statics.getLeastRecentlyWatchedVideoIds = async function(
+  userId,
+  limit = 50,
+  skip = 0
+) {
+  try {
+    const history = await this.find({ userId })
+      .select('videoId lastWatchedAt')
+      .sort({ lastWatchedAt: 1 }) // oldest watches first
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    return history.map(entry => entry.videoId);
+  } catch (error) {
+    console.error('❌ Error getting least-recently-watched video IDs:', error);
     return [];
   }
 };

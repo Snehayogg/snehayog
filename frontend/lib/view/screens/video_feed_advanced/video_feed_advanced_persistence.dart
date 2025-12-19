@@ -111,4 +111,36 @@ extension _VideoFeedPersistence on _VideoFeedAdvancedState {
       AppLogger.log('❌ Error restoring background state: $e');
     }
   }
+
+  /// **NEW: Persist seen video keys so reopened app doesn't re-show them at top**
+  Future<void> _loadSeenVideoKeysFromStorage() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final storedKeys = prefs.getStringList(_kSeenVideoKeysKey) ?? const [];
+      if (storedKeys.isNotEmpty) {
+        _seenVideoKeys.addAll(storedKeys);
+        AppLogger.log(
+          '✅ VideoFeedAdvanced: Loaded ${_seenVideoKeys.length} seen video keys from storage',
+        );
+      }
+    } catch (e) {
+      AppLogger.log('⚠️ VideoFeedAdvanced: Error loading seen video keys: $e');
+    }
+  }
+
+  Future<void> _saveSeenVideoKeysToStorage() async {
+    try {
+      // Keep only a reasonable number of recent keys to avoid unbounded growth
+      const maxKeys = 1000;
+      final keys = _seenVideoKeys.toList();
+      if (keys.length > maxKeys) {
+        keys.removeRange(0, keys.length - maxKeys);
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_kSeenVideoKeysKey, keys);
+    } catch (e) {
+      AppLogger.log('⚠️ VideoFeedAdvanced: Error saving seen video keys: $e');
+    }
+  }
 }

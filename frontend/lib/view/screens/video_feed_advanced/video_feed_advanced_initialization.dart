@@ -41,6 +41,9 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
         _errorMessage = null; // Clear any previous error
       });
 
+      // **NEW: Load persisted seen video keys so cache doesn't re-show watched videos**
+      await _loadSeenVideoKeysFromStorage();
+
       // **BACKEND-FIRST: Backend handles all filtering via WatchHistory**
       // No need to load from local storage - backend is source of truth
       // Backend filters watched videos for ALL users (authenticated + anonymous via deviceId)
@@ -395,8 +398,7 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
                 // Show snackbar to user
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content:
-                        Text('Video not found. Showing feed instead.'),
+                    content: Text('Video not found. Showing feed instead.'),
                     backgroundColor: Colors.orange,
                     duration: Duration(seconds: 3),
                   ),

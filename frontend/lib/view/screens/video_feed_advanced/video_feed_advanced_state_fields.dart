@@ -132,6 +132,7 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   String get _kSavedVideoIdKey => 'video_feed_saved_video_id';
   String get _kSavedPageKey => 'video_feed_saved_page';
   String get _kSavedStateTimestampKey => 'video_feed_saved_timestamp';
+  String get _kSeenVideoKeysKey => 'video_feed_seen_video_keys';
 
   // Cold start tracking
   bool _isColdStart = true;
