@@ -29,6 +29,7 @@ import 'package:vayu/services/authservices.dart';
 import 'package:vayu/view/search/video_creator_search_delegate.dart';
 import 'package:vayu/services/earnings_service.dart';
 import 'package:vayu/model/video_model.dart';
+import 'package:vayu/view/screens/creator_revenue_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -1990,6 +1991,18 @@ class _ProfileScreenState extends State<ProfileScreen>
     ProfileDialogsWidget.showFAQDialog(context);
   }
 
+  /// **NEW: Navigate to Creator Revenue Screen when earnings is tapped**
+  void _handleEarningsTap() {
+    AppLogger.log(
+        '💰 ProfileScreen: Earnings tapped - navigating to CreatorRevenueScreen');
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const CreatorRevenueScreen(),
+      ),
+    );
+  }
+
   Widget _buildProfileContent(UserProvider userProvider, UserModel? userModel) {
     final authController =
         Provider.of<GoogleSignInController>(context, listen: false);
@@ -2039,8 +2052,8 @@ class _ProfileScreenState extends State<ProfileScreen>
               // **SIMPLIFIED: Simple followers tap**
               AppLogger.log('🔄 ProfileScreen: Followers tapped');
             },
-            // Profile screen: disable earnings bottom sheet tap
-            onEarningsTap: null,
+            // **FIXED: Navigate to CreatorRevenueScreen when earnings is tapped (only for own profile)**
+            onEarningsTap: isViewingOwnProfile ? _handleEarningsTap : null,
           ),
 
           const SizedBox(height: 16),

@@ -22,6 +22,8 @@ import 'package:vayu/model/video_model.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/background_profile_preloader.dart';
 import 'package:vayu/services/location_onboarding_service.dart';
+import 'package:vayu/services/welcome_onboarding_service.dart';
+import 'package:vayu/view/screens/welcome_onboarding_screen.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/core/managers/shared_video_controller_pool.dart';
@@ -77,9 +79,11 @@ void _checkServerConnectivity() async {
     final workingUrl = await AppConfig.checkAndUpdateServerUrl();
     print('✅ Main: Using server URL: $workingUrl');
     print('✅ Main: All API calls will go to: $workingUrl');
-    
+
     // In development mode, verify local server is accessible
-    if (workingUrl.contains('192.168') || workingUrl.contains('localhost') || workingUrl.contains('127.0.0.1')) {
+    if (workingUrl.contains('192.168') ||
+        workingUrl.contains('localhost') ||
+        workingUrl.contains('127.0.0.1')) {
       print('🔧 Main: LOCAL SERVER MODE - Make sure backend is running!');
       print('🔧 Main: Test connection: $workingUrl/api/health');
     }
@@ -530,14 +534,60 @@ class MainScreenWithLocationCheck extends StatefulWidget {
 class _MainScreenWithLocationCheckState
     extends State<MainScreenWithLocationCheck> {
   bool _hasCheckedLocation = false;
+  bool _hasCheckedWelcome = false;
+  bool _shouldShowWelcome = false;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    // **NON-BLOCKING: Check location in background after showing MainScreen**
+    // **CHECK: Check if welcome onboarding should be shown FIRST**
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkLocationInBackground();
+      _checkWelcomeOnboarding();
     });
+  }
+
+  /// **Check if welcome onboarding should be shown**
+  Future<void> _checkWelcomeOnboarding() async {
+    if (_hasCheckedWelcome) return;
+    _hasCheckedWelcome = true;
+
+    try {
+      print('🔍 MainScreenWithLocationCheck: Checking welcome onboarding...');
+      final shouldShow =
+          await WelcomeOnboardingService.shouldShowWelcomeOnboarding();
+
+      if (mounted) {
+        setState(() {
+          _shouldShowWelcome = shouldShow;
+          _isLoading = false;
+        });
+
+        // If not showing welcome, check location in background
+        if (!shouldShow) {
+          _checkLocationInBackground();
+        }
+      }
+    } catch (e) {
+      print(
+          '❌ MainScreenWithLocationCheck: Error checking welcome onboarding: $e');
+      if (mounted) {
+        setState(() {
+          _shouldShowWelcome = false;
+          _isLoading = false;
+        });
+        _checkLocationInBackground();
+      }
+    }
+  }
+
+  /// **Handle Get Started button click**
+  void _handleGetStarted() {
+    setState(() {
+      _shouldShowWelcome = false;
+    });
+    // Check location in background after welcome screen
+    _checkLocationInBackground();
   }
 
   /// **Check location permission in background without blocking UI**
@@ -607,7 +657,19 @@ class _MainScreenWithLocationCheckState
 
   @override
   Widget build(BuildContext context) {
-    // **INSTANT: Show MainScreen immediately, location check happens in background**
+    // **SHOW: Welcome onboarding screen if user hasn't seen it yet**
+    if (_isLoading) {
+      // Show MainScreen while checking (brief moment)
+      return const MainScreen();
+    }
+
+    if (_shouldShowWelcome) {
+      return WelcomeOnboardingScreen(
+        onGetStarted: _handleGetStarted,
+      );
+    }
+
+    // **INSTANT: Show MainScreen, location check happens in background**
     return const MainScreen();
   }
 }
