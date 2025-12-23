@@ -1057,41 +1057,15 @@ class AuthService {
         }
       }
 
-      // **IMPROVED: Method 4: If device ID is recognized but no Google session exists,
-      // automatically trigger Google Sign-In - Google will remember the account
-      // On Android, Google One Tap will automatically select the previously used account
-      // On iOS, Google will show account picker but will pre-select the previously used account
+      // **CHANGED: Don't automatically trigger sign-in popup on app startup**
+      // Sign-in popup will only show when user explicitly interacts (like, comment)
+      // This prevents automatic account picker from showing when app opens
       if (googleUser == null) {
         AppLogger.log(
-            '🔄 Device ID recognized but no Google session - automatically triggering sign-in...');
+            'ℹ️ Device ID recognized but no Google session - user needs to sign in manually');
         AppLogger.log(
-            'ℹ️ Google will automatically select the previously used account (${userEmail ?? "unknown"})');
-        try {
-          // **IMPROVED: Call signIn - Google will automatically select the previously linked account**
-          // On Android: Google One Tap will show the correct account automatically
-          // On iOS: Account picker will pre-select the correct account
-          googleUser = await _googleSignIn.signIn();
-          if (googleUser != null) {
-            // **VERIFY: Check if the selected account matches the device ID's user**
-            if (userEmail != null &&
-                googleUser.email.toLowerCase() != userEmail.toLowerCase()) {
-              AppLogger.log(
-                  '⚠️ User selected different account (${googleUser.email}) than device account ($userEmail)');
-              AppLogger.log(
-                  'ℹ️ Proceeding with selected account - user may have switched accounts');
-              // Still proceed - user's choice to use different account
-            } else {
-              AppLogger.log(
-                  '✅ Automatic sign-in successful with matching account: ${googleUser.email}');
-            }
-          } else {
-            AppLogger.log('ℹ️ User cancelled automatic sign-in');
-            return null;
-          }
-        } catch (e) {
-          AppLogger.log('❌ Automatic sign-in failed: $e');
-          return null;
-        }
+            'ℹ️ Sign-in popup will appear when user interacts (like button, comments, etc.)');
+        return null;
       }
 
       AppLogger.log('✅ Google user found: ${googleUser.email}');

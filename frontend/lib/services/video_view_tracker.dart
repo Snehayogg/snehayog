@@ -57,7 +57,8 @@ class VideoViewTracker {
         final watchUrl = Uri.parse('$_baseUrl/api/videos/$videoId/watch');
         final watchBody = <String, dynamic>{
           'duration': effectiveDuration,
-          'completed': false, // Will be updated when video completes
+          'completed':
+              false, // Initial watch tracking - will be marked completed in increment-view
         };
 
         // **BACKEND-FIRST: Always send deviceId as fallback (even if token exists, it might be invalid)**
@@ -149,14 +150,22 @@ class VideoViewTracker {
       }
 
       // Make API call to increment view (existing functionality)
+      // **IMPROVED: Also send deviceId so backend can mark video as watched for anonymous users too**
       final url = Uri.parse('$_baseUrl/api/videos/$videoId/increment-view');
+      final incrementBody = <String, dynamic>{
+        'userId': userId,
+        'duration': effectiveDuration,
+      };
+
+      // Always send deviceId for watch tracking support
+      if (deviceId.isNotEmpty) {
+        incrementBody['deviceId'] = deviceId;
+      }
+
       final response = await httpClientService.post(
         url,
         headers: headers,
-        body: json.encode({
-          'userId': userId,
-          'duration': effectiveDuration,
-        }),
+        body: json.encode(incrementBody),
       );
 
       AppLogger.log(
@@ -288,39 +297,59 @@ class VideoViewTracker {
   }
 
   /// **NEW: Track video completion for watch history**
+  /// This should work for BOTH authenticated and anonymous users,
+  /// matching the logic used in [incrementView] for /watch tracking.
   Future<void> trackVideoCompletion(String videoId, {int? duration}) async {
     try {
       AppLogger.log(
           '📊 VideoViewTracker: Tracking video completion for $videoId');
 
-      // Get current user data
-      final userData = await _authService.getUserData();
-      if (userData == null || userData['id'] == null) {
-        AppLogger.log(
-            '❌ VideoViewTracker: No authenticated user found for completion tracking');
-        return;
-      }
+      // Get deviceId (works for anonymous + authenticated users)
+      final deviceIdService = DeviceIdService();
+      final deviceId = await deviceIdService.getDeviceId();
 
+      // Get auth token if available (optional)
       final token = await AuthService.getToken();
 
-      if (token == null || token.isEmpty) {
-        AppLogger.log(
-            '⚠️ VideoViewTracker: No auth token for completion tracking');
-        return;
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+      };
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
       }
 
-      // Track completed watch history
+      final body = <String, dynamic>{
+        'duration': duration ?? 0,
+        'completed': true, // Mark as completed
+      };
+
+      // Always include deviceId as fallback identity (same as incrementView)
+      if (deviceId.isNotEmpty) {
+        body['deviceId'] = deviceId;
+        AppLogger.log(
+          '📱 VideoViewTracker: Sending deviceId for completion tracking (deviceId: ${deviceId.substring(0, 8)}...)',
+        );
+      } else {
+        AppLogger.log(
+            '⚠️ VideoViewTracker: No deviceId available for completion tracking');
+      }
+
       final watchUrl = Uri.parse('$_baseUrl/api/videos/$videoId/watch');
+      AppLogger.log(
+          '📡 VideoViewTracker: Calling completion tracking API: $watchUrl');
+      AppLogger.log('📡 VideoViewTracker: Request body: ${json.encode(body)}');
+
       final watchResponse = await httpClientService.post(
         watchUrl,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: json.encode({
-          'duration': duration ?? 0,
-          'completed': true, // Mark as completed
-        }),
+        headers: headers,
+        body: json.encode(body),
+      );
+
+      AppLogger.log(
+        '📡 VideoViewTracker: Completion tracking response status: ${watchResponse.statusCode}',
+      );
+      AppLogger.log(
+        '📡 VideoViewTracker: Completion tracking response body: ${watchResponse.body}',
       );
 
       if (watchResponse.statusCode == 200) {
@@ -328,12 +357,15 @@ class VideoViewTracker {
             '✅ VideoViewTracker: Video completion tracked successfully');
         final watchData = json.decode(watchResponse.body);
         AppLogger.log(
-            '   Watch count: ${watchData['watchEntry']?['watchCount'] ?? 1}');
+          '   Watch count: ${watchData['watchEntry']?['watchCount'] ?? 1}',
+        );
         AppLogger.log(
-            '   Completed: ${watchData['watchEntry']?['completed'] ?? false}');
+          '   Completed: ${watchData['watchEntry']?['completed'] ?? false}',
+        );
       } else {
         AppLogger.log(
-            '⚠️ VideoViewTracker: Completion tracking failed: ${watchResponse.statusCode}');
+          '⚠️ VideoViewTracker: Completion tracking failed: ${watchResponse.statusCode}',
+        );
       }
     } catch (e) {
       AppLogger.log('❌ VideoViewTracker: Error tracking video completion: $e');

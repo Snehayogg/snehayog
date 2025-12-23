@@ -128,7 +128,12 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
   }
 
   int _getTotalItemCount() {
-    return _videos.length + (_isLoadingMore ? 1 : 0);
+    // **FIXED: Always add ONE extra item**
+    // This ensures:
+    // - When `_hasMore` is true → extra item is used as a loading indicator to fetch next page.
+    // - When `_hasMore` is false → extra item is used to seamlessly restart the feed (startOver).
+    // Without this extra item, PageView cannot scroll past the last video and scrolling feels "blocked".
+    return _videos.length + 1;
   }
 
   Widget _buildFeedItem(int index) {
@@ -136,23 +141,45 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     final videoIndex = index;
 
     if (videoIndex >= totalVideos) {
-      // Automatically restart the feed when reaching the end
-      // No buttons shown - seamless continuation
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && !_isRefreshing) {
-          startOver();
-        }
-      });
+      // **END-OF-FEED ITEM**
+      // This extra item handles BOTH:
+      // 1) Loading more videos when `_hasMore` is true.
+      // 2) Seamlessly restarting the feed (startOver) when `_hasMore` is false.
 
-      // Show loading indicator while restarting
+      if (mounted && !_isRefreshing) {
+        if (_hasMore && !_isLoadingMore) {
+          // More videos are available → trigger load more immediately
+          AppLogger.log(
+            '📡 UI: End-of-feed item at index $index, triggering load more...',
+          );
+          _loadMoreVideos();
+        } else if (!_hasMore && !_isLoadingMore) {
+          // No more videos from backend → restart feed from beginning
+          AppLogger.log(
+            '🔄 UI: No more videos available, restarting feed from beginning...',
+          );
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && !_isRefreshing) {
+              startOver();
+            }
+          });
+        }
+      }
+
+      // Show loading indicator or a very short "restarting" state
       return Container(
         width: double.infinity,
         height: double.infinity,
         color: Colors.black,
-        child: const Center(
-          child: CircularProgressIndicator(
-            color: Colors.white,
-          ),
+        child: Center(
+          child: (_hasMore || _isLoadingMore)
+              ? const CircularProgressIndicator(
+                  color: Colors.white,
+                )
+              : const Text(
+                  'Restarting feed...',
+                  style: TextStyle(color: Colors.white54),
+                ),
         ),
       );
     }

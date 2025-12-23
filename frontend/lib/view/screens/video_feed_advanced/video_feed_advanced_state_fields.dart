@@ -97,7 +97,7 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   bool _isLoadingMore = false;
   int _currentPage = 1;
   int get _videosPerPage =>
-      20; // **FIXED: Increased from 5 to 20 for better variety**
+      30; // **IMPROVED: Increased to 30 for better variety and smoother scrolling**
   bool _hasMore = true;
   int? _totalVideos;
 

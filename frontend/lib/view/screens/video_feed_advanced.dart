@@ -42,7 +42,6 @@ import 'package:vayu/services/earnings_service.dart';
 import 'package:vayu/core/utils/video_engagement_ranker.dart';
 import 'package:vayu/config/admob_config.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:vayu/view/screens/profile_screen.dart';
 
 part 'video_feed_advanced/video_feed_advanced_state_fields.dart';
 part 'video_feed_advanced/video_feed_advanced_playback.dart';
@@ -1715,17 +1714,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     if (_currentUserId == null) {
       AppLogger.log('❌ Like Handler: User not logged in');
-      // **NEW: Only show sign-in prompt if 5 minutes have passed**
-      if (_canShowSignInPrompt()) {
-        _navigateToLoginScreen();
-      } else {
-        final timeRemaining = _signInPromptDelay -
-            DateTime.now().difference(_screenFirstOpenedAt!);
-        final minutesRemaining = timeRemaining.inMinutes;
-        AppLogger.log(
-          '⏱️ Sign-in prompt delayed for like action. Time remaining: ${minutesRemaining}m',
-        );
-      }
+      // **CHANGED: Show Google account picker popup immediately when user clicks like button**
+      _triggerGoogleSignIn();
       return;
     }
 
@@ -1815,12 +1805,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       if (errorString.contains('sign in') ||
           errorString.contains('authenticated')) {
         errorMessage = 'Please sign in again to like videos';
-        // **NEW: Only show sign-in prompt if 5 minutes have passed**
-        if (_canShowSignInPrompt()) {
-          Future.delayed(const Duration(milliseconds: 500), () {
-            _navigateToLoginScreen();
-          });
-        }
+        // **CHANGED: Show Google account picker popup immediately when authentication error occurs**
+        Future.delayed(const Duration(milliseconds: 500), () {
+          _triggerGoogleSignIn();
+        });
       } else if (errorString.contains('User not found')) {
         errorMessage =
             'Please sign in again. Your account may not be registered.';
@@ -1872,24 +1860,33 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     );
   }
 
+  /// **NEW: Trigger Google Sign-In directly (shows account picker popup)**
+  Future<void> _triggerGoogleSignIn() async {
+    try {
+      final authController =
+          Provider.of<GoogleSignInController>(context, listen: false);
+      final user = await authController.signIn();
+      if (user != null) {
+        AppLogger.log('✅ Sign-in successful after like/comment action');
+        // User is now signed in, they can retry the action
+      } else {
+        AppLogger.log('ℹ️ User cancelled sign-in');
+      }
+    } catch (e) {
+      AppLogger.log('❌ Error triggering sign-in: $e');
+      _showSnackBar('Failed to sign in. Please try again.', isError: true);
+    }
+  }
+
   /// **HANDLE COMMENT: Open comment sheet**
   void _handleComment(VideoModel video) {
     // **FIX: Check if user is signed in before opening comment sheet**
     if (_currentUserId == null) {
-      // **NEW: Only show sign-in prompt if 5 minutes have passed**
-      if (_canShowSignInPrompt()) {
-        _showSnackBar('Please sign in to view and add comments', isError: true);
-        Future.delayed(const Duration(milliseconds: 500), () {
-          _navigateToLoginScreen();
-        });
-      } else {
-        final timeRemaining = _signInPromptDelay -
-            DateTime.now().difference(_screenFirstOpenedAt!);
-        final minutesRemaining = timeRemaining.inMinutes;
-        AppLogger.log(
-          '⏱️ Sign-in prompt delayed for comment action. Time remaining: ${minutesRemaining}m',
-        );
-      }
+      // **CHANGED: Show Google account picker popup immediately when user clicks comment button**
+      _showSnackBar('Please sign in to view and add comments', isError: true);
+      Future.delayed(const Duration(milliseconds: 500), () {
+        _triggerGoogleSignIn();
+      });
       return;
     }
 

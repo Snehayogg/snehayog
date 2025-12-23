@@ -521,10 +521,21 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
             // **MEMORY MANAGEMENT: Cleanup old videos to prevent memory issues**
             // Remove videos that are far from current index to keep memory usage low
             _cleanupOldVideosFromList();
+          } else {
+            // **FIXED: If all videos filtered out, still update hasMore based on backend response**
+            // This prevents infinite loading attempts when user has watched all videos
+            AppLogger.log(
+              '⚠️ No new videos after filtering, but backend says hasMore=$hasMore',
+            );
           }
           _currentPage = currentPage;
-          final bool inferredHasMore =
-              hasMore || newVideos.length == _videosPerPage;
+          // **FIXED: hasMore should respect backend response, but also check if we got videos**
+          // If backend says hasMore but we filtered all out, we might need to stop
+          final bool inferredHasMore = rankedNewVideos.isNotEmpty
+              ? (hasMore || newVideos.length == _videosPerPage)
+              : hasMore &&
+                  newVideos.length ==
+                      _videosPerPage; // Only continue if backend returned full page
           _hasMore = inferredHasMore;
           _totalVideos = total;
           // **CRITICAL FIX: Clear error message when videos are successfully loaded**
@@ -563,8 +574,21 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
 
         AppLogger.log(
             '🔍 VideoFeedAdvanced: Before ranking - newVideos.length: ${newVideos.length}');
+        // **IMPROVED: Remove duplicates BEFORE ranking to ensure no duplicates in feed**
+        final uniqueNewVideos = <String, VideoModel>{};
+        for (final video in newVideos) {
+          final key = videoIdentityKey(video);
+          if (key.isNotEmpty && !uniqueNewVideos.containsKey(key)) {
+            uniqueNewVideos[key] = video;
+          }
+        }
+
+        final deduplicatedVideos = uniqueNewVideos.values.toList();
+        AppLogger.log(
+            '🔍 Deduplication: ${newVideos.length} videos → ${deduplicatedVideos.length} unique videos');
+
         final rankedVideos = _rankVideosWithEngagement(
-          newVideos,
+          deduplicatedVideos,
           preserveVideoKey: preserveKey ?? (preserveVideoId),
         );
         AppLogger.log(
@@ -818,13 +842,11 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         continue;
       }
 
-      // **FRONTEND SAFETY NET**: Skip videos already seen in this session
-      // (except the one we're explicitly trying to preserve).
-      if (_seenVideoKeys.contains(key) && key != preserveVideoKey) {
-        AppLogger.log(
-            '👀 Skipping already-seen video from ranking: id=${video.id}, key=$key');
-        continue;
-      }
+      // **FIXED: Don't filter by _seenVideoKeys in initial ranking - backend already handles this**
+      // Only filter duplicates within the batch
+      // **REASON**: Backend already excludes watched videos, frontend filtering causes empty pages
+      // We only use _seenVideoKeys to prevent showing same video twice in same session
+      // But for pagination, we should trust backend and not filter again
 
       // Only check for duplicates in current batch
       // Backend already filters watched videos, this is just an extra safety layer.
@@ -912,16 +934,45 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       for (final existing in _videos) videoIdentityKey(existing),
     };
 
+    int filteredByExisting = 0;
+    int filteredByDuplicate = 0;
+
     for (final video in videos) {
       final key = videoIdentityKey(video);
       if (key.isEmpty) continue;
-      // **FILTER: Skip seen videos completely**
-      if (_seenVideoKeys.contains(key)) continue;
-      // **FILTER: Skip already loaded videos**
-      if (existingKeys.contains(key)) continue;
+
+      // **FIXED: Don't filter by _seenVideoKeys when appending - backend already handles watched videos**
+      // Only filter duplicates within current batch and videos already in _videos list
+      // **REASON**: Backend already excludes watched videos, so frontend shouldn't filter them again
+      // This prevents empty pages when user has watched many videos
+
+      // **FILTER: Skip already loaded videos in current list**
+      if (existingKeys.contains(key)) {
+        filteredByExisting++;
+        continue;
+      }
       // **FILTER: Skip duplicates in this batch**
-      if (uniqueNewVideos.containsKey(key)) continue;
+      if (uniqueNewVideos.containsKey(key)) {
+        filteredByDuplicate++;
+        continue;
+      }
       uniqueNewVideos[key] = video;
+    }
+
+    AppLogger.log(
+        '🔍 _filterAndRankNewVideos: Filtered ${videos.length} videos:');
+    AppLogger.log('   - Filtered by existing: $filteredByExisting');
+    AppLogger.log('   - Filtered by duplicate: $filteredByDuplicate');
+    AppLogger.log('   - Unique new videos: ${uniqueNewVideos.length}');
+
+    // **IMPROVED: No fallback - return empty if all filtered out**
+    // Backend should handle variety and prevent duplicates, frontend should trust it
+    // If all videos are filtered out, it means user has seen them all - better to show empty than duplicates
+    if (uniqueNewVideos.isEmpty && videos.isNotEmpty) {
+      AppLogger.log(
+        '⚠️ All videos filtered out! This may indicate all videos have been seen or backend needs to provide more variety.',
+      );
+      // Don't show duplicates - return empty and let backend handle pagination properly
     }
 
     if (uniqueNewVideos.isEmpty) return <VideoModel>[];
@@ -1536,7 +1587,12 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     }
 
     AppLogger.log('📡 Loading more videos: Page ${_currentPage + 1}');
-    setState(() => _isLoadingMore = true);
+
+    // **FIXED: Set loading state BEFORE async call to update UI immediately**
+    // This ensures PageView knows loading is in progress and can show loading item
+    if (mounted) {
+      setState(() => _isLoadingMore = true);
+    }
 
     try {
       await _loadVideos(page: _currentPage + 1, append: true);

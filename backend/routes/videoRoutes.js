@@ -73,120 +73,6 @@ async function convertLikedByToGoogleIds(likedByArray) {
 }
 
 
-// DEBUG: Check database status - MUST BE FIRST ROUTE
-router.get('/debug-database', async (req, res) => {
-  try {
-    console.log('🔍 DEBUG: Checking database status...');
-    
-    // Count all videos
-    const totalVideos = await Video.countDocuments({});
-    console.log('🔍 DEBUG: Total videos in database:', totalVideos);
-    
-    // Count videos by processing status
-    const statusCounts = await Video.aggregate([
-      { $group: { _id: '$processingStatus', count: { $sum: 1 } } }
-    ]);
-    console.log('🔍 DEBUG: Videos by processing status:', statusCounts);
-    
-    // Count videos by user
-    const userCounts = await Video.aggregate([
-      { $lookup: { from: 'users', localField: 'uploader', foreignField: '_id', as: 'user' } },
-      { $unwind: '$user' },
-      { $group: { _id: { googleId: '$user.googleId', name: '$user.name' }, count: { $sum: 1 } } }
-    ]);
-    console.log('🔍 DEBUG: Videos by user:', userCounts);
-    
-    // **NEW: Count videos by videoType**
-    const videoTypeStats = await Video.aggregate([
-      {
-        $group: {
-          _id: '$videoType',
-          count: { $sum: 1 }
-        }
-      },
-      {
-        $sort: { count: -1 }
-      }
-    ]);
-    console.log('🔍 DEBUG: Videos by videoType:', JSON.stringify(videoTypeStats, null, 2));
-    
-    // Count videos with null/undefined videoType
-    const nullVideoTypeCount = await Video.countDocuments({
-      $or: [
-        { videoType: null },
-        { videoType: { $exists: false } }
-      ]
-    });
-    if (nullVideoTypeCount > 0) {
-      console.log(`🔍 DEBUG: Videos with null/undefined videoType: ${nullVideoTypeCount}`);
-    }
-    
-    // Count completed videos by videoType (videos that can be shown)
-    const completedVideoTypeStats = await Video.aggregate([
-      {
-        $match: {
-          processingStatus: 'completed',
-          videoUrl: { 
-            $exists: true, 
-            $ne: null, 
-            $ne: '',
-            $not: /^uploads[\\\/]/,
-            $regex: /^https?:\/\//
-          }
-        }
-      },
-      {
-        $group: {
-          _id: '$videoType',
-          count: { $sum: 1 }
-        }
-      },
-      {
-        $sort: { count: -1 }
-      }
-    ]);
-    console.log('🔍 DEBUG: Completed videos by videoType (showable):', JSON.stringify(completedVideoTypeStats, null, 2));
-    
-    // Get sample videos with detailed URL information
-    const sampleVideos = await Video.find({})
-      .select('videoName uploader createdAt processingStatus videoType videoUrl thumbnailUrl hlsPlaylistUrl hlsMasterPlaylistUrl isHLSEncoded')
-      .populate('uploader', 'googleId name')
-      .limit(5)
-      .lean();
-    
-    console.log('🔍 DEBUG: Sample videos:', sampleVideos);
-    
-    // **NEW: Check for broken video URLs**
-    const brokenVideos = await Video.find({
-      $or: [
-        { videoUrl: { $exists: false } },
-        { videoUrl: null },
-        { videoUrl: '' },
-        { videoUrl: { $regex: /^uploads[\\\/]/ } }, // Local file paths
-        { processingStatus: 'failed' },
-        { processingStatus: 'error' }
-      ]
-    }).select('videoName videoUrl processingStatus processingError').lean();
-    
-    console.log('🔍 DEBUG: Broken videos found:', brokenVideos.length);
-    
-    res.json({
-      totalVideos,
-      statusCounts,
-      userCounts,
-      videoTypeStats,
-      nullVideoTypeCount,
-      completedVideoTypeStats,
-      sampleVideos,
-      brokenVideos,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('❌ DEBUG: Database check failed:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // **NEW: Cache Management Endpoints**
 // GET /api/videos/cache/status - Check cache status
 router.get('/cache/status', async (req, res) => {
@@ -1149,424 +1035,182 @@ router.get('/', async (req, res) => {
     let unwatchedVideos = [];
     let watchedVideos = [];
     let finalVideos = [];
-    let unwatchedVideoIds = []; // **FIXED: Declare outside if block for hasMore calculation**
-    let watchedVideoIds = []; // **FIXED: Declare outside if block for final summary access**
+    let unwatchedVideoIds = []; // kept for logging compatibility
+    let watchedVideoIds = []; // kept for logging compatibility
     
-    // **SIMPLE PERSONALIZED FEED: Always exclude watched videos using lifetime watch history**
-    // **IDENTITY RULE: Use googleId (userId) when logged in, deviceId for anonymous users**
-    // **SIMPLE APPROACH: No day limits, no caps - just exclude all watched videos forever**
+    // **PERSONALIZED LRU FEED: All yog videos in a loop (unwatched first, then oldest watched)**
     if (userIdentifier) {
-      console.log('🎯 Getting personalized feed for user:', userIdentifier, isAuthenticated ? '(authenticated)' : '(anonymous)');
-      
-      // **CRITICAL FIX: Check watch history for BOTH userId AND deviceId if both exist**
-      // This ensures watch history persists even after app restart/login
-      // **IMPORTANT: This MUST work correctly to prevent watched videos from appearing**
-      watchedVideoIds = []; // Reset for this request
-      const watchedIdsSet = new Set();
-      
-      // Check watch history for userId (googleId) if logged in
-      if (userId) {
-        try {
-          const userIdHistory = await WatchHistory.getUserWatchedVideoIds(userId, null);
-          if (Array.isArray(userIdHistory) && userIdHistory.length > 0) {
-            userIdHistory.forEach(id => {
-              if (id) {
-                watchedIdsSet.add(id.toString());
-              }
-            });
-            console.log(`✅ Watch history for userId (googleId): ${userIdHistory.length} videos`);
-          } else {
-            console.log(`⚠️ Watch history for userId (googleId): Empty or invalid`);
-          }
-        } catch (err) {
-          console.error(`❌ Error fetching watch history for userId: ${err.message}`);
-        }
+      console.log(
+        '🎯 Using LRU-style personalized feed for user:',
+        userIdentifier,
+        isAuthenticated ? '(authenticated)' : '(anonymous)',
+      );
+
+      // 1) Determine all identities to check for watch history
+      const userIdsToCheck = [];
+      if (userId) userIdsToCheck.push(userId);
+      if (deviceId && deviceId !== userId) userIdsToCheck.push(deviceId);
+      if (userIdsToCheck.length === 0 && userIdentifier) {
+        userIdsToCheck.push(userIdentifier);
       }
-      
-      // Also check watch history for deviceId (even if logged in, to catch anonymous history)
-      if (deviceId && deviceId !== userId) {
-        try {
-          const deviceIdHistory = await WatchHistory.getUserWatchedVideoIds(deviceId, null);
-          if (Array.isArray(deviceIdHistory) && deviceIdHistory.length > 0) {
-            deviceIdHistory.forEach(id => {
-              if (id) {
-                watchedIdsSet.add(id.toString());
-              }
-            });
-            console.log(`✅ Watch history for deviceId: ${deviceIdHistory.length} videos`);
-          } else {
-            console.log(`⚠️ Watch history for deviceId: Empty or invalid`);
-          }
-        } catch (err) {
-          console.error(`❌ Error fetching watch history for deviceId: ${err.message}`);
-        }
-      }
-      
-      // Convert Set back to array of ObjectIds (ensure valid ObjectIds)
-      watchedVideoIds = Array.from(watchedIdsSet)
-        .filter(id => id && mongoose.Types.ObjectId.isValid(id))
-        .map(id => new mongoose.Types.ObjectId(id));
-      
-      console.log(`═══════════════════════════════════════════════════════════`);
-      console.log(`📊 WATCH HISTORY SUMMARY:`);
-      console.log(`   - userId (googleId): ${userId || 'none'}`);
-      console.log(`   - deviceId: ${deviceId || 'none'}`);
-      console.log(`   - Total unique watched videos: ${watchedVideoIds.length}`);
-      console.log(`   - Will exclude from feed: ${watchedVideoIds.length > 0 ? 'YES ✅' : 'NO ⚠️'}`);
-      console.log(`   - isAuthenticated: ${isAuthenticated}`);
-      console.log(`═══════════════════════════════════════════════════════════`);
-      
-      // **CRITICAL DEBUG: Log first few watched video IDs to verify**
-      if (watchedVideoIds.length > 0) {
-        console.log(`🔍 Sample watched video IDs (first 5):`, watchedVideoIds.slice(0, 5).map(id => id.toString()));
-      } else {
-        console.log(`⚠️ WARNING: No watched videos found! This might cause watched videos to appear in feed.`);
-      }
-      
-      // Use primary identity for feed (googleId when logged in, deviceId when anonymous)
-      const identityId = userId || deviceId;
-      
-      // **CRITICAL: Validate that we have watch history data**
-      if (!Array.isArray(watchedVideoIds)) {
-        console.error('❌ Watch history is not an array, resetting to empty array');
-        watchedVideoIds = [];
-      }
-      
-      // **DEBUG: If watch history is empty, check why**
-      if (watchedVideoIds.length === 0) {
-        console.log(`⚠️ WARNING: Watch history is EMPTY for user. Checking database...`);
-        try {
-          // Direct database check to see if watch history exists
-          if (userId) {
-            const directCheck = await WatchHistory.countDocuments({ userId: userId });
-            console.log(`🔍 Direct DB check - userId '${userId}': ${directCheck} watch history entries`);
-          }
-          if (deviceId && deviceId !== userId) {
-            const directCheck = await WatchHistory.countDocuments({ userId: deviceId });
-            console.log(`🔍 Direct DB check - deviceId '${deviceId}': ${directCheck} watch history entries`);
-          }
-        } catch (err) {
-          console.error(`❌ Error checking watch history in DB: ${err.message}`);
-        }
-      }
-      
-      // Step 2: Fetch unwatched videos (ALWAYS exclude watched videos)
-      const skip = (pageNum - 1) * limitNum;
-      
-      // **CRITICAL: Build query with watched videos exclusion**
-      // This is the PRIMARY defense against watched videos appearing in feed
-      const unwatchedQuery = { ...baseQueryFilter };
-      
-      // **MANDATORY: Always exclude watched videos if we have watch history**
-      // Even if array is large, MongoDB $nin will handle it
-      if (watchedVideoIds.length > 0) {
-        unwatchedQuery._id = { $nin: watchedVideoIds };
-        console.log(`🔒 Applying $nin filter to exclude ${watchedVideoIds.length} watched videos`);
-      } else {
-        console.log(`⚠️ WARNING: No watch history - cannot exclude watched videos. All videos will be shown.`);
-      }
-      
-      // Fetch more videos to account for creator diversity filter (1 per creator)
-      // We'll filter to 1 per creator, so fetch 2x to ensure we have enough
-      const fetchLimit = limitNum * 2;
-      
-      console.log(`🔍 Fetching unwatched videos with query:`, {
-        watchedVideoIdsCount: watchedVideoIds.length,
-        hasExclusionFilter: watchedVideoIds.length > 0,
-        exclusionFilterType: watchedVideoIds.length > 0 ? '$nin' : 'none',
-        skip,
-        limit: fetchLimit,
-        finalLimit: limitNum,
-        queryPreview: JSON.stringify(unwatchedQuery).substring(0, 200)
-      });
-      
-      unwatchedVideos = await Video.find(unwatchedQuery)
-        .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded category tags keywords createdAt')
-        .populate('uploader', 'name profilePic googleId')
-        .populate('comments.user', 'name profilePic googleId')
-        .sort({ createdAt: -1 }) // Simple: newest first (but only unwatched videos)
-        .skip(skip)
-        .limit(fetchLimit)
-        .lean();
-      
-      // **CRITICAL: ALWAYS double-check that no watched videos slipped through $nin filter**
-      // This is a MANDATORY safety net - even if $nin works, we verify here
-      // **IMPORTANT: This prevents watched videos from appearing after app restart**
-      if (watchedVideoIds.length > 0) {
-        const watchedIdsSetForCheck = new Set(watchedVideoIds.map(id => id.toString()));
-        const beforeFilter = unwatchedVideos.length;
-        const removedVideos = [];
-        
-        unwatchedVideos = unwatchedVideos.filter(video => {
-          if (!video || !video._id) return false;
-          
-          const videoId = video._id.toString();
-          const isWatched = watchedIdsSetForCheck.has(videoId);
-          
-          if (isWatched) {
-            removedVideos.push({
-              id: videoId,
-              name: video.videoName || 'unnamed',
-              createdAt: video.createdAt
-            });
-            console.log(`🚫 CRITICAL: Removing watched video that slipped through: ${videoId} (${video.videoName || 'unnamed'})`);
-            return false; // Remove watched video
-          }
-          
-          return true; // Keep unwatched video
-        });
-        
-        if (beforeFilter !== unwatchedVideos.length) {
-          console.log(`🚫 CRITICAL: Filtered out ${beforeFilter - unwatchedVideos.length} watched videos that slipped through $nin filter:`, removedVideos.slice(0, 3));
-        } else if (beforeFilter > 0) {
-          console.log(`✅ All ${beforeFilter} videos are unwatched (no watched videos found in results)`);
-        }
-      } else {
-        console.log(`⚠️ WARNING: No watch history available - cannot filter watched videos. This might cause watched videos to appear.`);
-      }
-      
-      console.log(`✅ Found ${unwatchedVideos.length} unwatched videos`);
-      
-      // **DIVERSITY: Ensure only 1 video per creator per page + no duplicate videos**
-      // This prevents feed from being dominated by a single creator and duplicate videos
-      const uniqueCreatorVideos = [];
-      const seenCreators = new Set();
-      const seenVideoIds = new Set(); // Track video IDs to prevent duplicates
-      
-      for (const video of unwatchedVideos) {
-        const videoId = video._id?.toString();
-        const creatorId = video.uploader?._id?.toString() || video.uploader?.toString() || null;
-        
-        // Skip if video already seen (duplicate check)
-        if (seenVideoIds.has(videoId)) {
-          console.log(`🚫 Skipping duplicate video: ${videoId} (${video.videoName || 'unnamed'})`);
-          continue;
-        }
-        
-        // Add video if creator not seen yet
-        if (creatorId && !seenCreators.has(creatorId)) {
-          seenCreators.add(creatorId);
-          seenVideoIds.add(videoId);
-          uniqueCreatorVideos.push(video);
-          if (uniqueCreatorVideos.length >= limitNum) break; // Stop when we have enough
-        } else if (!creatorId) {
-          // If no creator info, include it (edge case) but still check for duplicates
-          seenVideoIds.add(videoId);
-          uniqueCreatorVideos.push(video);
-          if (uniqueCreatorVideos.length >= limitNum) break;
-        } else {
-          // Creator already seen - skip this video
-          console.log(`🚫 Skipping video from already-seen creator: ${creatorId} (video: ${video.videoName || 'unnamed'})`);
-        }
-      }
-      
-      const beforeDiversity = unwatchedVideos.length;
-      unwatchedVideos = uniqueCreatorVideos;
-      console.log(`🎨 Creator diversity filter: ${beforeDiversity} → ${unwatchedVideos.length} videos (1 per creator, no duplicates)`);
-      
-      // **FIXED: If we don't have enough videos after diversity filter, fetch more with proper creator tracking**
-      if (unwatchedVideos.length < limitNum) {
-        console.log(`⚠️ Only ${unwatchedVideos.length} videos after diversity filter (need ${limitNum}). Fetching more...`);
-        
-        // Keep fetching until we have enough unique creators or run out of videos
-        let currentSkip = skip + fetchLimit;
-        let maxAttempts = 5; // Prevent infinite loop
-        let attempts = 0;
-        
-        while (unwatchedVideos.length < limitNum && attempts < maxAttempts) {
-          attempts++;
-          const additionalVideos = await Video.find(unwatchedQuery)
-            .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded category tags keywords createdAt')
-            .populate('uploader', 'name profilePic googleId')
-            .populate('comments.user', 'name profilePic googleId')
-            .sort({ createdAt: -1 })
-            .skip(currentSkip)
-            .limit(fetchLimit * 2)
+
+      // 2) Build a map: videoId -> oldest lastWatchedAt (timestamp)
+      const historyMap = new Map(); // videoId (string) -> timestamp (number)
+      try {
+        if (userIdsToCheck.length > 0) {
+          const historyEntries = await WatchHistory.find({
+            userId: { $in: userIdsToCheck },
+          })
+            .select('videoId lastWatchedAt userId')
             .lean();
-          
-          if (additionalVideos.length === 0) {
-            console.log(`⚠️ No more videos available at skip ${currentSkip}`);
-            break;
-          }
-          
-          // Filter out watched videos and duplicates
-          const watchedIdsSetForAdditional = new Set(watchedVideoIds.map(id => id.toString()));
-          const filteredAdditional = additionalVideos.filter(video => {
-            const videoId = video._id?.toString();
-            return !watchedIdsSetForAdditional.has(videoId) && !seenVideoIds.has(videoId);
-          });
-          
-          // Add unique creators from additional videos
-          let addedFromThisBatch = 0;
-          for (const video of filteredAdditional) {
-            if (unwatchedVideos.length >= limitNum) break;
-            
-            const videoId = video._id?.toString();
-            const creatorId = video.uploader?._id?.toString() || video.uploader?.toString() || null;
-            
-            if (creatorId && !seenCreators.has(creatorId)) {
-              seenCreators.add(creatorId);
-              seenVideoIds.add(videoId);
-              unwatchedVideos.push(video);
-              addedFromThisBatch++;
-            } else if (!creatorId && !seenVideoIds.has(videoId)) {
-              seenVideoIds.add(videoId);
-              unwatchedVideos.push(video);
-              addedFromThisBatch++;
+
+          console.log(
+            `📊 LRU FEED: Loaded ${historyEntries.length} watch history entries for identities:`,
+            userIdsToCheck,
+          );
+
+          for (const entry of historyEntries) {
+            const vid = entry.videoId?.toString();
+            if (!vid) continue;
+
+            const currentTime = new Date(entry.lastWatchedAt || 0).getTime();
+            const existingTime = historyMap.get(vid);
+
+            if (existingTime === undefined || currentTime < existingTime) {
+              historyMap.set(vid, currentTime); // keep oldest watch time
             }
           }
-          
-          console.log(`📥 Fetched ${filteredAdditional.length} additional videos, added ${addedFromThisBatch} unique creators`);
-          currentSkip += fetchLimit * 2;
-          
-          if (addedFromThisBatch === 0) {
-            // No new creators found, try next batch
-            continue;
-          }
+
+          watchedVideoIds = Array.from(historyMap.keys()).map(
+            (id) => new mongoose.Types.ObjectId(id),
+          );
+          console.log(
+            `📊 LRU FEED: Unique watched videos in historyMap: ${historyMap.size}`,
+          );
+        } else {
+          console.log(
+            '⚠️ LRU FEED: No identities to check for watch history; treating all videos as never watched.',
+          );
         }
-        
-        console.log(`✅ After fetching additional videos: ${unwatchedVideos.length} videos (${seenCreators.size} unique creators)`);
+      } catch (err) {
+        console.error(
+          `❌ LRU FEED: Error building history map: ${err.message}`,
+        );
       }
-      
-      // **FALLBACK: If no unwatched videos found, show least-recently-watched videos**
-      // **CRITICAL: Show OLDEST watched videos (not recently watched) when user has watched most videos**
-      // This ensures user sees variety - videos they watched longest ago, not recently watched ones
-      if (unwatchedVideos.length === 0 && watchedVideoIds.length > 0) {
-        console.log(`🔄 No unwatched videos found. Showing LEAST-RECENTLY-WATCHED (oldest watched) videos.`);
-        console.log(`📊 User has watched ${watchedVideoIds.length} videos - showing OLDEST watched videos first (not recently watched)`);
-        
-        // **FIXED: Get least-recently-watched (OLDEST watched) from BOTH identities if both exist**
-        // This ensures we show videos user watched LONGEST AGO, not recently watched ones
-        const userIdsToCheck = [];
-        if (userId) userIdsToCheck.push(userId);
-        if (deviceId && deviceId !== userId) userIdsToCheck.push(deviceId);
-        
-        // If no identities, use identityId as fallback
-        if (userIdsToCheck.length === 0 && identityId) {
-          userIdsToCheck.push(identityId);
-        }
-        
-        // **CRITICAL: Fetch watch history from ALL identities, sort by lastWatchedAt ASC (oldest first)**
-        // This ensures we show OLDEST watched videos, NOT recently watched ones
-        const historyEntries = await WatchHistory.find({
-          userId: { $in: userIdsToCheck }
-        })
-        .select('videoId lastWatchedAt userId')
-        .sort({ lastWatchedAt: 1 }) // ASC = oldest watched first (NOT recently watched)
-        .skip(skip)
-        .limit(limitNum * 3) // Fetch more to account for creator diversity filter
-        .lean();
-        
-        // Deduplicate by videoId (keep oldest entry if duplicate)
-        const videoIdMap = new Map();
-        for (const entry of historyEntries) {
-          const videoIdStr = entry.videoId.toString();
-          if (!videoIdMap.has(videoIdStr)) {
-            videoIdMap.set(videoIdStr, entry);
-          } else {
-            // If duplicate, keep the one with older lastWatchedAt
-            const existing = videoIdMap.get(videoIdStr);
-            const existingDate = new Date(existing.lastWatchedAt || 0).getTime();
-            const currentDate = new Date(entry.lastWatchedAt || 0).getTime();
-            if (currentDate < existingDate) {
-              videoIdMap.set(videoIdStr, entry); // Keep older one
-            }
-          }
-        }
-        
-        // Get video IDs in oldest-first order (already sorted by lastWatchedAt ASC)
-        const historyIds = Array.from(videoIdMap.values())
-          .sort((a, b) => {
-            const dateA = new Date(a.lastWatchedAt || 0).getTime();
-            const dateB = new Date(b.lastWatchedAt || 0).getTime();
-            return dateA - dateB; // Oldest first (NOT recently watched)
-          })
-          .map(entry => entry.videoId);
-        
-        console.log(`📊 Fetched ${historyIds.length} OLDEST watched videos (not recently watched) from ${userIdsToCheck.length} identity/identities`);
-        
-        if (historyIds.length > 0) {
-          unwatchedVideos = await Video.find({
-            ...baseQueryFilter,
-            _id: { $in: historyIds }
-          })
-          .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded category tags keywords createdAt')
+
+      // 3) Fetch ALL matching videos for this feed (e.g., all yog videos)
+      let allVideos = [];
+      try {
+        allVideos = await Video.find(baseQueryFilter)
+          .select(
+            'videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded category tags keywords createdAt',
+          )
           .populate('uploader', 'name profilePic googleId')
           .populate('comments.user', 'name profilePic googleId')
           .lean();
-          
-          // Preserve least-recently-watched order (oldest watched first)
-          const orderMap = new Map(historyIds.map((id, index) => [id.toString(), index]));
-          unwatchedVideos.sort((a, b) => {
-            const aIndex = orderMap.get(a._id?.toString() || '') ?? 0;
-            const bIndex = orderMap.get(b._id?.toString() || '') ?? 0;
-            return aIndex - bIndex;
-          });
-          
-          // **DIVERSITY: Apply 1 video per creator filter to fallback videos too + no duplicates**
-          const uniqueCreatorFallbackVideos = [];
-          const seenFallbackCreators = new Set();
-          const seenFallbackVideoIds = new Set();
-          
-          for (const video of unwatchedVideos) {
-            const videoId = video._id?.toString();
-            const creatorId = video.uploader?._id?.toString() || video.uploader?.toString() || null;
-            
-            // Skip duplicates
-            if (seenFallbackVideoIds.has(videoId)) {
-              continue;
-            }
-            
-            if (creatorId && !seenFallbackCreators.has(creatorId)) {
-              seenFallbackCreators.add(creatorId);
-              seenFallbackVideoIds.add(videoId);
-              uniqueCreatorFallbackVideos.push(video);
-              if (uniqueCreatorFallbackVideos.length >= limitNum) break;
-            } else if (!creatorId && !seenFallbackVideoIds.has(videoId)) {
-              seenFallbackVideoIds.add(videoId);
-              uniqueCreatorFallbackVideos.push(video);
-              if (uniqueCreatorFallbackVideos.length >= limitNum) break;
-            }
-          }
-          
-          unwatchedVideos = uniqueCreatorFallbackVideos;
-          console.log(`✅ Showing ${unwatchedVideos.length} least-recently-watched videos (oldest watched first, 1 per creator, no duplicates)`);
-        } else {
-          console.log(`⚠️ No watch history found - showing empty feed`);
-          unwatchedVideos = [];
-        }
+
+        console.log(
+          `📊 LRU FEED: Total videos matching base filter for user: ${allVideos.length}`,
+        );
+      } catch (err) {
+        console.error(
+          `❌ LRU FEED: Error fetching videos for personalized feed: ${err.message}`,
+        );
+      }
+
+      // 4) Attach lastWatchedAt (null = never watched / highest priority)
+      const videosWithHistory = allVideos.map((video) => {
+        const id = video._id?.toString();
+        const ts = id ? historyMap.get(id) : undefined;
+        return {
+          ...video,
+          _lastWatchedAt: ts !== undefined ? ts : null, // null => never watched
+        };
+      });
+
+      // 5) Separate unwatched and watched videos
+      const unwatchedVideos = videosWithHistory.filter(v => v._lastWatchedAt === null);
+      const watchedVideos = videosWithHistory.filter(v => v._lastWatchedAt !== null);
+      
+      // **IMPROVED: Shuffle unwatched videos for variety (different order each page load)**
+      // This prevents same videos appearing in same order repeatedly
+      for (let i = unwatchedVideos.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [unwatchedVideos[i], unwatchedVideos[j]] = [unwatchedVideos[j], unwatchedVideos[i]];
       }
       
-      // **FINAL SAFETY CHECK: Remove any duplicate videos or duplicate creators**
-      const finalUniqueVideos = [];
-      const finalSeenVideoIds = new Set();
-      const finalSeenCreators = new Set();
+      // Sort watched videos by oldest watch time first (least recently watched)
+      watchedVideos.sort((a, b) => a._lastWatchedAt - b._lastWatchedAt);
       
-      for (const video of unwatchedVideos) {
-        if (finalUniqueVideos.length >= limitNum) break;
-        
+      // Combine: unwatched first (shuffled), then watched (oldest first)
+      const sortedVideos = [...unwatchedVideos, ...watchedVideos];
+      
+      // **CREATOR DIVERSITY: Apply creator diversity filter before pagination**
+      // This ensures variety in each page - max 3 videos per creator per page
+      const uniqueCreatorVideos = [];
+      const creatorCounts = new Map(); // Track how many videos per creator
+      const seenVideoIds = new Set(); // Track duplicates
+      const maxPerCreator = 3;
+      
+      for (const video of sortedVideos) {
         const videoId = video._id?.toString();
         const creatorId = video.uploader?._id?.toString() || video.uploader?.toString() || null;
         
-        // Skip if video already seen
-        if (finalSeenVideoIds.has(videoId)) {
-          console.log(`🚫 Final check: Removing duplicate video: ${videoId}`);
+        // Skip duplicates
+        if (seenVideoIds.has(videoId)) {
           continue;
         }
         
-        // Skip if creator already seen (1 per creator rule)
-        if (creatorId && finalSeenCreators.has(creatorId)) {
-          console.log(`🚫 Final check: Removing duplicate creator video: ${creatorId}`);
-          continue;
+        if (creatorId) {
+          const currentCount = creatorCounts.get(creatorId) || 0;
+          if (currentCount < maxPerCreator) {
+            creatorCounts.set(creatorId, currentCount + 1);
+            seenVideoIds.add(videoId);
+            uniqueCreatorVideos.push(video);
+          }
+        } else if (!creatorId && !seenVideoIds.has(videoId)) {
+          seenVideoIds.add(videoId);
+          uniqueCreatorVideos.push(video);
         }
-        
-        finalSeenVideoIds.add(videoId);
-        if (creatorId) finalSeenCreators.add(creatorId);
-        finalUniqueVideos.push(video);
       }
       
-      finalVideos = finalUniqueVideos;
-      console.log(`✅ Final videos: ${finalVideos.length} (${finalSeenCreators.size} unique creators, no duplicates)`);
+      // 6) Pagination over the filtered and sorted list
+      const skip = (pageNum - 1) * limitNum;
+      const totalVideosForUser = uniqueCreatorVideos.length;
+      const pagedVideos = uniqueCreatorVideos.slice(skip, skip + limitNum);
+      const hasMore = skip + pagedVideos.length < totalVideosForUser;
+
+      // **FINAL DUPLICATE CHECK: Ensure no duplicate video IDs in response**
+      const finalVideoIds = new Set();
+      const duplicatesRemoved = [];
+      const finalDeduplicatedVideos = [];
+      for (const video of pagedVideos) {
+        const videoId = video._id?.toString();
+        if (!videoId) continue;
+        if (finalVideoIds.has(videoId)) {
+          duplicatesRemoved.push(videoId);
+          continue;
+        }
+        finalVideoIds.add(videoId);
+        finalDeduplicatedVideos.push(video);
+      }
+      if (duplicatesRemoved.length > 0) {
+        console.log(`⚠️ WARNING: Found ${duplicatesRemoved.length} duplicate video IDs in final response, removed them:`, duplicatesRemoved);
+      }
+      
+      console.log('📊 FINAL FEED SUMMARY (LRU):');
+      console.log(`   - Page: ${pageNum}, Limit: ${limitNum}`);
+      console.log(`   - Unwatched videos: ${unwatchedVideos.length} (shuffled for variety)`);
+      console.log(`   - Watched videos: ${watchedVideos.length}`);
+      console.log(`   - After creator diversity filter: ${uniqueCreatorVideos.length} videos`);
+      console.log(`   - Unique creators in feed: ${creatorCounts.size}`);
+      console.log(`   - Videos after duplicate check: ${finalDeduplicatedVideos.length}`);
+      console.log(`   - Total available (for user): ${totalVideosForUser}`);
+      console.log(`   - hasMore: ${hasMore}`);
+      
+      finalVideos = finalDeduplicatedVideos;
+
+      finalVideos = pagedVideos;
       
     } else {
       // Regular feed (no user identifier) - simple sorted by date
@@ -1587,10 +1231,11 @@ router.get('/', async (req, res) => {
         .limit(fetchLimit)
         .lean();
       
-      // **DIVERSITY: Ensure only 1 video per creator per page + no duplicate videos**
+      // **DIVERSITY: Allow max 3 videos per creator per page + no duplicate videos**
       const uniqueCreatorRegularVideos = [];
-      const seenRegularCreators = new Set();
+      const regularCreatorCounts = new Map(); // Track how many videos per creator
       const seenRegularVideoIds = new Set();
+      const regularMaxPerCreator = 3; // Same as personalized feed
       
       for (const video of regularVideos) {
         if (uniqueCreatorRegularVideos.length >= limitNum) break;
@@ -1604,21 +1249,24 @@ router.get('/', async (req, res) => {
           continue;
         }
         
-        if (creatorId && !seenRegularCreators.has(creatorId)) {
-          seenRegularCreators.add(creatorId);
-          seenRegularVideoIds.add(videoId);
-          uniqueCreatorRegularVideos.push(video);
+        if (creatorId) {
+          const currentCount = regularCreatorCounts.get(creatorId) || 0;
+          if (currentCount < regularMaxPerCreator) {
+            regularCreatorCounts.set(creatorId, currentCount + 1);
+            seenRegularVideoIds.add(videoId);
+            uniqueCreatorRegularVideos.push(video);
+          } else {
+            // Creator already has max videos - skip
+            console.log(`🚫 Regular feed: Skipping video from creator with max videos (${regularMaxPerCreator}): ${creatorId}`);
+          }
         } else if (!creatorId && !seenRegularVideoIds.has(videoId)) {
           seenRegularVideoIds.add(videoId);
           uniqueCreatorRegularVideos.push(video);
-        } else if (creatorId && seenRegularCreators.has(creatorId)) {
-          // Creator already seen - skip
-          console.log(`🚫 Regular feed: Skipping duplicate creator: ${creatorId}`);
         }
       }
       
       finalVideos = uniqueCreatorRegularVideos.slice(0, limitNum);
-      console.log(`✅ Found ${finalVideos.length} videos for regular feed (${seenRegularCreators.size} unique creators, no duplicates)`);
+      console.log(`✅ Found ${finalVideos.length} videos for regular feed (${regularCreatorCounts.size} unique creators, max ${regularMaxPerCreator} per creator, no duplicates)`);
     }
     
     // **DEBUG: Log final feed stats with watch history info**
@@ -1653,8 +1301,19 @@ router.get('/', async (req, res) => {
             ...(watchedVideoIds.length > 0 && { _id: { $nin: watchedVideoIds } })
           };
           const totalUnwatched = await Video.countDocuments(unwatchedQuery);
-          hasMore = totalUnwatched > (skip + finalVideos.length);
-          console.log(`📊 hasMore calculation: totalUnwatched=${totalUnwatched}, current=${skip + finalVideos.length}, hasMore=${hasMore}`);
+          
+          // **FIXED: If showing fallback (oldest watched videos), check watch history count instead**
+          // When totalUnwatched is 0, we're showing fallback videos, so check if more watched videos exist
+          if (totalUnwatched === 0 && watchedVideoIds.length > 0) {
+            // We're showing fallback videos - check if there are more watched videos beyond current page
+            const totalWatched = watchedVideoIds.length;
+            hasMore = totalWatched > (skip + finalVideos.length);
+            console.log(`📊 hasMore calculation (fallback): totalWatched=${totalWatched}, current=${skip + finalVideos.length}, hasMore=${hasMore}`);
+          } else {
+            // Normal case - check unwatched videos
+            hasMore = totalUnwatched > (skip + finalVideos.length);
+            console.log(`📊 hasMore calculation: totalUnwatched=${totalUnwatched}, current=${skip + finalVideos.length}, hasMore=${hasMore}`);
+          }
         } catch (err) {
           console.log(`⚠️ Error calculating hasMore: ${err.message}`);
         }
@@ -1670,12 +1329,38 @@ router.get('/', async (req, res) => {
       }
     }
     
+    // **IMPROVED: Calculate accurate total for pagination**
+    let totalCount = finalVideos.length;
+    if (userIdentifier) {
+      // For personalized feed, use the total after creator diversity filter
+      try {
+        const watchedVideoIds = await WatchHistory.getUserWatchedVideoIds(userIdentifier, null);
+        const unwatchedQuery = {
+          ...baseQueryFilter,
+          ...(watchedVideoIds.length > 0 && { _id: { $nin: watchedVideoIds } })
+        };
+        const totalUnwatched = await Video.countDocuments(unwatchedQuery);
+        const totalWatched = watchedVideoIds.length;
+        totalCount = totalUnwatched + totalWatched; // Approximate total
+      } catch (err) {
+        // Fallback to current count
+        totalCount = finalVideos.length;
+      }
+    } else {
+      // For regular feed, count all matching videos
+      try {
+        totalCount = await Video.countDocuments(baseQueryFilter);
+      } catch (err) {
+        totalCount = finalVideos.length;
+      }
+    }
+    
     res.json({
       videos: finalVideos,
       hasMore,
       page: pageNum,
       limit: limitNum,
-      total: finalVideos.length,
+      total: totalCount,
       isPersonalized: !!userIdentifier
     });
     
@@ -3336,11 +3021,12 @@ router.delete('/:videoId/comments/:commentId', async (req, res) => {
 router.post('/:id/increment-view', async (req, res) => {
   try {
     const videoId = req.params.id;
-    const { userId, duration = 2 } = req.body; // **CHANGED: Reduced from 4 to 2 seconds for more lenient view counting**
+    const { userId, duration = 2, deviceId } = req.body; // **IMPROVED: Added deviceId support for anonymous users**
 
     console.log('🎯 View increment request:', {
       videoId,
       userId,
+      deviceId,
       duration,
       timestamp: new Date().toISOString()
     });
@@ -3350,11 +3036,32 @@ router.post('/:id/increment-view', async (req, res) => {
       return res.status(400).json({ error: 'Invalid video ID' });
     }
 
-    // Find user by googleId
-    const user = await User.findOne({ googleId: userId });
-    if (!user) {
-      console.log('❌ User not found with Google ID:', userId);
-      return res.status(404).json({ error: 'User not found' });
+    // **IMPROVED: Support both authenticated (userId) and anonymous (deviceId) users**
+    let identityId = null;
+    let isAuthenticated = false;
+    let user = null;
+    let userObjectId = null;
+
+    // Try to get authenticated user first
+    if (userId) {
+      user = await User.findOne({ googleId: userId });
+      if (user) {
+        identityId = userId;
+        isAuthenticated = true;
+        userObjectId = user._id;
+        console.log('✅ Using authenticated user:', userId);
+      }
+    }
+
+    // Fallback to deviceId for anonymous users
+    if (!identityId && deviceId) {
+      identityId = deviceId;
+      isAuthenticated = false;
+      console.log('✅ Using deviceId for anonymous user:', deviceId);
+    }
+
+    if (!identityId) {
+      return res.status(400).json({ error: 'User identifier (userId or deviceId) required' });
     }
 
     // Find video
@@ -3364,45 +3071,83 @@ router.post('/:id/increment-view', async (req, res) => {
       return res.status(404).json({ error: 'Video not found' });
     }
 
-    // Check if user has already reached max views (10)
-    const existingView = video.viewDetails.find(view => 
-      view.user.toString() === user._id.toString()
-    );
-
-    if (existingView && existingView.viewCount >= 10) {
-      console.log('⚠️ User has reached maximum view count:', {
-        userId: user.googleId,
-        currentViewCount: existingView.viewCount
+    // **IMPROVED: Mark video as watched/completed when view count is incremented**
+    // Use same threshold (2 seconds) for both view increment and watch completion
+    try {
+      const watchEntry = await WatchHistory.trackWatch(identityId, videoId, {
+        duration: duration,
+        completed: true, // **NEW: Mark as completed when view count is incremented**
+        isAuthenticated: isAuthenticated
       });
-      return res.status(200).json({
-        message: 'View limit reached',
-        viewCount: existingView.viewCount,
-        maxViewsReached: true,
-        totalViews: video.views
-      });
+      console.log(`✅ Video marked as watched/completed for ${isAuthenticated ? 'authenticated' : 'anonymous'} user`);
+      
+      // **IMPROVED: Clear cache so user sees updated feed (video won't appear again)**
+      if (redisService.getConnectionStatus()) {
+        const unwatchedCachePattern = `videos:unwatched:ids:${identityId}:*`;
+        await redisService.clearPattern(unwatchedCachePattern);
+        const feedCachePattern = `videos:feed:user:${identityId}:*`;
+        await redisService.clearPattern(feedCachePattern);
+        console.log(`🧹 Cleared cache for ${identityId} after marking video as watched`);
+      }
+    } catch (watchError) {
+      console.log(`⚠️ Error marking video as watched (non-critical): ${watchError.message}`);
+      // Continue with view increment even if watch tracking fails
     }
 
-    // Increment view using the model method
-    await video.incrementView(user._id, duration);
+    // **ONLY increment view count for authenticated users (existing behavior)**
+    // Anonymous users get watch tracking but not view count increment
+    if (user && userObjectId) {
+      // Check if user has already reached max views (10)
+      const existingView = video.viewDetails.find(view => 
+        view.user.toString() === userObjectId.toString()
+      );
 
-    console.log('✅ View incremented successfully:', {
-      videoId,
-      userId: user.googleId,
-      newTotalViews: video.views,
-      userViewCount: existingView ? existingView.viewCount + 1 : 1
-    });
+      if (existingView && existingView.viewCount >= 10) {
+        console.log('⚠️ User has reached maximum view count:', {
+          userId: user.googleId,
+          currentViewCount: existingView.viewCount
+        });
+        return res.status(200).json({
+          message: 'View limit reached',
+          viewCount: existingView.viewCount,
+          maxViewsReached: true,
+          totalViews: video.views
+        });
+      }
 
-    // Return updated view count
-    const updatedExistingView = video.viewDetails.find(view => 
-      view.user.toString() === user._id.toString()
-    );
+      // Increment view using the model method
+      await video.incrementView(userObjectId, duration);
 
-    res.json({
-      message: 'View incremented successfully',
-      totalViews: video.views,
-      userViewCount: updatedExistingView ? updatedExistingView.viewCount : 1,
-      maxViewsReached: updatedExistingView ? updatedExistingView.viewCount >= 10 : false
-    });
+      console.log('✅ View incremented successfully:', {
+        videoId,
+        userId: user.googleId,
+        newTotalViews: video.views,
+        userViewCount: existingView ? existingView.viewCount + 1 : 1
+      });
+
+      // Return updated view count
+      const updatedExistingView = video.viewDetails.find(view => 
+        view.user.toString() === userObjectId.toString()
+      );
+
+      res.json({
+        message: 'View incremented successfully',
+        totalViews: video.views,
+        userViewCount: updatedExistingView ? updatedExistingView.viewCount : 1,
+        maxViewsReached: updatedExistingView ? updatedExistingView.viewCount >= 10 : false,
+        watched: true // **NEW: Indicate video was marked as watched**
+      });
+    } else {
+      // Anonymous user - only watch tracking, no view increment
+      console.log('✅ Watch tracking completed for anonymous user (view count not incremented)');
+      res.json({
+        message: 'Watch tracked successfully (anonymous user)',
+        totalViews: video.views,
+        userViewCount: 0, // Anonymous users don't increment view count
+        maxViewsReached: false,
+        watched: true // **NEW: Indicate video was marked as watched**
+      });
+    }
 
   } catch (err) {
     console.error('❌ Error incrementing view:', err);

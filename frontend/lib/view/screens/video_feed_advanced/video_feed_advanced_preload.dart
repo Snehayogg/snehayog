@@ -39,15 +39,21 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
     sharedPool.cleanupDistantControllers(_currentIndex, keepRange: keepRange);
 
-    if (_hasMore &&
-        !_isLoadingMore &&
-        _currentIndex >= _videos.length - _infiniteScrollThreshold) {
-      AppLogger.log(
-        '📡 Triggering load more: index=$_currentIndex, total=${_videos.length}, hasMore=$_hasMore',
-      );
-      _loadMoreVideos();
+    // **FIXED: More aggressive loading - trigger when within threshold**
+    // This ensures videos are loaded before user reaches the end
+    final distanceFromEnd = _videos.length - _currentIndex;
+    if (_hasMore && !_isLoadingMore) {
+      // **PROACTIVE: Load when within threshold (5 videos from end)**
+      if (_currentIndex >= _videos.length - _infiniteScrollThreshold) {
+        AppLogger.log(
+          '📡 Triggering load more: index=$_currentIndex, total=${_videos.length}, distanceFromEnd=$distanceFromEnd, hasMore=$_hasMore',
+        );
+        _loadMoreVideos();
+      }
     } else if (!_hasMore) {
       AppLogger.log('✅ All videos loaded, no more to load');
+    } else if (_isLoadingMore) {
+      AppLogger.log('⏳ Already loading more videos, waiting...');
     }
   }
 
@@ -711,15 +717,6 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
   void _handlePageChangeDebounced(int index) {
     if (!mounted || index == _currentIndex) return;
 
-    // **NEW: Automatically restart feed when reaching the end**
-    if (index >= _videos.length && !_isRefreshing) {
-      AppLogger.log(
-        '🔄 Reached end of feed at index $index, automatically restarting...',
-      );
-      startOver();
-      return;
-    }
-
     _lifecyclePaused = false;
 
     _lastAccessedLocal[_currentIndex] = DateTime.now();
@@ -758,7 +755,41 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       _cleanupOldVideosFromList();
     }
 
+    // **CRITICAL FIX: Check if we need to load more videos BEFORE checking if we're at the end**
+    // This ensures new videos are loaded when approaching the end
     _reprimeWindowIfNeeded();
+
+    // **FIXED: Try to load more videos first before restarting**
+    // Only restart if we've truly reached the end AND there are no more videos to load
+    if (index >= _videos.length && !_isRefreshing) {
+      // If we have more videos available, try loading them first
+      if (_hasMore && !_isLoadingMore) {
+        AppLogger.log(
+          '📡 Reached end but more videos available, loading more...',
+        );
+        _loadMoreVideos();
+        // Wait a bit for videos to load before restarting
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted &&
+              index >= _videos.length &&
+              !_hasMore &&
+              !_isRefreshing) {
+            AppLogger.log(
+              '🔄 No more videos available, restarting feed...',
+            );
+            startOver();
+          }
+        });
+        return;
+      } else if (!_hasMore) {
+        // Only restart if we truly have no more videos
+        AppLogger.log(
+          '🔄 Reached end of feed at index $index, no more videos, restarting...',
+        );
+        startOver();
+        return;
+      }
+    }
 
     final activeController = _controllerPool[_currentIndex];
     if (activeController != null && activeController.value.isInitialized) {
