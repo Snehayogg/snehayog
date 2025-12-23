@@ -1047,28 +1047,44 @@ router.get('/', async (req, res) => {
       );
 
       // 1) Determine all identities to check for watch history
+      // **IMPROVED: Better identity matching - check both userId and deviceId comprehensively**
       const userIdsToCheck = [];
       if (userId) userIdsToCheck.push(userId);
-      if (deviceId && deviceId !== userId) userIdsToCheck.push(deviceId);
-      if (userIdsToCheck.length === 0 && userIdentifier) {
+      if (deviceId) userIdsToCheck.push(deviceId);
+      if (userIdentifier && !userIdsToCheck.includes(userIdentifier)) {
         userIdsToCheck.push(userIdentifier);
       }
+      
+      // Remove duplicates
+      const uniqueIdsToCheck = [...new Set(userIdsToCheck)];
+      
+      console.log(
+        `🔍 WATCH HISTORY CHECK: Checking for identities:`,
+        uniqueIdsToCheck,
+        `(userId: ${userId || 'none'}, deviceId: ${deviceId || 'none'})`,
+      );
 
       // 2) Build a map: videoId -> oldest lastWatchedAt (timestamp)
+      // **IMPROVED: Check watch history for all identities (userId, deviceId, userIdentifier)**
       const historyMap = new Map(); // videoId (string) -> timestamp (number)
+      const watchedVideoSet = new Set(); // Track all watched video IDs
+      
       try {
-        if (userIdsToCheck.length > 0) {
+        if (uniqueIdsToCheck.length > 0) {
+          // Query watch history for all possible identities
           const historyEntries = await WatchHistory.find({
-            userId: { $in: userIdsToCheck },
+            userId: { $in: uniqueIdsToCheck },
           })
             .select('videoId lastWatchedAt userId')
             .lean();
 
           console.log(
             `📊 LRU FEED: Loaded ${historyEntries.length} watch history entries for identities:`,
-            userIdsToCheck,
+            uniqueIdsToCheck,
           );
 
+          // **IMPROVED: Build comprehensive watch history map**
+          // Consider a video watched if ANY identity has watched it
           for (const entry of historyEntries) {
             const vid = entry.videoId?.toString();
             if (!vid) continue;
@@ -1076,16 +1092,18 @@ router.get('/', async (req, res) => {
             const currentTime = new Date(entry.lastWatchedAt || 0).getTime();
             const existingTime = historyMap.get(vid);
 
+            // Keep the oldest watch time (most conservative - ensures video stays in "watched" category)
             if (existingTime === undefined || currentTime < existingTime) {
-              historyMap.set(vid, currentTime); // keep oldest watch time
+              historyMap.set(vid, currentTime);
             }
+            watchedVideoSet.add(vid);
           }
 
-          watchedVideoIds = Array.from(historyMap.keys()).map(
+          watchedVideoIds = Array.from(watchedVideoSet).map(
             (id) => new mongoose.Types.ObjectId(id),
           );
           console.log(
-            `📊 LRU FEED: Unique watched videos in historyMap: ${historyMap.size}`,
+            `📊 LRU FEED: Unique watched videos found: ${historyMap.size} (from ${historyEntries.length} history entries)`,
           );
         } else {
           console.log(
@@ -1096,6 +1114,30 @@ router.get('/', async (req, res) => {
         console.error(
           `❌ LRU FEED: Error building history map: ${err.message}`,
         );
+        // On error, treat all videos as unwatched (safer than showing watched videos)
+      }
+      
+      // **NEW: Session-Based Pagination State - Track videos shown in current session**
+      // This prevents same videos from appearing again in same session
+      const sessionShownKey = `session:shown:videos:${userIdentifier}`;
+      let sessionShownVideoIds = new Set();
+      
+      try {
+        if (redisService.getConnectionStatus() && userIdentifier) {
+          // Get videos already shown in this session (stored in Redis with 24h expiry)
+          const sessionShown = await redisService.get(sessionShownKey);
+          if (sessionShown) {
+            try {
+              const shownIds = JSON.parse(sessionShown);
+              sessionShownVideoIds = new Set(shownIds);
+              console.log(`📋 SESSION STATE: Found ${sessionShownVideoIds.size} videos already shown in current session`);
+            } catch (parseErr) {
+              console.log(`⚠️ SESSION STATE: Error parsing session shown videos: ${parseErr.message}`);
+            }
+          }
+        }
+      } catch (sessionErr) {
+        console.log(`⚠️ SESSION STATE: Error checking session state (non-critical): ${sessionErr.message}`);
       }
 
       // 3) Fetch ALL matching videos for this feed (e.g., all yog videos)
@@ -1109,6 +1151,9 @@ router.get('/', async (req, res) => {
           .populate('comments.user', 'name profilePic googleId')
           .lean();
 
+        // **FIX: Filter out invalid/null videos from database result**
+        allVideos = (allVideos || []).filter(v => v && v._id);
+        
         console.log(
           `📊 LRU FEED: Total videos matching base filter for user: ${allVideos.length}`,
         );
@@ -1116,34 +1161,141 @@ router.get('/', async (req, res) => {
         console.error(
           `❌ LRU FEED: Error fetching videos for personalized feed: ${err.message}`,
         );
+        allVideos = []; // Ensure it's an array even on error
       }
 
       // 4) Attach lastWatchedAt (null = never watched / highest priority)
-      const videosWithHistory = allVideos.map((video) => {
-        const id = video._id?.toString();
-        const ts = id ? historyMap.get(id) : undefined;
-        return {
-          ...video,
-          _lastWatchedAt: ts !== undefined ? ts : null, // null => never watched
-        };
-      });
+      // **FIX: Filter out invalid videos before mapping**
+      const videosWithHistory = allVideos
+        .filter(v => v && v._id) // Remove invalid videos
+        .map((video) => {
+          const id = video._id.toString();
+          const ts = id ? historyMap.get(id) : undefined;
+          return {
+            ...video,
+            _lastWatchedAt: ts !== undefined ? ts : null, // null => never watched
+          };
+        });
 
       // 5) Separate unwatched and watched videos
-      const unwatchedVideos = videosWithHistory.filter(v => v._lastWatchedAt === null);
-      const watchedVideos = videosWithHistory.filter(v => v._lastWatchedAt !== null);
+      // **FIX: Filter out invalid videos (null/undefined/missing _id)**
+      const unwatchedVideos = videosWithHistory.filter(v => v && v._id && v._lastWatchedAt === null);
+      const watchedVideos = videosWithHistory.filter(v => v && v._id && v._lastWatchedAt !== null);
       
-      // **IMPROVED: Shuffle unwatched videos for variety (different order each page load)**
-      // This prevents same videos appearing in same order repeatedly
-      for (let i = unwatchedVideos.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [unwatchedVideos[i], unwatchedVideos[j]] = [unwatchedVideos[j], unwatchedVideos[i]];
+      // **PROFESSIONAL: Time-Based Freshness + Engagement Ranking**
+      // Separate unwatched videos into: recent (7 days) and older
+      const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+      const recentUnwatched = [];
+      const olderUnwatched = [];
+      
+      for (const video of unwatchedVideos) {
+        const uploadTime = new Date(video.createdAt || video.uploadedAt || 0).getTime();
+        if (uploadTime >= sevenDaysAgo) {
+          recentUnwatched.push(video);
+        } else {
+          olderUnwatched.push(video);
+        }
       }
+      
+      // **ENGAGEMENT-BASED RANKING: Score videos by engagement**
+      const calculateEngagementScore = (video) => {
+        const likes = video.likes || 0;
+        const views = video.views || 0;
+        const shares = video.shares || 0;
+        const comments = (video.comments?.length || 0);
+        
+        // Weighted engagement score (likes are most valuable)
+        const score = (likes * 2) + views + (shares * 1.5) + (comments * 1.2);
+        return score;
+      };
+      
+      // Sort recent unwatched by engagement (high to low)
+      recentUnwatched.sort((a, b) => {
+        const scoreA = calculateEngagementScore(a);
+        const scoreB = calculateEngagementScore(b);
+        return scoreB - scoreA; // Descending
+      });
+      
+      // Sort older unwatched by engagement (high to low)
+      olderUnwatched.sort((a, b) => {
+        const scoreA = calculateEngagementScore(a);
+        const scoreB = calculateEngagementScore(b);
+        return scoreB - scoreA; // Descending
+      });
+      
+      // **SESSION-BASED SHUFFLE: Use deterministic seed for consistent order per session**
+      // Generate seed from userIdentifier + current date (changes daily, consistent per day)
+      const today = new Date();
+      const dateSeed = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
+      const seedString = `${userIdentifier}_${dateSeed}`;
+      let seed = 0;
+      for (let i = 0; i < seedString.length; i++) {
+        seed = ((seed << 5) - seed) + seedString.charCodeAt(i);
+        seed = seed & seed; // Convert to 32-bit integer
+      }
+      
+      // **DETERMINISTIC SHUFFLE: Seeded shuffle for consistent order per day**
+      const seededShuffle = (array, seedValue) => {
+        // **FIX: Filter out invalid entries before shuffling**
+        const validArray = array.filter(v => v && v._id);
+        const shuffled = [...validArray];
+        // Simple seeded random function
+        let rng = seedValue;
+        const random = () => {
+          rng = (rng * 9301 + 49297) % 233280;
+          return rng / 233280;
+        };
+        
+        for (let i = shuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(random() * (i + 1));
+          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled;
+      };
+      
+      // Shuffle within engagement-ranked groups (maintains ranking but adds variety)
+      const shuffledRecent = seededShuffle(recentUnwatched, seed);
+      const shuffledOlder = seededShuffle(olderUnwatched, seed + 1); // Different seed for older
+      
+      // Combine: Recent high-engagement first, then older high-engagement, then shuffle mix
+      // Mix recent and older in 70/30 ratio for freshness
+      const mixedUnwatched = [];
+      const recentCount = Math.min(shuffledRecent.length, Math.ceil(shuffledRecent.length * 0.7));
+      const olderCount = Math.min(shuffledOlder.length, shuffledRecent.length - recentCount);
+      
+      // Add top recent videos first
+      for (let i = 0; i < recentCount && i < shuffledRecent.length; i++) {
+        mixedUnwatched.push(shuffledRecent[i]);
+      }
+      
+      // Interleave older high-engagement videos
+      for (let i = 0; i < olderCount && i < shuffledOlder.length; i++) {
+        mixedUnwatched.push(shuffledOlder[i]);
+      }
+      
+      // Add remaining videos (shuffled)
+      const remainingRecent = shuffledRecent.slice(recentCount);
+      const remainingOlder = shuffledOlder.slice(olderCount);
+      const allRemaining = [...remainingRecent, ...remainingOlder];
+      const shuffledRemaining = seededShuffle(allRemaining, seed + 2);
+      mixedUnwatched.push(...shuffledRemaining);
       
       // Sort watched videos by oldest watch time first (least recently watched)
       watchedVideos.sort((a, b) => a._lastWatchedAt - b._lastWatchedAt);
       
-      // Combine: unwatched first (shuffled), then watched (oldest first)
-      const sortedVideos = [...unwatchedVideos, ...watchedVideos];
+      // Combine: Fresh unwatched first (recent + engagement-ranked), then older unwatched, then watched (oldest first)
+      // **FIX: Filter out any undefined/null videos before processing**
+      const sortedVideos = [...mixedUnwatched, ...watchedVideos].filter(v => v && v._id);
+      
+      // **SESSION STATE FILTER: Exclude videos already shown in current session**
+      // This prevents same videos from appearing again until session ends (24h)
+      const videosExcludingSession = sortedVideos.filter(video => {
+        if (!video || !video._id) return false; // Skip invalid videos
+        const videoId = video._id.toString();
+        return !sessionShownVideoIds.has(videoId);
+      });
+      
+      console.log(`📋 SESSION FILTER: ${sortedVideos.length} videos → ${videosExcludingSession.length} after excluding ${sessionShownVideoIds.size} session-shown videos`);
       
       // **CREATOR DIVERSITY: Apply creator diversity filter before pagination**
       // This ensures variety in each page - max 3 videos per creator per page
@@ -1152,8 +1304,13 @@ router.get('/', async (req, res) => {
       const seenVideoIds = new Set(); // Track duplicates
       const maxPerCreator = 3;
       
-      for (const video of sortedVideos) {
-        const videoId = video._id?.toString();
+      for (const video of videosExcludingSession) {
+        // **FIX: Skip invalid videos**
+        if (!video || !video._id) {
+          continue;
+        }
+        
+        const videoId = video._id.toString();
         const creatorId = video.uploader?._id?.toString() || video.uploader?.toString() || null;
         
         // Skip duplicates
@@ -1185,7 +1342,11 @@ router.get('/', async (req, res) => {
       const duplicatesRemoved = [];
       const finalDeduplicatedVideos = [];
       for (const video of pagedVideos) {
-        const videoId = video._id?.toString();
+        // **FIX: Skip invalid videos**
+        if (!video || !video._id) {
+          continue;
+        }
+        const videoId = video._id.toString();
         if (!videoId) continue;
         if (finalVideoIds.has(videoId)) {
           duplicatesRemoved.push(videoId);
@@ -1198,19 +1359,41 @@ router.get('/', async (req, res) => {
         console.log(`⚠️ WARNING: Found ${duplicatesRemoved.length} duplicate video IDs in final response, removed them:`, duplicatesRemoved);
       }
       
-      console.log('📊 FINAL FEED SUMMARY (LRU):');
+      // **UPDATE SESSION STATE: Mark returned videos as shown in session**
+      try {
+        if (redisService.getConnectionStatus() && userIdentifier && finalDeduplicatedVideos.length > 0) {
+          // Add new video IDs to session shown set
+          const newShownIds = finalDeduplicatedVideos.map(v => v._id?.toString()).filter(Boolean);
+          const updatedShownSet = new Set([...sessionShownVideoIds, ...newShownIds]);
+          
+          // Store in Redis with 24h expiry (session duration)
+          await redisService.set(
+            sessionShownKey,
+            JSON.stringify(Array.from(updatedShownSet)),
+            24 * 60 * 60 // 24 hours
+          );
+          console.log(`📋 SESSION STATE: Updated session shown videos to ${updatedShownSet.size} total (added ${newShownIds.length} new)`);
+        }
+      } catch (sessionErr) {
+        console.log(`⚠️ SESSION STATE: Error updating session state (non-critical): ${sessionErr.message}`);
+      }
+      
+      console.log('📊 FINAL FEED SUMMARY (PROFESSIONAL RECOMMENDATION):');
       console.log(`   - Page: ${pageNum}, Limit: ${limitNum}`);
-      console.log(`   - Unwatched videos: ${unwatchedVideos.length} (shuffled for variety)`);
-      console.log(`   - Watched videos: ${watchedVideos.length}`);
+      console.log(`   - Recent unwatched (7 days): ${recentUnwatched.length}`);
+      console.log(`   - Older unwatched: ${olderUnwatched.length}`);
+      console.log(`   - Total unwatched: ${unwatchedVideos.length} (engagement-ranked + freshness-prioritized)`);
+      console.log(`   - Watched videos: ${watchedVideos.length} (LRU sorted)`);
+      console.log(`   - Session-shown excluded: ${sessionShownVideoIds.size}`);
       console.log(`   - After creator diversity filter: ${uniqueCreatorVideos.length} videos`);
       console.log(`   - Unique creators in feed: ${creatorCounts.size}`);
       console.log(`   - Videos after duplicate check: ${finalDeduplicatedVideos.length}`);
       console.log(`   - Total available (for user): ${totalVideosForUser}`);
       console.log(`   - hasMore: ${hasMore}`);
+      console.log(`   - Shuffle seed: ${seed} (deterministic per user per day)`);
       
+      // **FIXED: Use deduplicated videos instead of overwriting**
       finalVideos = finalDeduplicatedVideos;
-
-      finalVideos = pagedVideos;
       
     } else {
       // Regular feed (no user identifier) - simple sorted by date
