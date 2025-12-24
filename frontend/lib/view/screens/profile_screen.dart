@@ -113,13 +113,21 @@ class _ProfileScreenState extends State<ProfileScreen>
     AppLogger.log(
         '🔄 ProfileScreen: Profile tab selected, ensuring data is loaded');
 
-    // **ENHANCED: Use cache-first approach - only load if no data in memory**
-    if (_stateManager.userData == null) {
+    // **ENHANCED: Always ensure data is loaded, even if cached**
+    // This fixes the issue where data doesn't show after coming back to profile tab
+    if (_stateManager.userData == null || _stateManager.userVideos.isEmpty) {
       AppLogger.log(
-          '📡 ProfileScreen: Data not loaded, loading from cache or server');
+          '📡 ProfileScreen: Data not loaded or videos missing, loading from cache or server');
       _loadData(); // This will use cache if available, only fetch from server if no cache
     } else {
       AppLogger.log('✅ ProfileScreen: Data already loaded in memory');
+      // **FIX: Even if data exists, ensure videos are loaded**
+      if (_stateManager.userVideos.isEmpty && !_stateManager.isVideosLoading) {
+        AppLogger.log('🔄 ProfileScreen: Data exists but videos missing, loading videos...');
+        _loadVideos().catchError((e) {
+          AppLogger.log('⚠️ ProfileScreen: Error loading videos: $e');
+        });
+      }
     }
   }
 
@@ -325,22 +333,19 @@ class _ProfileScreenState extends State<ProfileScreen>
               _stateManager.userData!['id'];
 
           if (currentUserId != null) {
-            // **OPTIMIZATION: Hide loading state as soon as profile data is ready**
-            // Videos will continue loading in background and update UI when ready
-            _isLoading.value = false;
-
-            // **NEW: Check UPI ID status after user data is loaded (only for own profile)**
-            if (widget.userId == null) {
-              _checkUpiIdStatus();
-            }
-
             // **CRITICAL: When forceRefresh=true, videos MUST also bypass cache**
             // Load videos with forceRefresh flag to ensure fresh data from server
             if (forceRefresh) {
               // **CRITICAL: During force refresh, wait for videos to load before hiding loading state**
               // This ensures user sees complete fresh data, not partial cached data
               await _loadVideos(forceRefresh: true);
+              // **FIX: Hide loading only after videos are loaded during force refresh**
+              _isLoading.value = false;
             } else {
+              // **OPTIMIZATION: Hide loading state as soon as profile data is ready**
+              // Videos will continue loading in background and update UI when ready
+              _isLoading.value = false;
+              
               // **OPTIMIZATION: Load videos in background without blocking UI (normal load)**
               _loadVideos(forceRefresh: false).catchError((e) {
                 AppLogger.log(
@@ -362,6 +367,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                   );
                 }
               });
+            }
+
+            // **NEW: Check UPI ID status after user data is loaded (only for own profile)**
+            if (widget.userId == null) {
+              _checkUpiIdStatus();
             }
 
             // **FAST: Load earnings in parallel (non-blocking)**
@@ -1452,6 +1462,27 @@ class _ProfileScreenState extends State<ProfileScreen>
           _loadVideos().catchError((e) {
             AppLogger.log(
                 '⚠️ ProfileScreen: Error loading videos for creator profile: $e');
+          });
+        }
+      });
+    }
+    
+    // **FIX: Ensure videos are loaded for own profile too if missing**
+    if (widget.userId == null &&
+        _stateManager.userData != null &&
+        _stateManager.userVideos.isEmpty &&
+        !_stateManager.isVideosLoading) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            widget.userId == null &&
+            _stateManager.userData != null &&
+            _stateManager.userVideos.isEmpty &&
+            !_stateManager.isVideosLoading) {
+          AppLogger.log(
+              '🔄 ProfileScreen: Profile data loaded but videos missing for own profile, loading videos...');
+          _loadVideos().catchError((e) {
+            AppLogger.log(
+                '⚠️ ProfileScreen: Error loading videos for own profile: $e');
           });
         }
       });
