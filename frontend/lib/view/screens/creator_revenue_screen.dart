@@ -142,7 +142,6 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
             (revenueData['thisMonth'] as num?)?.toDouble() ?? 0.0;
         final apiLastMonth =
             (revenueData['lastMonth'] as num?)?.toDouble() ?? 0.0;
-
         AppLogger.log(
             '💰 CreatorRevenueScreen: Revenue data received - thisMonth: ₹${apiThisMonth.toStringAsFixed(2)}, lastMonth: ₹${apiLastMonth.toStringAsFixed(2)}');
         AppLogger.log(

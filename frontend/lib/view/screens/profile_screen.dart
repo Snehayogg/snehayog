@@ -803,10 +803,12 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       final userData = await authController.signIn();
       if (userData != null) {
-        // Update ProfileStateManager with new auth data
-        await _stateManager
-            .loadUserData(userData['id'] ?? userData['googleId']);
-        _refreshData();
+        // **FIX: Pass null to loadUserData to load own profile (not userId)**
+        // When null is passed, ProfileStateManager uses logged-in user from AuthService
+        AppLogger.log(
+            '🔄 ProfileScreen: Sign-in successful, loading own profile data...');
+        // Force refresh to get latest data from server
+        await _loadData(forceRefresh: true);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1317,20 +1319,31 @@ class _ProfileScreenState extends State<ProfileScreen>
           // **FIX: Only sync with logged in user if viewing own profile (widget.userId is null)**
           // If widget.userId is provided, we're viewing someone else's profile - don't override it
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (widget.userId == null ||
-                (authController.isSignedIn &&
-                    authController.userData != null)) {
+            // **FIX: Only sync for own profile (widget.userId is null) when signed in**
+            if (widget.userId == null &&
+                authController.isSignedIn &&
+                authController.userData != null) {
               final loggedInUserId = authController.userData?['id'] ??
                   authController.userData?['googleId'];
 
-              // If viewing own profile (widget.userId is null), sync with logged in user
-              if (widget.userId == null && loggedInUserId != null) {
+              // **FIX: Load profile if userData is null OR if userId doesn't match**
+              if (loggedInUserId != null) {
                 final currentUserId = _stateManager.userData?['id'] ??
                     _stateManager.userData?['googleId'];
-                if (currentUserId != loggedInUserId) {
+                // Compare as strings to avoid type mismatch issues
+                final currentUserIdStr = currentUserId?.toString();
+                final loggedInUserIdStr = loggedInUserId.toString();
+
+                if (_stateManager.userData == null ||
+                    currentUserIdStr == null ||
+                    currentUserIdStr != loggedInUserIdStr) {
                   AppLogger.log(
-                      '🔄 ProfileScreen: Syncing with logged in user: $loggedInUserId');
-                  _stateManager.loadUserData(null); // null = own profile
+                      '🔄 ProfileScreen: Syncing with logged in user: $loggedInUserIdStr (currentUserId: $currentUserIdStr, hasUserData: ${_stateManager.userData != null})');
+                  // Use _loadData with forceRefresh to ensure fresh data after sign-in
+                  _loadData(forceRefresh: true).catchError((e) {
+                    AppLogger.log(
+                        '⚠️ ProfileScreen: Error loading profile after sync: $e');
+                  });
                 }
               }
               // If viewing someone else's profile (widget.userId is provided),
