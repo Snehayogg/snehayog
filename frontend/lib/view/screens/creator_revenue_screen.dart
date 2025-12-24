@@ -138,8 +138,25 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         if (!mounted) return;
 
         // **DEBUG: Log revenue data to verify API response**
+        final apiThisMonth =
+            (revenueData['thisMonth'] as num?)?.toDouble() ?? 0.0;
+        final apiLastMonth =
+            (revenueData['lastMonth'] as num?)?.toDouble() ?? 0.0;
+
         AppLogger.log(
-            '💰 CreatorRevenueScreen: Revenue data received - thisMonth: ₹${((revenueData['thisMonth'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2)}, lastMonth: ₹${((revenueData['lastMonth'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2)}');
+            '💰 CreatorRevenueScreen: Revenue data received - thisMonth: ₹${apiThisMonth.toStringAsFixed(2)}, lastMonth: ₹${apiLastMonth.toStringAsFixed(2)}');
+        AppLogger.log(
+            '💰 CreatorRevenueScreen: Frontend calculated revenue: ₹${_totalRevenue.toStringAsFixed(2)}');
+
+        // **FIX: If backend returns 0 but frontend calculation has revenue, use frontend as fallback**
+        // This handles cases where backend API might not have accurate data but frontend calculation does
+        if (apiThisMonth == 0.0 && _totalRevenue > 0.0) {
+          AppLogger.log(
+              '⚠️ CreatorRevenueScreen: Backend returned thisMonth=0 but frontend calculated ₹${_totalRevenue.toStringAsFixed(2)} - using frontend calculation as fallback');
+          // Update revenueData with frontend calculated value
+          revenueData['thisMonth'] = _totalRevenue;
+          revenueData['lastMonth'] = apiLastMonth; // Keep lastMonth from API
+        }
 
         setState(() {
           _revenueData = revenueData;
@@ -616,15 +633,14 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   Widget _buildRevenueOverviewCard() {
-    // **FIXED: Always use backend API value (same as ProfileStatsWidget)**
-    // Both screens should show same earnings from backend API
+    // **FIXED: Use backend API value, but fallback to frontend calculation if API returns 0**
     final backendThisMonth =
         (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
     final lastMonth = (_revenueData?['lastMonth'] as num?)?.toDouble() ?? 0.0;
 
-    // **FIXED: Always use backend API value (no fallback to _totalRevenue)**
-    // This ensures consistency between ProfileStatsWidget and CreatorRevenueScreen
-    final thisMonth = backendThisMonth;
+    // **FIX: If backend returns 0 but frontend has calculated revenue, use frontend**
+    // This ensures accurate display when backend API might not have updated data
+    final thisMonth = backendThisMonth > 0.0 ? backendThisMonth : _totalRevenue;
 
     // **FIXED: Calculate gross and platform fee from current month earnings**
     final creatorRevenue =
@@ -1069,10 +1085,10 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   Widget _buildRevenueAnalyticsCard() {
-    // **FIXED: Always use backend API value (same as ProfileStatsWidget)**
+    // **FIXED: Use backend API value, but fallback to frontend calculation if API returns 0**
     final backendThisMonth =
         (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
-    final thisMonth = backendThisMonth; // Always use backend API value
+    final thisMonth = backendThisMonth > 0.0 ? backendThisMonth : _totalRevenue;
     final thisMonthGross =
         thisMonth > 0 ? thisMonth / AppConfig.creatorRevenueShare : 0.0;
     final thisMonthPlatformFee =
@@ -1168,10 +1184,10 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   Widget _buildRevenueBreakdownCard() {
-    // **FIXED: Always use backend API value (same as ProfileStatsWidget)**
+    // **FIXED: Use backend API value, but fallback to frontend calculation if API returns 0**
     final backendThisMonth =
         (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
-    final thisMonth = backendThisMonth; // Always use backend API value
+    final thisMonth = backendThisMonth > 0.0 ? backendThisMonth : _totalRevenue;
     final creatorRevenue =
         thisMonth; // Current month creator earnings from backend
     final grossRevenue =

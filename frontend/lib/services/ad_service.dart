@@ -765,8 +765,26 @@ class AdService {
       );
 
       if (response.statusCode == 200) {
-        return json.decode(response.body);
+        final data = json.decode(response.body) as Map<String, dynamic>;
+
+        // **DEBUG: Log API response for troubleshooting**
+        AppLogger.log(
+            '🔍 AdService: Revenue API response keys: ${data.keys.toList()}');
+        AppLogger.log(
+            '🔍 AdService: thisMonth: ${data['thisMonth']}, lastMonth: ${data['lastMonth']}, totalRevenue: ${data['totalRevenue']}');
+
+        // **DEBUG: Check if thisMonth is null or missing**
+        if (data['thisMonth'] == null) {
+          AppLogger.log('⚠️ AdService: thisMonth is NULL in API response!');
+        } else if (data['thisMonth'] == 0) {
+          AppLogger.log(
+              '⚠️ AdService: thisMonth is 0 - no earnings this month or no ad impressions');
+        }
+
+        return data;
       } else {
+        AppLogger.log(
+            '❌ AdService: Revenue API failed with status ${response.statusCode}: ${response.body}');
         throw Exception('Failed to fetch creator revenue: ${response.body}');
       }
     } catch (e) {

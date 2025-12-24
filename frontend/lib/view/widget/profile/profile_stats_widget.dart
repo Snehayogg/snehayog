@@ -265,12 +265,31 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
             (data['thisMonth'] as num?)?.toDouble() ?? 0.0;
 
         AppLogger.log(
-          '💰 ProfileStatsWidget: Monthly earnings loaded: ₹${thisMonthEarnings.toStringAsFixed(2)} (this month)',
+          '💰 ProfileStatsWidget: Monthly earnings loaded from API: ₹${thisMonthEarnings.toStringAsFixed(2)} (this month)',
         );
+
+        // **FIX: If API returns 0, try frontend calculation as fallback**
+        double finalEarnings = thisMonthEarnings;
+        if (thisMonthEarnings == 0.0 &&
+            widget.stateManager.userVideos.isNotEmpty) {
+          try {
+            final frontendCalculated = await _calculateCurrentMonthEarnings();
+            if (frontendCalculated > 0.0) {
+              AppLogger.log(
+                '⚠️ ProfileStatsWidget: API returned 0 but frontend calculated ₹${frontendCalculated.toStringAsFixed(2)} - using frontend calculation',
+              );
+              finalEarnings = frontendCalculated;
+            }
+          } catch (e) {
+            AppLogger.log(
+              '⚠️ ProfileStatsWidget: Frontend calculation fallback failed: $e',
+            );
+          }
+        }
 
         if (mounted) {
           setState(() {
-            _earnings = thisMonthEarnings;
+            _earnings = finalEarnings;
             _isLoadingEarnings = false;
           });
         }
