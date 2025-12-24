@@ -289,6 +289,134 @@ class RedisService {
   }
 
   /**
+   * Get multiple keys at once (batch operation)
+   * @param {string[]} keys - Array of cache keys
+   * @returns {Promise<Array<any|null>>} - Array of cached values or null
+   */
+  async mget(keys) {
+    if (!this.isConnected || !this.client) {
+      return keys.map(() => null);
+    }
+
+    try {
+      if (keys.length === 0) return [];
+      const values = await this.client.mGet(keys);
+      return values.map(v => v ? JSON.parse(v) : null);
+    } catch (error) {
+      console.error(`❌ Redis: Error in mget:`, error.message);
+      return keys.map(() => null);
+    }
+  }
+
+  /**
+   * Set multiple key-value pairs at once (batch operation)
+   * @param {Array<[string, any]>} keyValuePairs - Array of [key, value] pairs
+   * @param {number} expirySeconds - Expiry time in seconds (applied to all keys)
+   * @returns {Promise<boolean>} - Success status
+   */
+  async mset(keyValuePairs, expirySeconds = null) {
+    if (!this.isConnected || !this.client) {
+      return false;
+    }
+
+    try {
+      const pipeline = this.client.multi();
+      for (const [key, value] of keyValuePairs) {
+        const stringValue = JSON.stringify(value);
+        if (expirySeconds && expirySeconds > 0) {
+          pipeline.setEx(key, expirySeconds, stringValue);
+        } else {
+          pipeline.set(key, stringValue);
+        }
+      }
+      await pipeline.exec();
+      return true;
+    } catch (error) {
+      console.error(`❌ Redis: Error in mset:`, error.message);
+      return false;
+    }
+  }
+
+  /**
+   * Redis Set operations for session state (more memory efficient)
+   * Add video ID to session shown set
+   */
+  async setSessionShownVideos(userIdentifier, videoIds) {
+    const key = `session:shown:${userIdentifier}`;
+    if (!this.isConnected || !this.client) {
+      return false;
+    }
+
+    try {
+      const pipeline = this.client.multi();
+      // Add all video IDs to set
+      if (videoIds.length > 0) {
+        pipeline.sAdd(key, videoIds);
+      }
+      pipeline.expire(key, 24 * 60 * 60); // 24h expiry
+      await pipeline.exec();
+      return true;
+    } catch (error) {
+      console.error(`❌ Redis: Error setting session videos:`, error.message);
+      return false;
+    }
+  }
+
+  /**
+   * Check if video is shown in session (using Redis Set)
+   */
+  async isVideoShownInSession(userIdentifier, videoId) {
+    const key = `session:shown:${userIdentifier}`;
+    if (!this.isConnected || !this.client) {
+      return false;
+    }
+
+    try {
+      return await this.client.sIsMember(key, videoId);
+    } catch (error) {
+      console.error(`❌ Redis: Error checking session video:`, error.message);
+      return false;
+    }
+  }
+
+  /**
+   * Get all videos shown in session (using Redis Set)
+   */
+  async getSessionShownVideos(userIdentifier) {
+    const key = `session:shown:${userIdentifier}`;
+    if (!this.isConnected || !this.client) {
+      return new Set();
+    }
+
+    try {
+      const members = await this.client.sMembers(key);
+      return new Set(members);
+    } catch (error) {
+      console.error(`❌ Redis: Error getting session videos:`, error.message);
+      return new Set();
+    }
+  }
+
+  /**
+   * Add video IDs to session shown set
+   */
+  async addToSessionShownVideos(userIdentifier, videoIds) {
+    const key = `session:shown:${userIdentifier}`;
+    if (!this.isConnected || !this.client || videoIds.length === 0) {
+      return false;
+    }
+
+    try {
+      await this.client.sAdd(key, videoIds);
+      await this.client.expire(key, 24 * 60 * 60); // Refresh 24h expiry
+      return true;
+    } catch (error) {
+      console.error(`❌ Redis: Error adding to session videos:`, error.message);
+      return false;
+    }
+  }
+
+  /**
    * Get cache statistics (for monitoring)
    * @returns {Promise<object>} - Cache statistics
    */

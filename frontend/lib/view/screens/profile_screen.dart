@@ -18,6 +18,7 @@ import 'package:vayu/view/widget/profile/profile_stats_widget.dart';
 import 'package:vayu/view/widget/profile/profile_videos_widget.dart';
 import 'package:vayu/view/widget/profile/profile_menu_widget.dart';
 import 'package:vayu/view/widget/profile/profile_dialogs_widget.dart';
+import 'package:vayu/view/widget/profile/top_earners_grid.dart';
 import 'package:vayu/controller/main_controller.dart';
 import 'package:vayu/core/managers/shared_video_controller_pool.dart';
 import 'package:vayu/utils/app_logger.dart';
@@ -67,9 +68,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   final ValueNotifier<int> _verifiedSignedUp = ValueNotifier<int>(0);
 
   // Local tab state for content section
-  // 0 => Your Videos, 1 => My Recommendations
+  // 0 => Your Videos, 1 => Top Earners / Recommendations
   final ValueNotifier<int> _activeProfileTabIndex = ValueNotifier<int>(0);
-  final List<Map<String, dynamic>> _recommendations = [];
 
   // UPI ID status tracking
   final ValueNotifier<bool> _hasUpiId = ValueNotifier<bool>(
@@ -2207,7 +2207,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  /// Simple Recommendations placeholder grid (creator suggested products)
+  /// Recommendations tab – shows Top Earners from following (3-column grid)
   Widget _buildRecommendationsSection() {
     return RepaintBoundary(
       child: Padding(
@@ -2215,103 +2215,17 @@ class _ProfileScreenState extends State<ProfileScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (_recommendations.isEmpty)
-              Container(
-                width: double.infinity,
-                margin: const EdgeInsets.only(top: 8),
-                padding: const EdgeInsets.symmetric(vertical: 32),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFE5E7EB)),
-                ),
-                child: const Center(
-                  child: Text(
-                    'No Recommendations',
-                    style: TextStyle(
-                      color: Color(0xFF6B7280),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              )
-            else
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
-                  childAspectRatio: 0.9,
-                ),
-                itemCount: _recommendations.length,
-                itemBuilder: (context, index) {
-                  final item = _recommendations[index];
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFE5E7EB)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.03),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: ClipRRect(
-                            borderRadius: const BorderRadius.only(
-                              topLeft: Radius.circular(12),
-                              topRight: Radius.circular(12),
-                            ),
-                            child: Container(
-                              color: const Color(0xFFF3F4F6),
-                              child: const Center(
-                                child: Icon(Icons.shopping_bag,
-                                    color: Color(0xFF9CA3AF)),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 8),
-                          child: Text(
-                            item['title'] ?? 'Recommended product',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Color(0xFF111827),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        const Padding(
-                          padding:
-                              EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-                          child: Text(
-                            'Creator suggested',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Color(0xFF6B7280),
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                    ),
-                  );
-                },
+            const SizedBox(height: 8),
+            const Text(
+              'Top Earners (Following)',
+              style: TextStyle(
+                color: Color(0xFF111827),
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
               ),
+            ),
+            const SizedBox(height: 8),
+            const TopEarnersGrid(),
           ],
         ),
       ),

@@ -741,11 +741,29 @@ async function processVideoToHLS(videoId, videoPath, videoName, userId) {
       console.log(`❌ Cache MISS: ${cacheKey}`);
     }
 
-    // Find user by googleId
-    const user = await User.findOne({ googleId: googleId });
+    // **OPTIMIZED: Cache user profile data**
+    const userProfileCacheKey = `user:profile:${googleId}`;
+    let user = null;
+    
+    if (redisService.getConnectionStatus()) {
+      user = await redisService.get(userProfileCacheKey);
+      if (user) {
+        console.log(`⚡ User Profile Cache HIT: ${userProfileCacheKey}`);
+      }
+    }
+    
     if (!user) {
-      console.log('❌ User not found for googleId:', googleId);
-      return res.status(404).json({ error: 'User not found' });
+      user = await User.findOne({ googleId: googleId }).lean();
+      if (!user) {
+        console.log('❌ User not found for googleId:', googleId);
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      // Cache user profile for 10 minutes
+      if (redisService.getConnectionStatus()) {
+        await redisService.set(userProfileCacheKey, user, 600);
+        console.log(`💾 User Profile Cache SET: ${userProfileCacheKey} (10min TTL)`);
+      }
     }
 
     console.log('✅ Found user:', {
@@ -1038,6 +1056,19 @@ router.get('/', async (req, res) => {
     let unwatchedVideoIds = []; // kept for logging compatibility
     let watchedVideoIds = []; // kept for logging compatibility
     
+    // **OPTIMIZED: Try feed cache first (short TTL for freshness while reducing DB load)**
+    const feedCacheKey = `feed:${userIdentifier || 'anonymous'}:${videoType || 'all'}:${pageNum}`;
+    let cachedFeed = null;
+    
+    if (redisService.getConnectionStatus()) {
+      cachedFeed = await redisService.get(feedCacheKey);
+      if (cachedFeed) {
+        console.log(`⚡ Feed Cache HIT: ${feedCacheKey}`);
+        return res.json(cachedFeed);
+      }
+      console.log(`💾 Feed Cache MISS: ${feedCacheKey}`);
+    }
+    
     // **PERSONALIZED LRU FEED: All yog videos in a loop (unwatched first, then oldest watched)**
     if (userIdentifier) {
       console.log(
@@ -1065,18 +1096,46 @@ router.get('/', async (req, res) => {
       );
 
       // 2) Build a map: videoId -> oldest lastWatchedAt (timestamp)
-      // **IMPROVED: Check watch history for all identities (userId, deviceId, userIdentifier)**
+      // **OPTIMIZED: Cache watch history queries to reduce DB load**
       const historyMap = new Map(); // videoId (string) -> timestamp (number)
       const watchedVideoSet = new Set(); // Track all watched video IDs
+      let historyEntries = [];
       
       try {
         if (uniqueIdsToCheck.length > 0) {
-          // Query watch history for all possible identities
-          const historyEntries = await WatchHistory.find({
-            userId: { $in: uniqueIdsToCheck },
+          // **OPTIMIZED: Try cache first, then DB**
+          const watchHistoryCacheKey = `watch:history:${uniqueIdsToCheck.sort().join(':')}`;
+          
+          if (redisService.getConnectionStatus()) {
+            const cachedHistory = await redisService.get(watchHistoryCacheKey);
+            if (cachedHistory && Array.isArray(cachedHistory)) {
+              historyEntries = cachedHistory;
+              console.log(
+                `⚡ Watch History Cache HIT: ${historyEntries.length} entries for identities:`,
+                uniqueIdsToCheck,
+              );
+            } else {
+              // Cache miss - fetch from DB
+              historyEntries = await WatchHistory.find({
+                userId: { $in: uniqueIdsToCheck },
           })
             .select('videoId lastWatchedAt userId')
             .lean();
+              
+              // Cache for 5 minutes (watch history changes infrequently)
+              await redisService.set(watchHistoryCacheKey, historyEntries, 300);
+              console.log(
+                `💾 Watch History Cache SET: ${historyEntries.length} entries (5min TTL)`,
+              );
+            }
+          } else {
+            // Redis unavailable - fetch from DB
+            historyEntries = await WatchHistory.find({
+              userId: { $in: uniqueIdsToCheck },
+            })
+              .select('videoId lastWatchedAt userId')
+              .lean();
+          }
 
           console.log(
             `📊 LRU FEED: Loaded ${historyEntries.length} watch history entries for identities:`,
@@ -1117,23 +1176,16 @@ router.get('/', async (req, res) => {
         // On error, treat all videos as unwatched (safer than showing watched videos)
       }
       
-      // **NEW: Session-Based Pagination State - Track videos shown in current session**
-      // This prevents same videos from appearing again in same session
-      const sessionShownKey = `session:shown:videos:${userIdentifier}`;
+      // **OPTIMIZED: Session-Based Pagination State - Track videos shown in current session**
+      // Uses Redis Set for O(1) lookups and better memory efficiency
       let sessionShownVideoIds = new Set();
       
       try {
         if (redisService.getConnectionStatus() && userIdentifier) {
-          // Get videos already shown in this session (stored in Redis with 24h expiry)
-          const sessionShown = await redisService.get(sessionShownKey);
-          if (sessionShown) {
-            try {
-              const shownIds = JSON.parse(sessionShown);
-              sessionShownVideoIds = new Set(shownIds);
-              console.log(`📋 SESSION STATE: Found ${sessionShownVideoIds.size} videos already shown in current session`);
-            } catch (parseErr) {
-              console.log(`⚠️ SESSION STATE: Error parsing session shown videos: ${parseErr.message}`);
-            }
+          // Get videos already shown in this session (using Redis Set - more efficient)
+          sessionShownVideoIds = await redisService.getSessionShownVideos(userIdentifier);
+          if (sessionShownVideoIds.size > 0) {
+            console.log(`📋 SESSION STATE: Found ${sessionShownVideoIds.size} videos already shown in current session (Redis Set)`);
           }
         }
       } catch (sessionErr) {
@@ -1153,7 +1205,7 @@ router.get('/', async (req, res) => {
 
         // **FIX: Filter out invalid/null videos from database result**
         allVideos = (allVideos || []).filter(v => v && v._id);
-        
+
         console.log(
           `📊 LRU FEED: Total videos matching base filter for user: ${allVideos.length}`,
         );
@@ -1170,12 +1222,12 @@ router.get('/', async (req, res) => {
         .filter(v => v && v._id) // Remove invalid videos
         .map((video) => {
           const id = video._id.toString();
-          const ts = id ? historyMap.get(id) : undefined;
-          return {
-            ...video,
-            _lastWatchedAt: ts !== undefined ? ts : null, // null => never watched
-          };
-        });
+        const ts = id ? historyMap.get(id) : undefined;
+        return {
+          ...video,
+          _lastWatchedAt: ts !== undefined ? ts : null, // null => never watched
+        };
+      });
 
       // 5) Separate unwatched and watched videos
       // **FIX: Filter out invalid videos (null/undefined/missing _id)**
@@ -1359,20 +1411,13 @@ router.get('/', async (req, res) => {
         console.log(`⚠️ WARNING: Found ${duplicatesRemoved.length} duplicate video IDs in final response, removed them:`, duplicatesRemoved);
       }
       
-      // **UPDATE SESSION STATE: Mark returned videos as shown in session**
+      // **OPTIMIZED: UPDATE SESSION STATE: Mark returned videos as shown in session (using Redis Set)**
       try {
         if (redisService.getConnectionStatus() && userIdentifier && finalDeduplicatedVideos.length > 0) {
-          // Add new video IDs to session shown set
+          // Add new video IDs to session shown set (using Redis Set - more efficient)
           const newShownIds = finalDeduplicatedVideos.map(v => v._id?.toString()).filter(Boolean);
-          const updatedShownSet = new Set([...sessionShownVideoIds, ...newShownIds]);
-          
-          // Store in Redis with 24h expiry (session duration)
-          await redisService.set(
-            sessionShownKey,
-            JSON.stringify(Array.from(updatedShownSet)),
-            24 * 60 * 60 // 24 hours
-          );
-          console.log(`📋 SESSION STATE: Updated session shown videos to ${updatedShownSet.size} total (added ${newShownIds.length} new)`);
+          await redisService.addToSessionShownVideos(userIdentifier, newShownIds);
+          console.log(`📋 SESSION STATE: Added ${newShownIds.length} new videos to session shown set (Redis Set)`);
         }
       } catch (sessionErr) {
         console.log(`⚠️ SESSION STATE: Error updating session state (non-critical): ${sessionErr.message}`);
@@ -1391,7 +1436,7 @@ router.get('/', async (req, res) => {
       console.log(`   - Total available (for user): ${totalVideosForUser}`);
       console.log(`   - hasMore: ${hasMore}`);
       console.log(`   - Shuffle seed: ${seed} (deterministic per user per day)`);
-      
+
       // **FIXED: Use deduplicated videos instead of overwriting**
       finalVideos = finalDeduplicatedVideos;
       
@@ -1538,14 +1583,23 @@ router.get('/', async (req, res) => {
       }
     }
     
-    res.json({
+    // **OPTIMIZED: Cache feed response before sending (short TTL for freshness)**
+    const feedResponse = {
       videos: finalVideos,
       hasMore,
       page: pageNum,
       limit: limitNum,
       total: totalCount,
       isPersonalized: !!userIdentifier
-    });
+    };
+    
+    // Cache for 30 seconds (short TTL ensures freshness while reducing DB load)
+    if (redisService.getConnectionStatus() && finalVideos.length > 0) {
+      await redisService.set(feedCacheKey, feedResponse, 30);
+      console.log(`💾 Feed Cache SET: ${feedCacheKey} (30s TTL)`);
+    }
+    
+    res.json(feedResponse);
     
   } catch (error) {
     console.error('❌ Error fetching videos:', error);
@@ -1832,17 +1886,25 @@ router.post('/:id/watch', async (req, res) => {
       $inc: { views: 1 }
     });
 
-    // **SIMPLE: Clear cache for the identity used**
+    // **OPTIMIZED: Smart cache invalidation - clear all related caches**
     if (redisService.getConnectionStatus()) {
-      // Clear the unwatched IDs cache so user sees updated feed after watching
-      const unwatchedCachePattern = `videos:unwatched:ids:${identityId}:*`;
-      await redisService.clearPattern(unwatchedCachePattern);
-      console.log(`🧹 Cleared unwatched IDs cache for: ${identityId}`);
+      // Clear watch history cache (will be refreshed on next feed request)
+      const watchHistoryPattern = `watch:history:${identityId}*`;
+      await redisService.clearPattern(watchHistoryPattern);
+      console.log(`🧹 Cleared watch history cache for: ${identityId}`);
       
-      // Also clear old feed cache pattern for backward compatibility
-      const feedCachePattern = `videos:feed:user:${identityId}:*`;
+      // Clear feed cache (user will see updated feed after watching)
+      const feedCachePattern = `feed:${identityId}:*`;
       await redisService.clearPattern(feedCachePattern);
       console.log(`🧹 Cleared feed cache for: ${identityId}`);
+      
+      // Clear unwatched IDs cache (for backward compatibility)
+      const unwatchedCachePattern = `videos:unwatched:ids:${identityId}:*`;
+      await redisService.clearPattern(unwatchedCachePattern);
+      
+      // Clear old feed cache pattern (for backward compatibility)
+      const oldFeedCachePattern = `videos:feed:user:${identityId}:*`;
+      await redisService.clearPattern(oldFeedCachePattern);
     }
 
     res.json({
@@ -2479,17 +2541,25 @@ router.post('/:id/watch', async (req, res) => {
       $inc: { views: 1 }
     });
 
-    // **SIMPLE: Clear cache for the identity used**
+    // **OPTIMIZED: Smart cache invalidation - clear all related caches**
     if (redisService.getConnectionStatus()) {
-      // Clear the unwatched IDs cache so user sees updated feed after watching
-      const unwatchedCachePattern = `videos:unwatched:ids:${identityId}:*`;
-      await redisService.clearPattern(unwatchedCachePattern);
-      console.log(`🧹 Cleared unwatched IDs cache for: ${identityId}`);
+      // Clear watch history cache (will be refreshed on next feed request)
+      const watchHistoryPattern = `watch:history:${identityId}*`;
+      await redisService.clearPattern(watchHistoryPattern);
+      console.log(`🧹 Cleared watch history cache for: ${identityId}`);
       
-      // Also clear old feed cache pattern for backward compatibility
-      const feedCachePattern = `videos:feed:user:${identityId}:*`;
+      // Clear feed cache (user will see updated feed after watching)
+      const feedCachePattern = `feed:${identityId}:*`;
       await redisService.clearPattern(feedCachePattern);
       console.log(`🧹 Cleared feed cache for: ${identityId}`);
+      
+      // Clear unwatched IDs cache (for backward compatibility)
+      const unwatchedCachePattern = `videos:unwatched:ids:${identityId}:*`;
+      await redisService.clearPattern(unwatchedCachePattern);
+      
+      // Clear old feed cache pattern (for backward compatibility)
+      const oldFeedCachePattern = `videos:feed:user:${identityId}:*`;
+      await redisService.clearPattern(oldFeedCachePattern);
     }
 
     res.json({
@@ -3280,43 +3350,43 @@ router.post('/:id/increment-view', async (req, res) => {
     // **ONLY increment view count for authenticated users (existing behavior)**
     // Anonymous users get watch tracking but not view count increment
     if (user && userObjectId) {
-      // Check if user has already reached max views (10)
-      const existingView = video.viewDetails.find(view => 
+    // Check if user has already reached max views (10)
+    const existingView = video.viewDetails.find(view => 
         view.user.toString() === userObjectId.toString()
-      );
+    );
 
-      if (existingView && existingView.viewCount >= 10) {
-        console.log('⚠️ User has reached maximum view count:', {
-          userId: user.googleId,
-          currentViewCount: existingView.viewCount
-        });
-        return res.status(200).json({
-          message: 'View limit reached',
-          viewCount: existingView.viewCount,
-          maxViewsReached: true,
-          totalViews: video.views
-        });
-      }
+    if (existingView && existingView.viewCount >= 10) {
+      console.log('⚠️ User has reached maximum view count:', {
+        userId: user.googleId,
+        currentViewCount: existingView.viewCount
+      });
+      return res.status(200).json({
+        message: 'View limit reached',
+        viewCount: existingView.viewCount,
+        maxViewsReached: true,
+        totalViews: video.views
+      });
+    }
 
-      // Increment view using the model method
+    // Increment view using the model method
       await video.incrementView(userObjectId, duration);
 
-      console.log('✅ View incremented successfully:', {
-        videoId,
-        userId: user.googleId,
-        newTotalViews: video.views,
-        userViewCount: existingView ? existingView.viewCount + 1 : 1
-      });
+    console.log('✅ View incremented successfully:', {
+      videoId,
+      userId: user.googleId,
+      newTotalViews: video.views,
+      userViewCount: existingView ? existingView.viewCount + 1 : 1
+    });
 
-      // Return updated view count
-      const updatedExistingView = video.viewDetails.find(view => 
+    // Return updated view count
+    const updatedExistingView = video.viewDetails.find(view => 
         view.user.toString() === userObjectId.toString()
-      );
+    );
 
-      res.json({
-        message: 'View incremented successfully',
-        totalViews: video.views,
-        userViewCount: updatedExistingView ? updatedExistingView.viewCount : 1,
+    res.json({
+      message: 'View incremented successfully',
+      totalViews: video.views,
+      userViewCount: updatedExistingView ? updatedExistingView.viewCount : 1,
         maxViewsReached: updatedExistingView ? updatedExistingView.viewCount >= 10 : false,
         watched: true // **NEW: Indicate video was marked as watched**
       });
