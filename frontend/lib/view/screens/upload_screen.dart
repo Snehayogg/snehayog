@@ -17,6 +17,7 @@ import 'package:vayu/view/screens/upload_screen/widgets/upload_advanced_settings
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:video_player/video_player.dart';
+import 'package:vayu/utils/app_text.dart';
 
 class UploadScreen extends StatefulWidget {
   final VoidCallback? onVideoUploaded; // Add callback for video upload success
@@ -51,49 +52,48 @@ class _UploadScreenState extends State<UploadScreen> {
   Timer? _progressTimer;
 
   // **UNIFIED PROGRESS PHASES** - Complete video processing flow
-  static const Map<String, Map<String, dynamic>> _progressPhases = {
-    'preparation': {
-      'name': 'Preparing Video',
-      'description': 'Validating file and preparing for upload...',
-      'progress': 0.1,
-      'icon': Icons.video_file,
-    },
-    'upload': {
-      'name': 'Uploading Video',
-      'description': 'Transferring video to server...',
-      'progress': 0.4,
-      'icon': Icons.cloud_upload,
-    },
-    'validation': {
-      'name': 'Validating Video',
-      'description': 'Checking video format and quality...',
-      'progress': 0.5,
-      'icon': Icons.verified,
-    },
-    'processing': {
-      'name': 'Processing Video',
-      'description': 'Converting to optimized format...',
-      'progress': 0.8,
-      'icon': Icons.settings,
-    },
-    'completed': {
-      'name': 'Upload Complete!',
-      'description': 'Video processing completed successfully!',
-      'progress': 1.0,
-      'icon': Icons.check_circle,
-    },
-    'finalizing': {
-      'name': 'Finalizing',
-      'description': 'Generating thumbnails and completing...',
-      'progress': 0.95,
-      'icon': Icons.check_circle,
-    },
-  };
+  Map<String, Map<String, dynamic>> get _progressPhases => {
+        'preparation': {
+          'name': AppText.get('upload_preparing_video'),
+          'description': AppText.get('upload_preparing_desc'),
+          'progress': 0.1,
+          'icon': Icons.video_file,
+        },
+        'upload': {
+          'name': AppText.get('upload_uploading_video'),
+          'description': AppText.get('upload_uploading_desc'),
+          'progress': 0.4,
+          'icon': Icons.cloud_upload,
+        },
+        'validation': {
+          'name': AppText.get('upload_validating_video'),
+          'description': AppText.get('upload_validating_desc'),
+          'progress': 0.5,
+          'icon': Icons.verified,
+        },
+        'processing': {
+          'name': AppText.get('upload_processing_video_name'),
+          'description': AppText.get('upload_processing_desc'),
+          'progress': 0.8,
+          'icon': Icons.settings,
+        },
+        'completed': {
+          'name': AppText.get('upload_complete'),
+          'description': AppText.get('upload_complete_desc'),
+          'progress': 1.0,
+          'icon': Icons.check_circle,
+        },
+        'finalizing': {
+          'name': AppText.get('upload_finalizing'),
+          'description': AppText.get('upload_finalizing_desc'),
+          'progress': 0.95,
+          'icon': Icons.check_circle,
+        },
+      };
 
   // NEW: Category, video type, and tags to align with ad targeting interests
   static const String _defaultCategory = 'Others';
   final ValueNotifier<String?> _selectedCategory = ValueNotifier<String?>(null);
-  final ValueNotifier<String?> _videoType = ValueNotifier<String?>(null);
   final ValueNotifier<List<String>> _tags = ValueNotifier<List<String>>([]);
   final ValueNotifier<bool> _showAdvancedSettings = ValueNotifier<bool>(false);
   final TextEditingController _tagInputController = TextEditingController();
@@ -137,7 +137,7 @@ class _UploadScreenState extends State<UploadScreen> {
       // **BATCHED UPDATE: Update all progress values at once**
       _unifiedProgress.value = 1.0;
       _currentPhase.value = 'completed';
-      _phaseDescription.value = 'Video is ready!';
+      _phaseDescription.value = AppText.get('upload_video_ready');
     }
   }
 
@@ -250,7 +250,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                     MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
-                                    'Progress',
+                                    AppText.get('upload_progress'),
                                     style: TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w500,
@@ -297,7 +297,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
-                                    'Time: ${_formatTime(elapsedSeconds)}',
+                                    '${AppText.get('upload_time')} ${_formatTime(elapsedSeconds)}',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: Colors.grey[600],
@@ -388,10 +388,10 @@ class _UploadScreenState extends State<UploadScreen> {
                         child: Icon(Icons.gavel, color: Colors.red.shade700),
                       ),
                       const SizedBox(width: 12),
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          'What to Upload? \nVayug Terms & Conditions (Copyright Policy)',
-                          style: TextStyle(
+                          AppText.get('upload_terms_title'),
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
                           ),
@@ -405,34 +405,28 @@ class _UploadScreenState extends State<UploadScreen> {
                   ),
                   const SizedBox(height: 12),
                   _buildNoticePoint(
-                    title: '1. User Responsibility',
-                    body:
-                        'By uploading, you confirm you are the original creator or have legal rights/permission to use this content. Do not upload media that infringes on others\' copyright, trademark, or intellectual property.',
+                    title: AppText.get('upload_terms_user_responsibility'),
+                    body: AppText.get('upload_terms_user_responsibility_desc'),
                   ),
                   _buildNoticePoint(
-                    title: '2. Copyright Infringement',
-                    body:
-                        'If you upload content belonging to someone else without permission, you (the uploader) will be fully responsible for any legal consequences. Vayug acts only as a platform and does not own or endorse user-uploaded content.',
+                    title: AppText.get('upload_terms_copyright'),
+                    body: AppText.get('upload_terms_copyright_desc'),
                   ),
                   _buildNoticePoint(
-                    title: '3. Reporting Copyright Violation',
-                    body:
-                        'Copyright owners may submit a takedown request by emailing: copyright@snehayog.site with proof of ownership. Upon receiving a valid request, Vayug will remove the infringing content within 48 hours.',
+                    title: AppText.get('upload_terms_reporting'),
+                    body: AppText.get('upload_terms_reporting_desc'),
                   ),
                   _buildNoticePoint(
-                    title: '4. Payment & Revenue Sharing',
-                    body:
-                        'All creator payments are subject to a 30-day hold for copyright checks and disputes. If a video is found infringing during this period, the payout will be cancelled and may be withheld.',
+                    title: AppText.get('upload_terms_payment'),
+                    body: AppText.get('upload_terms_payment_desc'),
                   ),
                   _buildNoticePoint(
-                    title: '5. Strike Policy',
-                    body:
-                        '1st Strike → Warning & content removal.  2nd Strike → Payment account on hold for 60 days.  3rd Strike → Permanent ban, with forfeiture of unpaid earnings.',
+                    title: AppText.get('upload_terms_strike'),
+                    body: AppText.get('upload_terms_strike_desc'),
                   ),
                   _buildNoticePoint(
-                    title: '6. Limitation of Liability',
-                    body:
-                        'Vayug, as an intermediary platform, is not liable for user-uploaded content under the IT Act 2000 (India) and DMCA (international). All responsibility for copyright compliance lies with the content uploader.',
+                    title: AppText.get('upload_terms_liability'),
+                    body: AppText.get('upload_terms_liability_desc'),
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
@@ -440,7 +434,7 @@ class _UploadScreenState extends State<UploadScreen> {
                     child: ElevatedButton.icon(
                       onPressed: () => Navigator.pop(context),
                       icon: const Icon(Icons.check_circle_outline),
-                      label: const Text('I Understand'),
+                      label: Text(AppText.get('btn_i_understand')),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         backgroundColor: Colors.red.shade600,
@@ -516,12 +510,12 @@ class _UploadScreenState extends State<UploadScreen> {
 
     // **BATCHED UPDATE: Use ValueNotifiers instead of setState**
     if (_selectedVideo.value == null) {
-      _errorMessage.value = 'Please select a video first';
+      _errorMessage.value = AppText.get('upload_error_select_video');
       return;
     }
 
     if (_titleController.text.isEmpty) {
-      _errorMessage.value = 'Please enter a title for your content';
+      _errorMessage.value = AppText.get('upload_error_enter_title');
       return;
     }
 
@@ -532,7 +526,7 @@ class _UploadScreenState extends State<UploadScreen> {
     // Validate category selection before uploading
     if (_selectedCategory.value == null || _selectedCategory.value!.isEmpty) {
       _isUploading.value = false;
-      _errorMessage.value = 'Please select a category';
+      _errorMessage.value = AppText.get('upload_error_select_category');
       return;
     }
 
@@ -565,7 +559,7 @@ class _UploadScreenState extends State<UploadScreen> {
       );
       if (fileSize > 100 * 1024 * 1024) {
         // 100MB limit
-        throw Exception('Video file is too large. Maximum size is 100MB');
+        throw Exception(AppText.get('upload_error_file_too_large'));
       }
 
       // Check file extension
@@ -575,7 +569,11 @@ class _UploadScreenState extends State<UploadScreen> {
 
       if (!allowedExtensions.contains(fileExtension)) {
         throw Exception(
-          'Invalid video format. Supported formats: ${allowedExtensions.join(', ').toUpperCase()}',
+          AppText.get('upload_error_invalid_format',
+                  fallback:
+                      'Invalid video format. Supported formats: {formats}')
+              .replaceAll(
+                  '{formats}', allowedExtensions.join(', ').toUpperCase()),
         );
       }
 
@@ -608,7 +606,7 @@ class _UploadScreenState extends State<UploadScreen> {
         ), // Increased timeout for large video uploads
         onTimeout: () {
           throw TimeoutException(
-            'Upload timed out. Please check your internet connection and try again.',
+            AppText.get('upload_error_timeout'),
           );
         },
       );
@@ -687,8 +685,7 @@ class _UploadScreenState extends State<UploadScreen> {
     } on FileSystemException catch (e) {
       AppLogger.log('File system error: $e');
       // **NO setState: Use ValueNotifier**
-      _errorMessage.value =
-          'Error accessing video file. Please try selecting the video again.';
+      _errorMessage.value = AppText.get('upload_error_file_access');
     } catch (e, stackTrace) {
       AppLogger.log('Error uploading video: $e');
       AppLogger.log('Stack trace: $stackTrace');
@@ -697,21 +694,17 @@ class _UploadScreenState extends State<UploadScreen> {
       String userFriendlyError;
       if (e.toString().contains('User not authenticated') ||
           e.toString().contains('Authentication token not found')) {
-        userFriendlyError =
-            'Please sign in again to upload videos. Your session may have expired.';
+        userFriendlyError = AppText.get('upload_error_sign_in_again');
       } else if (e.toString().contains('Server is not responding')) {
-        userFriendlyError =
-            'Server is not responding. Please check your connection and try again.';
+        userFriendlyError = AppText.get('upload_error_server_not_responding');
       } else if (e.toString().contains(
             'Failed to upload video to cloud service',
           )) {
-        userFriendlyError =
-            'Video upload service is temporarily unavailable. Please try again later.';
+        userFriendlyError = AppText.get('upload_error_service_unavailable');
       } else if (e.toString().contains('File too large')) {
-        userFriendlyError = 'Video file is too large. Maximum size is 100MB.';
+        userFriendlyError = AppText.get('upload_error_file_too_large_short');
       } else if (e.toString().contains('Invalid file type')) {
-        userFriendlyError =
-            'Invalid video format. Please upload a supported video file.';
+        userFriendlyError = AppText.get('upload_error_invalid_file_type');
       } else {
         userFriendlyError = 'Error uploading video: ${e.toString()}';
       }
@@ -845,9 +838,9 @@ class _UploadScreenState extends State<UploadScreen> {
                 const SizedBox(height: 24),
 
                 // Success title
-                const Text(
-                  'Upload Successful! 🎉',
-                  style: TextStyle(
+                Text(
+                  AppText.get('upload_success_title'),
+                  style: const TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                     color: Colors.black87,
@@ -857,9 +850,9 @@ class _UploadScreenState extends State<UploadScreen> {
                 const SizedBox(height: 16),
 
                 // Success message
-                const Text(
-                  'Your video has been uploaded and processed successfully! It is now available in your feed.',
-                  style: TextStyle(
+                Text(
+                  AppText.get('upload_success_message'),
+                  style: const TextStyle(
                     fontSize: 16,
                     color: Colors.black54,
                     height: 1.4,
@@ -882,7 +875,7 @@ class _UploadScreenState extends State<UploadScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'Video has been processed and is ready for streaming!',
+                          AppText.get('upload_processed_ready'),
                           style: TextStyle(
                             color: Colors.green.shade700,
                             fontSize: 14,
@@ -912,9 +905,9 @@ class _UploadScreenState extends State<UploadScreen> {
                             ),
                           ),
                         ),
-                        child: const Text(
-                          'Upload Another',
-                          style: TextStyle(
+                        child: Text(
+                          AppText.get('btn_upload_another'),
+                          style: const TextStyle(
                             color: Colors.grey,
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
@@ -939,9 +932,9 @@ class _UploadScreenState extends State<UploadScreen> {
                           ),
                           elevation: 0,
                         ),
-                        child: const Text(
-                          'View in Feed',
-                          style: TextStyle(
+                        child: Text(
+                          AppText.get('btn_view_in_feed'),
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                           ),
@@ -962,12 +955,12 @@ class _UploadScreenState extends State<UploadScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Login Required'),
-        content: const Text('Please sign in to upload videos.'),
+        title: Text(AppText.get('upload_login_required')),
+        content: Text(AppText.get('upload_please_sign_in_upload')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(AppText.get('btn_cancel')),
           ),
           TextButton(
             onPressed: () async {
@@ -981,7 +974,7 @@ class _UploadScreenState extends State<UploadScreen> {
                 await LogoutService.refreshAllState(this.context);
               }
             },
-            child: const Text('Sign In'),
+            child: Text(AppText.get('btn_sign_in')),
           ),
         ],
       ),
@@ -1041,8 +1034,7 @@ class _UploadScreenState extends State<UploadScreen> {
         final bool isVideo = videoExtensions.contains(extension);
 
         if (!isVideo) {
-          _errorMessage.value =
-              'Please select a valid video file (MP4, AVI, MOV, WMV, FLV, or WebM).';
+          _errorMessage.value = AppText.get('upload_error_invalid_file');
           _isProcessing.value = false;
           return;
         }
@@ -1053,7 +1045,7 @@ class _UploadScreenState extends State<UploadScreen> {
           const maxVideoSize = 100 * 1024 * 1024;
           if (fileSize > maxVideoSize) {
             _errorMessage.value =
-                'Video file is too large. Maximum size is 100MB';
+                AppText.get('upload_error_file_too_large_short');
             _isProcessing.value = false;
             return;
           }
@@ -1066,8 +1058,7 @@ class _UploadScreenState extends State<UploadScreen> {
             await controller.dispose();
 
             if (durationSeconds < 8) {
-              _errorMessage.value =
-                  'Video is too short. Minimum length is 8 seconds.';
+              _errorMessage.value = AppText.get('upload_error_video_too_short');
               _isProcessing.value = false;
               return;
             }
@@ -1110,8 +1101,10 @@ class _UploadScreenState extends State<UploadScreen> {
                   if (data['isDuplicate'] == true) {
                     final existingVideoName =
                         data['existingVideoName'] ?? 'Unknown';
-                    _errorMessage.value =
-                        'You have already uploaded this video: "$existingVideoName". Please select a different video.';
+                    _errorMessage.value = AppText.get('upload_error_duplicate',
+                            fallback:
+                                'You have already uploaded this video: "{name}". Please select a different video.')
+                        .replaceAll('{name}', existingVideoName);
                     _isProcessing.value = false;
                     AppLogger.log(
                         '⚠️ UploadScreen: Duplicate video detected: $existingVideoName');
@@ -1184,7 +1177,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Upload & Create'),
+            title: Text(AppText.get('upload_title')),
             centerTitle: true,
             actions: [
               if (isSignedIn)
@@ -1198,7 +1191,7 @@ class _UploadScreenState extends State<UploadScreen> {
                     );
                   },
                   icon: const Icon(Icons.campaign),
-                  tooltip: 'Manage Ads',
+                  tooltip: AppText.get('btn_manage_ads'),
                 ),
             ],
           ),
@@ -1222,10 +1215,10 @@ class _UploadScreenState extends State<UploadScreen> {
                             color: Colors.orange,
                           ),
                           const SizedBox(width: 8),
-                          const Expanded(
+                          Expanded(
                             child: Text(
-                              'Please sign in to upload videos and create ads',
-                              style: TextStyle(color: Colors.orange),
+                              AppText.get('upload_please_sign_in'),
+                              style: const TextStyle(color: Colors.orange),
                             ),
                           ),
                           TextButton(
@@ -1240,7 +1233,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                 await LogoutService.refreshAllState(context);
                               }
                             },
-                            child: const Text('Sign In'),
+                            child: Text(AppText.get('btn_sign_in')),
                           ),
                         ],
                       ),
@@ -1251,9 +1244,10 @@ class _UploadScreenState extends State<UploadScreen> {
                   // T&C card moved into a modal; show entry point above in AppBar
 
                   // Main Options Section
-                  const Text(
-                    'Choose what you want to create',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  Text(
+                    AppText.get('upload_choose_what_create'),
+                    style: const TextStyle(
+                        fontSize: 24, fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),
 
@@ -1294,9 +1288,9 @@ class _UploadScreenState extends State<UploadScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 16),
-                                  const Text(
-                                    'Upload Video',
-                                    style: TextStyle(
+                                  Text(
+                                    AppText.get('upload_video'),
+                                    style: const TextStyle(
                                       fontSize: 20,
                                       fontWeight: FontWeight.bold,
                                     ),
@@ -1304,7 +1298,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    'Share your video content with the community',
+                                    AppText.get('upload_video_desc'),
                                     style: TextStyle(
                                       color: Colors.grey.shade600,
                                       fontSize: 14,
@@ -1356,9 +1350,9 @@ class _UploadScreenState extends State<UploadScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 16),
-                                  const Text(
-                                    'Create Ad',
-                                    style: TextStyle(
+                                  Text(
+                                    AppText.get('upload_create_ad'),
+                                    style: const TextStyle(
                                       fontSize: 20,
                                       fontWeight: FontWeight.bold,
                                     ),
@@ -1366,7 +1360,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    'Promote your content with targeted advertisements',
+                                    AppText.get('upload_create_ad_desc'),
                                     style: TextStyle(
                                       color: Colors.grey.shade600,
                                       fontSize: 14,
@@ -1432,16 +1426,17 @@ class _UploadScreenState extends State<UploadScreen> {
                                       valueListenable: _selectedVideo,
                                       builder: (context, selectedVideo, _) {
                                         if (isProcessing) {
-                                          return const Center(
+                                          return Center(
                                             child: Column(
                                               mainAxisAlignment:
                                                   MainAxisAlignment.center,
                                               children: [
-                                                CircularProgressIndicator(),
-                                                SizedBox(height: 16),
+                                                const CircularProgressIndicator(),
+                                                const SizedBox(height: 16),
                                                 Text(
-                                                  'Processing video...',
-                                                  style: TextStyle(
+                                                  AppText.get(
+                                                      'upload_processing_video'),
+                                                  style: const TextStyle(
                                                     fontSize: 16,
                                                     color: Colors.grey,
                                                   ),
@@ -1524,7 +1519,8 @@ class _UploadScreenState extends State<UploadScreen> {
                                 child: OutlinedButton.icon(
                                   onPressed: _showWhatToUploadDialog,
                                   icon: const Icon(Icons.help_outline),
-                                  label: const Text('What to Upload?'),
+                                  label: Text(
+                                      AppText.get('upload_what_to_upload')),
                                   style: OutlinedButton.styleFrom(
                                     padding: const EdgeInsets.symmetric(
                                         vertical: 14),
@@ -1614,8 +1610,8 @@ class _UploadScreenState extends State<UploadScreen> {
                                                         _uploadVideo();
                                                       },
                                                 icon: const Icon(Icons.refresh),
-                                                label:
-                                                    const Text('Retry Upload'),
+                                                label: Text(AppText.get(
+                                                    'btn_retry_upload')),
                                                 style: ElevatedButton.styleFrom(
                                                   backgroundColor: Colors.blue,
                                                   foregroundColor: Colors.white,
@@ -1644,7 +1640,8 @@ class _UploadScreenState extends State<UploadScreen> {
                                     child: ElevatedButton.icon(
                                       onPressed: () => _pickVideo(),
                                       icon: const Icon(Icons.video_library),
-                                      label: const Text('Select Media'),
+                                      label:
+                                          Text(AppText.get('btn_select_media')),
                                       style: ElevatedButton.styleFrom(
                                         padding: const EdgeInsets.symmetric(
                                           vertical: 16,
@@ -1681,8 +1678,10 @@ class _UploadScreenState extends State<UploadScreen> {
                                               : const Icon(Icons.cloud_upload),
                                           label: Text(
                                             isUploading
-                                                ? 'Uploading...'
-                                                : 'Upload Media',
+                                                ? AppText.get(
+                                                    'upload_uploading')
+                                                : AppText.get(
+                                                    'btn_upload_media'),
                                           ),
                                           style: ElevatedButton.styleFrom(
                                             backgroundColor: Colors.blue,

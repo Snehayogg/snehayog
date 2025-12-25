@@ -115,6 +115,25 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
 
           if (_videos.isNotEmpty) {
             _markCurrentVideoAsSeen();
+
+            // **OPTIMIZED: Immediately preload first video for instant playback**
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && _videos.isNotEmpty) {
+                // Preload current video immediately (don't wait)
+                _preloadVideo(_currentIndex);
+
+                // Try autoplay immediately if screen is visible
+                if (_isScreenVisible || _mainController?.currentIndex == 0) {
+                  Future.delayed(const Duration(milliseconds: 100), () {
+                    if (mounted) {
+                      _tryAutoplayCurrent();
+                    }
+                  });
+                }
+              }
+            });
+
+            // Also start normal preloading sequence
             _startVideoPreloading();
           } else {
             AppLogger.log('⚠️ VideoFeedAdvanced: No videos after ranking');
@@ -466,6 +485,23 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
                 '✅ VideoFeedAdvanced: Yug tab videos loaded - setting _isScreenVisible = true',
               );
             }
+
+            // **OPTIMIZED: Immediately preload first video for instant playback**
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && _videos.isNotEmpty) {
+                // Preload current video immediately
+                _preloadVideo(_currentIndex);
+
+                // Try autoplay immediately if Yug tab is active
+                if (_mainController?.currentIndex == 0 && _isScreenVisible) {
+                  Future.delayed(const Duration(milliseconds: 150), () {
+                    if (mounted) {
+                      _tryAutoplayCurrent();
+                    }
+                  });
+                }
+              }
+            });
 
             _startVideoPreloading();
             _loadFollowingUsers();

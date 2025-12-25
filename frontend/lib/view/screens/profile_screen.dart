@@ -31,6 +31,8 @@ import 'package:vayu/view/search/video_creator_search_delegate.dart';
 import 'package:vayu/services/earnings_service.dart';
 import 'package:vayu/model/video_model.dart';
 import 'package:vayu/view/screens/creator_revenue_screen.dart';
+import 'package:vayu/utils/app_text.dart';
+import 'package:vayu/view/widget/ads/google_admob_banner_widget.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -123,7 +125,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       AppLogger.log('✅ ProfileScreen: Data already loaded in memory');
       // **FIX: Even if data exists, ensure videos are loaded**
       if (_stateManager.userVideos.isEmpty && !_stateManager.isVideosLoading) {
-        AppLogger.log('🔄 ProfileScreen: Data exists but videos missing, loading videos...');
+        AppLogger.log(
+            '🔄 ProfileScreen: Data exists but videos missing, loading videos...');
         _loadVideos().catchError((e) {
           AppLogger.log('⚠️ ProfileScreen: Error loading videos: $e');
         });
@@ -232,13 +235,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: const Text(
-                          'Unable to refresh profile. Showing cached data.',
+                        content: Text(
+                          AppText.get('error_refresh_cache'),
                         ),
                         backgroundColor: Colors.orange,
                         duration: const Duration(seconds: 3),
                         action: SnackBarAction(
-                          label: 'Retry',
+                          label: AppText.get('btn_retry', fallback: 'Retry'),
                           textColor: Colors.white,
                           onPressed: () => _loadData(forceRefresh: true),
                         ),
@@ -254,12 +257,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
-                        'Failed to refresh: ${_getUserFriendlyError(e)}',
+                        '${AppText.get('error_refresh')}: ${_getUserFriendlyError(e)}',
                       ),
                       backgroundColor: Colors.orange,
                       duration: const Duration(seconds: 4),
                       action: SnackBarAction(
-                        label: 'Retry',
+                        label: AppText.get('btn_retry', fallback: 'Retry'),
                         textColor: Colors.white,
                         onPressed: () => _loadData(forceRefresh: true),
                       ),
@@ -345,7 +348,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               // **OPTIMIZATION: Hide loading state as soon as profile data is ready**
               // Videos will continue loading in background and update UI when ready
               _isLoading.value = false;
-              
+
               // **OPTIMIZATION: Load videos in background without blocking UI (normal load)**
               _loadVideos(forceRefresh: false).catchError((e) {
                 AppLogger.log(
@@ -355,11 +358,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
-                          'Videos failed to load: ${_getUserFriendlyError(e)}'),
+                          '${AppText.get('error_videos_load')}: ${_getUserFriendlyError(e)}'),
                       backgroundColor: Colors.orange,
                       duration: const Duration(seconds: 3),
                       action: SnackBarAction(
-                        label: 'Retry',
+                        label: AppText.get('btn_retry', fallback: 'Retry'),
                         textColor: Colors.white,
                         onPressed: () => _loadVideos(forceRefresh: true),
                       ),
@@ -432,14 +435,14 @@ class _ProfileScreenState extends State<ProfileScreen>
       return 'Network error. Please check your internet connection.';
     } else if (errorString.contains('unauthorized') ||
         errorString.contains('401')) {
-      return 'Please sign in again to view your profile.';
+      return AppText.get('error_sign_in_again');
     } else if (errorString.contains('not found') ||
         errorString.contains('404')) {
-      return 'Profile not found.';
+      return AppText.get('error_profile_not_found');
     } else if (errorString.contains('server') || errorString.contains('500')) {
-      return 'Server error. Please try again later.';
+      return AppText.get('error_server');
     } else {
-      return 'Failed to load profile. Please try again.';
+      return AppText.get('error_load_profile_generic');
     }
   }
 
@@ -473,10 +476,10 @@ class _ProfileScreenState extends State<ProfileScreen>
           // **FIX: Show error instead of silently failing**
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Unable to load videos. Please refresh.'),
+              SnackBar(
+                content: Text(AppText.get('error_load_videos')),
                 backgroundColor: Colors.orange,
-                duration: Duration(seconds: 3),
+                duration: const Duration(seconds: 3),
               ),
             );
           }
@@ -604,7 +607,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           '✅ ProfileScreen: Manual refresh completed - ALL data fetched fresh from server (NO CACHE USED)');
     } catch (e) {
       AppLogger.log('❌ ProfileScreen: Error during refresh: $e');
-      _error.value = 'Failed to refresh: ${e.toString()}';
+      _error.value = '${AppText.get('error_refresh')}: ${e.toString()}';
       _isLoading.value = false;
     }
   }
@@ -782,11 +785,10 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                'Logged out successfully. Your payment details are saved.'),
+          SnackBar(
+            content: Text(AppText.get('profile_logout_success')),
             backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -796,7 +798,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error logging out: $e'),
+            content: Text('${AppText.get('error_logout')}: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -822,10 +824,10 @@ class _ProfileScreenState extends State<ProfileScreen>
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Signed in successfully!'),
+            SnackBar(
+              content: Text(AppText.get('profile_sign_in_success')),
               backgroundColor: Colors.green,
-              duration: Duration(seconds: 2),
+              duration: const Duration(seconds: 2),
             ),
           );
         }
@@ -834,8 +836,8 @@ class _ProfileScreenState extends State<ProfileScreen>
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(
-                  authController.error ?? 'Sign-in failed. Please try again.'),
+              content:
+                  Text(authController.error ?? AppText.get('error_sign_in')),
               backgroundColor: Colors.red,
               duration: const Duration(seconds: 3),
             ),
@@ -847,7 +849,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error signing in: $e'),
+            content: Text('${AppText.get('error_sign_in')}: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -892,8 +894,8 @@ class _ProfileScreenState extends State<ProfileScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Unable to share right now. Please try again.'),
+          SnackBar(
+            content: Text(AppText.get('error_share')),
           ),
         );
       }
@@ -951,10 +953,10 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile updated successfully!'),
+          SnackBar(
+            content: Text(AppText.get('profile_updated_success')),
             backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
+            duration: const Duration(seconds: 2),
           ),
         );
       }
@@ -964,7 +966,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error updating profile: $e'),
+            content: Text('${AppText.get('error_update_profile')}: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -989,7 +991,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('$initialCount videos deleted successfully!'),
+            content: Text(AppText.get('profile_videos_deleted')
+                .replaceAll('{count}', '$initialCount')),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 3),
           ),
@@ -1001,11 +1004,12 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_stateManager.error ?? 'Failed to delete videos'),
+            content:
+                Text(_stateManager.error ?? AppText.get('error_delete_videos')),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 4),
             action: SnackBarAction(
-              label: 'Retry',
+              label: AppText.get('btn_retry', fallback: 'Retry'),
               textColor: Colors.white,
               onPressed: () => _handleDeleteSelectedVideos(),
             ),
@@ -1059,9 +1063,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                     const SizedBox(height: 20),
 
                     // Title
-                    const Text(
-                      'Delete Videos?',
-                      style: TextStyle(
+                    Text(
+                      AppText.get('profile_delete_videos_title'),
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
@@ -1071,7 +1075,9 @@ class _ProfileScreenState extends State<ProfileScreen>
 
                     // Description
                     Text(
-                      'You are about to delete ${_stateManager.selectedVideoIds.length} video${_stateManager.selectedVideoIds.length == 1 ? '' : 's'}. This action cannot be undone.',
+                      AppText.get('profile_delete_videos_desc').replaceAll(
+                          '{count}',
+                          '${_stateManager.selectedVideoIds.length}'),
                       style: const TextStyle(
                         color: Colors.grey,
                         fontSize: 16,
@@ -1096,9 +1102,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 ),
                               ),
                             ),
-                            child: const Text(
-                              'Cancel',
-                              style: TextStyle(
+                            child: Text(
+                              AppText.get('btn_cancel'),
+                              style: const TextStyle(
                                 color: Colors.grey,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w500,
@@ -1119,8 +1125,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                               ),
                               elevation: 0,
                             ),
-                            child: const Text(
-                              'Delete',
+                            child: Text(
+                              AppText.get('btn_delete', fallback: 'Delete'),
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
@@ -1151,13 +1157,13 @@ class _ProfileScreenState extends State<ProfileScreen>
         context: context,
         builder: (BuildContext context) {
           return AlertDialog(
-            title: const Text('Change Profile Photo'),
+            title: Text(AppText.get('profile_change_photo')),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 ListTile(
                   leading: const Icon(Icons.camera_alt),
-                  title: const Text('Take Photo'),
+                  title: Text(AppText.get('profile_take_photo')),
                   onTap: () async {
                     final XFile? photo = await _imagePicker.pickImage(
                         source: ImageSource.camera);
@@ -1166,7 +1172,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 ),
                 ListTile(
                   leading: const Icon(Icons.photo_library),
-                  title: const Text('Choose from Gallery'),
+                  title: Text(AppText.get('profile_choose_gallery')),
                   onTap: () async {
                     final XFile? photo = await _imagePicker.pickImage(
                         source: ImageSource.gallery);
@@ -1182,9 +1188,9 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (image != null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Uploading profile photo...'),
-              duration: Duration(seconds: 1),
+            SnackBar(
+              content: Text(AppText.get('profile_photo_uploading')),
+              duration: const Duration(seconds: 1),
             ),
           );
         }
@@ -1200,8 +1206,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Profile photo updated successfully'),
+            SnackBar(
+              content: Text(AppText.get('profile_photo_updated')),
               backgroundColor: Colors.green,
             ),
           );
@@ -1213,7 +1219,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error changing profile photo: $e'),
+            content: Text('${AppText.get('error_change_photo')}: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -1263,9 +1269,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                 color: Color(0xFF757575),
               ),
               const SizedBox(height: 20),
-              const Text(
-                'Sign in to view your profile',
-                style: TextStyle(
+              Text(
+                AppText.get('profile_sign_in_title'),
+                style: const TextStyle(
                   fontSize: 20,
                   color: Color(0xFF424242),
                   fontWeight: FontWeight.bold,
@@ -1273,9 +1279,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
-              const Text(
-                'You need to sign in with your Google account to access your profile, upload videos, and track your earnings.',
-                style: TextStyle(
+              Text(
+                AppText.get('profile_sign_in_desc'),
+                style: const TextStyle(
                   fontSize: 14,
                   color: Color(0xFF757575),
                 ),
@@ -1288,7 +1294,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   'https://www.google.com/favicon.ico',
                   height: 24,
                 ),
-                label: const Text('Sign in with Google'),
+                label: Text(AppText.get('profile_sign_in_button')),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.grey[700],
                   foregroundColor: Colors.white,
@@ -1466,7 +1472,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         }
       });
     }
-    
+
     // **FIX: Ensure videos are loaded for own profile too if missing**
     if (widget.userId == null &&
         _stateManager.userData != null &&
@@ -1534,7 +1540,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            'Failed to load profile data',
+                            AppText.get('error_load_profile'),
                             style: TextStyle(
                               color: Colors.red[700],
                               fontSize: 18,
@@ -1571,7 +1577,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                                             strokeWidth: 2),
                                       )
                                     : const Icon(Icons.refresh),
-                                label: Text(isLoading ? 'Loading...' : 'Retry'),
+                                label: Text(isLoading
+                                    ? AppText.get('btn_loading',
+                                        fallback: 'Loading...')
+                                    : AppText.get('btn_retry',
+                                        fallback: 'Retry')),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.blue,
                                   foregroundColor: Colors.white,
@@ -1615,7 +1625,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            'Failed to load profile data',
+                            AppText.get('error_load_profile'),
                             style: TextStyle(
                               color: Colors.red[700],
                               fontSize: 18,
@@ -1651,7 +1661,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                                             strokeWidth: 2),
                                       )
                                     : const Icon(Icons.refresh),
-                                label: Text(isLoading ? 'Loading...' : 'Retry'),
+                                label: Text(isLoading
+                                    ? AppText.get('btn_loading',
+                                        fallback: 'Loading...')
+                                    : AppText.get('btn_retry',
+                                        fallback: 'Retry')),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.blue,
                                   foregroundColor: Colors.white,
@@ -1689,6 +1703,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                 physics: const AlwaysScrollableScrollPhysics(),
                 child: Column(
                   children: [
+                    // Google AdMob Banner Ad at the top
+                    const GoogleAdMobBannerWidget(
+                      adUnitId: 'ca-app-pub-2359959043864469/8166031130',
+                    ),
                     ProfileHeaderWidget(
                       stateManager: _stateManager,
                       userId: widget.userId,
@@ -1866,7 +1884,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                     ),
                   )
                 : Text(
-                    stateManager.userData?['name'] ?? 'Profile',
+                    stateManager.userData?['name'] ??
+                        AppText.get('profile_title'),
                     style: const TextStyle(
                       color: Color(0xFF1A1A1A),
                       fontSize: 20,
@@ -1999,9 +2018,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   void _showChatSupportError() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content:
-            Text('Unable to open WhatsApp right now. Please try again later.'),
+      SnackBar(
+        content: Text(AppText.get('error_whatsapp')),
       ),
     );
   }
@@ -2130,8 +2148,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                         color: Color(0xFF10B981),
                         size: 12,
                       ),
-                      label: const Text(
-                        'Refer 2 friends and get full access',
+                      label: Text(
+                        AppText.get('profile_refer_friends'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -2260,9 +2278,9 @@ class _ProfileScreenState extends State<ProfileScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 8),
-            const Text(
-              'Top Earners (Following)',
-              style: TextStyle(
+            Text(
+              AppText.get('profile_top_earners'),
+              style: const TextStyle(
                 color: Color(0xFF111827),
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -2298,7 +2316,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       ),
       child: Center(
         child: Text(
-          'Earning ke liye apna UPI ID add karein',
+          AppText.get('profile_upi_notice'),
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 12,
@@ -2917,9 +2935,9 @@ class _EarningsBottomSheetContentState
               const Icon(Icons.account_balance_wallet,
                   color: Colors.black87, size: 24),
               const SizedBox(width: 12),
-              const Text(
-                'Video Earnings',
-                style: TextStyle(
+              Text(
+                AppText.get('profile_video_earnings'),
+                style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
                   color: Colors.black87,
@@ -2949,12 +2967,12 @@ class _EarningsBottomSheetContentState
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : widget.videos.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Padding(
-                        padding: EdgeInsets.all(32.0),
+                        padding: const EdgeInsets.all(32.0),
                         child: Text(
-                          'No videos found',
-                          style: TextStyle(
+                          AppText.get('profile_no_videos'),
+                          style: const TextStyle(
                             fontSize: 16,
                             color: Colors.grey,
                           ),

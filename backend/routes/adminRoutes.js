@@ -456,14 +456,19 @@ router.get('/creators', requireAdminDashboardKey, async (req, res) => {
       };
     });
 
-    creatorSummaries.sort(
+    // **FIX: Filter creators to only include those with at least 1 video**
+    const creatorsWithVideos = creatorSummaries.filter(
+      (creator) => creator.totalVideos > 0
+    );
+
+    creatorsWithVideos.sort(
       (a, b) => (b.creatorRevenueINR || 0) - (a.creatorRevenueINR || 0)
     );
 
     res.json({
       success: true,
-      count: creatorSummaries.length,
-      creators: creatorSummaries
+      count: creatorsWithVideos.length,
+      creators: creatorsWithVideos
     });
   } catch (error) {
     console.error('❌ Error loading creator summaries:', error);

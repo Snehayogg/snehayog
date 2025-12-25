@@ -29,20 +29,24 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/core/managers/shared_video_controller_pool.dart';
 import 'package:vayu/core/managers/video_controller_manager.dart';
 import 'package:vayu/utils/app_logger.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:vayu/services/notification_service.dart';
+import 'package:vayu/services/app_remote_config_service.dart';
+// **OPTIMIZED: Firebase and notifications disabled (not active currently)**
+// TODO: Uncomment when notifications are needed
+// import 'package:firebase_core/firebase_core.dart';
+// import 'package:vayu/services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase and notifications
-  try {
-    await Firebase.initializeApp();
-    final notificationService = NotificationService();
-    unawaited(notificationService.initialize()); // Initialize in background
-  } catch (e) {
-    print('⚠️ Error initializing Firebase: $e');
-  }
+  // **OPTIMIZED: Firebase and notifications disabled (not active currently)**
+  // TODO: Uncomment when notifications are needed
+  // try {
+  //   await Firebase.initializeApp();
+  //   final notificationService = NotificationService();
+  //   unawaited(notificationService.initialize()); // Initialize in background
+  // } catch (e) {
+  //   print('⚠️ Error initializing Firebase: $e');
+  // }
 
   // **OPTIMIZED: Start app immediately, initialize services in background**
   runApp(
@@ -95,6 +99,13 @@ void _checkServerConnectivity() async {
 /// **OPTIMIZED: Initialize heavy services in background**
 void _initializeServicesInBackground() async {
   try {
+    // **NEW: Initialize backend-driven config first (non-blocking)**
+    unawaited(AppRemoteConfigService.instance.initialize().then((_) {
+      print('✅ AppRemoteConfigService initialized - Backend-driven texts enabled');
+    }).catchError((e) {
+      print('⚠️ AppRemoteConfigService initialization failed (using defaults): $e');
+    }));
+
     // Initialize AdMob in background
     await MobileAds.instance.initialize();
     ErrorLoggingService.logServiceInitialization('AdMob');
@@ -132,23 +143,38 @@ Future<void> _splashPrefetch() async {
       } catch (_) {}
     }());
 
-    // Cache the first page in SmartCacheManager for instant loading
-    const cacheKey = 'videos_page_1_yog';
-    final result = await cacheManager.get<Map<String, dynamic>>(
-      cacheKey,
+    // **ENHANCED: Cache Yug tab videos (most common tab) for instant loading**
+    const yogCacheKey = 'videos_page_1_yog';
+    final yogResult = await cacheManager.get<Map<String, dynamic>>(
+      yogCacheKey,
       fetchFn: () async {
-        print('🚀 SplashPrefetch: Fetching first page for cache');
+        print('🚀 SplashPrefetch: Fetching Yug videos for cache');
         return await videoService.getVideos(
-            page: 1, limit: 6, videoType: 'yog');
+            page: 1,
+            limit: 10,
+            videoType: 'yog'); // Increased limit for better cache
       },
       cacheType: 'videos',
       maxAge: const Duration(minutes: 15), // Cache for 15 minutes
     );
 
-    if (result != null) {
+    if (yogResult != null) {
       final List<VideoModel> videos =
-          (result['videos'] as List<dynamic>).cast<VideoModel>();
-      print('✅ SplashPrefetch: Cached ${videos.length} videos');
+          (yogResult['videos'] as List<dynamic>).cast<VideoModel>();
+      print('✅ SplashPrefetch: Cached ${videos.length} Yug videos');
+
+      // **NEW: Pre-initialize first video controller for instant playback**
+      if (videos.isNotEmpty) {
+        try {
+          final firstVideo = videos.first;
+          final controllerManager = VideoControllerManager();
+          // Pre-create controller for faster first video load
+          unawaited(controllerManager.preloadController(0, firstVideo));
+          print('🚀 SplashPrefetch: Pre-initialized first video controller');
+        } catch (e) {
+          print('⚠️ SplashPrefetch: Failed to pre-initialize controller: $e');
+        }
+      }
 
       // Warm-up manifests for first few HLS URLs
       for (final video in videos.take(3)) {
@@ -162,6 +188,25 @@ Future<void> _splashPrefetch() async {
         }
       }
     }
+
+    // **OPTIONAL: Also preload Vayu tab videos in background (non-blocking)**
+    unawaited(() async {
+      try {
+        const vayuCacheKey = 'videos_page_1_vayu';
+        await cacheManager.get<Map<String, dynamic>>(
+          vayuCacheKey,
+          fetchFn: () async {
+            return await videoService.getVideos(
+                page: 1, limit: 10, videoType: 'vayu');
+          },
+          cacheType: 'videos',
+          maxAge: const Duration(minutes: 15),
+        );
+        print('✅ SplashPrefetch: Cached Vayu videos in background');
+      } catch (e) {
+        print('⚠️ SplashPrefetch: Vayu cache failed (non-critical): $e');
+      }
+    }());
   } catch (e) {
     print('⚠️ SplashPrefetch failed: $e');
     // Best-effort prefetch; ignore failures
@@ -323,34 +368,36 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       }
     }
 
-    // Handle payment callback
-    if (uri.scheme == 'snehayog' && uri.host == 'payment-callback') {
-      final orderId = uri.queryParameters['razorpay_order_id'] ?? '';
-      final paymentId = uri.queryParameters['razorpay_payment_id'] ?? '';
-      final signature = uri.queryParameters['razorpay_signature'] ?? '';
+    // **OPTIMIZED: Razorpay payment callback disabled (not in use)**
+    // TODO: Uncomment when payment system is active
+    // if (uri.scheme == 'snehayog' && uri.host == 'payment-callback') {
+    //   final orderId = uri.queryParameters['razorpay_order_id'] ?? '';
+    //   final paymentId = uri.queryParameters['razorpay_payment_id'] ?? '';
+    //   final signature = uri.queryParameters['razorpay_signature'] ?? '';
+    //
+    //   if (orderId.isEmpty || paymentId.isEmpty || signature.isEmpty) {
+    //     if (mounted) {
+    //       ScaffoldMessenger.of(context).showSnackBar(
+    //         const SnackBar(
+    //           content: Text('Payment callback missing data'),
+    //           backgroundColor: Colors.red,
+    //         ),
+    //       );
+    //     }
+    //     return;
+    //   }
+    //
+    //   // Razorpay payment verification removed - service not available
+    //   if (mounted) {
+    //     ScaffoldMessenger.of(context).showSnackBar(
+    //       const SnackBar(
+    //         content: Text('Payment verification not available'),
+    //         backgroundColor: Colors.orange,
+    //       ),
+    //     );
+    //   }
+    // }
 
-      if (orderId.isEmpty || paymentId.isEmpty || signature.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Payment callback missing data'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
-
-      // Razorpay payment verification removed - service not available
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Payment verification not available'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-    }
     // Handle video deep links
     else if ((uri.scheme == 'snehayog' && uri.host == 'video') ||
         (uri.scheme == 'https' &&

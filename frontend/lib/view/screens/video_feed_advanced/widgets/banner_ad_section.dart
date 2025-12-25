@@ -33,40 +33,27 @@ class _BannerAdSectionState extends State<BannerAdSection> {
   Widget build(BuildContext context) {
     // **FIXED: Try Google AdMob first if configured and enabled, then fallback to custom ads**
     if (widget.useGoogleAds && AdMobConfig.isConfigured() && !_admobAdFailed) {
-      return Positioned(
-        top: 0,
-        left: 0,
-        right: 0,
-        child: GoogleAdMobBannerWidget(
-          adSize: AdSize.banner,
-          onAdLoaded: () {
-            AppLogger.log(
-                '✅ BannerAdSection: Google AdMob ad loaded successfully');
-            if (mounted) {
-              setState(() {
-                _admobAdFailed = false; // Reset failed state
-              });
-            }
-          },
-          onAdFailed: () {
-            AppLogger.log(
-                '⚠️ BannerAdSection: Google AdMob ad failed, falling back to custom banner');
-            // Mark AdMob as failed and show custom ad as fallback
-            if (mounted) {
-              setState(() {
-                _admobAdFailed = true;
-              });
-
-              // After marking failed, rebuild to show custom ad if available
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted) {
-                  setState(() {});
-                }
-              });
-            }
-          },
-        ),
-      );
+      final adUnitId = AdMobConfig.getBannerAdUnitId();
+      if (adUnitId == null || adUnitId.isEmpty) {
+        // If ad unit ID is not available, fallback to custom ads
+        AppLogger.log(
+            '⚠️ BannerAdSection: AdMob configured but ad unit ID not available');
+        if (mounted) {
+          setState(() {
+            _admobAdFailed = true;
+          });
+        }
+      } else {
+        return Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: GoogleAdMobBannerWidget(
+            adUnitId: adUnitId,
+            adSize: AdSize.banner,
+          ),
+        );
+      }
     }
 
     // **FALLBACK: Show custom banner ads if AdMob not configured, disabled, or failed**

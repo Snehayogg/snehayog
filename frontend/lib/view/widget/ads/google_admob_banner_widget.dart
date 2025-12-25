@@ -1,33 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:vayu/services/admob_service.dart';
-import 'package:vayu/config/admob_config.dart';
 import 'package:vayu/utils/app_logger.dart';
 
-/// Google AdMob Banner Widget
-/// Displays real Google AdMob banner ads in place of custom banner ads
-/// Follows modular approach for better maintainability
+/// Widget to display Google AdMob banner ad
 class GoogleAdMobBannerWidget extends StatefulWidget {
-  final String? adUnitId;
-  final AdSize adSize;
-  final VoidCallback? onAdLoaded;
-  final VoidCallback? onAdFailed;
-  final double? width;
-  final double? height;
-  final EdgeInsets? margin;
-  final BorderRadius? borderRadius;
+  final String adUnitId;
+  final AdSize? adSize;
 
   const GoogleAdMobBannerWidget({
-    Key? key,
-    this.adUnitId,
-    this.adSize = AdSize.banner,
-    this.onAdLoaded,
-    this.onAdFailed,
-    this.width,
-    this.height,
-    this.margin,
-    this.borderRadius,
-  }) : super(key: key);
+    super.key,
+    required this.adUnitId,
+    this.adSize,
+  });
 
   @override
   State<GoogleAdMobBannerWidget> createState() =>
@@ -37,6 +22,7 @@ class GoogleAdMobBannerWidget extends StatefulWidget {
 class _GoogleAdMobBannerWidgetState extends State<GoogleAdMobBannerWidget> {
   BannerAd? _bannerAd;
   bool _isAdLoaded = false;
+  bool _isAdLoading = false;
 
   @override
   void initState() {
@@ -45,72 +31,63 @@ class _GoogleAdMobBannerWidgetState extends State<GoogleAdMobBannerWidget> {
   }
 
   Future<void> _loadAd() async {
+    if (_isAdLoading) return;
+
     try {
-      // Get ad unit ID from config or widget parameter
-      final adUnitId = widget.adUnitId ?? AdMobConfig.getBannerAdUnitId();
+      _isAdLoading = true;
 
-      if (adUnitId == null || adUnitId.isEmpty) {
-        AppLogger.log('⚠️ GoogleAdMobBannerWidget: No ad unit ID available');
-        _handleAdFailed();
-        return;
+      // Initialize AdMob service if not already initialized
+      final admobService = AdMobService();
+      if (!admobService.isInitialized) {
+        await admobService.initialize();
       }
 
-      final adMobService = AdMobService();
-
-      // Ensure AdMob is initialized
-      if (!adMobService.isInitialized) {
-        await adMobService.initialize();
-      }
-
-      // Create BannerAd with listener directly (listener is final, must be set in constructor)
+      // Create banner ad directly with listener
       _bannerAd = BannerAd(
-        adUnitId: adUnitId,
-        size: widget.adSize,
+        adUnitId: widget.adUnitId,
+        size: widget.adSize ?? AdSize.banner,
         request: const AdRequest(),
         listener: BannerAdListener(
           onAdLoaded: (ad) {
-            AppLogger.log('✅ GoogleAdMobBannerWidget: Ad loaded successfully');
+            AppLogger.log('✅ GoogleAdMobBannerWidget: Banner ad loaded');
             if (mounted) {
               setState(() {
                 _isAdLoaded = true;
+                _isAdLoading = false;
               });
-              widget.onAdLoaded?.call();
             }
           },
           onAdFailedToLoad: (ad, error) {
             AppLogger.log(
-                '❌ GoogleAdMobBannerWidget: Failed to load ad: ${error.message}');
+                '❌ GoogleAdMobBannerWidget: Banner ad failed to load: ${error.message}');
             ad.dispose();
-            _bannerAd = null;
             if (mounted) {
-              _handleAdFailed();
+              setState(() {
+                _isAdLoaded = false;
+                _isAdLoading = false;
+                _bannerAd = null;
+              });
             }
           },
           onAdOpened: (ad) {
-            AppLogger.log('✅ GoogleAdMobBannerWidget: Ad opened');
+            AppLogger.log('✅ GoogleAdMobBannerWidget: Banner ad opened');
           },
           onAdClosed: (ad) {
-            AppLogger.log('✅ GoogleAdMobBannerWidget: Ad closed');
-          },
-          onAdImpression: (ad) {
-            AppLogger.log('📊 GoogleAdMobBannerWidget: Ad impression recorded');
+            AppLogger.log('✅ GoogleAdMobBannerWidget: Banner ad closed');
           },
         ),
       );
 
-      await _bannerAd?.load();
+      // Load the ad
+      await _bannerAd!.load();
     } catch (e) {
       AppLogger.log('❌ GoogleAdMobBannerWidget: Error loading ad: $e');
-      _handleAdFailed();
-    }
-  }
-
-  void _handleAdFailed() {
-    if (mounted) {
-      setState(() {
-        _isAdLoaded = false;
-      });
-      widget.onAdFailed?.call();
+      if (mounted) {
+        setState(() {
+          _isAdLoading = false;
+          _bannerAd = null;
+        });
+      }
     }
   }
 
@@ -122,34 +99,21 @@ class _GoogleAdMobBannerWidgetState extends State<GoogleAdMobBannerWidget> {
 
   @override
   Widget build(BuildContext context) {
-    // Show nothing if ad failed to load or not loaded yet
+    // Only show ad if it's loaded
     if (!_isAdLoaded || _bannerAd == null) {
       return const SizedBox.shrink();
     }
 
-    // Match the styling of current banner ad
-    final width = widget.width ?? MediaQuery.of(context).size.width * 0.8;
-    final height = widget.height ?? widget.adSize.height.toDouble();
-    final margin = widget.margin ?? const EdgeInsets.only(top: 1, left: 16);
-    final borderRadius = widget.borderRadius ?? BorderRadius.circular(12);
+    // Get the size of the ad
+    final adSize = _bannerAd!.size;
+    final height = adSize.height.toDouble();
 
-    return SafeArea(
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Container(
-          width: width,
-          height: height,
-          margin: margin,
-          decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.6),
-            borderRadius: borderRadius,
-          ),
-          child: ClipRRect(
-            borderRadius: borderRadius,
-            child: AdWidget(ad: _bannerAd!),
-          ),
-        ),
-      ),
+    return Container(
+      alignment: Alignment.center,
+      width: double.infinity,
+      height: height,
+      color: Colors.transparent,
+      child: AdWidget(ad: _bannerAd!),
     );
   }
 }

@@ -18,6 +18,7 @@ import 'package:vayu/model/ad_model.dart';
 import 'package:vayu/controller/main_controller.dart';
 import 'dart:io';
 import 'package:vayu/utils/app_logger.dart';
+import 'package:vayu/utils/app_text.dart';
 
 class CreateAdScreenRefactored extends StatefulWidget {
   const CreateAdScreenRefactored({super.key});
@@ -172,9 +173,9 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
     // Inform user
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ Advertisement created. You can create another one.'),
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: Text(AppText.get('ad_created_success')),
+          duration: const Duration(seconds: 2),
         ),
       );
     }
@@ -404,7 +405,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Create Ad'),
+        title: Text(AppText.get('ad_create_title')),
         centerTitle: true,
         elevation: 0,
       ),
@@ -459,9 +460,9 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
         children: [
           const Icon(Icons.lock_outline, size: 64, color: Colors.grey),
           const SizedBox(height: 16),
-          const Text(
-            'Sign in to create ads',
-            style: TextStyle(fontSize: 18, color: Colors.grey),
+          Text(
+            AppText.get('ad_sign_in_to_create'),
+            style: const TextStyle(fontSize: 18, color: Colors.grey),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
@@ -477,7 +478,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
               }
               setState(() {});
             },
-            child: const Text('Sign In with Google'),
+            child: Text(AppText.get('btn_sign_in_google')),
           ),
         ],
       ),
@@ -562,8 +563,8 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                         const SizedBox(width: 8),
                         Text(
                           _selectedAdType == 'banner'
-                              ? 'Banner Details'
-                              : 'Ad Details',
+                              ? AppText.get('ad_banner_details')
+                              : AppText.get('ad_details'),
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -591,8 +592,8 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                           Expanded(
                             child: Text(
                               _selectedAdType == 'banner'
-                                  ? 'Tip: Keep headline short (4-6 words) and use a clear, bright image'
-                                  : 'Tip: Use engaging visuals and a clear call-to-action',
+                                  ? AppText.get('ad_tip_banner')
+                                  : AppText.get('ad_tip_general'),
                               style: TextStyle(
                                 fontSize: 11,
                                 color: Colors.amber.shade900,
@@ -632,23 +633,22 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
+                    Row(
                       children: [
-                        Icon(Icons.attach_money, color: Colors.green),
-                        SizedBox(width: 8),
+                        const Icon(Icons.attach_money, color: Colors.green),
+                        const SizedBox(width: 8),
                         Text(
-                          'Budget & Duration',
-                          style: TextStyle(
+                          AppText.get('ad_budget_duration'),
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        Spacer(),
+                        const Spacer(),
                         // **NEW: Helpful tip icon**
                         Tooltip(
-                          message:
-                              'Recommended: ₹300/day for 14 days gives you good reach',
-                          child: Icon(
+                          message: AppText.get('ad_budget_recommended'),
+                          child: const Icon(
                             Icons.help_outline,
                             size: 20,
                             color: Colors.grey,
@@ -664,11 +664,11 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                           child: TextFormField(
                             controller: _budgetController,
                             decoration: InputDecoration(
-                              labelText: 'Daily Budget (₹)',
-                              hintText: '300',
+                              labelText: AppText.get('ad_daily_budget'),
+                              hintText: AppText.get('ad_budget_hint'),
                               prefixText: '₹',
                               border: const OutlineInputBorder(),
-                              helperText: 'Minimum ₹100',
+                              helperText: AppText.get('ad_budget_minimum'),
                               suffixIcon: _budgetController.text == '300.00'
                                   ? Container(
                                       margin: const EdgeInsets.all(8),
@@ -682,10 +682,11 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                                           color: Colors.green.shade200,
                                         ),
                                       ),
-                                      child: const Center(
+                                      child: Center(
                                         child: Text(
-                                          'Recommended',
-                                          style: TextStyle(
+                                          AppText.get(
+                                              'ad_budget_recommended_badge'),
+                                          style: const TextStyle(
                                             fontSize: 10,
                                             color: Colors.green,
                                             fontWeight: FontWeight.w600,
@@ -702,15 +703,15 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                             },
                             validator: (value) {
                               if (value == null || value.trim().isEmpty) {
-                                return 'Budget is required';
+                                return AppText.get('ad_budget_required');
                               }
                               try {
                                 final budget = double.parse(value.trim());
                                 if (budget < 100) {
-                                  return 'Minimum budget is ₹100';
+                                  return AppText.get('ad_budget_minimum_error');
                                 }
                               } catch (e) {
-                                return 'Enter a valid amount';
+                                return AppText.get('ad_budget_invalid');
                               }
                               return null;
                             },
@@ -744,9 +745,9 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                       ),
                     const SizedBox(height: 16),
                     // Quick duration picker
-                    const Text(
-                      'Campaign Duration',
-                      style: TextStyle(fontWeight: FontWeight.w500),
+                    Text(
+                      AppText.get('ad_campaign_duration'),
+                      style: const TextStyle(fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 8),
                     Wrap(
@@ -823,13 +824,13 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                 children: [
                   ListTile(
                     leading: const Icon(Icons.tune, color: Colors.blue),
-                    title: const Text(
-                      'Advanced Settings (Optional)',
-                      style: TextStyle(fontWeight: FontWeight.w600),
+                    title: Text(
+                      AppText.get('ad_advanced_settings'),
+                      style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
-                    subtitle: const Text(
-                      'Smart targeting is enabled by default. Customize if needed.',
-                      style: TextStyle(fontSize: 12),
+                    subtitle: Text(
+                      AppText.get('ad_advanced_settings_desc'),
+                      style: const TextStyle(fontSize: 12),
                     ),
                     trailing: Icon(
                       _showAdvancedSettings
@@ -873,7 +874,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
-                                      'Smart Targeting is ON: Your ad will automatically reach the right audience based on your content.',
+                                      AppText.get('ad_smart_targeting'),
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: Colors.blue.shade800,
@@ -1087,7 +1088,9 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                       )
                     : const Icon(Icons.create),
                 label: Text(
-                  _isLoading ? 'Creating Ad...' : 'Create Advertisement',
+                  _isLoading
+                      ? AppText.get('btn_creating_ad')
+                      : AppText.get('btn_create_ad'),
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -1281,13 +1284,11 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
         if (newAdType == 'banner') {
           if (_selectedVideo != null) {
             _selectedVideo = null;
-            _errorMessage =
-                'Banner ads only support images. Video has been removed.';
+            _errorMessage = AppText.get('ad_banner_only_images');
           }
           if (_selectedImages.isNotEmpty) {
             _selectedImages.clear();
-            _errorMessage =
-                'Banner ads only support single images. Multiple images have been removed.';
+            _errorMessage = AppText.get('ad_banner_single_image');
           }
         } else if (newAdType == 'carousel') {
           if (_selectedImage != null ||
@@ -1296,8 +1297,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
             _selectedImage = null;
             _selectedVideo = null;
             _selectedImages.clear();
-            _errorMessage =
-                'Carousel ads require exclusive selection. Please choose either images OR video.';
+            _errorMessage = AppText.get('ad_carousel_exclusive');
           }
         }
 
@@ -1361,7 +1361,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
           if (_titleController.text.trim().isEmpty) {
             setState(() {
               _isTitleValid = false;
-              _titleError = 'Ad title is required';
+              _titleError = AppText.get('ad_title_required');
             });
           } else {
             // Check word count for banner ads (max 30 words)
@@ -1371,7 +1371,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
               if (wordCount > 30) {
                 setState(() {
                   _isTitleValid = false;
-                  _titleError = 'Banner ad title must be 30 words or less';
+                  _titleError = AppText.get('ad_title_too_long');
                 });
               } else {
                 setState(() {
@@ -1397,7 +1397,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
           } else if (_descriptionController.text.trim().isEmpty) {
             setState(() {
               _isDescriptionValid = false;
-              _descriptionError = 'Description is required';
+              _descriptionError = AppText.get('ad_description_required');
             });
           } else {
             setState(() {
@@ -1410,7 +1410,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
           if (_linkController.text.trim().isEmpty) {
             setState(() {
               _isLinkValid = false;
-              _linkError = 'Link URL is required';
+              _linkError = AppText.get('ad_link_required');
             });
           } else {
             setState(() {
@@ -1423,7 +1423,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
           if (_budgetController.text.trim().isEmpty) {
             setState(() {
               _isBudgetValid = false;
-              _budgetError = 'Budget amount is required';
+              _budgetError = AppText.get('ad_budget_required');
             });
           } else {
             try {
@@ -1431,12 +1431,12 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
               if (budget <= 0) {
                 setState(() {
                   _isBudgetValid = false;
-                  _budgetError = 'Budget must be greater than ₹0';
+                  _budgetError = AppText.get('ad_budget_positive');
                 });
               } else if (budget < 100) {
                 setState(() {
                   _isBudgetValid = false;
-                  _budgetError = 'Minimum budget is ₹100';
+                  _budgetError = AppText.get('ad_budget_minimum_error');
                 });
               } else {
                 setState(() {
@@ -1447,8 +1447,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
             } catch (e) {
               setState(() {
                 _isBudgetValid = false;
-                _budgetError =
-                    'Please enter a valid budget amount (e.g., 100.00)';
+                _budgetError = AppText.get('ad_budget_invalid');
               });
             }
           }
@@ -1457,16 +1456,14 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
           if (_selectedAdType == 'banner' && _selectedImage == null) {
             setState(() {
               _isMediaValid = false;
-              _mediaError =
-                  'Banner ads require an image. Please select an image.';
+              _mediaError = AppText.get('ad_banner_image_required');
             });
           } else if (_selectedAdType == 'carousel' &&
               _selectedImages.isEmpty &&
               _selectedVideo == null) {
             setState(() {
               _isMediaValid = false;
-              _mediaError =
-                  'Carousel ads require either images or video. Please select media.';
+              _mediaError = AppText.get('ad_carousel_media_required');
             });
           } else {
             setState(() {
@@ -1485,8 +1482,8 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
     // Show title for all ad types (including banner)
     validationItems.add({
       'label': _selectedAdType == 'banner'
-          ? 'Banner Title (max 30 words)'
-          : 'Ad Title',
+          ? AppText.get('ad_banner_title_max')
+          : AppText.get('ad_title'),
       'isValid': _titleController.text.trim().isNotEmpty &&
           (_selectedAdType != 'banner' ||
               _titleController.text.trim().split(RegExp(r'\s+')).length <= 30),
@@ -1496,7 +1493,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
     // Only show description for non-banner ads
     if (_selectedAdType != 'banner') {
       validationItems.add({
-        'label': 'Description',
+        'label': AppText.get('ad_description'),
         'isValid': _descriptionController.text.trim().isNotEmpty,
         'icon': Icons.description,
       });
@@ -1504,7 +1501,9 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
 
     // Link URL is required for all ad types
     validationItems.add({
-      'label': _selectedAdType == 'banner' ? 'Destination URL' : 'Link URL',
+      'label': _selectedAdType == 'banner'
+          ? AppText.get('ad_destination_url')
+          : AppText.get('ad_link_url'),
       'isValid': _linkController.text.trim().isNotEmpty,
       'icon': Icons.link,
     });
@@ -1512,18 +1511,18 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
     // Budget, dates, and media are required for all ad types
     validationItems.addAll([
       {
-        'label': 'Budget (₹100+)',
+        'label': AppText.get('ad_budget_min'),
         'isValid': _budgetController.text.trim().isNotEmpty &&
             (double.tryParse(_budgetController.text.trim()) ?? 0) >= 100,
         'icon': Icons.attach_money,
       },
       {
-        'label': 'Campaign Dates',
+        'label': AppText.get('ad_campaign_dates'),
         'isValid': _startDate != null && _endDate != null,
         'icon': Icons.calendar_today,
       },
       {
-        'label': 'Media File',
+        'label': AppText.get('ad_media_file'),
         'isValid': _isMediaValid,
         'icon': _selectedAdType == 'banner' ? Icons.image : Icons.video_library,
       },
@@ -1535,9 +1534,9 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Required Fields Checklist',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            Text(
+              AppText.get('ad_required_fields'),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             ...validationItems.map(
@@ -1613,19 +1612,19 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
     try {
       // Step 1: Upload media files
       setState(() {
-        _errorMessage = '📤 Uploading media files...';
+        _errorMessage = AppText.get('ad_error_uploading_media');
       });
 
       final mediaUrls = await _uploadMediaFiles();
       if (mediaUrls.isEmpty) {
         throw Exception(
-          '❌ Media upload failed - no URLs returned. Please try selecting different media files.',
+          AppText.get('ad_error_media_failed'),
         );
       }
 
       // Step 2: Create ad with payment
       setState(() {
-        _errorMessage = '💳 Creating advertisement...';
+        _errorMessage = AppText.get('ad_error_creating');
       });
 
       final result = await _adService.createAdWithPayment(
@@ -1681,7 +1680,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
 
       if (result['success']) {
         setState(() {
-          _successMessage = '✅ Advertisement created successfully!';
+          _successMessage = AppText.get('success_ad_created_full');
           _errorMessage = null;
         });
 
@@ -1700,7 +1699,12 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
         );
       } else {
         throw Exception(
-          '❌ Failed to create ad: ${result['message'] ?? 'Unknown error occurred. Please try again.'}',
+          AppText.get('ad_error_failed',
+                  fallback: '❌ Failed to create ad: {message}')
+              .replaceAll(
+                  '{message}',
+                  result['message'] ??
+                      'Unknown error occurred. Please try again.'),
         );
       }
     } catch (e) {
@@ -1709,30 +1713,25 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
       // Provide more specific error messages based on common issues
       if (errorMessage.contains('network') ||
           errorMessage.contains('connection')) {
-        errorMessage =
-            '❌ Network error: Please check your internet connection and try again.';
+        errorMessage = AppText.get('ad_error_network');
       } else if (errorMessage.contains('upload') ||
           errorMessage.contains('media')) {
-        errorMessage =
-            '❌ Media upload failed: Please try with different image/video files.';
+        errorMessage = AppText.get('ad_error_media_upload');
       } else if (errorMessage.contains('payment') ||
           errorMessage.contains('billing')) {
-        errorMessage =
-            '❌ Payment error: Please check your payment details and try again.';
+        errorMessage = AppText.get('ad_error_payment');
       } else if (errorMessage.contains('validation') ||
           errorMessage.contains('required')) {
-        errorMessage =
-            '❌ Validation error: Please check all required fields are filled correctly.';
+        errorMessage = AppText.get('ad_error_validation');
       } else if (errorMessage.contains('server') ||
           errorMessage.contains('500')) {
-        errorMessage = '❌ Server error: Please try again in a few moments.';
+        errorMessage = AppText.get('ad_error_server');
       } else if (errorMessage.contains('unauthorized') ||
           errorMessage.contains('401')) {
-        errorMessage = '❌ Authentication error: Please sign in again.';
+        errorMessage = AppText.get('ad_error_auth');
       } else if (errorMessage.contains('forbidden') ||
           errorMessage.contains('403')) {
-        errorMessage =
-            '❌ Access denied: You do not have permission to create ads.';
+        errorMessage = AppText.get('ad_error_forbidden');
       }
 
       setState(() {
@@ -1756,7 +1755,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
     if (_titleController.text.trim().isEmpty) {
       setState(() {
         _isTitleValid = false;
-        _titleError = 'Ad title is required';
+        _titleError = AppText.get('ad_title_required');
         isValid = false;
       });
     } else {
@@ -1767,7 +1766,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
         if (wordCount > 30) {
           setState(() {
             _isTitleValid = false;
-            _titleError = 'Banner ad title must be 30 words or less';
+            _titleError = AppText.get('ad_title_too_long');
             isValid = false;
           });
         } else {
@@ -1789,7 +1788,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
       if (_descriptionController.text.trim().isEmpty) {
         setState(() {
           _isDescriptionValid = false;
-          _descriptionError = 'Description is required';
+          _descriptionError = AppText.get('ad_description_required');
           isValid = false;
         });
       } else {
@@ -1809,7 +1808,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
     if (_linkController.text.trim().isEmpty) {
       setState(() {
         _isLinkValid = false;
-        _linkError = 'Link URL is required';
+        _linkError = AppText.get('ad_link_required');
         isValid = false;
       });
     } else {
@@ -1823,7 +1822,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
     if (_budgetController.text.trim().isEmpty) {
       setState(() {
         _isBudgetValid = false;
-        _budgetError = 'Budget amount is required';
+        _budgetError = AppText.get('ad_budget_required');
         isValid = false;
       });
     } else {
@@ -1833,13 +1832,13 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
         if (budget <= 0) {
           setState(() {
             _isBudgetValid = false;
-            _budgetError = 'Budget must be greater than ₹0';
+            _budgetError = AppText.get('ad_budget_positive');
             isValid = false;
           });
         } else if (budget < 100) {
           setState(() {
             _isBudgetValid = false;
-            _budgetError = 'Minimum budget is ₹100';
+            _budgetError = AppText.get('ad_budget_minimum_error');
             isValid = false;
           });
         } else {
@@ -1851,7 +1850,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
       } catch (e) {
         setState(() {
           _isBudgetValid = false;
-          _budgetError = 'Please enter a valid budget amount (e.g., 100.00)';
+          _budgetError = AppText.get('ad_budget_invalid');
           isValid = false;
         });
       }
@@ -1861,7 +1860,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
     if (_startDate == null || _endDate == null) {
       setState(() {
         _isDateValid = false;
-        _dateError = 'Please select campaign start and end dates';
+        _dateError = AppText.get('ad_dates_required');
         isValid = false;
       });
     } else {
@@ -1869,7 +1868,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
       if (_endDate!.isBefore(_startDate!)) {
         setState(() {
           _isDateValid = false;
-          _dateError = 'End date must be after start date';
+          _dateError = AppText.get('ad_end_after_start');
           isValid = false;
         });
       } else if (_startDate!.isBefore(
@@ -1877,7 +1876,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
       )) {
         setState(() {
           _isDateValid = false;
-          _dateError = 'Start date cannot be in the past';
+          _dateError = AppText.get('ad_start_not_past');
           isValid = false;
         });
       } else {
@@ -1892,7 +1891,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
     if (_selectedAdType == 'banner' && _selectedImage == null) {
       setState(() {
         _isMediaValid = false;
-        _mediaError = 'Banner ads require an image. Please select an image.';
+        _mediaError = AppText.get('ad_banner_image_required');
         isValid = false;
       });
     } else if (_selectedAdType == 'carousel' &&
@@ -1900,8 +1899,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
         _selectedVideo == null) {
       setState(() {
         _isMediaValid = false;
-        _mediaError =
-            'Carousel ads require either images or video. Please select media.';
+        _mediaError = AppText.get('ad_carousel_media_required');
         isValid = false;
       });
     } else {
@@ -1915,7 +1913,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
     if (_minAge != null && _maxAge != null && _minAge! > _maxAge!) {
       setState(() {
         _isDateValid = false;
-        _dateError = 'Minimum age cannot be greater than maximum age';
+        _dateError = AppText.get('ad_age_range_invalid');
         isValid = false;
       });
     }

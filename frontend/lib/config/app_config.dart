@@ -236,7 +236,6 @@ class AppConfig {
   static const Duration retryDelay = Duration(seconds: 2);
 
   // Ad configuration
-  static const int maxAdBudget = 1000; // Maximum daily budget in dollars
   static const int minAdBudget = 1; // Minimum daily budget in dollars
 
   // **NEW: Fixed CPM for India market**

@@ -12,6 +12,7 @@ import 'package:vayu/services/ad_impression_service.dart';
 import 'package:vayu/services/earnings_service.dart';
 import 'package:vayu/services/logout_service.dart';
 import 'package:vayu/utils/app_logger.dart';
+import 'package:vayu/utils/app_text.dart';
 
 // Lightweight holder for per-video stats used in the breakdown list
 class _VideoStats {
@@ -195,18 +196,17 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
       AppLogger.log('❌ CreatorRevenueScreen: Error loading revenue data: $e');
 
       // **FIXED: Better error handling for authentication errors**
-      String errorMessage = 'Error loading revenue data: $e';
+      String errorMessage = AppText.get('error_load_revenue',
+              fallback: 'Error loading revenue data: {error}')
+          .replaceAll('{error}', e.toString());
       if (e.toString().contains('401') ||
           e.toString().contains('Unauthorized')) {
-        errorMessage =
-            'Please sign in again to view your revenue. Your session may have expired.';
+        errorMessage = AppText.get('error_revenue_sign_in');
       } else if (e.toString().contains('Authentication token not found') ||
           e.toString().contains('token not found')) {
-        errorMessage =
-            'Authentication token not found. Please sign in again to view your revenue.';
+        errorMessage = AppText.get('error_revenue_token');
       } else if (e.toString().contains('Failed to fetch user videos')) {
-        errorMessage =
-            'Unable to load your videos. Please check your connection and try again.';
+        errorMessage = AppText.get('error_revenue_videos');
       }
 
       setState(() {
@@ -488,7 +488,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Creator Revenue'),
+        title: Text(AppText.get('revenue_title')),
         centerTitle: true,
         elevation: 0,
         actions: [
@@ -524,9 +524,9 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
             color: Colors.grey,
           ),
           const SizedBox(height: 16),
-          const Text(
-            'Please sign in to view your revenue',
-            style: TextStyle(fontSize: 18, color: Colors.grey),
+          Text(
+            AppText.get('revenue_sign_in_to_view'),
+            style: const TextStyle(fontSize: 18, color: Colors.grey),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
@@ -544,7 +544,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                 }
               }
             },
-            child: const Text('Sign In with Google'),
+            child: Text(AppText.get('btn_sign_in_google')),
           ),
         ],
       ),
@@ -571,7 +571,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () => _loadRevenueData(forceRefresh: true),
-              child: const Text('Retry'),
+              child: Text(AppText.get('btn_retry')),
             ),
           ],
         ),
@@ -579,8 +579,8 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     }
 
     if (_revenueData == null) {
-      return const Center(
-        child: Text('No revenue data available'),
+      return Center(
+        child: Text(AppText.get('error_load_profile_generic')),
       );
     }
 
@@ -658,9 +658,9 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            const Text(
-              'Creator Earnings',
-              style: TextStyle(
+            Text(
+              AppText.get('revenue_creator_earnings'),
+              style: const TextStyle(
                 fontSize: 16,
                 color: Colors.grey,
               ),
@@ -679,7 +679,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
               children: [
                 Expanded(
                   child: _buildRevenueStat(
-                    'Gross Revenue',
+                    AppText.get('revenue_gross_revenue'),
                     '₹${grossRevenue.toStringAsFixed(2)}',
                     Icons.receipt_long,
                     Colors.grey[700]!,
@@ -687,7 +687,9 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                 ),
                 Expanded(
                   child: _buildRevenueStat(
-                    'Platform Fee ($platformSharePercent%)',
+                    AppText.get('revenue_platform_fee',
+                            fallback: 'Platform Fee ({percent}%)')
+                        .replaceAll('{percent}', platformSharePercent),
                     '₹${calculatedPlatformFee.toStringAsFixed(2)}',
                     Icons.account_balance,
                     Colors.red,
@@ -700,7 +702,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
               children: [
                 Expanded(
                   child: _buildRevenueStat(
-                    'This Month',
+                    AppText.get('revenue_this_month'),
                     '₹${thisMonth.toStringAsFixed(2)}',
                     Icons.trending_up,
                     Colors.grey[700]!, // Changed from Colors.blue
@@ -708,7 +710,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                 ),
                 Expanded(
                   child: _buildRevenueStat(
-                    'Last Month',
+                    AppText.get('revenue_last_month'),
                     '₹${lastMonth.toStringAsFixed(2)}',
                     Icons.calendar_today,
                     Colors.orange,
@@ -762,9 +764,9 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'View Cycle Summary',
-                  style: TextStyle(
+                Text(
+                  AppText.get('revenue_view_cycle'),
+                  style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
@@ -780,7 +782,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
               const Center(child: CircularProgressIndicator())
             else ...[
               Text(
-                'Current Cycle Views',
+                AppText.get('revenue_current_cycle_views'),
                 style: TextStyle(
                   fontSize: 14,
                   color: Colors.grey[600],
@@ -797,15 +799,15 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
               ),
               const SizedBox(height: 20),
               _buildAnalyticsRow(
-                'All-time Views',
+                AppText.get('revenue_all_time_views'),
                 _allTimeViews.toString(),
               ),
               _buildAnalyticsRow(
-                'Cycle Period',
+                AppText.get('revenue_cycle_period'),
                 '${_formatDate(cycleStart)} → ${_formatDate(cycleEnd)}',
               ),
               _buildAnalyticsRow(
-                'Next Reset',
+                AppText.get('revenue_next_reset'),
                 _formatDate(nextReset),
               ),
             ],
@@ -876,7 +878,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                       const SizedBox(width: 8),
                       Flexible(
                         child: Text(
-                          'Previous Month Earnings',
+                          AppText.get('revenue_previous_month'),
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -921,7 +923,9 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'No earnings in $lastMonthName',
+                        AppText.get('revenue_no_earnings',
+                                fallback: 'No earnings in {month}')
+                            .replaceAll('{month}', lastMonthName),
                         style: TextStyle(
                           fontSize: 16,
                           color: Colors.grey[600],
@@ -930,7 +934,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Start creating content to earn!',
+                        AppText.get('revenue_start_creating'),
                         style: TextStyle(
                           fontSize: 14,
                           color: Colors.grey[500],
@@ -955,7 +959,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                 child: Column(
                   children: [
                     Text(
-                      'Total Earnings',
+                      AppText.get('revenue_total_earnings'),
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.grey[600],
@@ -979,7 +983,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                 children: [
                   Expanded(
                     child: _buildPreviousMonthStat(
-                      'Gross Revenue',
+                      AppText.get('revenue_gross_revenue'),
                       '₹${lastMonthGross.toStringAsFixed(2)}',
                       Icons.receipt_long,
                     ),
@@ -987,7 +991,9 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: _buildPreviousMonthStat(
-                      'Platform Fee',
+                      AppText.get('revenue_platform_fee',
+                              fallback: 'Platform Fee')
+                          .replaceAll('({percent}%)', ''),
                       '₹${lastMonthPlatformFee.toStringAsFixed(2)}',
                       Icons.account_balance,
                     ),
@@ -1006,7 +1012,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'This Month',
+                      AppText.get('revenue_this_month'),
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.grey[700],
@@ -1111,9 +1117,9 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
           children: [
             Row(
               children: [
-                const Text(
-                  'Revenue Analytics',
-                  style: TextStyle(
+                Text(
+                  AppText.get('revenue_analytics'),
+                  style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
@@ -1127,7 +1133,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    'This Month',
+                    AppText.get('revenue_analytics_this_month'),
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
@@ -1138,18 +1144,28 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
               ],
             ),
             const SizedBox(height: 16),
+            _buildAnalyticsRow(AppText.get('revenue_creator_earnings'),
+                '₹${thisMonth.toStringAsFixed(2)}'),
+            _buildAnalyticsRow(AppText.get('revenue_gross_revenue'),
+                '₹${thisMonthGross.toStringAsFixed(2)}'),
             _buildAnalyticsRow(
-                'Creator Earnings', '₹${thisMonth.toStringAsFixed(2)}'),
+                AppText.get('revenue_platform_fee', fallback: 'Platform Fee')
+                    .replaceAll('({percent}%)', ''),
+                '₹${thisMonthPlatformFee.toStringAsFixed(2)}'),
             _buildAnalyticsRow(
-                'Gross Revenue', '₹${thisMonthGross.toStringAsFixed(2)}'),
+                AppText.get('revenue_total_videos', fallback: 'Total Videos'),
+                totalVideos.toString()),
             _buildAnalyticsRow(
-                'Platform Fee', '₹${thisMonthPlatformFee.toStringAsFixed(2)}'),
-            _buildAnalyticsRow('Total Videos', totalVideos.toString()),
-            _buildAnalyticsRow('Average Revenue per Video',
+                AppText.get('revenue_avg_per_video',
+                    fallback: 'Average Revenue per Video'),
                 '₹${averageRevenue.toStringAsFixed(2)}'),
             _buildAnalyticsRow(
-                'Top Performing Video', topPerformingVideoName ?? 'N/A'),
-            _buildAnalyticsRow('Top Performing Revenue',
+                AppText.get('revenue_top_performing',
+                    fallback: 'Top Performing Video'),
+                topPerformingVideoName ?? 'N/A'),
+            _buildAnalyticsRow(
+                AppText.get('revenue_top_performing_revenue',
+                    fallback: 'Top Performing Revenue'),
                 '₹${topPerformingRevenue.toStringAsFixed(2)}'),
           ],
         ),
@@ -1214,9 +1230,9 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Revenue Breakdown',
-              style: TextStyle(
+            Text(
+              AppText.get('revenue_breakdown'),
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
@@ -1251,13 +1267,19 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
 
             const SizedBox(height: 16),
 
-            _buildBreakdownRow('Gross Revenue',
+            _buildBreakdownRow(AppText.get('revenue_gross_revenue'),
                 '₹${grossRevenue.toStringAsFixed(2)}', Colors.green),
-            _buildBreakdownRow('Platform Fee ($platformSharePercent%)',
-                '₹${platformFee.toStringAsFixed(2)}', Colors.red),
+            _buildBreakdownRow(
+                AppText.get('revenue_platform_fee',
+                        fallback: 'Platform Fee ({percent}%)')
+                    .replaceAll('{percent}', platformSharePercent),
+                '₹${platformFee.toStringAsFixed(2)}',
+                Colors.red),
             const Divider(),
             _buildBreakdownRow(
-                'Creator Earnings ($creatorSharePercent%)',
+                AppText.get('revenue_creator_earnings',
+                        fallback: 'Creator Earnings ({percent}%)')
+                    .replaceAll('{percent}', creatorSharePercent),
                 '₹${creatorRevenue.toStringAsFixed(2)}',
                 Colors.grey[700]!, // Changed from Colors.blue
                 isTotal: true),
@@ -1306,9 +1328,9 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Payment History',
-                  style: TextStyle(
+                Text(
+                  AppText.get('revenue_payment_history'),
+                  style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
@@ -1317,18 +1339,18 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                   onPressed: () {
                     // Navigate to detailed payment history
                   },
-                  child: const Text('View All'),
+                  child: Text(AppText.get('btn_view_all')),
                 ),
               ],
             ),
             const SizedBox(height: 16),
             if (payments.isEmpty)
-              const Center(
+              Center(
                 child: Padding(
-                  padding: EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(20),
                   child: Text(
-                    'No payments yet',
-                    style: TextStyle(color: Colors.grey),
+                    AppText.get('revenue_no_payments'),
+                    style: const TextStyle(color: Colors.grey),
                   ),
                 ),
               )
@@ -1413,16 +1435,18 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Withdraw Earnings',
-              style: TextStyle(
+            Text(
+              AppText.get('revenue_withdraw_earnings'),
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 16),
             Text(
-              'Available Balance: ₹${availableBalance.toStringAsFixed(2)}',
+              AppText.get('revenue_available_balance',
+                      fallback: 'Available Balance: ₹{amount}')
+                  .replaceAll('{amount}', availableBalance.toStringAsFixed(2)),
               style: const TextStyle(
                 fontSize: 16,
                 color: Colors.green,
@@ -1431,7 +1455,9 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Minimum withdrawal: ₹${minWithdrawal.toStringAsFixed(2)}',
+              AppText.get('revenue_min_withdrawal',
+                      fallback: 'Minimum withdrawal: ₹{amount}')
+                  .replaceAll('{amount}', minWithdrawal.toStringAsFixed(2)),
               style: const TextStyle(
                 fontSize: 12,
                 color: Colors.grey,
@@ -1449,7 +1475,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
-                child: const Text('Withdraw Funds'),
+                child: Text(AppText.get('btn_withdraw_funds')),
               ),
             ),
           ],
@@ -1469,7 +1495,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                 Icon(Icons.video_library, size: 48, color: Colors.grey[400]),
                 const SizedBox(height: 16),
                 Text(
-                  'No videos available',
+                  AppText.get('revenue_no_videos'),
                   style: TextStyle(
                     fontSize: 16,
                     color: Colors.grey[600],
@@ -1477,7 +1503,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Upload videos to start earning',
+                  AppText.get('revenue_upload_to_earn'),
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.grey[500],
@@ -1500,16 +1526,16 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Video Revenue Breakdown',
-                  style: TextStyle(
+                Text(
+                  AppText.get('revenue_video_breakdown'),
+                  style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 TextButton(
                   onPressed: () => _showDetailedVideoAnalytics(),
-                  child: const Text('View All'),
+                  child: Text(AppText.get('btn_view_all')),
                 ),
               ],
             ),
@@ -1560,14 +1586,17 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          _buildVideoStat('Views', '${video.views}'),
-                          const SizedBox(width: 16),
-                          _buildVideoStat('Likes', '${video.likes}'),
+                          _buildVideoStat(
+                              AppText.get('revenue_views'), '${video.views}'),
                           const SizedBox(width: 16),
                           _buildVideoStat(
-                              'Comments', '${video.comments.length}'),
+                              AppText.get('revenue_likes'), '${video.likes}'),
                           const SizedBox(width: 16),
-                          _buildVideoStat('Ad Impressions', '$adImpressions'),
+                          _buildVideoStat(AppText.get('revenue_comments'),
+                              '${video.comments.length}'),
+                          const SizedBox(width: 16),
+                          _buildVideoStat(AppText.get('revenue_ad_impressions'),
+                              '$adImpressions'),
                         ],
                       ),
                     ],
@@ -1581,7 +1610,10 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                 padding: const EdgeInsets.only(top: 16),
                 child: Center(
                   child: Text(
-                    '... and ${_userVideos.length - 5} more videos',
+                    AppText.get('revenue_and_more',
+                            fallback: '... and {count} more videos')
+                        .replaceAll(
+                            '{count}', (_userVideos.length - 5).toString()),
                     style: TextStyle(
                       color: Colors.grey[600],
                       fontSize: 14,
@@ -1621,22 +1653,21 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Withdraw Funds'),
-        content: const Text(
-          'This will initiate a withdrawal to your registered bank account. '
-          'Processing time: 3-5 business days.',
+        title: Text(AppText.get('revenue_withdraw_dialog_title')),
+        content: Text(
+          AppText.get('revenue_withdraw_dialog_content'),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(AppText.get('btn_cancel')),
           ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
               _initiateWithdrawal();
             },
-            child: const Text('Confirm'),
+            child: Text(AppText.get('btn_confirm')),
           ),
         ],
       ),
@@ -1646,8 +1677,8 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   void _initiateWithdrawal() {
     // This would call the backend to initiate withdrawal
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Withdrawal initiated successfully!'),
+      SnackBar(
+        content: Text(AppText.get('success_withdrawal')),
         backgroundColor: Colors.green,
       ),
     );
@@ -1684,7 +1715,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Detailed Video Analytics'),
+        title: Text(AppText.get('revenue_detailed_analytics')),
         content: SizedBox(
           width: double.maxFinite,
           child: SingleChildScrollView(
@@ -1718,7 +1749,9 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  subtitle: Text('$adImpressions impressions'),
+                  subtitle: Text(AppText.get('revenue_impressions',
+                          fallback: '{count} impressions')
+                      .replaceAll('{count}', adImpressions.toString())),
                   trailing: Text(
                     '₹${revenue.toStringAsFixed(2)}',
                     style: const TextStyle(
@@ -1734,7 +1767,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
+            child: Text(AppText.get('btn_close')),
           ),
         ],
       ),

@@ -82,9 +82,19 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
                   });
                 }
 
-                // Try autoplay immediately with cached data
+                // **OPTIMIZED: Preload first video immediately for instant playback**
                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _tryAutoplayCurrent();
+                  if (mounted && _videos.isNotEmpty) {
+                    // Preload current video immediately (don't wait)
+                    _preloadVideo(_currentIndex);
+
+                    // Try autoplay immediately
+                    Future.delayed(const Duration(milliseconds: 100), () {
+                      if (mounted) {
+                        _tryAutoplayCurrent();
+                      }
+                    });
+                  }
                 });
 
                 AppLogger.log(
