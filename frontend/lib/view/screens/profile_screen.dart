@@ -1704,7 +1704,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 child: Column(
                   children: [
                     // Google AdMob Banner Ad at the top
-                    const GoogleAdMobBannerWidget(
+                    GoogleAdMobBannerWidget(
                       adUnitId: 'ca-app-pub-2359959043864469/8166031130',
                     ),
                     ProfileHeaderWidget(

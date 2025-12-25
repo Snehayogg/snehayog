@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -30,16 +31,11 @@ import 'package:vayu/core/managers/shared_video_controller_pool.dart';
 import 'package:vayu/core/managers/video_controller_manager.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/services/app_remote_config_service.dart';
-// **OPTIMIZED: Firebase and notifications disabled (not active currently)**
-// TODO: Uncomment when notifications are needed
-// import 'package:firebase_core/firebase_core.dart';
-// import 'package:vayu/services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // **OPTIMIZED: Firebase and notifications disabled (not active currently)**
-  // TODO: Uncomment when notifications are needed
   // try {
   //   await Firebase.initializeApp();
   //   final notificationService = NotificationService();
@@ -70,12 +66,12 @@ void main() async {
   // **BACKGROUND: Initialize heavy services after app starts**
   _initializeServicesInBackground();
 
-  // **NEW: Check server connectivity and set optimal URL**
-  _checkServerConnectivity();
+  // **OPTIMIZED: Check server connectivity non-blocking (don't wait for it)**
+  unawaited(_checkServerConnectivity());
 }
 
-/// **NEW: Check server connectivity and set optimal URL**
-void _checkServerConnectivity() async {
+/// **OPTIMIZED: Check server connectivity and set optimal URL (non-blocking)**
+Future<void> _checkServerConnectivity() async {
   try {
     print('🔍 Main: Checking server connectivity...');
     // Clear any cached URLs to force fresh check
@@ -101,14 +97,39 @@ void _initializeServicesInBackground() async {
   try {
     // **NEW: Initialize backend-driven config first (non-blocking)**
     unawaited(AppRemoteConfigService.instance.initialize().then((_) {
-      print('✅ AppRemoteConfigService initialized - Backend-driven texts enabled');
+      print(
+          '✅ AppRemoteConfigService initialized - Backend-driven texts enabled');
     }).catchError((e) {
-      print('⚠️ AppRemoteConfigService initialization failed (using defaults): $e');
+      print(
+          '⚠️ AppRemoteConfigService initialization failed (using defaults): $e');
     }));
 
-    // Initialize AdMob in background
-    await MobileAds.instance.initialize();
-    ErrorLoggingService.logServiceInitialization('AdMob');
+    // **OPTIMIZED: Initialize AdMob non-blocking (don't wait for it)**
+    unawaited(() async {
+      try {
+        await MobileAds.instance.initialize();
+
+        // Configure AdMob RequestConfiguration for better ad loading
+        // This helps with ad delivery and debugging
+        try {
+          final requestConfiguration = RequestConfiguration(
+            // In release builds, real ads will be served
+            // Test device IDs can be added here if needed for testing
+            testDeviceIds: kDebugMode ? [] : [], // Empty in release = real ads
+          );
+          await MobileAds.instance
+              .updateRequestConfiguration(requestConfiguration);
+          print('✅ AdMob: RequestConfiguration updated');
+        } catch (e) {
+          print('⚠️ AdMob: Error updating RequestConfiguration: $e');
+        }
+
+        ErrorLoggingService.logServiceInitialization('AdMob');
+        print('✅ AdMob: Initialized and configured');
+      } catch (e) {
+        print('⚠️ AdMob: Error initializing: $e');
+      }
+    }());
 
     // Set orientation in background
     SystemChrome.setPreferredOrientations([

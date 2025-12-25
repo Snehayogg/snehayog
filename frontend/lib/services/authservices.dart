@@ -100,12 +100,12 @@ class AuthService {
 
       AppLogger.log('🔑 Got ID token, attempting backend authentication...');
 
-      // **NEW: Get device ID to send to backend**
+      // **OPTIMIZED: Get device ID (usually cached, so fast)**
       final deviceId = await DeviceIdService().getDeviceId();
 
       // First, authenticate with backend to get JWT
       try {
-        // **OPTIMIZED: Reduced timeout for faster sign-in**
+        // **OPTIMIZED: Reduced timeout from 8s to 5s for faster sign-in**
         final authResponse = await http
             .post(
               Uri.parse('${AppConfig.baseUrl}/api/auth'),
@@ -115,7 +115,7 @@ class AuthService {
                 'deviceId': deviceId, // **NEW: Send device ID to backend
               }),
             )
-            .timeout(const Duration(seconds: 8));
+            .timeout(const Duration(seconds: 5));
 
         AppLogger.log(
             '📡 Backend auth response status: ${authResponse.statusCode}');
@@ -131,45 +131,51 @@ class AuthService {
           SharedPreferences prefs = await SharedPreferences.getInstance();
           await prefs.setString('jwt_token', authData['token']);
 
-          // **NEW: Retry saving FCM token after successful login**
-          try {
-            final notificationService = NotificationService();
-            if (notificationService.isInitialized) {
-              await notificationService.retrySaveToken();
+          // **OPTIMIZED: Retry saving FCM token non-blocking (fire and forget)**
+          unawaited(() async {
+            try {
+              final notificationService = NotificationService();
+              if (notificationService.isInitialized) {
+                await notificationService.retrySaveToken();
+              }
+            } catch (e) {
+              AppLogger.log('⚠️ Error retrying FCM token save: $e');
             }
-          } catch (e) {
-            AppLogger.log('⚠️ Error retrying FCM token save: $e');
-          }
+          }());
 
-          // **PROFESSIONAL: Sync watch history after login to merge anonymous and authenticated history**
+          // **OPTIMIZED: Sync watch history non-blocking (fire and forget)**
           // This ensures watched videos don't appear again after login
-          try {
-            final syncResponse = await http
-                .post(
-                  Uri.parse(
-                      '${AppConfig.baseUrl}/api/videos/sync-watch-history'),
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ${authData['token']}',
-                  },
-                  body: jsonEncode({
-                    'deviceId': deviceId,
-                  }),
-                )
-                .timeout(const Duration(seconds: 5));
+          // Don't block sign-in completion for this
+          unawaited(() async {
+            try {
+              final syncResponse = await http
+                  .post(
+                    Uri.parse(
+                        '${AppConfig.baseUrl}/api/videos/sync-watch-history'),
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': 'Bearer ${authData['token']}',
+                    },
+                    body: jsonEncode({
+                      'deviceId': deviceId,
+                    }),
+                  )
+                  .timeout(const Duration(seconds: 3));
 
-            if (syncResponse.statusCode == 200) {
-              final syncData = jsonDecode(syncResponse.body);
+              if (syncResponse.statusCode == 200) {
+                final syncData = jsonDecode(syncResponse.body);
+                AppLogger.log(
+                    '✅ Watch history synced successfully: ${syncData['syncedCount']} videos');
+              } else {
+                AppLogger.log(
+                    '⚠️ Watch history sync failed: ${syncResponse.statusCode}');
+              }
+            } catch (e) {
+              // Non-critical - don't fail login if sync fails
               AppLogger.log(
-                  '✅ Watch history synced successfully: ${syncData['syncedCount']} videos');
-            } else {
-              AppLogger.log(
-                  '⚠️ Watch history sync failed: ${syncResponse.statusCode}');
+                  '⚠️ Error syncing watch history (non-critical): $e');
             }
-          } catch (e) {
-            // Non-critical - don't fail login if sync fails
-            AppLogger.log('⚠️ Error syncing watch history (non-critical): $e');
-          }
+          }());
 
           // Then register/update user profile
           final userData = {
@@ -183,14 +189,14 @@ class AuthService {
           Map<String, dynamic>? registeredUserData;
 
           try {
-            // **OPTIMIZED: Reduced timeout for faster sign-in**
+            // **OPTIMIZED: Reduced timeout from 8s to 5s for faster sign-in**
             final registerResponse = await http
                 .post(
                   Uri.parse('${AppConfig.baseUrl}/api/users/register'),
                   headers: {'Content-Type': 'application/json'},
                   body: jsonEncode(userData),
                 )
-                .timeout(const Duration(seconds: 8));
+                .timeout(const Duration(seconds: 5));
 
             AppLogger.log(
                 '📡 User registration response status: ${registerResponse.statusCode}');
@@ -241,10 +247,11 @@ class AuthService {
           await prefs.setString('fallback_user', jsonEncode(fallbackData));
           AppLogger.log('✅ Saved fallback_user with Google account data');
 
-          // **CRITICAL: ALWAYS store device ID after successful authentication**
-          await _ensureDeviceIdStored(deviceId);
+          // **OPTIMIZED: Store device ID in parallel (non-blocking)**
+          // Device ID storage is critical but doesn't need to block sign-in completion
+          unawaited(_ensureDeviceIdStored(deviceId));
 
-          // Return combined user data
+          // Return combined user data immediately (device ID storage happens in background)
           return {
             'id': googleUser.id,
             'googleId': googleUser.id,
@@ -654,9 +661,10 @@ class AuthService {
     try {
       AppLogger.log('🔍 AuthService: Getting user data...');
 
+      // **OPTIMIZED: Reduced timeout from 12s to 5s for faster startup**
       // Wait for internal retrieval with a sensible timeout; on timeout, fallback to cached user
       return await _getUserDataInternal(skipTokenRefresh: skipTokenRefresh)
-          .timeout(const Duration(seconds: 12), onTimeout: () async {
+          .timeout(const Duration(seconds: 5), onTimeout: () async {
         try {
           final prefs = await SharedPreferences.getInstance();
           final token = prefs.getString('jwt_token');

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/services/authservices.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
+import 'dart:convert';
 
 class GoogleSignInController extends ChangeNotifier {
   final AuthService _authService = AuthService();
@@ -24,6 +27,34 @@ class GoogleSignInController extends ChangeNotifier {
 
   Future<void> _initInBackground() async {
     try {
+      // **OPTIMIZED: Use cached data immediately, verify in background**
+      // First, try to get cached user data instantly (no network call)
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final fallbackUser = prefs.getString('fallback_user');
+        if (fallbackUser != null) {
+          final cachedData = jsonDecode(fallbackUser);
+          _userData = {
+            'id': cachedData['id'],
+            'googleId': cachedData['googleId'] ?? cachedData['id'],
+            'name': cachedData['name'],
+            'email': cachedData['email'],
+            'profilePic': cachedData['profilePic'],
+            'token': prefs.getString('jwt_token'),
+            'isFallback': true,
+          };
+          _isLoading = false;
+          notifyListeners();
+          print('✅ GoogleSignInController: Using cached user data (instant)');
+
+          // Refresh from backend in background (non-blocking)
+          unawaited(_refreshUserDataInBackground());
+          return;
+        }
+      } catch (e) {
+        print('⚠️ GoogleSignInController: Error loading cached data: $e');
+      }
+
       _isLoading = true;
       notifyListeners();
 
@@ -151,6 +182,21 @@ class GoogleSignInController extends ChangeNotifier {
       _error = e.toString();
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  /// **OPTIMIZED: Refresh user data in background without blocking UI**
+  Future<void> _refreshUserDataInBackground() async {
+    try {
+      final freshData = await _authService.getUserData();
+      if (freshData != null) {
+        _userData = freshData;
+        notifyListeners();
+        print('✅ GoogleSignInController: User data refreshed from backend');
+      }
+    } catch (e) {
+      print('⚠️ GoogleSignInController: Error refreshing user data: $e');
+      // Keep cached data on error
     }
   }
 }
