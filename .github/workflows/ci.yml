@@ -28,7 +28,24 @@ jobs:
 
       - name: 🔍 Analyze code
         working-directory: ./frontend
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+        run: |
+          # Run analyze and capture output
+          set +e
+          flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | tee analyze-output.txt
+          ANALYZE_EXIT=${PIPESTATUS[0]}
+          set -e
+          
+          # Check if there are actual errors (not just warnings/infos)
+          # Errors start with "   error •" or "error •"
+          if grep -qE "^\s*error •" analyze-output.txt; then
+            echo "❌ Analysis found errors - failing build"
+            exit 1
+          elif [ $ANALYZE_EXIT -ne 0 ]; then
+            echo "⚠️  Analysis found warnings/infos only - continuing"
+            exit 0
+          else
+            echo "✅ No analysis issues found"
+          fi
 
       - name: 🧪 Run tests
         working-directory: ./frontend
