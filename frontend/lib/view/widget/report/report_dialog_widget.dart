@@ -77,7 +77,7 @@ class _ReportDialogWidgetState extends State<ReportDialogWidget> {
           mainAxisSize: MainAxisSize.min,
           children: [
             DropdownButtonFormField<String>(
-              initialValue: _selectedReason,
+              value: _selectedReason,
               items: _reasons
                   .map((r) => DropdownMenuItem(value: r, child: Text(r)))
                   .toList(),
