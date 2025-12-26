@@ -9,11 +9,16 @@ import 'package:vayu/utils/app_logger.dart';
 class GoogleAdMobBannerWidget extends StatefulWidget {
   final String adUnitId;
   final AdSize? adSize;
+  final VoidCallback?
+      onAdFailed; // Callback when ad fails to load after all retries
+  final VoidCallback? onAdLoaded; // Callback when ad loads successfully
 
   const GoogleAdMobBannerWidget({
     super.key,
     required this.adUnitId,
     this.adSize,
+    this.onAdFailed,
+    this.onAdLoaded,
   });
 
   @override
@@ -80,6 +85,8 @@ class _GoogleAdMobBannerWidgetState extends State<GoogleAdMobBannerWidget> {
                 _retryCount = 0; // Reset retry count on success
                 _lastError = null;
               });
+              // Notify parent that ad loaded successfully
+              widget.onAdLoaded?.call();
             }
           },
           onAdFailedToLoad: (ad, error) {
@@ -124,6 +131,8 @@ class _GoogleAdMobBannerWidgetState extends State<GoogleAdMobBannerWidget> {
             } else if (_retryCount >= _maxRetries) {
               AppLogger.log(
                   '❌ GoogleAdMobBannerWidget: Max retries reached. Giving up.');
+              // Notify parent that ad failed
+              widget.onAdFailed?.call();
             }
           },
           onAdOpened: (ad) {
@@ -163,6 +172,9 @@ class _GoogleAdMobBannerWidgetState extends State<GoogleAdMobBannerWidget> {
             _loadAd();
           }
         });
+      } else if (_retryCount >= _maxRetries) {
+        // Notify parent that ad failed after max retries
+        widget.onAdFailed?.call();
       }
     }
   }

@@ -13,7 +13,6 @@ class ResponsiveHelper {
       MediaQuery.of(context).size.width >= 1200;
 
   static double getAdaptiveFontSize(BuildContext context, double baseSize) {
-    double screenWidth = MediaQuery.of(context).size.width;
     if (isMobile(context)) {
       return baseSize;
     } else if (isTablet(context)) {

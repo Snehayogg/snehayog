@@ -7,9 +7,9 @@ class AdMobConfig {
   // **TEST Ad Unit IDs (for development)**
   // Replace these with your actual ad unit IDs from AdMob console
   static const String _testBannerAdUnitIdAndroid =
-      'ca-app-pub-3940256099942544/6300978111';
+      'ca-app-pub-2359959043864469/8166031130';
   static const String _testBannerAdUnitIdIOS =
-      'ca-app-pub-3940256099942544/2934735716';
+      'ca-app-pub-2359959043864469/8166031130';
 
   // **PRODUCTION Ad Unit IDs**
   // These should be set via environment variables or from backend

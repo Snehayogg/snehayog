@@ -2254,9 +2254,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               backgroundColor: Colors.black,
               body: Stack(
                 children: [
-                  _isLoading
+                  _isLoading && _videos.isEmpty
                       ? Center(child: _buildGreenSpinner(size: 40))
-                      : _errorMessage != null
+                      : _videos.isEmpty && _errorMessage != null
                           ? _buildErrorState()
                           : _videos.isEmpty
                               ? _buildEmptyState()

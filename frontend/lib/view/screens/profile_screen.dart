@@ -1127,7 +1127,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                             ),
                             child: Text(
                               AppText.get('btn_delete', fallback: 'Delete'),
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -1704,7 +1704,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 child: Column(
                   children: [
                     // Google AdMob Banner Ad at the top
-                    GoogleAdMobBannerWidget(
+                    const GoogleAdMobBannerWidget(
                       adUnitId: 'ca-app-pub-2359959043864469/8166031130',
                     ),
                     ProfileHeaderWidget(
@@ -2152,7 +2152,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                         AppText.get('profile_refer_friends'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: Color(0xFF10B981),
                           fontSize: 10,
                           fontWeight: FontWeight.w600,

@@ -38,7 +38,7 @@ class WelcomeOnboardingScreen extends StatelessWidget {
 
               // Main heading text
               const Text(
-                'Create short videos. Get views. Earn 80% ad revenue',
+                'Create short gaming video Get views. Earn 80% ad revenue',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Color(0xFF1A1A1A), // Dark black - primary

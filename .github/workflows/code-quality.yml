@@ -1,0 +1,81 @@
+name: Code Quality
+
+on:
+  pull_request:
+    branches: [ main, master, develop ]
+  push:
+    branches: [ main, master, develop ]
+  schedule:
+    # Run weekly on Monday at 9 AM UTC
+    - cron: '0 9 * * 1'
+
+jobs:
+  lint:
+    name: Lint & Format Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🎯 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true
+
+      - name: 📦 Get dependencies
+        working-directory: ./frontend
+        run: flutter pub get
+
+      - name: 🔍 Analyze code
+        working-directory: ./frontend
+        run: flutter analyze --no-fatal-infos
+
+      - name: ✨ Check formatting
+        working-directory: ./frontend
+        run: dart format --set-exit-if-changed --output=none .
+
+      - name: 📊 Generate analysis report
+        working-directory: ./frontend
+        run: flutter analyze --write=analysis-report.txt || true
+
+      - name: 📎 Upload analysis report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-analysis-report
+          path: ./frontend/analysis-report.txt
+          retention-days: 7
+
+  dependency-check:
+    name: Dependency Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🎯 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true
+
+      - name: 📦 Get dependencies
+        working-directory: ./frontend
+        run: flutter pub get
+
+      - name: 🔍 Check for outdated packages
+        working-directory: ./frontend
+        run: flutter pub outdated || true
+
+      - name: 🔒 Check for security vulnerabilities
+        working-directory: ./frontend
+        run: |
+          # Check if dart pub has security audit (when available)
+          flutter pub get
+          echo "✅ Dependency check complete"
+

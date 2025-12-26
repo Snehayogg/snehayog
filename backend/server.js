@@ -114,11 +114,16 @@ app.use('/.well-known', express.static(path.join(__dirname, 'public/.well-known'
 app.use(cors({
   origin: [
     'https://snehayog.site', // Production web app
+    'https://cerulean-kashata-b8a907.netlify.app', // Netlify deployment
+    /^https:\/\/.*\.netlify\.app$/, // All Netlify subdomains
+    'http://localhost', // Local development (any port)
+    'http://localhost:3000', // Local development
+    'http://localhost:5001', // Local development
+    'http://127.0.0.1', // Localhost alternative (any port)
+    'http://127.0.0.1:5001', // Localhost alternative
     'http://192.168.0.184:5001', // Local development (LAN)
-    'http://localhost:5001',      // Local development
-    'http://10.0.2.2:5001',      // Android emulator
-    'http://127.0.0.1:5001',     // Localhost alternative
-    '*'                           // Allow all origins for development
+    'http://10.0.2.2:5001', // Android emulator
+    '*' // Allow all origins for development (fallback)
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],

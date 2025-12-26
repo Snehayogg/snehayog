@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 class GoogleSignInConfig {
   // ✅ ANDROID OAuth 2.0 Client ID (from google-services.json)
@@ -9,12 +10,18 @@ class GoogleSignInConfig {
   static const String iosClientId =
       '406195883653-f4ejmoq2e0v9tnquvout06uu305bb4eh.apps.googleusercontent.com';
 
-
   static const String webClientId =
       '406195883653-qp49f9nauq4t428ndscuu3nr9jb10g4h.apps.googleusercontent.com';
 
   // ✅ Platform-specific client ID getter (Android, iOS & Web)
   static String get platformClientId {
+    // Check for web platform first (kIsWeb works on all platforms)
+    if (kIsWeb) {
+      print('🌐 Web platform detected, using Web client ID');
+      return webClientId;
+    }
+
+    // For native platforms, use Platform checks
     try {
       if (Platform.isAndroid) return clientId;
       if (Platform.isIOS) return iosClientId;
@@ -23,11 +30,11 @@ class GoogleSignInConfig {
         return webClientId;
       }
     } catch (e) {
-      // Web platform (browser) - use Web client ID for 1-click sign-in
-      print('🌐 Web browser detected, using Web client ID for 1-click sign-in');
+      // Fallback for web if Platform check fails
+      print('🌐 Platform detection failed, using Web client ID as fallback');
       return webClientId;
     }
-    return webClientId; 
+    return webClientId;
   }
 
   static const List<String> scopes = ['email', 'profile'];

@@ -1,0 +1,132 @@
+name: Build Android
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type (apk or appbundle)'
+        required: true
+        default: 'apk'
+        type: choice
+        options:
+          - apk
+          - appbundle
+      build_mode:
+        description: 'Build mode'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - release
+          - debug
+
+jobs:
+  build-android:
+    name: Build Android ${{ github.event.inputs.build_type || 'apk' }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🎯 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true
+
+      - name: 📦 Get dependencies
+        working-directory: ./frontend
+        run: flutter pub get
+
+      - name: 🔑 Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: 🔐 Setup Keystore (if available)
+        if: github.event.inputs.build_mode == 'release' || startsWith(github.ref, 'refs/tags/v')
+        env:
+          KEYSTORE_FILE: ${{ secrets.ANDROID_KEYSTORE_FILE }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ ! -z "$KEYSTORE_FILE" ]; then
+            echo "$KEYSTORE_FILE" | base64 -d > ./frontend/android/key.jks
+            mkdir -p ./frontend/android/app
+            cat > ./frontend/android/key.properties << EOF
+          storeFile=key.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+            echo "✅ Keystore configured"
+          else
+            echo "⚠️ No keystore secrets found, building unsigned APK"
+          fi
+        working-directory: ./frontend
+
+      - name: 🏗️ Build APK
+        if: github.event.inputs.build_type == 'apk' || startsWith(github.ref, 'refs/tags/v')
+        working-directory: ./frontend
+        run: |
+          if [ "${{ github.event.inputs.build_mode || 'release' }}" == "release" ] && [ -f "./android/key.properties" ]; then
+            flutter build apk --release
+          else
+            flutter build apk --${{ github.event.inputs.build_mode || 'release' }}
+          fi
+
+      - name: 🏗️ Build App Bundle
+        if: github.event.inputs.build_type == 'appbundle'
+        working-directory: ./frontend
+        run: |
+          if [ "${{ github.event.inputs.build_mode || 'release' }}" == "release" ] && [ -f "./android/key.properties" ]; then
+            flutter build appbundle --release
+          else
+            echo "⚠️ App Bundle requires release mode with keystore"
+            exit 1
+          fi
+
+      - name: 📦 Get version info
+        working-directory: ./frontend
+        id: version
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "📱 App Version: $VERSION"
+
+      - name: 📎 Upload APK artifact
+        if: github.event.inputs.build_type == 'apk' || startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-${{ steps.version.outputs.version }}-${{ github.sha }}
+          path: |
+            ./frontend/build/app/outputs/flutter-apk/*.apk
+          retention-days: 90
+
+      - name: 📎 Upload App Bundle artifact
+        if: github.event.inputs.build_type == 'appbundle'
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-bundle-${{ steps.version.outputs.version }}-${{ github.sha }}
+          path: |
+            ./frontend/build/app/outputs/bundle/*.aab
+          retention-days: 90
+
+      - name: 📋 Build Summary
+        run: |
+          echo "## 🎉 Build Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Type:** ${{ github.event.inputs.build_type || 'apk' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Mode:** ${{ github.event.inputs.build_mode || 'release' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Artifacts uploaded successfully!" >> $GITHUB_STEP_SUMMARY
+

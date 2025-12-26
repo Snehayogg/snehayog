@@ -1,0 +1,149 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🎯 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true
+
+      - name: 📦 Get dependencies
+        working-directory: ./frontend
+        run: flutter pub get
+
+      - name: 🔑 Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: 🔐 Setup Keystore
+        env:
+          KEYSTORE_FILE: ${{ secrets.ANDROID_KEYSTORE_FILE }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_FILE" ]; then
+            echo "❌ Keystore secrets not configured"
+            exit 1
+          fi
+          echo "$KEYSTORE_FILE" | base64 -d > ./frontend/android/key.jks
+          mkdir -p ./frontend/android/app
+          cat > ./frontend/android/key.properties << EOF
+          storeFile=key.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+          echo "✅ Keystore configured"
+        working-directory: ./frontend
+
+      - name: 🏗️ Build APK
+        working-directory: ./frontend
+        run: flutter build apk --release
+
+      - name: 🏗️ Build App Bundle
+        working-directory: ./frontend
+        run: flutter build appbundle --release
+
+      - name: 📦 Get version info
+        working-directory: ./frontend
+        id: version
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | sed 's/+.*//')
+          BUILD_NUMBER=$(grep '^version:' pubspec.yaml | sed 's/version: .*+//')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
+          echo "📱 Version: $VERSION (Build: $BUILD_NUMBER)"
+
+      - name: 📝 Extract release notes
+        id: release_notes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = context.ref.replace('refs/tags/', '');
+            const { data: release } = await github.rest.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag: tag
+            }).catch(() => ({ data: null }));
+            
+            if (release && release.body) {
+              core.setOutput('body', release.body);
+            } else {
+              // Generate release notes from commits
+              const { data: commits } = await github.rest.repos.compareCommits({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                base: await getPreviousTag(),
+                head: context.sha
+              });
+              
+              const changes = commits.commits
+                .map(c => `- ${c.commit.message.split('\n')[0]} (@${c.author.login})`)
+                .join('\n');
+              
+              core.setOutput('body', `## What's New\n\n${changes}`);
+            }
+            
+            async function getPreviousTag() {
+              const { data: tags } = await github.rest.repos.listTags({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                per_page: 2
+              });
+              return tags.length > 1 ? tags[1].name : tags[0]?.name || 'HEAD';
+            }
+
+      - name: 🏷️ Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref }}
+          name: Release ${{ steps.version.outputs.version }}
+          body: |
+            ## 🎉 Release ${{ steps.version.outputs.version }}
+            
+            **Build Number:** ${{ steps.version.outputs.build_number }}
+            
+            ### 📦 Artifacts
+            - APK (Android Package)
+            - AAB (Android App Bundle - for Play Store)
+            
+            ### 📝 Changes
+            ${{ steps.release_notes.outputs.body }}
+            
+            ---
+            **Download:** See assets below ⬇️
+          files: |
+            ./frontend/build/app/outputs/flutter-apk/app-release.apk
+            ./frontend/build/app/outputs/bundle/release/app-release.aab
+          draft: false
+          prerelease: ${{ contains(github.ref, '-') }}
+
+      - name: 📋 Release Summary
+        run: |
+          echo "## 🚀 Release Published!" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build:** ${{ steps.version.outputs.build_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag:** ${{ github.ref }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **APK:** ✅ Built & Uploaded" >> $GITHUB_STEP_SUMMARY
+          echo "- **AAB:** ✅ Built & Uploaded" >> $GITHUB_STEP_SUMMARY
+

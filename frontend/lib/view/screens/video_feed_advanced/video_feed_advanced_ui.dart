@@ -371,11 +371,10 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     // **FIXED: Always prepare custom ad data for fallback, even when AdMob is configured**
     final bool shouldUseAdMob = AdMobConfig.isConfigured();
 
-    if (_adsLoaded) {
-      AppLogger.log(
-        '🔍 _buildBannerAd: Video index=$index, Total banner ads=${_bannerAds.length}, Locked ads=${_lockedBannerAdByVideoId.length}, AdMob configured: $shouldUseAdMob',
-      );
-    }
+    // **FIXED: Always log banner ad status for debugging**
+    AppLogger.log(
+      '🔍 _buildBannerAd: Video index=$index, _adsLoaded=$_adsLoaded, Total banner ads=${_bannerAds.length}, Locked ads=${_lockedBannerAdByVideoId.length}, AdMob configured: $shouldUseAdMob',
+    );
 
     // **FIXED: Prepare custom ad data for fallback (even when AdMob is configured)**
     Map<String, dynamic>? adData;
@@ -398,6 +397,17 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
       } else {
         AppLogger.log(
           '⚠️ Invalid adIndex $adIndex for bannerAds length ${_bannerAds.length}',
+        );
+      }
+    } else {
+      // **FIXED: Log when banner ads are not available**
+      if (!_adsLoaded) {
+        AppLogger.log(
+          '⚠️ _buildBannerAd: Ads not loaded yet for video ${video.videoName} (index $index)',
+        );
+      } else if (_bannerAds.isEmpty) {
+        AppLogger.log(
+          '⚠️ _buildBannerAd: No banner ads available from backend for video ${video.videoName} (index $index)',
         );
       }
     }
@@ -924,228 +934,246 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
   }
 
   Widget _buildVideoOverlay(VideoModel video, int index) {
-    return RepaintBoundary(
-      child: Stack(
-        children: [
-          Positioned(
-            top: 52,
-            right: 8,
-            child: _buildEarningsLabel(video),
-          ),
-          Positioned(
-            bottom: 8,
-            left: 0,
-            right: 75,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _navigateToCreatorProfile(video),
-                    child: Row(
-                      children: [
-                        GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => _navigateToCreatorProfile(video),
-                          child: Container(
-                            width: 24,
-                            height: 24,
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.grey,
-                            ),
-                            child: video.uploader.profilePic.isNotEmpty
-                                ? ClipOval(
-                                    child: CachedNetworkImage(
-                                      imageUrl: video.uploader.profilePic,
-                                      fit: BoxFit.cover,
-                                      placeholder: (context, url) => Container(
-                                        color: Colors.grey[300],
-                                        child: Center(
-                                          child: Text(
-                                            video.uploader.name.isNotEmpty
-                                                ? video.uploader.name[0]
-                                                    .toUpperCase()
-                                                : 'U',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 10,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      errorWidget: (context, url, error) =>
-                                          Container(
-                                        color: Colors.grey[300],
-                                        child: Center(
-                                          child: Text(
-                                            video.uploader.name.isNotEmpty
-                                                ? video.uploader.name[0]
-                                                    .toUpperCase()
-                                                : 'U',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 10,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                : Center(
-                                    child: Text(
-                                      video.uploader.name.isNotEmpty
-                                          ? video.uploader.name[0].toUpperCase()
-                                          : 'U',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 10,
-                                      ),
-                                    ),
-                                  ),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => _navigateToCreatorProfile(video),
-                            child: Text(
-                              video.uploader.name,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        _buildFollowTextButton(video),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    video.videoName,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  if (video.link?.isNotEmpty == true)
-                    GestureDetector(
-                      onTap: () => _handleVisitNow(video),
-                      child: Container(
-                        width: (_screenWidth ?? 400) * 0.75,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.6),
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.4),
-                              blurRadius: 12,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
+    // **REELS/SHORTS STYLE: Position at absolute bottom with zero spacing**
+    return Builder(
+      builder: (context) {
+        final mediaQuery = MediaQuery.of(context);
+        // Only account for SafeArea bottom padding (system navigation bar)
+        // No bottom navigation bar spacing - elements will be at absolute bottom
+        final bottomPadding = mediaQuery.padding.bottom;
+
+        return RepaintBoundary(
+          child: Stack(
+            children: [
+              Positioned(
+                top: 52,
+                right: 8,
+                child: _buildEarningsLabel(video),
+              ),
+              // **Video info at absolute bottom - Reels/Shorts style**
+              Positioned(
+                bottom:
+                    bottomPadding, // Only SafeArea padding, no extra spacing
+                left: 0,
+                right: 75,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12,
+                      8), // **FIX: Bottom padding for content spacing**
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => _navigateToCreatorProfile(video),
+                        child: Row(
                           children: [
-                            Icon(
-                              Icons.open_in_new,
-                              color: Colors.white,
-                              size: 14,
-                            ),
-                            SizedBox(width: 6),
-                            Text(
-                              'Visit Now',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
+                            GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => _navigateToCreatorProfile(video),
+                              child: Container(
+                                width: 24,
+                                height: 24,
+                                decoration: const BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.grey,
+                                ),
+                                child: video.uploader.profilePic.isNotEmpty
+                                    ? ClipOval(
+                                        child: CachedNetworkImage(
+                                          imageUrl: video.uploader.profilePic,
+                                          fit: BoxFit.cover,
+                                          placeholder: (context, url) =>
+                                              Container(
+                                            color: Colors.grey[300],
+                                            child: Center(
+                                              child: Text(
+                                                video.uploader.name.isNotEmpty
+                                                    ? video.uploader.name[0]
+                                                        .toUpperCase()
+                                                    : 'U',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 10,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          errorWidget: (context, url, error) =>
+                                              Container(
+                                            color: Colors.grey[300],
+                                            child: Center(
+                                              child: Text(
+                                                video.uploader.name.isNotEmpty
+                                                    ? video.uploader.name[0]
+                                                        .toUpperCase()
+                                                    : 'U',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 10,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      )
+                                    : Center(
+                                        child: Text(
+                                          video.uploader.name.isNotEmpty
+                                              ? video.uploader.name[0]
+                                                  .toUpperCase()
+                                              : 'U',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                      ),
                               ),
                             ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => _navigateToCreatorProfile(video),
+                                child: Text(
+                                  video.uploader.name,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            _buildFollowTextButton(video),
                           ],
                         ),
                       ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          Positioned(
-            right: 12,
-            bottom: 12,
-            child: Column(
-              children: [
-                _buildVerticalActionButton(
-                  icon:
-                      _isLiked(video) ? Icons.favorite : Icons.favorite_border,
-                  color: _isLiked(video) ? Colors.red : Colors.white,
-                  count: video.likes,
-                  onTap: () => _handleLike(video, index),
-                ),
-                const SizedBox(height: 10),
-                _buildVerticalActionButton(
-                  icon: Icons.chat_bubble_outline,
-                  count: video.comments.length,
-                  onTap: () => _handleComment(video),
-                ),
-                const SizedBox(height: 10),
-                _buildVerticalActionButton(
-                  icon: Icons.share,
-                  onTap: () => _handleShare(video),
-                ),
-                const SizedBox(height: 10),
-                GestureDetector(
-                  onTap: () => _navigateToCarouselAd(index),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.5),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.arrow_forward_ios,
+                      const SizedBox(height: 6),
+                      Text(
+                        video.videoName,
+                        style: const TextStyle(
                           color: Colors.white,
-                          size: 18,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
                         ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
-                      const Text(
-                        'Swipe',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
+                      if (video.link?.isNotEmpty == true)
+                        GestureDetector(
+                          onTap: () => _handleVisitNow(video),
+                          child: Container(
+                            width: (_screenWidth ?? 400) * 0.75,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.6),
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.4),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.open_in_new,
+                                  color: Colors.white,
+                                  size: 14,
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Visit Now',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),
-              ],
-            ),
+              ),
+              // **Action buttons at absolute bottom - Reels/Shorts style**
+              Positioned(
+                right: 12,
+                bottom:
+                    bottomPadding, // Only SafeArea padding, no extra spacing
+                child: Column(
+                  children: [
+                    _buildVerticalActionButton(
+                      icon: _isLiked(video)
+                          ? Icons.favorite
+                          : Icons.favorite_border,
+                      color: _isLiked(video) ? Colors.red : Colors.white,
+                      count: video.likes,
+                      onTap: () => _handleLike(video, index),
+                    ),
+                    const SizedBox(height: 10),
+                    _buildVerticalActionButton(
+                      icon: Icons.chat_bubble_outline,
+                      count: video.comments.length,
+                      onTap: () => _handleComment(video),
+                    ),
+                    const SizedBox(height: 10),
+                    _buildVerticalActionButton(
+                      icon: Icons.share,
+                      onTap: () => _handleShare(video),
+                    ),
+                    const SizedBox(height: 10),
+                    GestureDetector(
+                      onTap: () => _navigateToCarouselAd(index),
+                      child: Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.5),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.arrow_forward_ios,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Swipe',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
