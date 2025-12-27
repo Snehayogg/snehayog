@@ -3,11 +3,12 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:vayu/features/auth/domain/repositories/auth_repository.dart';
 import 'package:vayu/features/auth/domain/entities/user_entity.dart';
 import 'package:vayu/features/auth/data/repositories/auth_repository_impl.dart';
+import 'package:vayu/config/google_sign_in_config.dart';
 
 class GoogleSignInController extends ChangeNotifier {
   final AuthRepository _authRepository;
   final GoogleSignIn _googleSignIn;
-  
+
   bool _isLoading = false;
   UserEntity? _currentUser;
   String? _errorMessage;
@@ -15,7 +16,8 @@ class GoogleSignInController extends ChangeNotifier {
   GoogleSignInController({AuthRepository? authRepository})
       : _authRepository = authRepository ?? AuthRepositoryImpl(),
         _googleSignIn = GoogleSignIn(
-          scopes: ['email', 'profile'],
+          scopes: GoogleSignInConfig.scopes,
+          clientId: GoogleSignInConfig.platformClientId,
         );
 
   // Getters
@@ -36,8 +38,9 @@ class GoogleSignInController extends ChangeNotifier {
         return;
       }
 
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-      
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+
       final user = UserEntity(
         id: googleUser.id,
         name: googleUser.displayName ?? '',
@@ -49,10 +52,9 @@ class GoogleSignInController extends ChangeNotifier {
       // Save user to backend
       final savedUser = await _authRepository.signInWithGoogle(user);
       _currentUser = savedUser;
-      
+
       _setLoading(false);
       notifyListeners();
-      
     } catch (error) {
       _setError('Failed to sign in: ${error.toString()}');
       _setLoading(false);
@@ -63,14 +65,13 @@ class GoogleSignInController extends ChangeNotifier {
   Future<void> signOut() async {
     try {
       _setLoading(true);
-      
+
       await _googleSignIn.signOut();
       await _authRepository.signOut();
-      
+
       _currentUser = null;
       _setLoading(false);
       notifyListeners();
-      
     } catch (error) {
       _setError('Failed to sign out: ${error.toString()}');
       _setLoading(false);
@@ -111,5 +112,4 @@ class GoogleSignInController extends ChangeNotifier {
   void _clearError() {
     _errorMessage = null;
   }
-
 }

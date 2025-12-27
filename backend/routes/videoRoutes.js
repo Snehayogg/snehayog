@@ -5,6 +5,7 @@ import Video from '../models/Video.js';
 import User from '../models/User.js';
 import Comment from '../models/Comment.js';
 import WatchHistory from '../models/WatchHistory.js';
+import RecommendationService from '../services/recommendationService.js';
 import fs from 'fs'; 
 import path from 'path';
 import crypto from 'crypto';
@@ -1214,6 +1215,84 @@ router.get('/', async (req, res) => {
           `❌ LRU FEED: Error fetching videos for personalized feed: ${err.message}`,
         );
         allVideos = []; // Ensure it's an array even on error
+      }
+
+      // **NEW: Try session-based recommendations first (like Instagram/YouTube)**
+      // This learns from user's current session and recommends similar content using AI
+      let sessionBasedVideos = [];
+      try {
+        if (userIdentifier && pageNum === 1) {
+          // Only use session-based recommendations on first page
+          console.log('🤖 Attempting session-based AI recommendations...');
+          sessionBasedVideos = await RecommendationService.getSessionBasedRecommendations(
+            userIdentifier,
+            null, // No current video to exclude
+            limitNum * 2 // Get more candidates for diversity filtering
+          );
+          
+          if (sessionBasedVideos && sessionBasedVideos.length > 0) {
+            console.log(`✅ Session-based recommendations found: ${sessionBasedVideos.length} videos`);
+            
+            // Apply diversity ordering
+            sessionBasedVideos = RecommendationService.orderFeedWithDiversity(sessionBasedVideos, {
+              randomness: 0.15,
+              minCreatorSpacing: 2
+            });
+            
+            // Limit to requested amount
+            sessionBasedVideos = sessionBasedVideos.slice(0, limitNum);
+            
+            // Populate uploader and comments for session-based videos
+            const sessionVideoIds = sessionBasedVideos.map(v => v._id);
+            const populatedSessionVideos = await Video.find({
+              _id: { $in: sessionVideoIds }
+            })
+              .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded category tags keywords createdAt')
+              .populate('uploader', 'name profilePic googleId')
+              .populate('comments.user', 'name profilePic googleId')
+              .lean();
+            
+            // Maintain order from session-based recommendations
+            const orderedSessionVideos = sessionVideoIds.map(id => 
+              populatedSessionVideos.find(v => v._id.toString() === id.toString())
+            ).filter(Boolean);
+            
+            if (orderedSessionVideos.length > 0) {
+              console.log(`✅ Using ${orderedSessionVideos.length} session-based AI recommendations`);
+              // Use session-based videos as primary feed
+              finalVideos = orderedSessionVideos;
+              
+              // Mark these videos as shown in session
+              if (redisService.getConnectionStatus() && userIdentifier) {
+                const videoIdsToMark = orderedSessionVideos.map(v => v._id.toString());
+                await redisService.setSessionShownVideos(userIdentifier, videoIdsToMark);
+              }
+              
+              // Skip LRU feed logic and go to response
+              const feedResponse = {
+                videos: finalVideos,
+                hasMore: true, // Assume more available
+                page: pageNum,
+                limit: limitNum,
+                total: finalVideos.length,
+                isPersonalized: true,
+                isSessionBased: true // Flag to indicate AI recommendations
+              };
+              
+              // Cache for 30 seconds
+              if (redisService.getConnectionStatus() && finalVideos.length > 0) {
+                await redisService.set(feedCacheKey, feedResponse, 30);
+              }
+              
+              return res.json(feedResponse);
+            }
+          } else {
+            console.log('⚠️ Session-based recommendations returned no results, using LRU feed');
+          }
+        }
+      } catch (sessionError) {
+        console.error('❌ Error in session-based recommendations (falling back to LRU):', sessionError.message);
+        // Continue with LRU feed on error
       }
 
       // 4) Attach lastWatchedAt (null = never watched / highest priority)

@@ -6,10 +6,12 @@ import 'package:google_sign_in_platform_interface/google_sign_in_platform_interf
 import 'package:http/http.dart' as http;
 import 'package:vayu/model/usermodel.dart';
 import 'package:vayu/config/app_config.dart';
+import 'package:vayu/config/google_sign_in_config.dart';
 
 class ProfileController extends ChangeNotifier {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: ['email', 'profile'],
+    scopes: GoogleSignInConfig.scopes,
+    clientId: GoogleSignInConfig.platformClientId,
   );
 
   UserModel? user;
@@ -60,9 +62,26 @@ class ProfileController extends ChangeNotifier {
       print('Fetching authentication token...');
       String? idToken;
       if (kIsWeb) {
-        final tokens = await GoogleSignInPlatform.instance
-            .getTokens(email: account.email);
-        idToken = tokens.idToken;
+        // Try getTokens first
+        try {
+          final tokens = await GoogleSignInPlatform.instance
+              .getTokens(email: account.email);
+          idToken = tokens.idToken;
+          print('✅ Got ID token using getTokens method');
+        } catch (getTokensError) {
+          print(
+              '⚠️ getTokens failed, trying authentication method: $getTokensError');
+          // Fallback: try authentication method
+          try {
+            final auth = await account.authentication;
+            idToken = auth.idToken;
+            print('✅ Got ID token using authentication method');
+          } catch (authError) {
+            print('❌ Both methods failed: $authError');
+            error = "Failed to get ID token from Google. Error: $authError";
+            return;
+          }
+        }
       } else {
         final auth = await account.authentication;
         idToken = auth.idToken;
@@ -70,7 +89,7 @@ class ProfileController extends ChangeNotifier {
 
       if (idToken == null) {
         error =
-            "Failed to get ID token from Google. Please try signing in again.";
+            "Failed to get ID token from Google. Please check your Google Cloud Console configuration for authorized JavaScript origins and redirect URIs.";
         print('ID token is null');
         return;
       }

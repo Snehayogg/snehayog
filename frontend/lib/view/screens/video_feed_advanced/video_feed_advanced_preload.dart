@@ -73,7 +73,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       AppLogger.log(
         '⏳ Max concurrent initializations reached (${_initializingVideos.length}/$maxConcurrent), deferring video $index',
       );
-      Future.delayed(const Duration(milliseconds: 500), () {
+      // **OPTIMIZED: Reduced delay from 500ms to 100ms for faster retry**
+      Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted && !_preloadedVideos.contains(index)) {
           _preloadVideo(index);
         }
@@ -252,6 +253,24 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
         _firstFrameReady[index] ??= ValueNotifier<bool>(false);
         _firstFrameReady[index]!.value = false;
+
+        // **WEB FIX: On web, force set firstFrameReady if controller has size**
+        // Web video player might not trigger position updates the same way
+        if (kIsWeb && controller.value.isInitialized) {
+          final hasSize = controller.value.size.width > 0 &&
+              controller.value.size.height > 0;
+          if (hasSize) {
+            Future.delayed(const Duration(milliseconds: 300), () {
+              if (mounted && _firstFrameReady[index]?.value != true) {
+                _firstFrameReady[index]?.value = true;
+                AppLogger.log(
+                  '🌐 WEB FIX: Force set firstFrameReady for index $index (controller has size)',
+                );
+              }
+            });
+          }
+        }
+
         if (index <= 1) {
           _forceMountPlayer[index] = ValueNotifier<bool>(false);
           Future.delayed(const Duration(milliseconds: 700), () {
@@ -272,7 +291,16 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         void markReadyIfNeeded() async {
           if (_firstFrameReady[index]?.value == true) return;
           final v = controller!.value;
-          if (v.isInitialized && v.position > Duration.zero && !v.isBuffering) {
+
+          // **WEB FIX: On web, check if controller has size instead of position**
+          // Web video might not update position immediately, but size is available
+          final bool isReady = kIsWeb
+              ? (v.isInitialized && v.size.width > 0 && v.size.height > 0)
+              : (v.isInitialized &&
+                  v.position > Duration.zero &&
+                  !v.isBuffering);
+
+          if (isReady) {
             _firstFrameReady[index]?.value = true;
             try {
               await controller.pause();
@@ -327,24 +355,24 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
             }
           });
 
-          // **FALLBACK: Also check after a small delay in case immediate attempt didn't work**
-          // This handles cases where video needs a tiny bit more time to be ready
-          Future.delayed(const Duration(milliseconds: 150), () {
+          // **FALLBACK: Also check using callback in case immediate attempt didn't work**
+          // Use postFrameCallback instead of delay for faster retry
+          WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted &&
                 _currentIndex == index &&
                 currentController.value.isInitialized &&
                 !currentController.value.isPlaying &&
                 _userPaused[index] != true) {
               AppLogger.log(
-                '⚡ VideoFeedAdvanced: Retrying autoplay after brief delay',
+                '⚡ VideoFeedAdvanced: Retrying autoplay after callback',
               );
               _tryAutoplayCurrentImmediate(index);
             }
           });
 
-          // **ADDITIONAL FALLBACK: Wait for buffer if needed**
+          // **ADDITIONAL FALLBACK: Wait for buffer if needed (reduced delay)**
           // Only if video still hasn't started playing after immediate attempts
-          Future.delayed(const Duration(milliseconds: 400), () {
+          Future.delayed(const Duration(milliseconds: 200), () {
             if (mounted &&
                 _currentIndex == index &&
                 currentController.value.isInitialized &&
@@ -1153,8 +1181,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         AppLogger.log(
             '⚡ VideoFeedAdvanced: Immediate autoplay started for index $index');
 
-        // **NEW: Verify play actually started, retry if needed**
-        Future.delayed(const Duration(milliseconds: 100), () {
+        // **NEW: Verify play actually started, retry if needed (use callback instead of delay)**
+        WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted &&
               _currentIndex == index &&
               controllerToPlay.value.isInitialized &&
@@ -1172,8 +1200,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       } catch (e) {
         AppLogger.log(
             '❌ VideoFeedAdvanced: Immediate autoplay failed: $e, will retry');
-        // Retry after a brief delay if initial play failed
-        Future.delayed(const Duration(milliseconds: 200), () {
+        // Retry using callback instead of delay for faster recovery
+        WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted &&
               _currentIndex == index &&
               controllerToPlay.value.isInitialized &&

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -273,11 +274,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               _controllerPool[_currentIndex]?.value.isInitialized != true) {
             _preloadVideo(_currentIndex).then((_) {
               if (mounted) {
-                Future.delayed(const Duration(milliseconds: 100), () {
-                  if (mounted) {
-                    _tryAutoplayCurrent();
-                  }
-                });
+                // No delay - autoplay checks controller readiness
+                _tryAutoplayCurrent();
               }
             });
           } else {
@@ -451,7 +449,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   void _scheduleAutoplayAfterLogin() {
     if (!_pendingAutoplayAfterLogin) return;
 
-    Future.delayed(const Duration(milliseconds: 150), () {
+    // Use postFrameCallback instead of delay for faster autoplay
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
 
       if (!_shouldAutoplayForContext('autoplay after login')) {

@@ -62,12 +62,16 @@ class GoogleSignInConfig {
     print('   📦 Package Name: com.example.snehayog');
     print('   🎯 Scopes: ${scopes.join(', ')}');
 
-    // Safe platform detection
+    // Safe platform detection - check web first
     String platformInfo = 'Unknown';
-    try {
-      platformInfo = Platform.operatingSystem;
-    } catch (e) {
+    if (kIsWeb) {
       platformInfo = 'Web Browser';
+    } else {
+      try {
+        platformInfo = Platform.operatingSystem;
+      } catch (e) {
+        platformInfo = 'Unknown';
+      }
     }
     print('   🌐 Platform: $platformInfo');
 

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:video_player/video_player.dart';
 import 'package:vayu/core/managers/video_position_cache_manager.dart';
 import 'package:vayu/core/managers/hot_ui_state_manager.dart';
@@ -171,13 +172,24 @@ class VideoControllerManager {
         await VideoControllerFactory.createController(videoWithSignedUrl);
 
     try {
+      // **WEB FIX: Web video player initialization may need longer timeout or different handling**
+     const timeoutDuration =
+          kIsWeb ? Duration(seconds: 15) : Duration(seconds: 10);
       await controller.initialize().timeout(
-        const Duration(seconds: 10),
+        timeoutDuration,
         onTimeout: () {
           throw TimeoutException(
-              'Video initialization timeout', const Duration(seconds: 10));
+              'Video initialization timeout', timeoutDuration);
         },
-      );
+      ).catchError((error) {
+        // **WEB FIX: Catch platform channel errors on web**
+        AppLogger.log(
+          '⚠️ VideoControllerManager: Video initialization error (may be web-specific): $error',
+          isError: true,
+        );
+        // Re-throw to let caller handle
+        throw error;
+      });
 
       controller.setLooping(true);
       _controllers[index] = controller;

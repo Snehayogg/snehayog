@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 
 /// AdMob configuration module for managing Google AdMob ad unit IDs
 /// Follows the modular approach for better maintainability
@@ -33,6 +33,11 @@ class AdMobConfig {
 
   /// Get banner ad unit ID for current platform
   static String? getBannerAdUnitId() {
+    // **WEB FIX: Web platform doesn't support AdMob banner ads**
+    if (kIsWeb) {
+      return null; // AdMob doesn't support web banner ads
+    }
+
     // **FIX: Use production ads if forced OR in release mode**
     // In debug mode, use test IDs UNLESS production ads are forced
     if (kDebugMode && !_forceProductionAds) {

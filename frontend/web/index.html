@@ -123,6 +123,54 @@
       object-fit: cover;
     }
 
+    /* Fix for video player on web - ensure video elements are visible */
+    video {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: contain !important;
+      display: block !important;
+      position: relative !important;
+      z-index: 1 !important;
+      background-color: #000000 !important;
+      opacity: 1 !important;
+      visibility: visible !important;
+      pointer-events: auto !important;
+    }
+
+    /* Ensure video player container is visible */
+    flt-video-player {
+      width: 100% !important;
+      height: 100% !important;
+      display: block !important;
+      position: relative !important;
+      z-index: 1 !important;
+      opacity: 1 !important;
+      visibility: visible !important;
+    }
+
+    /* Fix for video player wrapper */
+    [data-video-player] {
+      width: 100% !important;
+      height: 100% !important;
+      display: block !important;
+      position: relative !important;
+      z-index: 1 !important;
+      opacity: 1 !important;
+      visibility: visible !important;
+    }
+
+    /* Fix for Flutter video player widget on web */
+    canvas[data-video-player],
+    div[data-video-player] {
+      width: 100% !important;
+      height: 100% !important;
+      display: block !important;
+      position: relative !important;
+      z-index: 1 !important;
+      opacity: 1 !important;
+      visibility: visible !important;
+    }
+
     .bottom {
       position: absolute;
       bottom: 0;

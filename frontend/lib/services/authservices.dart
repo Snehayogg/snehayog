@@ -77,13 +77,30 @@ class AuthService {
 
       AppLogger.log('✅ Google Sign-In successful for: ${googleUser.email}');
 
-      // Acquire ID token; on web, prefer platform getTokens as authentication.idToken can be null
+      // Acquire ID token; on web, try multiple methods with fallback
       String? idToken;
       try {
         if (kIsWeb) {
-          final tokens = await GoogleSignInPlatform.instance
-              .getTokens(email: googleUser.email);
-          idToken = tokens.idToken;
+          // Try getTokens first (preferred method for web)
+          try {
+            final tokens = await GoogleSignInPlatform.instance
+                .getTokens(email: googleUser.email);
+            idToken = tokens.idToken;
+            AppLogger.log('✅ Got ID token using getTokens method');
+          } catch (getTokensError) {
+            AppLogger.log(
+                '⚠️ getTokens failed, trying authentication method: $getTokensError');
+            // Fallback: try authentication method
+            try {
+              final GoogleSignInAuthentication googleAuth =
+                  await googleUser.authentication;
+              idToken = googleAuth.idToken;
+              AppLogger.log('✅ Got ID token using authentication method');
+            } catch (authError) {
+              AppLogger.log('❌ authentication method also failed: $authError');
+              rethrow;
+            }
+          }
         } else {
           final GoogleSignInAuthentication googleAuth =
               await googleUser.authentication;
@@ -91,11 +108,13 @@ class AuthService {
         }
       } catch (e) {
         AppLogger.log('❌ Error obtaining Google tokens: $e');
+        AppLogger.log('❌ Error details: ${e.toString()}');
       }
 
       if (idToken == null) {
         AppLogger.log('❌ Failed to get ID token from Google');
-        throw Exception('Failed to get authentication token from Google');
+        throw Exception(
+            'Failed to get authentication token from Google. Please check your Google Cloud Console configuration for authorized JavaScript origins and redirect URIs.');
       }
 
       AppLogger.log('🔑 Got ID token, attempting backend authentication...');
@@ -1078,13 +1097,30 @@ class AuthService {
 
       AppLogger.log('✅ Google user found: ${googleUser.email}');
 
-      // Step 4: Get ID token from Google
+      // Step 4: Get ID token from Google (with fallback for web)
       String? idToken;
       try {
         if (kIsWeb) {
-          final tokens = await GoogleSignInPlatform.instance
-              .getTokens(email: googleUser.email);
-          idToken = tokens.idToken;
+          // Try getTokens first (preferred method for web)
+          try {
+            final tokens = await GoogleSignInPlatform.instance
+                .getTokens(email: googleUser.email);
+            idToken = tokens.idToken;
+            AppLogger.log('✅ Got ID token using getTokens method');
+          } catch (getTokensError) {
+            AppLogger.log(
+                '⚠️ getTokens failed, trying authentication method: $getTokensError');
+            // Fallback: try authentication method
+            try {
+              final GoogleSignInAuthentication googleAuth =
+                  await googleUser.authentication;
+              idToken = googleAuth.idToken;
+              AppLogger.log('✅ Got ID token using authentication method');
+            } catch (authError) {
+              AppLogger.log('❌ authentication method also failed: $authError');
+              return null;
+            }
+          }
         } else {
           final GoogleSignInAuthentication googleAuth =
               await googleUser.authentication;

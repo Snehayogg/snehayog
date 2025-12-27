@@ -401,25 +401,6 @@
         </div>
 
         <div class="dashboard-section">
-            <h2 class="section-title">💰 Current Month Earnings</h2>
-            <div class="action-buttons">
-                <button class="btn btn-primary" onclick="loadMonthlyEarnings()">
-                    🔄 Load Current Month Earnings
-                </button>
-            </div>
-            <div id="currentMonthEarnings">
-                <p>Click "Load Current Month Earnings" to view all creators' earnings for this month</p>
-            </div>
-        </div>
-
-        <div class="dashboard-section">
-            <h2 class="section-title">📅 Previous Month Earnings</h2>
-            <div id="previousMonthEarnings">
-                <p>Previous month earnings will be displayed when you load monthly earnings</p>
-            </div>
-        </div>
-
-        <div class="dashboard-section">
             <h2 class="section-title">📋 Recent Payouts</h2>
             <div id="recentPayouts">
                 <p>Loading recent payouts...</p>
@@ -624,13 +605,24 @@
         function markCreatorPaid(encodedId) {
             const creatorId = decodeURIComponent(encodedId);
             if (!creatorId) return;
+            
+            // Get current month for tracking
+            const now = new Date();
+            const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            
+            // Always allow marking (for tracking each month's payment)
             if (markedCreators.has(creatorId)) {
-                showSuccess('This creator is already marked as paid.');
-                return;
+                // Already marked - allow re-marking for new month
+                markedCreators.add(creatorId);
+                saveMarkedCreators();
+                showSuccess(`Marked payout as done for ${currentMonth} ✅`);
+            } else {
+                // First time marking
+                markedCreators.add(creatorId);
+                saveMarkedCreators();
+                showSuccess(`Marked payout as done for ${currentMonth} ✅`);
             }
-            markedCreators.add(creatorId);
-            saveMarkedCreators();
-            showSuccess('Marked payout as done ✅');
+            
             filterCreators();
         }
 
@@ -824,27 +816,28 @@
                 const markedBadge = formatCurrencyINR(
                     pendingAmount > 0 ? pendingAmount : netEarnings
                 );
-                const shouldShowMarkButton =
-                    !isMarked && (pendingAmount > 0 || netEarnings > 0);
+                const shouldShowMarkButton = (pendingAmount > 0 || netEarnings > 0);
 
                 let pendingCell = '—';
-                if (isMarked) {
-                    pendingCell = `
-                        <span class="status-badge status-paid">
-                            ${markedBadge} Paid ✅
-                        </span>
-                    `;
-                } else if (shouldShowMarkButton) {
+                if (shouldShowMarkButton) {
                     const amountBadge =
                         pendingAmount > 0
                             ? `<span class="status-badge status-pending">${formatCurrencyINR(pendingAmount)}</span>`
                             : '';
 
+                    // Always show button, but show different text if already marked
+                    const buttonText = isMarked ? 'Mark Paid Again' : 'Mark Paid';
+                    const buttonClass = isMarked ? 'btn btn-warning btn-sm' : 'btn btn-success btn-sm';
+                    const statusBadge = isMarked 
+                        ? `<span class="status-badge status-paid" style="margin-right: 8px;">${markedBadge} Paid ✅</span>`
+                        : '';
+
                     pendingCell = `
                         <div style="display:flex; align-items:center; gap:8px; flex-wrap: wrap;">
+                            ${statusBadge}
                             ${amountBadge}
-                            <button class="btn btn-success btn-sm" onclick="markCreatorPaid('${encodedId}')">
-                                Mark Paid
+                            <button class="${buttonClass}" onclick="markCreatorPaid('${encodedId}')">
+                                ${buttonText}
                             </button>
                         </div>
                     `;
@@ -1254,9 +1247,6 @@
                 // Load recent payouts
                 await loadRecentPayouts();
                 
-                // Load monthly earnings
-                await loadMonthlyEarnings();
-                
                 setLoading(false);
             } catch (error) {
                 console.error('Error refreshing data:', error);
@@ -1604,148 +1594,6 @@
             loadVideos();
         }
 
-        // **NEW: Load monthly earnings for all creators**
-        async function loadMonthlyEarnings() {
-            const currentContainer = document.getElementById('currentMonthEarnings');
-            const previousContainer = document.getElementById('previousMonthEarnings');
-            
-            try {
-                currentContainer.innerHTML = '<p>Loading monthly earnings...</p>';
-                previousContainer.innerHTML = '<p>Loading...</p>';
-                
-                const response = await authorizedFetch(`${API_BASE}/admin/creators/monthly-earnings`);
-                if (!response || !response.ok) {
-                    currentContainer.innerHTML = '<p class="error-message">Failed to load monthly earnings</p>';
-                    previousContainer.innerHTML = '<p class="error-message">Failed to load monthly earnings</p>';
-                    return;
-                }
-                
-                const data = await response.json();
-                if (!data.success) {
-                    currentContainer.innerHTML = '<p class="error-message">Failed to load monthly earnings</p>';
-                    previousContainer.innerHTML = '<p class="error-message">Failed to load monthly earnings</p>';
-                    return;
-                }
-                
-                const creators = data.creators || [];
-                const currentMonth = data.currentMonth || 'N/A';
-                const lastMonth = data.lastMonth || 'N/A';
-                const totalThisMonth = data.totalThisMonth || 0;
-                const totalLastMonth = data.totalLastMonth || 0;
-                
-                // Render current month earnings
-                if (creators.length === 0) {
-                    currentContainer.innerHTML = '<p>No creators found</p>';
-                    previousContainer.innerHTML = '<p>No creators found</p>';
-                    return;
-                }
-                
-                // Current Month Table
-                const currentMonthRows = creators.map((creator, index) => {
-                    const name = escapeHtml(creator.name || 'Unknown');
-                    const email = escapeHtml(creator.email || '—');
-                    const googleId = escapeHtml(creator.googleId || '—');
-                    const earnings = creator.thisMonth || 0;
-                    
-                    return `
-                        <tr>
-                            <td>${index + 1}</td>
-                            <td>
-                                <strong>${name}</strong><br>
-                                <small>${email}</small><br>
-                                <small>Google ID: ${googleId}</small>
-                            </td>
-                            <td>${formatNumber(creator.currentMonthBannerViews || 0)}</td>
-                            <td>${formatNumber(creator.currentMonthCarouselViews || 0)}</td>
-                            <td style="font-weight: bold; color: #28a745;">${formatCurrencyINR(earnings)}</td>
-                        </tr>
-                    `;
-                }).join('');
-                
-                currentContainer.innerHTML = `
-                    <div style="margin-bottom: 20px; padding: 15px; background: #e7f3ff; border-radius: 10px; border-left: 4px solid #2196F3;">
-                        <h3 style="margin: 0 0 10px 0; color: #1976D2;">Month: ${currentMonth}</h3>
-                        <p style="margin: 0; font-size: 1.2rem; font-weight: bold; color: #28a745;">
-                            Total Earnings: ${formatCurrencyINR(totalThisMonth)}
-                        </p>
-                        <p style="margin: 5px 0 0 0; color: #666;">
-                            ${creators.length} creators
-                        </p>
-                    </div>
-                    <div style="overflow-x: auto;">
-                        <table class="payout-table">
-                            <thead>
-                                <tr>
-                                    <th>#</th>
-                                    <th>Creator</th>
-                                    <th>Banner Views</th>
-                                    <th>Carousel Views</th>
-                                    <th>Earnings (₹)</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${currentMonthRows}
-                            </tbody>
-                        </table>
-                    </div>
-                `;
-                
-                // Previous Month Table
-                const previousMonthRows = creators.map((creator, index) => {
-                    const name = escapeHtml(creator.name || 'Unknown');
-                    const email = escapeHtml(creator.email || '—');
-                    const googleId = escapeHtml(creator.googleId || '—');
-                    const earnings = creator.lastMonth || 0;
-                    
-                    return `
-                        <tr>
-                            <td>${index + 1}</td>
-                            <td>
-                                <strong>${name}</strong><br>
-                                <small>${email}</small><br>
-                                <small>Google ID: ${googleId}</small>
-                            </td>
-                            <td>${formatNumber(creator.lastMonthBannerViews || 0)}</td>
-                            <td>${formatNumber(creator.lastMonthCarouselViews || 0)}</td>
-                            <td style="font-weight: bold; color: #ff9800;">${formatCurrencyINR(earnings)}</td>
-                        </tr>
-                    `;
-                }).join('');
-                
-                previousContainer.innerHTML = `
-                    <div style="margin-bottom: 20px; padding: 15px; background: #fff3e0; border-radius: 10px; border-left: 4px solid #ff9800;">
-                        <h3 style="margin: 0 0 10px 0; color: #f57c00;">Month: ${lastMonth}</h3>
-                        <p style="margin: 0; font-size: 1.2rem; font-weight: bold; color: #ff9800;">
-                            Total Earnings: ${formatCurrencyINR(totalLastMonth)}
-                        </p>
-                        <p style="margin: 5px 0 0 0; color: #666;">
-                            ${creators.length} creators
-                        </p>
-                    </div>
-                    <div style="overflow-x: auto;">
-                        <table class="payout-table">
-                            <thead>
-                                <tr>
-                                    <th>#</th>
-                                    <th>Creator</th>
-                                    <th>Banner Views</th>
-                                    <th>Carousel Views</th>
-                                    <th>Earnings (₹)</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${previousMonthRows}
-                            </tbody>
-                        </table>
-                    </div>
-                `;
-                
-            } catch (error) {
-                console.error('Error loading monthly earnings:', error);
-                currentContainer.innerHTML = `<p class="error-message">Error loading monthly earnings: ${error.message}</p>`;
-                previousContainer.innerHTML = `<p class="error-message">Error loading monthly earnings: ${error.message}</p>`;
-            }
-        }
     </script>
 </body>
 </html>

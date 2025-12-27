@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:vayu/utils/feature_flags.dart';
@@ -119,7 +120,7 @@ class SmartCacheManager {
   final Map<String, InstagramCacheEntry> _memoryCache = {};
 
   // Disk cache for persistence
-  late Directory _cacheDir;
+  Directory? _cacheDir; // **WEB FIX: Nullable for web platform support**
 
   // Initialization state
   bool _isInitialized = false;
@@ -231,10 +232,27 @@ class SmartCacheManager {
 
   /// Initialize cache directory
   Future<void> _initializeCacheDirectory() async {
-    final appDir = await getApplicationDocumentsDirectory();
-    _cacheDir = Directory('${appDir.path}/smart_cache');
-    if (!await _cacheDir.exists()) {
-      await _cacheDir.create(recursive: true);
+    // **WEB FIX: On web, use browser's IndexedDB/localStorage instead of file system**
+    if (kIsWeb) {
+      // Web doesn't support file system, cache will use in-memory or browser storage
+      // For now, we'll skip directory creation on web
+      _cacheDir = null;
+      AppLogger.log(
+          '🌐 SmartCacheManager: Web platform detected, skipping file system cache');
+      return;
+    }
+
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      _cacheDir = Directory('${appDir.path}/smart_cache');
+      if (!await _cacheDir!.exists()) {
+        await _cacheDir!.create(recursive: true);
+      }
+    } catch (e) {
+      // Fallback if directory creation fails
+      _cacheDir = null;
+      AppLogger.log(
+          '⚠️ SmartCacheManager: Failed to create cache directory: $e');
     }
   }
 
@@ -354,9 +372,14 @@ class SmartCacheManager {
             // Invalidate any existing cache for this key
             _memoryCache.remove(key);
             try {
-              final file = File('${_cacheDir.path}/$key.json');
-              if (await file.exists()) {
-                await file.delete();
+              // **MOBILE/WEB SAFE: Only perform file operations if cache directory exists**
+              // On mobile: _cacheDir will be set during initialization
+              // On web: _cacheDir will be null, so this will be skipped
+              if (_cacheDir != null) {
+                final file = File('${_cacheDir!.path}/$key.json');
+                if (await file.exists()) {
+                  await file.delete();
+                }
               }
             } catch (_) {}
             return freshData; // Return but don't cache
@@ -509,9 +532,10 @@ class SmartCacheManager {
   /// Load persisted cache from disk
   Future<void> _loadPersistedCache() async {
     try {
-      if (!await _cacheDir.exists()) return;
+      if (_cacheDir == null) return; // **WEB FIX: Skip on web**
+      if (!await _cacheDir!.exists()) return;
 
-      final files = _cacheDir.listSync();
+      final files = _cacheDir!.listSync();
       int loadedCount = 0;
 
       for (final file in files) {
@@ -656,9 +680,9 @@ class SmartCacheManager {
     try {
       _memoryCache.clear();
 
-      if (await _cacheDir.exists()) {
-        await _cacheDir.delete(recursive: true);
-        await _cacheDir.create();
+      if (_cacheDir != null && await _cacheDir!.exists()) {
+        await _cacheDir!.delete(recursive: true);
+        await _cacheDir!.create();
       }
 
       AppLogger.log('🗑️ SmartCacheManager: Cache cleared successfully');
@@ -685,8 +709,8 @@ class SmartCacheManager {
       }
 
       // Also remove from disk cache
-      if (await _cacheDir.exists()) {
-        final files = _cacheDir.listSync();
+      if (_cacheDir != null && await _cacheDir!.exists()) {
+        final files = _cacheDir!.listSync();
         for (final file in files) {
           if (file is File && file.path.contains(pattern)) {
             await file.delete();
@@ -821,7 +845,8 @@ class SmartCacheManager {
   /// Get cache entry from disk
   Future<InstagramCacheEntry<T>?> _getFromDiskCache<T>(String key) async {
     try {
-      final file = File('${_cacheDir.path}/$key.json');
+      if (_cacheDir == null) return null; // **WEB FIX: Skip on web**
+      final file = File('${_cacheDir!.path}/$key.json');
       if (!await file.exists()) return null;
 
       final jsonString = await file.readAsString();
@@ -917,7 +942,8 @@ class SmartCacheManager {
       // **FIX: Check disk cache size before persisting**
       await _enforceDiskCacheLimit();
 
-      final file = File('${_cacheDir.path}/$key.json');
+      if (_cacheDir == null) return; // **WEB FIX: Skip on web**
+      final file = File('${_cacheDir!.path}/$key.json');
       await file.writeAsString(jsonEncode(entry.toJson()));
     } catch (e) {
       AppLogger.log(
@@ -928,13 +954,14 @@ class SmartCacheManager {
   /// Enforce disk cache size limit (100 MB)
   Future<void> _enforceDiskCacheLimit() async {
     try {
-      if (!await _cacheDir.exists()) return;
+      if (_cacheDir == null) return; // **WEB FIX: Skip on web**
+      if (!await _cacheDir!.exists()) return;
 
       // Calculate current disk cache size
       int totalSizeBytes = 0;
       final fileInfos = <MapEntry<File, int>>[];
 
-      await for (final entity in _cacheDir.list()) {
+      await for (final entity in _cacheDir!.list()) {
         if (entity is File && entity.path.endsWith('.json')) {
           final size = await entity.length();
           totalSizeBytes += size;

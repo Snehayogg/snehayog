@@ -241,14 +241,42 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
       color: Colors.black,
       child: Stack(
         children: [
-          Positioned.fill(child: _buildVideoThumbnail(video)),
+          // **WEB FIX: Hide thumbnail when video is ready on web**
+          ValueListenableBuilder<bool>(
+            valueListenable:
+                _firstFrameReady[index] ?? ValueNotifier<bool>(false),
+            builder: (context, firstFrameReady, _) {
+              final bool shouldShowOnWeb = kIsWeb &&
+                  controller != null &&
+                  controller.value.isInitialized;
+              final bool shouldHideThumbnail = firstFrameReady ||
+                  _forceMountPlayer[index]?.value == true ||
+                  shouldShowOnWeb;
+
+              return Positioned.fill(
+                child: shouldHideThumbnail
+                    ? const SizedBox.shrink()
+                    : _buildVideoThumbnail(video),
+              );
+            },
+          ),
           if (controller != null && controller.value.isInitialized)
             ValueListenableBuilder<bool>(
               valueListenable:
                   _firstFrameReady[index] ?? ValueNotifier<bool>(false),
               builder: (context, firstFrameReady, _) {
-                if (firstFrameReady ||
-                    _forceMountPlayer[index]?.value == true) {
+                // **WEB FIX: On web, always show video if controller is initialized**
+                // Web video player doesn't always trigger firstFrameReady properly
+                // So we force show video on web if controller is initialized
+                // This ensures videos are visible even if firstFrameReady never triggers
+                final bool shouldShowOnWeb =
+                    kIsWeb && controller.value.isInitialized;
+
+                final shouldShowVideo = firstFrameReady ||
+                    _forceMountPlayer[index]?.value == true ||
+                    shouldShowOnWeb;
+
+                if (shouldShowVideo) {
                   return Positioned.fill(
                     child:
                         _buildVideoPlayer(controller, isActive, index, video),
@@ -495,6 +523,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         width: double.infinity,
         height: double.infinity,
         color: Colors.black,
+        // **WEB FIX: Ensure video player container is above other elements**
         child: Center(
           child: _buildVideoWithCorrectAspectRatio(
             controller,
@@ -678,7 +707,8 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         child: SizedBox(
           width: displayWidth,
           height: displayHeight,
-          child: VideoPlayer(controller),
+          child:
+              _buildVideoPlayerWidget(controller, displayWidth, displayHeight),
         ),
       ),
     );
@@ -773,9 +803,37 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         child: SizedBox(
           width: displayWidth,
           height: displayHeight,
-          child: VideoPlayer(controller),
+          child:
+              _buildVideoPlayerWidget(controller, displayWidth, displayHeight),
         ),
       ),
+    );
+  }
+
+  /// **WEB FIX: Build video player widget with explicit sizing for web compatibility**
+  Widget _buildVideoPlayerWidget(
+    VideoPlayerController controller,
+    double width,
+    double height,
+  ) {
+    // **WEB FIX: Ensure video player has explicit sizing and proper container for web**
+    // Check if controller is initialized before rendering
+    if (!controller.value.isInitialized) {
+      return Container(
+        width: width,
+        height: height,
+        color: Colors.black,
+        child: const Center(
+          child: CircularProgressIndicator(color: Colors.white),
+        ),
+      );
+    }
+
+    return Container(
+      width: width,
+      height: height,
+      color: Colors.black,
+      child: VideoPlayer(controller),
     );
   }
 

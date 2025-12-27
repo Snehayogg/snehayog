@@ -1,5 +1,6 @@
 import Video from '../models/Video.js';
 import WatchHistory from '../models/WatchHistory.js';
+import aiSemanticService from './aiSemanticService.js';
 
 /**
  * Balanced Recommendation System Service
@@ -427,6 +428,352 @@ class RecommendationService {
       console.error('❌ Error in recalculateAllScores:', error);
       throw error;
     }
+  }
+
+  /**
+   * Real-time session learning (like Instagram/YouTube Shorts)
+   * Learns from user's current session and recommends similar content using AI
+   * 
+   * @param {String} userId - User ID (Google ID or deviceId)
+   * @param {String} currentVideoId - Current video ID to exclude from results
+   * @param {Number} limit - Number of videos to return
+   * @returns {Promise<Array>} Array of recommended videos
+   */
+  static async getSessionBasedRecommendations(userId, currentVideoId = null, limit = 20) {
+    try {
+      console.log('🎯 RecommendationService: Getting session-based recommendations for user:', userId);
+      
+      // Get last 5-10 videos user watched in this session (last 30 minutes)
+      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+      const recentWatches = await WatchHistory.find({ 
+        userId,
+        watchedAt: { $gte: thirtyMinutesAgo }
+      })
+        .sort({ watchedAt: -1 })
+        .limit(10)
+        .populate('videoId')
+        .lean();
+      
+      console.log(`📊 Found ${recentWatches.length} recent watches in session`);
+      
+      if (recentWatches.length < 2) {
+        // Not enough session data, use default recommendations
+        console.log('⚠️ Not enough session data, using default recommendations');
+        return await this.getDefaultRecommendations(limit, currentVideoId);
+      }
+      
+      // Extract patterns from session
+      const sessionPatterns = {
+        categories: new Map(),
+        tags: new Map(),
+        creators: new Map(),
+        keywords: new Set(),
+        watchedVideoIds: new Set()
+      };
+      
+      recentWatches.forEach(watch => {
+        const video = watch.videoId;
+        if (!video) return;
+        
+        // Track watched videos to exclude
+        sessionPatterns.watchedVideoIds.add(video._id.toString());
+        
+        // Category pattern (weighted by watch duration)
+        if (video.category) {
+          const weight = watch.watchDuration || 1;
+          sessionPatterns.categories.set(
+            video.category,
+            (sessionPatterns.categories.get(video.category) || 0) + weight
+          );
+        }
+        
+        // Tag pattern
+        if (video.tags && Array.isArray(video.tags)) {
+          video.tags.forEach(tag => {
+            const weight = watch.watchDuration || 1;
+            sessionPatterns.tags.set(
+              tag,
+              (sessionPatterns.tags.get(tag) || 0) + weight
+            );
+          });
+        }
+        
+        // Creator pattern
+        const creatorId = video.uploader?.toString();
+        if (creatorId) {
+          const weight = watch.watchDuration || 1;
+          sessionPatterns.creators.set(
+            creatorId,
+            (sessionPatterns.creators.get(creatorId) || 0) + weight
+          );
+        }
+        
+        // Keywords from video name/description
+        const text = `${video.videoName || ''} ${video.description || ''}`.toLowerCase();
+        const keywords = text.split(/\s+/).filter(w => w.length > 3);
+        keywords.forEach(kw => sessionPatterns.keywords.add(kw));
+      });
+      
+      // Get top patterns (what user is interested in RIGHT NOW)
+      const topCategories = Array.from(sessionPatterns.categories.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([cat]) => cat);
+      
+      const topTags = Array.from(sessionPatterns.tags.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([tag]) => tag);
+      
+      const topCreators = Array.from(sessionPatterns.creators.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([creator]) => creator);
+      
+      console.log('🎯 Session patterns detected:', {
+        categories: topCategories,
+        tags: topTags.slice(0, 3),
+        creators: topCreators.length
+      });
+      
+      // Find similar videos using AI embeddings (like Instagram/YouTube)
+      const similarVideos = await this.findSimilarVideosUsingAI(
+        recentWatches.map(w => w.videoId).filter(Boolean),
+        topCategories,
+        topTags,
+        currentVideoId,
+        Array.from(sessionPatterns.watchedVideoIds),
+        limit
+      );
+      
+      return similarVideos;
+    } catch (error) {
+      console.error('❌ Error in session-based recommendations:', error);
+      return await this.getDefaultRecommendations(limit, currentVideoId);
+    }
+  }
+
+  /**
+   * Use AI embeddings to find similar videos (like Instagram/YouTube)
+   * This is the key to real-time learning - no hardcoding needed!
+   */
+  static async findSimilarVideosUsingAI(
+    watchedVideos,
+    preferredCategories,
+    preferredTags,
+    excludeVideoId,
+    excludeVideoIds,
+    limit
+  ) {
+    try {
+      console.log('🤖 Using AI to find similar videos...');
+      
+      // Get embeddings for watched videos
+      const watchedEmbeddings = [];
+      for (const video of watchedVideos) {
+        if (!video) continue;
+        const text = `${video.videoName || ''} ${video.description || ''}`.trim();
+        if (!text) continue;
+        
+        try {
+          const embedding = await aiSemanticService.getEmbedding(text);
+          if (embedding) {
+            watchedEmbeddings.push(embedding);
+          }
+        } catch (error) {
+          console.warn('⚠️ Failed to get embedding for video:', video._id);
+        }
+      }
+      
+      if (watchedEmbeddings.length === 0) {
+        // Fallback to category/tag matching if AI fails
+        console.log('⚠️ No embeddings available, using category/tag matching');
+        return await this.findVideosByPatterns(
+          preferredCategories,
+          preferredTags,
+          excludeVideoId,
+          excludeVideoIds,
+          limit
+        );
+      }
+      
+      // Calculate average embedding (user's current interest vector)
+      const avgEmbedding = this.calculateAverageEmbedding(watchedEmbeddings);
+      if (!avgEmbedding) {
+        return await this.findVideosByPatterns(
+          preferredCategories,
+          preferredTags,
+          excludeVideoId,
+          excludeVideoIds,
+          limit
+        );
+      }
+      
+      console.log('✅ Calculated user interest vector from session');
+      
+      // Build query for candidate videos
+      const excludeIds = [excludeVideoId, ...excludeVideoIds].filter(Boolean);
+      const query = {
+        _id: { $nin: excludeIds },
+        processingStatus: 'completed'
+      };
+      
+      // Add category/tag filters to narrow down candidates
+      const orConditions = [];
+      if (preferredCategories.length > 0) {
+        orConditions.push({ category: { $in: preferredCategories } });
+      }
+      if (preferredTags.length > 0) {
+        orConditions.push({ tags: { $in: preferredTags } });
+      }
+      
+      if (orConditions.length > 0) {
+        query.$or = orConditions;
+      }
+      
+      // Get candidate videos (more than limit for AI filtering)
+      const candidates = await Video.find(query)
+        .sort({ finalScore: -1, createdAt: -1 })
+        .limit(Math.min(100, limit * 5)) // Get 5x candidates for AI filtering
+        .lean();
+      
+      if (candidates.length === 0) {
+        console.log('⚠️ No candidate videos found, using default recommendations');
+        return await this.getDefaultRecommendations(limit, excludeVideoId);
+      }
+      
+      console.log(`🤖 Scoring ${candidates.length} candidate videos using AI...`);
+      
+      // Score each candidate using cosine similarity
+      const scoredVideos = [];
+      for (const video of candidates) {
+        try {
+          const text = `${video.videoName || ''} ${video.description || ''}`.trim();
+          if (!text) continue;
+          
+          const videoEmbedding = await aiSemanticService.getEmbedding(text);
+          if (!videoEmbedding) continue;
+          
+          const similarity = aiSemanticService.cosineSimilarity(
+            avgEmbedding,
+            videoEmbedding
+          );
+          
+          // Combine AI similarity (70%) with base score (30%)
+          const baseScore = video.finalScore || 0;
+          const normalizedBaseScore = Math.min(baseScore / 10, 1); // Normalize to 0-1
+          const combinedScore = (0.7 * similarity) + (0.3 * normalizedBaseScore);
+          
+          scoredVideos.push({
+            video,
+            score: combinedScore,
+            similarity,
+            baseScore: normalizedBaseScore
+          });
+        } catch (error) {
+          // Skip this video if embedding fails
+          continue;
+        }
+      }
+      
+      // Sort by combined score
+      scoredVideos.sort((a, b) => b.score - a.score);
+      
+      console.log(`✅ AI scoring complete. Top 3 similarities: ${scoredVideos.slice(0, 3).map(s => s.similarity.toFixed(3)).join(', ')}`);
+      
+      // Return top videos
+      return scoredVideos
+        .slice(0, limit)
+        .map(item => item.video);
+        
+    } catch (error) {
+      console.error('❌ Error in AI-based similarity:', error);
+      // Fallback
+      return await this.findVideosByPatterns(
+        preferredCategories,
+        preferredTags,
+        excludeVideoId,
+        excludeVideoIds,
+        limit
+      );
+    }
+  }
+
+  /**
+   * Calculate average embedding from multiple embeddings
+   * This represents the user's current interest vector
+   */
+  static calculateAverageEmbedding(embeddings) {
+    if (embeddings.length === 0) return null;
+    
+    const dimension = embeddings[0].length;
+    const avg = new Array(dimension).fill(0);
+    
+    embeddings.forEach(embedding => {
+      for (let i = 0; i < dimension; i++) {
+        avg[i] += embedding[i];
+      }
+    });
+    
+    // Average
+    for (let i = 0; i < dimension; i++) {
+      avg[i] /= embeddings.length;
+    }
+    
+    // Normalize
+    const norm = Math.sqrt(avg.reduce((sum, val) => sum + val * val, 0));
+    if (norm > 0) {
+      for (let i = 0; i < dimension; i++) {
+        avg[i] /= norm;
+      }
+    }
+    
+    return avg;
+  }
+
+  /**
+   * Fallback: Find videos by category/tag patterns (when AI is not available)
+   */
+  static async findVideosByPatterns(categories, tags, excludeVideoId, excludeVideoIds, limit) {
+    const query = {
+      _id: { $nin: [excludeVideoId, ...excludeVideoIds].filter(Boolean) },
+      processingStatus: 'completed'
+    };
+    
+    const orConditions = [];
+    if (categories.length > 0) {
+      orConditions.push({ category: { $in: categories } });
+    }
+    if (tags.length > 0) {
+      orConditions.push({ tags: { $in: tags } });
+    }
+    
+    if (orConditions.length > 0) {
+      query.$or = orConditions;
+    }
+    
+    return await Video.find(query)
+      .sort({ finalScore: -1, createdAt: -1 })
+      .limit(limit)
+      .lean();
+  }
+
+  /**
+   * Default recommendations when no session data is available
+   */
+  static async getDefaultRecommendations(limit, excludeVideoId = null) {
+    const query = {
+      processingStatus: 'completed'
+    };
+    
+    if (excludeVideoId) {
+      query._id = { $ne: excludeVideoId };
+    }
+    
+    return await Video.find(query)
+      .sort({ finalScore: -1, createdAt: -1 })
+      .limit(limit)
+      .lean();
   }
 }
 

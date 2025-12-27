@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:video_player/video_player.dart';
 import 'package:vayu/model/video_model.dart';
 import 'package:vayu/core/services/video_player_config_service.dart';
 import 'package:vayu/core/managers/smart_cache_manager.dart';
 import 'package:vayu/core/services/hls_warmup_service.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 /// Factory for creating VideoPlayerController instances with optimized configuration
 class VideoControllerFactory {
@@ -94,20 +96,36 @@ class VideoControllerFactory {
       HlsWarmupService().warmUp(optimizedUrl);
     }
 
-    return VideoPlayerController.networkUrl(
-      Uri.parse(optimizedUrl),
-      videoPlayerOptions: VideoPlayerOptions(
-        mixWithOthers: true,
-        allowBackgroundPlayback: false,
-      ),
-      httpHeaders: {
-        ...headers,
-        // ADD THESE FOR FASTER LOADING:
-        'Connection': 'keep-alive',
-        'Cache-Control': 'public, max-age=3600',
-        'Accept-Encoding': 'gzip, deflate',
-      },
+    // **WEB FIX: Web video player needs different configuration**
+    final videoPlayerOptions = VideoPlayerOptions(
+      mixWithOthers: kIsWeb ? false : true, // Web doesn't support mixWithOthers
+      allowBackgroundPlayback: false,
     );
+
+    AppLogger.log(
+      '🎬 VideoControllerFactory: Creating controller for web: $kIsWeb, URL: $optimizedUrl',
+    );
+
+    try {
+      return VideoPlayerController.networkUrl(
+        Uri.parse(optimizedUrl),
+        videoPlayerOptions: videoPlayerOptions,
+        httpHeaders: {
+          ...headers,
+          // ADD THESE FOR FASTER LOADING:
+          'Connection': 'keep-alive',
+          'Cache-Control': 'public, max-age=3600',
+          'Accept-Encoding': 'gzip, deflate',
+        },
+      );
+    } catch (e) {
+      AppLogger.log(
+        '❌ VideoControllerFactory: Error creating controller: $e',
+        isError: true,
+      );
+      // Re-throw to let caller handle
+      rethrow;
+    }
   }
 
   /// Creates a VideoPlayerController with custom quality preset (ENHANCED HLS SUPPORT)

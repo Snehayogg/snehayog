@@ -112,19 +112,53 @@ app.use(compression()); // Enable gzip compression
 app.use('/.well-known', express.static(path.join(__dirname, 'public/.well-known')))
 // **ENHANCED: CORS Configuration for Flutter app and Railway**
 app.use(cors({
-  origin: [
-    'https://snehayog.site', // Production web app
-    'https://cerulean-kashata-b8a907.netlify.app', // Netlify deployment
-    /^https:\/\/.*\.netlify\.app$/, // All Netlify subdomains
-    'http://localhost', // Local development (any port)
-    'http://localhost:3000', // Local development
-    'http://localhost:5001', // Local development
-    'http://127.0.0.1', // Localhost alternative (any port)
-    'http://127.0.0.1:5001', // Localhost alternative
-    'http://192.168.0.184:5001', // Local development (LAN)
-    'http://10.0.2.2:5001', // Android emulator
-    '*' // Allow all origins for development (fallback)
-  ],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, Postman, or curl requests)
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    const allowedOrigins = [
+      'https://snehayog.site', // Production web app
+      'https://cerulean-kashata-b8a907.netlify.app', // Netlify deployment
+      /^https:\/\/.*\.netlify\.app$/, // All Netlify subdomains
+      'http://localhost', // Local development (any port)
+      'http://localhost:3000', // Local development
+      'http://localhost:5000', // Local development
+      'http://localhost:5001', // Local development
+      'http://localhost:8080', // Flutter web default port
+      /^http:\/\/localhost:\d+$/, // Any localhost port (for Flutter web)
+      'http://127.0.0.1', // Localhost alternative (any port)
+      'http://127.0.0.1:5000', // Localhost alternative
+      'http://127.0.0.1:5001', // Localhost alternative
+      'http://127.0.0.1:8080', // Flutter web default port
+      /^http:\/\/127\.0\.0\.1:\d+$/, // Any 127.0.0.1 port (for Flutter web)
+      'http://192.168.0.184:5001', // Local development (LAN)
+      'http://192.168.0.198:5001', // Local development (LAN)
+      /^http:\/\/192\.168\.\d+\.\d+:\d+$/, // Any LAN IP (for mobile devices)
+      'http://10.0.2.2:5001', // Android emulator
+    ];
+
+    // Check if origin matches any allowed pattern
+    const isAllowed = allowedOrigins.some(allowed => {
+      if (allowed instanceof RegExp) {
+        return allowed.test(origin);
+      }
+      return allowed === origin;
+    });
+
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      // In development, allow all origins as fallback
+      if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
+        console.log(`⚠️ CORS: Allowing origin in dev mode: ${origin}`);
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: [

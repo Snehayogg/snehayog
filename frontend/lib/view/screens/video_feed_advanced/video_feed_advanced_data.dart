@@ -88,12 +88,8 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
                     // Preload current video immediately (don't wait)
                     _preloadVideo(_currentIndex);
 
-                    // Try autoplay immediately
-                    Future.delayed(const Duration(milliseconds: 100), () {
-                      if (mounted) {
-                        _tryAutoplayCurrent();
-                      }
-                    });
+                    // Try autoplay immediately (no delay - autoplay checks controller readiness)
+                    _tryAutoplayCurrent();
                   }
                 });
 
@@ -171,12 +167,16 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
 
       AppLogger.log('🔍 VideoFeedAdvanced: Loading videos from API');
       AppLogger.log('   - page: $page');
-      AppLogger.log('   - limit: $_videosPerPage');
+
+      // **OPTIMIZED: For first page, load only 5 videos for instant display**
+      final limit =
+          (page == 1 && !append && _videos.isEmpty) ? 5 : _videosPerPage;
+      AppLogger.log('   - limit: $limit (optimized for instant load)');
       AppLogger.log('   - videoType: ${widget.videoType}');
 
       final response = await _videoService.getVideos(
         page: page,
-        limit: _videosPerPage,
+        limit: limit,
         videoType: widget.videoType,
       );
 
@@ -682,6 +682,99 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
             _errorMessage = null;
           });
 
+          // **OPTIMIZED: Load remaining videos in background if we only loaded 5 initially**
+          // This ensures instant display while loading remaining videos non-blocking
+          if (page == 1 &&
+              !append &&
+              limit == 5 &&
+              hasMore &&
+              !_isLoadingRemainingVideos) {
+            AppLogger.log(
+                '🚀 VideoFeedAdvanced: Loading remaining videos in background...');
+            _isLoadingRemainingVideos = true;
+
+            // Load remaining videos after a short delay to not block UI
+            Future.delayed(const Duration(milliseconds: 300), () async {
+              if (!mounted || _isLoadingRemainingVideos == false) return;
+
+              try {
+                AppLogger.log(
+                    '📡 VideoFeedAdvanced: Fetching remaining videos (limit: 25)...');
+                final remainingResponse = await _videoService.getVideos(
+                  page: 1,
+                  limit: 25, // Load remaining 25 videos (30 - 5 = 25)
+                  videoType: widget.videoType,
+                );
+
+                if (!mounted) return;
+
+                // Parse remaining videos
+                List<VideoModel> remainingVideos;
+                final remainingVideosList = remainingResponse['videos'];
+                if (remainingVideosList is List &&
+                    remainingVideosList.isNotEmpty) {
+                  final firstItem = remainingVideosList.first;
+                  if (firstItem is VideoModel) {
+                    remainingVideos = remainingVideosList.cast<VideoModel>();
+                  } else if (firstItem is Map<String, dynamic>) {
+                    remainingVideos = remainingVideosList
+                        .map((item) {
+                          try {
+                            return VideoModel.fromJson(
+                                item as Map<String, dynamic>);
+                          } catch (e) {
+                            AppLogger.log(
+                                '❌ Error parsing remaining video: $e');
+                            return null;
+                          }
+                        })
+                        .whereType<VideoModel>()
+                        .toList();
+                  } else {
+                    remainingVideos = <VideoModel>[];
+                  }
+
+                  // Remove duplicates (videos that might already be in _videos)
+                  final existingVideoIds =
+                      _videos.map((v) => videoIdentityKey(v)).toSet();
+                  final uniqueRemainingVideos = remainingVideos
+                      .where((v) =>
+                          !existingVideoIds.contains(videoIdentityKey(v)))
+                      .toList();
+
+                  if (uniqueRemainingVideos.isNotEmpty && mounted) {
+                    AppLogger.log(
+                        '✅ VideoFeedAdvanced: Adding ${uniqueRemainingVideos.length} remaining videos to feed');
+
+                    // Rank and filter remaining videos
+                    final rankedRemaining = _rankVideosWithEngagement(
+                      uniqueRemainingVideos,
+                      preserveVideoKey: null,
+                    );
+
+                    if (mounted && rankedRemaining.isNotEmpty) {
+                      setState(() {
+                        _videos.addAll(rankedRemaining);
+                        // Update hasMore based on response
+                        _hasMore =
+                            remainingResponse['hasMore'] as bool? ?? false;
+                      });
+                      AppLogger.log(
+                          '✅ VideoFeedAdvanced: Background load complete. Total videos: ${_videos.length}');
+                    }
+                  }
+                }
+              } catch (e) {
+                AppLogger.log(
+                    '⚠️ VideoFeedAdvanced: Error loading remaining videos: $e');
+              } finally {
+                if (mounted) {
+                  _isLoadingRemainingVideos = false;
+                }
+              }
+            });
+          }
+
           // **NEW: Update page controller if index changed**
           if (nextIndex != null && _pageController.hasClients) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -737,9 +830,9 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       // Only fallback if _preloadVideo's immediate autoplay didn't trigger
       if (mounted) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          // **DELAYED FALLBACK: Only try autoplay if video still hasn't started**
-          // This ensures we don't interfere with immediate autoplay from _preloadVideo
-          Future.delayed(const Duration(milliseconds: 300), () {
+          // **FALLBACK: Only try autoplay if video still hasn't started**
+          // Use nested callback instead of delay for faster check
+          WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && _currentIndex < _videos.length) {
               final controller = _controllerPool[_currentIndex];
               if (controller != null &&

@@ -122,13 +122,9 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
                 // Preload current video immediately (don't wait)
                 _preloadVideo(_currentIndex);
 
-                // Try autoplay immediately if screen is visible
+                // Try autoplay immediately if screen is visible (no delay - autoplay checks controller readiness)
                 if (_isScreenVisible || _mainController?.currentIndex == 0) {
-                  Future.delayed(const Duration(milliseconds: 100), () {
-                    if (mounted) {
-                      _tryAutoplayCurrent();
-                    }
-                  });
+                  _tryAutoplayCurrent();
                 }
               }
             });
@@ -140,15 +136,25 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
           }
         }
 
-        // Load background data asynchronously - don't block video display on errors
-        _loadCurrentUserId().catchError((e) {
-          AppLogger.log('⚠️ Error loading user ID (non-blocking): $e');
-        });
-        _loadActiveAds().catchError((e) {
-          AppLogger.log('⚠️ Error loading ads (non-blocking): $e');
-        });
-        _loadFollowingUsers().catchError((e) {
-          AppLogger.log('⚠️ Error loading following users (non-blocking): $e');
+        // **OPTIMIZED: Load background data in parallel - don't block video display on errors**
+        Future.wait([
+          _loadCurrentUserId().catchError((e) {
+            AppLogger.log('⚠️ Error loading user ID (non-blocking): $e');
+            return;
+          }),
+          _loadActiveAds().catchError((e) {
+            AppLogger.log('⚠️ Error loading ads (non-blocking): $e');
+            return;
+          }),
+          _loadFollowingUsers().catchError((e) {
+            AppLogger.log(
+                '⚠️ Error loading following users (non-blocking): $e');
+            return;
+          }),
+        ], eagerError: false)
+            .catchError((e) {
+          AppLogger.log('⚠️ Error in parallel background data loading: $e');
+          return <void>[];
         });
         return;
       }
@@ -278,7 +284,7 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
                 '🎯 VideoFeedAdvanced: PageController jumped to index 0 (cold start, immediate)',
               );
             } else {
-              // PageController not ready yet, wait for it
+              // PageController not ready yet, wait for it using nested callbacks instead of delay
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (mounted) {
                   // Try immediately
@@ -288,12 +294,12 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
                       '🎯 VideoFeedAdvanced: PageController jumped to index 0 (cold start, first callback)',
                     );
                   } else {
-                    // If still not ready, wait a bit more
-                    Future.delayed(const Duration(milliseconds: 150), () {
+                    // Use another postFrameCallback instead of delay
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (mounted && _pageController.hasClients) {
                         _pageController.jumpToPage(0);
                         AppLogger.log(
-                          '🎯 VideoFeedAdvanced: PageController jumped to index 0 (cold start, delayed)',
+                          '🎯 VideoFeedAdvanced: PageController jumped to index 0 (cold start, second callback)',
                         );
                       }
                     });
@@ -330,23 +336,25 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
               // Deep link video is always at index 0
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (mounted && _currentIndex == 0 && _videos.isNotEmpty) {
-                  // First attempt: immediate autoplay
-                  Future.delayed(const Duration(milliseconds: 100), () {
-                    if (mounted && _currentIndex == 0 && _videos.isNotEmpty) {
-                      AppLogger.log(
-                        '🎬 VideoFeedAdvanced: Attempting autoplay for deep link video at index 0 (ID: ${_videos[0].id}, Name: ${_videos[0].videoName})',
-                      );
-                      _tryAutoplayCurrent();
-                    }
-                  });
+                  // First attempt: immediate autoplay (no delay - autoplay checks controller readiness)
+                  AppLogger.log(
+                    '🎬 VideoFeedAdvanced: Attempting autoplay for deep link video at index 0 (ID: ${_videos[0].id}, Name: ${_videos[0].videoName})',
+                  );
+                  _tryAutoplayCurrent();
 
-                  // Second attempt: after video preloads (more reliable)
-                  Future.delayed(const Duration(milliseconds: 500), () {
+                  // Second attempt: after video controller is ready (use listener instead of delay)
+                  // Only retry if first attempt didn't work
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
                     if (mounted && _currentIndex == 0 && _videos.isNotEmpty) {
-                      AppLogger.log(
-                        '🎬 VideoFeedAdvanced: Second autoplay attempt for deep link video',
-                      );
-                      _tryAutoplayCurrent();
+                      // Check if video is already playing before retrying
+                      if (_controllerStates[0] != true ||
+                          (_controllerPool.containsKey(0) &&
+                              !_controllerPool[0]!.value.isPlaying)) {
+                        AppLogger.log(
+                          '🎬 VideoFeedAdvanced: Second autoplay attempt for deep link video',
+                        );
+                        _tryAutoplayCurrent();
+                      }
 
                       // **FORCE PLAY: If video still not playing, force it**
                       // Deep link video is always at index 0
@@ -434,8 +442,21 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
         _verifyAndSetCorrectIndex();
       }
 
-      final userFuture = _loadCurrentUserId();
-      final adsFuture = _loadActiveAds();
+      // **OPTIMIZED: Load background data in parallel - don't block video display**
+      Future.wait([
+        _loadCurrentUserId().catchError((e) {
+          AppLogger.log('⚠️ Error loading user ID (non-blocking): $e');
+          return;
+        }),
+        _loadActiveAds().catchError((e) {
+          AppLogger.log('⚠️ Error loading ads (non-blocking): $e');
+          return;
+        }),
+      ], eagerError: false)
+          .catchError((e) {
+        AppLogger.log('⚠️ Error in parallel background data loading: $e');
+        return <void>[];
+      });
 
       if (mounted) {
         if (!_isColdStart) {
@@ -446,11 +467,10 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
         // If videos list is still empty, keep loading state or show error
         if (_videos.isEmpty && _errorMessage == null) {
           AppLogger.log(
-            '⚠️ VideoFeedAdvanced: No videos loaded, retrying once...',
+            '⚠️ VideoFeedAdvanced: No videos loaded, retrying immediately...',
           );
-          // No error but no videos - might be network issue, retry once
+          // No error but no videos - might be network issue, retry immediately (no delay)
           try {
-            await Future.delayed(const Duration(milliseconds: 500));
             await _loadVideos(page: 1, useCache: false);
             if (!mounted) return;
             _verifyAndSetCorrectIndex();
@@ -492,26 +512,22 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
                 // Preload current video immediately
                 _preloadVideo(_currentIndex);
 
-                // Try autoplay immediately if Yug tab is active
+                // Try autoplay immediately if Yug tab is active (no delay - autoplay checks controller readiness)
                 if (_mainController?.currentIndex == 0 && _isScreenVisible) {
-                  Future.delayed(const Duration(milliseconds: 150), () {
-                    if (mounted) {
-                      _tryAutoplayCurrent();
-                    }
-                  });
+                  _tryAutoplayCurrent();
                 }
               }
             });
 
             _startVideoPreloading();
-            _loadFollowingUsers();
+            // **OPTIMIZED: Load following users in parallel with other background tasks**
+            _loadFollowingUsers().catchError((e) {
+              AppLogger.log(
+                  '⚠️ Error loading following users (non-blocking): $e');
+            });
           }
         }
       }
-
-      try {
-        await Future.wait([userFuture, adsFuture], eagerError: false);
-      } catch (_) {}
     } catch (e) {
       AppLogger.log('❌ Error loading initial data: $e');
       if (mounted) {
@@ -633,8 +649,8 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
           );
 
           // **FALLBACK: Only try autoplay if video still hasn't started playing**
-          // Wait a bit to let immediate autoplay from _preloadVideo work first
-          Future.delayed(const Duration(milliseconds: 250), () {
+          // Use another postFrameCallback instead of delay to check immediately
+          WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && _currentIndex < _videos.length) {
               final controller = _controllerPool[_currentIndex];
               if (controller != null &&

@@ -1,4 +1,5 @@
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 /// Optimized app configuration for better performance and smaller size
 class AppConfig {
@@ -9,11 +10,14 @@ class AppConfig {
   // **NEW: Smart URL selection with fallback**
   static String? _cachedBaseUrl;
 
-  // Local development server (Wi‑Fi/LAN)
+  // Local development server (Wi‑Fi/LAN) - for mobile devices
   // **IMPORTANT**: Update this IP to match your local machine's IP address
   // Find your IP: Windows: ipconfig | Linux/Mac: ifconfig or ip address
   // Make sure your phone/emulator is on the same Wi‑Fi network
   static const String _localIpBaseUrl = 'http://192.168.0.198:5001';
+
+  // Local development server (localhost) - for web
+  static const String _localWebBaseUrl = 'http://localhost:5001';
 
   // Primary production endpoints
   static const String _customDomainUrl = 'https://api.snehayog.site';
@@ -32,6 +36,25 @@ class AppConfig {
 
   // Backend API configuration with smart fallback
   static String get baseUrl {
+    // **FIX: For web, always use localhost, not IP address**
+    if (kIsWeb) {
+      // Web ke liye localhost use karein (development me)
+      if (_isDevelopment) {
+        print(
+            '🌐 AppConfig.baseUrl: WEB DEVELOPMENT MODE - Using: $_localWebBaseUrl');
+        print(
+            '🌐 AppConfig.baseUrl: Make sure your backend is running on $_localWebBaseUrl');
+        _cachedBaseUrl = _localWebBaseUrl;
+        return _localWebBaseUrl;
+      }
+      // Production web ke liye
+      if (_cachedBaseUrl != null) {
+        return _cachedBaseUrl!;
+      }
+      _cachedBaseUrl = _customDomainUrl;
+      return _customDomainUrl;
+    }
+
     // **FIXED: In development mode, ALWAYS use local server and ignore cache**
     if (_isDevelopment) {
       print(
@@ -56,6 +79,22 @@ class AppConfig {
 
   // **UPDATED: Try custom domain first, then Railway, then local server**
   static Future<String> getBaseUrlWithFallback() async {
+    // **FIX: For web, always use localhost**
+    if (kIsWeb) {
+      if (_isDevelopment) {
+        print('🌐 AppConfig.getBaseUrlWithFallback: WEB DEVELOPMENT MODE');
+        print('🌐 Using: $_localWebBaseUrl');
+        print('🌐 Make sure your backend is running on $_localWebBaseUrl');
+        _cachedBaseUrl = _localWebBaseUrl;
+        return _localWebBaseUrl;
+      }
+      // Production web ke liye
+      if (_cachedBaseUrl != null) {
+        return _cachedBaseUrl!;
+      }
+      return _customDomainUrl;
+    }
+
     // In explicit development mode, always use local server and skip remote checks
     if (_isDevelopment) {
       print('🔧 AppConfig.getBaseUrlWithFallback: DEVELOPMENT MODE');
@@ -113,21 +152,23 @@ class AppConfig {
     print(
         '⚠️ AppConfig: Railway unreachable, trying local server as fallback...');
 
-    // 3) Local IP server (172.20.10.2:5001) - THIRD PRIORITY
+    // 3) Local server - THIRD PRIORITY
+    // **FIX: For web, use localhost; for mobile, use IP address**
+    final localServerUrl = kIsWeb ? _localWebBaseUrl : _localIpBaseUrl;
     try {
-      print('🔍 AppConfig: [3/3] Testing local IP server: $_localIpBaseUrl...');
+      print('🔍 AppConfig: [3/3] Testing local server: $localServerUrl...');
       final response = await http.get(
-        Uri.parse('$_localIpBaseUrl/api/health'),
+        Uri.parse('$localServerUrl/api/health'),
         headers: {'Content-Type': 'application/json'},
       ).timeout(const Duration(seconds: 3));
 
       if (response.statusCode == 200) {
-        print('✅ AppConfig: Local IP server accessible at $_localIpBaseUrl');
-        _cachedBaseUrl = _localIpBaseUrl;
-        return _localIpBaseUrl;
+        print('✅ AppConfig: Local server accessible at $localServerUrl');
+        _cachedBaseUrl = localServerUrl;
+        return localServerUrl;
       }
     } catch (e) {
-      print('❌ AppConfig: Local IP server not accessible: $e');
+      print('❌ AppConfig: Local server not accessible: $e');
     }
 
     // All servers failed - use default custom domain as last resort
@@ -139,6 +180,22 @@ class AppConfig {
 
   // **UPDATED: Check server connectivity - Custom Domain → Railway → Local Server**
   static Future<String> checkAndUpdateServerUrl() async {
+    // **FIX: For web, always use localhost**
+    if (kIsWeb) {
+      if (_isDevelopment) {
+        print('🌐 AppConfig.checkAndUpdateServerUrl: WEB DEVELOPMENT MODE');
+        print('🌐 Skipping connectivity check, using: $_localWebBaseUrl');
+        print('🌐 Make sure your backend is running on $_localWebBaseUrl');
+        _cachedBaseUrl = _localWebBaseUrl;
+        return _localWebBaseUrl;
+      }
+      // Production web ke liye
+      if (_cachedBaseUrl != null) {
+        return _cachedBaseUrl!;
+      }
+      return _customDomainUrl;
+    }
+
     // In explicit development mode, always use local server
     if (_isDevelopment) {
       print('🔧 AppConfig.checkAndUpdateServerUrl: DEVELOPMENT MODE');
@@ -191,21 +248,23 @@ class AppConfig {
     print(
         '⚠️ AppConfig: Railway unreachable, trying local server as fallback...');
 
-    // 3) Local IP server (172.20.10.2:5001) - THIRD PRIORITY
+    // 3) Local server - THIRD PRIORITY
+    // **FIX: For web, use localhost; for mobile, use IP address**
+    final localServerUrl = kIsWeb ? _localWebBaseUrl : _localIpBaseUrl;
     try {
-      print('🔍 AppConfig: [3/3] Testing local IP server: $_localIpBaseUrl...');
+      print('🔍 AppConfig: [3/3] Testing local server: $localServerUrl...');
       final response = await http.get(
-        Uri.parse('$_localIpBaseUrl/api/health'),
+        Uri.parse('$localServerUrl/api/health'),
         headers: {'Content-Type': 'application/json'},
       ).timeout(const Duration(seconds: 4));
 
       if (response.statusCode == 200) {
-        print('✅ AppConfig: Local IP server is accessible at $_localIpBaseUrl');
-        _cachedBaseUrl = _localIpBaseUrl;
-        return _localIpBaseUrl;
+        print('✅ AppConfig: Local server is accessible at $localServerUrl');
+        _cachedBaseUrl = localServerUrl;
+        return localServerUrl;
       }
     } catch (e) {
-      print('❌ AppConfig: Local IP server not accessible: $e');
+      print('❌ AppConfig: Local server not accessible: $e');
     }
 
     // If all servers fail, return default
