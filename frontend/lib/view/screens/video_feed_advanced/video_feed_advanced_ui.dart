@@ -141,46 +141,53 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     final videoIndex = index;
 
     if (videoIndex >= totalVideos) {
-      // **END-OF-FEED ITEM**
-      // This extra item handles BOTH:
-      // 1) Loading more videos when `_hasMore` is true.
-      // 2) Seamlessly restarting the feed (startOver) when `_hasMore` is false.
+      // **SEAMLESS END-OF-FEED ITEM**
+      // Show last video as placeholder while new videos load (invisible transition)
+      // This creates seamless experience - user sees video, not loading state
 
-      if (mounted && !_isRefreshing) {
-        if (_hasMore && !_isLoadingMore) {
-          // More videos are available → trigger load more immediately
-          AppLogger.log(
-            '📡 UI: End-of-feed item at index $index, triggering load more...',
-          );
-          _loadMoreVideos();
-        } else if (!_hasMore && !_isLoadingMore) {
-          // No more videos from backend → restart feed from beginning
-          AppLogger.log(
-            '🔄 UI: No more videos available, restarting feed from beginning...',
-          );
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && !_isRefreshing) {
-              startOver();
-            }
-          });
+      if (totalVideos > 0) {
+        // **OPTIMIZED: Show last video as seamless placeholder**
+        final lastVideoIndex = totalVideos - 1;
+        final lastVideo = _videos[lastVideoIndex];
+        final lastController = _getController(lastVideoIndex);
+        
+        // Trigger load more silently in background if not already loading
+        if (mounted && !_isRefreshing) {
+          if (_hasMore && !_isLoadingMore) {
+            // Load more videos silently (no visible loading state)
+            AppLogger.log(
+              '📡 UI: End-of-feed item at index $index, triggering silent load more...',
+            );
+            _loadMoreVideos();
+          } else if (!_hasMore && !_isLoadingMore) {
+            // No more videos from backend → restart feed from beginning
+            AppLogger.log(
+              '🔄 UI: No more videos available, restarting feed from beginning...',
+            );
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && !_isRefreshing) {
+                startOver();
+              }
+            });
+          }
         }
+        
+        // **CRITICAL: Return last video widget instead of loading indicator**
+        // This creates seamless experience - user sees video while new ones load
+        return _buildVideoItem(
+          lastVideo,
+          lastController,
+          false, // Not active, just seamless placeholder
+          lastVideoIndex,
+        );
       }
-
-      // Show loading indicator or a very short "restarting" state
+      
+      // Fallback: Only if no videos at all (shouldn't happen)
       return Container(
         width: double.infinity,
         height: double.infinity,
         color: Colors.black,
-        child: Center(
-          child: (_hasMore || _isLoadingMore)
-              ? const CircularProgressIndicator(
-                  color: Colors.white,
-                )
-              : const Text(
-                  'Restarting feed...',
-                  style: TextStyle(color: Colors.white54),
-                ),
-        ),
+        child: const SizedBox.shrink(), // Completely invisible
       );
     }
 

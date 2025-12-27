@@ -1691,15 +1691,40 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
 
     AppLogger.log('📡 Loading more videos: Page ${_currentPage + 1}');
 
-    // **FIXED: Set loading state BEFORE async call to update UI immediately**
-    // This ensures PageView knows loading is in progress and can show loading item
-    if (mounted) {
-      setState(() => _isLoadingMore = true);
-    }
+    // **OPTIMIZED: Silent loading - no setState to prevent UI updates**
+    // This ensures seamless experience without visible loading state
+    _isLoadingMore = true; // Just update flag, no setState (no UI rebuild)
 
     try {
+      final videosCountBefore = _videos.length;
       await _loadVideos(page: _currentPage + 1, append: true);
       AppLogger.log('✅ Loaded more videos successfully');
+
+      // **CRITICAL: Immediately preload newly loaded videos for seamless playback**
+      if (mounted && _videos.length > videosCountBefore) {
+        final newVideosStartIndex = videosCountBefore;
+        final newVideosEndIndex = _videos.length;
+        final newVideosCount = newVideosEndIndex - newVideosStartIndex;
+
+        AppLogger.log(
+          '🚀 Preloading $newVideosCount newly loaded videos (indices $newVideosStartIndex to ${newVideosEndIndex - 1})...',
+        );
+
+        // Preload first 5 new videos immediately (they'll be needed soon)
+        for (int i = newVideosStartIndex;
+            i < newVideosEndIndex && i < newVideosStartIndex + 5;
+            i++) {
+          if (i >= 0 &&
+              !_preloadedVideos.contains(i) &&
+              !_loadingVideos.contains(i)) {
+            _preloadVideo(i);
+          }
+        }
+
+        AppLogger.log(
+          '✅ Preloaded first 5 new videos (indices $newVideosStartIndex to ${newVideosStartIndex + 4 < newVideosEndIndex ? newVideosStartIndex + 4 : newVideosEndIndex - 1}) for seamless playback',
+        );
+      }
     } catch (e) {
       AppLogger.log('❌ Error loading more videos: $e');
       if (mounted) {
@@ -1708,9 +1733,8 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         });
       }
     } finally {
-      if (mounted) {
-        setState(() => _isLoadingMore = false);
-      }
+      // **OPTIMIZED: Don't use setState - just update flag silently**
+      _isLoadingMore = false; // No setState, no UI rebuild
     }
   }
 }

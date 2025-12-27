@@ -15,12 +15,13 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
     // **FIX: Limit preloading when opened from ProfileScreen to prevent memory buildup**
     final bool openedFromProfile =
         widget.initialVideos != null && widget.initialVideos!.isNotEmpty;
+    // **OPTIMIZED: Increased preload window to 5 for seamless experience**
     final int preloadWindow = openedFromProfile
         ? 1
-        : 2; // Only preload 1 video ahead when from ProfileScreen
+        : 5; // Preload 5 videos ahead (was 2) for seamless playback
     final int keepRange = openedFromProfile
         ? 1
-        : 3; // Keep only current video when from ProfileScreen
+        : 5; // Keep 5 videos in memory (was 3) for better performance
 
     for (int i = _currentIndex;
         i <= _currentIndex + preloadWindow && i < _videos.length;
@@ -39,12 +40,12 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
     sharedPool.cleanupDistantControllers(_currentIndex, keepRange: keepRange);
 
-    // **FIXED: More aggressive loading - trigger when within threshold**
-    // This ensures videos are loaded before user reaches the end
+    // **OPTIMIZED: More aggressive loading - trigger when 15 videos from end**
+    // This ensures next batch is loaded and preloaded before user reaches the end
     final distanceFromEnd = _videos.length - _currentIndex;
     if (_hasMore && !_isLoadingMore) {
-      // **PROACTIVE: Load when within threshold (5 videos from end)**
-      if (_currentIndex >= _videos.length - _infiniteScrollThreshold) {
+      // **PROACTIVE: Load when 15 videos from end (much earlier for seamless experience)**
+      if (_currentIndex >= _videos.length - 15) {
         AppLogger.log(
           '📡 Triggering load more: index=$_currentIndex, total=${_videos.length}, distanceFromEnd=$distanceFromEnd, hasMore=$_hasMore',
         );
