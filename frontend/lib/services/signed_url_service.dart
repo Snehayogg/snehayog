@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
-import 'package:http/http.dart' as http;
+import 'package:vayu/core/services/http_client_service.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/services/authservices.dart';
 
@@ -78,8 +78,7 @@ class SignedUrlService {
       print(
           '🌐 SignedUrlService: Making request to ${AppConfig.baseUrl}/api/videos/generate-signed-url');
 
-      final response = await http
-          .post(
+      final response = await httpClientService.post(
         Uri.parse('${AppConfig.baseUrl}/api/videos/generate-signed-url'),
         headers: {
           'Content-Type': 'application/json',
@@ -89,14 +88,7 @@ class SignedUrlService {
           'videoUrl': normalizedUrl,
           'quality': quality,
         }),
-      )
-          .timeout(
-        const Duration(seconds: 5), // Shorter timeout
-        onTimeout: () {
-          print('⏰ SignedUrlService: Request timeout after 5 seconds');
-          throw TimeoutException(
-              'Signed URL request timeout', const Duration(seconds: 5));
-        },
+        timeout: const Duration(seconds: 5), // Shorter timeout
       );
 
       print(

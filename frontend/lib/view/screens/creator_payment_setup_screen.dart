@@ -3,7 +3,7 @@ import 'package:vayu/config/app_config.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/payment_setup_service.dart';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:vayu/core/services/http_client_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/utils/app_logger.dart';
 
@@ -198,7 +198,7 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
       }
 
       AppLogger.log('🔄 Fetching fresh profile data from server...');
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/profile'),
         headers: {
           'Authorization': 'Bearer $token',
@@ -361,7 +361,7 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
       AppLogger.log(
           '🔍 Headers: Authorization: Bearer ${token.substring(0, 20)}...');
 
-      final response = await http.put(
+      final response = await httpClientService.put(
         Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/payment-method'),
         headers: {
           'Authorization': 'Bearer $token',

@@ -1,4 +1,4 @@
-import 'package:http/http.dart' as http;
+import '../services/http_client_service.dart';
 import '../../features/video/data/datasources/video_remote_datasource.dart';
 import '../../features/video/data/repositories/video_repository_impl.dart';
 import '../../features/video/domain/repositories/video_repository.dart';
@@ -12,14 +12,12 @@ class ServiceLocator {
   ServiceLocator._internal();
 
   // Core services
-  http.Client? _httpClient;
   VideoRemoteDataSource? _videoRemoteDataSource;
   VideoRepository? _videoRepository;
 
   // Getters
-  http.Client get httpClient => _httpClient ??= http.Client();
   VideoRemoteDataSource get videoRemoteDataSource =>
-      _videoRemoteDataSource ??= VideoRemoteDataSource(httpClient: httpClient);
+      _videoRemoteDataSource ??= VideoRemoteDataSource();
   VideoRepository get videoRepository => _videoRepository ??=
       VideoRepositoryImpl(remoteDataSource: videoRemoteDataSource);
 
@@ -28,10 +26,8 @@ class ServiceLocator {
     return VideoProvider();
   }
 
-  /// Cleans up all dependencie
+  /// Cleans up all dependencies
   void dispose() {
-    _httpClient?.close();
-    _httpClient = null;
     _videoRemoteDataSource = null;
     _videoRepository = null;
   }

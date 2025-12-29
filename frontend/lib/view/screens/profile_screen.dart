@@ -12,7 +12,7 @@ import 'package:vayu/model/usermodel.dart';
 import 'package:vayu/core/services/profile_screen_logger.dart';
 import 'dart:async';
 import 'package:share_plus/share_plus.dart';
-import 'package:http/http.dart' as http;
+import 'package:vayu/core/services/http_client_service.dart';
 import 'package:vayu/view/widget/profile/profile_header_widget.dart';
 import 'package:vayu/view/widget/profile/profile_stats_widget.dart';
 import 'package:vayu/view/widget/profile/profile_videos_widget.dart';
@@ -868,9 +868,11 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (token != null) {
         try {
           final uri = Uri.parse('${AppConfig.baseUrl}/api/referrals/code');
-          final resp = await http.get(uri, headers: {
-            'Authorization': 'Bearer $token',
-          }).timeout(const Duration(seconds: 6));
+          final resp = await httpClientService.get(
+            uri,
+            headers: {'Authorization': 'Bearer $token'},
+            timeout: const Duration(seconds: 6),
+          );
           if (resp.statusCode == 200) {
             final data = json.decode(resp.body);
             referralCode = data['code'] ?? '';
@@ -916,9 +918,11 @@ class _ProfileScreenState extends State<ProfileScreen>
       final token = userData?['token'];
       if (token == null) return;
       final uri = Uri.parse('${AppConfig.baseUrl}/api/referrals/stats');
-      final resp = await http.get(uri, headers: {
-        'Authorization': 'Bearer $token',
-      }).timeout(const Duration(seconds: 6));
+      final resp = await httpClientService.get(
+        uri,
+        headers: {'Authorization': 'Bearer $token'},
+        timeout: const Duration(seconds: 6),
+      );
       if (resp.statusCode == 200) {
         final data = json.decode(resp.body);
         // **BATCHED UPDATE: Update both values**
@@ -2402,7 +2406,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       ProfileScreenLogger.logApiCall(
           endpoint: 'creator-payouts/profile', method: 'GET');
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/profile'),
         headers: {
           'Authorization': 'Bearer $token',
@@ -2515,7 +2519,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       // If not found in local state, verify with API
       AppLogger.log(
           '🔍 ProfileScreen: UPI ID not in local state, checking API...');
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/profile'),
         headers: {
           'Authorization': 'Bearer $token',

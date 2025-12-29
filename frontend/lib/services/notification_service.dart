@@ -1,6 +1,6 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:http/http.dart' as http;
+import 'package:vayu/core/services/http_client_service.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -239,7 +239,7 @@ class NotificationService {
       }
 
       final baseUrl = AppConfig.baseUrl;
-      final response = await http.post(
+      final response = await httpClientService.post(
         Uri.parse('$baseUrl/api/notifications/token'),
         headers: {
           'Content-Type': 'application/json',

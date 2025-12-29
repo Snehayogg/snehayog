@@ -2,7 +2,10 @@ part of 'package:vayu/view/screens/video_feed_advanced.dart';
 
 extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
   Future<void> _loadVideos(
-      {int page = 1, bool append = false, bool useCache = true}) async {
+      {int page = 1,
+      bool append = false,
+      bool useCache = true,
+      bool clearSession = false}) async {
     try {
       AppLogger.log(
           '🔄 Loading videos - Page: $page, Append: $append, UseCache: $useCache');
@@ -98,7 +101,9 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
               }
 
               // **Load fresh data in background (non-blocking)**
-              _loadVideosFromAPI(page: page, append: append).catchError((e) {
+              _loadVideosFromAPI(
+                      page: page, append: append, clearSession: clearSession)
+                  .catchError((e) {
                 AppLogger.log('⚠️ Background refresh failed: $e');
               });
               return;
@@ -110,7 +115,8 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       }
 
       // **FALLBACK: Load from API directly**
-      await _loadVideosFromAPI(page: page, append: append);
+      await _loadVideosFromAPI(
+          page: page, append: append, clearSession: clearSession);
     } catch (e) {
       AppLogger.log('❌ Error loading videos: $e');
       if (mounted) {
@@ -123,7 +129,8 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
   }
 
   /// **NEW: Load videos from API (separate method for background refresh)**
-  Future<void> _loadVideosFromAPI({int page = 1, bool append = false}) async {
+  Future<void> _loadVideosFromAPI(
+      {int page = 1, bool append = false, bool clearSession = false}) async {
     // #region agent log
     _debugLog(
         'video_feed_advanced_data.dart:109',
@@ -168,16 +175,18 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       AppLogger.log('🔍 VideoFeedAdvanced: Loading videos from API');
       AppLogger.log('   - page: $page');
 
-      // **OPTIMIZED: For first page, load only 5 videos for instant display**
-      final limit =
-          (page == 1 && !append && _videos.isEmpty) ? 5 : _videosPerPage;
-      AppLogger.log('   - limit: $limit (optimized for instant load)');
+      // **OPTIMIZED: Load 4 videos on first page for instant loading, then 15 for subsequent pages**
+      final limit = _videosPerPage;
+      AppLogger.log(
+          '   - limit: $limit (first page: 4 videos for instant load, subsequent: 15 videos)');
       AppLogger.log('   - videoType: ${widget.videoType}');
+      AppLogger.log('   - clearSession: $clearSession');
 
       final response = await _videoService.getVideos(
         page: page,
         limit: limit,
         videoType: widget.videoType,
+        clearSession: clearSession,
       );
 
       AppLogger.log('✅ VideoFeedAdvanced: Successfully loaded videos from API');
@@ -1411,11 +1420,12 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     _isRefreshing = true;
 
     try {
+      // **SEAMLESS RESTART: Don't clear videos list immediately to avoid grey screen**
+      // Keep last video visible while new videos load in background
       if (mounted) {
         setState(() {
-          _isLoading = true;
+          // Don't set _isLoading = true to avoid grey screen
           _errorMessage = null;
-          _currentIndex = 0; // Reset to first video
           _hasMore = true; // Reset hasMore flag
         });
       }
@@ -1426,12 +1436,21 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       );
 
       _currentPage = 1;
-      await _loadVideos(page: 1, append: false);
 
-      if (mounted) {
+      // **SEAMLESS: Load videos with clearSession=true AND append=true initially**
+      // This ensures:
+      // 1. Backend session state is cleared (fresh videos)
+      // 2. Videos are appended to existing list (no grey screen)
+      // 3. After load, we'll replace the list seamlessly
+      final currentVideosCount = _videos.length;
+      await _loadVideos(page: 1, append: true, clearSession: true);
+
+      // **SEAMLESS: After videos load, replace old videos with new ones**
+      if (mounted && _videos.length > currentVideosCount) {
         setState(() {
-          _isLoading = false;
-          _errorMessage = null;
+          // Remove old videos and keep only new ones (seamless transition)
+          _videos = _videos.sublist(currentVideosCount);
+          _currentIndex = 0; // Reset to first video of new list
         });
 
         // Navigate to first video
@@ -1439,7 +1458,6 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && _pageController.hasClients) {
               _pageController.jumpToPage(0);
-              _currentIndex = 0;
             }
           });
         }
@@ -1450,6 +1468,42 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
               _tryAutoplayCurrent();
             }
           }
+        });
+      } else if (mounted && _videos.isEmpty) {
+        // Fallback: If no videos loaded, clear list and show loading
+        setState(() {
+          _isLoading = true;
+        });
+        // Retry without append
+        await _loadVideos(page: 1, append: false, clearSession: true);
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _currentIndex = 0;
+          });
+        }
+
+        // Navigate to first video
+        if (_pageController.hasClients) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _pageController.hasClients) {
+              _pageController.jumpToPage(0);
+            }
+          });
+        }
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            if (_mainController?.currentIndex == 0) {
+              _tryAutoplayCurrent();
+            }
+          }
+        });
+      }
+
+      if (mounted) {
+        setState(() {
+          _errorMessage = null;
         });
       }
 
@@ -1710,10 +1764,9 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
           '🚀 Preloading $newVideosCount newly loaded videos (indices $newVideosStartIndex to ${newVideosEndIndex - 1})...',
         );
 
-        // Preload first 5 new videos immediately (they'll be needed soon)
-        for (int i = newVideosStartIndex;
-            i < newVideosEndIndex && i < newVideosStartIndex + 5;
-            i++) {
+        // **FIXED: Preload ALL new videos immediately (not just 10)**
+        // This ensures seamless playback when user scrolls quickly to the end
+        for (int i = newVideosStartIndex; i < newVideosEndIndex; i++) {
           if (i >= 0 &&
               !_preloadedVideos.contains(i) &&
               !_loadingVideos.contains(i)) {
@@ -1722,8 +1775,11 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         }
 
         AppLogger.log(
-          '✅ Preloaded first 5 new videos (indices $newVideosStartIndex to ${newVideosStartIndex + 4 < newVideosEndIndex ? newVideosStartIndex + 4 : newVideosEndIndex - 1}) for seamless playback',
+          '✅ Preloaded all $newVideosCount new videos (indices $newVideosStartIndex to ${newVideosEndIndex - 1}) for seamless playback',
         );
+
+        // **NEW: Also trigger preload nearby to ensure smooth transition**
+        _preloadNearbyVideos();
       }
     } catch (e) {
       AppLogger.log('❌ Error loading more videos: $e');

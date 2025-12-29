@@ -78,7 +78,7 @@ async function convertLikedByToGoogleIds(likedByArray) {
 // GET /api/videos/cache/status - Check cache status
 router.get('/cache/status', async (req, res) => {
   try {
-    const { userId, deviceId, videoType } = req.query;
+    const { userId, platformId, videoType } = req.query;
     
     if (!redisService.getConnectionStatus()) {
       return res.json({
@@ -88,7 +88,7 @@ router.get('/cache/status', async (req, res) => {
       });
     }
 
-    const userIdentifier = userId || deviceId;
+    const userIdentifier = userId || platformId;
     const cachePatterns = {
       unwatchedIds: userIdentifier 
         ? `videos:unwatched:ids:${userIdentifier}:${videoType || 'all'}`
@@ -155,7 +155,7 @@ router.get('/cache/status', async (req, res) => {
 // POST /api/videos/cache/clear - Clear video cache
 router.post('/cache/clear', async (req, res) => {
   try {
-    const { pattern, userId, deviceId, videoType, clearAll } = req.body;
+    const { pattern, userId, platformId, videoType, clearAll } = req.body;
     
     if (!redisService.getConnectionStatus()) {
       return res.json({
@@ -189,8 +189,8 @@ router.post('/cache/clear', async (req, res) => {
       clearedCount += count;
       clearedPatterns.push({ pattern, keysCleared: count });
     } else {
-      // Clear based on user/device
-      const userIdentifier = userId || deviceId;
+      // Clear based on user/platform
+      const userIdentifier = userId || platformId;
       const patterns = [];
       
       if (userIdentifier) {
@@ -969,26 +969,36 @@ router.get('/', async (req, res) => {
       console.log('⚠️ Error checking token, using regular feed:', error.message);
     }
 
-    const { videoType, page = 1, limit = 10, deviceId } = req.query;
+    const { videoType, page = 1, limit = 10, platformId, clearSession } = req.query;
     
-    // **BACKEND-FIRST: Use userId for authenticated users, deviceId for anonymous**
+    // **BACKEND-FIRST: Use userId for authenticated users, platformId for anonymous**
     // After login, the frontend should call `/api/videos/sync-watch-history` ONCE to merge histories,
-    // then this route will always prioritize userId (googleId) and only use deviceId as a fallback.
-    const userIdentifier = userId || deviceId; // Primary identifier used for personalization
+    // then this route will always prioritize userId (googleId) and only use platformId as a fallback.
+    const userIdentifier = userId || platformId; // Primary identifier used for personalization
     const isAuthenticated = !!userId;
-    const identitySource = userId ? 'userId' : (deviceId ? 'deviceId' : 'none');
+    const identitySource = userId ? 'userId' : (platformId ? 'platformId' : 'none');
     
-    // **IDENTITY DEBUG: Log per-request identity info to detect flips between userId/deviceId**
+    // **NEW: Clear session state if requested (for seamless feed restart)**
+    if (clearSession === 'true' && userIdentifier) {
+      try {
+        await redisService.clearSessionShownVideos(userIdentifier);
+        console.log(`🧹 SESSION CLEAR: Cleared session shown videos for feed restart (userIdentifier: ${userIdentifier})`);
+      } catch (clearErr) {
+        console.log(`⚠️ SESSION CLEAR: Error clearing session state: ${clearErr.message}`);
+      }
+    }
+    
+    // **IDENTITY DEBUG: Log per-request identity info to detect flips between userId/platformId**
     console.log('📹 Fetching videos...', { 
       videoType, 
       page, 
       limit, 
       userId: userId || null,
-      deviceId: deviceId || null,
+      platformId: platformId || null,
       userIdentifier: userIdentifier || null,
       identitySource,
-      hasBothIds: !!(userId && deviceId),
-      idsMatch: userId && deviceId ? userId === deviceId : null
+      hasBothIds: !!(userId && platformId),
+      idsMatch: userId && platformId ? userId === platformId : null
     });
     
     // Get query parameters for pagination
@@ -1079,10 +1089,10 @@ router.get('/', async (req, res) => {
       );
 
       // 1) Determine all identities to check for watch history
-      // **IMPROVED: Better identity matching - check both userId and deviceId comprehensively**
+      // **IMPROVED: Better identity matching - check both userId and platformId comprehensively**
       const userIdsToCheck = [];
       if (userId) userIdsToCheck.push(userId);
-      if (deviceId) userIdsToCheck.push(deviceId);
+      if (platformId) userIdsToCheck.push(platformId);
       if (userIdentifier && !userIdsToCheck.includes(userIdentifier)) {
         userIdsToCheck.push(userIdentifier);
       }
@@ -1093,7 +1103,7 @@ router.get('/', async (req, res) => {
       console.log(
         `🔍 WATCH HISTORY CHECK: Checking for identities:`,
         uniqueIdsToCheck,
-        `(userId: ${userId || 'none'}, deviceId: ${deviceId || 'none'})`,
+        `(userId: ${userId || 'none'}, platformId: ${platformId || 'none'})`,
       );
 
       // 2) Build a map: videoId -> oldest lastWatchedAt (timestamp)
@@ -1354,18 +1364,53 @@ router.get('/', async (req, res) => {
         return scoreB - scoreA; // Descending
       });
       
-      // **SESSION-BASED SHUFFLE: Use deterministic seed for consistent order per session**
-      // Generate seed from userIdentifier + current date (changes daily, consistent per day)
-      const today = new Date();
-      const dateSeed = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
-      const seedString = `${userIdentifier}_${dateSeed}`;
+      // **SESSION-BASED SHUFFLE: Use session-based seed for fresh order per session**
+      // Each new session gets a fresh seed, but same session maintains consistent order
+      // This gives fresh videos on app reopen while maintaining pagination consistency
       let seed = 0;
-      for (let i = 0; i < seedString.length; i++) {
-        seed = ((seed << 5) - seed) + seedString.charCodeAt(i);
-        seed = seed & seed; // Convert to 32-bit integer
+      const sessionSeedKey = `session:seed:${userIdentifier}:${videoType || 'all'}`;
+      
+      try {
+        if (redisService.getConnectionStatus() && userIdentifier) {
+          // Try to get existing session seed from Redis
+          const cachedSeed = await redisService.get(sessionSeedKey);
+          if (cachedSeed !== null && typeof cachedSeed === 'number') {
+            seed = cachedSeed;
+            console.log(`🎲 SESSION SEED: Using cached seed for session (seed: ${seed})`);
+          } else {
+            // New session - generate fresh seed based on timestamp
+            const timestamp = Date.now();
+            const seedString = `${userIdentifier}_${videoType || 'all'}_${timestamp}`;
+            for (let i = 0; i < seedString.length; i++) {
+              seed = ((seed << 5) - seed) + seedString.charCodeAt(i);
+              seed = seed & seed; // Convert to 32-bit integer
+            }
+            // Cache seed for this session (24h TTL - same as session state)
+            await redisService.set(sessionSeedKey, seed, 86400);
+            console.log(`🎲 SESSION SEED: Generated new seed for session (seed: ${seed}, TTL: 24h)`);
+          }
+        } else {
+          // Redis unavailable or no userIdentifier - generate seed from timestamp
+          const timestamp = Date.now();
+          const seedString = `${userIdentifier || 'anonymous'}_${videoType || 'all'}_${timestamp}`;
+          for (let i = 0; i < seedString.length; i++) {
+            seed = ((seed << 5) - seed) + seedString.charCodeAt(i);
+            seed = seed & seed; // Convert to 32-bit integer
+          }
+          console.log(`🎲 SESSION SEED: Generated seed without Redis (seed: ${seed})`);
+        }
+      } catch (seedError) {
+        // Fallback: generate seed from timestamp if Redis fails
+        console.log(`⚠️ SESSION SEED: Error getting session seed, using fallback: ${seedError.message}`);
+        const timestamp = Date.now();
+        const seedString = `${userIdentifier || 'anonymous'}_${videoType || 'all'}_${timestamp}`;
+        for (let i = 0; i < seedString.length; i++) {
+          seed = ((seed << 5) - seed) + seedString.charCodeAt(i);
+          seed = seed & seed; // Convert to 32-bit integer
+        }
       }
       
-      // **DETERMINISTIC SHUFFLE: Seeded shuffle for consistent order per day**
+      // **DETERMINISTIC SHUFFLE: Seeded shuffle for consistent order per session**
       const seededShuffle = (array, seedValue) => {
         // **FIX: Filter out invalid entries before shuffling**
         const validArray = array.filter(v => v && v._id);
@@ -1585,7 +1630,7 @@ router.get('/', async (req, res) => {
     console.log(`   - userIdentifier: ${userIdentifier || 'none'}`);
     if (userIdentifier) {
       console.log(`   - userId: ${userId || 'none'}`);
-      console.log(`   - deviceId: ${deviceId || 'none'}`);
+      console.log(`   - platformId: ${platformId || 'none'}`);
       console.log(`   - Watched videos excluded: ${watchedVideoIds?.length || 0}`);
     }
     console.log(`═══════════════════════════════════════════════════════════`);
@@ -1599,7 +1644,7 @@ router.get('/', async (req, res) => {
     // If we got less than limit, try to check if more videos exist
     if (finalVideos.length < limitNum && userIdentifier) {
       // Check if there are more unwatched videos beyond what we fetched
-      const identityId = userId || deviceId;
+      const identityId = userId || platformId;
       if (identityId) {
         try {
           const watchedVideoIds = await WatchHistory.getUserWatchedVideoIds(identityId, null);
@@ -1868,14 +1913,7 @@ router.get('/:id', verifyToken, async (req, res) => {
 // **BACKEND-FIRST: POST /api/videos/:id/watch - Track video watch for personalized feed**
 // Supports both authenticated users (via token) and anonymous users (via deviceId)
 router.post('/:id/watch', async (req, res) => {
-  console.log('🎬 POST /api/videos/:id/watch - Route hit!');
-  console.log('🎬 Request params:', req.params);
-  console.log('🎬 Request body:', req.body);
-  console.log('🎬 Request headers:', {
-    'authorization': req.headers.authorization ? 'present' : 'missing',
-    'x-device-id': req.headers['x-device-id'] || 'missing',
-    'content-type': req.headers['content-type']
-  });
+  // **OPTIMIZED: Reduced logging - only log errors to prevent log spam**
   try {
     // Try to get userId from token (authenticated users)
     let userId = null;
@@ -2523,14 +2561,7 @@ router.get('/:id', verifyToken, async (req, res) => {
 // **BACKEND-FIRST: POST /api/videos/:id/watch - Track video watch for personalized feed**
 // Supports both authenticated users (via token) and anonymous users (via deviceId)
 router.post('/:id/watch', async (req, res) => {
-  console.log('🎬 POST /api/videos/:id/watch - Route hit!');
-  console.log('🎬 Request params:', req.params);
-  console.log('🎬 Request body:', req.body);
-  console.log('🎬 Request headers:', {
-    'authorization': req.headers.authorization ? 'present' : 'missing',
-    'x-device-id': req.headers['x-device-id'] || 'missing',
-    'content-type': req.headers['content-type']
-  });
+  // **OPTIMIZED: Reduced logging - only log errors to prevent log spam**
   try {
     // Try to get userId from token (authenticated users)
     let userId = null;

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/services/authservices.dart';
-import 'package:vayu/services/device_id_service.dart';
+import 'package:vayu/services/platform_id_service.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/core/services/http_client_service.dart';
 import 'package:vayu/core/constants/app_constants.dart';
@@ -38,9 +38,9 @@ class VideoViewTracker {
           '🎯 VideoViewTracker: Attempting to increment view for video $videoId');
 
       // **CRITICAL FIX: Watch tracking should work for BOTH authenticated AND anonymous users**
-      // Get deviceId first (always available, even for anonymous users)
-      final deviceIdService = DeviceIdService();
-      final deviceId = await deviceIdService.getDeviceId();
+      // Get platformId first (always available, even for anonymous users)
+      final platformIdService = PlatformIdService();
+      final platformId = await platformIdService.getPlatformId();
 
       // Get auth token (may be null for anonymous users)
       final token = await AuthService.getToken();
@@ -61,15 +61,15 @@ class VideoViewTracker {
               false, // Initial watch tracking - will be marked completed in increment-view
         };
 
-        // **BACKEND-FIRST: Always send deviceId as fallback (even if token exists, it might be invalid)**
+        // **BACKEND-FIRST: Always send platformId as fallback (even if token exists, it might be invalid)**
         // This ensures watch tracking works even if token verification fails
-        if (deviceId.isNotEmpty) {
-          watchBody['deviceId'] = deviceId;
+        if (platformId.isNotEmpty) {
+          watchBody['platformId'] = platformId;
           AppLogger.log(
-              '📱 VideoViewTracker: Sending deviceId for watch tracking (deviceId: ${deviceId.substring(0, 8)}...)');
+              '📱 VideoViewTracker: Sending platformId for watch tracking (platformId: ${platformId.substring(0, 8)}...)');
         } else {
           AppLogger.log(
-              '⚠️ VideoViewTracker: No deviceId available for watch tracking fallback');
+              '⚠️ VideoViewTracker: No platformId available for watch tracking fallback');
         }
 
         AppLogger.log(
@@ -150,16 +150,16 @@ class VideoViewTracker {
       }
 
       // Make API call to increment view (existing functionality)
-      // **IMPROVED: Also send deviceId so backend can mark video as watched for anonymous users too**
+      // **IMPROVED: Also send platformId so backend can mark video as watched for anonymous users too**
       final url = Uri.parse('$_baseUrl/api/videos/$videoId/increment-view');
       final incrementBody = <String, dynamic>{
         'userId': userId,
         'duration': effectiveDuration,
       };
 
-      // Always send deviceId for watch tracking support
-      if (deviceId.isNotEmpty) {
-        incrementBody['deviceId'] = deviceId;
+      // Always send platformId for watch tracking support
+      if (platformId.isNotEmpty) {
+        incrementBody['platformId'] = platformId;
       }
 
       final response = await httpClientService.post(
@@ -304,9 +304,9 @@ class VideoViewTracker {
       AppLogger.log(
           '📊 VideoViewTracker: Tracking video completion for $videoId');
 
-      // Get deviceId (works for anonymous + authenticated users)
-      final deviceIdService = DeviceIdService();
-      final deviceId = await deviceIdService.getDeviceId();
+      // Get platformId (works for anonymous + authenticated users)
+      final platformIdService = PlatformIdService();
+      final platformId = await platformIdService.getPlatformId();
 
       // Get auth token if available (optional)
       final token = await AuthService.getToken();
@@ -323,15 +323,15 @@ class VideoViewTracker {
         'completed': true, // Mark as completed
       };
 
-      // Always include deviceId as fallback identity (same as incrementView)
-      if (deviceId.isNotEmpty) {
-        body['deviceId'] = deviceId;
+      // Always include platformId as fallback identity (same as incrementView)
+      if (platformId.isNotEmpty) {
+        body['platformId'] = platformId;
         AppLogger.log(
-          '📱 VideoViewTracker: Sending deviceId for completion tracking (deviceId: ${deviceId.substring(0, 8)}...)',
+          '📱 VideoViewTracker: Sending platformId for completion tracking (platformId: ${platformId.substring(0, 8)}...)',
         );
       } else {
         AppLogger.log(
-            '⚠️ VideoViewTracker: No deviceId available for completion tracking');
+            '⚠️ VideoViewTracker: No platformId available for completion tracking');
       }
 
       final watchUrl = Uri.parse('$_baseUrl/api/videos/$videoId/watch');

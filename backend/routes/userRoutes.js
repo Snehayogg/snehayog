@@ -136,52 +136,26 @@ router.post('/register', async (req, res) => {
 // **IMPORTANT: This must come before /:id route**
 router.get('/profile', verifyToken, async (req, res) => {
   try {
-    console.log('🔍 Profile API: Request received');
-    console.log('🔍 Profile API: Current user from token:', req.user);
-    console.log('🔍 Profile API: req.user.id type:', typeof req.user.id);
-    console.log('🔍 Profile API: req.user.id value:', req.user.id);
-    console.log('🔍 Profile API: req.user.googleId type:', typeof req.user.googleId);
-    console.log('🔍 Profile API: req.user.googleId value:', req.user.googleId);
-    
     const currentUserId = req.user.id; // This is the Google user ID
-    
-    console.log('🔍 Profile API: currentUserId:', currentUserId);
-    console.log('🔍 Profile API: currentUserId type:', typeof currentUserId);
-    
-    // **DEBUG: Log the exact query being made**
-    console.log('🔍 Profile API: Making query: User.findOne({ googleId: "' + currentUserId + '" })');
     
     const profileCacheKey = getProfileCacheKey(currentUserId);
     if (profileCacheKey) {
       const cachedProfile = await getCachedResponse(profileCacheKey);
       if (cachedProfile) {
-        console.log('⚡ Profile API: Cache hit for', currentUserId);
+        // Only log cache hits (minimal logging)
         return res.json(cachedProfile);
       }
     }
 
     // Find current user
     const currentUser = await User.findOne({ googleId: currentUserId });
-    console.log('🔍 Profile API: Query result:', currentUser);
     
     if (!currentUser) {
       console.log('❌ Profile API: User not found with googleId:', currentUserId);
-      
-      // **DEBUG: Try to find by other fields**
-      const allUsers = await User.find({}).limit(5);
-      console.log('🔍 Profile API: First 5 users in database:', allUsers.map(u => ({ googleId: u.googleId, name: u.name, email: u.email })));
-      
       return res.status(404).json({ 
-        error: 'User not found',
-        debug: {
-          searchedFor: currentUserId,
-          searchedForType: typeof currentUserId,
-          availableUsers: allUsers.map(u => ({ googleId: u.googleId, name: u.name }))
-        }
+        error: 'User not found'
       });
     }
-    
-    console.log('✅ Profile API: User found successfully');
     
     const payload = {
       _id: currentUser._id, // MongoDB ObjectID
@@ -223,14 +197,6 @@ router.get('/top-earners-test', (req, res) => {
 router.get('/top-earners-from-following', verifyToken, async (req, res) => {
   try {
     console.log('========================================');
-    console.log('💰💰💰 TOP EARNERS API CALLED 💰💰💰');
-    console.log('💰 Top Earners from Following API: Request received');
-    console.log('💰 Request method:', req.method);
-    console.log('💰 Request URL:', req.originalUrl);
-    console.log('💰 Request headers:', JSON.stringify(req.headers, null, 2));
-    console.log('💰 Top Earners API: Request user:', JSON.stringify(req.user, null, 2));
-    console.log('💰 Top Earners API: req.user.id:', req.user.id);
-    console.log('💰 Top Earners API: req.user.googleId:', req.user.googleId);
     
     // Try both id and googleId from req.user
     const currentUserId = req.user.id || req.user.googleId;
@@ -238,7 +204,6 @@ router.get('/top-earners-from-following', verifyToken, async (req, res) => {
     console.log('💰 Top Earners API: Current user ID type:', typeof currentUserId);
 
     if (!currentUserId) {
-      console.log('❌ Top Earners API: No user ID found in token');
       return res.status(401).json({ error: 'Invalid token - no user ID' });
     }
 

@@ -5,6 +5,7 @@ import 'package:vayu/services/authservices.dart';
 import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:vayu/core/services/http_client_service.dart';
 import 'package:vayu/utils/app_logger.dart';
 
 class CreatorPayoutDashboard extends StatefulWidget {
@@ -123,17 +124,13 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
 
       http.Response profileResponse;
       try {
-        profileResponse = await http.get(
+        profileResponse = await httpClientService.get(
           Uri.parse(profileUrl),
           headers: {
             'Authorization': 'Bearer $token',
             'Content-Type': 'application/json',
           },
-        ).timeout(
-          const Duration(seconds: 10),
-          onTimeout: () {
-            throw Exception('Profile API request timed out');
-          },
+          timeout: const Duration(seconds: 10),
         );
       } catch (error) {
         AppLogger.log('❌ HTTP Request Error (profile): $error');
@@ -196,7 +193,7 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
 
       http.Response historyResponse;
       try {
-        historyResponse = await http.get(
+        historyResponse = await httpClientService.get(
           Uri.parse(historyUrl),
           headers: {
             'Authorization': 'Bearer $token',
@@ -270,11 +267,9 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
       final healthUrl = '$baseUrl/api/creator-payouts/health';
       AppLogger.log('🔍 Testing health endpoint: $healthUrl');
 
-      final healthResponse = await http.get(Uri.parse(healthUrl)).timeout(
-        const Duration(seconds: 5),
-        onTimeout: () {
-          throw Exception('Health check timed out - backend may be down');
-        },
+      final healthResponse = await httpClientService.get(
+        Uri.parse(healthUrl),
+        timeout: const Duration(seconds: 5),
       );
       AppLogger.log('🔍 Health response status: ${healthResponse.statusCode}');
       AppLogger.log('🔍 Health response body: ${healthResponse.body}');
@@ -284,7 +279,7 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
         final testUrl = '$baseUrl/api/creator-payouts/test';
         AppLogger.log('🔍 Testing test endpoint: $testUrl');
 
-        final testResponse = await http.get(Uri.parse(testUrl));
+        final testResponse = await httpClientService.get(Uri.parse(testUrl));
         AppLogger.log('🔍 Test response status: ${testResponse.statusCode}');
         AppLogger.log('🔍 Test response body: ${testResponse.body}');
 
@@ -379,7 +374,7 @@ class _CreatorPayoutDashboardState extends State<CreatorPayoutDashboard> {
       final profileUrl = '$baseUrl/api/creator-payouts/profile';
       AppLogger.log('🔍 Testing authenticated endpoint: $profileUrl');
 
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse(profileUrl),
         headers: {
           'Authorization': 'Bearer $token',

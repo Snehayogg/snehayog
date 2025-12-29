@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:vayu/core/services/http_client_service.dart';
 import 'package:vayu/model/feedback_model.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/config/app_config.dart';
@@ -20,7 +20,7 @@ class FeedbackService {
         throw Exception('User not authenticated');
       }
 
-      final response = await http.post(
+      final response = await httpClientService.post(
         Uri.parse('$baseUrl/api/feedback/submit'),
         headers: {
           'Content-Type': 'application/json',
@@ -55,7 +55,7 @@ class FeedbackService {
         throw Exception('User not authenticated');
       }
 
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('$baseUrl/api/feedback/history'),
         headers: {
           'Authorization': 'Bearer $token',

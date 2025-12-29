@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:http/http.dart' as http;
+import 'package:vayu/core/services/http_client_service.dart';
 import 'dart:convert';
 import 'package:geocoding/geocoding.dart';
 import 'package:vayu/services/authservices.dart';
@@ -219,7 +219,7 @@ class LocationOnboardingService {
         return false;
       }
 
-      final response = await http.post(
+      final response = await httpClientService.post(
         Uri.parse('${AuthService.baseUrl}/api/users/update-location'),
         headers: {
           'Content-Type': 'application/json',
@@ -258,7 +258,7 @@ class LocationOnboardingService {
         return false;
       }
 
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('${AuthService.baseUrl}/api/users/location-permission'),
         headers: {
           'Content-Type': 'application/json',

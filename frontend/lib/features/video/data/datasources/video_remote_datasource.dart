@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
+import '../../../../core/services/http_client_service.dart';
 import 'package:video_player/video_player.dart';
 import '../../../../config/app_config.dart';
 import '../../../../core/exceptions/app_exceptions.dart';
@@ -12,10 +13,7 @@ import '../../../../services/authservices.dart';
 /// Remote data source for video operations
 /// Handles all HTTP requests to the video API
 class VideoRemoteDataSource {
-  final http.Client _httpClient;
-
-  VideoRemoteDataSource({http.Client? httpClient})
-      : _httpClient = httpClient ?? http.Client();
+  // Using httpClientService for better performance and connection pooling
 
   /// Fetches a paginated list of videos from the server
   Future<Map<String, dynamic>> getVideos({
@@ -25,8 +23,8 @@ class VideoRemoteDataSource {
     try {
       final url = '${NetworkHelper.videosEndpoint}?page=$page&limit=$limit';
 
-      final response = await _makeRequest(
-        () => _httpClient.get(Uri.parse(url)),
+      final response = await httpClientService.get(
+        Uri.parse(url),
         timeout: NetworkHelper.defaultTimeout,
       );
 
@@ -62,8 +60,8 @@ class VideoRemoteDataSource {
   /// Fetches a specific video by its ID
   Future<VideoModel> getVideoById(String id) async {
     try {
-      final response = await _makeRequest(
-        () => _httpClient.get(Uri.parse('${NetworkHelper.videosEndpoint}/$id')),
+      final response = await httpClientService.get(
+        Uri.parse('${NetworkHelper.videosEndpoint}/$id'),
         timeout: NetworkHelper.defaultTimeout,
       );
 
@@ -101,8 +99,9 @@ class VideoRemoteDataSource {
 
       final url = '${NetworkHelper.videosEndpoint}/user/$userId';
 
-      final response = await _makeRequest(
-        () => _httpClient.get(Uri.parse(url), headers: headers),
+      final response = await httpClientService.get(
+        Uri.parse(url),
+        headers: headers,
         timeout: NetworkHelper.defaultTimeout,
       );
 
@@ -177,14 +176,10 @@ class VideoRemoteDataSource {
         request.fields['link'] = link;
       }
 
-      // Send the request with timeout
-      final streamedResponse = await request.send().timeout(
-        NetworkHelper.uploadTimeout,
-        onTimeout: () {
-          throw const TimeoutException(
-            'Upload timed out. Please check your internet connection and try again.',
-          );
-        },
+      // Send the request with timeout using httpClientService
+      final streamedResponse = await httpClientService.send(
+        request,
+        timeout: NetworkHelper.uploadTimeout,
       );
 
       // Get the response
@@ -230,12 +225,10 @@ class VideoRemoteDataSource {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ${userData['token']}',
       };
-      final response = await _makeRequest(
-        () => _httpClient.post(
-          Uri.parse('${NetworkHelper.videosEndpoint}/$videoId/like'),
-          headers: headers,
-          body: json.encode({}), // backend derives user from token
-        ),
+      final response = await httpClientService.post(
+        Uri.parse('${NetworkHelper.videosEndpoint}/$videoId/like'),
+        headers: headers,
+        body: json.encode({}), // backend derives user from token
         timeout: NetworkHelper.defaultTimeout,
       );
 
@@ -267,15 +260,13 @@ class VideoRemoteDataSource {
     required String userId,
   }) async {
     try {
-      final response = await _makeRequest(
-        () => _httpClient.post(
-          Uri.parse('${NetworkHelper.videosEndpoint}/$videoId/comments'),
-          headers: {'Content-Type': 'application/json'},
-          body: json.encode({
-            'userId': userId,
-            'text': text,
-          }),
-        ),
+      final response = await httpClientService.post(
+        Uri.parse('${NetworkHelper.videosEndpoint}/$videoId/comments'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'userId': userId,
+          'text': text,
+        }),
         timeout: NetworkHelper.defaultTimeout,
       );
 
@@ -300,9 +291,10 @@ class VideoRemoteDataSource {
   /// Checks if the server is healthy
   Future<bool> checkServerHealth() async {
     try {
-      final response = await _httpClient
-          .get(Uri.parse(NetworkHelper.healthEndpoint))
-          .timeout(NetworkHelper.shortTimeout);
+      final response = await httpClientService.get(
+        Uri.parse(NetworkHelper.healthEndpoint),
+        timeout: NetworkHelper.shortTimeout,
+      );
       return response.statusCode == 200;
     } catch (e) {
       return false;
@@ -322,36 +314,7 @@ class VideoRemoteDataSource {
     }
   }
 
-  /// Makes an HTTP request with retry logic
-  Future<http.Response> _makeRequest(
-    Future<http.Response> Function() requestFn, {
-    int maxRetries = NetworkHelper.defaultMaxRetries,
-    Duration retryDelay = NetworkHelper.defaultRetryDelay,
-    Duration timeout = NetworkHelper.defaultTimeout,
-  }) async {
-    int attempts = 0;
-    while (attempts < maxRetries) {
-      try {
-        final response = await requestFn().timeout(timeout);
-        if (response.statusCode == 200 || response.statusCode == 201) {
-          return response;
-        }
-        // **FIXED: Don't retry on authentication errors (401/403) - they won't be fixed by retrying**
-        if (response.statusCode == 401 || response.statusCode == 403) {
-          return response; // Return immediately so caller can handle auth error
-        }
-        attempts++;
-        if (attempts < maxRetries) {
-          await Future.delayed(retryDelay * attempts);
-        }
-      } catch (e) {
-        attempts++;
-        if (attempts >= maxRetries) rethrow;
-        await Future.delayed(retryDelay * attempts);
-      }
-    }
-    throw Exception('Request failed after $maxRetries attempts');
-  }
+  // _makeRequest method removed - using httpClientService which handles retries automatically
 
   /// Handles upload-specific errors
   Never _handleUploadError(Map<String, dynamic> responseData) {

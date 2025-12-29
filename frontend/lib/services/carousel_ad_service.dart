@@ -243,6 +243,7 @@ class CarouselAdService {
         headers: {
           'Content-Type': 'application/json',
         },
+        body: json.encode({}), // Send empty JSON object to avoid null parsing error
       );
 
       return response.statusCode == 200;
@@ -260,6 +261,7 @@ class CarouselAdService {
         headers: {
           'Content-Type': 'application/json',
         },
+        body: json.encode({}), // Send empty JSON object to avoid null parsing error
       );
 
       return response.statusCode == 200;

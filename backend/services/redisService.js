@@ -417,6 +417,27 @@ class RedisService {
   }
 
   /**
+   * Clear session shown videos (for feed restart)
+   * @param {string} userIdentifier - User identifier (userId or platformId)
+   * @returns {Promise<boolean>} - Success status
+   */
+  async clearSessionShownVideos(userIdentifier) {
+    const key = `session:shown:${userIdentifier}`;
+    if (!this.isConnected || !this.client) {
+      return false;
+    }
+
+    try {
+      await this.client.del(key);
+      console.log(`🧹 Redis: Cleared session shown videos for: ${userIdentifier}`);
+      return true;
+    } catch (error) {
+      console.error(`❌ Redis: Error clearing session videos:`, error.message);
+      return false;
+    }
+  }
+
+  /**
    * Get cache statistics (for monitoring)
    * @returns {Promise<object>} - Cache statistics
    */

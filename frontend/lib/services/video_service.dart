@@ -11,10 +11,11 @@ import 'package:vayu/model/video_model.dart';
 import 'package:vayu/model/ad_model.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/ad_service.dart';
-import 'package:vayu/services/device_id_service.dart';
+import 'package:vayu/services/platform_id_service.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/services/connectivity_service.dart';
+import 'package:vayu/core/services/http_client_service.dart';
 
 /// Eliminates code duplication and provides consistent API
 class VideoService {
@@ -23,8 +24,7 @@ class VideoService {
   final AuthService _authService = AuthService();
   final AdService _adService = AdService();
 
-  // Reusable HTTP client to avoid new TLS handshakes per request
-  final http.Client _client = http.Client();
+  // Using httpClientService for connection pooling and better performance
 
   // **VIDEO TRACKING: State management for video playback**
   int _currentVisibleVideoIndex = 0;
@@ -130,10 +130,12 @@ class VideoService {
 
   /// **Get videos with pagination and HLS support**
   /// **NEW: Optional authentication for personalized feed**
+  /// **NEW: Optional clearSession parameter to clear backend session state for fresh videos**
   Future<Map<String, dynamic>> getVideos({
     int page = 1,
-    int limit = 10,
+    int limit = 15,
     String? videoType,
+    bool clearSession = false,
   }) async {
     try {
       // Get base URL with Railway first, local fallback
@@ -149,12 +151,20 @@ class VideoService {
         AppLogger.log('🔍 VideoService: Filtering by videoType: $apiVideoType');
       }
 
-      // **BACKEND-FIRST: Get deviceId for anonymous users**
-      final deviceIdService = DeviceIdService();
-      final deviceId = await deviceIdService.getDeviceId();
-      if (deviceId.isNotEmpty) {
-        url += '&deviceId=$deviceId';
-        AppLogger.log('📱 VideoService: Using deviceId for personalized feed');
+      // **BACKEND-FIRST: Get platformId for anonymous users**
+      final platformIdService = PlatformIdService();
+      final platformId = await platformIdService.getPlatformId();
+      if (platformId.isNotEmpty) {
+        url += '&platformId=$platformId';
+        AppLogger.log(
+            '📱 VideoService: Using platformId for personalized feed');
+      }
+
+      // **NEW: Add clearSession parameter to clear backend session state**
+      if (clearSession) {
+        url += '&clearSession=true';
+        AppLogger.log(
+            '🧹 VideoService: Clearing session state for fresh videos');
       }
 
       // **BACKEND-FIRST: Get auth token for authenticated users (optional - don't fail if missing)**
@@ -173,8 +183,9 @@ class VideoService {
             '⚠️ VideoService: Error getting auth token, using regular feed: $e');
       }
 
-      final response = await _makeRequest(
-        () => _client.get(Uri.parse(url), headers: headers),
+      final response = await httpClientService.get(
+        Uri.parse(url),
+        headers: headers,
         timeout: const Duration(seconds: 15),
       );
 
@@ -1180,7 +1191,7 @@ class VideoService {
     try {
       final headers = await _getAuthHeaders();
       final resolvedBaseUrl = await getBaseUrlWithFallback();
-      final res = await http.post(
+      final res = await httpClientService.post(
         Uri.parse('$resolvedBaseUrl/api/videos/$videoId/share'),
         headers: headers,
       );
@@ -1394,7 +1405,7 @@ class VideoService {
   /// **Get videos with integrated ads**
   Future<Map<String, dynamic>> getVideosWithAds({
     int page = 1,
-    int limit = 10,
+    int limit = 15,
     int adInsertionFrequency = 3,
   }) async {
     try {

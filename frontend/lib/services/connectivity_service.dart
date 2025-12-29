@@ -1,14 +1,8 @@
 import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:http/http.dart' as http;
+import 'package:vayu/core/services/http_client_service.dart';
 import 'package:vayu/utils/app_logger.dart';
 
-/// **CONNECTIVITY SERVICE - Proactive internet connection checking**
-///
-/// Features:
-/// - Real-time connectivity monitoring
-/// - Proactive internet connection verification
-/// - Network status streaming
 class ConnectivityService {
   static final Connectivity _connectivity = Connectivity();
   static List<ConnectivityResult>? _lastKnownResult;
@@ -31,9 +25,10 @@ class ConnectivityService {
       // Double-check with actual network request (connectivity_plus can give false positives)
       // **FIXED: Increased timeout to 8 seconds to avoid false positives with good internet**
       try {
-        final response = await http
-            .get(Uri.parse('https://www.google.com'))
-            .timeout(const Duration(seconds: 8));
+        final response = await httpClientService.get(
+          Uri.parse('https://www.google.com'),
+          timeout: const Duration(seconds: 8),
+        );
 
         final hasInternet = response.statusCode == 200;
         AppLogger.log(

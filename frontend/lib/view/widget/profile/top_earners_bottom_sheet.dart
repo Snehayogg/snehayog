@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:vayu/view/screens/profile_screen.dart';
-import 'package:http/http.dart' as http;
+import 'package:vayu/core/services/http_client_service.dart';
 import 'dart:convert';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/services/authservices.dart';
@@ -65,13 +65,14 @@ class _TopEarnersBottomSheetState extends State<TopEarnersBottomSheet> {
       AppLogger.log(
           '📡 TopEarnersBottomSheet: Fetching top earners from following list...');
 
-      final response = await http.get(
+      final response = await httpClientService.get(
         uri,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-      ).timeout(const Duration(seconds: 30));
+        timeout: const Duration(seconds: 30),
+      );
 
       AppLogger.log('========================================');
       AppLogger.log('📡 TopEarnersBottomSheet: Response received');

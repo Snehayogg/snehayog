@@ -1,5 +1,6 @@
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart' show kIsWeb;
+import '../core/services/http_client_service.dart';
 
 /// Optimized app configuration for better performance and smaller size
 class AppConfig {
@@ -113,10 +114,11 @@ class AppConfig {
     // 1) Custom domain (snehayog.site) - FIRST PRIORITY
     try {
       print('🔍 AppConfig: [1/3] Testing custom domain: $_customDomainUrl...');
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('$_customDomainUrl/api/health'),
         headers: {'Content-Type': 'application/json'},
-      ).timeout(const Duration(seconds: 8));
+        timeout: const Duration(seconds: 8),
+      );
 
       if (response.statusCode == 200) {
         print('✅ AppConfig: Custom domain accessible at $_customDomainUrl');
@@ -133,10 +135,11 @@ class AppConfig {
     // 2) Railway URL - SECOND PRIORITY
     try {
       print('🔍 AppConfig: [2/3] Testing Railway server: $_railwayUrl...');
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('$_railwayUrl/api/health'),
         headers: {'Content-Type': 'application/json'},
-      ).timeout(const Duration(seconds: 8));
+        timeout: const Duration(seconds: 8),
+      );
 
       if (response.statusCode == 200) {
         print('✅ AppConfig: Railway server accessible at $_railwayUrl');
@@ -155,10 +158,11 @@ class AppConfig {
     final localServerUrl = kIsWeb ? _localWebBaseUrl : _localIpBaseUrl;
     try {
       print('🔍 AppConfig: [3/3] Testing local server: $localServerUrl...');
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('$localServerUrl/api/health'),
         headers: {'Content-Type': 'application/json'},
-      ).timeout(const Duration(seconds: 3));
+        timeout: const Duration(seconds: 3),
+      );
 
       if (response.statusCode == 200) {
         print('✅ AppConfig: Local server accessible at $localServerUrl');
@@ -209,10 +213,11 @@ class AppConfig {
 
     try {
       print('🔍 AppConfig: [1/3] Testing custom domain: $_customDomainUrl...');
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('$_customDomainUrl/api/health'),
         headers: {'Content-Type': 'application/json'},
-      ).timeout(const Duration(seconds: 12));
+        timeout: const Duration(seconds: 12),
+      );
 
       if (response.statusCode == 200) {
         print('✅ AppConfig: Custom domain is accessible at $_customDomainUrl');
@@ -229,10 +234,11 @@ class AppConfig {
     // 2) Railway URL - SECOND PRIORITY
     try {
       print('🔍 AppConfig: [2/3] Testing Railway server: $_railwayUrl...');
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('$_railwayUrl/api/health'),
         headers: {'Content-Type': 'application/json'},
-      ).timeout(const Duration(seconds: 12));
+        timeout: const Duration(seconds: 12),
+      );
 
       if (response.statusCode == 200) {
         print('✅ AppConfig: Railway server is accessible at $_railwayUrl');
@@ -251,10 +257,11 @@ class AppConfig {
     final localServerUrl = kIsWeb ? _localWebBaseUrl : _localIpBaseUrl;
     try {
       print('🔍 AppConfig: [3/3] Testing local server: $localServerUrl...');
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('$localServerUrl/api/health'),
         headers: {'Content-Type': 'application/json'},
-      ).timeout(const Duration(seconds: 4));
+        timeout: const Duration(seconds: 4),
+      );
 
       if (response.statusCode == 200) {
         print('✅ AppConfig: Local server is accessible at $localServerUrl');

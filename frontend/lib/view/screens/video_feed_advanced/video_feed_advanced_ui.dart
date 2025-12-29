@@ -150,14 +150,16 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         final lastVideoIndex = totalVideos - 1;
         final lastVideo = _videos[lastVideoIndex];
         final lastController = _getController(lastVideoIndex);
-        
-        // Trigger load more silently in background if not already loading
+
+        // **IMMEDIATE TRIGGER: Load more videos immediately if not already loading**
+        // This prevents grey screen by ensuring videos start loading as soon as user reaches end
         if (mounted && !_isRefreshing) {
           if (_hasMore && !_isLoadingMore) {
             // Load more videos silently (no visible loading state)
             AppLogger.log(
-              '📡 UI: End-of-feed item at index $index, triggering silent load more...',
+              '📡 UI: End-of-feed item at index $index, triggering immediate load more...',
             );
+            // Trigger immediately without waiting
             _loadMoreVideos();
           } else if (!_hasMore && !_isLoadingMore) {
             // No more videos from backend → restart feed from beginning
@@ -171,9 +173,10 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             });
           }
         }
-        
-        // **CRITICAL: Return last video widget instead of loading indicator**
+
+        // **CRITICAL: Return last video widget immediately instead of loading indicator**
         // This creates seamless experience - user sees video while new ones load
+        // Use WidgetsBinding to ensure immediate render without delay
         return _buildVideoItem(
           lastVideo,
           lastController,
@@ -181,13 +184,18 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           lastVideoIndex,
         );
       }
-      
-      // Fallback: Only if no videos at all (shouldn't happen)
+
+      // **FALLBACK: Black container instead of grey screen**
+      // Only if no videos at all (shouldn't happen in normal flow)
       return Container(
         width: double.infinity,
         height: double.infinity,
-        color: Colors.black,
-        child: const SizedBox.shrink(), // Completely invisible
+        color: Colors.black, // Black instead of grey for better UX
+        child: _isLoading
+            ? const Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              )
+            : const SizedBox.shrink(),
       );
     }
 

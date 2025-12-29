@@ -6,6 +6,7 @@ import 'package:vayu/core/enums/video_state.dart';
 import 'package:vayu/core/constants/app_constants.dart';
 import 'package:vayu/core/managers/smart_cache_manager.dart';
 import 'package:vayu/core/managers/video_controller_manager.dart';
+import 'package:vayu/services/platform_id_service.dart';
 
 class VideoProvider extends ChangeNotifier {
   final VideoService _videoService = VideoService();
@@ -64,8 +65,13 @@ class VideoProvider extends ChangeNotifier {
         await smartCache.initialize();
       }
 
+      // **FIX: Include platformId in cache key for personalized feeds**
+      // This ensures each user gets their own cached personalized feed
+      final platformIdService = PlatformIdService();
+      final platformId = await platformIdService.getPlatformId();
       final normalizedType = (videoType ?? 'all').toLowerCase();
-      final cacheKey = 'videos_page_${_currentPage}_$normalizedType';
+      final cacheKey =
+          'videos_page_${_currentPage}_${normalizedType}_$platformId';
 
       bool cachedMarkedAsEnd = false;
 

@@ -731,6 +731,7 @@ class SmartCacheManager {
   }
 
   /// **NEW: Invalidate video cache for a specific video type (used when videos are deleted)**
+  /// **UPDATED: Now handles cache keys with platformId: videos_page_${page}_${type}_${platformId}**
   Future<void> invalidateVideoCache({String? videoType}) async {
     try {
       AppLogger.log(
@@ -738,10 +739,13 @@ class SmartCacheManager {
       );
 
       if (videoType != null) {
-        // Invalidate specific video type cache
-        await clearCacheByPattern('videos_page_*_$videoType');
+        // **FIX: Pattern matches new cache key format with platformId**
+        // New format: videos_page_${page}_${type}_${platformId}
+        // Match by type substring: _${videoType}_
+        final normalizedType = videoType.toLowerCase();
+        await clearCacheByPattern('_${normalizedType}_');
       } else {
-        // Invalidate all video caches
+        // Invalidate all video caches (matches all keys starting with videos_page_)
         await clearCacheByPattern('videos_page_');
       }
 

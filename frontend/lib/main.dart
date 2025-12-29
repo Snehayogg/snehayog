@@ -26,6 +26,7 @@ import 'package:vayu/services/location_onboarding_service.dart';
 import 'package:vayu/services/welcome_onboarding_service.dart';
 import 'package:vayu/view/screens/welcome_onboarding_screen.dart';
 import 'package:http/http.dart' as http;
+import 'package:vayu/core/services/http_client_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/core/managers/shared_video_controller_pool.dart';
 import 'package:vayu/core/managers/video_controller_manager.dart';
@@ -157,9 +158,10 @@ Future<void> _splashPrefetch() async {
     unawaited(() async {
       try {
         final base = await vsvc.VideoService.getBaseUrlWithFallback();
-        await http
-            .get(Uri.parse('$base/api/health'))
-            .timeout(const Duration(seconds: 3));
+        await httpClientService.get(
+          Uri.parse('$base/api/health'),
+          timeout: const Duration(seconds: 3),
+        );
         print('✅ TLS warmup ok');
       } catch (_) {}
     }());

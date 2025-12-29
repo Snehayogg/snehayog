@@ -40,14 +40,18 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
     sharedPool.cleanupDistantControllers(_currentIndex, keepRange: keepRange);
 
-    // **OPTIMIZED: More aggressive loading - trigger when 15 videos from end**
-    // This ensures next batch is loaded and preloaded before user reaches the end
+    // **FIXED: Dynamic loading trigger based on total videos**
+    // For small lists (like first page with 4 videos), trigger much earlier
+    // For larger lists, use 12 videos from end
     final distanceFromEnd = _videos.length - _currentIndex;
     if (_hasMore && !_isLoadingMore) {
-      // **PROACTIVE: Load when 15 videos from end (much earlier for seamless experience)**
-      if (_currentIndex >= _videos.length - 15) {
+      // **PROACTIVE: Dynamic trigger - earlier for small lists, later for large lists**
+      // If total videos < 10, trigger when 3 videos from end (increased from 2 for fast scrolling)
+      // Otherwise, trigger when 12 videos from end
+      final triggerDistance = _videos.length < 10 ? 3 : 12;
+      if (distanceFromEnd <= triggerDistance) {
         AppLogger.log(
-          '📡 Triggering load more: index=$_currentIndex, total=${_videos.length}, distanceFromEnd=$distanceFromEnd, hasMore=$_hasMore',
+          '📡 Triggering load more: index=$_currentIndex, total=${_videos.length}, distanceFromEnd=$distanceFromEnd, triggerDistance=$triggerDistance, hasMore=$_hasMore',
         );
         _loadMoreVideos();
       }
@@ -737,6 +741,24 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
   void _onPageChanged(int index) {
     if (index == _currentIndex) return;
+
+    // **CRITICAL FIX: Immediate check for fast scrolling - no debounce when close to end**
+    // This ensures trigger happens even during fast scrolling
+    if (index < _videos.length && _hasMore && !_isLoadingMore) {
+      final distanceFromEnd = _videos.length - index;
+      final triggerDistance =
+          _videos.length < 10 ? 3 : 12; // More aggressive: 3 for small lists
+
+      if (distanceFromEnd <= triggerDistance) {
+        AppLogger.log(
+          '⚡ IMMEDIATE (fast scroll): index=$index, total=${_videos.length}, distanceFromEnd=$distanceFromEnd, triggerDistance=$triggerDistance',
+        );
+        // Trigger immediately without debounce for fast scrolling
+        _loadMoreVideos();
+        _preloadNearbyVideos();
+      }
+    }
+
     _pageChangeTimer?.cancel();
     _pageChangeTimer = Timer(const Duration(milliseconds: 150), () {
       _handlePageChangeDebounced(index);
@@ -787,6 +809,27 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
     // **CRITICAL FIX: Check if we need to load more videos BEFORE checking if we're at the end**
     // This ensures new videos are loaded when approaching the end
     _reprimeWindowIfNeeded();
+
+    // **FIXED: Dynamic immediate check - trigger earlier for small lists**
+    // This prevents grey screen by ensuring videos load and preload immediately without debounce delay
+    bool isCloseToEnd = false;
+    if (index < _videos.length && _hasMore && !_isLoadingMore) {
+      final distanceFromEnd = _videos.length - index;
+      // **PROACTIVE: Dynamic trigger - earlier for small lists, later for large lists**
+      // If total videos < 10, trigger when 3 videos from end (increased from 2 for fast scrolling)
+      // Otherwise, trigger when 12 videos from end
+      final triggerDistance = _videos.length < 10 ? 3 : 12;
+      if (distanceFromEnd <= triggerDistance) {
+        isCloseToEnd = true;
+        AppLogger.log(
+          '📡 Immediate load more check: index=$index, total=${_videos.length}, distanceFromEnd=$distanceFromEnd, triggerDistance=$triggerDistance',
+        );
+        _loadMoreVideos();
+        // **CRITICAL: Also call _preloadNearbyVideos() immediately (not debounced) when close to end**
+        // This ensures preloading happens immediately for seamless playback
+        _preloadNearbyVideos();
+      }
+    }
 
     // **FIXED: Try to load more videos first before restarting**
     // Only restart if we've truly reached the end AND there are no more videos to load
@@ -925,7 +968,10 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         }
       }
 
-      _preloadNearbyVideosDebounced();
+      // **OPTIMIZED: Skip debounced preload if already called immediately (when close to end)**
+      if (!isCloseToEnd) {
+        _preloadNearbyVideosDebounced();
+      }
       return;
     }
 
@@ -983,7 +1029,10 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       });
     }
 
-    _preloadNearbyVideosDebounced();
+    // **OPTIMIZED: Skip debounced preload if already called immediately (when close to end)**
+    if (!isCloseToEnd) {
+      _preloadNearbyVideosDebounced();
+    }
   }
 
   void _preloadNearbyVideosDebounced() {

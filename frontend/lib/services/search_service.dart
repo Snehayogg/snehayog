@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:http/http.dart' as http;
+import 'package:vayu/core/services/http_client_service.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/model/video_model.dart';
 import 'package:vayu/model/usermodel.dart';
@@ -8,11 +8,10 @@ import 'package:vayu/utils/app_logger.dart';
 
 /// Simple search service to search videos and creators.
 class SearchService {
-  final http.Client _client;
   // **FIX: Cache base URL to avoid repeated network checks**
   String? _cachedBaseUrl;
 
-  SearchService({http.Client? client}) : _client = client ?? http.Client();
+  SearchService();
 
   // **FIX: Get base URL with caching**
   Future<String> _getBaseUrl() async {
@@ -39,9 +38,11 @@ class SearchService {
     AppLogger.log('🔍 SearchService: searchVideos q="$trimmed" url=$uri');
 
     try {
-      final res = await _client.get(uri, headers: const {
-        'Content-Type': 'application/json'
-      }).timeout(const Duration(seconds: 10));
+      final res = await httpClientService.get(
+        uri,
+        headers: const {'Content-Type': 'application/json'},
+        timeout: const Duration(seconds: 10),
+      );
 
       AppLogger.log(
         '📡 SearchService: searchVideos response status=${res.statusCode}',
@@ -94,9 +95,11 @@ class SearchService {
     AppLogger.log('🔍 SearchService: searchCreators q="$trimmed" url=$uri');
 
     try {
-      final res = await _client.get(uri, headers: const {
-        'Content-Type': 'application/json'
-      }).timeout(const Duration(seconds: 10));
+      final res = await httpClientService.get(
+        uri,
+        headers: const {'Content-Type': 'application/json'},
+        timeout: const Duration(seconds: 10),
+      );
 
       AppLogger.log(
         '📡 SearchService: searchCreators response status=${res.statusCode}',
@@ -153,9 +156,11 @@ class SearchService {
     );
 
     try {
-      final res = await _client.get(uri, headers: const {
-        'Content-Type': 'application/json'
-      }).timeout(const Duration(seconds: 5));
+      final res = await httpClientService.get(
+        uri,
+        headers: const {'Content-Type': 'application/json'},
+        timeout: const Duration(seconds: 5),
+      );
 
       if (res.statusCode != 200) {
         return <String, dynamic>{
@@ -187,9 +192,11 @@ class SearchService {
 
       List<VideoModel> videos = <VideoModel>[];
       try {
-        final videosRes = await _client.get(videosUri, headers: const {
-          'Content-Type': 'application/json'
-        }).timeout(const Duration(seconds: 5));
+        final videosRes = await httpClientService.get(
+          videosUri,
+          headers: const {'Content-Type': 'application/json'},
+          timeout: const Duration(seconds: 5),
+        );
 
         if (videosRes.statusCode == 200) {
           final videosData =

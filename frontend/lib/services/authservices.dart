@@ -2,6 +2,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
 import 'package:http/http.dart' as http;
+import 'package:vayu/core/services/http_client_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -12,7 +13,7 @@ import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:vayu/config/google_sign_in_config.dart';
 import 'package:vayu/services/location_onboarding_service.dart';
 import 'package:vayu/utils/app_logger.dart';
-import 'package:vayu/services/device_id_service.dart';
+import 'package:vayu/services/platform_id_service.dart';
 import 'package:vayu/services/notification_service.dart';
 
 class AuthService {
@@ -119,8 +120,8 @@ class AuthService {
 
       AppLogger.log('🔑 Got ID token, attempting backend authentication...');
 
-      // **OPTIMIZED: Get device ID (usually cached, so fast)**
-      final deviceId = await DeviceIdService().getDeviceId();
+      // **OPTIMIZED: Get platform ID (usually cached, so fast)**
+      final platformId = await PlatformIdService().getPlatformId();
 
       // First, authenticate with backend to get JWT
       try {
@@ -131,7 +132,7 @@ class AuthService {
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
                 'idToken': idToken,
-                'deviceId': deviceId, // **NEW: Send device ID to backend
+                'platformId': platformId, // **NEW: Send platform ID to backend
               }),
             )
             .timeout(const Duration(seconds: 5));
@@ -167,19 +168,18 @@ class AuthService {
           // Don't block sign-in completion for this
           unawaited(() async {
             try {
-              final syncResponse = await http
-                  .post(
-                    Uri.parse(
-                        '${AppConfig.baseUrl}/api/videos/sync-watch-history'),
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'Authorization': 'Bearer ${authData['token']}',
-                    },
-                    body: jsonEncode({
-                      'deviceId': deviceId,
-                    }),
-                  )
-                  .timeout(const Duration(seconds: 3));
+              final platformId = await PlatformIdService().getPlatformId();
+              final syncResponse = await httpClientService.post(
+                Uri.parse('${AppConfig.baseUrl}/api/videos/sync-watch-history'),
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': 'Bearer ${authData['token']}',
+                },
+                body: jsonEncode({
+                  'platformId': platformId,
+                }),
+                timeout: const Duration(seconds: 3),
+              );
 
               if (syncResponse.statusCode == 200) {
                 final syncData = jsonDecode(syncResponse.body);
@@ -266,9 +266,9 @@ class AuthService {
           await prefs.setString('fallback_user', jsonEncode(fallbackData));
           AppLogger.log('✅ Saved fallback_user with Google account data');
 
-          // **OPTIMIZED: Store device ID in parallel (non-blocking)**
-          // Device ID storage is critical but doesn't need to block sign-in completion
-          unawaited(_ensureDeviceIdStored(deviceId));
+          // **OPTIMIZED: Store platform ID in parallel (non-blocking)**
+          // Platform ID storage is critical but doesn't need to block sign-in completion
+          unawaited(_ensurePlatformIdStored(platformId));
 
           // Return combined user data immediately (device ID storage happens in background)
           return {
@@ -336,7 +336,8 @@ class AuthService {
                   headers: {'Content-Type': 'application/json'},
                   body: jsonEncode({
                     'idToken': idToken,
-                    'deviceId': deviceId, // **NEW: Send device ID on retry
+                    'platformId':
+                        platformId, // **NEW: Send platform ID on retry
                   }),
                 )
                 .timeout(const Duration(seconds: 10));
@@ -354,14 +355,14 @@ class AuthService {
                 'profilePic': googleUser.photoUrl,
               };
 
-              await http.post(
+              await httpClientService.post(
                 Uri.parse('${AppConfig.baseUrl}/api/users/register'),
                 headers: {'Content-Type': 'application/json'},
                 body: jsonEncode(userData),
               );
 
-              // **CRITICAL: ALWAYS store device ID after successful retry authentication**
-              await _ensureDeviceIdStored(deviceId);
+              // **CRITICAL: ALWAYS store platform ID after successful retry authentication**
+              await _ensurePlatformIdStored(platformId);
 
               return {
                 'id': googleUser.id,
@@ -412,8 +413,8 @@ class AuthService {
             'isFallback': true,
           }));
 
-      // **CRITICAL: ALWAYS store device ID even in fallback mode**
-      await _ensureDeviceIdStored(await DeviceIdService().getDeviceId());
+      // **CRITICAL: ALWAYS store platform ID even in fallback mode**
+      await _ensurePlatformIdStored(await PlatformIdService().getPlatformId());
 
       AppLogger.log('✅ Fallback session created successfully');
 
@@ -496,38 +497,25 @@ class AuthService {
 
         // **IMPROVED: Wait for auto-login if device ID is recognized (for seamless reinstall experience)**
         try {
-          final deviceIdService = DeviceIdService();
-          final deviceId = await deviceIdService.getDeviceId();
+          final platformIdService = PlatformIdService();
+          final platformId = await platformIdService.getPlatformId();
 
-          // Check if device ID is valid and might be recognized
-          if (deviceId.isNotEmpty && !deviceId.startsWith('fallback_')) {
-            // Check if device has logged in before (with timeout)
-            final hasStoredDeviceId = await deviceIdService
-                .hasStoredDeviceId()
-                .timeout(const Duration(seconds: 3), onTimeout: () => false);
+          // Check if platform ID is valid (platform ID is always available)
+          if (platformId.isNotEmpty && !platformId.startsWith('fallback_')) {
+            AppLogger.log('✅ Platform ID available - attempting auto-login...');
+            // Try auto-login with platform ID (with timeout)
+            final autoLoginResult = await autoLoginWithPlatformId()
+                .timeout(const Duration(seconds: 10), onTimeout: () {
+              AppLogger.log('⚠️ Auto-login timed out');
+              return null;
+            });
 
-            if (hasStoredDeviceId) {
-              AppLogger.log(
-                  '✅ Device ID recognized - waiting for auto-login to complete...');
-              // Wait for auto-login with timeout (max 10 seconds)
-              final autoLoginResult = await autoLoginWithDeviceId()
-                  .timeout(const Duration(seconds: 10), onTimeout: () {
-                AppLogger.log('⚠️ Auto-login timed out');
-                return null;
-              });
-
-              if (autoLoginResult != null) {
-                AppLogger.log(
-                    '✅ Auto-login successful - user session restored');
-                return true; // User is now logged in
-              } else {
-                AppLogger.log(
-                    'ℹ️ Auto-login failed or cancelled - user needs to login manually');
-                return false;
-              }
+            if (autoLoginResult != null) {
+              AppLogger.log('✅ Auto-login successful - user session restored');
+              return true; // User is now logged in
             } else {
               AppLogger.log(
-                  'ℹ️ Device ID not recognized - first time login required');
+                  'ℹ️ Auto-login failed or cancelled - user needs to login manually');
               return false;
             }
           } else {
@@ -537,7 +525,7 @@ class AuthService {
         } catch (e) {
           AppLogger.log('⚠️ Error during auto-login check: $e');
           // Fallback: try auto-login in background (non-blocking)
-          unawaited(autoLoginWithDeviceId().then((userData) {
+          unawaited(autoLoginWithPlatformId().then((userData) {
             if (userData != null) {
               AppLogger.log('✅ Auto-login successful in background');
             }
@@ -562,10 +550,11 @@ class AuthService {
     if (token == null || token.isEmpty) return;
 
     try {
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('${AppConfig.baseUrl}/api/users/profile'),
         headers: {'Authorization': 'Bearer $token'},
-      ).timeout(const Duration(seconds: 3));
+        timeout: const Duration(seconds: 3),
+      );
 
       // Only clear token if it's actually unauthorized (401/403), not on network errors
       if (response.statusCode == 401 || response.statusCode == 403) {
@@ -777,11 +766,12 @@ class AuthService {
           AppLogger.log('🔍 Token is null!');
         }
 
-        final response = await http.get(
+        final response = await httpClientService.get(
           Uri.parse('${AppConfig.baseUrl}/api/users/profile'),
           headers: {'Authorization': 'Bearer $token'},
-        ).timeout(const Duration(
-            seconds: 3)); // **OPTIMIZED: Reduced timeout for faster startup**
+          timeout: const Duration(
+              seconds: 3), // **OPTIMIZED: Reduced timeout for faster startup**
+        );
 
         if (response.statusCode == 200) {
           final userData = jsonDecode(response.body);
@@ -982,55 +972,64 @@ class AuthService {
     }
   }
 
-  /// **IMPROVED: Auto-login using device ID (for persistent login after reinstall)**
-  /// Attempts to restore user session if device ID indicates user logged in before
-  /// Automatically triggers Google Sign-In if device ID is recognized but silent sign-in fails
-  Future<Map<String, dynamic>?> autoLoginWithDeviceId() async {
+  /// **IMPROVED: Auto-login using platform ID (for persistent login after reinstall)**
+  /// Attempts to restore user session if platform ID indicates user logged in before
+  /// Automatically triggers Google Sign-In if platform ID is recognized but silent sign-in fails
+  Future<Map<String, dynamic>?> autoLoginWithPlatformId() async {
     try {
-      AppLogger.log('🔄 Attempting auto-login with device ID...');
+      AppLogger.log('🔄 Attempting auto-login with platform ID...');
 
-      final deviceIdService = DeviceIdService();
+      final platformIdService = PlatformIdService();
 
-      // Step 1: Get device ID (works even after reinstall)
-      final deviceId = await deviceIdService.getDeviceId();
-      if (deviceId.isEmpty || deviceId.startsWith('fallback_')) {
-        AppLogger.log('❌ Invalid device ID - cannot auto-login');
-        return null;
-      }
-
-      AppLogger.log('✅ Device ID retrieved: ${deviceId.substring(0, 8)}...');
-
-      // Step 2: Check with backend if this device has logged in before
-      final hasStoredDeviceId = await deviceIdService.hasStoredDeviceId();
-      if (!hasStoredDeviceId) {
-        AppLogger.log(
-            'ℹ️ Device ID not found on backend - first time login required');
+      // Step 1: Get platform ID (works even after reinstall)
+      final platformId = await platformIdService.getPlatformId();
+      if (platformId.isEmpty || platformId.startsWith('fallback_')) {
+        AppLogger.log('❌ Invalid platform ID - cannot auto-login');
         return null;
       }
 
       AppLogger.log(
-          '✅ Device ID verified with backend - user has logged in before');
+          '✅ Platform ID retrieved: ${platformId.substring(0, 8)}...');
 
-      // **NEW: Get user email from backend for seamless auto-login**
+      // Step 2: Check with backend if this platform has logged in before
+      // Platform ID is always available, so we check backend directly
       String? userEmail;
       try {
         final resolvedBaseUrl = await AppConfig.getBaseUrlWithFallback();
-        final checkResponse = await http
-            .post(
-              Uri.parse('$resolvedBaseUrl/api/auth/check-device'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({'deviceId': deviceId}),
-            )
-            .timeout(const Duration(seconds: 5));
+        final checkResponse = await httpClientService.post(
+          Uri.parse('$resolvedBaseUrl/api/auth/check-device'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'platformId': platformId}),
+          timeout: const Duration(seconds: 5),
+        );
 
-        if (checkResponse.statusCode == 200) {
-          final checkData = jsonDecode(checkResponse.body);
-          userEmail = checkData['userEmail'] as String?;
+        if (checkResponse.statusCode != 200) {
           AppLogger.log(
-              '✅ User email retrieved from backend: ${userEmail?.substring(0, 5)}...');
+              'ℹ️ Platform ID not found on backend - first time login required');
+          return null;
+        }
+
+        final checkData = jsonDecode(checkResponse.body);
+        final hasLoggedIn = checkData['hasLoggedIn'] ?? false;
+
+        if (!hasLoggedIn) {
+          AppLogger.log(
+              'ℹ️ Platform ID not found on backend - first time login required');
+          return null;
+        }
+
+        AppLogger.log(
+            '✅ Platform ID verified with backend - user has logged in before');
+
+        // Get user email from backend response for seamless auto-login
+        userEmail = checkData['userEmail'] as String?;
+        if (userEmail != null) {
+          AppLogger.log(
+              '✅ User email retrieved from backend: ${userEmail.substring(0, 5)}...');
         }
       } catch (e) {
-        AppLogger.log('⚠️ Failed to get user email from backend: $e');
+        AppLogger.log('⚠️ Error checking device with backend: $e');
+        // Continue with auto-login attempt anyway
       }
 
       AppLogger.log('🔄 Attempting to restore Google Sign-In session...');
@@ -1043,11 +1042,11 @@ class AuthService {
       try {
         googleUser = await _googleSignIn.signInSilently();
         if (googleUser != null) {
-          // **VERIFY: Check if the signed-in account matches the device ID's user**
+          // **VERIFY: Check if the signed-in account matches the platform ID's user**
           if (userEmail != null &&
               googleUser.email.toLowerCase() != userEmail.toLowerCase()) {
             AppLogger.log(
-                '⚠️ Silent sign-in returned different account (${googleUser.email}) than device account ($userEmail)');
+                '⚠️ Silent sign-in returned different account (${googleUser.email}) than platform account ($userEmail)');
             // Still proceed - user might have switched accounts
           } else {
             AppLogger.log('✅ Silent sign-in successful with matching account');
@@ -1089,7 +1088,7 @@ class AuthService {
       // This prevents automatic account picker from showing when app opens
       if (googleUser == null) {
         AppLogger.log(
-            'ℹ️ Device ID recognized but no Google session - user needs to sign in manually');
+            'ℹ️ Platform ID recognized but no Google session - user needs to sign in manually');
         AppLogger.log(
             'ℹ️ Sign-in popup will appear when user interacts (like button, comments, etc.)');
         return null;
@@ -1144,7 +1143,7 @@ class AuthService {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
               'idToken': idToken,
-              'deviceId': deviceId,
+              'platformId': platformId,
             }),
           )
           .timeout(const Duration(seconds: 10));
@@ -1172,11 +1171,11 @@ class AuthService {
         };
         await prefs.setString('fallback_user', jsonEncode(fallbackData));
 
-        // **CRITICAL: ALWAYS store device ID after successful auto-login**
-        await _ensureDeviceIdStored(deviceId);
+        // **CRITICAL: ALWAYS store platform ID after successful auto-login**
+        await _ensurePlatformIdStored(platformId);
 
         AppLogger.log('✅ Auto-login successful! User: ${googleUser.email}');
-        AppLogger.log('✅ JWT token restored and device ID stored');
+        AppLogger.log('✅ JWT token restored and platform ID stored');
 
         return {
           'id': googleUser.id,
@@ -1373,39 +1372,20 @@ class AuthService {
   }
 
   /// **CRITICAL: Ensure device ID is ALWAYS stored after successful authentication**
-  /// This method guarantees deviceId storage even if backend calls fail
-  /// This is essential for auto-login to work after app reinstall
-  Future<void> _ensureDeviceIdStored(String deviceId) async {
+  /// This method guarantees platformId storage even if backend calls fail
+  /// Platform ID is always available - no need to store
+  /// Backend will use platform ID for watch history tracking
+  Future<void> _ensurePlatformIdStored(String platformId) async {
     try {
-      final deviceIdService = DeviceIdService();
-
-      // Store locally first (always succeeds)
-      await deviceIdService.storeDeviceId();
+      // Platform ID is always available from platform
+      // No need to store locally - it persists across app reinstalls
       AppLogger.log(
-          '✅ Device ID stored locally: ${deviceId.substring(0, 8)}...');
-
-      // Try to verify with backend (non-blocking, doesn't fail if backend is down)
-      try {
-        final hasStored = await deviceIdService
-            .hasStoredDeviceId()
-            .timeout(const Duration(seconds: 3), onTimeout: () => false);
-
-        if (!hasStored) {
-          AppLogger.log(
-              '⚠️ Device ID not yet verified on backend, but stored locally');
-          AppLogger.log(
-              'ℹ️ Backend verification will happen on next app launch');
-        } else {
-          AppLogger.log('✅ Device ID verified on backend');
-        }
-      } catch (e) {
-        AppLogger.log('⚠️ Backend verification failed (non-critical): $e');
-        AppLogger.log(
-            'ℹ️ Device ID stored locally, will verify on next launch');
-      }
+          '✅ Platform ID available: ${platformId.substring(0, 8)}...');
+      AppLogger.log(
+          'ℹ️ Backend will use this platform ID for watch history tracking');
     } catch (e) {
-      AppLogger.log('❌ CRITICAL: Failed to store device ID: $e');
-      // Don't throw - deviceId storage failure shouldn't break sign-in
+      AppLogger.log('❌ CRITICAL: Failed to store platform ID: $e');
+      // Don't throw - platformId storage failure shouldn't break sign-in
       // But log it as critical since it affects auto-login
     }
   }

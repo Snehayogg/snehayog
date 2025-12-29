@@ -35,7 +35,8 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.2
   file_picker: ^10.1.9
-  http: ^1.1.0
+  dio: ^5.4.0
+  http: ^1.1.0  # Kept temporarily for backward compatibility during migration
   crypto: ^3.0.3
   shared_preferences: ^2.2.2
   share_plus: ^11.0.0

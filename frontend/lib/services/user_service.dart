@@ -8,7 +8,23 @@ import 'package:vayu/core/services/http_client_service.dart';
 class UserService {
   final AuthService _authService = AuthService();
 
+  // **REQUEST DEDUPLICATION: Track in-flight requests to prevent duplicate API calls**
+  static final Map<String, Future<Map<String, dynamic>>> _pendingRequests = {};
+
   Future<Map<String, dynamic>> getUserById(String id) async {
+    // **OPTIMIZATION: If a request for this user ID is already in-flight, reuse it**
+    if (_pendingRequests.containsKey(id)) {
+      AppLogger.log(
+          '♻️ UserService: Reusing in-flight request for user: $id');
+      try {
+        return await _pendingRequests[id]!;
+      } catch (e) {
+        // If the request failed, remove it so we can retry
+        _pendingRequests.remove(id);
+        rethrow;
+      }
+    }
+
     // **FIXED: Make authentication optional for creator profiles**
     // Backend /api/users/:id endpoint doesn't require authentication
     final token = (await _authService.getUserData())?['token'];
@@ -24,6 +40,25 @@ class UserService {
       headers['Authorization'] = 'Bearer $token';
     }
 
+    // **DEDUPLICATION: Create and store the future before making the request**
+    final requestFuture = _fetchUserById(id, baseUrl, headers);
+    _pendingRequests[id] = requestFuture;
+
+    try {
+      final result = await requestFuture;
+      // **CLEANUP: Remove from pending requests after successful completion**
+      _pendingRequests.remove(id);
+      return result;
+    } catch (e) {
+      // **CLEANUP: Remove from pending requests on error so it can be retried**
+      _pendingRequests.remove(id);
+      rethrow;
+    }
+  }
+
+  /// **PRIVATE: Internal method to actually fetch user data from backend**
+  Future<Map<String, dynamic>> _fetchUserById(
+      String id, String baseUrl, Map<String, String> headers) async {
     final response = await httpClientService.get(
       Uri.parse('$baseUrl/api/users/$id'),
       headers: headers,

@@ -97,14 +97,14 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   int get _infiniteScrollThreshold => 15;
   bool _isLoadingMore = false;
   int _currentPage = 1;
-  // **OPTIMIZED: Load only 5 videos initially for instant display, then 30 for subsequent loads**
+  // **OPTIMIZED: Load 4 videos on first page for instant loading, then 15 for subsequent pages**
   int get _videosPerPage {
-    // First load: only 5 videos for instant display (reduces load time from 3-8s to 0.5-1.5s)
+    // First page: only 4 videos for instant display (reduces load time significantly)
     if (_currentPage == 1 && _videos.isEmpty) {
-      return 5;
+      return 4;
     }
-    // Subsequent loads: 30 videos for better variety and smoother scrolling
-    return 30;
+    // Subsequent pages: 15 videos for seamless UX
+    return 15;
   }
 
   bool _hasMore = true;

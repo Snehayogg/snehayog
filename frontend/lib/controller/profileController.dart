@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
-import 'package:http/http.dart' as http;
+import 'package:vayu/core/services/http_client_service.dart';
 import 'package:vayu/model/usermodel.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/config/google_sign_in_config.dart';
@@ -97,7 +97,7 @@ class ProfileController extends ChangeNotifier {
       print('ID token obtained successfully');
       print('Attempting to fetch user data with ID token');
 
-      final res = await http.post(
+      final res = await httpClientService.post(
         Uri.parse("${AppConfig.baseUrl}/api/auth"),
         headers: {
           'Content-Type': 'application/json',
@@ -192,7 +192,7 @@ class ProfileController extends ChangeNotifier {
   }
 
   Future<void> registerUserOnBackend(Map<String, dynamic> user) async {
-    final response = await http.post(
+    final response = await httpClientService.post(
       Uri.parse(
           'https://snehayog-production.up.railway.app/api/users/register'),
       headers: {'Content-Type': 'application/json'},

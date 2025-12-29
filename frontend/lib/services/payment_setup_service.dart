@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:vayu/core/services/http_client_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/services/authservices.dart';
@@ -62,7 +62,7 @@ class PaymentSetupService {
 
       if (token == null) return false;
 
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/profile'),
         headers: {
           'Authorization': 'Bearer $token',
@@ -214,7 +214,7 @@ class PaymentSetupService {
       final token = userData?['token'];
       if (token == null) return null;
 
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/profile'),
         headers: {
           'Authorization': 'Bearer $token',
@@ -261,7 +261,7 @@ class PaymentSetupService {
       'country': 'IN',
     };
 
-    final response = await http.put(
+    final response = await httpClientService.put(
       Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/payment-method'),
       headers: {
         'Authorization': 'Bearer $token',

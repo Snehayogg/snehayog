@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:vayu/core/services/http_client_service.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/utils/app_logger.dart';
@@ -39,8 +39,7 @@ class ReportService {
           '📡 ReportService: Submitting report - targetType: $targetType, targetId: $targetId, reason: $reason');
       AppLogger.log('📡 ReportService: URL: $baseUrl/api/report');
 
-      final response = await http
-          .post(
+      final response = await httpClientService.post(
         Uri.parse('$baseUrl/api/report'),
         headers: headers,
         body: jsonEncode({
@@ -49,12 +48,7 @@ class ReportService {
           'reason': reason,
           'details': details,
         }),
-      )
-          .timeout(
-        const Duration(seconds: 15),
-        onTimeout: () {
-          throw Exception('Request timed out');
-        },
+        timeout: const Duration(seconds: 15),
       );
 
       AppLogger.log(

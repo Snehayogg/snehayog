@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:vayu/core/services/http_client_service.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/utils/app_logger.dart';
@@ -56,13 +56,14 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
 
       AppLogger.log('💰 TopEarnersGrid: Fetching top earners from $uri');
 
-      final response = await http.get(
+      final response = await httpClientService.get(
         uri,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-      ).timeout(const Duration(seconds: 30));
+        timeout: const Duration(seconds: 30),
+      );
 
       AppLogger.log(
           '💰 TopEarnersGrid: Response status: ${response.statusCode}');

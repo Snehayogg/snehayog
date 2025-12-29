@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:vayu/core/services/http_client_service.dart';
 import 'dart:convert';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/services/authservices.dart';
@@ -33,7 +33,7 @@ class _FeedbackDialogWidgetState extends State<FeedbackDialogWidget> {
       final userData = await authService.getUserData();
 
       // Submit feedback to backend
-      final response = await http.post(
+      final response = await httpClientService.post(
         Uri.parse('${AppConfig.baseUrl}/api/feedback/submit'),
         headers: {
           'Content-Type': 'application/json',

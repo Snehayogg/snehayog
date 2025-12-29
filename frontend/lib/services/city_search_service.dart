@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:vayu/core/services/http_client_service.dart';
 
 /// **CitySearchService - Handles dynamic city search using OpenStreetMap Nominatim API**
 class CitySearchService {
@@ -15,7 +15,7 @@ class CitySearchService {
 
     try {
       final encodedQuery = Uri.encodeComponent('$query, India');
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('$_baseUrl?'
             'q=$encodedQuery&'
             'format=jsonv2&'
@@ -84,21 +84,14 @@ class CitySearchService {
       print('🔍 CitySearchService: API URL: $url');
 
       // **ENHANCED: Add timeout for better UX**
-      final response = await http
-          .get(
-            Uri.parse(url),
-            headers: {
-              'User-Agent': _userAgent,
-              'Accept-Language': 'en',
-            },
-          )
-          .timeout(
-            const Duration(seconds: 10),
-            onTimeout: () {
-              print('⏱️ CitySearchService: Request timeout');
-              throw TimeoutException('Location search request timed out');
-            },
-          );
+      final response = await httpClientService.get(
+        Uri.parse(url),
+        headers: {
+          'User-Agent': _userAgent,
+          'Accept-Language': 'en',
+        },
+        timeout: const Duration(seconds: 10),
+      );
 
       print('🔍 CitySearchService: Response status: ${response.statusCode}');
 
@@ -112,22 +105,22 @@ class CitySearchService {
           try {
             final displayName = place['display_name'] as String? ?? '';
             final address = place['address'] as Map<String, dynamic>?;
-            
+
             // **ENHANCED: Better city name extraction**
             final city = address?['city'] ??
                 address?['town'] ??
                 address?['village'] ??
                 address?['municipality'] ??
                 _extractCityName(displayName);
-            
+
             // **ENHANCED: Better state extraction**
-            final state = address?['state'] ?? 
+            final state = address?['state'] ??
                 address?['state_district'] ??
                 _extractState(displayName);
 
             // **ENHANCED: Skip if city name is too generic or empty**
-            if (city.isNotEmpty && 
-                city.length >= 2 && 
+            if (city.isNotEmpty &&
+                city.length >= 2 &&
                 !cities.any((c) => c['name'] == city)) {
               cities.add({
                 'name': city,

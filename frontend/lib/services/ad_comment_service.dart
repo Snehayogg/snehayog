@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:vayu/core/services/http_client_service.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/services/authservices.dart';
 
@@ -19,7 +19,7 @@ class AdCommentService {
         throw Exception('User not authenticated');
       }
 
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('$_baseUrl/api/ads/comments/$adId?page=$page&limit=$limit'),
         headers: {
           'Content-Type': 'application/json',
@@ -51,7 +51,7 @@ class AdCommentService {
         throw Exception('User not authenticated');
       }
 
-      final response = await http.post(
+      final response = await httpClientService.post(
         Uri.parse('$_baseUrl/api/ads/comments/$adId'),
         headers: {
           'Content-Type': 'application/json',
@@ -86,7 +86,7 @@ class AdCommentService {
         throw Exception('User not authenticated');
       }
 
-      final response = await http.delete(
+      final response = await httpClientService.delete(
         Uri.parse('$_baseUrl/api/ads/comments/$adId/$commentId'),
         headers: {
           'Content-Type': 'application/json',
@@ -118,7 +118,7 @@ class AdCommentService {
         throw Exception('User not authenticated');
       }
 
-      final response = await http.post(
+      final response = await httpClientService.post(
         Uri.parse('$_baseUrl/api/ads/comments/$adId/$commentId/like'),
         headers: {
           'Content-Type': 'application/json',
