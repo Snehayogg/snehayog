@@ -442,7 +442,8 @@ class _MainScreenState extends State<MainScreen>
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: mainController.currentIndex == 0
+                  colors: (mainController.currentIndex == 0 ||
+                          mainController.currentIndex == 1)
                       ? [
                           const Color(0xFF1A1A1A),
                           const Color(0xFF0F0F0F),
@@ -454,7 +455,8 @@ class _MainScreenState extends State<MainScreen>
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: mainController.currentIndex == 0
+                    color: (mainController.currentIndex == 0 ||
+                            mainController.currentIndex == 1)
                         ? Colors.black.withOpacity(0.3)
                         : Colors.black.withOpacity(0.1),
                     blurRadius: 20,
@@ -462,7 +464,8 @@ class _MainScreenState extends State<MainScreen>
                     spreadRadius: 0,
                   ),
                   BoxShadow(
-                    color: mainController.currentIndex == 0
+                    color: (mainController.currentIndex == 0 ||
+                            mainController.currentIndex == 1)
                         ? Colors.black.withOpacity(0.2)
                         : Colors.black.withOpacity(0.05),
                     blurRadius: 8,
@@ -597,7 +600,8 @@ class _MainScreenState extends State<MainScreen>
                     size: isSelected ? 30 : 28, // Same size for all icons
                     color: isSelected
                         ? const Color(0xFF2196F3)
-                        : (mainController.currentIndex == 0
+                        : ((mainController.currentIndex == 0 ||
+                                mainController.currentIndex == 1)
                             ? Colors.grey[400]
                             : Colors.grey[600]),
                   ),
@@ -611,7 +615,8 @@ class _MainScreenState extends State<MainScreen>
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                   color: isSelected
                       ? const Color(0xFF2196F3)
-                      : (mainController.currentIndex == 0
+                      : ((mainController.currentIndex == 0 ||
+                              mainController.currentIndex == 1)
                           ? Colors.grey[400]
                           : Colors.grey[600]),
                   letterSpacing: 0.2,

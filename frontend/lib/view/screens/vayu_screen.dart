@@ -4,6 +4,9 @@ import 'package:vayu/model/video_model.dart';
 import 'package:vayu/services/video_service.dart';
 import 'package:vayu/view/screens/video_screen.dart';
 import 'package:vayu/utils/app_logger.dart';
+import 'package:vayu/view/search/video_creator_search_delegate.dart';
+// Removed unused app_theme.dart
+// Removed timeago package dependency in favor of local helper
 
 class VayuScreen extends StatefulWidget {
   const VayuScreen({Key? key}) : super(key: key);
@@ -51,7 +54,6 @@ class _VayuScreenState extends State<VayuScreen> {
         _currentPage = 1;
         _hasMore = true;
         _errorMessage = null;
-        // Don't clear videos immediately on refresh to avoid flicker
       });
     } else {
       setState(() {
@@ -63,7 +65,7 @@ class _VayuScreenState extends State<VayuScreen> {
     try {
       final result = await _videoService.getVideos(
         page: _currentPage,
-        limit: 20, // Fetch more for grid view
+        limit: 10, // Fetch fewer items for list view (larger items)
         videoType: 'vayu',
       );
 
@@ -76,7 +78,6 @@ class _VayuScreenState extends State<VayuScreen> {
         if (refresh) {
           _videos = newVideos;
         } else {
-          // Filter out duplicates just in case
           final existingIds = _videos.map((v) => v.id).toSet();
           final uniqueNewVideos =
               newVideos.where((v) => !existingIds.contains(v.id)).toList();
@@ -123,9 +124,10 @@ class _VayuScreenState extends State<VayuScreen> {
 
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final hours = duration.inHours;
     final minutes = twoDigits(duration.inMinutes.remainder(60));
     final seconds = twoDigits(duration.inSeconds.remainder(60));
-    return '$minutes:$seconds';
+    return hours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
   }
 
   String _formatViews(int views) {
@@ -138,26 +140,62 @@ class _VayuScreenState extends State<VayuScreen> {
     }
   }
 
+  String _formatTimeAgo(DateTime dateTime) {
+    final difference = DateTime.now().difference(dateTime);
+    if (difference.inDays > 365) {
+      return '${(difference.inDays / 365).floor()} years ago';
+    } else if (difference.inDays > 30) {
+      return '${(difference.inDays / 30).floor()} months ago';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays} days ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours} hours ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes} minutes ago';
+    } else {
+      return 'Just now';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Vayu tab uses a purely dark theme (YouTube style)
     return Scaffold(
-      backgroundColor: Colors.black, // Dark theme like "Yug"
+      backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
-        title: const Text(
-          'Vayu',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
+        elevation: 0,
+        title: Row(
+          children: [
+            Image.asset(
+              'assets/icons/app_icon.png', // Assuming app icon exists
+              height: 24,
+              errorBuilder: (_, __, ___) =>
+                  const Icon(Icons.play_circle_fill, color: Colors.red),
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              'Vayu',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                letterSpacing: -0.5,
+              ),
+            ),
+          ],
         ),
         actions: [
           IconButton(
             icon: const Icon(Icons.search, color: Colors.white),
             onPressed: () {
-              // TODO: Implement search
+              showSearch(
+                context: context,
+                delegate: VideoCreatorSearchDelegate(),
+              );
             },
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: _buildBody(),
@@ -166,7 +204,7 @@ class _VayuScreenState extends State<VayuScreen> {
 
   Widget _buildBody() {
     if (_isLoading && _videos.isEmpty) {
-      return _buildShimmerGrid();
+      return _buildShimmerList(); // Changed to List shimmer
     }
 
     if (_errorMessage != null && _videos.isEmpty) {
@@ -174,16 +212,20 @@ class _VayuScreenState extends State<VayuScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, color: Colors.red, size: 48),
+            const Icon(Icons.wifi_off, color: Colors.white54, size: 60),
             const SizedBox(height: 16),
             Text(
               _errorMessage!,
               style: const TextStyle(color: Colors.white70),
             ),
-            const SizedBox(height: 16),
-            ElevatedButton(
+            const SizedBox(height: 24),
+            OutlinedButton(
               onPressed: () => _loadVideos(refresh: true),
-              child: const Text('Retry'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: Colors.white30),
+              ),
+              child: const Text('Try Again'),
             ),
           ],
         ),
@@ -195,20 +237,28 @@ class _VayuScreenState extends State<VayuScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.videocam_off, color: Colors.white54, size: 48),
-            const SizedBox(height: 16),
+            const Icon(Icons.video_library_outlined,
+                color: Colors.white24, size: 80),
+            const SizedBox(height: 24),
             const Text(
               'No long-form videos yet',
-              style: TextStyle(color: Colors.white70, fontSize: 16),
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             const Text(
               'Upload videos longer than 1 min to see them here',
-              style: TextStyle(color: Colors.white38, fontSize: 12),
+              style: TextStyle(color: Colors.white54, fontSize: 14),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => _loadVideos(refresh: true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black,
+              ),
               child: const Text('Refresh'),
             ),
           ],
@@ -218,21 +268,19 @@ class _VayuScreenState extends State<VayuScreen> {
 
     return RefreshIndicator(
       onRefresh: () => _loadVideos(refresh: true),
-      color: Colors.blue,
+      color: Colors.red,
       backgroundColor: Colors.white,
-      child: GridView.builder(
+      child: ListView.builder(
         controller: _scrollController,
-        padding: const EdgeInsets.all(8),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2, // 2 columns
-          childAspectRatio: 0.75, // Taller items for vertical thumbnails
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-        ),
-        itemCount: _videos.length + (_isLoading && _videos.isNotEmpty ? 2 : 0),
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: _videos.length + (_isLoading && _videos.isNotEmpty ? 1 : 0),
         itemBuilder: (context, index) {
           if (index >= _videos.length) {
-            return _buildShimmerItem();
+            return const Padding(
+              padding: EdgeInsets.all(16.0),
+              child:
+                  Center(child: CircularProgressIndicator(color: Colors.red)),
+            );
           }
           return _buildVideoCard(index);
         },
@@ -243,148 +291,158 @@ class _VayuScreenState extends State<VayuScreen> {
   Widget _buildVideoCard(int index) {
     final video = _videos[index];
 
-    return GestureDetector(
+    return InkWell(
       onTap: () => _navigateToVideo(index),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.grey[900],
-          borderRadius: BorderRadius.circular(8),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Thumbnail
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CachedNetworkImage(
-                    imageUrl: video.thumbnailUrl,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => Container(
-                      color: Colors.grey[800],
-                      child: const Center(
-                          child: Icon(Icons.image, color: Colors.white24)),
-                    ),
-                    errorWidget: (context, url, error) => Container(
-                      color: Colors.grey[800],
-                      child: const Center(
-                          child: Icon(Icons.error, color: Colors.white24)),
-                    ),
+      child: Column(
+        children: [
+          // 1. Thumbnail Section (16:9)
+          Stack(
+            children: [
+              AspectRatio(
+                aspectRatio: 16 / 9,
+                child: CachedNetworkImage(
+                  imageUrl: video.thumbnailUrl,
+                  fit: BoxFit.cover,
+                  placeholder: (context, url) => Container(
+                    color: Colors.grey[900],
                   ),
-                  // Duration Badge
-                  if (video.duration.inSeconds > 0)
-                    Positioned(
-                      bottom: 8,
-                      right: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.8),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          _formatDuration(video.duration),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+                  errorWidget: (context, url, error) => Container(
+                    color: Colors.grey[900],
+                    child:
+                        const Icon(Icons.broken_image, color: Colors.white24),
+                  ),
+                ),
               ),
-            ),
-            // Details
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    video.videoName,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
+              // Duration Badge
+              if (video.duration.inSeconds > 0)
+                Positioned(
+                  bottom: 8,
+                  right: 8,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.8),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      _formatDuration(video.duration),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Row(
+                ),
+            ],
+          ),
+
+          // 2. Info Section (Below Thumbnail)
+          Container(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Avatar
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: Colors.grey[800],
+                  backgroundImage: video.uploader.profilePic.isNotEmpty
+                      ? CachedNetworkImageProvider(video.uploader.profilePic)
+                      : null,
+                  child: video.uploader.profilePic.isEmpty
+                      ? const Icon(Icons.person, size: 20, color: Colors.white)
+                      : null,
+                ),
+                const SizedBox(width: 12),
+                // Text Info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      CircleAvatar(
-                        radius: 8,
-                        backgroundImage: video.uploader.profilePic.isNotEmpty
-                            ? CachedNetworkImageProvider(
-                                video.uploader.profilePic)
-                            : null,
-                        child: video.uploader.profilePic.isEmpty
-                            ? const Icon(Icons.person,
-                                size: 8, color: Colors.white)
-                            : null,
+                      // Title
+                      Text(
+                        video.videoName,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          height: 1.2,
+                        ),
                       ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          video.uploader.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 11,
-                          ),
+                      const SizedBox(height: 4),
+                      // Meta: Channel • Views • Time
+                      Text(
+                        '${video.uploader.name} • ${_formatViews(video.views)} • ${_formatTimeAgo(video.uploadedAt)}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 12,
+                          height: 1.3,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _formatViews(video.views),
-                    style: const TextStyle(
-                      color: Colors.white54,
-                      fontSize: 10,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+                // Filter/More Icon (Optional)
+                IconButton(
+                  icon: const Icon(Icons.more_vert,
+                      color: Colors.white54, size: 20),
+                  onPressed: () {
+                    // Show options sheet
+                  },
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+          // Divider between videos (optional, or just spacing)
+          // const Divider(color: Colors.white10, height: 1),
+        ],
       ),
     );
   }
 
-  Widget _buildShimmerGrid() {
-    return GridView.builder(
-      padding: const EdgeInsets.all(8),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 0.75,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-      ),
-      itemCount: 6,
+  Widget _buildShimmerList() {
+    return ListView.builder(
+      itemCount: 5,
       itemBuilder: (context, index) => _buildShimmerItem(),
     );
   }
 
   Widget _buildShimmerItem() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.grey[900],
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Center(
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          color: Colors.white24,
+    return Column(
+      children: [
+        AspectRatio(
+          aspectRatio: 16 / 9,
+          child: Container(color: Colors.grey[900]),
         ),
-      ),
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              const CircleAvatar(radius: 18, backgroundColor: Colors.white10),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                        height: 14,
+                        width: double.infinity,
+                        color: Colors.white10),
+                    const SizedBox(height: 8),
+                    Container(height: 12, width: 200, color: Colors.white10),
+                  ],
+                ),
+              )
+            ],
+          ),
+        )
+      ],
     );
   }
 }
