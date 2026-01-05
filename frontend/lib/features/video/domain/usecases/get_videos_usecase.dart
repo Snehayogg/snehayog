@@ -20,6 +20,7 @@ class GetVideosUseCase {
   Future<Map<String, dynamic>> execute({
     int page = 1,
     int limit = 10,
+    bool clearSession = false,
   }) async {
     // Validate input parameters
     if (page < 1) {
@@ -31,6 +32,10 @@ class GetVideosUseCase {
     }
 
     // Execute the repository method
-    return await _repository.getVideos(page: page, limit: limit);
+    return await _repository.getVideos(
+      page: page,
+      limit: limit,
+      clearSession: clearSession,
+    );
   }
 }

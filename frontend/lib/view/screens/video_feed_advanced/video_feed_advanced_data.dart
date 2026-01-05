@@ -1,18 +1,26 @@
 part of 'package:vayu/view/screens/video_feed_advanced.dart';
 
 extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
+  /// **ISOLATE HELPER: Runs heavy ranking computation in isolate**
+  /// This prevents UI freezes by moving VideoEngagementRanker.rankVideos() off the main thread
+  Future<List<VideoModel>> _rankVideosInIsolate(List<VideoModel> videos) async {
+    // Use compute to run heavy ranking in isolate
+    return await compute(_rankVideosIsolateHelper, videos);
+  }
+
   Future<void> _loadVideos(
       {int page = 1,
       bool append = false,
       bool useCache = true,
-      bool clearSession = false}) async {
+      bool clearSession = true}) async {
     try {
       AppLogger.log(
           '🔄 Loading videos - Page: $page, Append: $append, UseCache: $useCache');
       _printCacheStatus();
 
       // **NEW: Try to load from cache first (instant) if not appending and cache is enabled**
-      if (useCache && !append && page == 1) {
+      // **OPTIMIZATION: Skip cache if clearSession is true (fresh videos requested)**
+      if (useCache && !append && page == 1 && !clearSession) {
         try {
           await _cacheManager.initialize();
           final cacheKey = 'videos_page_${page}_${widget.videoType ?? 'yog'}';
@@ -35,8 +43,8 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
               final prefs = await SharedPreferences.getInstance();
               final savedVideoId = prefs.getString(_kSavedVideoIdKey);
 
-              // Rank cached videos
-              final rankedVideos = _rankVideosWithEngagement(
+              // Rank cached videos (async - runs in isolate)
+              final rankedVideos = await _rankVideosWithEngagement(
                 cachedVideos,
                 preserveVideoKey: savedVideoId != null
                     ? cachedVideos
@@ -66,15 +74,14 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
               }
 
               if (mounted) {
-                setState(() {
-                  _videos = videosToUse;
-                  if (restoredIndex != null) {
-                    _currentIndex = restoredIndex;
-                  } else {
-                    _currentIndex = 0;
-                  }
-                  _isLoading = false;
-                });
+                // **OPTIMIZED: Use ValueNotifiers for granular updates**
+                _videos = videosToUse;
+                if (restoredIndex != null) {
+                  _currentIndex = restoredIndex;
+                } else {
+                  _currentIndex = 0;
+                }
+                _isLoading = false;
 
                 // Jump to saved index
                 if (restoredIndex != null && _pageController.hasClients) {
@@ -120,10 +127,9 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     } catch (e) {
       AppLogger.log('❌ Error loading videos: $e');
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage = e.toString();
-        });
+        // **OPTIMIZED: Use ValueNotifiers for granular updates**
+        _isLoading = false;
+        _errorMessage = e.toString();
       }
     }
   }
@@ -156,9 +162,8 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
             'No internet connection. Please check your network.',
             isError: true,
           );
-          setState(() {
-            _isLoading = false;
-          });
+          // **OPTIMIZED: Use ValueNotifier for granular update**
+          _isLoading = false;
         }
         return;
       }
@@ -477,20 +482,19 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
                   '✅ VideoFeedAdvanced: Fallback without videoType successful, got ${fallbackVideos.length} videos',
                 );
                 if (mounted) {
-                  final rankedFallbackVideos = _rankVideosWithEngagement(
+                  final rankedFallbackVideos = await _rankVideosWithEngagement(
                     fallbackVideos,
                     preserveVideoKey: existingCurrentKey,
                   );
-                  setState(() {
-                    _videos = rankedFallbackVideos;
-                    _currentIndex = 0;
-                    _currentPage =
-                        fallbackResponse['currentPage'] as int? ?? page;
-                    _hasMore = fallbackResponse['hasMore'] as bool? ?? false;
-                    _totalVideos = fallbackResponse['total'] as int? ?? 0;
-                    // **CRITICAL FIX: Clear error message when videos are successfully loaded**
-                    _errorMessage = null;
-                  });
+                  // **OPTIMIZED: Use ValueNotifiers for granular updates**
+                  _videos = rankedFallbackVideos;
+                  _currentIndex = 0;
+                  _currentPage =
+                      fallbackResponse['currentPage'] as int? ?? page;
+                  _hasMore = fallbackResponse['hasMore'] as bool? ?? false;
+                  _totalVideos = fallbackResponse['total'] as int? ?? 0;
+                  // **CRITICAL FIX: Clear error message when videos are successfully loaded**
+                  _errorMessage = null;
                   _markCurrentVideoAsSeen();
                   return;
                 }
@@ -506,19 +510,18 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
               '✅ VideoFeedAdvanced: Retry successful, got ${retryVideos.length} videos',
             );
             if (mounted) {
-              final rankedRetryVideos = _rankVideosWithEngagement(
+              final rankedRetryVideos = await _rankVideosWithEngagement(
                 retryVideos,
                 preserveVideoKey: existingCurrentKey,
               );
-              setState(() {
-                _videos = rankedRetryVideos;
-                _currentIndex = 0;
-                _currentPage = retryResponse['currentPage'] as int? ?? page;
-                _hasMore = retryResponse['hasMore'] as bool? ?? false;
-                _totalVideos = retryResponse['total'] as int? ?? 0;
-                // **CRITICAL FIX: Clear error message when videos are successfully loaded**
-                _errorMessage = null;
-              });
+              // **OPTIMIZED: Use ValueNotifiers for granular updates**
+              _videos = rankedRetryVideos;
+              _currentIndex = 0;
+              _currentPage = retryResponse['currentPage'] as int? ?? page;
+              _hasMore = retryResponse['hasMore'] as bool? ?? false;
+              _totalVideos = retryResponse['total'] as int? ?? 0;
+              // **CRITICAL FIX: Clear error message when videos are successfully loaded**
+              _errorMessage = null;
               _markCurrentVideoAsSeen();
               return;
             }
@@ -533,35 +536,36 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       if (append) {
         final rankedNewVideos = _filterAndRankNewVideos(newVideos);
 
-        setState(() {
-          if (rankedNewVideos.isNotEmpty) {
-            _videos.addAll(rankedNewVideos);
+        // **OPTIMIZED: Use ValueNotifiers for granular updates**
+        if (rankedNewVideos.isNotEmpty) {
+          _videos.addAll(rankedNewVideos);
 
-            // **MEMORY MANAGEMENT: Cleanup old videos to prevent memory issues**
-            // Remove videos that are far from current index to keep memory usage low
-            _cleanupOldVideosFromList();
-          } else {
-            // **FIXED: If all videos filtered out, still update hasMore based on backend response**
-            // This prevents infinite loading attempts when user has watched all videos
-            AppLogger.log(
-              '⚠️ No new videos after filtering, but backend says hasMore=$hasMore',
-            );
-          }
-          _currentPage = currentPage;
-          // **FIXED: hasMore should respect backend response, but also check if we got videos**
-          // If backend says hasMore but we filtered all out, we might need to stop
-          final bool inferredHasMore = rankedNewVideos.isNotEmpty
-              ? (hasMore || newVideos.length == _videosPerPage)
-              : hasMore &&
-                  newVideos.length ==
-                      _videosPerPage; // Only continue if backend returned full page
-          _hasMore = inferredHasMore;
-          _totalVideos = total;
-          // **CRITICAL FIX: Clear error message when videos are successfully loaded**
-          if (_videos.isNotEmpty) {
-            _errorMessage = null;
-          }
-        });
+          // **MEMORY MANAGEMENT: Cleanup old videos to prevent memory issues**
+          // Remove videos that are far from current index to keep memory usage low
+          _cleanupOldVideosFromList();
+        } else {
+          // **FIXED: If all videos filtered out, still update hasMore based on backend response**
+          // This prevents infinite loading attempts when user has watched all videos
+          AppLogger.log(
+            '⚠️ No new videos after filtering, but backend says hasMore=$hasMore',
+          );
+        }
+        _currentPage = currentPage;
+        // **FIXED: hasMore should respect backend response, but also check if we got videos**
+        // If backend says hasMore but we filtered all out, we might need to stop
+        final bool inferredHasMore = rankedNewVideos.isNotEmpty
+            ? (hasMore || newVideos.length == _videosPerPage)
+            : hasMore &&
+                newVideos.length ==
+                    _videosPerPage; // Only continue if backend returned full page
+        _hasMore = inferredHasMore;
+        _totalVideos = total;
+        // **CRITICAL FIX: Clear error message when videos are successfully loaded**
+        if (_videos.isNotEmpty) {
+          _errorMessage = null;
+        }
+
+        _markCurrentVideoAsSeen();
 
         _markCurrentVideoAsSeen();
       } else {
@@ -606,7 +610,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         AppLogger.log(
             '🔍 Deduplication: ${newVideos.length} videos → ${deduplicatedVideos.length} unique videos');
 
-        final rankedVideos = _rankVideosWithEngagement(
+        final rankedVideos = await _rankVideosWithEngagement(
           deduplicatedVideos,
           preserveVideoKey: preserveKey ?? (preserveVideoId),
         );
@@ -668,28 +672,27 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         }
 
         if (mounted) {
-          setState(() {
-            _videos = videosToUse;
-            // **DEBUG: Log final state**
-            AppLogger.log('✅ VideoFeedAdvanced: State updated:');
-            AppLogger.log('   _videos.length: ${_videos.length}');
-            AppLogger.log('   _errorMessage: $_errorMessage');
-            AppLogger.log('   _isLoading: $_isLoading');
-            AppLogger.log('   _currentIndex: $_currentIndex');
+          // **OPTIMIZED: Use ValueNotifiers for granular updates**
+          _videos = videosToUse;
+          // **DEBUG: Log final state**
+          AppLogger.log('✅ VideoFeedAdvanced: State updated:');
+          AppLogger.log('   _videos.length: ${_videos.length}');
+          AppLogger.log('   _errorMessage: $_errorMessage');
+          AppLogger.log('   _isLoading: $_isLoading');
+          AppLogger.log('   _currentIndex: $_currentIndex');
 
-            if (nextIndex != null) {
-              _currentIndex = nextIndex;
-            } else if (_currentIndex >= _videos.length) {
-              _currentIndex = 0;
-            }
-            _currentPage = currentPage;
-            final bool inferredHasMore =
-                hasMore || newVideos.length == _videosPerPage;
-            _hasMore = inferredHasMore;
-            _totalVideos = total;
-            // **CRITICAL FIX: Clear error message when videos are successfully loaded**
-            _errorMessage = null;
-          });
+          if (nextIndex != null) {
+            _currentIndex = nextIndex;
+          } else if (_currentIndex >= _videos.length) {
+            _currentIndex = 0;
+          }
+          _currentPage = currentPage;
+          final bool inferredHasMore =
+              hasMore || newVideos.length == _videosPerPage;
+          _hasMore = inferredHasMore;
+          _totalVideos = total;
+          // **CRITICAL FIX: Clear error message when videos are successfully loaded**
+          _errorMessage = null;
 
           // **OPTIMIZED: Load remaining videos in background if we only loaded 5 initially**
           // This ensures instant display while loading remaining videos non-blocking
@@ -755,19 +758,17 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
                     AppLogger.log(
                         '✅ VideoFeedAdvanced: Adding ${uniqueRemainingVideos.length} remaining videos to feed');
 
-                    // Rank and filter remaining videos
-                    final rankedRemaining = _rankVideosWithEngagement(
+                    // Rank and filter remaining videos (async - runs in isolate)
+                    final rankedRemaining = await _rankVideosWithEngagement(
                       uniqueRemainingVideos,
                       preserveVideoKey: null,
                     );
 
                     if (mounted && rankedRemaining.isNotEmpty) {
-                      setState(() {
-                        _videos.addAll(rankedRemaining);
-                        // Update hasMore based on response
-                        _hasMore =
-                            remainingResponse['hasMore'] as bool? ?? false;
-                      });
+                      // **OPTIMIZED: Use ValueNotifiers for granular updates**
+                      _videos.addAll(rankedRemaining);
+                      // Update hasMore based on response
+                      _hasMore = remainingResponse['hasMore'] as bool? ?? false;
                       AppLogger.log(
                           '✅ VideoFeedAdvanced: Background load complete. Total videos: ${_videos.length}');
                     }
@@ -810,19 +811,18 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         // #endregion
 
         if (mounted && _isLoading) {
-          setState(() {
-            _isLoading = false;
+          // **OPTIMIZED: Use ValueNotifier for granular update**
+          _isLoading = false;
 
-            // #region agent log
-            _debugLog(
-                'video_feed_advanced_data.dart:369',
-                'isLoading set to false',
-                {
-                  'videosLength': _videos.length,
-                },
-                'D');
-            // #endregion
-          });
+          // #region agent log
+          _debugLog(
+              'video_feed_advanced_data.dart:369',
+              'isLoading set to false',
+              {
+                'videosLength': _videos.length,
+              },
+              'D');
+          // #endregion
         }
       }
 
@@ -872,25 +872,25 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
           // For slow / bad internet we only show a snackbar, don't block the feed.
           final errorMsg = ConnectivityService.getNetworkErrorMessage(e);
           _showSnackBar(errorMsg, isError: true);
-          setState(() {
-            _isLoading = false;
-          });
+          // **OPTIMIZED: Use ValueNotifier for granular update**
+          _isLoading = false;
         } else {
           final errorMsg = _getUserFriendlyErrorMessage(e);
-          setState(() {
-            _errorMessage = errorMsg;
-            _hasMore = false;
-            _isLoading = false;
-          });
+          // **OPTIMIZED: Use ValueNotifiers for granular updates**
+          _errorMessage = errorMsg;
+          _hasMore = false;
+          _isLoading = false;
         }
       }
     }
   }
 
-  List<VideoModel> _rankVideosWithEngagement(
+  /// **OPTIMIZED: Async ranking with isolate for heavy computation**
+  /// Moves heavy VideoEngagementRanker.rankVideos() to isolate to prevent UI freezes
+  Future<List<VideoModel>> _rankVideosWithEngagement(
     List<VideoModel> videos, {
     String? preserveVideoKey,
-  }) {
+  }) async {
     if (videos.isEmpty) return <VideoModel>[];
 
     AppLogger.log(
@@ -1008,10 +1008,14 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
 
     final uniqueList = uniqueVideos.values.toList();
 
-    // **RANKING: Rank by engagement (backend already shuffles, but ranking helps)**
-    var rankedVideos = VideoEngagementRanker.rankVideos(uniqueList);
+    // **PERFORMANCE FIX: Run heavy ranking computation in isolate to prevent UI freezes**
+    // This moves VideoEngagementRanker.rankVideos() off the main thread
+    AppLogger.log('⚡ Running video ranking in isolate (non-blocking)...');
+    var rankedVideos = await _rankVideosInIsolate(uniqueList);
+    AppLogger.log('✅ Video ranking completed in isolate');
 
     // **YUG TAB RANDOMIZATION: Shuffle order for Yug feed while preserving current video if needed**
+    // This is fast, so we keep it on main thread
     if (widget.videoType == 'yog') {
       AppLogger.log(
           '🎲 _rankVideosWithEngagement: Shuffling videos for Yug tab (videoType=yog)');
@@ -1019,9 +1023,11 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     }
 
     // **CREATOR DIVERSITY: Avoid long streaks from the same creator**
+    // This is fast, so we keep it on main thread
     rankedVideos = _applyCreatorDiversity(rankedVideos, maxConsecutive: 2);
 
     // **PRESERVE: Keep current video at the beginning if specified**
+    // This is fast, so we keep it on main thread
     if (preserveVideoKey != null) {
       final preserveIndex = rankedVideos.indexWhere(
         (video) => videoIdentityKey(video) == preserveVideoKey,
@@ -1313,10 +1319,9 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
 
     try {
       if (mounted) {
-        setState(() {
-          _isLoading = true;
-          _errorMessage = null;
-        });
+        // **OPTIMIZED: Use ValueNotifiers for granular updates**
+        _isLoading = true;
+        _errorMessage = null;
       }
 
       await _cacheManager.initialize();
@@ -1325,13 +1330,12 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       );
 
       _currentPage = 1;
-      await _loadVideos(page: 1, append: false);
+      await _loadVideos(page: 1, append: false, clearSession: false);
 
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage = null;
-        });
+        // **OPTIMIZED: Use ValueNotifiers for granular updates**
+        _isLoading = false;
+        _errorMessage = null;
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
@@ -1364,10 +1368,9 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       AppLogger.log('❌ VideoFeedAdvanced: Error refreshing videos: $e');
 
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage = e.toString();
-        });
+        // **OPTIMIZED: Use ValueNotifiers for granular updates**
+        _isLoading = false;
+        _errorMessage = e.toString();
       }
 
       if (mounted) {
@@ -1423,11 +1426,10 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       // **SEAMLESS RESTART: Don't clear videos list immediately to avoid grey screen**
       // Keep last video visible while new videos load in background
       if (mounted) {
-        setState(() {
-          // Don't set _isLoading = true to avoid grey screen
-          _errorMessage = null;
-          _hasMore = true; // Reset hasMore flag
-        });
+        // **OPTIMIZED: Use ValueNotifiers for granular updates**
+        // Don't set _isLoading = true to avoid grey screen
+        _errorMessage = null;
+        _hasMore = true; // Reset hasMore flag
       }
 
       await _cacheManager.initialize();
@@ -1447,11 +1449,10 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
 
       // **SEAMLESS: After videos load, replace old videos with new ones**
       if (mounted && _videos.length > currentVideosCount) {
-        setState(() {
-          // Remove old videos and keep only new ones (seamless transition)
-          _videos = _videos.sublist(currentVideosCount);
-          _currentIndex = 0; // Reset to first video of new list
-        });
+        // **OPTIMIZED: Use ValueNotifiers for granular updates**
+        // Remove old videos and keep only new ones (seamless transition)
+        _videos = _videos.sublist(currentVideosCount);
+        _currentIndex = 0; // Reset to first video of new list
 
         // Navigate to first video
         if (_pageController.hasClients) {
@@ -1471,16 +1472,14 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         });
       } else if (mounted && _videos.isEmpty) {
         // Fallback: If no videos loaded, clear list and show loading
-        setState(() {
-          _isLoading = true;
-        });
+        // **OPTIMIZED: Use ValueNotifier for granular update**
+        _isLoading = true;
         // Retry without append
         await _loadVideos(page: 1, append: false, clearSession: true);
         if (mounted) {
-          setState(() {
-            _isLoading = false;
-            _currentIndex = 0;
-          });
+          // **OPTIMIZED: Use ValueNotifiers for granular updates**
+          _isLoading = false;
+          _currentIndex = 0;
         }
 
         // Navigate to first video
@@ -1502,9 +1501,8 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       }
 
       if (mounted) {
-        setState(() {
-          _errorMessage = null;
-        });
+        // **OPTIMIZED: Use ValueNotifier for granular update**
+        _errorMessage = null;
       }
 
       AppLogger.log(
@@ -1526,10 +1524,9 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       AppLogger.log('❌ VideoFeedAdvanced: Error starting over: $e');
 
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage = e.toString();
-        });
+        // **OPTIMIZED: Use ValueNotifiers for granular updates**
+        _isLoading = false;
+        _errorMessage = e.toString();
       }
 
       if (mounted) {
@@ -1656,9 +1653,8 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     }
 
     if (_videos.isEmpty && mounted) {
-      setState(() {
-        _currentIndex = 0;
-      });
+      // **OPTIMIZED: Use ValueNotifier for granular update**
+      _currentIndex = 0;
       AppLogger.log('🔄 Reset current index to 0');
     }
 
@@ -1685,11 +1681,10 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       await _activeAdsService.clearAdsCache();
 
       if (mounted) {
-        setState(() {
-          _lockedBannerAdByVideoId.clear();
-          AppLogger.log(
-              '🧹 Cleared locked banner ads to allow new ads to display');
-        });
+        // **OPTIMIZED: No setState needed - just clear the map**
+        _lockedBannerAdByVideoId.clear();
+        AppLogger.log(
+            '🧹 Cleared locked banner ads to allow new ads to display');
       }
 
       await _loadActiveAds();
@@ -1713,9 +1708,8 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       final carouselAds = _carouselAdManager.carouselAds;
 
       if (mounted) {
-        setState(() {
-          _carouselAds = carouselAds;
-        });
+        // **OPTIMIZED: Use ValueNotifier for granular update**
+        _carouselAds = carouselAds;
         AppLogger.log(
           '✅ VideoFeedAdvanced: Loaded ${_carouselAds.length} carousel ads',
         );
@@ -1727,7 +1721,8 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
 
   void _onVideoChanged(int newIndex) {
     if (_currentIndex != newIndex) {
-      setState(() => _currentIndex = newIndex);
+      // **OPTIMIZED: Use ValueNotifier for granular update**
+      _currentIndex = newIndex;
       AppLogger.log('🔄 VideoFeedAdvanced: Video changed to index $newIndex');
     }
   }
@@ -1784,9 +1779,8 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     } catch (e) {
       AppLogger.log('❌ Error loading more videos: $e');
       if (mounted) {
-        setState(() {
-          _hasMore = false;
-        });
+        // **OPTIMIZED: Use ValueNotifier for granular update**
+        _hasMore = false;
       }
     } finally {
       // **OPTIMIZED: Don't use setState - just update flag silently**

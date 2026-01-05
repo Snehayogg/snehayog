@@ -1,15 +1,26 @@
 part of 'package:vayu/view/screens/video_feed_advanced.dart';
 
 mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
-  // Core state
+  // Core state - **OPTIMIZED: Using ValueNotifiers for granular updates**
   List<VideoModel> _videos = [];
-  bool _isLoading = true;
+  final ValueNotifier<bool> _isLoadingVN = ValueNotifier<bool>(true);
+  bool get _isLoading => _isLoadingVN.value;
+  set _isLoading(bool value) => _isLoadingVN.value = value;
+
   String? _currentUserId;
-  int _currentIndex = 0;
+  final ValueNotifier<int> _currentIndexVN = ValueNotifier<int>(0);
+  int get _currentIndex => _currentIndexVN.value;
+  set _currentIndex(int value) => _currentIndexVN.value = value;
+
   final Set<String> _followingUsers = {};
   final Set<String> _seenVideoKeys = <String>{};
-  String? _errorMessage;
-  bool _isRefreshing = false;
+  final ValueNotifier<String?> _errorMessageVN = ValueNotifier<String?>(null);
+  String? get _errorMessage => _errorMessageVN.value;
+  set _errorMessage(String? value) => _errorMessageVN.value = value;
+
+  final ValueNotifier<bool> _isRefreshingVN = ValueNotifier<bool>(false);
+  bool get _isRefreshing => _isRefreshingVN.value;
+  set _isRefreshing(bool value) => _isRefreshingVN.value = value;
 
   // Services
   late VideoService _videoService;
@@ -45,10 +56,17 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   int _preloadHits = 0;
   final int _totalRequests = 0;
 
-  // Ad state
-  List<Map<String, dynamic>> _bannerAds = [];
+  // Ad state - **OPTIMIZED: Using ValueNotifiers for granular updates**
+  final ValueNotifier<List<Map<String, dynamic>>> _bannerAdsVN =
+      ValueNotifier<List<Map<String, dynamic>>>([]);
+  List<Map<String, dynamic>> get _bannerAds => _bannerAdsVN.value;
+  set _bannerAds(List<Map<String, dynamic>> value) =>
+      _bannerAdsVN.value = value;
+
   final Map<String, Map<String, dynamic>> _lockedBannerAdByVideoId = {};
-  bool _adsLoaded = false;
+  final ValueNotifier<bool> _adsLoadedVN = ValueNotifier<bool>(false);
+  bool get _adsLoaded => _adsLoadedVN.value;
+  set _adsLoaded(bool value) => _adsLoadedVN.value = value;
 
   // Page controller
   late PageController _pageController;
@@ -64,6 +82,8 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   final Map<int, bool> _isBuffering = {};
   final Set<int> _togglingVideos = {};
   final Map<int, ValueNotifier<bool>> _isBufferingVN = {};
+  final Map<int, ValueNotifier<bool>> _isSlowConnectionVN = {};
+  final Map<int, Timer> _bufferingTimers = {};
 
   // LRU tracking
   final Map<int, DateTime> _lastAccessedLocal = {};
@@ -95,19 +115,24 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   // Infinite scrolling
   // **OPTIMIZED: Increased to 15 for earlier loading - next batch loads when 15 videos from end**
   int get _infiniteScrollThreshold => 15;
-  bool _isLoadingMore = false;
+  final ValueNotifier<bool> _isLoadingMoreVN = ValueNotifier<bool>(false);
+  bool get _isLoadingMore => _isLoadingMoreVN.value;
+  set _isLoadingMore(bool value) => _isLoadingMoreVN.value = value;
+
   int _currentPage = 1;
   // **OPTIMIZED: Load 4 videos on first page for instant loading, then 15 for subsequent pages**
   int get _videosPerPage {
-    // First page: only 4 videos for instant display (reduces load time significantly)
+    // First page: only 3 videos for instant display (reduces load time significantly)
     if (_currentPage == 1 && _videos.isEmpty) {
-      return 4;
+      return 3;
     }
     // Subsequent pages: 15 videos for seamless UX
     return 15;
   }
 
-  bool _hasMore = true;
+  final ValueNotifier<bool> _hasMoreVN = ValueNotifier<bool>(true);
+  bool get _hasMore => _hasMoreVN.value;
+  set _hasMore(bool value) => _hasMoreVN.value = value;
   int? _totalVideos;
   bool _isLoadingRemainingVideos =
       false; // Track background loading of remaining videos
@@ -122,8 +147,12 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
       250; // Start cleanup when reaching this
   static const int _videosKeepRange = 100; // Keep current ± 100 videos
 
-  // Carousel ads
-  List<CarouselAdModel> _carouselAds = [];
+  // Carousel ads - **OPTIMIZED: Using ValueNotifiers for granular updates**
+  final ValueNotifier<List<CarouselAdModel>> _carouselAdsVN =
+      ValueNotifier<List<CarouselAdModel>>([]);
+  List<CarouselAdModel> get _carouselAds => _carouselAdsVN.value;
+  set _carouselAds(List<CarouselAdModel> value) => _carouselAdsVN.value = value;
+
   final Map<int, ValueNotifier<int>> _currentHorizontalPage = {};
 
   // Screen visibility
@@ -154,8 +183,12 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   bool _pendingAutoplayAfterLogin = false;
 
   // **NEW: Track when screen was first opened to delay sign-in prompts**
+  DateTime? _lastPausedAt;
   DateTime? _screenFirstOpenedAt;
   Duration get _signInPromptDelay => const Duration(minutes: 5);
+
+  // Background page preload logic
+  bool _hasStartedBackgroundPreload = false;
 
   String videoIdentityKey(VideoModel video) {
     if (video.id.isNotEmpty) return video.id;

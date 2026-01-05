@@ -17,11 +17,13 @@ class VideoRepositoryImpl implements VideoRepository {
   Future<Map<String, dynamic>> getVideos({
     int page = 1,
     int limit = 10,
+    bool clearSession = false,
   }) async {
     try {
       final result = await _remoteDataSource.getVideos(
         page: page,
         limit: limit,
+        clearSession: clearSession,
       );
 
       // Convert VideoModel to VideoEntity

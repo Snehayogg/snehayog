@@ -1,13 +1,13 @@
 import 'dart:async';
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/services/user_service.dart';
 import 'package:vayu/services/video_service.dart';
 import 'package:vayu/utils/app_logger.dart';
+import 'package:vayu/core/managers/smart_cache_manager.dart';
 
 /// **PROFILE PRELOADER**
 /// Preloads profile data for any user (especially other creators)
 /// This ensures instant profile screen loading when user navigates to it
+/// **OPTIMIZED: Uses SmartCacheManager for unified caching with ProfileStateManager**
 class ProfilePreloader {
   static final ProfilePreloader _instance = ProfilePreloader._internal();
   factory ProfilePreloader() => _instance;
@@ -15,13 +15,31 @@ class ProfilePreloader {
 
   final UserService _userService = UserService();
   final VideoService _videoService = VideoService();
+  final SmartCacheManager _cacheManager = SmartCacheManager();
+  bool _cacheInitialized = false;
 
   // Track preloading state to avoid duplicate requests
   final Set<String> _preloadingProfiles = {};
   final Set<String> _preloadedProfiles = {};
 
+  /// **INITIALIZE CACHE MANAGER**
+  Future<void> _ensureCacheInitialized() async {
+    if (_cacheInitialized) return;
+    try {
+      await _cacheManager.initialize();
+      _cacheInitialized = _cacheManager.isInitialized;
+      if (_cacheInitialized) {
+        AppLogger.log('✅ ProfilePreloader: SmartCacheManager initialized');
+      }
+    } catch (e) {
+      AppLogger.log('⚠️ ProfilePreloader: Cache init failed: $e');
+      _cacheInitialized = false;
+    }
+  }
+
   /// **PRELOAD PROFILE: Preload any user's profile data**
   /// This is called when user views a video or taps on creator name
+  /// **OPTIMIZED: Uses SmartCacheManager for unified caching**
   Future<void> preloadProfile(String userId) async {
     if (userId.isEmpty || userId == 'unknown') {
       AppLogger.log('⚠️ ProfilePreloader: Invalid userId, skipping preload');
@@ -38,29 +56,27 @@ class ProfilePreloader {
       return;
     }
 
-    // Check if already cached
-    final prefs = await SharedPreferences.getInstance();
-    final cachedData = prefs.getString('profile_cache_$trimmedUserId');
-    final cachedTimestamp =
-        prefs.getInt('profile_cache_timestamp_$trimmedUserId');
+    await _ensureCacheInitialized();
 
-    // If cache exists and is less than 1 hour old, skip preload
-    if (cachedData != null && cachedData.isNotEmpty) {
-      if (cachedTimestamp != null) {
-        final cacheTime = DateTime.fromMillisecondsSinceEpoch(cachedTimestamp);
-        final age = DateTime.now().difference(cacheTime);
-        if (age.inHours < 1) {
+    // **OPTIMIZED: Check SmartCacheManager cache (same as ProfileStateManager)**
+    if (_cacheInitialized) {
+      final cacheKey = 'user_profile_$trimmedUserId';
+      try {
+        // **OPTIMIZATION: Use peek() to check cache without triggering fetch**
+        final cachedProfile = await _cacheManager.peek<Map<String, dynamic>>(
+          cacheKey,
+          cacheType: 'user_profile',
+          allowStale: true, // Allow stale cache for preload check
+        );
+
+        if (cachedProfile != null) {
           AppLogger.log(
-              '⚡ ProfilePreloader: Profile $trimmedUserId already cached (${age.inMinutes}m old), skipping preload');
+              '⚡ ProfilePreloader: Profile $trimmedUserId already cached in SmartCache, skipping preload');
           _preloadedProfiles.add(trimmedUserId);
           return;
         }
-      } else {
-        // Cache exists but no timestamp - assume it's fresh enough
-        AppLogger.log(
-            '⚡ ProfilePreloader: Profile $trimmedUserId already cached (no timestamp), skipping preload');
-        _preloadedProfiles.add(trimmedUserId);
-        return;
+      } catch (e) {
+        AppLogger.log('⚠️ ProfilePreloader: Error checking cache: $e');
       }
     }
 
@@ -76,35 +92,41 @@ class ProfilePreloader {
         // Fetch profile data
         final profileData = await _userService.getUserById(trimmedUserId);
 
-        // Cache profile data
-        await prefs.setString(
-          'profile_cache_$trimmedUserId',
-          json.encode(profileData),
-        );
-        await prefs.setInt(
-          'profile_cache_timestamp_$trimmedUserId',
-          DateTime.now().millisecondsSinceEpoch,
-        );
+        // **OPTIMIZED: Cache in SmartCacheManager via get() with fetchFn**
+        // get() will check cache first, and if not cached, call fetchFn which returns our data
+        if (_cacheInitialized) {
+          final cacheKey = 'user_profile_$trimmedUserId';
+          await _cacheManager.get<Map<String, dynamic>>(
+            cacheKey,
+            cacheType: 'user_profile',
+            maxAge: const Duration(days: 7),
+            fetchFn: () async =>
+                profileData, // Return already fetched data to cache it
+          );
+          AppLogger.log(
+              '✅ ProfilePreloader: Cached profile in SmartCacheManager for user: $trimmedUserId');
+        }
 
-        AppLogger.log(
-            '✅ ProfilePreloader: Preloaded and cached profile for user: $trimmedUserId');
-
-        // Also preload videos in background (non-blocking)
+        // **OPTIMIZED: Also preload videos in parallel (not sequential)**
         Future.microtask(() async {
           try {
             final videos = await _videoService.getUserVideos(trimmedUserId);
-            if (videos.isNotEmpty) {
-              final videosJson = videos.map((v) => v.toJson()).toList();
-              await prefs.setString(
-                'profile_videos_cache_$trimmedUserId',
-                json.encode(videosJson),
-              );
-              await prefs.setInt(
-                'profile_videos_cache_timestamp_$trimmedUserId',
-                DateTime.now().millisecondsSinceEpoch,
+            if (videos.isNotEmpty && _cacheInitialized) {
+              final videoCacheKey = 'video_profile_$trimmedUserId';
+              final videosPayload = {
+                'videos': videos.map((v) => v.toJson()).toList(growable: false),
+                'fetchedAt': DateTime.now().toIso8601String(),
+              };
+              // **OPTIMIZATION: Cache via get() with fetchFn**
+              await _cacheManager.get<Map<String, dynamic>>(
+                videoCacheKey,
+                cacheType: 'videos',
+                maxAge: const Duration(minutes: 45),
+                fetchFn: () async =>
+                    videosPayload, // Return already fetched data to cache it
               );
               AppLogger.log(
-                  '✅ ProfilePreloader: Preloaded ${videos.length} videos for user: $trimmedUserId');
+                  '✅ ProfilePreloader: Preloaded and cached ${videos.length} videos for user: $trimmedUserId');
             }
           } catch (e) {
             AppLogger.log('⚠️ ProfilePreloader: Failed to preload videos: $e');
@@ -127,10 +149,37 @@ class ProfilePreloader {
 
   /// **PRELOAD PROFILE ON TAP: Preload before navigation**
   /// Call this when user taps on creator name/avatar
+  /// **OPTIMIZED: Checks cache first for instant navigation**
   Future<void> preloadProfileOnTap(String userId) async {
     if (userId.isEmpty || userId == 'unknown') return;
 
-    // Start preloading immediately
+    final trimmedUserId = userId.trim();
+    await _ensureCacheInitialized();
+
+    // **OPTIMIZATION: Check SmartCacheManager first for instant navigation**
+    if (_cacheInitialized) {
+      final cacheKey = 'user_profile_$trimmedUserId';
+      try {
+        // **OPTIMIZATION: Use peek() to check cache without triggering fetch**
+        final cachedProfile = await _cacheManager.peek<Map<String, dynamic>>(
+          cacheKey,
+          cacheType: 'user_profile',
+          allowStale: true, // Allow stale cache for instant navigation check
+        );
+
+        if (cachedProfile != null) {
+          AppLogger.log(
+              '⚡ ProfilePreloader: Using cached profile for instant navigation: $trimmedUserId');
+          // Cache exists - navigation will be instant
+          return;
+        }
+      } catch (e) {
+        AppLogger.log('⚠️ ProfilePreloader: Error checking cache: $e');
+      }
+    }
+
+    // **OPTIMIZATION: Start preloading in background (non-blocking)**
+    // Navigation will happen, ProfileScreen will load from cache or fetch
     preloadProfile(userId);
 
     // Small delay to allow preload to start
@@ -138,13 +187,23 @@ class ProfilePreloader {
   }
 
   /// **CHECK IF PROFILE IS CACHED**
+  /// **OPTIMIZED: Uses SmartCacheManager**
   Future<bool> isProfileCached(String userId) async {
     if (userId.isEmpty || userId == 'unknown') return false;
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final cachedData = prefs.getString('profile_cache_${userId.trim()}');
-      return cachedData != null && cachedData.isNotEmpty;
+      await _ensureCacheInitialized();
+      if (!_cacheInitialized) return false;
+
+      final cacheKey = 'user_profile_${userId.trim()}';
+      // **OPTIMIZATION: Use peek() to check cache without triggering fetch**
+      final cachedProfile = await _cacheManager.peek<Map<String, dynamic>>(
+        cacheKey,
+        cacheType: 'user_profile',
+        allowStale: true, // Allow stale cache
+      );
+
+      return cachedProfile != null;
     } catch (e) {
       return false;
     }

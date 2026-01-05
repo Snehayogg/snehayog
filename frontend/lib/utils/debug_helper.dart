@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/config/app_config.dart';
-import 'package:http/http.dart' as http;
+import 'package:vayu/core/services/http_client_service.dart';
 import 'package:vayu/utils/app_logger.dart';
 
 class DebugHelper {
@@ -48,11 +48,10 @@ class DebugHelper {
 
   static Future<void> _testBackendConnection(BuildContext context) async {
     try {
-      final response = await http
-          .get(
-            Uri.parse('${AppConfig.baseUrl}/api/health'),
-          )
-          .timeout(const Duration(seconds: 5));
+      final response = await httpClientService.get(
+        Uri.parse('${AppConfig.baseUrl}/api/health'),
+        timeout: const Duration(seconds: 5),
+      );
 
       if (response.statusCode == 200) {
         _showResult(context, '✅ Backend is accessible!', Colors.green);

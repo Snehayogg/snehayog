@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import Feedback from '../models/Feedback.js';
 import requireAdminDashboardKey from '../middleware/adminDashboardAuth.js';
 import User from '../models/User.js';
@@ -428,6 +429,7 @@ router.get('/creators', requireAdminDashboardKey, async (req, res) => {
           ? earnings.creatorRevenueINR
           : payouts.totalEarningsINR || 0;
 
+
       return {
         id,
         googleId: creator.googleId,
@@ -452,14 +454,14 @@ router.get('/creators', requireAdminDashboardKey, async (req, res) => {
         payoutCount: creator.payoutCount || 0,
         paymentDetails: paymentSummary,
         createdAt: creator.createdAt,
-        lastPayoutAt: payouts.lastPayoutAt
+        lastPayoutAt: payouts.lastPayoutAt,
+        // **NEW: Include videos for frontend revenue calculation**
+        videos: [] // Will be populated separately if needed (empty for now to save bandwidth)
       };
     });
 
-    // **FIX: Filter creators to only include those with at least 1 video**
-    const creatorsWithVideos = creatorSummaries.filter(
-      (creator) => creator.totalVideos > 0
-    );
+    // Removed filter to show all creators regardless of video count
+    const creatorsWithVideos = creatorSummaries;
 
     creatorsWithVideos.sort(
       (a, b) => (b.creatorRevenueINR || 0) - (a.creatorRevenueINR || 0)
@@ -483,52 +485,52 @@ router.get('/stats', requireAdminDashboardKey, async (req, res) => {
   try {
     // Get total videos count
     const totalVideos = await Video.countDocuments({});
-    
+
     // **NEW: Get daily upload count (videos uploaded today)**
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    
+
     const dailyUploadCount = await Video.countDocuments({
       createdAt: {
         $gte: today,
         $lt: tomorrow
       }
     });
-    
+
     // Calculate total earnings across all creators
     // Get all creators and their earnings
     const creators = await User.find({}).select('_id').lean();
     const creatorIds = creators.map(c => c._id);
-    
+
     // Get all videos for all creators
     const allVideos = await Video.find({ uploader: { $in: creatorIds } }).select('_id').lean();
     const allVideoIds = allVideos.map(v => v._id);
-    
+
     // Calculate total ad impressions and earnings
     const bannerImpressions = await AdImpression.countDocuments({
       videoId: { $in: allVideoIds },
       adType: 'banner',
       impressionType: 'view'
     });
-    
+
     const carouselImpressions = await AdImpression.countDocuments({
       videoId: { $in: allVideoIds },
       adType: 'carousel',
       impressionType: 'view'
     });
-    
+
     // Calculate revenue (same logic as revenue API)
     const bannerCpm = AD_CONFIG?.BANNER_CPM ?? 10; // ₹10 per 1000 impressions
     const carouselCpm = AD_CONFIG?.DEFAULT_CPM ?? 30; // ₹30 per 1000 impressions
     const creatorShare = AD_CONFIG?.CREATOR_REVENUE_SHARE ?? 0.8; // 80% to creator
-    
+
     const bannerRevenueINR = (bannerImpressions / 1000) * bannerCpm;
     const carouselRevenueINR = (carouselImpressions / 1000) * carouselCpm;
     const totalGrossRevenueINR = bannerRevenueINR + carouselRevenueINR;
     const totalCreatorEarningsINR = totalGrossRevenueINR * creatorShare;
-    
+
     res.json({
       success: true,
       totalVideos,
@@ -548,12 +550,14 @@ router.get('/stats', requireAdminDashboardKey, async (req, res) => {
 // **NEW: Admin endpoint to get monthly earnings for all creators**
 router.get('/creators/monthly-earnings', requireAdminDashboardKey, async (req, res) => {
   try {
+    const { month, year } = req.query; // **NEW: Support filtering by month/year**
+
     const creators = await User.find({}).select('_id googleId name email').lean();
     const creatorIds = creators.map(c => c._id);
-    
+
     // Get all videos for all creators
     const allVideos = await Video.find({ uploader: { $in: creatorIds } }).select('_id uploader').lean();
-    
+
     // Group videos by creator
     const videosByCreator = new Map();
     allVideos.forEach(video => {
@@ -563,29 +567,32 @@ router.get('/creators/monthly-earnings', requireAdminDashboardKey, async (req, r
       }
       videosByCreator.get(creatorId).push(video._id);
     });
-    
-    // Calculate current month and last month
+
+    // Calculate current month and last month (or requested month)
     const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-    const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
-    const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
-    
-    const currentMonthStart = new Date(currentYear, currentMonth, 1);
-    const currentMonthEnd = new Date(currentYear, currentMonth + 1, 1);
+    // Use requested date or default to current
+    const targetMonth = month !== undefined ? parseInt(month) : now.getMonth();
+    const targetYear = year !== undefined ? parseInt(year) : now.getFullYear();
+
+    // Calculate Last Month (relative to target)
+    const lastMonth = targetMonth === 0 ? 11 : targetMonth - 1;
+    const lastMonthYear = targetMonth === 0 ? targetYear - 1 : targetYear;
+
+    const currentMonthStart = new Date(targetYear, targetMonth, 1);
+    const currentMonthEnd = new Date(targetYear, targetMonth + 1, 1);
     const lastMonthStart = new Date(lastMonthYear, lastMonth, 1);
     const lastMonthEnd = new Date(lastMonthYear, lastMonth + 1, 1);
-    
+
     const bannerCpm = AD_CONFIG?.BANNER_CPM ?? 10;
     const carouselCpm = AD_CONFIG?.DEFAULT_CPM ?? 30;
     const creatorShare = AD_CONFIG?.CREATOR_REVENUE_SHARE ?? 0.8;
-    
+
     // Calculate monthly earnings for each creator
     const monthlyEarnings = await Promise.all(
       creators.map(async (creator) => {
         const creatorId = String(creator._id);
         const videoIds = videosByCreator.get(creatorId) || [];
-        
+
         if (videoIds.length === 0) {
           return {
             creatorId: creatorId,
@@ -600,19 +607,19 @@ router.get('/creators/monthly-earnings', requireAdminDashboardKey, async (req, r
             lastMonthBannerViews: 0,
             lastMonthCarouselViews: 0,
             lastMonthTotalAdViews: 0,
-            lastMonthGrossRevenue: 0
+            lastMonthGrossRevenue: 0,
+            videosUploaded: 0 // **NEW: 0 videos**
           };
         }
-        
+
         // Convert videoIds to ObjectIds if they're strings
-        const mongoose = (await import('mongoose')).default;
         const videoObjectIds = videoIds.map(id => {
           if (typeof id === 'string') {
             return new mongoose.Types.ObjectId(id);
           }
           return id;
         });
-        
+
         // Current month impressions
         const currentMonthBanner = await AdImpression.countDocuments({
           videoId: { $in: videoObjectIds },
@@ -620,14 +627,14 @@ router.get('/creators/monthly-earnings', requireAdminDashboardKey, async (req, r
           impressionType: 'view',
           timestamp: { $gte: currentMonthStart, $lt: currentMonthEnd }
         });
-        
+
         const currentMonthCarousel = await AdImpression.countDocuments({
           videoId: { $in: videoObjectIds },
           adType: 'carousel',
           impressionType: 'view',
           timestamp: { $gte: currentMonthStart, $lt: currentMonthEnd }
         });
-        
+
         // Last month impressions
         const lastMonthBanner = await AdImpression.countDocuments({
           videoId: { $in: videoObjectIds },
@@ -635,25 +642,25 @@ router.get('/creators/monthly-earnings', requireAdminDashboardKey, async (req, r
           impressionType: 'view',
           timestamp: { $gte: lastMonthStart, $lt: lastMonthEnd }
         });
-        
+
         const lastMonthCarousel = await AdImpression.countDocuments({
           videoId: { $in: videoObjectIds },
           adType: 'carousel',
           impressionType: 'view',
           timestamp: { $gte: lastMonthStart, $lt: lastMonthEnd }
         });
-        
+
         // Calculate revenue
         const currentMonthBannerRevenue = (currentMonthBanner / 1000) * bannerCpm;
         const currentMonthCarouselRevenue = (currentMonthCarousel / 1000) * carouselCpm;
         const currentMonthGrossRevenue = currentMonthBannerRevenue + currentMonthCarouselRevenue;
         const currentMonthTotal = currentMonthGrossRevenue * creatorShare;
-        
+
         const lastMonthBannerRevenue = (lastMonthBanner / 1000) * bannerCpm;
         const lastMonthCarouselRevenue = (lastMonthCarousel / 1000) * carouselCpm;
         const lastMonthGrossRevenue = lastMonthBannerRevenue + lastMonthCarouselRevenue;
         const lastMonthTotal = lastMonthGrossRevenue * creatorShare;
-        
+
         // Calculate current month video views from viewDetails using aggregation
         const viewStats = await Video.aggregate([
           {
@@ -686,9 +693,15 @@ router.get('/creators/monthly-earnings', requireAdminDashboardKey, async (req, r
             }
           }
         ]);
-        
+
         const currentMonthTotalViews = viewStats.length > 0 ? (viewStats[0].totalViews || 0) : 0;
-        
+
+        // **NEW: Count videos uploaded in the target month**
+        const videosUploaded = await Video.countDocuments({
+          uploader: creator._id,
+          createdAt: { $gte: currentMonthStart, $lt: currentMonthEnd }
+        });
+
         return {
           creatorId: creatorId,
           googleId: creator.googleId,
@@ -704,21 +717,22 @@ router.get('/creators/monthly-earnings', requireAdminDashboardKey, async (req, r
           currentMonthTotalViews: currentMonthTotalViews,
           lastMonthBannerViews: lastMonthBanner,
           lastMonthCarouselViews: lastMonthCarousel,
-          lastMonthTotalAdViews: lastMonthBanner + lastMonthCarousel
+          lastMonthTotalAdViews: lastMonthBanner + lastMonthCarousel,
+          videosUploaded: videosUploaded // **NEW: Include monthly video upload count**
         };
       })
     );
-    
+
     // Sort by current month earnings (descending)
     monthlyEarnings.sort((a, b) => b.thisMonth - a.thisMonth);
-    
+
     // Calculate totals
     const totalThisMonth = monthlyEarnings.reduce((sum, c) => sum + c.thisMonth, 0);
     const totalLastMonth = monthlyEarnings.reduce((sum, c) => sum + c.lastMonth, 0);
-    
+
     res.json({
       success: true,
-      currentMonth: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`,
+      currentMonth: `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}`,
       lastMonth: `${lastMonthYear}-${String(lastMonth + 1).padStart(2, '0')}`,
       totalThisMonth: Math.round(totalThisMonth * 100) / 100,
       totalLastMonth: Math.round(totalLastMonth * 100) / 100,
@@ -730,12 +744,96 @@ router.get('/creators/monthly-earnings', requireAdminDashboardKey, async (req, r
   }
 });
 
+// **NEW: Admin endpoint to get ad impressions for a specific creator (for frontend calculation)**
+router.get('/creators/:creatorId/ad-impressions', requireAdminDashboardKey, async (req, res) => {
+  try {
+    const { creatorId } = req.params;
+    const { month, year } = req.query;
+
+    // Find creator by googleId
+    const creator = await User.findOne({ googleId: creatorId }).select('_id').lean();
+    if (!creator) {
+      return res.status(404).json({
+        success: false,
+        error: 'Creator not found',
+        bannerViews: 0,
+        carouselViews: 0
+      });
+    }
+
+    // Get creator's videos
+    const videos = await Video.find({ uploader: creator._id }).select('_id').lean();
+    const videoIds = videos.map(v => v._id);
+
+    if (videoIds.length === 0) {
+      return res.json({
+        success: true,
+        bannerViews: 0,
+        carouselViews: 0,
+        month: parseInt(month),
+        year: parseInt(year)
+      });
+    }
+
+    // Parse month and year
+    const monthNum = parseInt(month);
+    const yearNum = parseInt(year);
+
+    // Calculate month start and end dates
+    const monthStart = new Date(yearNum, monthNum, 1);
+    const monthEnd = new Date(yearNum, monthNum + 1, 1);
+
+    // Count banner ad impressions for the specified month
+    const bannerViews = await AdImpression.countDocuments({
+      videoId: { $in: videoIds },
+      adType: 'banner',
+      impressionType: 'view',
+      isViewed: true, // **FIX: Only count verified views**
+      timestamp: {
+        $gte: monthStart,
+        $lt: monthEnd
+      }
+    });
+
+    // Count carousel ad impressions for the specified month
+    const carouselViews = await AdImpression.countDocuments({
+      videoId: { $in: videoIds },
+      adType: 'carousel',
+      impressionType: 'view',
+      isViewed: true, // **FIX: Only count verified views**
+      timestamp: {
+        $gte: monthStart,
+        $lt: monthEnd
+      }
+    });
+
+    res.json({
+      success: true,
+      creatorId,
+      month: monthNum,
+      year: yearNum,
+      bannerViews,
+      carouselViews,
+      totalAdViews: bannerViews + carouselViews
+    });
+  } catch (error) {
+    console.error('❌ Error fetching creator ad impressions:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch ad impressions',
+      bannerViews: 0,
+      carouselViews: 0
+    });
+  }
+});
+
 // **NEW: Admin endpoint to get all videos with search/filter**
+
 router.get('/videos', requireAdminDashboardKey, async (req, res) => {
   try {
     const { search, limit = 50, skip = 0 } = req.query;
     const query = {};
-    
+
     if (search && search.trim()) {
       const searchRegex = new RegExp(search.trim(), 'i');
       query.$or = [
@@ -743,16 +841,16 @@ router.get('/videos', requireAdminDashboardKey, async (req, res) => {
         { description: searchRegex }
       ];
     }
-    
+
     const videos = await Video.find(query)
       .populate('uploader', 'name email googleId')
       .sort({ createdAt: -1 })
       .limit(parseInt(limit))
       .skip(parseInt(skip))
       .lean();
-    
+
     const totalCount = await Video.countDocuments(query);
-    
+
     res.json({
       success: true,
       videos: videos.map(v => ({
@@ -784,24 +882,24 @@ router.get('/videos', requireAdminDashboardKey, async (req, res) => {
 router.delete('/videos/:videoId', requireAdminDashboardKey, async (req, res) => {
   try {
     const { videoId } = req.params;
-    
+
     const video = await Video.findById(videoId);
     if (!video) {
       return res.status(404).json({ success: false, error: 'Video not found' });
     }
-    
+
     // Remove video from user's videos array
     if (video.uploader) {
       await User.findByIdAndUpdate(video.uploader, {
         $pull: { videos: videoId }
       });
     }
-    
+
     // Delete the video
     await Video.findByIdAndDelete(videoId);
-    
+
     console.log(`✅ Admin deleted video: ${videoId} - ${video.videoName}`);
-    
+
     res.json({
       success: true,
       message: 'Video deleted successfully',
@@ -820,20 +918,20 @@ router.delete('/videos/:videoId', requireAdminDashboardKey, async (req, res) => 
 router.post('/recalculate-scores', requireAdminDashboardKey, async (req, res) => {
   try {
     const { onlyOutdated = false, maxAgeMinutes = 15, limit = null } = req.body;
-    
+
     console.log('🔄 Admin triggered score recalculation:', {
       onlyOutdated,
       maxAgeMinutes,
       limit
     });
-    
+
     const stats = await RecommendationService.recalculateAllScores({
       batchSize: 100,
       onlyOutdated: onlyOutdated === true,
       maxAgeMinutes: parseInt(maxAgeMinutes) || 15,
       limit: limit ? parseInt(limit) : null
     });
-    
+
     res.json({
       success: true,
       message: 'Score recalculation completed',
@@ -841,10 +939,10 @@ router.post('/recalculate-scores', requireAdminDashboardKey, async (req, res) =>
     });
   } catch (error) {
     console.error('❌ Error in admin score recalculation:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       error: 'Failed to recalculate scores',
-      message: error.message 
+      message: error.message
     });
   }
 });

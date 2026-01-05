@@ -9,6 +9,7 @@ import '../../../../core/exceptions/app_exceptions.dart';
 import '../../../../model/video_model.dart';
 import '../models/comment_model.dart';
 import '../../../../services/authservices.dart';
+import '../../../../services/platform_id_service.dart';
 
 /// Remote data source for video operations
 /// Handles all HTTP requests to the video API
@@ -19,12 +20,35 @@ class VideoRemoteDataSource {
   Future<Map<String, dynamic>> getVideos({
     int page = 1,
     int limit = 10,
+    bool clearSession = false,
   }) async {
     try {
-      final url = '${NetworkHelper.videosEndpoint}?page=$page&limit=$limit';
+      // **FIXED: Send platform ID and Auth Token for session persistence**
+      // This ensures previously watched/shown videos are excluded
+      final platformId = await PlatformIdService().getPlatformId();
+
+      // Get auth token if available
+      String? token;
+      try {
+        final authData = await AuthService().getUserData();
+        token = authData?['token'];
+      } catch (_) {
+        // Ignore auth errors - proceed as anonymous
+      }
+
+      // Add platformId to query params
+      final url =
+          '${NetworkHelper.videosEndpoint}?page=$page&limit=$limit&platformId=$platformId${clearSession ? '&clearSession=true' : ''}';
+
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+        if (platformId.isNotEmpty) 'x-device-id': platformId,
+      };
 
       final response = await httpClientService.get(
         Uri.parse(url),
+        headers: headers,
         timeout: NetworkHelper.defaultTimeout,
       );
 
@@ -38,6 +62,11 @@ class VideoRemoteDataSource {
               !json['videoUrl'].toString().startsWith('http')) {
             json['videoUrl'] =
                 '${NetworkHelper.getBaseUrl()}/${json['videoUrl']}';
+          }
+          if (json['thumbnailUrl'] != null &&
+              !json['thumbnailUrl'].toString().startsWith('http')) {
+            json['thumbnailUrl'] =
+                '${NetworkHelper.getBaseUrl()}/${json['thumbnailUrl']}';
           }
           return VideoModel.fromJson(json);
         }).toList();

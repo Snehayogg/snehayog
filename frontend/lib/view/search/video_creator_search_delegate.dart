@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:vayu/model/usermodel.dart';
 import 'package:vayu/model/video_model.dart';
 import 'package:vayu/services/search_service.dart';
+import 'package:vayu/services/video_service.dart';
+import 'package:vayu/services/earnings_service.dart';
 import 'package:vayu/view/screens/profile_screen.dart';
 import 'package:vayu/view/screens/video_screen.dart';
+import 'package:vayu/utils/app_logger.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 /// Global search UI for videos and creators.
@@ -355,31 +358,8 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
 
   /// **PROFESSIONAL: Build creator result tile (full search results)**
   Widget _buildCreatorResultTile(BuildContext context, UserModel creator) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      leading: CircleAvatar(
-        radius: 28,
-        backgroundColor: Colors.grey[200],
-        backgroundImage: creator.profilePic.isNotEmpty
-            ? CachedNetworkImageProvider(creator.profilePic)
-            : null,
-        child: creator.profilePic.isEmpty
-            ? const Icon(Icons.person, color: Colors.grey)
-            : null,
-      ),
-      title: Text(
-        creator.name,
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      subtitle: Text(
-        creator.email,
-        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-      ),
-      trailing:
-          Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey[400]),
+    return _CreatorEarningsTile(
+      creator: creator,
       onTap: () {
         close(context, null);
         Navigator.of(context).push(
@@ -393,30 +373,9 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
 
   /// **PROFESSIONAL: Build creator suggestion tile (autocomplete)**
   Widget _buildCreatorSuggestionTile(BuildContext context, UserModel creator) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      leading: CircleAvatar(
-        radius: 20,
-        backgroundColor: Colors.grey[200],
-        backgroundImage: creator.profilePic.isNotEmpty
-            ? CachedNetworkImageProvider(creator.profilePic)
-            : null,
-        child: creator.profilePic.isEmpty
-            ? const Icon(Icons.person, size: 20, color: Colors.grey)
-            : null,
-      ),
-      title: Text(
-        creator.name,
-        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-      ),
-      subtitle: Text(
-        creator.email,
-        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      trailing:
-          Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey[400]),
+    return _CreatorEarningsTile(
+      creator: creator,
+      isCompact: true,
       onTap: () {
         close(context, null);
         Navigator.of(context).push(
@@ -589,5 +548,219 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
     } else {
       return '${(views / 1000000).toStringAsFixed(1)}M';
     }
+  }
+}
+
+/// **NEW: Widget to display creator with earnings calculation**
+class _CreatorEarningsTile extends StatefulWidget {
+  final UserModel creator;
+  final VoidCallback onTap;
+  final bool isCompact;
+
+  const _CreatorEarningsTile({
+    required this.creator,
+    required this.onTap,
+    this.isCompact = false,
+  });
+
+  @override
+  State<_CreatorEarningsTile> createState() => _CreatorEarningsTileState();
+}
+
+class _CreatorEarningsTileState extends State<_CreatorEarningsTile> {
+  double? _earnings;
+  bool _isLoadingEarnings = false;
+  final VideoService _videoService = VideoService();
+  static final Map<String, double> _earningsCache =
+      {}; // **NEW: In-memory cache for earnings**
+  static final Map<String, DateTime> _earningsCacheTimestamp =
+      {}; // **NEW: Cache timestamps**
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEarnings();
+  }
+
+  /// **OPTIMIZED: Load cached earnings immediately, fetch fresh in background**
+  Future<void> _loadEarnings() async {
+    if (widget.creator.videos.isEmpty) {
+      setState(() {
+        _earnings = 0.0;
+        _isLoadingEarnings = false;
+      });
+      return;
+    }
+
+    final creatorId = widget.creator.id;
+    final cacheKey = 'creator_earnings_$creatorId';
+
+    // **STEP 1: Check cache first - show immediately if available**
+    final cachedEarnings = _earningsCache[cacheKey];
+    final cacheTime = _earningsCacheTimestamp[cacheKey];
+    final now = DateTime.now();
+
+    if (cachedEarnings != null && cacheTime != null) {
+      final cacheAge = now.difference(cacheTime);
+      // Use cache if it's less than 5 minutes old
+      if (cacheAge < const Duration(minutes: 5)) {
+        AppLogger.log(
+            '⚡ CreatorEarningsTile: Using cached earnings for $creatorId: ₹${cachedEarnings.toStringAsFixed(2)}');
+        setState(() {
+          _earnings = cachedEarnings;
+          _isLoadingEarnings = false;
+        });
+        // **OPTIMIZED: Still fetch fresh in background (non-blocking)**
+        _fetchFreshEarningsInBackground(creatorId, cacheKey);
+        return;
+      }
+    }
+
+    // **STEP 2: No cache or cache expired - show loading and fetch**
+    setState(() {
+      _isLoadingEarnings = true;
+    });
+
+    try {
+      // Get creator's videos
+      final videos = await _videoService.getUserVideos(creatorId);
+
+      if (videos.isEmpty) {
+        setState(() {
+          _earnings = 0.0;
+          _isLoadingEarnings = false;
+        });
+        // Cache 0 earnings too
+        _earningsCache[cacheKey] = 0.0;
+        _earningsCacheTimestamp[cacheKey] = now;
+        return;
+      }
+
+      // Calculate earnings from videos
+      final earnings =
+          await EarningsService.calculateCreatorTotalRevenueForVideos(
+        videos,
+        timeout: const Duration(seconds: 3),
+      );
+
+      // **CACHE: Store earnings in cache**
+      _earningsCache[cacheKey] = earnings;
+      _earningsCacheTimestamp[cacheKey] = now;
+
+      if (mounted) {
+        setState(() {
+          _earnings = earnings;
+          _isLoadingEarnings = false;
+        });
+      }
+    } catch (e) {
+      // **FALLBACK: Use cached value even if fresh fetch fails**
+      if (cachedEarnings != null) {
+        AppLogger.log(
+            '⚠️ CreatorEarningsTile: Fresh fetch failed, using cached earnings: $e');
+        if (mounted) {
+          setState(() {
+            _earnings = cachedEarnings;
+            _isLoadingEarnings = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _earnings = 0.0;
+            _isLoadingEarnings = false;
+          });
+        }
+      }
+    }
+  }
+
+  /// **NEW: Fetch fresh earnings in background (non-blocking)**
+  Future<void> _fetchFreshEarningsInBackground(
+      String creatorId, String cacheKey) async {
+    try {
+      // Get creator's videos
+      final videos = await _videoService.getUserVideos(creatorId);
+
+      if (videos.isEmpty) {
+        return;
+      }
+
+      // Calculate earnings from videos
+      final earnings =
+          await EarningsService.calculateCreatorTotalRevenueForVideos(
+        videos,
+        timeout: const Duration(seconds: 3),
+      );
+
+      // **UPDATE CACHE: Store fresh earnings**
+      _earningsCache[cacheKey] = earnings;
+      _earningsCacheTimestamp[cacheKey] = DateTime.now();
+
+      // **UPDATE UI: Only update if value changed significantly (avoid flicker)**
+      if (mounted &&
+          (_earnings == null || (_earnings! - earnings).abs() > 0.01)) {
+        setState(() {
+          _earnings = earnings;
+        });
+        AppLogger.log(
+            '✅ CreatorEarningsTile: Background earnings updated for $creatorId: ₹${earnings.toStringAsFixed(2)}');
+      }
+    } catch (e) {
+      // Silent fail - keep showing cached value
+      AppLogger.log(
+          '⚠️ CreatorEarningsTile: Background earnings fetch failed (non-critical): $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: widget.isCompact ? 4 : 8,
+      ),
+      leading: CircleAvatar(
+        radius: widget.isCompact ? 20 : 28,
+        backgroundColor: Colors.grey[200],
+        backgroundImage: widget.creator.profilePic.isNotEmpty
+            ? CachedNetworkImageProvider(widget.creator.profilePic)
+            : null,
+        child: widget.creator.profilePic.isEmpty
+            ? Icon(
+                Icons.person,
+                size: widget.isCompact ? 20 : 28,
+                color: Colors.grey,
+              )
+            : null,
+      ),
+      title: Text(
+        widget.creator.name,
+        style: TextStyle(
+          fontSize: widget.isCompact ? 15 : 16,
+          fontWeight: widget.isCompact ? FontWeight.w500 : FontWeight.w600,
+        ),
+      ),
+      subtitle: _isLoadingEarnings
+          ? Text(
+              'Calculating...',
+              style: TextStyle(
+                fontSize: widget.isCompact ? 12 : 13,
+                color: Colors.grey[600],
+              ),
+            )
+          : Text(
+              '₹${(_earnings ?? 0.0).toStringAsFixed(2)} earnings',
+              style: TextStyle(
+                fontSize: widget.isCompact ? 12 : 13,
+                color: Colors.grey[600],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+      trailing:
+          Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey[400]),
+      onTap: widget.onTap,
+    );
   }
 }

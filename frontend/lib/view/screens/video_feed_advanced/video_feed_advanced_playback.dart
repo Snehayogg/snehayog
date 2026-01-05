@@ -53,8 +53,14 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
 
     _videoControllerManager.pauseAllVideosOnTabChange();
 
+    // **FIX: Don't pause current video in shared pool**
+    String? currentVideoId;
+    if (currentIndex >= 0 && currentIndex < _videos.length) {
+      currentVideoId = _videos[currentIndex].id;
+    }
+
     final sharedPool = SharedVideoControllerPool();
-    sharedPool.pauseAllControllers();
+    sharedPool.pauseAllControllers(exceptVideoId: currentVideoId);
     _ensureWakelockForVisibility();
   }
 
@@ -71,7 +77,7 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
       _lifecyclePaused = false;
       controller.play();
       _controllerStates[_currentIndex] = true;
-      _userPaused[_currentIndex] = false;
+      _userPaused[_currentIndex] = false; // **Ensure user paused is reset**
       _ensureWakelockForVisibility();
       return;
     }

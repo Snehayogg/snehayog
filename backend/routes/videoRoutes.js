@@ -5,8 +5,9 @@ import Video from '../models/Video.js';
 import User from '../models/User.js';
 import Comment from '../models/Comment.js';
 import WatchHistory from '../models/WatchHistory.js';
+import FeedHistory from '../models/FeedHistory.js';
 import RecommendationService from '../services/recommendationService.js';
-import fs from 'fs'; 
+import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { verifyToken } from '../utils/verifytoken.js';
@@ -32,7 +33,7 @@ async function calculateVideoHash(filePath) {
   return new Promise((resolve, reject) => {
     const hash = crypto.createHash('sha256');
     const stream = fs.createReadStream(filePath);
-    
+
     stream.on('data', (data) => hash.update(data));
     stream.on('end', () => resolve(hash.digest('hex')));
     stream.on('error', (err) => reject(err));
@@ -44,13 +45,13 @@ async function convertLikedByToGoogleIds(likedByArray) {
   if (!Array.isArray(likedByArray) || likedByArray.length === 0) {
     return [];
   }
-  
+
   try {
     // Batch query all users at once for efficiency
     const users = await User.find({
       _id: { $in: likedByArray }
     }).select('googleId').lean();
-    
+
     // Create a map of ObjectId -> googleId
     const idMap = new Map();
     users.forEach(user => {
@@ -58,7 +59,7 @@ async function convertLikedByToGoogleIds(likedByArray) {
         idMap.set(user._id.toString(), user.googleId.toString());
       }
     });
-    
+
     // Convert ObjectIds to googleIds, filter out any that don't have googleId
     return likedByArray
       .map(id => {
@@ -79,7 +80,7 @@ async function convertLikedByToGoogleIds(likedByArray) {
 router.get('/cache/status', async (req, res) => {
   try {
     const { userId, platformId, videoType } = req.query;
-    
+
     if (!redisService.getConnectionStatus()) {
       return res.json({
         redisConnected: false,
@@ -90,7 +91,7 @@ router.get('/cache/status', async (req, res) => {
 
     const userIdentifier = userId || platformId;
     const cachePatterns = {
-      unwatchedIds: userIdentifier 
+      unwatchedIds: userIdentifier
         ? `videos:unwatched:ids:${userIdentifier}:${videoType || 'all'}`
         : null,
       feed: `videos:feed:${videoType || 'all'}`,
@@ -99,11 +100,11 @@ router.get('/cache/status', async (req, res) => {
     };
 
     const cacheStatus = {};
-    
+
     // Check each cache key
     for (const [name, pattern] of Object.entries(cachePatterns)) {
       if (!pattern) continue;
-      
+
       try {
         // Get all keys matching pattern
         const keys = await redisService.client.keys(pattern);
@@ -119,7 +120,7 @@ router.get('/cache/status', async (req, res) => {
             };
           })
         );
-        
+
         cacheStatus[name] = {
           pattern,
           keysFound: keys.length,
@@ -145,9 +146,9 @@ router.get('/cache/status', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error checking cache status:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to check cache status',
-      message: error.message 
+      message: error.message
     });
   }
 });
@@ -156,7 +157,7 @@ router.get('/cache/status', async (req, res) => {
 router.post('/cache/clear', async (req, res) => {
   try {
     const { pattern, userId, platformId, videoType, clearAll } = req.body;
-    
+
     if (!redisService.getConnectionStatus()) {
       return res.json({
         success: false,
@@ -175,7 +176,7 @@ router.post('/cache/clear', async (req, res) => {
         'videos:unwatched:ids:*',
         'video:*'
       ];
-      
+
       for (const p of patterns) {
         const count = await redisService.clearPattern(p);
         clearedCount += count;
@@ -192,23 +193,23 @@ router.post('/cache/clear', async (req, res) => {
       // Clear based on user/platform
       const userIdentifier = userId || platformId;
       const patterns = [];
-      
+
       if (userIdentifier) {
         patterns.push(`videos:unwatched:ids:${userIdentifier}:*`);
         patterns.push(`videos:feed:user:${userIdentifier}:*`);
       }
-      
+
       if (videoType) {
         patterns.push(`videos:feed:${videoType}`);
         patterns.push(`videos:unwatched:ids:*:${videoType}`);
       }
-      
+
       if (patterns.length === 0) {
         // Default: clear all video cache
         patterns.push('videos:*');
         patterns.push('videos:unwatched:ids:*');
       }
-      
+
       for (const p of patterns) {
         const count = await redisService.clearPattern(p);
         clearedCount += count;
@@ -227,9 +228,9 @@ router.post('/cache/clear', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error clearing cache:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to clear cache',
-      message: error.message 
+      message: error.message
     });
   }
 });
@@ -251,13 +252,13 @@ const validateVideoData = (req, res, next) => {
       req.body.duration = parseInt(req.body.duration) || 0;
     }
     if (req.body.aspectRatio !== undefined) {
-      req.body.aspectRatio = parseFloat(req.body.aspectRatio) || 9/16;
+      req.body.aspectRatio = parseFloat(req.body.aspectRatio) || 9 / 16;
     }
-    
+
     next();
   } catch (error) {
     console.error('❌ Data validation error:', error);
-    res.status(400).json({ 
+    res.status(400).json({
       error: 'Invalid data types in request',
       details: 'Numeric fields must be valid numbers'
     });
@@ -302,17 +303,13 @@ router.post('/check-duplicate', verifyToken, async (req, res) => {
   try {
     const { videoHash } = req.body;
     const googleId = req.user.googleId;
-    
+
     if (!videoHash) {
       return res.status(400).json({ error: 'Video hash is required' });
     }
 
-    console.log('🔍 Duplicate check: Checking for video hash:', videoHash);
-    console.log('🔍 Duplicate check: User Google ID:', googleId);
-
     const user = await User.findOne({ googleId });
     if (!user) {
-      console.log('❌ Duplicate check: User not found');
       return res.status(404).json({ error: 'User not found' });
     }
 
@@ -341,9 +338,6 @@ router.post('/check-duplicate', verifyToken, async (req, res) => {
 
 // POST /api/videos/upload
 router.post('/upload', verifyToken, validateVideoData, upload.single('video'), async (req, res) => {
-  let originalResult = null;
-  let hlsResult = null;
-
   try {
     console.log('🎬 Upload: Starting video upload process with HLS streaming...');
     console.log('🎬 Upload: Request body:', req.body);
@@ -393,13 +387,13 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
         fs.unlinkSync(req.file.path);
         return res.status(400).json({ error: 'Video file is empty or corrupted' });
       }
-      
+
       if (stats.size < 1024) { // Less than 1KB
         console.log('❌ Upload: Video file too small (likely corrupted):', stats.size);
         fs.unlinkSync(req.file.path);
         return res.status(400).json({ error: 'Video file is too small and likely corrupted' });
       }
-      
+
       console.log('✅ Upload: File validation passed - Size:', stats.size, 'bytes');
     } catch (validationError) {
       console.error('❌ Upload: File validation failed:', validationError);
@@ -449,6 +443,43 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
     }
     console.log('✅ Upload: No duplicate found, proceeding with upload');
 
+    // **NEW: Determine video type based on duration**
+    // Lazy load service not needed here as we need duration before creating video record
+    if (!hybridVideoService) {
+      const { default: service } = await import('../services/hybridVideoService.js');
+      hybridVideoService = service;
+    }
+
+    // Get video info to check duration
+    console.log('⏱️ Upload: Checking video duration for type classification...');
+    let detectedDuration = 0;
+    let detectedWidth = 0;
+    let detectedHeight = 0;
+
+    try {
+      const videoInfo = await hybridVideoService.getOriginalVideoInfo(req.file.path);
+      detectedDuration = videoInfo.duration || 0;
+      detectedWidth = videoInfo.width || 0;
+      detectedHeight = videoInfo.height || 0;
+      console.log(`⏱️ Upload: Video duration: ${detectedDuration}s, Dimensions: ${detectedWidth}x${detectedHeight}`);
+    } catch (infoError) {
+      console.warn('⚠️ Upload: Failed to get video info, defaulting to provided values:', infoError.message);
+    }
+
+    // Auto-detect type: > 60 seconds = 'vayu', else 'yog'
+    // This overrides user selection if it conflicts with duration rules
+    let finalVideoType = videoType || 'yog';
+
+    if (detectedDuration > 60) {
+      finalVideoType = 'vayu';
+      console.log('📼 Upload: Video duration > 60s, automatically setting type to VAYU (Long form)');
+    } else if (detectedDuration > 0) {
+      finalVideoType = 'yog';
+      console.log('📱 Upload: Video duration <= 60s, automatically setting type to YOG (Short form)');
+    } else {
+      console.log(`ℹ️ Upload: Duration not detected, keeping requested type: ${finalVideoType}`);
+    }
+
     // Video processing uses Cloudflare Stream (FREE transcoding) with HLS fallback
     console.log('✅ Upload: Video processing service ready');
 
@@ -456,23 +487,23 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
     console.log('🚀 Starting Pure HLS Video Processing (FFmpeg → R2)...');
     console.log('💰 Expected cost: $0 processing (FREE!) + $0.015/GB/month storage + $0 bandwidth (FREE!)');
     console.log('📹 Format: HLS (HTTP Live Streaming) - Single 480p quality');
-    
+
     // **NEW: Lazy load hybrid service to ensure env vars are loaded**
     if (!hybridVideoService) {
       const { default: service } = await import('../services/hybridVideoService.js');
       hybridVideoService = service;
     }
-    
+
     // **NEW: Validate video with hybrid service**
     const videoValidation = await hybridVideoService.validateVideo(req.file.path);
     if (!videoValidation.isValid) {
       fs.unlinkSync(req.file.path);
-      return res.status(400).json({ 
-        error: 'Invalid video file', 
-        details: videoValidation.error 
+      return res.status(400).json({
+        error: 'Invalid video file',
+        details: videoValidation.error
       });
     }
-    
+
     // **NEW: Create initial video record with pending status**
     // **FIX: Save original dimensions to preserve aspect ratio**
     const video = new Video({
@@ -482,15 +513,15 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
       videoUrl: '', // Will be set after processing - don't store local paths
       thumbnailUrl: '', // Will be generated during processing
       uploader: user._id,
-      videoType: videoType || 'yog',
+      videoType: finalVideoType, // Use auto-detected type
       mediaType: 'video',
-      aspectRatio: (videoValidation.width && videoValidation.height) 
-        ? videoValidation.width / videoValidation.height 
-        : 9/16, // Default to 9:16 (portrait) if dimensions unavailable
-      duration: videoValidation.duration || 0,
+      aspectRatio: (detectedWidth && detectedHeight)
+        ? detectedWidth / detectedHeight
+        : 9 / 16, // Default to 9:16 (portrait) if dimensions unavailable
+      duration: detectedDuration || 0,
       originalResolution: {
-        width: videoValidation.width || 0,
-        height: videoValidation.height || 0
+        width: detectedWidth || 0,
+        height: detectedHeight || 0
       },
       processingStatus: 'pending',
       processingProgress: 0,
@@ -499,13 +530,13 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
       likes: 0, views: 0, shares: 0, likedBy: [], comments: [],
       uploadedAt: new Date()
     });
-    
+
     await video.save();
     user.videos.push(video._id);
     await user.save();
-    
+
     console.log('✅ Video record created with ID:', video._id);
-    
+
     // **NEW: Invalidate cache when new video is uploaded**
     if (redisService.getConnectionStatus()) {
       await invalidateCache([
@@ -515,10 +546,10 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
       ]);
       console.log('🧹 Cache invalidated after video upload');
     }
-    
+
     // **NEW: Start video processing in background (non-blocking)**
     processVideoHybrid(video._id, req.file.path, videoName, user._id.toString());
-    
+
     // **NEW: Return immediate response**
     return res.status(201).json({
       success: true,
@@ -539,15 +570,15 @@ router.post('/upload', verifyToken, validateVideoData, upload.single('video'), a
         }
       }
     });
-    
+
   } catch (error) {
     console.error('❌ Upload: Error in video upload process:', error);
     if (req.file) {
-      try { fs.unlinkSync(req.file.path); } catch (_) {}
+      try { fs.unlinkSync(req.file.path); } catch (_) { }
     }
-    return res.status(500).json({ 
-      error: 'Video upload failed', 
-      details: error.message 
+    return res.status(500).json({
+      error: 'Video upload failed',
+      details: error.message
     });
   }
 });
@@ -647,7 +678,7 @@ router.post('/image', verifyToken, async (req, res) => {
 async function processVideoToHLS(videoId, videoPath, videoName, userId) {
   try {
     console.log('🚀 Starting Pure HLS processing (FFmpeg → R2) for:', videoId);
-    
+
     const video = await Video.findById(videoId);
     if (!video) {
       throw new Error('Video not found');
@@ -656,17 +687,17 @@ async function processVideoToHLS(videoId, videoPath, videoName, userId) {
     video.processingStatus = 'processing';
     video.processingProgress = 10;
     await video.save();
-    
+
     // **NEW: Lazy load hybrid service to ensure env vars are loaded**
     if (!hybridVideoService) {
       const { default: service } = await import('../services/hybridVideoService.js');
       hybridVideoService = service;
     }
-    
+
     // Process video using Pure HLS service (FFmpeg → R2)
     const hlsResult = await hybridVideoService.processVideoToHLS(
-      videoPath, 
-      videoName, 
+      videoPath,
+      videoName,
       userId
     );
 
@@ -678,7 +709,7 @@ async function processVideoToHLS(videoId, videoPath, videoName, userId) {
     video.processingProgress = 100;
     video.isHLSEncoded = true; // Using HLS format
     video.lowQualityUrl = hlsResult.videoUrl; // Single quality (480p)
-    
+
     // **FIX: Preserve original aspect ratio and dimensions**
     if (hlsResult.aspectRatio) {
       video.aspectRatio = hlsResult.aspectRatio;
@@ -691,7 +722,7 @@ async function processVideoToHLS(videoId, videoPath, videoName, userId) {
       };
       console.log(`📐 Preserved original dimensions: ${hlsResult.width}x${hlsResult.height}`);
     }
-    
+
     await video.save();
     console.log('🎉 Pure HLS processing completed for:', videoId);
     console.log('📊 Result:');
@@ -700,10 +731,10 @@ async function processVideoToHLS(videoId, videoPath, videoName, userId) {
     console.log(`   Segments: ${hlsResult.segments}`);
     console.log(`   Total Files: ${hlsResult.totalFiles}`);
     console.log('💰 Cost: $0 processing + $0.015/GB/month storage + $0 bandwidth');
-    
+
   } catch (error) {
     console.error('❌ Error in Pure HLS processing:', error);
-    
+
     try {
       const video = await Video.findById(videoId);
       if (video) {
@@ -722,9 +753,9 @@ async function processVideoToHLS(videoId, videoPath, videoName, userId) {
 // Single 480p quality for cost optimization
 // 100% FREE processing + FREE bandwidth = Maximum savings!
 
-  // Get videos by user ID (consistently use googleId)
-  // **NEW: Redis caching integrated**
-  router.get('/user/:googleId', verifyToken, async (req, res) => {
+// Get videos by user ID (consistently use googleId)
+// **NEW: Redis caching integrated**
+router.get('/user/:googleId', verifyToken, async (req, res) => {
   try {
     const { googleId } = req.params;
     console.log('🎬 Fetching videos for googleId:', googleId);
@@ -745,21 +776,21 @@ async function processVideoToHLS(videoId, videoPath, videoName, userId) {
     // **OPTIMIZED: Cache user profile data**
     const userProfileCacheKey = `user:profile:${googleId}`;
     let user = null;
-    
+
     if (redisService.getConnectionStatus()) {
       user = await redisService.get(userProfileCacheKey);
       if (user) {
         console.log(`⚡ User Profile Cache HIT: ${userProfileCacheKey}`);
       }
     }
-    
+
     if (!user) {
       user = await User.findOne({ googleId: googleId }).lean();
       if (!user) {
         console.log('❌ User not found for googleId:', googleId);
         return res.status(404).json({ error: 'User not found' });
       }
-      
+
       // Cache user profile for 10 minutes
       if (redisService.getConnectionStatus()) {
         await redisService.set(userProfileCacheKey, user, 600);
@@ -775,7 +806,7 @@ async function processVideoToHLS(videoId, videoPath, videoName, userId) {
     });
 
     // **IMPROVED: Get videos directly from Video collection using uploader field**
-    const videos = await Video.find({ 
+    const videos = await Video.find({
       uploader: user._id,
       videoUrl: { $exists: true, $ne: null, $ne: '' }, // Ensure video URL exists and is not empty
       processingStatus: { $nin: ['failed', 'error'] } // Only exclude explicitly failed videos
@@ -785,10 +816,10 @@ async function processVideoToHLS(videoId, videoPath, videoName, userId) {
 
     // **NEW: Filter out videos with invalid uploader references**
     const validVideos = videos.filter(video => {
-      return video.uploader && 
-             video.uploader._id && 
-             video.uploader.name && 
-             video.uploader.name.trim() !== '';
+      return video.uploader &&
+        video.uploader._id &&
+        video.uploader.name &&
+        video.uploader.name.trim() !== '';
     });
 
     console.log('🎬 Found videos count:', videos.length);
@@ -798,8 +829,8 @@ async function processVideoToHLS(videoId, videoPath, videoName, userId) {
     if (validVideos.length !== videos.length) {
       console.log('🔄 Syncing user.videos array with valid videos...');
       const validVideoIds = validVideos.map(v => v._id);
-      await User.findByIdAndUpdate(user._id, { 
-        $set: { videos: validVideoIds } 
+      await User.findByIdAndUpdate(user._id, {
+        $set: { videos: validVideoIds }
       });
       console.log(`✅ Updated user.videos array: ${videos.length} -> ${validVideos.length} videos`);
     }
@@ -813,17 +844,17 @@ async function processVideoToHLS(videoId, videoPath, videoName, userId) {
     // **FIX: Convert to async to handle likedBy conversion**
     const videosWithUrls = await Promise.all(validVideos.map(async (video) => {
       const videoObj = video.toObject();
-      
+
       // **CRITICAL: Ensure all required fields are present**
       // **FIX: Normalize video URLs to fix Windows path separator issues**
       const normalizeUrl = (url) => {
         if (!url) return url;
         return url.replace(/\\/g, '/');
       };
-      
+
       // **FIX: Convert likedBy ObjectIds to googleIds**
       const likedByGoogleIds = await convertLikedByToGoogleIds(videoObj.likedBy || []);
-      
+
       const result = {
         _id: videoObj._id?.toString(),
         videoName: (videoObj.videoName && videoObj.videoName.toString().trim()) || 'Untitled Video',
@@ -834,7 +865,7 @@ async function processVideoToHLS(videoId, videoPath, videoName, userId) {
         views: parseInt(videoObj.views) || 0,
         shares: parseInt(videoObj.shares) || 0,
         duration: parseInt(videoObj.duration) || 0,
-        aspectRatio: parseFloat(videoObj.aspectRatio) || 9/16,
+        aspectRatio: parseFloat(videoObj.aspectRatio) || 9 / 16,
         videoType: videoObj.videoType || 'reel',
         mediaType: videoObj.mediaType || 'video',
         link: videoObj.link || null,
@@ -856,7 +887,7 @@ async function processVideoToHLS(videoId, videoPath, videoName, userId) {
         likedBy: likedByGoogleIds, // **FIXED: Use googleIds instead of ObjectIds**
         comments: videoObj.comments || []
       };
-      
+
       console.log(`🎬 Video ${result.videoName}:`, {
         id: result._id,
         hasVideoUrl: !!result.videoUrl,
@@ -866,7 +897,7 @@ async function processVideoToHLS(videoId, videoPath, videoName, userId) {
         uploader: result.uploader.name,
         uploaderGoogleId: result.uploader.googleId
       });
-      
+
       return result;
     }));
 
@@ -885,9 +916,9 @@ async function processVideoToHLS(videoId, videoPath, videoName, userId) {
     res.json(videosWithUrls);
   } catch (error) {
     console.error('❌ Error fetching user videos:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Error fetching videos',
-      details: error.message 
+      details: error.message
     });
   }
 });
@@ -916,7 +947,7 @@ router.get('/', async (req, res) => {
       'user-agent': req.headers['user-agent']?.substring(0, 50) || 'Unknown',
     });
     console.log('═══════════════════════════════════════════════════════════');
-    
+
     // Try to get user from token (optional authentication)
     let userId = null;
     try {
@@ -934,7 +965,7 @@ router.get('/', async (req, res) => {
             // Try JWT token
             const jwt = (await import('jsonwebtoken')).default;
             const JWT_SECRET = process.env.JWT_SECRET;
-            
+
             // **NEW: Check if JWT_SECRET exists**
             if (!JWT_SECRET) {
               console.log('⚠️ JWT_SECRET not found in environment, skipping JWT verification');
@@ -970,14 +1001,14 @@ router.get('/', async (req, res) => {
     }
 
     const { videoType, page = 1, limit = 10, platformId, clearSession } = req.query;
-    
+
     // **BACKEND-FIRST: Use userId for authenticated users, platformId for anonymous**
     // After login, the frontend should call `/api/videos/sync-watch-history` ONCE to merge histories,
     // then this route will always prioritize userId (googleId) and only use platformId as a fallback.
     const userIdentifier = userId || platformId; // Primary identifier used for personalization
     const isAuthenticated = !!userId;
     const identitySource = userId ? 'userId' : (platformId ? 'platformId' : 'none');
-    
+
     // **NEW: Clear session state if requested (for seamless feed restart)**
     if (clearSession === 'true' && userIdentifier) {
       try {
@@ -987,12 +1018,12 @@ router.get('/', async (req, res) => {
         console.log(`⚠️ SESSION CLEAR: Error clearing session state: ${clearErr.message}`);
       }
     }
-    
+
     // **IDENTITY DEBUG: Log per-request identity info to detect flips between userId/platformId**
-    console.log('📹 Fetching videos...', { 
-      videoType, 
-      page, 
-      limit, 
+    console.log('📹 Fetching videos...', {
+      videoType,
+      page,
+      limit,
       userId: userId || null,
       platformId: platformId || null,
       userIdentifier: userIdentifier || null,
@@ -1000,26 +1031,25 @@ router.get('/', async (req, res) => {
       hasBothIds: !!(userId && platformId),
       idsMatch: userId && platformId ? userId === platformId : null
     });
-    
+
     // Get query parameters for pagination
     const pageNum = parseInt(page) || 1;
     const limitNum = parseInt(limit) || 10;
-    
+
     // **IMPROVED: Don't cache shuffled results - cache raw data instead**
     // This ensures different users get different random orders
     // Cache key for unwatched video IDs (not shuffled results)
     const unwatchedCacheKey = userIdentifier
       ? `videos:unwatched:ids:${userIdentifier}:${videoType || 'all'}`
       : null;
-    
+
     // **FIXED: DISABLE CACHE - Always fetch fresh unwatched videos for variety**
     // Cache was causing same videos to appear repeatedly
     // Now we always fetch fresh unwatched videos to ensure variety
     console.log('🔄 Always fetching fresh unwatched videos (cache disabled for variety)');
-    
+
     // Build base query filter
     // **RELAXED: Show all videos with valid uploader, exclude only failed ones**
-    // This ensures all 400+ videos appear in feed
     const baseQueryFilter = {
       uploader: { $exists: true, $ne: null },
       processingStatus: { $ne: 'failed' }, // Only exclude explicitly failed videos
@@ -1030,7 +1060,7 @@ router.get('/', async (req, res) => {
         { hlsPlaylistUrl: { $exists: true, $ne: null, $ne: '' } }
       ]
     };
-    
+
     // **DEBUG: Log total videos count to diagnose feed issues**
     try {
       const totalVideosInDB = await Video.countDocuments({});
@@ -1041,18 +1071,18 @@ router.get('/', async (req, res) => {
     } catch (err) {
       console.log(`⚠️ Error counting videos: ${err.message}`);
     }
-    
+
     // Add videoType filter if specified
     // **FIXED: Use 'yog' consistently in both frontend and backend**
     if (videoType) {
       const normalizedType = videoType.toLowerCase();
       // Normalize 'vayug' to 'vayu' for consistency (keep 'yog' as is)
       const normalizedVideoType = normalizedType === 'vayug' ? 'vayu' : normalizedType;
-      
+
       if (normalizedVideoType === 'yog' || normalizedVideoType === 'vayu') {
         baseQueryFilter.videoType = normalizedVideoType;
         console.log(`📹 Filtering by videoType: ${normalizedVideoType}`);
-        
+
         // **DEBUG: Check how many videos match this filter**
         const matchingCount = await Video.countDocuments(baseQueryFilter);
         console.log(`📊 Videos matching videoType='${normalizedVideoType}': ${matchingCount}`);
@@ -1060,567 +1090,309 @@ router.get('/', async (req, res) => {
         console.log(`⚠️ Unknown videoType: ${videoType}, showing all videos`);
       }
     }
-    
-    let unwatchedVideos = [];
-    let watchedVideos = [];
+
     let finalVideos = [];
-    let unwatchedVideoIds = []; // kept for logging compatibility
     let watchedVideoIds = []; // kept for logging compatibility
-    
+
     // **OPTIMIZED: Try feed cache first (short TTL for freshness while reducing DB load)**
+    // **FIX: Skip feed cache for page 1 to ensure fresh videos on every app open (Reels-like behavior)**
+    // For subsequent pages, cache is OK (user is scrolling, not reopening app)
     const feedCacheKey = `feed:${userIdentifier || 'anonymous'}:${videoType || 'all'}:${pageNum}`;
     let cachedFeed = null;
-    
-    if (redisService.getConnectionStatus()) {
+
+    // **OPTIMIZATION: Don't cache page 1 - always show fresh videos on app open**
+    // This ensures different videos every time user opens app (like Reels)
+    if (redisService.getConnectionStatus() && pageNum > 1) {
+      // Only cache page 2+ (user is scrolling, not reopening app)
       cachedFeed = await redisService.get(feedCacheKey);
       if (cachedFeed) {
         console.log(`⚡ Feed Cache HIT: ${feedCacheKey}`);
         return res.json(cachedFeed);
       }
       console.log(`💾 Feed Cache MISS: ${feedCacheKey}`);
+    } else if (pageNum === 1) {
+      console.log(`🔄 Page 1: Skipping cache for fresh videos on app open (Reels-like behavior)`);
     }
-    
+
+    // **FIX: Declare sessionShownVideoIds in parent scope to avoid ReferenceError in else block**
+    let sessionShownVideoIds = new Set();
+
     // **PERSONALIZED LRU FEED: All yog videos in a loop (unwatched first, then oldest watched)**
     if (userIdentifier) {
       console.log(
-        '🎯 Using LRU-style personalized feed for user:',
+        '🎯 Using PERSISTENT UNIQUE FEED (FeedHistory) for user:',
         userIdentifier,
         isAuthenticated ? '(authenticated)' : '(anonymous)',
       );
 
-      // 1) Determine all identities to check for watch history
-      // **IMPROVED: Better identity matching - check both userId and platformId comprehensively**
-      const userIdsToCheck = [];
-      if (userId) userIdsToCheck.push(userId);
-      if (platformId) userIdsToCheck.push(platformId);
-      if (userIdentifier && !userIdsToCheck.includes(userIdentifier)) {
-        userIdsToCheck.push(userIdentifier);
-      }
-      
-      // Remove duplicates
-      const uniqueIdsToCheck = [...new Set(userIdsToCheck)];
-      
-      console.log(
-        `🔍 WATCH HISTORY CHECK: Checking for identities:`,
-        uniqueIdsToCheck,
-        `(userId: ${userId || 'none'}, platformId: ${platformId || 'none'})`,
-      );
-
-      // 2) Build a map: videoId -> oldest lastWatchedAt (timestamp)
-      // **OPTIMIZED: Cache watch history queries to reduce DB load**
-      const historyMap = new Map(); // videoId (string) -> timestamp (number)
-      const watchedVideoSet = new Set(); // Track all watched video IDs
-      let historyEntries = [];
-      
+      // **STEP 1: Fetch User's Seen History (Persistent)**
+      // We rely on the optimized FeedHistory collection which tracks ALL impressions
+      let seenVideoIds = new Set();
       try {
-        if (uniqueIdsToCheck.length > 0) {
-          // **OPTIMIZED: Try cache first, then DB**
-          const watchHistoryCacheKey = `watch:history:${uniqueIdsToCheck.sort().join(':')}`;
-          
-          if (redisService.getConnectionStatus()) {
-            const cachedHistory = await redisService.get(watchHistoryCacheKey);
-            if (cachedHistory && Array.isArray(cachedHistory)) {
-              historyEntries = cachedHistory;
-              console.log(
-                `⚡ Watch History Cache HIT: ${historyEntries.length} entries for identities:`,
-                uniqueIdsToCheck,
-              );
-            } else {
-              // Cache miss - fetch from DB
-              historyEntries = await WatchHistory.find({
-                userId: { $in: uniqueIdsToCheck },
-          })
-            .select('videoId lastWatchedAt userId')
-            .lean();
-              
-              // Cache for 5 minutes (watch history changes infrequently)
-              await redisService.set(watchHistoryCacheKey, historyEntries, 300);
-              console.log(
-                `💾 Watch History Cache SET: ${historyEntries.length} entries (5min TTL)`,
-              );
-            }
-          } else {
-            // Redis unavailable - fetch from DB
-            historyEntries = await WatchHistory.find({
-              userId: { $in: uniqueIdsToCheck },
-            })
-              .select('videoId lastWatchedAt userId')
-              .lean();
-          }
-
-          console.log(
-            `📊 LRU FEED: Loaded ${historyEntries.length} watch history entries for identities:`,
-            uniqueIdsToCheck,
-          );
-
-          // **IMPROVED: Build comprehensive watch history map**
-          // Consider a video watched if ANY identity has watched it
-          for (const entry of historyEntries) {
-            const vid = entry.videoId?.toString();
-            if (!vid) continue;
-
-            const currentTime = new Date(entry.lastWatchedAt || 0).getTime();
-            const existingTime = historyMap.get(vid);
-
-            // Keep the oldest watch time (most conservative - ensures video stays in "watched" category)
-            if (existingTime === undefined || currentTime < existingTime) {
-              historyMap.set(vid, currentTime);
-            }
-            watchedVideoSet.add(vid);
-          }
-
-          watchedVideoIds = Array.from(watchedVideoSet).map(
-            (id) => new mongoose.Types.ObjectId(id),
-          );
-          console.log(
-            `📊 LRU FEED: Unique watched videos found: ${historyMap.size} (from ${historyEntries.length} history entries)`,
-          );
-        } else {
-          console.log(
-            '⚠️ LRU FEED: No identities to check for watch history; treating all videos as never watched.',
-          );
+        if (FeedHistory) {
+          seenVideoIds = await FeedHistory.getSeenVideoIds(userIdentifier);
+          console.log(`👁️ FEED HISTORY: User has seen ${seenVideoIds.size} unique videos`);
         }
       } catch (err) {
-        console.error(
-          `❌ LRU FEED: Error building history map: ${err.message}`,
-        );
-        // On error, treat all videos as unwatched (safer than showing watched videos)
-      }
-      
-      // **OPTIMIZED: Session-Based Pagination State - Track videos shown in current session**
-      // Uses Redis Set for O(1) lookups and better memory efficiency
-      let sessionShownVideoIds = new Set();
-      
-      try {
-        if (redisService.getConnectionStatus() && userIdentifier) {
-          // Get videos already shown in this session (using Redis Set - more efficient)
-          sessionShownVideoIds = await redisService.getSessionShownVideos(userIdentifier);
-          if (sessionShownVideoIds.size > 0) {
-            console.log(`📋 SESSION STATE: Found ${sessionShownVideoIds.size} videos already shown in current session (Redis Set)`);
-          }
-        }
-      } catch (sessionErr) {
-        console.log(`⚠️ SESSION STATE: Error checking session state (non-critical): ${sessionErr.message}`);
+        console.error('❌ Error fetching feed history:', err.message);
       }
 
-      // 3) Fetch ALL matching videos for this feed (e.g., all yog videos)
+      // **STEP 2: Fetch ALL Candidate Videos (Lean)**
+      // Fetch minimal fields for filtering and sorting
       let allVideos = [];
       try {
         allVideos = await Video.find(baseQueryFilter)
-          .select(
-            'videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded category tags keywords createdAt',
-          )
-          .populate('uploader', 'name profilePic googleId')
-          .populate('comments.user', 'name profilePic googleId')
+          .select('_id videoName uploader createdAt uploadedAt likes views shares comments videoType score finalScore')
           .lean();
 
-        // **FIX: Filter out invalid/null videos from database result**
+        // Filter out invalid videos immediately
         allVideos = (allVideos || []).filter(v => v && v._id);
-
-        console.log(
-          `📊 LRU FEED: Total videos matching base filter for user: ${allVideos.length}`,
-        );
+        console.log(`📊 TOTAL CANDIDATES: ${allVideos.length} videos available in DB`);
       } catch (err) {
-        console.error(
-          `❌ LRU FEED: Error fetching videos for personalized feed: ${err.message}`,
-        );
-        allVideos = []; // Ensure it's an array even on error
+        console.error('❌ Error fetching candidates:', err.message);
       }
 
-      // **NEW: Try session-based recommendations first (like Instagram/YouTube)**
-      // This learns from user's current session and recommends similar content using AI
-      let sessionBasedVideos = [];
-      try {
-        if (userIdentifier && pageNum === 1) {
-          // Only use session-based recommendations on first page
-          console.log('🤖 Attempting session-based AI recommendations...');
-          sessionBasedVideos = await RecommendationService.getSessionBasedRecommendations(
-            userIdentifier,
-            null, // No current video to exclude
-            limitNum * 2 // Get more candidates for diversity filtering
-          );
-          
-          if (sessionBasedVideos && sessionBasedVideos.length > 0) {
-            console.log(`✅ Session-based recommendations found: ${sessionBasedVideos.length} videos`);
-            
-            // Apply diversity ordering
-            sessionBasedVideos = RecommendationService.orderFeedWithDiversity(sessionBasedVideos, {
-              randomness: 0.15,
-              minCreatorSpacing: 2
-            });
-            
-            // Limit to requested amount
-            sessionBasedVideos = sessionBasedVideos.slice(0, limitNum);
-            
-            // Populate uploader and comments for session-based videos
-            const sessionVideoIds = sessionBasedVideos.map(v => v._id);
-            const populatedSessionVideos = await Video.find({
-              _id: { $in: sessionVideoIds }
-            })
-              .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded category tags keywords createdAt')
-              .populate('uploader', 'name profilePic googleId')
-              .populate('comments.user', 'name profilePic googleId')
-              .lean();
-            
-            // Maintain order from session-based recommendations
-            const orderedSessionVideos = sessionVideoIds.map(id => 
-              populatedSessionVideos.find(v => v._id.toString() === id.toString())
-            ).filter(Boolean);
-            
-            if (orderedSessionVideos.length > 0) {
-              console.log(`✅ Using ${orderedSessionVideos.length} session-based AI recommendations`);
-              // Use session-based videos as primary feed
-              finalVideos = orderedSessionVideos;
-              
-              // Mark these videos as shown in session
-              if (redisService.getConnectionStatus() && userIdentifier) {
-                const videoIdsToMark = orderedSessionVideos.map(v => v._id.toString());
-                await redisService.setSessionShownVideos(userIdentifier, videoIdsToMark);
-              }
-              
-              // Skip LRU feed logic and go to response
-              const feedResponse = {
-                videos: finalVideos,
-                hasMore: true, // Assume more available
-                page: pageNum,
-                limit: limitNum,
-                total: finalVideos.length,
-                isPersonalized: true,
-                isSessionBased: true // Flag to indicate AI recommendations
-              };
-              
-              // Cache for 30 seconds
-              if (redisService.getConnectionStatus() && finalVideos.length > 0) {
-                await redisService.set(feedCacheKey, feedResponse, 30);
-              }
-              
-              return res.json(feedResponse);
-            }
-          } else {
-            console.log('⚠️ Session-based recommendations returned no results, using LRU feed');
-          }
-        }
-      } catch (sessionError) {
-        console.error('❌ Error in session-based recommendations (falling back to LRU):', sessionError.message);
-        // Continue with LRU feed on error
-      }
+      // **STEP 3: Separate Fresh (Unseen) vs Seen**
+      // Filter out videos present in FeedHistory
+      let unseenVideos = allVideos.filter(v => !seenVideoIds.has(v._id.toString()));
+      console.log(`✨ FRESH CONTENT: ${unseenVideos.length} videos available for this user`);
 
-      // 4) Attach lastWatchedAt (null = never watched / highest priority)
-      // **FIX: Filter out invalid videos before mapping**
-      const videosWithHistory = allVideos
-        .filter(v => v && v._id) // Remove invalid videos
-        .map((video) => {
-          const id = video._id.toString();
-        const ts = id ? historyMap.get(id) : undefined;
-        return {
-          ...video,
-          _lastWatchedAt: ts !== undefined ? ts : null, // null => never watched
-        };
-      });
-
-      // 5) Separate unwatched and watched videos
-      // **FIX: Filter out invalid videos (null/undefined/missing _id)**
-      const unwatchedVideos = videosWithHistory.filter(v => v && v._id && v._lastWatchedAt === null);
-      const watchedVideos = videosWithHistory.filter(v => v && v._id && v._lastWatchedAt !== null);
-      
-      // **PROFESSIONAL: Time-Based Freshness + Engagement Ranking**
-      // Separate unwatched videos into: recent (7 days) and older
-      const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
-      const recentUnwatched = [];
-      const olderUnwatched = [];
-      
-      for (const video of unwatchedVideos) {
-        const uploadTime = new Date(video.createdAt || video.uploadedAt || 0).getTime();
-        if (uploadTime >= sevenDaysAgo) {
-          recentUnwatched.push(video);
-        } else {
-          olderUnwatched.push(video);
-        }
-      }
-      
-      // **ENGAGEMENT-BASED RANKING: Score videos by engagement**
+      // **STEP 4: Sort Fresh Videos (Engagement + Shuffle)**
       const calculateEngagementScore = (video) => {
         const likes = video.likes || 0;
         const views = video.views || 0;
         const shares = video.shares || 0;
         const comments = (video.comments?.length || 0);
-        
-        // Weighted engagement score (likes are most valuable)
-        const score = (likes * 2) + views + (shares * 1.5) + (comments * 1.2);
-        return score;
+        return (likes * 2) + views + (shares * 1.5) + (comments * 1.2);
       };
-      
-      // Sort recent unwatched by engagement (high to low)
-      recentUnwatched.sort((a, b) => {
-        const scoreA = calculateEngagementScore(a);
-        const scoreB = calculateEngagementScore(b);
-        return scoreB - scoreA; // Descending
-      });
-      
-      // Sort older unwatched by engagement (high to low)
-      olderUnwatched.sort((a, b) => {
-        const scoreA = calculateEngagementScore(a);
-        const scoreB = calculateEngagementScore(b);
-        return scoreB - scoreA; // Descending
-      });
-      
-      // **SESSION-BASED SHUFFLE: Use session-based seed for fresh order per session**
-      // Each new session gets a fresh seed, but same session maintains consistent order
-      // This gives fresh videos on app reopen while maintaining pagination consistency
-      let seed = 0;
-      const sessionSeedKey = `session:seed:${userIdentifier}:${videoType || 'all'}`;
-      
-      try {
-        if (redisService.getConnectionStatus() && userIdentifier) {
-          // Try to get existing session seed from Redis
-          const cachedSeed = await redisService.get(sessionSeedKey);
-          if (cachedSeed !== null && typeof cachedSeed === 'number') {
-            seed = cachedSeed;
-            console.log(`🎲 SESSION SEED: Using cached seed for session (seed: ${seed})`);
-          } else {
-            // New session - generate fresh seed based on timestamp
-            const timestamp = Date.now();
-            const seedString = `${userIdentifier}_${videoType || 'all'}_${timestamp}`;
-            for (let i = 0; i < seedString.length; i++) {
-              seed = ((seed << 5) - seed) + seedString.charCodeAt(i);
-              seed = seed & seed; // Convert to 32-bit integer
+
+      // Sort by engagement score descending
+      unseenVideos.sort((a, b) => calculateEngagementScore(b) - calculateEngagementScore(a));
+
+      // **Shuffle Top Tier for Variety**
+      // To prevent the feed from being static (always same top videos), we shuffle the top 50%
+      // We use a fresh seed every time to mimic "Reels" behavior (different order on open)
+      const shuffleArray = (array) => {
+        for (let i = array.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+      };
+
+      if (unseenVideos.length > 0) {
+        const topTierCount = Math.floor(unseenVideos.length * 0.5);
+        const topTier = shuffleArray(unseenVideos.slice(0, topTierCount));
+        const bottomTier = shuffleArray(unseenVideos.slice(topTierCount)); // Shuffle bottom too for variety
+        unseenVideos = [...topTier, ...bottomTier];
+      }
+
+      // **STEP 5: Check if we have enough Fresh Content**
+      let sortedFeed = [...unseenVideos];
+
+      // Calculate how many videos we need to satisfy this request (considering pagination)
+      const requiredCount = pageNum * limitNum;
+
+      // **LRU FALLBACK TRIGGER**
+      if (sortedFeed.length < requiredCount) {
+        console.log(`⚠️ FRESH CONTENT EXHAUSTED: Have ${sortedFeed.length}, need ${requiredCount}. Activating LRU fallback...`);
+
+        const needed = requiredCount - sortedFeed.length + 20; // Fetch extra buffer
+        const excludeIds = sortedFeed.map(v => v._id); // Don't fetch what we already have
+
+        try {
+          // Fetch oldest seen videos from FeedHistory
+          const lruVideoIds = await FeedHistory.getLRUVideos(userIdentifier, needed, excludeIds);
+
+          if (lruVideoIds.length > 0) {
+            console.log(`↺ LRU FALLBACK: Creating map for ${lruVideoIds.length} recycled videos...`);
+
+            // Map IDs to video objects (using the allVideos cache we already fetched)
+            const videoMap = new Map();
+            allVideos.forEach(v => videoMap.set(v._id.toString(), v));
+
+            const lruVideos = [];
+            const missingIds = [];
+
+            for (const id of lruVideoIds) {
+              const v = videoMap.get(id.toString());
+              if (v) lruVideos.push(v);
+              else missingIds.push(id);
             }
-            // Cache seed for this session (24h TTL - same as session state)
-            await redisService.set(sessionSeedKey, seed, 86400);
-            console.log(`🎲 SESSION SEED: Generated new seed for session (seed: ${seed}, TTL: 24h)`);
+
+            // If videos are missing from allVideos (maybe deleted or baseQueryFilter excluded them), fetch them
+            if (missingIds.length > 0) {
+              console.log(`🔎 Fetching ${missingIds.length} missing LRU videos from DB...`);
+              const fetchedMissing = await Video.find({ _id: { $in: missingIds } }).lean();
+              lruVideos.push(...fetchedMissing);
+            }
+
+            console.log(`✅ LRU FALLBACK: Added ${lruVideos.length} videos to feed`);
+            sortedFeed = [...sortedFeed, ...lruVideos];
           }
-        } else {
-          // Redis unavailable or no userIdentifier - generate seed from timestamp
-          const timestamp = Date.now();
-          const seedString = `${userIdentifier || 'anonymous'}_${videoType || 'all'}_${timestamp}`;
-          for (let i = 0; i < seedString.length; i++) {
-            seed = ((seed << 5) - seed) + seedString.charCodeAt(i);
-            seed = seed & seed; // Convert to 32-bit integer
-          }
-          console.log(`🎲 SESSION SEED: Generated seed without Redis (seed: ${seed})`);
-        }
-      } catch (seedError) {
-        // Fallback: generate seed from timestamp if Redis fails
-        console.log(`⚠️ SESSION SEED: Error getting session seed, using fallback: ${seedError.message}`);
-        const timestamp = Date.now();
-        const seedString = `${userIdentifier || 'anonymous'}_${videoType || 'all'}_${timestamp}`;
-        for (let i = 0; i < seedString.length; i++) {
-          seed = ((seed << 5) - seed) + seedString.charCodeAt(i);
-          seed = seed & seed; // Convert to 32-bit integer
+        } catch (lruErr) {
+          console.error('❌ LRU Fallback failed:', lruErr.message);
         }
       }
-      
-      // **DETERMINISTIC SHUFFLE: Seeded shuffle for consistent order per session**
-      const seededShuffle = (array, seedValue) => {
-        // **FIX: Filter out invalid entries before shuffling**
-        const validArray = array.filter(v => v && v._id);
-        const shuffled = [...validArray];
-        // Simple seeded random function
-        let rng = seedValue;
-        const random = () => {
-          rng = (rng * 9301 + 49297) % 233280;
-          return rng / 233280;
-        };
-        
-        for (let i = shuffled.length - 1; i > 0; i--) {
-          const j = Math.floor(random() * (i + 1));
-          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-        }
-        return shuffled;
-      };
-      
-      // Shuffle within engagement-ranked groups (maintains ranking but adds variety)
-      const shuffledRecent = seededShuffle(recentUnwatched, seed);
-      const shuffledOlder = seededShuffle(olderUnwatched, seed + 1); // Different seed for older
-      
-      // Combine: Recent high-engagement first, then older high-engagement, then shuffle mix
-      // Mix recent and older in 70/30 ratio for freshness
-      const mixedUnwatched = [];
-      const recentCount = Math.min(shuffledRecent.length, Math.ceil(shuffledRecent.length * 0.7));
-      const olderCount = Math.min(shuffledOlder.length, shuffledRecent.length - recentCount);
-      
-      // Add top recent videos first
-      for (let i = 0; i < recentCount && i < shuffledRecent.length; i++) {
-        mixedUnwatched.push(shuffledRecent[i]);
-      }
-      
-      // Interleave older high-engagement videos
-      for (let i = 0; i < olderCount && i < shuffledOlder.length; i++) {
-        mixedUnwatched.push(shuffledOlder[i]);
-      }
-      
-      // Add remaining videos (shuffled)
-      const remainingRecent = shuffledRecent.slice(recentCount);
-      const remainingOlder = shuffledOlder.slice(olderCount);
-      const allRemaining = [...remainingRecent, ...remainingOlder];
-      const shuffledRemaining = seededShuffle(allRemaining, seed + 2);
-      mixedUnwatched.push(...shuffledRemaining);
-      
-      // Sort watched videos by oldest watch time first (least recently watched)
-      watchedVideos.sort((a, b) => a._lastWatchedAt - b._lastWatchedAt);
-      
-      // Combine: Fresh unwatched first (recent + engagement-ranked), then older unwatched, then watched (oldest first)
-      // **FIX: Filter out any undefined/null videos before processing**
-      const sortedVideos = [...mixedUnwatched, ...watchedVideos].filter(v => v && v._id);
-      
-      // **SESSION STATE FILTER: Exclude videos already shown in current session**
-      // This prevents same videos from appearing again until session ends (24h)
-      const videosExcludingSession = sortedVideos.filter(video => {
-        if (!video || !video._id) return false; // Skip invalid videos
-        const videoId = video._id.toString();
-        return !sessionShownVideoIds.has(videoId);
-      });
-      
-      console.log(`📋 SESSION FILTER: ${sortedVideos.length} videos → ${videosExcludingSession.length} after excluding ${sessionShownVideoIds.size} session-shown videos`);
-      
-      // **CREATOR DIVERSITY: Apply creator diversity filter before pagination**
-      // This ensures variety in each page - max 3 videos per creator per page
+
+      // **STEP 6: Creator Diversity Filter**
+      // Ensure no more than 3 videos from same creator per batch, and NO duplicates
       const uniqueCreatorVideos = [];
-      const creatorCounts = new Map(); // Track how many videos per creator
-      const seenVideoIds = new Set(); // Track duplicates
+      const creatorCounts = new Map();
+      const finalSeenIds = new Set();
       const maxPerCreator = 3;
-      
-      for (const video of videosExcludingSession) {
-        // **FIX: Skip invalid videos**
-        if (!video || !video._id) {
-          continue;
-        }
-        
+
+      for (const video of sortedFeed) {
+        if (!video || !video._id) continue;
+
         const videoId = video._id.toString();
-        const creatorId = video.uploader?._id?.toString() || video.uploader?.toString() || null;
-        
-        // Skip duplicates
-        if (seenVideoIds.has(videoId)) {
-          continue;
-        }
-        
-        if (creatorId) {
-          const currentCount = creatorCounts.get(creatorId) || 0;
-          if (currentCount < maxPerCreator) {
-            creatorCounts.set(creatorId, currentCount + 1);
-            seenVideoIds.add(videoId);
-            uniqueCreatorVideos.push(video);
-          }
-        } else if (!creatorId && !seenVideoIds.has(videoId)) {
-          seenVideoIds.add(videoId);
+        // Skip duplicates (shouldn't happen with our logic, but safety first)
+        if (finalSeenIds.has(videoId)) continue;
+
+        const creatorId = video.uploader?._id?.toString() || video.uploader?.toString() || 'unknown';
+        const currentCount = creatorCounts.get(creatorId) || 0;
+
+        if (currentCount < maxPerCreator) {
           uniqueCreatorVideos.push(video);
+          finalSeenIds.add(videoId);
+          creatorCounts.set(creatorId, currentCount + 1);
         }
       }
-      
-      // 6) Pagination over the filtered and sorted list
+
+      // **STEP 7: Pagination**
       const skip = (pageNum - 1) * limitNum;
-      const totalVideosForUser = uniqueCreatorVideos.length;
-      const pagedVideos = uniqueCreatorVideos.slice(skip, skip + limitNum);
-      const hasMore = skip + pagedVideos.length < totalVideosForUser;
+      let pagedVideos = uniqueCreatorVideos.slice(skip, skip + limitNum);
+      const hasMore = (skip + limitNum) < uniqueCreatorVideos.length;
 
-      // **FINAL DUPLICATE CHECK: Ensure no duplicate video IDs in response**
-      const finalVideoIds = new Set();
-      const duplicatesRemoved = [];
-      const finalDeduplicatedVideos = [];
-      for (const video of pagedVideos) {
-        // **FIX: Skip invalid videos**
-        if (!video || !video._id) {
-          continue;
-        }
-        const videoId = video._id.toString();
-        if (!videoId) continue;
-        if (finalVideoIds.has(videoId)) {
-          duplicatesRemoved.push(videoId);
-          continue;
-        }
-        finalVideoIds.add(videoId);
-        finalDeduplicatedVideos.push(video);
-      }
-      if (duplicatesRemoved.length > 0) {
-        console.log(`⚠️ WARNING: Found ${duplicatesRemoved.length} duplicate video IDs in final response, removed them:`, duplicatesRemoved);
-      }
-      
-      // **OPTIMIZED: UPDATE SESSION STATE: Mark returned videos as shown in session (using Redis Set)**
-      try {
-        if (redisService.getConnectionStatus() && userIdentifier && finalDeduplicatedVideos.length > 0) {
-          // Add new video IDs to session shown set (using Redis Set - more efficient)
-          const newShownIds = finalDeduplicatedVideos.map(v => v._id?.toString()).filter(Boolean);
-          await redisService.addToSessionShownVideos(userIdentifier, newShownIds);
-          console.log(`📋 SESSION STATE: Added ${newShownIds.length} new videos to session shown set (Redis Set)`);
-        }
-      } catch (sessionErr) {
-        console.log(`⚠️ SESSION STATE: Error updating session state (non-critical): ${sessionErr.message}`);
-      }
-      
-      console.log('📊 FINAL FEED SUMMARY (PROFESSIONAL RECOMMENDATION):');
-      console.log(`   - Page: ${pageNum}, Limit: ${limitNum}`);
-      console.log(`   - Recent unwatched (7 days): ${recentUnwatched.length}`);
-      console.log(`   - Older unwatched: ${olderUnwatched.length}`);
-      console.log(`   - Total unwatched: ${unwatchedVideos.length} (engagement-ranked + freshness-prioritized)`);
-      console.log(`   - Watched videos: ${watchedVideos.length} (LRU sorted)`);
-      console.log(`   - Session-shown excluded: ${sessionShownVideoIds.size}`);
-      console.log(`   - After creator diversity filter: ${uniqueCreatorVideos.length} videos`);
-      console.log(`   - Unique creators in feed: ${creatorCounts.size}`);
-      console.log(`   - Videos after duplicate check: ${finalDeduplicatedVideos.length}`);
-      console.log(`   - Total available (for user): ${totalVideosForUser}`);
-      console.log(`   - hasMore: ${hasMore}`);
-      console.log(`   - Shuffle seed: ${seed} (deterministic per user per day)`);
+      console.log(`📦 PAGINATION: Page ${pageNum}, delivering ${pagedVideos.length} videos (Has more: ${hasMore})`);
 
-      // **FIXED: Use deduplicated videos instead of overwriting**
-      finalVideos = finalDeduplicatedVideos;
-      
+      // **STEP 8: Final Population & Recording**
+      if (pagedVideos.length > 0) {
+        const finalIds = pagedVideos.map(v => v._id);
+
+        // Populate details
+        const populatedData = await Video.find({ _id: { $in: finalIds } })
+          .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded category tags keywords createdAt')
+          .populate('uploader', 'name profilePic googleId')
+          .populate('comments.user', 'name profilePic googleId')
+          .lean();
+
+        // Merge details
+        pagedVideos = pagedVideos.map(v => {
+          const populated = populatedData.find(p => p._id.toString() === v._id.toString());
+          return populated || v;
+        });
+
+        // **CRITICAL: Async Record "Seen" Status in Background**
+        // This ensures these videos won't show again until LRU fallback
+        // We fire and forget this promise to not block response
+        FeedHistory.markAsSeen(userIdentifier, finalIds).catch(err =>
+          console.error('❌ Failed to record feed history:', err.message)
+        );
+      }
+
+      finalVideos = pagedVideos;
+
     } else {
-      // Regular feed (no user identifier) - simple sorted by date
+      // Regular feed (no user identifier) - simple randomized feed
       console.log('📹 Using regular feed (no user identifier)');
-      
-      const skip = (pageNum - 1) * limitNum;
-      
-      // Fetch more videos to account for creator diversity filter
-      // We'll filter to 1 per creator, so fetch 2x to ensure we have enough
-      const fetchLimit = limitNum * 2;
-      
-      let regularVideos = await Video.find(baseQueryFilter)
-        .select('videoName videoUrl thumbnailUrl likes views shares uploader uploadedAt likedBy videoType aspectRatio duration comments link description hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded category tags keywords createdAt')
-        .populate('uploader', 'name profilePic googleId')
-        .populate('comments.user', 'name profilePic googleId')
-        .sort({ createdAt: -1 }) // Simple: newest first
-        .skip(skip)
-        .limit(fetchLimit)
-        .lean();
-      
+
+      // **OPTIMIZED: USE AGGREGATION PIPELINE FOR PERFORMANCE AND RANDOMIZATION**
+      // Fetch random sample directly from DB (100 candidates)
+
+      // Convert session shown IDs to ObjectIds for exclusion
+      const excludeIds = Array.from(sessionShownVideoIds).map(id => {
+        try {
+          return new mongoose.Types.ObjectId(id);
+        } catch (e) {
+          return null;
+        }
+      }).filter(Boolean);
+
+      const pipeline = [
+        // 1. Match base filter
+        { $match: baseQueryFilter },
+
+        // 2. Exclude videos already shown in session
+        { $match: { _id: { $nin: excludeIds } } },
+
+        // 3. Random sample of 100 candidates (efficient random selection)
+        { $sample: { size: 100 } },
+
+        // 4. Lookup uploader details
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'uploader',
+            foreignField: '_id',
+            as: 'uploader'
+          }
+        },
+
+        // 5. Unwind uploader array (lookup returns array)
+        { $unwind: { path: '$uploader', preserveNullAndEmptyArrays: true } },
+
+        // 6. Lookup comments user details (limited to top 5 comments for performance)
+        // Note: Full comment population is expensive, so we might skip deep population here
+        // or just rely on the frontend fetching comments separately if needed.
+        // For feed, we usually just need comment count, which is already in video object array.
+      ];
+
+      let regularVideos = await Video.aggregate(pipeline);
+
+      console.log(`📊 Random sample fetched: ${regularVideos.length} videos`);
+
       // **DIVERSITY: Allow max 3 videos per creator per page + no duplicate videos**
       const uniqueCreatorRegularVideos = [];
       const regularCreatorCounts = new Map(); // Track how many videos per creator
       const seenRegularVideoIds = new Set();
-      const regularMaxPerCreator = 3; // Same as personalized feed
-      
+      const regularMaxPerCreator = 3;
+
       for (const video of regularVideos) {
         if (uniqueCreatorRegularVideos.length >= limitNum) break;
-        
+
         const videoId = video._id?.toString();
         const creatorId = video.uploader?._id?.toString() || video.uploader?.toString() || null;
-        
+
         // Skip duplicates
         if (seenRegularVideoIds.has(videoId)) {
-          console.log(`🚫 Regular feed: Skipping duplicate video: ${videoId}`);
           continue;
         }
-        
+
         if (creatorId) {
           const currentCount = regularCreatorCounts.get(creatorId) || 0;
           if (currentCount < regularMaxPerCreator) {
             regularCreatorCounts.set(creatorId, currentCount + 1);
             seenRegularVideoIds.add(videoId);
             uniqueCreatorRegularVideos.push(video);
-          } else {
-            // Creator already has max videos - skip
-            console.log(`🚫 Regular feed: Skipping video from creator with max videos (${regularMaxPerCreator}): ${creatorId}`);
           }
         } else if (!creatorId && !seenRegularVideoIds.has(videoId)) {
           seenRegularVideoIds.add(videoId);
           uniqueCreatorRegularVideos.push(video);
         }
       }
-      
-      finalVideos = uniqueCreatorRegularVideos.slice(0, limitNum);
+
+      // Use the filtered list
+      finalVideos = uniqueCreatorRegularVideos;
+
+      // Update session shown videos for regular feed
+      try {
+        if (redisService.getConnectionStatus() && userIdentifier && finalVideos.length > 0) {
+          const newShownIds = finalVideos.map(v => v._id?.toString()).filter(Boolean);
+          await redisService.addToSessionShownVideos(userIdentifier, newShownIds);
+        }
+      } catch (e) { }
+
+      // Calculate hasMore - if we got full page, assume more might exist
+      const hasMore = regularVideos.length >= limitNum;
+
+      console.log(`📊 REGULAR FEED SUMMARY (OPTIMIZED):`);
+      console.log(`   - Sampled: ${regularVideos.length}`);
+      console.log(`   - After diversity filter: ${finalVideos.length}`);
+      console.log(`   - hasMore: ${hasMore}`);
       console.log(`✅ Found ${finalVideos.length} videos for regular feed (${regularCreatorCounts.size} unique creators, max ${regularMaxPerCreator} per creator, no duplicates)`);
     }
-    
+
     // **DEBUG: Log final feed stats with watch history info**
     console.log(`═══════════════════════════════════════════════════════════`);
     console.log(`📊 FINAL FEED SUMMARY:`);
@@ -1634,13 +1406,13 @@ router.get('/', async (req, res) => {
       console.log(`   - Watched videos excluded: ${watchedVideoIds?.length || 0}`);
     }
     console.log(`═══════════════════════════════════════════════════════════`);
-    
+
     // **FIXED: Calculate hasMore more accurately**
     // hasMore should be true if we got the requested limit OR if there might be more videos
     // Since creator diversity filter might reduce count, we check if we got full limit
     // For personalized feed, also check if there are more unwatched videos available
     let hasMore = finalVideos.length === limitNum;
-    
+
     // If we got less than limit, try to check if more videos exist
     if (finalVideos.length < limitNum && userIdentifier) {
       // Check if there are more unwatched videos beyond what we fetched
@@ -1653,7 +1425,7 @@ router.get('/', async (req, res) => {
             ...(watchedVideoIds.length > 0 && { _id: { $nin: watchedVideoIds } })
           };
           const totalUnwatched = await Video.countDocuments(unwatchedQuery);
-          
+
           // **FIXED: If showing fallback (oldest watched videos), check watch history count instead**
           // When totalUnwatched is 0, we're showing fallback videos, so check if more watched videos exist
           if (totalUnwatched === 0 && watchedVideoIds.length > 0) {
@@ -1680,7 +1452,7 @@ router.get('/', async (req, res) => {
         console.log(`⚠️ Error calculating hasMore: ${err.message}`);
       }
     }
-    
+
     // **IMPROVED: Calculate accurate total for pagination**
     let totalCount = finalVideos.length;
     if (userIdentifier) {
@@ -1706,7 +1478,7 @@ router.get('/', async (req, res) => {
         totalCount = finalVideos.length;
       }
     }
-    
+
     // **OPTIMIZED: Cache feed response before sending (short TTL for freshness)**
     const feedResponse = {
       videos: finalVideos,
@@ -1716,15 +1488,19 @@ router.get('/', async (req, res) => {
       total: totalCount,
       isPersonalized: !!userIdentifier
     };
-    
-    // Cache for 30 seconds (short TTL ensures freshness while reducing DB load)
-    if (redisService.getConnectionStatus() && finalVideos.length > 0) {
+
+    // **FIX: Don't cache page 1 feed response - always show fresh videos on app open**
+    // Cache only page 2+ for scrolling performance (user is scrolling, not reopening app)
+    if (redisService.getConnectionStatus() && finalVideos.length > 0 && pageNum > 1) {
+      // Only cache page 2+ (user is scrolling, not reopening app)
       await redisService.set(feedCacheKey, feedResponse, 30);
-      console.log(`💾 Feed Cache SET: ${feedCacheKey} (30s TTL)`);
+      console.log(`💾 Feed Cache SET: ${feedCacheKey} (30s TTL, page ${pageNum})`);
+    } else if (pageNum === 1) {
+      console.log(`🔄 Page 1: Not caching - fresh videos on every app open (Reels-like behavior)`);
     }
-    
+
     res.json(feedResponse);
-    
+
   } catch (error) {
     console.error('❌ Error fetching videos:', error);
     res.status(500).json({
@@ -1751,16 +1527,16 @@ router.get('/:id', verifyToken, async (req, res) => {
 
     // Transform video data to match frontend expectations
     const videoObj = video.toObject();
-    
+
     // **FIX: Normalize video URLs to fix Windows path separator issues**
     const normalizeUrl = (url) => {
       if (!url) return url;
       return url.replace(/\\/g, '/');
     };
-    
+
     // **FIX: Convert likedBy ObjectIds to googleIds**
     const likedByGoogleIds = await convertLikedByToGoogleIds(videoObj.likedBy || []);
-    
+
     const transformedVideo = {
       _id: videoObj._id?.toString(),
       videoName: videoObj.videoName,
@@ -1835,16 +1611,16 @@ router.get('/:id', verifyToken, async (req, res) => {
 
     // Transform video data to match frontend expectations
     const videoObj = video.toObject();
-    
+
     // **FIX: Normalize video URLs to fix Windows path separator issues**
     const normalizeUrl = (url) => {
       if (!url) return url;
       return url.replace(/\\/g, '/');
     };
-    
+
     // **FIX: Convert likedBy ObjectIds to googleIds**
     const likedByGoogleIds = await convertLikedByToGoogleIds(videoObj.likedBy || []);
-    
+
     const transformedVideo = {
       _id: videoObj._id?.toString(),
       videoName: videoObj.videoName || 'Untitled Video',
@@ -1855,7 +1631,7 @@ router.get('/:id', verifyToken, async (req, res) => {
       views: parseInt(videoObj.views) || 0,
       shares: parseInt(videoObj.shares) || 0,
       duration: parseInt(videoObj.duration) || 0,
-      aspectRatio: parseFloat(videoObj.aspectRatio) || 9/16,
+      aspectRatio: parseFloat(videoObj.aspectRatio) || 9 / 16,
       videoType: videoObj.videoType || 'yog',
       link: videoObj.link || null,
       uploadedAt: videoObj.uploadedAt?.toISOString?.() || new Date().toISOString(),
@@ -1903,9 +1679,9 @@ router.get('/:id', verifyToken, async (req, res) => {
     res.json(transformedVideo);
   } catch (error) {
     console.error('❌ Error getting video by ID:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to get video',
-      details: error.message 
+      details: error.message
     });
   }
 });
@@ -1918,10 +1694,10 @@ router.post('/:id/watch', async (req, res) => {
     // Try to get userId from token (authenticated users)
     let userId = null;
     let isAuthenticated = false;
-    
+
     // **BACKEND-FIRST: Get deviceId first (always available for fallback)**
     const deviceId = req.body.deviceId || req.headers['x-device-id'];
-    
+
     try {
       const token = req.headers.authorization?.split(' ')[1];
       if (token) {
@@ -1962,11 +1738,11 @@ router.post('/:id/watch', async (req, res) => {
       // Error getting token - will use deviceId (this is OK, not an error)
       console.log(`ℹ️ Watch tracking: Error processing token (non-critical), using deviceId fallback (deviceId: ${deviceId ? 'present' : 'missing'})`);
     }
-    
+
     // **SIMPLE IDENTITY RULE: Use googleId (userId) when logged in, deviceId for anonymous**
     // This matches the feed logic - same identity used for tracking and filtering
     const identityId = userId || deviceId;
-    
+
     const videoId = req.params.id;
     const { duration = 0, completed = false } = req.body;
 
@@ -1978,14 +1754,14 @@ router.post('/:id/watch', async (req, res) => {
       return res.status(400).json({ error: 'Invalid video ID' });
     }
 
-    console.log('📊 Tracking video watch:', { 
-      identityId, 
+    console.log('📊 Tracking video watch:', {
+      identityId,
       userId: userId || 'none',
       deviceId: deviceId || 'none',
       isAuthenticated: isAuthenticated ? 'authenticated (googleId)' : 'anonymous (deviceId)',
-      videoId, 
-      duration, 
-      completed 
+      videoId,
+      duration,
+      completed
     });
 
     // **SIMPLE TRACKING: Use single identity (googleId when logged in, deviceId when anonymous)**
@@ -1995,7 +1771,13 @@ router.post('/:id/watch', async (req, res) => {
       completed,
       isAuthenticated
     });
-    
+
+    // **REDIS OPTIMIZATION: Also track in Redis for ultra-fast batch filtering**
+    if (redisService.getConnectionStatus()) {
+      await redisService.addToLongTermWatchHistory(identityId, [videoId.toString()]);
+      console.log(`🚀 Watch history synced to Redis for ${identityId}`);
+    }
+
     console.log(`✅ Watch tracked successfully for ${isAuthenticated ? 'authenticated (googleId)' : 'anonymous (deviceId)'} user`);
 
     // Update video view count
@@ -2009,16 +1791,16 @@ router.post('/:id/watch', async (req, res) => {
       const watchHistoryPattern = `watch:history:${identityId}*`;
       await redisService.clearPattern(watchHistoryPattern);
       console.log(`🧹 Cleared watch history cache for: ${identityId}`);
-      
+
       // Clear feed cache (user will see updated feed after watching)
       const feedCachePattern = `feed:${identityId}:*`;
       await redisService.clearPattern(feedCachePattern);
       console.log(`🧹 Cleared feed cache for: ${identityId}`);
-      
+
       // Clear unwatched IDs cache (for backward compatibility)
       const unwatchedCachePattern = `videos:unwatched:ids:${identityId}:*`;
       await redisService.clearPattern(unwatchedCachePattern);
-      
+
       // Clear old feed cache pattern (for backward compatibility)
       const oldFeedCachePattern = `videos:feed:user:${identityId}:*`;
       await redisService.clearPattern(oldFeedCachePattern);
@@ -2051,19 +1833,28 @@ router.post('/sync-watch-history', verifyToken, async (req, res) => {
   try {
     const googleId = req.user.googleId;
     const { deviceId } = req.body;
-    
+
+    // **REDIS OPTIMIZATION: Also sync Redis watch sets**
+    if (redisService.getConnectionStatus() && deviceId) {
+      const deviceHistory = await redisService.getLongTermWatchHistory(deviceId);
+      if (deviceHistory.size > 0) {
+        await redisService.addToLongTermWatchHistory(googleId, Array.from(deviceHistory));
+        console.log(`🚀 Redis Sync: ${deviceHistory.size} videos synced from ${deviceId} to ${googleId}`);
+      }
+    }
+
     if (!deviceId) {
       return res.status(400).json({ error: 'deviceId is required' });
     }
-    
+
     console.log('🔄 Syncing watch history:', { googleId, deviceId });
-    
+
     // Get watch history for both identifiers
     const watchedByUserId = await WatchHistory.getUserWatchedVideoIds(googleId, null);
     const watchedByDeviceId = await WatchHistory.getUserWatchedVideoIds(deviceId, null);
-    
+
     console.log(`📊 Watch history before sync: ${watchedByUserId.length} (userId) + ${watchedByDeviceId.length} (deviceId)`);
-    
+
     // Merge: Copy all deviceId watch history to userId
     // This ensures authenticated user gets all their anonymous watch history
     let syncedCount = 0;
@@ -2074,14 +1865,14 @@ router.post('/sync-watch-history', verifyToken, async (req, res) => {
           userId: googleId,
           videoId: videoId
         });
-        
+
         if (!exists) {
           // Copy watch history entry from deviceId to userId
           const deviceEntry = await WatchHistory.findOne({
             userId: deviceId,
             videoId: videoId
           });
-          
+
           if (deviceEntry) {
             await WatchHistory.create({
               userId: googleId,
@@ -2101,7 +1892,7 @@ router.post('/sync-watch-history', verifyToken, async (req, res) => {
         // Continue with other videos
       }
     }
-    
+
     // Also sync in reverse: Copy userId watch history to deviceId (for consistency)
     let reverseSyncedCount = 0;
     for (const videoId of watchedByUserId) {
@@ -2110,13 +1901,13 @@ router.post('/sync-watch-history', verifyToken, async (req, res) => {
           userId: deviceId,
           videoId: videoId
         });
-        
+
         if (!exists) {
           const userEntry = await WatchHistory.findOne({
             userId: googleId,
             videoId: videoId
           });
-          
+
           if (userEntry) {
             await WatchHistory.create({
               userId: deviceId,
@@ -2135,21 +1926,21 @@ router.post('/sync-watch-history', verifyToken, async (req, res) => {
         console.error(`⚠️ Error reverse syncing video ${videoId}:`, error.message);
       }
     }
-    
+
     // Get final counts
     const finalWatchedByUserId = await WatchHistory.getUserWatchedVideoIds(googleId, null);
     const finalWatchedByDeviceId = await WatchHistory.getUserWatchedVideoIds(deviceId, null);
-    
+
     console.log(`✅ Watch history sync complete: ${syncedCount} videos synced to userId, ${reverseSyncedCount} to deviceId`);
     console.log(`📊 Watch history after sync: ${finalWatchedByUserId.length} (userId) + ${finalWatchedByDeviceId.length} (deviceId)`);
-    
+
     // Clear cache for both identifiers
     if (redisService.getConnectionStatus()) {
       await redisService.clearPattern(`videos:unwatched:ids:${googleId}:*`);
       await redisService.clearPattern(`videos:unwatched:ids:${deviceId}:*`);
       console.log('🧹 Cleared cache for both identifiers');
     }
-    
+
     res.json({
       success: true,
       message: 'Watch history synced successfully',
@@ -2186,16 +1977,16 @@ router.get('/:id', verifyToken, async (req, res) => {
 
     // Transform video data to match frontend expectations
     const videoObj = video.toObject();
-    
+
     // **FIX: Normalize video URLs to fix Windows path separator issues**
     const normalizeUrl = (url) => {
       if (!url) return url;
       return url.replace(/\\/g, '/');
     };
-    
+
     // **FIX: Convert likedBy ObjectIds to googleIds**
     const likedByGoogleIds = await convertLikedByToGoogleIds(videoObj.likedBy || []);
-    
+
     const transformedVideo = {
       _id: videoObj._id?.toString(),
       videoName: videoObj.videoName || 'Untitled Video',
@@ -2206,7 +1997,7 @@ router.get('/:id', verifyToken, async (req, res) => {
       views: parseInt(videoObj.views) || 0,
       shares: parseInt(videoObj.shares) || 0,
       duration: parseInt(videoObj.duration) || 0,
-      aspectRatio: parseFloat(videoObj.aspectRatio) || 9/16,
+      aspectRatio: parseFloat(videoObj.aspectRatio) || 9 / 16,
       videoType: videoObj.videoType || 'yog',
       link: videoObj.link || null,
       uploadedAt: videoObj.uploadedAt?.toISOString?.() || new Date().toISOString(),
@@ -2254,9 +2045,9 @@ router.get('/:id', verifyToken, async (req, res) => {
     res.json(transformedVideo);
   } catch (error) {
     console.error('❌ Error getting video by ID:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to get video',
-      details: error.message 
+      details: error.message
     });
   }
 });
@@ -2302,7 +2093,7 @@ router.post('/:id/like', verifyToken, async (req, res) => {
     const likedByStrings = (video.likedBy || []).map(id => id?.toString?.() || String(id));
     const userLikedIndex = likedByStrings.indexOf(userObjectId.toString());
     let wasLiked = false;
-    
+
     // **CRITICAL FIX: Use atomic MongoDB operations to update BOTH likedBy AND likes count simultaneously**
     // This prevents race conditions and ensures data consistency
     let updatedVideo;
@@ -2310,7 +2101,7 @@ router.post('/:id/like', verifyToken, async (req, res) => {
       // User has already liked - remove the like (atomic $pull + $inc operations)
       updatedVideo = await Video.findByIdAndUpdate(
         videoId,
-        { 
+        {
           $pull: { likedBy: userObjectId },
           $inc: { likes: -1 } // Atomically decrement likes count
         },
@@ -2322,7 +2113,7 @@ router.post('/:id/like', verifyToken, async (req, res) => {
       // User hasn't liked - add the like (atomic $push + $inc operations)
       updatedVideo = await Video.findByIdAndUpdate(
         videoId,
-        { 
+        {
           $push: { likedBy: userObjectId },
           $inc: { likes: 1 } // Atomically increment likes count
         },
@@ -2387,17 +2178,17 @@ router.post('/:id/like', verifyToken, async (req, res) => {
 
     // Transform comments to match Flutter app expectations
     const videoObj = updatedVideo.toObject();
-    
+
     // **FIX: Convert likedBy ObjectIds to googleIds**
     const likedByGoogleIds = await convertLikedByToGoogleIds(videoObj.likedBy || []);
-    
+
     // **CRITICAL: Ensure likes count matches likedBy length before sending response**
     const finalLikesCount = Math.max(0, likedByGoogleIds.length);
     const finalLikes = Math.max(0, parseInt(videoObj.likes) || 0);
-    
+
     // Use the actual likedBy length as the source of truth for likes count
     const correctLikesCount = finalLikesCount;
-    
+
     console.log('🔍 Like API: Final response data', {
       likes: correctLikesCount,
       likedByLength: likedByGoogleIds.length,
@@ -2426,7 +2217,7 @@ router.post('/:id/like', verifyToken, async (req, res) => {
       uploadedAt: videoObj.uploadedAt?.toISOString?.() || new Date().toISOString(),
       likedBy: likedByGoogleIds, // **FIXED: Use googleIds instead of ObjectIds**
       videoType: videoObj.videoType || 'reel',
-      aspectRatio: parseFloat(videoObj.aspectRatio) || 9/16,
+      aspectRatio: parseFloat(videoObj.aspectRatio) || 9 / 16,
       duration: parseInt(videoObj.duration) || 0,
       comments: await Promise.all((videoObj.comments || []).map(async (comment) => {
         // **FIX: Convert comment likedBy ObjectIds to googleIds**
@@ -2453,13 +2244,13 @@ router.post('/:id/like', verifyToken, async (req, res) => {
     };
 
     res.json(transformedVideo);
-    
+
     console.log('✅ Like API: Successfully toggled like, returning video');
-    
+
   } catch (err) {
     console.error('❌ Like API Error:', err);
-    res.status(500).json({ 
-      error: 'Failed to toggle like', 
+    res.status(500).json({
+      error: 'Failed to toggle like',
       details: err.message,
       stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
@@ -2483,16 +2274,16 @@ router.get('/:id', verifyToken, async (req, res) => {
 
     // Transform video data to match frontend expectations
     const videoObj = video.toObject();
-    
+
     // **FIX: Normalize video URLs to fix Windows path separator issues**
     const normalizeUrl = (url) => {
       if (!url) return url;
       return url.replace(/\\/g, '/');
     };
-    
+
     // **FIX: Convert likedBy ObjectIds to googleIds**
     const likedByGoogleIds = await convertLikedByToGoogleIds(videoObj.likedBy || []);
-    
+
     const transformedVideo = {
       _id: videoObj._id?.toString(),
       videoName: videoObj.videoName || 'Untitled Video',
@@ -2503,7 +2294,7 @@ router.get('/:id', verifyToken, async (req, res) => {
       views: parseInt(videoObj.views) || 0,
       shares: parseInt(videoObj.shares) || 0,
       duration: parseInt(videoObj.duration) || 0,
-      aspectRatio: parseFloat(videoObj.aspectRatio) || 9/16,
+      aspectRatio: parseFloat(videoObj.aspectRatio) || 9 / 16,
       videoType: videoObj.videoType || 'yog',
       link: videoObj.link || null,
       uploadedAt: videoObj.uploadedAt?.toISOString?.() || new Date().toISOString(),
@@ -2551,9 +2342,9 @@ router.get('/:id', verifyToken, async (req, res) => {
     res.json(transformedVideo);
   } catch (error) {
     console.error('❌ Error getting video by ID:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to get video',
-      details: error.message 
+      details: error.message
     });
   }
 });
@@ -2566,10 +2357,10 @@ router.post('/:id/watch', async (req, res) => {
     // Try to get userId from token (authenticated users)
     let userId = null;
     let isAuthenticated = false;
-    
+
     // **BACKEND-FIRST: Get deviceId first (always available for fallback)**
     const deviceId = req.body.deviceId || req.headers['x-device-id'];
-    
+
     try {
       const token = req.headers.authorization?.split(' ')[1];
       if (token) {
@@ -2610,11 +2401,11 @@ router.post('/:id/watch', async (req, res) => {
       // Error getting token - will use deviceId (this is OK, not an error)
       console.log(`ℹ️ Watch tracking: Error processing token (non-critical), using deviceId fallback (deviceId: ${deviceId ? 'present' : 'missing'})`);
     }
-    
+
     // **SIMPLE IDENTITY RULE: Use googleId (userId) when logged in, deviceId for anonymous**
     // This matches the feed logic - same identity used for tracking and filtering
     const identityId = userId || deviceId;
-    
+
     const videoId = req.params.id;
     const { duration = 0, completed = false } = req.body;
 
@@ -2626,30 +2417,55 @@ router.post('/:id/watch', async (req, res) => {
       return res.status(400).json({ error: 'Invalid video ID' });
     }
 
-    console.log('📊 Tracking video watch:', { 
-      identityId, 
+    console.log('📊 Tracking video watch:', {
+      identityId,
       userId: userId || 'none',
       deviceId: deviceId || 'none',
       isAuthenticated: isAuthenticated ? 'authenticated (googleId)' : 'anonymous (deviceId)',
-      videoId, 
-      duration, 
-      completed 
-    });
-
-    // **SIMPLE TRACKING: Use single identity (googleId when logged in, deviceId when anonymous)**
-    // This ensures watch history is stored under the same identity used in feed filtering
-    const watchEntry = await WatchHistory.trackWatch(identityId, videoId, {
+      videoId,
       duration,
-      completed,
-      isAuthenticated
+      completed
     });
-    
-    console.log(`✅ Watch tracked successfully for ${isAuthenticated ? 'authenticated (googleId)' : 'anonymous (deviceId)'} user`);
 
-    // Update video view count
-    await Video.findByIdAndUpdate(videoId, {
-      $inc: { views: 1 }
-    });
+    // **HYBRID VIEW LOGIC: Distinction between "Skim" and "Watch"**
+    // 1. Skim (< 5s): Temporary Redis storage (seen recently) - prevents immediate repetition but valid for recycling
+    // 2. Watch (>= 5s): Permanent DB storage - strictly hidden unless user history reset
+
+    // **CRITICAL: Backend threshold logic**
+    const SKIM_THRESHOLD = 5; // Seconds
+    const isSkim = duration < SKIM_THRESHOLD;
+
+    if (isSkim) {
+      // **SKIM PATH: Store in Redis only (Temporary)**
+      console.log(`👀 Skim detected (${duration}s): Storing in temporary Redis set for ${identityId}`);
+      if (redisService.getConnectionStatus()) {
+        const skimKey = `videos:seen_recently:${identityId}`;
+        await redisService.addToSet(skimKey, [videoId]);
+        // Set TTL to 3 days (259200 seconds) if new key, or ensure it expires
+        await redisService.expire(skimKey, 259200);
+      }
+
+      // Update view count (still count as a view public metric)
+      await Video.findByIdAndUpdate(videoId, { $inc: { views: 1 } });
+
+    } else {
+      // **WATCH PATH: Permanent DB storage (Existing Logic)**
+      console.log(`✅ True Watch detected (${duration}s): Storing in DB History for ${identityId}`);
+
+      const watchEntry = await WatchHistory.trackWatch(identityId, videoId, {
+        duration,
+        completed,
+        isAuthenticated
+      });
+
+      // Update view count
+      await Video.findByIdAndUpdate(videoId, { $inc: { views: 1 } });
+
+      // Sync to Redis Long Term (Permanent Filter)
+      if (redisService.getConnectionStatus()) {
+        await redisService.addToLongTermWatchHistory(identityId, [videoId.toString()]);
+      }
+    }
 
     // **OPTIMIZED: Smart cache invalidation - clear all related caches**
     if (redisService.getConnectionStatus()) {
@@ -2657,16 +2473,16 @@ router.post('/:id/watch', async (req, res) => {
       const watchHistoryPattern = `watch:history:${identityId}*`;
       await redisService.clearPattern(watchHistoryPattern);
       console.log(`🧹 Cleared watch history cache for: ${identityId}`);
-      
+
       // Clear feed cache (user will see updated feed after watching)
       const feedCachePattern = `feed:${identityId}:*`;
       await redisService.clearPattern(feedCachePattern);
       console.log(`🧹 Cleared feed cache for: ${identityId}`);
-      
+
       // Clear unwatched IDs cache (for backward compatibility)
       const unwatchedCachePattern = `videos:unwatched:ids:${identityId}:*`;
       await redisService.clearPattern(unwatchedCachePattern);
-      
+
       // Clear old feed cache pattern (for backward compatibility)
       const oldFeedCachePattern = `videos:feed:user:${identityId}:*`;
       await redisService.clearPattern(oldFeedCachePattern);
@@ -2733,7 +2549,7 @@ router.post('/:id/like', verifyToken, async (req, res) => {
     const likedByStrings = (video.likedBy || []).map(id => id?.toString?.() || String(id));
     const userLikedIndex = likedByStrings.indexOf(userObjectId.toString());
     let wasLiked = false;
-    
+
     // **CRITICAL FIX: Use atomic MongoDB operations to update BOTH likedBy AND likes count simultaneously**
     // This prevents race conditions and ensures data consistency
     let updatedVideo;
@@ -2741,7 +2557,7 @@ router.post('/:id/like', verifyToken, async (req, res) => {
       // User has already liked - remove the like (atomic $pull + $inc operations)
       updatedVideo = await Video.findByIdAndUpdate(
         videoId,
-        { 
+        {
           $pull: { likedBy: userObjectId },
           $inc: { likes: -1 } // Atomically decrement likes count
         },
@@ -2753,7 +2569,7 @@ router.post('/:id/like', verifyToken, async (req, res) => {
       // User hasn't liked - add the like (atomic $push + $inc operations)
       updatedVideo = await Video.findByIdAndUpdate(
         videoId,
-        { 
+        {
           $push: { likedBy: userObjectId },
           $inc: { likes: 1 } // Atomically increment likes count
         },
@@ -2818,17 +2634,17 @@ router.post('/:id/like', verifyToken, async (req, res) => {
 
     // Transform comments to match Flutter app expectations
     const videoObj = updatedVideo.toObject();
-    
+
     // **FIX: Convert likedBy ObjectIds to googleIds**
     const likedByGoogleIds = await convertLikedByToGoogleIds(videoObj.likedBy || []);
-    
+
     // **CRITICAL: Ensure likes count matches likedBy length before sending response**
     const finalLikesCount = Math.max(0, likedByGoogleIds.length);
     const finalLikes = Math.max(0, parseInt(videoObj.likes) || 0);
-    
+
     // Use the actual likedBy length as the source of truth for likes count
     const correctLikesCount = finalLikesCount;
-    
+
     console.log('🔍 Like API: Final response data', {
       likes: correctLikesCount,
       likedByLength: likedByGoogleIds.length,
@@ -2857,7 +2673,7 @@ router.post('/:id/like', verifyToken, async (req, res) => {
       uploadedAt: videoObj.uploadedAt?.toISOString?.() || new Date().toISOString(),
       likedBy: likedByGoogleIds, // **FIXED: Use googleIds instead of ObjectIds**
       videoType: videoObj.videoType || 'reel',
-      aspectRatio: parseFloat(videoObj.aspectRatio) || 9/16,
+      aspectRatio: parseFloat(videoObj.aspectRatio) || 9 / 16,
       duration: parseInt(videoObj.duration) || 0,
       comments: await Promise.all((videoObj.comments || []).map(async (comment) => {
         // **FIX: Convert comment likedBy ObjectIds to googleIds**
@@ -2884,13 +2700,13 @@ router.post('/:id/like', verifyToken, async (req, res) => {
     };
 
     res.json(transformedVideo);
-    
+
     console.log('✅ Like API: Successfully toggled like, returning video');
-    
+
   } catch (err) {
     console.error('❌ Like API Error:', err);
-    res.status(500).json({ 
-      error: 'Failed to toggle like', 
+    res.status(500).json({
+      error: 'Failed to toggle like',
       details: err.message,
       stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
@@ -2939,7 +2755,7 @@ router.delete('/:id/like', verifyToken, async (req, res) => {
     // Check if user has liked the video
     const likedByStrings = (video.likedBy || []).map(id => id?.toString?.() || String(id));
     const userLikedIndex = likedByStrings.indexOf(userObjectId.toString());
-    
+
     if (userLikedIndex > -1) {
       // User has liked - remove the like
       video.likedBy.splice(userLikedIndex, 1);
@@ -2979,10 +2795,10 @@ router.delete('/:id/like', verifyToken, async (req, res) => {
       .populate('comments.user', 'name profilePic googleId');
 
     const videoObj = updatedVideo.toObject();
-    
+
     // **FIX: Convert likedBy ObjectIds to googleIds**
     const likedByGoogleIds = await convertLikedByToGoogleIds(videoObj.likedBy || []);
-    
+
     const transformedVideo = {
       _id: videoObj._id?.toString(),
       videoName: videoObj.videoName || '',
@@ -3003,7 +2819,7 @@ router.delete('/:id/like', verifyToken, async (req, res) => {
       uploadedAt: videoObj.uploadedAt?.toISOString?.() || new Date().toISOString(),
       likedBy: likedByGoogleIds, // **FIXED: Use googleIds instead of ObjectIds**
       videoType: videoObj.videoType || 'reel',
-      aspectRatio: parseFloat(videoObj.aspectRatio) || 9/16,
+      aspectRatio: parseFloat(videoObj.aspectRatio) || 9 / 16,
       duration: parseInt(videoObj.duration) || 0,
       comments: await Promise.all((videoObj.comments || []).map(async (comment) => {
         // **FIX: Convert comment likedBy ObjectIds to googleIds**
@@ -3028,13 +2844,13 @@ router.delete('/:id/like', verifyToken, async (req, res) => {
     };
 
     res.json(transformedVideo);
-    
+
     console.log('✅ Unlike API: Successfully unliked video');
-    
+
   } catch (err) {
     console.error('❌ Unlike API Error:', err);
-    res.status(500).json({ 
-      error: 'Failed to unlike video', 
+    res.status(500).json({
+      error: 'Failed to unlike video',
       details: err.message,
       stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
@@ -3054,10 +2870,10 @@ router.get('/:id', async (req, res) => {
 
     // **FIXED: Ensure consistent data types and HLS URL handling**
     const videoObj = video.toObject();
-    
+
     // **FIX: Convert likedBy ObjectIds to googleIds**
     const likedByGoogleIds = await convertLikedByToGoogleIds(videoObj.likedBy || []);
-    
+
     const formattedVideo = {
       ...videoObj,
       // **FIXED: Ensure numeric fields are numbers**
@@ -3065,7 +2881,7 @@ router.get('/:id', async (req, res) => {
       views: parseInt(videoObj.views) || 0,
       shares: parseInt(videoObj.shares) || 0,
       duration: parseInt(videoObj.duration) || 0,
-      aspectRatio: parseFloat(videoObj.aspectRatio) || 9/16,
+      aspectRatio: parseFloat(videoObj.aspectRatio) || 9 / 16,
       // **FIXED: Ensure ObjectId fields are properly formatted**
       _id: videoObj._id?.toString() || videoObj._id,
       uploader: videoObj.uploader?._id?.toString() || videoObj.uploader?.toString() || videoObj.uploader,
@@ -3192,7 +3008,7 @@ router.post('/:id/comments', async (req, res) => {
       userName: c.user?.name,
       userGoogleId: c.user?.googleId
     })));
-    
+
     const transformedVideo = {
       ...videoObj,
       comments: await Promise.all((videoObj.comments || []).map(async (comment) => {
@@ -3209,7 +3025,7 @@ router.post('/:id/comments', async (req, res) => {
         };
       }))
     };
-    
+
     console.log('🔍 Comment transformation - Transformed comments:', transformedVideo.comments);
 
     // **FIX: Return comments array directly to match frontend expectations**
@@ -3243,9 +3059,9 @@ router.get('/:videoId/comments', async (req, res) => {
       return res.status(404).json({ error: 'Video not found' });
     }
 
-    console.log('✅ Video found with comments:', { 
-      videoId: video._id, 
-      commentsCount: video.comments.length 
+    console.log('✅ Video found with comments:', {
+      videoId: video._id,
+      commentsCount: video.comments.length
     });
 
     // Transform comments to match Flutter app expectations
@@ -3264,7 +3080,7 @@ router.get('/:videoId/comments', async (req, res) => {
       };
     }));
 
-    console.log('📤 Sending comments response:', { 
+    console.log('📤 Sending comments response:', {
       commentsCount: transformedComments.length,
       comments: transformedComments.map(c => ({
         _id: c._id,
@@ -3443,7 +3259,7 @@ router.post('/:id/increment-view', async (req, res) => {
         isAuthenticated: isAuthenticated
       });
       console.log(`✅ Video marked as watched/completed for ${isAuthenticated ? 'authenticated' : 'anonymous'} user`);
-      
+
       // **IMPROVED: Clear cache so user sees updated feed (video won't appear again)**
       if (redisService.getConnectionStatus()) {
         const unwatchedCachePattern = `videos:unwatched:ids:${identityId}:*`;
@@ -3460,43 +3276,43 @@ router.post('/:id/increment-view', async (req, res) => {
     // **ONLY increment view count for authenticated users (existing behavior)**
     // Anonymous users get watch tracking but not view count increment
     if (user && userObjectId) {
-    // Check if user has already reached max views (10)
-    const existingView = video.viewDetails.find(view => 
+      // Check if user has already reached max views (10)
+      const existingView = video.viewDetails.find(view =>
         view.user.toString() === userObjectId.toString()
-    );
+      );
 
-    if (existingView && existingView.viewCount >= 10) {
-      console.log('⚠️ User has reached maximum view count:', {
-        userId: user.googleId,
-        currentViewCount: existingView.viewCount
-      });
-      return res.status(200).json({
-        message: 'View limit reached',
-        viewCount: existingView.viewCount,
-        maxViewsReached: true,
-        totalViews: video.views
-      });
-    }
+      if (existingView && existingView.viewCount >= 10) {
+        console.log('⚠️ User has reached maximum view count:', {
+          userId: user.googleId,
+          currentViewCount: existingView.viewCount
+        });
+        return res.status(200).json({
+          message: 'View limit reached',
+          viewCount: existingView.viewCount,
+          maxViewsReached: true,
+          totalViews: video.views
+        });
+      }
 
-    // Increment view using the model method
+      // Increment view using the model method
       await video.incrementView(userObjectId, duration);
 
-    console.log('✅ View incremented successfully:', {
-      videoId,
-      userId: user.googleId,
-      newTotalViews: video.views,
-      userViewCount: existingView ? existingView.viewCount + 1 : 1
-    });
+      console.log('✅ View incremented successfully:', {
+        videoId,
+        userId: user.googleId,
+        newTotalViews: video.views,
+        userViewCount: existingView ? existingView.viewCount + 1 : 1
+      });
 
-    // Return updated view count
-    const updatedExistingView = video.viewDetails.find(view => 
+      // Return updated view count
+      const updatedExistingView = video.viewDetails.find(view =>
         view.user.toString() === userObjectId.toString()
-    );
+      );
 
-    res.json({
-      message: 'View incremented successfully',
-      totalViews: video.views,
-      userViewCount: updatedExistingView ? updatedExistingView.viewCount : 1,
+      res.json({
+        message: 'View incremented successfully',
+        totalViews: video.views,
+        userViewCount: updatedExistingView ? updatedExistingView.viewCount : 1,
         maxViewsReached: updatedExistingView ? updatedExistingView.viewCount >= 10 : false,
         watched: true // **NEW: Indicate video was marked as watched**
       });
@@ -3514,9 +3330,9 @@ router.post('/:id/increment-view', async (req, res) => {
 
   } catch (err) {
     console.error('❌ Error incrementing view:', err);
-    res.status(500).json({ 
-      error: 'Failed to increment view', 
-      details: err.message 
+    res.status(500).json({
+      error: 'Failed to increment view',
+      details: err.message
     });
   }
 });
@@ -3529,9 +3345,9 @@ router.delete('/:id', verifyToken, async (req, res) => {
     console.log('🗑️ User from token:', req.user);
     console.log('🗑️ User ID type:', req.user.id.runtimeType);
     console.log('🗑️ User ID value:', req.user.id);
-    
+
     const videoId = req.params.id;
-    
+
     // Get video to check ownership
     const video = await Video.findById(videoId);
     if (!video) {
@@ -3602,7 +3418,7 @@ router.delete('/:id', verifyToken, async (req, res) => {
 router.post('/bulk-delete', verifyToken, async (req, res) => {
   try {
     const { videoIds, deleteReason, timestamp } = req.body;
-    
+
     // Get user from database to compare ObjectIds
     const user = await User.findOne({ googleId: req.user.googleId });
     if (!user) {
@@ -3618,18 +3434,18 @@ router.post('/bulk-delete', verifyToken, async (req, res) => {
 
     // Find all videos and check ownership
     const videos = await Video.find({ _id: { $in: videoIds } });
-    
+
     if (videos.length === 0) {
       return res.status(404).json({ error: 'No videos found' });
     }
 
     // Check if user owns all videos by comparing ObjectIds
-    const unauthorizedVideos = videos.filter(video => 
+    const unauthorizedVideos = videos.filter(video =>
       video.uploader.toString() !== user._id.toString()
     );
 
     if (unauthorizedVideos.length > 0) {
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: 'You can only delete your own videos',
         unauthorizedVideos: unauthorizedVideos.map(v => v._id)
       });
@@ -3637,7 +3453,7 @@ router.post('/bulk-delete', verifyToken, async (req, res) => {
 
     // Delete all videos
     const deleteResult = await Video.deleteMany({ _id: { $in: videoIds } });
-    
+
     // **NEW: Remove video references from user's videos array**
     await User.findByIdAndUpdate(
       user._id,
@@ -3654,11 +3470,11 @@ router.post('/bulk-delete', verifyToken, async (req, res) => {
       ]);
       console.log('🧹 Cache invalidated after bulk video deletion');
     }
-    
+
     console.log(`✅ Bulk delete successful: ${deleteResult.deletedCount} videos deleted`);
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: `${deleteResult.deletedCount} videos deleted successfully`,
       deletedCount: deleteResult.deletedCount
     });
@@ -3754,17 +3570,17 @@ router.get('/cloudinary-config', verifyToken, async (req, res) => {
       // API key and secret are never sent to frontend for security
       hasCredentials: !!(process.env.CLOUD_KEY && process.env.CLOUD_SECRET),
     };
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       config: config,
       message: 'Cloudinary config retrieved successfully'
     });
   } catch (error) {
     console.error('❌ Error getting Cloudinary config:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'Failed to get Cloudinary config' 
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get Cloudinary config'
     });
   }
 });
@@ -3776,7 +3592,7 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
   try {
     const { userId } = req.params;
     console.log('🔍 Getting videos for user:', userId);
-    
+
     // Find user by Google ID first, then by MongoDB ObjectId
     let user = await User.findOne({ googleId: userId });
     if (!user) {
@@ -3786,16 +3602,16 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
         // ignore invalid ObjectId errors
       }
     }
-    
+
     if (!user) {
       console.log('❌ User not found:', userId);
       return res.status(404).json({ error: 'User not found' });
     }
-    
+
     console.log('✅ User found:', user.name);
-    
+
     // Get user's videos with population
-    const videos = await Video.find({ 
+    const videos = await Video.find({
       uploader: user._id,
       videoUrl: { $exists: true, $ne: null, $ne: '' }, // Ensure video URL exists and is not empty
       processingStatus: { $nin: ['failed', 'error'] } // Only exclude explicitly failed videos
@@ -3805,28 +3621,28 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
       .populate('comments.user', 'name profilePic googleId')
       .sort({ createdAt: -1 }) // Simple: newest first
       .lean();
-    
+
     // **NEW: Filter out videos with invalid uploader references**
     const validVideos = videos.filter(video => {
-      return video.uploader && 
-             video.uploader._id && 
-             video.uploader.name && 
-             video.uploader.name.trim() !== '';
+      return video.uploader &&
+        video.uploader._id &&
+        video.uploader.name &&
+        video.uploader.name.trim() !== '';
     });
-    
+
     console.log('🎬 Found videos count:', videos.length);
     console.log(`🎬 Valid videos count: ${validVideos.length}`);
-    
+
     // **NEW: Sync user.videos array with actual valid videos**
     if (validVideos.length !== videos.length) {
       console.log('🔄 Syncing user.videos array with valid videos...');
       const validVideoIds = validVideos.map(v => v._id);
-      await User.findByIdAndUpdate(user._id, { 
-        $set: { videos: validVideoIds } 
+      await User.findByIdAndUpdate(user._id, {
+        $set: { videos: validVideoIds }
       });
       console.log(`✅ Updated user.videos array: ${videos.length} -> ${validVideos.length} videos`);
     }
-    
+
     if (validVideos.length === 0) {
       console.log('⚠️ No valid videos found for user:', user.name);
     }
@@ -3835,10 +3651,10 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
     // **FIX: Convert to async to handle likedBy conversion**
     const transformedVideos = await Promise.all(validVideos.map(async (video) => {
       const videoObj = video;
-      
+
       // **FIX: Convert likedBy ObjectIds to googleIds**
       const likedByGoogleIds = await convertLikedByToGoogleIds(videoObj.likedBy || []);
-      
+
       const result = {
         _id: videoObj._id?.toString(),
         videoName: (videoObj.videoName && videoObj.videoName.toString().trim()) || 'Untitled Video',
@@ -3849,7 +3665,7 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
         views: parseInt(videoObj.views) || 0,
         shares: parseInt(videoObj.shares) || 0,
         duration: parseInt(videoObj.duration) || 0,
-        aspectRatio: parseFloat(videoObj.aspectRatio) || 9/16,
+        aspectRatio: parseFloat(videoObj.aspectRatio) || 9 / 16,
         videoType: videoObj.videoType || 'yog',
         link: videoObj.link || null,
         uploadedAt: videoObj.uploadedAt?.toISOString?.() || new Date().toISOString(),
@@ -3869,7 +3685,7 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
         likedBy: likedByGoogleIds, // **FIXED: Use googleIds instead of ObjectIds**
         comments: videoObj.comments || []
       };
-      
+
       console.log(`🎬 Video ${result.videoName}:`, {
         id: result._id,
         hasVideoUrl: !!result.videoUrl,
@@ -3879,7 +3695,7 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
         uploader: result.uploader.name,
         uploaderGoogleId: result.uploader.googleId
       });
-      
+
       return result;
     }));
 
@@ -3891,9 +3707,9 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
     res.json(transformedVideos);
   } catch (error) {
     console.error('❌ Error fetching user videos:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Error fetching videos',
-      details: error.message 
+      details: error.message
     });
   }
 });
@@ -3902,7 +3718,7 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
 router.post('/cleanup-orphaned', verifyToken, async (req, res) => {
   try {
     console.log('🧹 Starting orphaned videos cleanup...');
-    
+
     // Find videos with invalid uploader references
     const orphanedVideos = await Video.find({
       $or: [
@@ -3911,35 +3727,35 @@ router.post('/cleanup-orphaned', verifyToken, async (req, res) => {
         { uploader: { $type: 'string' } } // Invalid ObjectId type
       ]
     });
-    
+
     console.log(`🧹 Found ${orphanedVideos.length} orphaned videos`);
-    
+
     if (orphanedVideos.length === 0) {
-      return res.json({ 
-        success: true, 
+      return res.json({
+        success: true,
         message: 'No orphaned videos found',
         deletedCount: 0
       });
     }
-    
+
     // Delete orphaned videos
     const orphanedIds = orphanedVideos.map(v => v._id);
     const deleteResult = await Video.deleteMany({ _id: { $in: orphanedIds } });
-    
+
     console.log(`✅ Cleanup successful: ${deleteResult.deletedCount} orphaned videos deleted`);
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: `${deleteResult.deletedCount} orphaned videos deleted successfully`,
       deletedCount: deleteResult.deletedCount,
       orphanedVideoIds: orphanedIds
     });
-    
+
   } catch (error) {
     console.error('❌ Error cleaning up orphaned videos:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to cleanup orphaned videos',
-      details: error.message 
+      details: error.message
     });
   }
 });
@@ -3949,7 +3765,7 @@ router.post('/cleanup-orphaned', verifyToken, async (req, res) => {
 async function processVideoHybrid(videoId, videoPath, videoName, userId) {
   try {
     console.log('🚀 Starting hybrid video processing (Cloudinary → R2) for:', videoId);
-    
+
     // **NEW: Update status to processing**
     const video = await Video.findById(videoId);
     if (!video) {
@@ -3966,11 +3782,11 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
       const { default: service } = await import('../services/hybridVideoService.js');
       hybridVideoService = service;
     }
-    
+
     // **NEW: Process video using hybrid approach**
     const hybridResult = await hybridVideoService.processVideoHybrid(
-      videoPath, 
-      videoName, 
+      videoPath,
+      videoName,
       userId
     );
 
@@ -3980,13 +3796,13 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
     // **NEW: Update video record with R2 URLs**
     video.videoUrl = hybridResult.videoUrl; // R2 video URL with FREE bandwidth
     video.thumbnailUrl = hybridResult.thumbnailUrl; // R2 thumbnail URL
-    
+
     // **NEW: Clear old quality URLs (single format now)**
     video.preloadQualityUrl = null;
     video.lowQualityUrl = hybridResult.videoUrl; // Same as main URL (480p)
     video.mediumQualityUrl = null;
     video.highQualityUrl = null;
-    
+
     video.processingStatus = 'completed';
     video.processingProgress = 100;
 
@@ -4007,7 +3823,7 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
         hybridVideoService = service;
       }
       const originalVideoInfo = await hybridVideoService.getOriginalVideoInfo(videoPath);
-      
+
       // Preserve original aspect ratio and dimensions
       if (originalVideoInfo.width && originalVideoInfo.height) {
         video.aspectRatio = originalVideoInfo.aspectRatio;
@@ -4021,7 +3837,7 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
       // Use existing aspect ratio if dimensions already saved
       console.log(`📐 Using existing aspect ratio: ${video.aspectRatio}, dimensions: ${video.originalResolution.width}x${video.originalResolution.height}`);
     }
-    
+
     // **NEW: Add hybrid metadata**
     video.originalSize = hybridResult.size || video.originalSize;
     video.originalFormat = 'mp4';
@@ -4059,25 +3875,25 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
 
   } catch (error) {
     console.error('❌ Error in hybrid video processing:', error);
-    
+
     try {
       // **NEW: Update video status and try fallback URL**
       const video = await Video.findById(videoId);
       if (video) {
         // Try to create a fallback URL using the local file
         const isProduction = process.env.NODE_ENV === 'production';
-        const baseUrl = isProduction 
+        const baseUrl = isProduction
           ? 'https://snehayog.site'
           : (process.env.SERVER_URL || 'http://192.168.0.199:5001');
-        
+
         // Create fallback URL for the uploaded file
         const fallbackUrl = `${baseUrl}/${videoPath.replace(/\\/g, '/')}`;
-        
+
         video.videoUrl = fallbackUrl;
         video.processingStatus = 'completed'; // Mark as completed with fallback
         video.processingError = `Hybrid processing failed, using fallback: ${error.message}`;
         await video.save();
-        
+
         console.log('⚠️ Using fallback URL for video:', fallbackUrl);
       }
     } catch (updateError) {
@@ -4091,12 +3907,12 @@ router.get('/test-video-url/:videoId', async (req, res) => {
   try {
     const videoId = req.params.videoId;
     console.log('🔍 Testing video URL for video ID:', videoId);
-    
+
     const video = await Video.findById(videoId);
     if (!video) {
       return res.status(404).json({ error: 'Video not found' });
     }
-    
+
     console.log('📹 Video details:', {
       id: video._id,
       name: video.videoName,
@@ -4108,7 +3924,7 @@ router.get('/test-video-url/:videoId', async (req, res) => {
       processingStatus: video.processingStatus,
       processingProgress: video.processingProgress
     });
-    
+
     // Test video URL accessibility
     const testResults = {
       videoId: video._id,
@@ -4127,7 +3943,7 @@ router.get('/test-video-url/:videoId', async (req, res) => {
       isHLSEncoded: video.isHLSEncoded,
       recommendations: []
     };
-    
+
     // Check if video URL is accessible
     if (video.videoUrl) {
       try {
@@ -4152,7 +3968,7 @@ router.get('/test-video-url/:videoId', async (req, res) => {
     } else {
       testResults.recommendations.push('No video URL found - video processing may have failed');
     }
-    
+
     // Check thumbnail URL
     if (video.thumbnailUrl) {
       try {
@@ -4171,7 +3987,7 @@ router.get('/test-video-url/:videoId', async (req, res) => {
         testResults.recommendations.push('Thumbnail URL is not accessible');
       }
     }
-    
+
     // Add specific recommendations based on processing status
     if (video.processingStatus === 'failed' || video.processingStatus === 'error') {
       testResults.recommendations.push('Video processing failed - check server logs for details');
@@ -4180,14 +3996,14 @@ router.get('/test-video-url/:videoId', async (req, res) => {
     } else if (video.processingStatus === 'completed' && !video.videoUrl) {
       testResults.recommendations.push('Processing completed but no video URL - check R2 upload');
     }
-    
+
     res.json(testResults);
-    
+
   } catch (error) {
     console.error('❌ Error testing video URL:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to test video URL',
-      details: error.message 
+      details: error.message
     });
   }
 });
@@ -4196,10 +4012,10 @@ router.get('/test-video-url/:videoId', async (req, res) => {
 router.post('/cleanup-broken-videos', verifyToken, async (req, res) => {
   try {
     console.log('🧹 Starting cleanup of recently broken videos...');
-    
+
     // Only target videos uploaded in the last 24 hours that have issues
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    
+
     // Find recently uploaded videos that are broken or have invalid URLs
     const brokenVideos = await Video.find({
       $and: [
@@ -4217,43 +4033,43 @@ router.post('/cleanup-broken-videos', verifyToken, async (req, res) => {
         }
       ]
     });
-    
+
     console.log(`🧹 Found ${brokenVideos.length} recently broken videos to clean up`);
-    
+
     if (brokenVideos.length === 0) {
-      return res.json({ 
-        success: true, 
+      return res.json({
+        success: true,
         message: 'No recently broken videos found',
         deletedCount: 0
       });
     }
-    
+
     // Get video IDs for cleanup
     const brokenVideoIds = brokenVideos.map(v => v._id);
-    
+
     // Remove video references from users' videos arrays
     await User.updateMany(
       { videos: { $in: brokenVideoIds } },
       { $pull: { videos: { $in: brokenVideoIds } } }
     );
-    
+
     // Delete the broken videos
     const deleteResult = await Video.deleteMany({ _id: { $in: brokenVideoIds } });
-    
+
     console.log(`✅ Cleanup successful: ${deleteResult.deletedCount} recently broken videos deleted`);
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: `${deleteResult.deletedCount} recently broken videos deleted successfully`,
       deletedCount: deleteResult.deletedCount,
       brokenVideoIds: brokenVideoIds
     });
-    
+
   } catch (error) {
     console.error('❌ Error cleaning up broken videos:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to cleanup broken videos',
-      details: error.message 
+      details: error.message
     });
   }
 });
@@ -4262,26 +4078,26 @@ router.post('/cleanup-broken-videos', verifyToken, async (req, res) => {
 router.post('/sync-user-video-arrays', verifyToken, async (req, res) => {
   try {
     console.log('🔄 Starting sync of all users\' video arrays...');
-    
+
     const users = await User.find({ videos: { $exists: true, $ne: [] } });
     let totalUpdated = 0;
     let totalUsers = users.length;
-    
+
     for (const user of users) {
       try {
         // Get actual valid videos for this user
-        const validVideos = await Video.find({ 
+        const validVideos = await Video.find({
           uploader: user._id,
           videoUrl: { $exists: true, $ne: null, $ne: '' },
           processingStatus: { $nin: ['failed', 'error'] }
         }).select('_id');
-        
+
         const validVideoIds = validVideos.map(v => v._id);
-        
+
         // Update user's videos array if different
         if (validVideoIds.length !== user.videos.length) {
-          await User.findByIdAndUpdate(user._id, { 
-            $set: { videos: validVideoIds } 
+          await User.findByIdAndUpdate(user._id, {
+            $set: { videos: validVideoIds }
           });
           totalUpdated++;
           console.log(`✅ Updated user ${user.name}: ${user.videos.length} -> ${validVideoIds.length} videos`);
@@ -4290,21 +4106,21 @@ router.post('/sync-user-video-arrays', verifyToken, async (req, res) => {
         console.error(`❌ Error syncing user ${user.name}:`, userError);
       }
     }
-    
+
     console.log(`✅ Sync completed: ${totalUpdated}/${totalUsers} users updated`);
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: `Synced ${totalUpdated} out of ${totalUsers} users`,
       updatedUsers: totalUpdated,
       totalUsers: totalUsers
     });
-    
+
   } catch (error) {
     console.error('❌ Error syncing user video arrays:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to sync user video arrays',
-      details: error.message 
+      details: error.message
     });
   }
 });

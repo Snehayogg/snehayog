@@ -274,10 +274,13 @@ class SharedVideoControllerPool {
   }
 
   /// **Pause all controllers instead of disposing (better UX)**
-  void pauseAllControllers() {
-    AppLogger.log('⏸️ SharedPool: Pausing all controllers (keeping in memory)');
+  void pauseAllControllers({String? exceptVideoId}) {
+    AppLogger.log(
+        '⏸️ SharedPool: Pausing all controllers (except $exceptVideoId)');
 
     for (final entry in _controllerPool.entries) {
+      if (exceptVideoId != null && entry.key == exceptVideoId) continue;
+
       try {
         if (entry.value.value.isInitialized && entry.value.value.isPlaying) {
           entry.value.pause();
@@ -290,7 +293,8 @@ class SharedVideoControllerPool {
       }
     }
 
-    AppLogger.log('✅ SharedPool: All controllers paused');
+    AppLogger.log(
+        '✅ SharedPool: Paused controllers${exceptVideoId != null ? ' (except current)' : ''}');
   }
 
   /// **Resume specific controller (for better UX)**

@@ -11,6 +11,7 @@ import './AdImpression.js';
 import './CreatorPayout.js';
 import './Feedback.js';
 import './WatchHistory.js';
+import './FeedHistory.js';
 import './AppConfig.js';
 
 console.log('✅ All models imported and registered successfully');

@@ -6,7 +6,7 @@ import '../core/services/http_client_service.dart';
 class AppConfig {
   // **MANUAL: Development mode control**
   static const bool _isDevelopment =
-      false; // Set to true for local testing, false for production
+      true; // Set to true for local testing, false for production
 
   // **NEW: Smart URL selection with fallback**
   static String? _cachedBaseUrl;
@@ -76,7 +76,26 @@ class AppConfig {
     return _cachedBaseUrl!;
   }
 
-  // **UPDATED: Try custom domain first, then Railway, then local server**
+  /// **OPTIMIZED: Check server connectivity (helper method for parallel checks)**
+  static Future<String?> _checkServer(String url) async {
+    try {
+      final response = await httpClientService.get(
+        Uri.parse('$url/api/health'),
+        headers: {'Content-Type': 'application/json'},
+        timeout: const Duration(seconds: 8),
+      );
+
+      if (response.statusCode == 200) {
+        print('✅ AppConfig: Server accessible at $url');
+        return url;
+      }
+    } catch (e) {
+      print('❌ AppConfig: Server not accessible at $url: $e');
+    }
+    return null;
+  }
+
+  // **OPTIMIZED: Try all servers in parallel instead of sequentially**
   static Future<String> getBaseUrlWithFallback() async {
     // **FIX: For web, always use localhost**
     if (kIsWeb) {
@@ -108,69 +127,28 @@ class AppConfig {
       return _cachedBaseUrl!;
     }
 
-    print('🔍 AppConfig: Starting server connectivity check...');
-    print('🔍 AppConfig: Order: Custom Domain → Railway → Local Server');
-
-    // 1) Custom domain (snehayog.site) - FIRST PRIORITY
-    try {
-      print('🔍 AppConfig: [1/3] Testing custom domain: $_customDomainUrl...');
-      final response = await httpClientService.get(
-        Uri.parse('$_customDomainUrl/api/health'),
-        headers: {'Content-Type': 'application/json'},
-        timeout: const Duration(seconds: 8),
-      );
-
-      if (response.statusCode == 200) {
-        print('✅ AppConfig: Custom domain accessible at $_customDomainUrl');
-        _cachedBaseUrl = _customDomainUrl;
-        return _customDomainUrl;
-      }
-    } catch (e) {
-      print('❌ AppConfig: Custom domain not accessible: $e');
-    }
-
+    print('🔍 AppConfig: Starting parallel server connectivity check...');
     print(
-        '⚠️ AppConfig: Custom domain unreachable, trying Railway as fallback...');
+        '🔍 AppConfig: Checking all servers simultaneously for faster response');
 
-    // 2) Railway URL - SECOND PRIORITY
-    try {
-      print('🔍 AppConfig: [2/3] Testing Railway server: $_railwayUrl...');
-      final response = await httpClientService.get(
-        Uri.parse('$_railwayUrl/api/health'),
-        headers: {'Content-Type': 'application/json'},
-        timeout: const Duration(seconds: 8),
-      );
-
-      if (response.statusCode == 200) {
-        print('✅ AppConfig: Railway server accessible at $_railwayUrl');
-        _cachedBaseUrl = _railwayUrl;
-        return _railwayUrl;
-      }
-    } catch (e) {
-      print('❌ AppConfig: Railway server not accessible: $e');
-    }
-
-    print(
-        '⚠️ AppConfig: Railway unreachable, trying local server as fallback...');
-
-    // 3) Local server - THIRD PRIORITY
-    // **FIX: For web, use localhost; for mobile, use IP address**
+    // **OPTIMIZED: Check all servers in parallel instead of sequentially**
     final localServerUrl = kIsWeb ? _localWebBaseUrl : _localIpBaseUrl;
-    try {
-      print('🔍 AppConfig: [3/3] Testing local server: $localServerUrl...');
-      final response = await httpClientService.get(
-        Uri.parse('$localServerUrl/api/health'),
-        headers: {'Content-Type': 'application/json'},
-        timeout: const Duration(seconds: 3),
-      );
+    final futures = [
+      _checkServer(_customDomainUrl),
+      _checkServer(_railwayUrl),
+      _checkServer(localServerUrl),
+    ];
 
-      if (response.statusCode == 200) {
-        print('✅ AppConfig: Local server accessible at $localServerUrl');
-        _cachedBaseUrl = localServerUrl;
-        return localServerUrl;
+    // Wait for all checks to complete in parallel
+    final results = await Future.wait(futures);
+
+    // Use first successful result (priority order: Custom Domain → Railway → Local Server)
+    for (final url in results) {
+      if (url != null) {
+        print('✅ AppConfig: Selected server: $url');
+        _cachedBaseUrl = url;
+        return url;
       }
-    } catch (e) {
-      print('❌ AppConfig: Local server not accessible: $e');
     }
 
     // All servers failed - use default custom domain as last resort
@@ -180,7 +158,7 @@ class AppConfig {
     return _cachedBaseUrl!;
   }
 
-  // **UPDATED: Check server connectivity - Custom Domain → Railway → Local Server**
+  // **OPTIMIZED: Check server connectivity - parallel checks for faster response**
   static Future<String> checkAndUpdateServerUrl() async {
     // **FIX: For web, always use localhost**
     if (kIsWeb) {
@@ -208,68 +186,28 @@ class AppConfig {
       return _localIpBaseUrl;
     }
 
-    print('🔍 AppConfig: Checking server connectivity...');
-    print('🔍 AppConfig: Order: Custom Domain → Railway → Local Server');
-
-    try {
-      print('🔍 AppConfig: [1/3] Testing custom domain: $_customDomainUrl...');
-      final response = await httpClientService.get(
-        Uri.parse('$_customDomainUrl/api/health'),
-        headers: {'Content-Type': 'application/json'},
-        timeout: const Duration(seconds: 12),
-      );
-
-      if (response.statusCode == 200) {
-        print('✅ AppConfig: Custom domain is accessible at $_customDomainUrl');
-        _cachedBaseUrl = _customDomainUrl;
-        return _customDomainUrl;
-      }
-    } catch (e) {
-      print('❌ AppConfig: Custom domain not accessible: $e');
-    }
-
+    print('🔍 AppConfig: Starting parallel server connectivity check...');
     print(
-        '⚠️ AppConfig: Custom domain unreachable, trying Railway as fallback...');
+        '🔍 AppConfig: Checking all servers simultaneously for faster response');
 
-    // 2) Railway URL - SECOND PRIORITY
-    try {
-      print('🔍 AppConfig: [2/3] Testing Railway server: $_railwayUrl...');
-      final response = await httpClientService.get(
-        Uri.parse('$_railwayUrl/api/health'),
-        headers: {'Content-Type': 'application/json'},
-        timeout: const Duration(seconds: 12),
-      );
+    // **OPTIMIZED: Check all servers in parallel instead of sequentially**
+    const localServerUrl = kIsWeb ? _localWebBaseUrl : _localIpBaseUrl;
+    final futures = [
+      _checkServer(_customDomainUrl),
+      _checkServer(_railwayUrl),
+      _checkServer(localServerUrl),
+    ];
 
-      if (response.statusCode == 200) {
-        print('✅ AppConfig: Railway server is accessible at $_railwayUrl');
-        _cachedBaseUrl = _railwayUrl;
-        return _railwayUrl;
+    // Wait for all checks to complete in parallel
+    final results = await Future.wait(futures);
+
+    // Use first successful result (priority order: Custom Domain → Railway → Local Server)
+    for (final url in results) {
+      if (url != null) {
+        print('✅ AppConfig: Selected server: $url');
+        _cachedBaseUrl = url;
+        return url;
       }
-    } catch (e) {
-      print('❌ AppConfig: Railway server not accessible: $e');
-    }
-
-    print(
-        '⚠️ AppConfig: Railway unreachable, trying local server as fallback...');
-
-    // 3) Local server - THIRD PRIORITY
-    // **FIX: For web, use localhost; for mobile, use IP address**
-    final localServerUrl = kIsWeb ? _localWebBaseUrl : _localIpBaseUrl;
-    try {
-      print('🔍 AppConfig: [3/3] Testing local server: $localServerUrl...');
-      final response = await httpClientService.get(
-        Uri.parse('$localServerUrl/api/health'),
-        headers: {'Content-Type': 'application/json'},
-        timeout: const Duration(seconds: 4),
-      );
-
-      if (response.statusCode == 200) {
-        print('✅ AppConfig: Local server is accessible at $localServerUrl');
-        _cachedBaseUrl = localServerUrl;
-        return localServerUrl;
-      }
-    } catch (e) {
-      print('❌ AppConfig: Local server not accessible: $e');
     }
 
     // If all servers fail, return default

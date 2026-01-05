@@ -21,20 +21,20 @@ class RedisService {
       // Get Redis URL from environment variables
       // Priority: REDIS_PUBLIC_URL > REDIS_URL > Construct from individual parts
       let redisUrl = process.env.REDIS_PUBLIC_URL || process.env.REDIS_URL;
-      
+
       // If no full URL, try to construct from individual parts
       if (!redisUrl) {
         const redisHost = process.env.REDISHOST || process.env.REDIS_HOST;
         const redisPort = process.env.REDISPORT || process.env.REDIS_PORT || '6379';
         const redisUser = process.env.REDISUSER || process.env.REDIS_USER || 'default';
         const redisPassword = process.env.REDISPASSWORD || process.env.REDIS_PASSWORD || process.env.REDIS_PASSWORD;
-        
+
         if (redisHost && redisPassword) {
           redisUrl = `redis://${redisUser}:${redisPassword}@${redisHost}:${redisPort}`;
           console.log('🔧 Redis: Constructed URL from individual environment variables');
         }
       }
-      
+
       if (!redisUrl) {
         console.error('❌ Redis: No Redis URL found in environment variables');
         console.error('💡 Available options:');
@@ -438,6 +438,134 @@ class RedisService {
   }
 
   /**
+   * LONG-TERM WATCH HISTORY: Add video IDs to persistent watch set
+   * @param {string} userIdentifier - User identifier
+   * @param {string[]} videoIds - List of video IDs to add
+   */
+  async addToLongTermWatchHistory(userIdentifier, videoIds) {
+    const key = `watch:history:${userIdentifier}`;
+    if (!this.isConnected || !this.client || !videoIds.length) return false;
+
+    try {
+      // Add to set (no expiry for long-term history)
+      await this.client.sAdd(key, videoIds);
+      // Optional: Set a long expiry like 90 days to keep Redis clean
+      await this.client.expire(key, 90 * 24 * 60 * 60);
+      return true;
+    } catch (error) {
+      console.error(`❌ Redis: Error adding to long-term watch history:`, error.message);
+      return false;
+    }
+  }
+
+  /**
+   * BATCH FILTERING: Check which of the provided video IDs have been watched
+   * @param {string} userIdentifier - User identifier
+   * @param {string[]} videoIds - List of video IDs to check
+   * @returns {Promise<Set<string>>} - Returns a Set of watched video IDs
+   */
+  async checkWatchedBatch(userIdentifier, videoIds) {
+    const key = `watch:history:${userIdentifier}`;
+    if (!this.isConnected || !this.client || !videoIds.length) return new Set();
+
+    try {
+      if (videoIds.length === 0) return new Set();
+
+      // Use SMISMEMBER for atomic batch check (Redis 6.2+)
+      // Fallback for older Redis versions if needed: use pipeline with sIsMember
+      const results = await this.client.smIsMember(key, videoIds);
+
+      const watchedSet = new Set();
+      results.forEach((isWatched, index) => {
+        if (isWatched) watchedSet.add(videoIds[index]);
+      });
+      return watchedSet;
+    } catch (error) {
+      // Fallback: If smIsMember fails (older Redis), use pipeline
+      try {
+        const pipeline = this.client.multi();
+        videoIds.forEach(id => pipeline.sIsMember(key, id));
+        const results = await pipeline.exec();
+
+        const watchedSet = new Set();
+        results.forEach((isWatched, index) => {
+          if (isWatched) watchedSet.add(videoIds[index]);
+        });
+        return watchedSet;
+      } catch (err) {
+        console.error(`❌ Redis: Error in checkWatchedBatch:`, err.message);
+        return new Set();
+      }
+    }
+  }
+
+  /**
+   * Get all watched video IDs for a user
+   */
+  async getLongTermWatchHistory(userIdentifier) {
+    const key = `watch:history:${userIdentifier}`;
+    if (!this.isConnected || !this.client) return new Set();
+
+    try {
+      const members = await this.client.sMembers(key);
+      return new Set(members);
+    } catch (error) {
+      console.error(`❌ Redis: Error getting long-term watch history:`, error.message);
+      return new Set();
+    }
+  }
+
+  /**
+   * Add members to a set
+   * @param {string} key - key
+   * @param {Array<string>} members - members to add
+   */
+  async addToSet(key, members) {
+    if (!this.isConnected || !this.client) return false;
+    try {
+      if (members.length > 0) {
+        await this.client.sAdd(key, members);
+      }
+      return true;
+    } catch (error) {
+      console.error(`❌ Redis: Error adding to set ${key}:`, error.message);
+      return false;
+    }
+  }
+
+  /**
+   * Get all members of a set
+   * @param {string} key - key
+   * @returns {Promise<Set<string>>}
+   */
+  async getSetMembers(key) {
+    if (!this.isConnected || !this.client) return new Set();
+    try {
+      const members = await this.client.sMembers(key);
+      return new Set(members);
+    } catch (error) {
+      console.error(`❌ Redis: Error getting set members ${key}:`, error.message);
+      return new Set();
+    }
+  }
+
+  /**
+   * Set expiry for a key
+   * @param {string} key - key
+   * @param {number} seconds - expiry in seconds
+   */
+  async expire(key, seconds) {
+    if (!this.isConnected || !this.client) return false;
+    try {
+      await this.client.expire(key, seconds);
+      return true;
+    } catch (error) {
+      console.error(`❌ Redis: Error setting expiry for ${key}:`, error.message);
+      return false;
+    }
+  }
+
+  /**
    * Get cache statistics (for monitoring)
    * @returns {Promise<object>} - Cache statistics
    */
@@ -453,7 +581,7 @@ class RedisService {
     try {
       const info = await this.client.info('memory');
       const keys = await this.client.dbSize();
-      
+
       return {
         connected: true,
         keys: keys,

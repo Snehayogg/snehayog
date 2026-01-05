@@ -168,7 +168,10 @@ class VideoService {
       }
 
       // **BACKEND-FIRST: Get auth token for authenticated users (optional - don't fail if missing)**
-      Map<String, String> headers = {'Content-Type': 'application/json'};
+      Map<String, String> headers = {
+        'Content-Type': 'application/json',
+        if (platformId.isNotEmpty) 'x-device-id': platformId,
+      };
       try {
         final token = await AuthService.getToken();
         if (token != null && token.isNotEmpty) {

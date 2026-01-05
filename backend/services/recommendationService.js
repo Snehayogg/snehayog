@@ -26,20 +26,20 @@ class RecommendationService {
   static calculateWatchScore(totalWatchTime, videoDuration) {
     if (!videoDuration || videoDuration <= 0) return 0;
     if (!totalWatchTime || totalWatchTime <= 0) return 0;
-    
+
     // First part: Percentage completion (good for short videos)
     const completionScore = totalWatchTime / videoDuration;
-    
+
     // Second part: Raw watch time capped at 15 seconds (industry standard)
     // This rewards long videos that keep users watching
     const rawWatchScore = Math.min(totalWatchTime, 15) / 15;
-    
+
     // Balanced combination: 50% completion + 50% raw watch time
     const watchScore = 0.5 * completionScore + 0.5 * rawWatchScore;
-    
+
     return Math.min(Math.max(watchScore, 0), 1); // Clamp between 0 and 1
   }
-  
+
   /**
    * Calculate Engagement Score (Likes + Comments)
    * Normalized by total views to prevent bias toward high-view videos
@@ -51,17 +51,17 @@ class RecommendationService {
    */
   static calculateEngagementScore(totalLikes, totalComments, totalViews) {
     if (!totalViews || totalViews <= 0) return 0;
-    
+
     const likeScore = totalLikes / totalViews;
     const commentScore = totalComments / totalViews;
-    
+
     // Combined engagement score
     const engagementScore = likeScore + commentScore;
-    
+
     // Normalize to 0-1 range (assuming max 0.5 engagement rate is excellent)
     return Math.min(engagementScore / 0.5, 1);
   }
-  
+
   /**
    * Calculate Share Score
    * Normalized by total views
@@ -72,13 +72,13 @@ class RecommendationService {
    */
   static calculateShareScore(totalShares, totalViews) {
     if (!totalViews || totalViews <= 0) return 0;
-    
+
     const shareScore = totalShares / totalViews;
-    
+
     // Normalize to 0-1 range (assuming max 0.1 share rate is excellent)
     return Math.min(shareScore / 0.1, 1);
   }
-  
+
   /**
    * Calculate Recency Boost
    * Balanced approach: Newer videos get a slight boost, but it doesn't dominate
@@ -89,11 +89,11 @@ class RecommendationService {
    */
   static calculateRecencyBoost(uploadedAt) {
     if (!uploadedAt) return 0.7; // Default reasonable boost for missing date
-    
+
     const now = new Date();
     const uploadDate = new Date(uploadedAt);
     const ageInDays = (now - uploadDate) / (1000 * 60 * 60 * 24);
-    
+
     // More balanced formula: 0.7 + 0.3 / (1 + ageInDays * 0.05)
     // New content (0 days) → 1.0 boost (slight advantage)
     // 10 days old → ~0.9 boost
@@ -103,10 +103,10 @@ class RecommendationService {
     // Very old content → ~0.7 boost (still competitive, not penalized too much)
     // This ensures fresh content is discovered but doesn't completely hide older quality content
     const recencyBoost = 0.7 + (0.3 / (1 + ageInDays * 0.05));
-    
+
     return Math.max(recencyBoost, 0.7); // Minimum 0.7 boost (more balanced)
   }
-  
+
   /**
    * Calculate Final Recommendation Score
    * Combines all components with proper weights
@@ -131,24 +131,24 @@ class RecommendationService {
       views = 0,
       uploadedAt
     } = videoData;
-    
+
     // Get comment count (handle both array and number)
     const commentCount = Array.isArray(comments) ? comments.length : (comments || 0);
-    
+
     // Calculate component scores
     const watchScore = this.calculateWatchScore(totalWatchTime, duration);
     const engagementScore = this.calculateEngagementScore(likes, commentCount, views);
     const shareScore = this.calculateShareScore(shares, views);
     const recencyBoost = this.calculateRecencyBoost(uploadedAt);
-    
+
     // Final score formula:
     // 60% watch score + 20% engagement + 20% shares, then multiply by recency boost
     const baseScore = 0.6 * watchScore + 0.2 * engagementScore + 0.2 * shareScore;
     const finalScore = baseScore * recencyBoost;
-    
+
     return Math.max(finalScore, 0); // Ensure non-negative
   }
-  
+
   /**
    * Aggregate total watch time for a video from WatchHistory
    * 
@@ -161,14 +161,14 @@ class RecommendationService {
         { $match: { videoId: videoId } },
         { $group: { _id: null, totalWatchTime: { $sum: '$watchDuration' } } }
       ]);
-      
+
       return result.length > 0 ? (result[0].totalWatchTime || 0) : 0;
     } catch (error) {
       console.error(`❌ Error aggregating watch time for video ${videoId}:`, error);
       return 0;
     }
   }
-  
+
   /**
    * Calculate and update score for a single video
    * 
@@ -181,10 +181,10 @@ class RecommendationService {
       if (!video) {
         throw new Error(`Video not found: ${videoId}`);
       }
-      
+
       // Aggregate total watch time from WatchHistory
       const totalWatchTime = await this.aggregateTotalWatchTime(videoId);
-      
+
       // Calculate final score
       const finalScore = this.calculateFinalScore({
         totalWatchTime,
@@ -195,14 +195,14 @@ class RecommendationService {
         views: video.views || 0,
         uploadedAt: video.uploadedAt || video.createdAt
       });
-      
+
       // Update video with new score and watch time
       video.totalWatchTime = totalWatchTime;
       video.finalScore = finalScore;
       video.scoreUpdatedAt = new Date();
-      
+
       await video.save();
-      
+
       return {
         videoId: video._id,
         totalWatchTime,
@@ -221,7 +221,7 @@ class RecommendationService {
       throw error;
     }
   }
-  
+
   /**
    * Calculate diversity-aware feed ordering
    * Ensures no same creator appears back-to-back while maintaining score-based ranking
@@ -253,12 +253,12 @@ class RecommendationService {
     while (remaining.length > 0) {
       // Filter candidates that can be placed at current position
       const candidates = remaining.filter(video => {
-        const creatorId = video.uploader?._id?.toString() || 
-                         video.uploader?.googleId?.toString() || 
-                         video.uploader?.id?.toString() || 
-                         'unknown';
+        const creatorId = video.uploader?._id?.toString() ||
+          video.uploader?.googleId?.toString() ||
+          video.uploader?.id?.toString() ||
+          'unknown';
         const lastPosition = creatorLastPositions.get(creatorId);
-        
+
         // Check spacing requirement
         if (lastPosition !== undefined) {
           const spacing = position - lastPosition - 1;
@@ -275,10 +275,10 @@ class RecommendationService {
         // No candidates meet spacing requirement, relax constraint and take best available
         // This prevents infinite loops when same creator has many videos
         const relaxedCandidates = remaining.filter(video => {
-          const creatorId = video.uploader?._id?.toString() || 
-                           video.uploader?.googleId?.toString() || 
-                           video.uploader?.id?.toString() || 
-                           'unknown';
+          const creatorId = video.uploader?._id?.toString() ||
+            video.uploader?.googleId?.toString() ||
+            video.uploader?.id?.toString() ||
+            'unknown';
           const lastPosition = creatorLastPositions.get(creatorId);
           return lastPosition === undefined || (position - lastPosition - 1) >= 1;
         });
@@ -320,10 +320,10 @@ class RecommendationService {
       ordered.push(selected);
 
       // Update creator position tracking
-      const creatorId = selected.uploader?._id?.toString() || 
-                       selected.uploader?.googleId?.toString() || 
-                       selected.uploader?.id?.toString() || 
-                       'unknown';
+      const creatorId = selected.uploader?._id?.toString() ||
+        selected.uploader?.googleId?.toString() ||
+        selected.uploader?.id?.toString() ||
+        'unknown';
       creatorLastPositions.set(creatorId, position);
 
       // Remove from remaining
@@ -357,13 +357,13 @@ class RecommendationService {
       onlyOutdated = false,
       maxAgeMinutes = 30
     } = options;
-    
+
     try {
       console.log('🔄 Starting recommendation score recalculation...');
-      
+
       // Build query
       const query = { processingStatus: 'completed' }; // Only process completed videos
-      
+
       if (onlyOutdated) {
         const cutoffDate = new Date();
         cutoffDate.setMinutes(cutoffDate.getMinutes() - maxAgeMinutes);
@@ -372,34 +372,34 @@ class RecommendationService {
           { scoreUpdatedAt: { $lt: cutoffDate } }
         ];
       }
-      
+
       // Get total count
       const totalVideos = await Video.countDocuments(query);
       console.log(`📊 Found ${totalVideos} videos to process`);
-      
+
       let processed = 0;
       let errors = 0;
       const startTime = Date.now();
-      
+
       // Process in batches
       let skip = 0;
       const actualLimit = limit || totalVideos;
-      
+
       while (skip < actualLimit && skip < totalVideos) {
         const videos = await Video.find(query)
           .select('_id duration likes comments shares views uploadedAt createdAt')
           .limit(batchSize)
           .skip(skip)
           .lean();
-        
+
         if (videos.length === 0) break;
-        
+
         // Process batch
         for (const video of videos) {
           try {
             await this.calculateAndUpdateVideoScore(video._id);
             processed++;
-            
+
             if (processed % 50 === 0) {
               console.log(`✅ Processed ${processed}/${Math.min(actualLimit, totalVideos)} videos...`);
             }
@@ -408,12 +408,12 @@ class RecommendationService {
             console.error(`❌ Error processing video ${video._id}:`, error.message);
           }
         }
-        
+
         skip += batchSize;
       }
-      
+
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-      
+
       const stats = {
         totalVideos,
         processed,
@@ -421,7 +421,7 @@ class RecommendationService {
         duration: `${duration}s`,
         success: errors === 0
       };
-      
+
       console.log(`✅ Score recalculation complete:`, stats);
       return stats;
     } catch (error) {
@@ -439,13 +439,16 @@ class RecommendationService {
    * @param {Number} limit - Number of videos to return
    * @returns {Promise<Array>} Array of recommended videos
    */
-  static async getSessionBasedRecommendations(userId, currentVideoId = null, limit = 20) {
+  static async getSessionBasedRecommendations(userId, currentVideoId = null, limit = 20, excludeIds = []) {
     try {
       console.log('🎯 RecommendationService: Getting session-based recommendations for user:', userId);
-      
+
+      if (!userId) {
+        return await this.getDefaultRecommendations(limit, currentVideoId);
+      }
       // Get last 5-10 videos user watched in this session (last 30 minutes)
       const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-      const recentWatches = await WatchHistory.find({ 
+      const recentWatches = await WatchHistory.find({
         userId,
         watchedAt: { $gte: thirtyMinutesAgo }
       })
@@ -453,15 +456,15 @@ class RecommendationService {
         .limit(10)
         .populate('videoId')
         .lean();
-      
+
       console.log(`📊 Found ${recentWatches.length} recent watches in session`);
-      
+
       if (recentWatches.length < 2) {
         // Not enough session data, use default recommendations
         console.log('⚠️ Not enough session data, using default recommendations');
         return await this.getDefaultRecommendations(limit, currentVideoId);
       }
-      
+
       // Extract patterns from session
       const sessionPatterns = {
         categories: new Map(),
@@ -470,14 +473,14 @@ class RecommendationService {
         keywords: new Set(),
         watchedVideoIds: new Set()
       };
-      
+
       recentWatches.forEach(watch => {
         const video = watch.videoId;
         if (!video) return;
-        
+
         // Track watched videos to exclude
         sessionPatterns.watchedVideoIds.add(video._id.toString());
-        
+
         // Category pattern (weighted by watch duration)
         if (video.category) {
           const weight = watch.watchDuration || 1;
@@ -486,7 +489,7 @@ class RecommendationService {
             (sessionPatterns.categories.get(video.category) || 0) + weight
           );
         }
-        
+
         // Tag pattern
         if (video.tags && Array.isArray(video.tags)) {
           video.tags.forEach(tag => {
@@ -497,7 +500,7 @@ class RecommendationService {
             );
           });
         }
-        
+
         // Creator pattern
         const creatorId = video.uploader?.toString();
         if (creatorId) {
@@ -507,45 +510,48 @@ class RecommendationService {
             (sessionPatterns.creators.get(creatorId) || 0) + weight
           );
         }
-        
+
         // Keywords from video name/description
         const text = `${video.videoName || ''} ${video.description || ''}`.toLowerCase();
         const keywords = text.split(/\s+/).filter(w => w.length > 3);
         keywords.forEach(kw => sessionPatterns.keywords.add(kw));
       });
-      
+
       // Get top patterns (what user is interested in RIGHT NOW)
       const topCategories = Array.from(sessionPatterns.categories.entries())
         .sort((a, b) => b[1] - a[1])
         .slice(0, 3)
         .map(([cat]) => cat);
-      
+
       const topTags = Array.from(sessionPatterns.tags.entries())
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5)
         .map(([tag]) => tag);
-      
+
       const topCreators = Array.from(sessionPatterns.creators.entries())
         .sort((a, b) => b[1] - a[1])
         .slice(0, 3)
         .map(([creator]) => creator);
-      
+
       console.log('🎯 Session patterns detected:', {
         categories: topCategories,
         tags: topTags.slice(0, 3),
         creators: topCreators.length
       });
-      
+
+      // Track watched videos to exclude + user provided excludeIds
+      const allExcludeIds = new Set([...sessionPatterns.watchedVideoIds, ...excludeIds]);
+
       // Find similar videos using AI embeddings (like Instagram/YouTube)
       const similarVideos = await this.findSimilarVideosUsingAI(
         recentWatches.map(w => w.videoId).filter(Boolean),
         topCategories,
         topTags,
         currentVideoId,
-        Array.from(sessionPatterns.watchedVideoIds),
+        Array.from(allExcludeIds),
         limit
       );
-      
+
       return similarVideos;
     } catch (error) {
       console.error('❌ Error in session-based recommendations:', error);
@@ -567,14 +573,14 @@ class RecommendationService {
   ) {
     try {
       console.log('🤖 Using AI to find similar videos...');
-      
+
       // Get embeddings for watched videos
       const watchedEmbeddings = [];
       for (const video of watchedVideos) {
         if (!video) continue;
         const text = `${video.videoName || ''} ${video.description || ''}`.trim();
         if (!text) continue;
-        
+
         try {
           const embedding = await aiSemanticService.getEmbedding(text);
           if (embedding) {
@@ -584,7 +590,7 @@ class RecommendationService {
           console.warn('⚠️ Failed to get embedding for video:', video._id);
         }
       }
-      
+
       if (watchedEmbeddings.length === 0) {
         // Fallback to category/tag matching if AI fails
         console.log('⚠️ No embeddings available, using category/tag matching');
@@ -596,7 +602,7 @@ class RecommendationService {
           limit
         );
       }
-      
+
       // Calculate average embedding (user's current interest vector)
       const avgEmbedding = this.calculateAverageEmbedding(watchedEmbeddings);
       if (!avgEmbedding) {
@@ -608,16 +614,16 @@ class RecommendationService {
           limit
         );
       }
-      
+
       console.log('✅ Calculated user interest vector from session');
-      
+
       // Build query for candidate videos
       const excludeIds = [excludeVideoId, ...excludeVideoIds].filter(Boolean);
       const query = {
         _id: { $nin: excludeIds },
         processingStatus: 'completed'
       };
-      
+
       // Add category/tag filters to narrow down candidates
       const orConditions = [];
       if (preferredCategories.length > 0) {
@@ -626,44 +632,44 @@ class RecommendationService {
       if (preferredTags.length > 0) {
         orConditions.push({ tags: { $in: preferredTags } });
       }
-      
+
       if (orConditions.length > 0) {
         query.$or = orConditions;
       }
-      
+
       // Get candidate videos (more than limit for AI filtering)
       const candidates = await Video.find(query)
         .sort({ finalScore: -1, createdAt: -1 })
         .limit(Math.min(100, limit * 5)) // Get 5x candidates for AI filtering
         .lean();
-      
+
       if (candidates.length === 0) {
         console.log('⚠️ No candidate videos found, using default recommendations');
         return await this.getDefaultRecommendations(limit, excludeVideoId);
       }
-      
+
       console.log(`🤖 Scoring ${candidates.length} candidate videos using AI...`);
-      
+
       // Score each candidate using cosine similarity
       const scoredVideos = [];
       for (const video of candidates) {
         try {
           const text = `${video.videoName || ''} ${video.description || ''}`.trim();
           if (!text) continue;
-          
+
           const videoEmbedding = await aiSemanticService.getEmbedding(text);
           if (!videoEmbedding) continue;
-          
+
           const similarity = aiSemanticService.cosineSimilarity(
             avgEmbedding,
             videoEmbedding
           );
-          
+
           // Combine AI similarity (70%) with base score (30%)
           const baseScore = video.finalScore || 0;
           const normalizedBaseScore = Math.min(baseScore / 10, 1); // Normalize to 0-1
           const combinedScore = (0.7 * similarity) + (0.3 * normalizedBaseScore);
-          
+
           scoredVideos.push({
             video,
             score: combinedScore,
@@ -675,17 +681,17 @@ class RecommendationService {
           continue;
         }
       }
-      
+
       // Sort by combined score
       scoredVideos.sort((a, b) => b.score - a.score);
-      
+
       console.log(`✅ AI scoring complete. Top 3 similarities: ${scoredVideos.slice(0, 3).map(s => s.similarity.toFixed(3)).join(', ')}`);
-      
+
       // Return top videos
       return scoredVideos
         .slice(0, limit)
         .map(item => item.video);
-        
+
     } catch (error) {
       console.error('❌ Error in AI-based similarity:', error);
       // Fallback
@@ -705,21 +711,21 @@ class RecommendationService {
    */
   static calculateAverageEmbedding(embeddings) {
     if (embeddings.length === 0) return null;
-    
+
     const dimension = embeddings[0].length;
     const avg = new Array(dimension).fill(0);
-    
+
     embeddings.forEach(embedding => {
       for (let i = 0; i < dimension; i++) {
         avg[i] += embedding[i];
       }
     });
-    
+
     // Average
     for (let i = 0; i < dimension; i++) {
       avg[i] /= embeddings.length;
     }
-    
+
     // Normalize
     const norm = Math.sqrt(avg.reduce((sum, val) => sum + val * val, 0));
     if (norm > 0) {
@@ -727,7 +733,7 @@ class RecommendationService {
         avg[i] /= norm;
       }
     }
-    
+
     return avg;
   }
 
@@ -739,7 +745,7 @@ class RecommendationService {
       _id: { $nin: [excludeVideoId, ...excludeVideoIds].filter(Boolean) },
       processingStatus: 'completed'
     };
-    
+
     const orConditions = [];
     if (categories.length > 0) {
       orConditions.push({ category: { $in: categories } });
@@ -747,11 +753,11 @@ class RecommendationService {
     if (tags.length > 0) {
       orConditions.push({ tags: { $in: tags } });
     }
-    
+
     if (orConditions.length > 0) {
       query.$or = orConditions;
     }
-    
+
     return await Video.find(query)
       .sort({ finalScore: -1, createdAt: -1 })
       .limit(limit)
@@ -765,11 +771,11 @@ class RecommendationService {
     const query = {
       processingStatus: 'completed'
     };
-    
+
     if (excludeVideoId) {
       query._id = { $ne: excludeVideoId };
     }
-    
+
     return await Video.find(query)
       .sort({ finalScore: -1, createdAt: -1 })
       .limit(limit)

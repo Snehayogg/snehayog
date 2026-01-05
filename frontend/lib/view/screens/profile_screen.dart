@@ -81,6 +81,11 @@ class _ProfileScreenState extends State<ProfileScreen>
   // **NEW: Refresh counter to force ProfileStatsWidget to reload earnings**
   int _earningsRefreshCounter = 0;
 
+  // **NEW: Track if videos have been loaded/checked for this profile session**
+  // This prevents reloading when creator has no videos
+  bool _videosLoadAttempted = false;
+  String? _lastLoadedUserId; // Track which user's videos we've loaded
+
   @override
   void initState() {
     super.initState();
@@ -110,27 +115,50 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   /// **PUBLIC METHOD: Called when Profile tab is selected**
-  /// Uses cache if available, only loads from server if no cache exists
+  /// **OPTIMIZED: Only load if data is missing - don't reload on every tab switch**
+  /// **FIXED: Don't reload if creator has no videos - only load once per session**
   void onProfileTabSelected() {
     AppLogger.log(
-        '🔄 ProfileScreen: Profile tab selected, ensuring data is loaded');
+        '🔄 ProfileScreen: Profile tab selected, checking if data needs loading');
 
-    // **ENHANCED: Always ensure data is loaded, even if cached**
-    // This fixes the issue where data doesn't show after coming back to profile tab
-    if (_stateManager.userData == null || _stateManager.userVideos.isEmpty) {
+    // Get current user ID
+    final currentUserId = widget.userId ??
+        _stateManager.userData?['googleId'] ??
+        _stateManager.userData?['id'];
+
+    // **FIXED: Reset load attempt flag if user changed**
+    if (currentUserId != null && currentUserId != _lastLoadedUserId) {
+      _videosLoadAttempted = false;
+      _lastLoadedUserId = currentUserId;
       AppLogger.log(
-          '📡 ProfileScreen: Data not loaded or videos missing, loading from cache or server');
+          '🔄 ProfileScreen: User changed, resetting videos load attempt flag');
+    }
+
+    // **OPTIMIZED: Only load if data is completely missing - don't reload if already loaded**
+    if (_stateManager.userData == null) {
+      AppLogger.log(
+          '📡 ProfileScreen: No user data found, loading from cache or server');
       _loadData(); // This will use cache if available, only fetch from server if no cache
+    } else if (!_videosLoadAttempted &&
+        _stateManager.userVideos.isEmpty &&
+        !_stateManager.isVideosLoading) {
+      // **FIXED: Only load videos if we haven't attempted before**
+      // This prevents reloading when creator has no videos
+      AppLogger.log(
+          '🔄 ProfileScreen: User data exists but videos not loaded yet, loading videos once...');
+      _videosLoadAttempted = true; // Mark as attempted
+      _loadVideos().catchError((e) {
+        AppLogger.log('⚠️ ProfileScreen: Error loading videos: $e');
+        _videosLoadAttempted = false; // Reset on error so we can retry
+      });
     } else {
-      AppLogger.log('✅ ProfileScreen: Data already loaded in memory');
-      // **FIX: Even if data exists, ensure videos are loaded**
-      if (_stateManager.userVideos.isEmpty && !_stateManager.isVideosLoading) {
+      AppLogger.log(
+          '✅ ProfileScreen: Data already loaded - no reload needed (using cache/memory)');
+      if (_videosLoadAttempted && _stateManager.userVideos.isEmpty) {
         AppLogger.log(
-            '🔄 ProfileScreen: Data exists but videos missing, loading videos...');
-        _loadVideos().catchError((e) {
-          AppLogger.log('⚠️ ProfileScreen: Error loading videos: $e');
-        });
+            'ℹ️ ProfileScreen: Videos already checked - creator has no videos (not reloading)');
       }
+      // **OPTIMIZED: Don't reload if data is already available - just use cached data**
     }
   }
 
@@ -152,11 +180,13 @@ class _ProfileScreenState extends State<ProfileScreen>
         final cachedData = await _loadCachedProfileData();
         if (cachedData != null) {
           AppLogger.log(
-              '⚡ ProfileScreen: Using cached data (INSTANT - no server fetch)');
+              '⚡ ProfileScreen: Using cached data (INSTANT - no server fetch, cache persists when user navigates back)');
 
           // **INSTANT: Show cached data immediately (no loading state)**
           _stateManager.setUserData(cachedData);
-          await _loadVideosFromCache(); // **FIXED: Wait for videos to load before hiding loading**
+
+          // **OPTIMIZATION: Also load cached videos immediately**
+          await _loadVideosFromCache(); // This will load from SmartCacheManager via ProfileStateManager
           _isLoading.value = false; // Hide loading after videos are loaded
 
           // **NEW: Check UPI ID status after cached data is loaded (only for own profile)**
@@ -174,36 +204,11 @@ class _ProfileScreenState extends State<ProfileScreen>
             });
           }
 
-          // **OPTIMIZATION: Different cache refresh times for own profile vs other users**
-          final prefs = await SharedPreferences.getInstance();
-          final cacheKey = _getProfileCacheKey();
-          final cachedTimestamp =
-              prefs.getInt('profile_cache_timestamp_$cacheKey');
-
+          // **OPTIMIZATION: Always refresh in background for fresh data**
+          // SmartCacheManager handles cache expiry, so we refresh to ensure fresh data
           bool shouldRefresh = true;
-          if (cachedTimestamp != null) {
-            final cacheTime =
-                DateTime.fromMillisecondsSinceEpoch(cachedTimestamp);
-            final age = DateTime.now().difference(cacheTime);
-
-            // **OPTIMIZATION: Shorter cache time for other users (5 minutes) vs own profile (1 day)**
-            final isOtherUser = widget.userId != null;
-            final maxCacheAge = isOtherUser
-                ? const Duration(
-                    minutes: 5) // 5 minutes for other users (fresher data)
-                : const Duration(days: 1); // 1 day for own profile
-
-            if (age < maxCacheAge) {
-              shouldRefresh = false;
-              AppLogger.log(
-                '⚡ ProfileScreen: Cache is fresh (${age.inMinutes}m old for ${isOtherUser ? "other user" : "own profile"}), skipping background refresh',
-              );
-            } else {
-              AppLogger.log(
-                '🔄 ProfileScreen: Cache is stale (${age.inMinutes}m old), will refresh in background',
-              );
-            }
-          }
+          AppLogger.log(
+              '🔄 ProfileScreen: Will refresh in background to ensure fresh data (cache already shown)');
 
           if (shouldRefresh) {
             // **BACKGROUND: Refresh in background (non-blocking)**
@@ -513,11 +518,20 @@ class _ProfileScreenState extends State<ProfileScreen>
           },
         );
 
+        // **FIXED: Mark videos as loaded/attempted after successful load**
+        // This prevents reloading when creator has no videos
+        _videosLoadAttempted = true;
+        if (userIdForVideos != null) {
+          _lastLoadedUserId = userIdForVideos;
+        }
+
         AppLogger.log(
             '✅ ProfileScreen: Loaded ${_stateManager.userVideos.length} videos${forceRefresh ? " (fresh from server, not cache)" : ""}');
       }
     } catch (e) {
       AppLogger.log('❌ ProfileScreen: Error loading videos: $e');
+      // **FIXED: Reset load attempt flag on error so we can retry**
+      _videosLoadAttempted = false;
       // **FIX: Re-throw error so it can be caught and shown to user**
       rethrow;
     }
@@ -528,6 +542,12 @@ class _ProfileScreenState extends State<ProfileScreen>
   Future<void> _refreshData() async {
     AppLogger.log(
         '🔄 ProfileScreen: Manual refresh - clearing ALL caches and fetching fresh data from server (NO CACHE WILL BE USED)');
+
+    // **FIXED: Reset videos load attempt flag on manual refresh**
+    // This allows videos to be reloaded even if they were empty before
+    _videosLoadAttempted = false;
+    AppLogger.log(
+        '🔄 ProfileScreen: Manual refresh - resetting videos load attempt flag');
 
     try {
       // **CRITICAL: Clear ALL caches first - profile cache, video cache, and SmartCache**
@@ -2569,21 +2589,48 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   // **NEW: Enhanced caching methods for profile data**
 
-  /// **ENHANCED: Load cached profile data - use cache if exists (no expiry check)**
-  /// Only fetches from server if no cache exists or manual refresh
+  /// **OPTIMIZED: Load cached profile data from SmartCacheManager**
+  /// **ENHANCED: Uses unified SmartCacheManager (same as ProfileStateManager)**
+  /// Shows cached data instantly when user navigates back to same profile
   Future<Map<String, dynamic>?> _loadCachedProfileData() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final cacheKey = _getProfileCacheKey();
-      final cachedDataJson = prefs.getString('profile_cache_$cacheKey');
+      final cacheManager = SmartCacheManager();
+      await cacheManager.initialize();
 
-      if (cachedDataJson != null && cachedDataJson.isNotEmpty) {
+      if (!cacheManager.isInitialized) {
         ProfileScreenLogger.logDebugInfo(
-            '⚡ Loading profile from SharedPreferences cache (no expiry check - cache persists until manual refresh)');
-        return Map<String, dynamic>.from(json.decode(cachedDataJson));
+            'ℹ️ SmartCacheManager not initialized, will fetch from server');
+        return null;
+      }
+
+      // **OPTIMIZATION: Use same cache key format as ProfileStateManager**
+      final loggedInUser = await _authService.getUserData();
+      String cacheKey;
+      if (widget.userId != null) {
+        // For creator profiles, use userId directly
+        cacheKey = 'user_profile_${widget.userId}';
+      } else {
+        // For own profile, resolve cache key same way as ProfileStateManager
+        final loggedInUserId = loggedInUser?['googleId'] ?? loggedInUser?['id'];
+        cacheKey = loggedInUserId != null
+            ? 'user_profile_$loggedInUserId'
+            : 'user_profile_self';
+      }
+
+      // **OPTIMIZATION: Use peek() to check cache without triggering fetch**
+      final cachedProfile = await cacheManager.peek<Map<String, dynamic>>(
+        cacheKey,
+        cacheType: 'user_profile',
+        allowStale: true, // Allow stale cache for instant display
+      );
+
+      if (cachedProfile != null) {
+        ProfileScreenLogger.logDebugInfo(
+            '⚡ Loading profile from SmartCacheManager (INSTANT - cache persists when user navigates back)');
+        return cachedProfile;
       } else {
         ProfileScreenLogger.logDebugInfo(
-            'ℹ️ No profile cache found - will fetch from server');
+            'ℹ️ No profile cache found in SmartCacheManager - will fetch from server');
       }
     } catch (e) {
       ProfileScreenLogger.logWarning('Error loading cached profile data: $e');
@@ -2591,19 +2638,48 @@ class _ProfileScreenState extends State<ProfileScreen>
     return null;
   }
 
-  /// Cache profile data to SharedPreferences
+  /// **OPTIMIZED: Cache profile data to SmartCacheManager**
+  /// **ENHANCED: Uses unified SmartCacheManager (same as ProfileStateManager)**
+  /// Cache persists when user navigates back to same profile
   Future<void> _cacheProfileData(Map<String, dynamic> profileData) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final cacheKey = _getProfileCacheKey();
+      final cacheManager = SmartCacheManager();
+      await cacheManager.initialize();
 
-      await prefs.setString(
-          'profile_cache_$cacheKey', json.encode(profileData));
-      await prefs.setInt('profile_cache_timestamp_$cacheKey',
-          DateTime.now().millisecondsSinceEpoch);
+      if (!cacheManager.isInitialized) {
+        ProfileScreenLogger.logDebugInfo(
+            '⚠️ SmartCacheManager not initialized, skipping cache');
+        return;
+      }
+
+      // **OPTIMIZATION: Use same cache key format as ProfileStateManager**
+      final loggedInUser = await _authService.getUserData();
+      final isOtherUser = widget.userId != null;
+      String cacheKey;
+      if (widget.userId != null) {
+        // For creator profiles, use userId directly
+        cacheKey = 'user_profile_${widget.userId}';
+      } else {
+        // For own profile, resolve cache key same way as ProfileStateManager
+        final loggedInUserId = loggedInUser?['googleId'] ?? loggedInUser?['id'];
+        cacheKey = loggedInUserId != null
+            ? 'user_profile_$loggedInUserId'
+            : 'user_profile_self';
+      }
+
+      // **OPTIMIZATION: Cache via get() with fetchFn (cache data we already have)**
+      await cacheManager.get<Map<String, dynamic>>(
+        cacheKey,
+        cacheType: 'user_profile',
+        maxAge: isOtherUser
+            ? const Duration(days: 7) // 7 days for other users
+            : const Duration(hours: 24), // 24 hours for own profile
+        fetchFn: () async =>
+            profileData, // Return already fetched data to cache it
+      );
 
       ProfileScreenLogger.logDebugInfo(
-          'Profile data cached to SharedPreferences');
+          '✅ Profile data cached to SmartCacheManager (persists when user navigates back)');
     } catch (e) {
       ProfileScreenLogger.logWarning('Error caching profile data: $e');
     }
@@ -2862,25 +2938,15 @@ class _EarningsBottomSheetContentState
   Future<void> _loadEarnings() async {
     setState(() => _isLoading = true);
     try {
-      // Always limit the number of concurrent requests so UI doesn't feel stuck
-      final now = DateTime.now();
-      final currentMonth = now.month - 1; // 0-indexed for backend
-      final currentYear = now.year;
-
       // To keep loading time reasonable, cap the number of videos we query
       final videosToLoad = widget.videos.take(50).toList();
 
       await Future.wait(
         videosToLoad.map((video) async {
           try {
-            final grossEarnings =
-                await EarningsService.calculateVideoRevenueForMonth(
-              video.id,
-              currentMonth,
-              currentYear,
-            );
+            // **FIX: Use LIFETIME Earnings to match the video label exactly**
             final creatorEarnings =
-                EarningsService.creatorShareFromGross(grossEarnings);
+                await EarningsService.calculateCreatorRevenueForVideo(video.id);
             _videoEarnings[video.id] = creatorEarnings;
           } catch (e) {
             _videoEarnings[video.id] = 0.0;

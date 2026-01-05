@@ -4,6 +4,7 @@ import 'package:vayu/model/video_model.dart';
 import 'package:vayu/core/services/video_player_config_service.dart';
 import 'package:vayu/core/managers/smart_cache_manager.dart';
 import 'package:vayu/core/services/hls_warmup_service.dart';
+import 'package:vayu/services/video_cache_proxy_service.dart';
 import 'package:vayu/utils/app_logger.dart';
 
 /// Factory for creating VideoPlayerController instances with optimized configuration
@@ -61,8 +62,11 @@ class VideoControllerFactory {
         ) ??
         VideoPlayerConfigService.getOptimizedVideoUrl(videoUrl, qualityPreset);
 
+    // **INTEGRATION: Wrap with Video Cache Proxy for persistent caching**
+    final proxiedUrl = videoCacheProxy.proxyUrl(optimizedUrl);
+
     // Get optimized HTTP headers with caching support
-    final headers = VideoPlayerConfigService.getOptimizedHeaders(optimizedUrl);
+    final headers = VideoPlayerConfigService.getOptimizedHeaders(proxiedUrl);
 
     // **HLS CACHING: Add HLS-specific cache headers**
     if (isHLS) {
@@ -108,7 +112,7 @@ class VideoControllerFactory {
 
     try {
       return VideoPlayerController.networkUrl(
-        Uri.parse(optimizedUrl),
+        Uri.parse(proxiedUrl),
         videoPlayerOptions: videoPlayerOptions,
         httpHeaders: {
           ...headers,
@@ -157,7 +161,11 @@ class VideoControllerFactory {
         VideoPlayerConfigService.getQualityPreset(qualityUseCase);
     final optimizedUrl =
         VideoPlayerConfigService.getOptimizedVideoUrl(videoUrl, qualityPreset);
-    final headers = VideoPlayerConfigService.getOptimizedHeaders(optimizedUrl);
+
+    // **INTEGRATION: Wrap with Video Cache Proxy**
+    final proxiedUrl = videoCacheProxy.proxyUrl(optimizedUrl);
+
+    final headers = VideoPlayerConfigService.getOptimizedHeaders(proxiedUrl);
 
     print(
         '🎬 VideoControllerFactory: Creating controller with quality: $qualityUseCase');
@@ -166,7 +174,7 @@ class VideoControllerFactory {
     print('🎬 VideoControllerFactory: Is HLS: $isHLS');
 
     return VideoPlayerController.networkUrl(
-      Uri.parse(optimizedUrl),
+      Uri.parse(proxiedUrl),
       videoPlayerOptions: VideoPlayerOptions(
         mixWithOthers: true,
         allowBackgroundPlayback: false,

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -27,7 +28,7 @@
             background: white;
             padding: 30px;
             border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
             margin-bottom: 30px;
             text-align: center;
         }
@@ -54,7 +55,7 @@
             background: white;
             padding: 25px;
             border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             text-align: center;
             transition: transform 0.3s ease;
         }
@@ -63,10 +64,21 @@
             transform: translateY(-5px);
         }
 
-        .stat-card.primary { border-left: 5px solid #667eea; }
-        .stat-card.success { border-left: 5px solid #28a745; }
-        .stat-card.warning { border-left: 5px solid #ffc107; }
-        .stat-card.danger { border-left: 5px solid #dc3545; }
+        .stat-card.primary {
+            border-left: 5px solid #667eea;
+        }
+
+        .stat-card.success {
+            border-left: 5px solid #28a745;
+        }
+
+        .stat-card.warning {
+            border-left: 5px solid #ffc107;
+        }
+
+        .stat-card.danger {
+            border-left: 5px solid #dc3545;
+        }
 
         .stat-icon {
             font-size: 3rem;
@@ -88,7 +100,7 @@
             background: white;
             padding: 30px;
             border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
             margin-bottom: 30px;
         }
 
@@ -132,10 +144,25 @@
             text-transform: uppercase;
         }
 
-        .status-pending { background: #fff3cd; color: #856404; }
-        .status-processing { background: #d1ecf1; color: #0c5460; }
-        .status-paid { background: #d4edda; color: #155724; }
-        .status-failed { background: #f8d7da; color: #721c24; }
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-processing {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .status-paid {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
 
         .feedback-card {
             background: #f8f9fa;
@@ -147,7 +174,7 @@
         }
 
         .feedback-card:hover {
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
             transform: translateY(-2px);
         }
 
@@ -267,7 +294,7 @@
             height: 60px;
             font-size: 1.5rem;
             cursor: pointer;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
             transition: all 0.3s ease;
         }
 
@@ -303,11 +330,11 @@
             .stats-grid {
                 grid-template-columns: 1fr;
             }
-            
+
             .payout-table {
                 font-size: 0.9rem;
             }
-            
+
             .payout-table th,
             .payout-table td {
                 padding: 10px 8px;
@@ -315,6 +342,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <div class="header">
@@ -328,37 +356,37 @@
                 <div class="stat-number" id="totalVideos">-</div>
                 <div class="stat-label">Total Videos</div>
             </div>
-            
+
             <div class="stat-card success">
                 <div class="stat-icon">💰</div>
                 <div class="stat-number" id="totalCreatorEarnings">-</div>
                 <div class="stat-label">Current Month Creator Earnings</div>
             </div>
-            
+
             <div class="stat-card warning">
                 <div class="stat-icon">🤖</div>
                 <div class="stat-number" id="totalPayouts">-</div>
                 <div class="stat-label">Total Payouts</div>
             </div>
-            
+
             <div class="stat-card danger">
                 <div class="stat-icon">⏳</div>
                 <div class="stat-number" id="pendingPayouts">-</div>
                 <div class="stat-label">Pending</div>
             </div>
-            
+
             <div class="stat-card success">
                 <div class="stat-icon">✅</div>
                 <div class="stat-number" id="successfulPayouts">-</div>
                 <div class="stat-label">Successful</div>
             </div>
-            
+
             <div class="stat-card danger">
                 <div class="stat-icon">❌</div>
                 <div class="stat-number" id="failedPayouts">-</div>
                 <div class="stat-label">Failed</div>
             </div>
-            
+
             <div class="stat-card primary">
                 <div class="stat-icon">📅</div>
                 <div class="stat-number" id="dailyUploads">-</div>
@@ -369,10 +397,19 @@
         <div class="dashboard-section">
             <h2 class="section-title">👥 All Creators</h2>
             <div class="filter-controls">
-                <input type="text" id="creatorSearch" placeholder="Search by name, email, Google ID, or UPI" oninput="filterCreators()">
+                <input type="text" id="creatorSearch" placeholder="Search by name, email, Google ID, or UPI"
+                    oninput="filterCreators()">
+
+                <!-- NEW: Date Filters -->
+                <!-- UPDATED: Date Filter (Current & Previous Only) -->
+                <select id="filterPeriod" onchange="refreshData()" style="min-width: 200px;">
+                    <!-- Populated by JS -->
+                </select>
+
                 <select id="creatorSort" onchange="filterCreators()">
                     <option value="earnings">Sort by Earnings</option>
                     <option value="views">Sort by Total Views</option>
+                    <option value="uploads">Sort by Monthly Uploads</option> <!-- NEW -->
                     <option value="adViews">Sort by Ad Views</option>
                     <option value="name">Sort by Name</option>
                     <option value="pending">Sort by Pending Payout</option>
@@ -396,7 +433,7 @@
         <div class="dashboard-section">
             <h2 class="section-title">📊 Payout Overview</h2>
             <div id="payoutOverview">
-                <p>Loading payout overview...</p>
+                <p>Loading overview...</p>
             </div>
         </div>
 
@@ -425,7 +462,8 @@
         <div class="dashboard-section">
             <h2 class="section-title">🎬 Video Management</h2>
             <div class="filter-controls">
-                <input type="text" id="videoSearch" placeholder="Search videos by name or description..." oninput="searchVideos()">
+                <input type="text" id="videoSearch" placeholder="Search videos by name or description..."
+                    oninput="searchVideos()">
                 <button class="btn btn-primary btn-sm" onclick="loadVideos()">Load Videos</button>
                 <button class="btn btn-warning btn-sm" onclick="resetVideoFilters()">Reset</button>
             </div>
@@ -605,11 +643,11 @@
         function markCreatorPaid(encodedId) {
             const creatorId = decodeURIComponent(encodedId);
             if (!creatorId) return;
-            
+
             // Get current month for tracking
             const now = new Date();
             const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-            
+
             // Always allow marking (for tracking each month's payment)
             if (markedCreators.has(creatorId)) {
                 // Already marked - allow re-marking for new month
@@ -622,7 +660,7 @@
                 saveMarkedCreators();
                 showSuccess(`Marked payout as done for ${currentMonth} ✅`);
             }
-            
+
             filterCreators();
         }
 
@@ -709,13 +747,23 @@
 
             const totals = creators.reduce((acc, creator) => {
                 const isMarked = isCreatorMarked(creator.id);
-                const net = Number(creator.creatorRevenueINR ?? creator.totalEarningsINR ?? 0);
-                const gross = Number(creator.grossRevenueINR ?? net);
-                const platform = Math.max(Number(creator.platformRevenueINR ?? (gross - net)), 0);
-                const pendingAmount = Number(creator.pendingEarningsINR || 0);
+
+                // **USE FRONTEND CALCULATED VALUES ONLY** (not backend values)
+                // Priority: frontendCalculatedRevenue > creatorRevenueINR > 0
+                const frontendRev = creator.frontendCalculatedRevenue;
+                const net = frontendRev ? frontendRev.creator : Number(creator.creatorRevenueINR ?? creator.totalEarningsINR ?? 0);
+                const gross = frontendRev ? frontendRev.gross : Number(creator.grossRevenueINR ?? net);
+                const platform = frontendRev ? frontendRev.platform : Math.max(Number(creator.platformRevenueINR ?? (gross - net)), 0);
+
+                // Use frontend calculated ad views if available
+                const totalAdViews = frontendRev ?
+                    (frontendRev.bannerViews + frontendRev.carouselViews) :
+                    Number(creator.totalAdViews || 0);
+
+                const pendingAmount = Number(creator.pendingEarningsINR || net || 0);
 
                 acc.totalViews += Number(creator.totalViews || 0);
-                acc.totalAdViews += Number(creator.totalAdViews || 0);
+                acc.totalAdViews += totalAdViews;
                 acc.totalCreatorEarnings += net;
                 acc.totalGrossEarnings += gross;
                 acc.totalPlatformRevenue += platform > 0 ? platform : Math.max(gross - net, 0);
@@ -742,6 +790,13 @@
             });
 
             summaryContainer.innerHTML = `
+                <div style="margin-bottom: 12px; padding: 10px; background: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 4px;">
+                    <strong>💻 Frontend Revenue Calculation Active</strong>
+                    <p style="margin: 5px 0 0 0; font-size: 0.9rem; color: #555;">
+                        Revenue values are calculated using frontend method (same as Creator App). 
+                        CPM: Banner ₹10, Carousel ₹30 | Creator Share: 80%
+                    </p>
+                </div>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px;">
                     <div style="background: #f8f9fa; border-radius: 12px; padding: 16px; text-align: center;">
                         <h3 style="margin-bottom: 8px; color: #667eea;">${formatNumber(creators.length)}</h3>
@@ -786,31 +841,56 @@
                 const upiIdRaw = creator.paymentDetails?.upiId || '—';
                 const upiId = upiIdRaw === '—' ? upiIdRaw : escapeHtml(upiIdRaw);
 
-                const totalAdViews = Number(creator.totalAdViews || 0);
-                const netEarnings = Number(creator.creatorRevenueINR ?? creator.totalEarningsINR ?? 0);
-                const grossEarnings = Number(creator.grossRevenueINR ?? netEarnings);
-                const platformRevenue = Math.max(Number(creator.platformRevenueINR ?? (grossEarnings - netEarnings)), 0);
+                // **USE FRONTEND CALCULATED VALUES FIRST** (priority over backend)
+                const frontendRev = creator.frontendCalculatedRevenue;
 
-                const pendingAmount = Number(creator.pendingEarningsINR || 0);
+                const totalAdViews = frontendRev ?
+                    (frontendRev.bannerViews + frontendRev.carouselViews) :
+                    Number(creator.totalAdViews || 0);
+
+                const netEarnings = frontendRev ?
+                    frontendRev.creator :
+                    Number(creator.creatorRevenueINR ?? creator.totalEarningsINR ?? 0);
+
+                const grossEarnings = frontendRev ?
+                    frontendRev.gross :
+                    Number(creator.grossRevenueINR ?? netEarnings);
+
+                const platformRevenue = frontendRev ?
+                    frontendRev.platform :
+                    Math.max(Number(creator.platformRevenueINR ?? (grossEarnings - netEarnings)), 0);
+
+                const pendingAmount = Number(creator.pendingEarningsINR || netEarnings || 0);
                 const isMarked = isCreatorMarked(creator.id);
                 const encodedId = encodeURIComponent(creator.id);
 
-                // Get monthly earnings data
-                const monthlyData = monthlyEarningsData[creator.id] || { 
-                    thisMonth: 0, 
+                // Get monthly earnings data (use frontend if available)
+                const monthlyData = monthlyEarningsData[creator.id] || {
+                    thisMonth: frontendRev ? frontendRev.creator : 0,
                     lastMonth: 0,
-                    currentMonthGrossRevenue: 0,
-                    currentMonthTotalAdViews: 0,
+                    currentMonthGrossRevenue: frontendRev ? frontendRev.gross : 0,
+                    currentMonthTotalAdViews: frontendRev ? (frontendRev.bannerViews + frontendRev.carouselViews) : 0,
                     currentMonthTotalViews: 0
                 };
-                
-                // Use current month data for these columns
+
+                // Use current month data for these columns (prioritize frontend)
                 const currentMonthTotalViews = monthlyData.currentMonthTotalViews || 0;
-                const currentMonthTotalAdViews = monthlyData.currentMonthTotalAdViews || 0;
-                const currentMonthEarnings = monthlyData.thisMonth || 0;
-                const currentMonthGrossRevenue = monthlyData.currentMonthGrossRevenue || 0;
-                const currentMonthPlatformRevenue = currentMonthGrossRevenue - currentMonthEarnings;
-                
+                const currentMonthTotalAdViews = frontendRev ?
+                    (frontendRev.bannerViews + frontendRev.carouselViews) :
+                    (monthlyData.currentMonthTotalAdViews || 0);
+
+                const currentMonthEarnings = frontendRev ?
+                    frontendRev.creator :
+                    (monthlyData.thisMonth || 0);
+
+                const currentMonthGrossRevenue = frontendRev ?
+                    frontendRev.gross :
+                    (monthlyData.currentMonthGrossRevenue || 0);
+
+                const currentMonthPlatformRevenue = frontendRev ?
+                    frontendRev.platform :
+                    (currentMonthGrossRevenue - currentMonthEarnings);
+
                 const previousMonthEarnings = monthlyData.lastMonth || 0;
 
                 const markedBadge = formatCurrencyINR(
@@ -821,14 +901,14 @@
                 let pendingCell = '—';
                 if (shouldShowMarkButton) {
                     const amountBadge =
-                        pendingAmount > 0
+                        (pendingAmount > 0 && !isMarked)
                             ? `<span class="status-badge status-pending">${formatCurrencyINR(pendingAmount)}</span>`
                             : '';
 
                     // Always show button, but show different text if already marked
                     const buttonText = isMarked ? 'Mark Paid Again' : 'Mark Paid';
                     const buttonClass = isMarked ? 'btn btn-warning btn-sm' : 'btn btn-success btn-sm';
-                    const statusBadge = isMarked 
+                    const statusBadge = isMarked
                         ? `<span class="status-badge status-paid" style="margin-right: 8px;">${markedBadge} Paid ✅</span>`
                         : '';
 
@@ -968,42 +1048,263 @@
             renderCreators(creatorData);
         }
 
+        // **NEW: Frontend Revenue Calculation (Same as creator_revenue_screen.dart)**
+        // CPM Configuration - Must match AppConfig in Flutter app
+        const BANNER_CPM = 10;      // ₹10 per 1000 impressions
+        const CAROUSEL_CPM = 30;    // ₹30 per 1000 impressions
+        const CREATOR_SHARE = 0.80; // 80% to creator
+        const PLATFORM_SHARE = 0.20; // 20% to platform
+
+        /**
+         * Calculate revenue from ad impressions (frontend calculation)
+         * @param {number} bannerViews - Banner ad views
+         * @param {number} carouselViews - Carousel ad views
+         * @returns {object} - { gross, creator, platform }
+         */
+        function calculateRevenueFromViews(bannerViews, carouselViews) {
+            const bannerRevenue = (bannerViews / 1000.0) * BANNER_CPM;
+            const carouselRevenue = (carouselViews / 1000.0) * CAROUSEL_CPM;
+            const grossRevenue = bannerRevenue + carouselRevenue;
+            const creatorRevenue = grossRevenue * CREATOR_SHARE;
+            const platformRevenue = grossRevenue * PLATFORM_SHARE;
+
+            return {
+                gross: grossRevenue,
+                creator: creatorRevenue,
+                platform: platformRevenue,
+                breakdown: {
+                    bannerRevenue,
+                    carouselRevenue,
+                    bannerViews,
+                    carouselViews
+                }
+            };
+        }
+
+        /**
+         * Fetch ad impressions for a creator's videos
+         * @param {string} creatorId - Creator's ID (googleId)
+         * @param {Array} videoIds - Array of video IDs
+         * @param {number} month - Month filter (0-11)
+         * @param {number} year - Year filter
+         * @returns {object} - { bannerViews, carouselViews }
+         */
+        async function fetchCreatorAdImpressions(creatorId, videoIds, month, year) {
+            try {
+                if (!videoIds || videoIds.length === 0) {
+                    return { bannerViews: 0, carouselViews: 0 };
+                }
+
+                // Use provided date or default to current
+                const now = new Date();
+                const targetMonth = month !== undefined ? month : now.getMonth();
+                const targetYear = year !== undefined ? year : now.getFullYear();
+
+                const response = await authorizedFetch(
+                    `${API_BASE}/admin/creators/${encodeURIComponent(creatorId)}/ad-impressions?month=${targetMonth}&year=${targetYear}`
+                );
+
+                if (response && response.ok) {
+                    const data = await response.json();
+                    return {
+                        bannerViews: data.bannerViews || 0,
+                        carouselViews: data.carouselViews || 0
+                    };
+                }
+
+                return { bannerViews: 0, carouselViews: 0 };
+            } catch (error) {
+                console.warn(`Error fetching ad impressions for ${creatorId}:`, error);
+                return { bannerViews: 0, carouselViews: 0 };
+            }
+        }
+
+
+
+        /**
+         * Calculate revenue for all creators using frontend calculation
+         * @param {Array} creators - Array of creator objects
+         * @param {number} month - Month filter (optional)
+         * @param {number} year - Year filter (optional)
+         * @returns {Promise<Map>} - Map of creatorId to calculated revenue
+         */
+        /**
+         * Calculate revenue for all creators using frontend calculation
+         * @param {Array} creators - Array of creator objects (from /creators)
+         * @param {Array} monthlyStats - Array of monthly stats (from /monthly-earnings)
+         * @returns {Promise<Map>} - Map of creatorId to calculated revenue
+         */
+        async function calculateAllCreatorsRevenue(creators, monthlyStats) {
+            const revenueMap = new Map();
+
+            // Create map of monthly stats for O(1) lookup
+            const statsMap = new Map();
+            if (monthlyStats && Array.isArray(monthlyStats)) {
+                monthlyStats.forEach(stat => {
+                    statsMap.set(String(stat.creatorId), stat);
+                });
+            }
+
+            console.log('💰 Starting frontend revenue calculation for', creators.length, 'creators using monthly stats');
+
+            // Calculate revenue synchronously using provided stats
+            creators.forEach((creator) => {
+                try {
+                    const creatorId = String(creator.id || creator._id);
+                    const stats = statsMap.get(creatorId);
+
+                    // Use stats from monthly-earnings endpoint if available
+                    const bannerViews = stats ? (stats.currentMonthBannerViews || 0) : 0;
+                    const carouselViews = stats ? (stats.currentMonthCarouselViews || 0) : 0;
+
+                    // Calculate revenue
+                    const revenue = calculateRevenueFromViews(
+                        bannerViews,
+                        carouselViews
+                    );
+
+                    revenueMap.set(creatorId, revenue);
+                } catch (error) {
+                    console.error(`Error calculating revenue for ${creator.name}:`, error);
+                }
+            });
+
+            return revenueMap;
+        }
+
+        function initDateFilters() {
+            const now = new Date();
+            const periodSelect = document.getElementById('filterPeriod');
+            if (!periodSelect) return;
+
+            periodSelect.innerHTML = '';
+
+            // 1. Current Month
+            const currentMonth = now.getMonth();
+            const currentYear = now.getFullYear();
+            const currentOption = document.createElement('option');
+            currentOption.value = `${currentMonth}|${currentYear}`;
+            const currentMonthName = now.toLocaleString('default', { month: 'long' });
+            currentOption.textContent = `${currentMonthName} ${currentYear} (Current)`;
+            periodSelect.appendChild(currentOption);
+
+            // 2. Previous Month
+            const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const prevMonth = prevDate.getMonth();
+            const prevYear = prevDate.getFullYear();
+            const prevOption = document.createElement('option');
+            prevOption.value = `${prevMonth}|${prevYear}`;
+            const prevMonthName = prevDate.toLocaleString('default', { month: 'long' });
+            prevOption.textContent = `${prevMonthName} ${prevYear} (Previous)`;
+            periodSelect.appendChild(prevOption);
+
+            // Default to Current
+            periodSelect.value = `${currentMonth}|${currentYear}`;
+        }
+
         async function loadCreators() {
             const container = document.getElementById('creatorsList');
             try {
                 container.innerHTML = '<p>Loading creators...</p>';
-                
+
+                // Get selected date filters
+                const periodSelect = document.getElementById('filterPeriod');
+
+                // Default to current date if controls not ready
+                const now = new Date();
+                let month = now.getMonth();
+                let year = now.getFullYear();
+
+                if (periodSelect && periodSelect.value) {
+                    const parts = periodSelect.value.split('|');
+                    if (parts.length === 2) {
+                        month = parseInt(parts[0]);
+                        year = parseInt(parts[1]);
+                    }
+                }
+
+
+
                 // Load creators and monthly earnings in parallel
                 const [creatorsResponse, monthlyResponse] = await Promise.all([
                     authorizedFetch(`${API_BASE}/admin/creators`),
-                    authorizedFetch(`${API_BASE}/admin/creators/monthly-earnings`)
+                    authorizedFetch(`${API_BASE}/admin/creators/monthly-earnings?month=${month}&year=${year}`)
                 ]);
-                
+
                 if (!creatorsResponse || !creatorsResponse.ok) {
                     container.innerHTML = '<p class="error-message">Failed to load creators list</p>';
                     return;
                 }
-                
+
                 const creatorsData = await creatorsResponse.json();
                 creatorData = creatorsData.creators || [];
-                
-                // Process monthly earnings data
+
+                // Parse monthly data EARLY to use for revenue calculation
+                let monthlyStats = [];
                 if (monthlyResponse && monthlyResponse.ok) {
                     const monthlyData = await monthlyResponse.json();
                     if (monthlyData.success && monthlyData.creators) {
+                        monthlyStats = monthlyData.creators;
+
+                        // Initialize monthlyEarningsData for later use
                         monthlyEarningsData = {};
-                        monthlyData.creators.forEach(creator => {
-                            monthlyEarningsData[creator.creatorId] = {
-                                thisMonth: creator.thisMonth || 0,
-                                lastMonth: creator.lastMonth || 0,
-                                currentMonthGrossRevenue: creator.currentMonthGrossRevenue || 0,
-                                currentMonthTotalAdViews: creator.currentMonthTotalAdViews || 0,
-                                currentMonthTotalViews: creator.currentMonthTotalViews || 0
-                            };
-                        });
                     }
                 }
-                
+
+                // **NEW: Calculate revenue on frontend with DATE FILTER**
+                // Now uses monthlyStats to avoid N+1 network requests
+                console.log('💰 Admin Dashboard: Calculating frontend revenue for all creators using monthly stats...');
+                const frontendRevenueMap = await calculateAllCreatorsRevenue(creatorData, monthlyStats);
+
+                // **NEW: Merge frontend calculations with creator data**
+                creatorData.forEach(creator => {
+                    const frontendRevenue = frontendRevenueMap.get(creator.id);
+                    if (frontendRevenue) {
+                        // Add frontend calculated revenue to creator object
+                        creator.frontendCalculatedRevenue = {
+                            gross: frontendRevenue.gross,
+                            creator: frontendRevenue.creator,
+                            platform: frontendRevenue.platform,
+                            bannerRevenue: frontendRevenue.breakdown.bannerRevenue,
+                            carouselRevenue: frontendRevenue.breakdown.carouselRevenue,
+                            bannerViews: frontendRevenue.breakdown.bannerViews,
+                            carouselViews: frontendRevenue.breakdown.carouselViews
+                        };
+
+                        // **CRITICAL: Override backend values with frontend calculation**
+                        // This ensures revenue shown matches exactly what creator sees in app
+                        creator.creatorRevenueINR = frontendRevenue.creator;
+                        creator.grossRevenueINR = frontendRevenue.gross;
+                        creator.platformRevenueINR = frontendRevenue.platform;
+
+                        console.log(`✅ ${creator.name}: Frontend=₹${frontendRevenue.creator.toFixed(2)}, Backend=₹${creator.totalEarningsINR || 0}`);
+                    }
+                });
+
+                // Build monthlyEarningsData map
+                if (monthlyStats.length > 0) {
+                    monthlyStats.forEach(creator => {
+                        // Check if we have frontend calculation for this creator
+                        const frontendRevenue = frontendRevenueMap.get(creator.creatorId);
+
+                        monthlyEarningsData[creator.creatorId] = {
+                            // **USE FRONTEND CALCULATION for current month if available**
+                            thisMonth: frontendRevenue ? frontendRevenue.creator : (creator.thisMonth || 0),
+                            lastMonth: creator.lastMonth || 0,
+                            currentMonthGrossRevenue: frontendRevenue ? frontendRevenue.gross : (creator.currentMonthGrossRevenue || 0),
+                            currentMonthTotalAdViews: frontendRevenue ?
+                                (frontendRevenue.breakdown.bannerViews + frontendRevenue.breakdown.carouselViews) :
+                                (creator.currentMonthTotalAdViews || 0),
+                            currentMonthTotalViews: creator.currentMonthTotalViews || 0
+                        };
+
+                        if (frontendRevenue) {
+                            console.log(`📊 ${creator.creatorId}: Using FRONTEND calculation for thisMonth: ₹${frontendRevenue.creator.toFixed(2)}`);
+                        }
+                    });
+                }
+
+                console.log('✅ Admin Dashboard: Revenue calculation complete. Displaying creators...');
                 renderCreators(creatorData);
                 // Re-apply current filters after data refresh
                 filterCreators();
@@ -1012,9 +1313,10 @@
                 container.innerHTML = `<p class="error-message">Error loading creators: ${error.message}</p>`;
             }
         }
-        
+
         // Load data on page load
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
+            initDateFilters();
             refreshData();
         });
 
@@ -1039,7 +1341,7 @@
 
         function displayFeedback(feedbackList) {
             const container = document.getElementById('feedbackList');
-            
+
             if (feedbackList.length === 0) {
                 container.innerHTML = '<p>No feedback found</p>';
                 return;
@@ -1114,32 +1416,32 @@
             const ratingFilter = document.getElementById('ratingFilter').value;
             const searchFilter = document.getElementById('searchFilter').value.toLowerCase();
             const sortFilter = document.getElementById('sortFilter').value;
-            
+
             const cards = document.querySelectorAll('.feedback-card');
-            
+
             cards.forEach(card => {
                 const rating = card.dataset.rating;
                 const content = card.textContent.toLowerCase();
-                
+
                 let show = true;
-                
+
                 // Filter by rating
                 if (ratingFilter && rating !== ratingFilter) {
                     show = false;
                 }
-                
+
                 // Filter by search
                 if (searchFilter && !content.includes(searchFilter)) {
                     show = false;
                 }
-                
+
                 card.style.display = show ? 'block' : 'none';
             });
-            
+
             // Sort cards
             const visibleCards = Array.from(cards).filter(card => card.style.display !== 'none');
             const container = document.getElementById('feedbackList');
-            
+
             visibleCards.sort((a, b) => {
                 switch (sortFilter) {
                     case 'newest':
@@ -1154,7 +1456,7 @@
                         return 0;
                 }
             });
-            
+
             // Reorder in DOM
             visibleCards.forEach(card => {
                 container.appendChild(card);
@@ -1234,19 +1536,19 @@
         async function refreshData() {
             try {
                 setLoading(true);
-                
+
                 // Load payout statistics
                 await loadPayoutStats();
-                
+
                 // Load payout overview
                 await loadPayoutOverview();
 
                 // Load creator summaries
                 await loadCreators();
-                
+
                 // Load recent payouts
                 await loadRecentPayouts();
-                
+
                 setLoading(false);
             } catch (error) {
                 console.error('Error refreshing data:', error);
@@ -1262,7 +1564,7 @@
                     authorizedFetch(`${API_BASE}/admin/stats`),
                     authorizedFetch(`${API_BASE}/admin/creators/monthly-earnings`)
                 ]);
-                
+
                 // Payout status cards
                 if (payoutResponse && payoutResponse.ok) {
                     const stats = await payoutResponse.json();
@@ -1271,7 +1573,7 @@
                     document.getElementById('pendingPayouts').textContent = stats.pending || 0;
                     document.getElementById('failedPayouts').textContent = stats.failed || 0;
                 }
-                
+
                 // Platform-level stats (videos + daily uploads)
                 let platformStats = null;
                 if (platformStatsResponse && platformStatsResponse.ok) {
@@ -1302,7 +1604,7 @@
                 const response = await authorizedFetch(`${API_BASE}/creator-payouts/overview`);
                 if (response.ok) {
                     const overview = await response.json();
-                    
+
                     const overviewHtml = `
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
                             <div style="text-align: center; padding: 20px; background: #f8f9fa; border-radius: 10px;">
@@ -1323,7 +1625,7 @@
                             </div>
                         </div>
                     `;
-                    
+
                     document.getElementById('payoutOverview').innerHTML = overviewHtml;
                 }
             } catch (error) {
@@ -1338,12 +1640,12 @@
                 if (response.ok) {
                     const data = await response.json();
                     const payouts = data.payouts || [];
-                    
+
                     if (payouts.length === 0) {
                         document.getElementById('recentPayouts').innerHTML = '<p>No recent payouts found</p>';
                         return;
                     }
-                    
+
                     const tableHtml = `
                         <table class="payout-table">
                             <thead>
@@ -1374,7 +1676,7 @@
                             </tbody>
                         </table>
                     `;
-                    
+
                     document.getElementById('recentPayouts').innerHTML = tableHtml;
                 }
             } catch (error) {
@@ -1424,10 +1726,10 @@
             const errorDiv = document.createElement('div');
             errorDiv.className = 'error-message';
             errorDiv.textContent = message;
-            
+
             const container = document.querySelector('.container');
             container.insertBefore(errorDiv, container.firstChild);
-            
+
             setTimeout(() => errorDiv.remove(), 5000);
         }
 
@@ -1435,10 +1737,10 @@
             const successDiv = document.createElement('div');
             successDiv.className = 'success-message';
             successDiv.textContent = message;
-            
+
             const container = document.querySelector('.container');
             container.insertBefore(successDiv, container.firstChild);
-            
+
             setTimeout(() => successDiv.remove(), 5000);
         }
 
@@ -1459,7 +1761,7 @@
                 if (searchValue) {
                     params.append('search', searchValue);
                 }
-                
+
                 const response = await authorizedFetch(`${API_BASE}/admin/videos?${params}`);
                 if (!response || !response.ok) {
                     container.innerHTML = '<p class="error-message">Failed to load videos</p>';
@@ -1476,7 +1778,7 @@
 
         function renderVideos(videos, totalCount) {
             const container = document.getElementById('videosList');
-            
+
             if (!videos || videos.length === 0) {
                 container.innerHTML = '<p>No videos found</p>';
                 return;
@@ -1596,4 +1898,5 @@
 
     </script>
 </body>
+
 </html>

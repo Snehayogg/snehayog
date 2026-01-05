@@ -66,7 +66,7 @@ router.get('/creators', async (req, res) => {
     const creators = await User.find({
       name: { $regex: escapedQuery, $options: 'i' },
     })
-      .select('googleId name email profilePic followers createdAt')
+      .select('googleId name profilePic followers createdAt') // **FIXED: Removed email for privacy**
       .sort({ 'followers.length': -1 })
       .limit(limit)
       .lean();

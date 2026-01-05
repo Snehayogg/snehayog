@@ -32,9 +32,13 @@ import 'package:vayu/core/managers/shared_video_controller_pool.dart';
 import 'package:vayu/core/managers/video_controller_manager.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/services/app_remote_config_service.dart';
+import 'package:vayu/services/video_cache_proxy_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // **NEW: Initialize Video Cache Proxy for persistent caching**
+  await videoCacheProxy.initialize();
 
   // **OPTIMIZED: Firebase and notifications disabled (not active currently)**
   // try {
@@ -141,6 +145,9 @@ void _initializeServicesInBackground() async {
 
     print('✅ Background services initialized successfully');
 
+    // **CLEANUP: Perform periodic proxy cache cleanup**
+    unawaited(videoCacheProxy.cleanCache());
+
     // Splash-time prefetch: fetch first page and warm up first few videos
     unawaited(_splashPrefetch());
   } catch (e) {
@@ -209,6 +216,9 @@ Future<void> _splashPrefetch() async {
         if (url.contains('.m3u8')) {
           unawaited(HlsWarmupService().warmUp(url));
         }
+
+        // **NEW: Persistent chunk caching for instant reload**
+        unawaited(videoCacheProxy.prefetchChunk(url));
       }
     }
 

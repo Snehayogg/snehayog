@@ -8,6 +8,7 @@ abstract class VideoRepository {
   Future<Map<String, dynamic>> getVideos({
     int page = 1,
     int limit = 10,
+    bool clearSession = false,
   });
 
   /// Fetches a specific video by its ID

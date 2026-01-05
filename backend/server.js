@@ -11,7 +11,7 @@ import cron from 'node-cron';
 // Only disable if explicitly requested via DISABLE_CONSOLE_LOG=true
 if (process.env.DISABLE_CONSOLE_LOG === 'true') {
   // eslint-disable-next-line no-console
-  console.log = () => {};
+  console.log = () => { };
 }
 
 // Import database manager
@@ -63,9 +63,9 @@ const __dirname = path.dirname(__filename);
 
 // Check required environment variables (support both MONGO_URI and MONGODB_URI)
 // **FIX: Don't exit early - allow server to start for healthcheck even if DB is missing**
-const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
+const mongoUri = process.env.MONGO_URI;
 if (!mongoUri) {
-  console.warn('⚠️ Missing environment variable: MONGO_URI or MONGODB_URI');
+  console.warn('⚠️ Missing environment variable: MONGO_URI');
   console.warn('⚠️ Server will start but database features will be unavailable');
 } else {
   // Set the environment variable for consistency
@@ -123,8 +123,6 @@ app.use(cors({
       'https://cerulean-kashata-b8a907.netlify.app', // Netlify deployment
       /^https:\/\/.*\.netlify\.app$/, // All Netlify subdomains
       'http://localhost', // Local development (any port)
-      'http://localhost:3000', // Local development
-      'http://localhost:5000', // Local development
       'http://localhost:5001', // Local development
       'http://localhost:8080', // Flutter web default port
       /^http:\/\/localhost:\d+$/, // Any localhost port (for Flutter web)
@@ -162,8 +160,8 @@ app.use(cors({
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: [
-    'Content-Type', 
-    'Authorization', 
+    'Content-Type',
+    'Authorization',
     'X-Requested-With',
     'Accept',
     'Origin',
@@ -191,14 +189,14 @@ app.use('/hls', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Range, Accept-Ranges, Content-Range');
   res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
-  
+
   // Set proper MIME types for HLS files
   if (req.path.endsWith('.m3u8')) {
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
   } else if (req.path.endsWith('.ts')) {
     res.setHeader('Content-Type', 'video/mp2t');
   }
-  
+
   next();
 }, express.static(path.join(__dirname, 'uploads/hls'), {
   // **FIXED: Add better error handling for missing files**
@@ -228,29 +226,6 @@ app.use('/hls', (err, req, res, next) => {
   }
 });
 
-// Health check endpoint (before routes)
-// **FIX: Add both /health and /api/health for Railway compatibility**
-app.get('/health', (req, res) => {
-  console.log('🏥 Health check endpoint hit from:', req.ip);
-  res.json({ 
-    status: 'healthy',
-    service: 'vayug-backend',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    environment: process.env.NODE_ENV || 'development'
-  });
-});
-
-app.get('/api/health', (req, res) => {
-  console.log('🏥 Health check endpoint hit from:', req.ip);
-  res.json({ 
-    status: 'healthy',
-    service: 'vayug-backend',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    environment: process.env.NODE_ENV || 'development'
-  });
-});
 
 // API Routes
 // Note: /api/app-config is excluded from API versioning as it's needed for version detection
@@ -281,11 +256,11 @@ app.use('/api', apiVersioning, apiRouter);
 app.get('/', (req, res) => {
   console.log('🔗 Root route hit:', req.url, 'Query:', req.query);
   const refCode = req.query.ref || '';
-  const appSchemeUrl = refCode 
-    ? `snehayog://video/?ref=${refCode}` 
+  const appSchemeUrl = refCode
+    ? `snehayog://video/?ref=${refCode}`
     : 'snehayog://';
-  const webUrl = refCode 
-    ? `https://snehayog.site/?ref=${refCode}` 
+  const webUrl = refCode
+    ? `https://snehayog.site/?ref=${refCode}`
     : 'https://snehayog.site';
   const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.snehayog.app';
 
@@ -491,20 +466,20 @@ app.use(errorHandler);
 // Graceful shutdown
 const gracefulShutdown = async (signal) => {
   console.log(`\n🛑 Received ${signal}, shutting down gracefully...`);
-  
+
   try {
     // Stop cron jobs
     monthlyNotificationCron.stop();
     recommendationScoreCron.stop();
-    
+
     // Disconnect Redis
     if (redisService.getConnectionStatus()) {
       await redisService.disconnect();
     }
-    
+
     // Disconnect database
     await databaseManager.disconnect();
-    
+
     console.log('✅ Graceful shutdown complete');
     process.exit(0);
   } catch (error) {
@@ -526,23 +501,23 @@ const startServer = async () => {
     console.log(`   HOST: ${HOST}`);
     console.log(`   NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
     console.log(`   Railway: ${process.env.RAILWAY_ENVIRONMENT ? 'YES' : 'NO'}`);
-    
+
     // **FIX: Start HTTP server FIRST so healthcheck works immediately**
     // Database connection will happen in background (non-blocking)
     const server = app.listen(PORT, HOST, () => {
       const addr = server.address();
       console.log(`🚀 Server running on ${addr.address}:${addr.port}`);
       console.log('✅ Server is ready to accept connections');
-      
+
       // Log Railway-specific info
       if (process.env.RAILWAY_ENVIRONMENT) {
         console.log(`🚂 Railway environment detected`);
         console.log(`🔌 Railway will forward traffic to: ${HOST}:${PORT}`);
       }
-      
+
       console.log('🔌 Database connecting in background...');
     });
-    
+
     // Handle server binding errors
     server.on('error', (error) => {
       if (error.code === 'EADDRINUSE') {
@@ -558,12 +533,12 @@ const startServer = async () => {
         throw error;
       }
     });
-    
+
     // Verify successful binding
     server.on('listening', () => {
       const addr = server.address();
       console.log(`✅ Server successfully bound to ${addr.address}:${addr.port}`);
-      
+
       // Verify port matches what we requested
       if (addr.port === PORT) {
         console.log(`✅ Port binding verified: ${PORT}`);
@@ -571,7 +546,7 @@ const startServer = async () => {
         console.warn(`⚠️ Port mismatch: requested ${PORT}, bound to ${addr.port}`);
       }
     });
-    
+
     // **FIX: Connect to database in background (non-blocking)**
     // This allows healthcheck to work even if database is slow/failing
     if (mongoUri) {
@@ -580,7 +555,7 @@ const startServer = async () => {
           console.log('✅ Database connected successfully');
           // Start services that require database
           automatedPayoutService.startScheduler();
-          
+
           // Start ad cleanup cron job (run every hour at minute 0)
           cron.schedule('0 * * * *', async () => {
             try {
@@ -589,10 +564,10 @@ const startServer = async () => {
               console.error('❌ Error in scheduled ad cleanup:', error);
             }
           });
-          
+
           // Start monthly notification cron job (runs on 1st of every month at 9:00 AM)
           monthlyNotificationCron.start();
-          
+
           // Start recommendation score recalculation cron job (runs every 15 minutes)
           recommendationScoreCron.start();
         })
@@ -605,7 +580,7 @@ const startServer = async () => {
       console.warn('⚠️ No MongoDB URI - skipping database connection');
       console.warn('⚠️ Database features will be unavailable');
     }
-    
+
     // **FIX: Connect to Redis in background (non-blocking)**
     redisService.connect()
       .then((redisConnected) => {
@@ -619,7 +594,7 @@ const startServer = async () => {
         console.error('❌ Redis connection error:', error.message);
         console.log('⚠️ App will continue without Redis caching');
       });
-    
+
   } catch (error) {
     console.error('❌ Failed to start server:', error);
     console.error('❌ Error details:', {
@@ -627,7 +602,7 @@ const startServer = async () => {
       message: error.message,
       stack: error.stack
     });
-    
+
     // **FIX: Only exit on critical errors (like port already in use)**
     if (error.code === 'EADDRINUSE' || error.code === 'EACCES') {
       console.error('❌ Critical binding error - exiting');

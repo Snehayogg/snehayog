@@ -36,10 +36,9 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
 
   Future<void> _loadInitialData() async {
     try {
-      setState(() {
-        _isLoading = true;
-        _errorMessage = null; // Clear any previous error
-      });
+      // **OPTIMIZED: Use ValueNotifiers for granular updates**
+      _isLoading = true;
+      _errorMessage = null; // Clear any previous error
 
       // **NEW: Load persisted seen video keys so cache doesn't re-show watched videos**
       await _loadSeenVideoKeysFromStorage();
@@ -62,8 +61,8 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
         preserveKey ??=
             _videos.isNotEmpty ? videoIdentityKey(_videos.first) : null;
 
-        // **FIX: Rank videos and find correct index AFTER ranking**
-        final rankedVideos = _rankVideosWithEngagement(
+        // **FIX: Rank videos and find correct index AFTER ranking (async - runs in isolate)**
+        final rankedVideos = await _rankVideosWithEngagement(
           _videos,
           preserveVideoKey: preserveKey,
         );
@@ -103,11 +102,9 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
             }
           });
 
-          // Use a single setState call to prevent excessive updates
-          setState(() {
-            _isLoading = false;
-            _errorMessage = null; // Ensure error is cleared
-          });
+          // **OPTIMIZED: Use ValueNotifiers for granular updates**
+          _isLoading = false;
+          _errorMessage = null; // Ensure error is cleared
 
           AppLogger.log(
             '🚀 VideoFeedAdvanced: Progressive render with provided videos: ${_videos.length}, currentIndex: $_currentIndex (videoId: ${widget.initialVideoId})',
@@ -136,25 +133,11 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
           }
         }
 
-        // **OPTIMIZED: Load background data in parallel - don't block video display on errors**
-        Future.wait([
-          _loadCurrentUserId().catchError((e) {
-            AppLogger.log('⚠️ Error loading user ID (non-blocking): $e');
-            return;
-          }),
-          _loadActiveAds().catchError((e) {
-            AppLogger.log('⚠️ Error loading ads (non-blocking): $e');
-            return;
-          }),
-          _loadFollowingUsers().catchError((e) {
-            AppLogger.log(
-                '⚠️ Error loading following users (non-blocking): $e');
-            return;
-          }),
-        ], eagerError: false)
-            .catchError((e) {
-          AppLogger.log('⚠️ Error in parallel background data loading: $e');
-          return <void>[];
+        // **OPTIMIZED: DEFER non-critical background data loading**
+        // We'll trigger these after the first video starts preloading/playing
+        // to give 100% bandwidth and CPU to the video feed first
+        _loadCurrentUserId().catchError((e) {
+          AppLogger.log('⚠️ Error loading user ID (non-blocking): $e');
         });
         return;
       }
@@ -174,7 +157,7 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
           );
 
           // Load regular videos from API
-          await _loadVideos(page: 1);
+          await _loadVideos(page: 1, clearSession: false);
 
           if (mounted) {
             // **FIX: For shared/deep link videos, ALWAYS put target video at index 0**
@@ -194,8 +177,9 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
 
             // **CRITICAL: Re-rank videos but preserve deep link video at index 0**
             // Use preserveVideoKey to ensure deep link video stays at position 0
+            // (async - runs in isolate)
             final deepLinkVideoKey = videoIdentityKey(targetVideo);
-            final rankedVideos = _rankVideosWithEngagement(
+            final rankedVideos = await _rankVideosWithEngagement(
               _videos,
               preserveVideoKey: deepLinkVideoKey.isNotEmpty
                   ? deepLinkVideoKey
@@ -312,11 +296,9 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
               '✅ VideoFeedAdvanced: Deep link video ready at index 0 (ID: $targetVideoId, videoName: ${targetVideo.videoName})',
             );
 
-            // **CRITICAL: Set loading to false and ensure video autoplays after positioning**
-            setState(() {
-              _isLoading = false;
-              _errorMessage = null;
-            });
+            // **OPTIMIZED: Use ValueNotifiers for granular updates**
+            _isLoading = false;
+            _errorMessage = null;
 
             // **CRITICAL: Ensure video preloading and autoplay for deep link video**
             // Deep link video is always at index 0
@@ -393,20 +375,16 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
             '⚠️ VideoFeedAdvanced: Error fetching deep link video: $e, falling back to regular load',
           );
 
-          // **ENHANCED: Show user-friendly error message**
+          // **OPTIMIZED: Use ValueNotifier for granular update**
           if (mounted) {
-            setState(() {
-              _errorMessage = 'Video not found. Loading feed instead...';
-            });
+            _errorMessage = 'Video not found. Loading feed instead...';
           }
 
           // **FALLBACK: Load regular videos and try to find the video in the feed**
-          await _loadVideos(page: 1);
+          await _loadVideos(page: 1, clearSession: false);
           if (mounted) {
-            // Clear error message
-            setState(() {
-              _errorMessage = null;
-            });
+            // **OPTIMIZED: Use ValueNotifier for granular update**
+            _errorMessage = null;
 
             // **ENHANCED: Try to verify and set correct index after loading**
             _verifyAndSetCorrectIndex();
@@ -437,25 +415,14 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
       } else {
         // Regular video load (no deep link)
         // **FIX: Wait for videos to load before setting isLoading = false**
-        await _loadVideos(page: 1);
+        await _loadVideos(page: 1, clearSession: false);
         if (!mounted) return;
         _verifyAndSetCorrectIndex();
       }
 
-      // **OPTIMIZED: Load background data in parallel - don't block video display**
-      Future.wait([
-        _loadCurrentUserId().catchError((e) {
-          AppLogger.log('⚠️ Error loading user ID (non-blocking): $e');
-          return;
-        }),
-        _loadActiveAds().catchError((e) {
-          AppLogger.log('⚠️ Error loading ads (non-blocking): $e');
-          return;
-        }),
-      ], eagerError: false)
-          .catchError((e) {
-        AppLogger.log('⚠️ Error in parallel background data loading: $e');
-        return <void>[];
+      // **OPTIMIZED: DEFER non-critical background data loading**
+      _loadCurrentUserId().catchError((e) {
+        AppLogger.log('⚠️ Error loading user ID (non-blocking): $e');
       });
 
       if (mounted) {
@@ -471,16 +438,15 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
           );
           // No error but no videos - might be network issue, retry immediately (no delay)
           try {
-            await _loadVideos(page: 1, useCache: false);
+            await _loadVideos(page: 1, useCache: false, clearSession: false);
             if (!mounted) return;
             _verifyAndSetCorrectIndex();
           } catch (retryError) {
             AppLogger.log('❌ VideoFeedAdvanced: Retry failed: $retryError');
             if (mounted) {
-              setState(() {
-                _isLoading = false;
-                _errorMessage = retryError.toString();
-              });
+              // **OPTIMIZED: Use ValueNotifiers for granular updates**
+              _isLoading = false;
+              _errorMessage = retryError.toString();
             }
             return;
           }
@@ -488,7 +454,8 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
 
         // Videos loaded successfully or error occurred
         if (mounted) {
-          setState(() => _isLoading = false);
+          // **OPTIMIZED: Use ValueNotifier for granular update**
+          _isLoading = false;
           if (_videos.isNotEmpty) {
             AppLogger.log(
               '🚀 VideoFeedAdvanced: Progressive render after videos loaded: ${_videos.length}',
@@ -520,10 +487,19 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
             });
 
             _startVideoPreloading();
-            // **OPTIMIZED: Load following users in parallel with other background tasks**
-            _loadFollowingUsers().catchError((e) {
-              AppLogger.log(
-                  '⚠️ Error loading following users (non-blocking): $e');
+
+            // **OPTIMIZED: Trigger heavy background loads with a delay**
+            // This ensures first video rendering/playback is not interrupted
+            Future.delayed(const Duration(seconds: 2), () {
+              if (mounted) {
+                _loadActiveAds().catchError((e) {
+                  AppLogger.log('⚠️ Error loading ads (deferred): $e');
+                });
+                _loadFollowingUsers().catchError((e) {
+                  AppLogger.log(
+                      '⚠️ Error loading following users (deferred): $e');
+                });
+              }
             });
           }
         }
@@ -531,10 +507,9 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
     } catch (e) {
       AppLogger.log('❌ Error loading initial data: $e');
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage = e.toString();
-        });
+        // **OPTIMIZED: Use ValueNotifiers for granular updates**
+        _isLoading = false;
+        _errorMessage = e.toString();
       }
     }
   }
@@ -702,9 +677,8 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
         final userId = authController.userData!['id'] ??
             authController.userData!['googleId'];
         if (userId != null) {
-          setState(() {
-            _currentUserId = userId;
-          });
+          // **OPTIMIZED: No setState needed - _currentUserId doesn't trigger UI rebuilds**
+          _currentUserId = userId;
           AppLogger.log(
               '✅ Loaded current user ID from auth controller: $_currentUserId');
           return;
@@ -713,9 +687,8 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
 
       final userData = await _authService.getUserData();
       if (userData != null && userData['id'] != null) {
-        setState(() {
-          _currentUserId = userData['id'];
-        });
+        // **OPTIMIZED: No setState needed - _currentUserId doesn't trigger UI rebuilds**
+        _currentUserId = userData['id'];
         AppLogger.log(
             '✅ Loaded current user ID from auth service: $_currentUserId');
       }
@@ -732,10 +705,9 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
       final allAds = await _activeAdsService.fetchActiveAds();
 
       if (mounted) {
-        setState(() {
-          _bannerAds = allAds['banner'] ?? [];
-          _adsLoaded = true;
-        });
+        // **OPTIMIZED: Use ValueNotifiers for granular updates**
+        _bannerAds = allAds['banner'] ?? [];
+        _adsLoaded = true;
 
         AppLogger.log('✅ VideoFeedAdvanced: Fallback ads loaded:');
         AppLogger.log('   Banner ads: ${_bannerAds.length}');
@@ -748,11 +720,10 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
         }
 
         if (mounted) {
-          setState(() {
-            _lockedBannerAdByVideoId.clear();
-            AppLogger.log(
-                '🧹 Cleared locked banner ads to allow rotation with ${_bannerAds.length} ads');
-          });
+          // **OPTIMIZED: No setState needed - just clear the map**
+          _lockedBannerAdByVideoId.clear();
+          AppLogger.log(
+              '🧹 Cleared locked banner ads to allow rotation with ${_bannerAds.length} ads');
         }
       }
 
@@ -765,10 +736,9 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
             final retry = await _activeAdsService.fetchActiveAds();
             if (!mounted) return;
             if ((retry['banner'] ?? []).isNotEmpty) {
-              setState(() {
-                _bannerAds = retry['banner']!;
-                _adsLoaded = true;
-              });
+              // **OPTIMIZED: Use ValueNotifiers for granular updates**
+              _bannerAds = retry['banner']!;
+              _adsLoaded = true;
               AppLogger.log(
                   '✅ VideoFeedAdvanced: Banner ads loaded on retry: ${_bannerAds.length}');
             }
@@ -785,9 +755,8 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
     } catch (e) {
       AppLogger.log('❌ Error loading fallback ads: $e');
       if (mounted) {
-        setState(() {
-          _adsLoaded = true;
-        });
+        // **OPTIMIZED: Use ValueNotifier for granular update**
+        _adsLoaded = true;
       }
     }
   }
@@ -811,9 +780,8 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
         try {
           final isFollowing = await userService.isFollowingUser(uploaderId);
           if (isFollowing) {
-            setState(() {
-              _followingUsers.add(uploaderId);
-            });
+            // **OPTIMIZED: No setState needed - _followingUsers doesn't trigger UI rebuilds**
+            _followingUsers.add(uploaderId);
           }
         } catch (e) {
           AppLogger.log('❌ Error checking follow status for $uploaderId: $e');

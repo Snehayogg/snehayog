@@ -190,6 +190,17 @@ class ProfileStateManager extends ChangeNotifier {
       AppLogger.log(
           '🔄 ProfileStateManager: User data values: ${_userData?.values.toList()}');
 
+      // **OPTIMIZATION: Load videos in parallel with profile data (non-blocking)**
+      final videoUserId = userId ?? _userData?['googleId'] ?? _userData?['id'];
+      if (videoUserId != null && videoUserId.toString().isNotEmpty) {
+        // **OPTIMIZATION: Start video loading in parallel (don't wait)**
+        loadUserVideos(videoUserId.toString(), forceRefresh: forceRefresh)
+            .catchError((e) {
+          AppLogger.log(
+              '⚠️ ProfileStateManager: Error loading videos in parallel: $e');
+        });
+      }
+
       // **NEW: Populate UserProvider cache when loading another creator's profile**
       // This ensures follower count is available in UserProvider for ProfileStatsWidget
       if (userId != null && _context != null) {

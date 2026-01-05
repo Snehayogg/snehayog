@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, compute;
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -51,6 +51,7 @@ part 'video_feed_advanced/video_feed_advanced_initialization.dart';
 part 'video_feed_advanced/video_feed_advanced_data.dart';
 part 'video_feed_advanced/video_feed_advanced_preload.dart';
 part 'video_feed_advanced/video_feed_advanced_ui.dart';
+part 'video_feed_advanced/video_feed_advanced_scroll_physics.dart'; // **NEW: Custom physics**
 
 // #region agent log
 // Debug logging helper for instrumentation
@@ -88,6 +89,13 @@ Future<void> _debugLog(String location, String message,
   } catch (_) {}
 }
 // #endregion
+
+/// **ISOLATE HELPER: Top-level function for compute()**
+/// Must be top-level for isolate communication
+/// This function runs VideoEngagementRanker.rankVideos() in a separate isolate
+List<VideoModel> _rankVideosIsolateHelper(List<VideoModel> videos) {
+  return VideoEngagementRanker.rankVideos(videos);
+}
 
 class VideoFeedAdvanced extends StatefulWidget {
   final int? initialIndex;
@@ -148,6 +156,23 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         _isScreenVisible = true;
         _ensureWakelockForVisibility();
         _lifecyclePaused = false;
+
+        // **NEW: Refresh feed if app was in background for > 30 minutes**
+        bool shouldForceRefresh = false;
+        if (_lastPausedAt != null) {
+          final timeInBackground = DateTime.now().difference(_lastPausedAt!);
+          if (timeInBackground.inMinutes >= 30) {
+            AppLogger.log(
+                '🔄 VideoFeedAdvanced: App resumed after ${timeInBackground.inMinutes} mins. Triggering fresh feed load.');
+            shouldForceRefresh = true;
+          }
+          _lastPausedAt = null; // Clear after use
+        }
+
+        if (shouldForceRefresh) {
+          _loadVideos(page: 1, append: false, clearSession: false);
+        }
+
         // Try restoring state after resume
         _restoreBackgroundStateIfAny().then((_) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -157,6 +182,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               );
               return;
             }
+            // If we just triggered a refresh, don't try to autoplay old current index
+            if (shouldForceRefresh) return;
+
             final openedFromProfile = widget.initialVideos != null &&
                 widget.initialVideos!.isNotEmpty;
             if (openedFromProfile) {
@@ -183,6 +211,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   }
 
   void _handleAppMovedToBackground(AppLifecycleState state) {
+    _lastPausedAt = DateTime.now(); // Record when app enters background
     _saveBackgroundState();
     _pauseAllVideosOnTabSwitch();
     _videoControllerManager.pauseAllVideos();
@@ -1189,6 +1218,61 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   /// **HANDLE PAGE CHANGES** - Debounced for fast scrolling
   void _onPageChanged(int index) {
     if (index == _currentIndex) return;
+
+    // **CRITICAL FIX: Pause current video IMMEDIATELY to stop audio overlap**
+    if (_currentIndex < _videos.length) {
+      // Pause local controller if exists
+      if (_controllerPool.containsKey(_currentIndex)) {
+        final currentController = _controllerPool[_currentIndex];
+        if (currentController != null &&
+            currentController.value.isInitialized &&
+            currentController.value.isPlaying) {
+          currentController.pause();
+          _controllerStates[_currentIndex] = false;
+          AppLogger.log(
+              '⏸️ _onPageChanged: Immediate pause for index $_currentIndex');
+        }
+      }
+
+      // **SYNCHRONOUS PAUSE: Pause shared pool controller IMMEDIATELY**
+      // waiting for microtask allows overlap.
+      final video = _videos[_currentIndex];
+      final sharedPool = SharedVideoControllerPool();
+      if (sharedPool.hasController(video.id)) {
+        final ctrl = sharedPool.getController(video.id);
+        if (ctrl != null && ctrl.value.isPlaying) {
+          ctrl.pause();
+        }
+      }
+    }
+
+    // **AGGRESSIVE SAFETY: Pause ANY other playing video to ensure 100% silence**
+    // This catches edge cases in fast scrolling where internal state might lag
+    _controllerPool.forEach((idx, controller) {
+      if (idx != index && controller.value.isPlaying) {
+        try {
+          controller.pause();
+          _controllerStates[idx] = false;
+        } catch (_) {}
+      }
+    });
+
+    // **CRITICAL FIX: Immediate check for fast scrolling - no debounce when close to end**
+    // This ensures trigger happens even during fast scrolling
+    if (index < _videos.length && _hasMore && !_isLoadingMore) {
+      final distanceFromEnd = _videos.length - index;
+      const triggerDistance = 7; // Fixed trigger when 7 videos remain
+
+      if (distanceFromEnd <= triggerDistance) {
+        AppLogger.log(
+          '⚡ IMMEDIATE (fast scroll): index=$index, total=${_videos.length}, distanceFromEnd=$distanceFromEnd, triggerDistance=$triggerDistance',
+        );
+        // Trigger immediately without debounce for fast scrolling
+        _loadMoreVideos();
+        _preloadNearbyVideos();
+      }
+    }
+
     _pageChangeTimer?.cancel();
     _pageChangeTimer = Timer(const Duration(milliseconds: 150), () {
       _handlePageChangeDebounced(index);
@@ -1197,7 +1281,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   /// **DEBOUNCED PAGE CHANGE HANDLER**
   void _handlePageChangeDebounced(int index) {
-    if (!mounted || index == _currentIndex) return;
+    if (!mounted) return;
 
     // **LRU: Track access time for previous index**
     _lastAccessedLocal[_currentIndex] = DateTime.now();
@@ -1232,8 +1316,33 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     final sharedPool = SharedVideoControllerPool();
     sharedPool.pauseAllControllers();
 
+    // **IMMEDIATE SYNC: Update internal index (moved from _onPageChanged)**
     _currentIndex = index;
+    _autoAdvancedForIndex.remove(index);
+
+    // **FIXED: Reset user paused state for the NEW video so it can autoplay**
+    _userPaused[index] = false;
+
+    // **MEMORY MANAGEMENT: Periodic cleanup on page change**
+    if (index % 10 == 0 &&
+        _videos.length > VideoFeedStateFieldsMixin._videosCleanupThreshold) {
+      _cleanupOldVideosFromList();
+    }
+
     _reprimeWindowIfNeeded();
+
+    // **NEW: Pre-fetching trigger**
+    // Trigger loading next page when user reaches the 3rd video from the end (pro-active)
+    if (mounted &&
+        !_isRefreshing &&
+        _hasMore &&
+        !_isLoadingMore &&
+        index >= _videos.length - 3) {
+      AppLogger.log(
+        '📡 UI: Pre-fetching triggered at index $index (${_videos.length - index} videos before end)',
+      );
+      _loadMoreVideos();
+    }
 
     // Safety: ensure newly active video's audio is unmuted
     final activeController = _controllerPool[_currentIndex];
@@ -1314,13 +1423,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         return;
       }
 
-      // **FIX: Don't autoplay if user has manually paused the video**
-      if (_userPaused[index] == true) {
-        AppLogger.log(
-          '⏸️ Autoplay suppressed: user has manually paused video at index $index',
-        );
-        return;
-      }
+      // (Check removed to force autoplay on scroll)
 
       // **CRITICAL: Pause ALL other videos before playing current video**
       _pauseAllOtherVideos(index);
@@ -1356,49 +1459,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       AppLogger.log(
         '🔄 Video not preloaded, preloading and will autoplay when ready',
       );
-      // Mark as loading immediately so UI shows thumbnail/loading instead of grey
-      // No need for setState - the _loadingVideos set is already updated
       _preloadVideo(index).then((_) {
-        // After preloading, check if this is still the current video
-        if (mounted &&
-            _currentIndex == index &&
-            _controllerPool.containsKey(index)) {
-          // Guard again: only autoplay if context allows it
-          if (!_shouldAutoplayForContext('handlePageChange after preload')) {
-            return;
-          }
-          final loadedController = _controllerPool[index];
-          if (loadedController != null &&
-              loadedController.value.isInitialized) {
-            // **LRU: Track access time**
-            _lastAccessedLocal[index] = DateTime.now();
-
-            // **CRITICAL: Pause ALL other videos before playing current video**
-            _pauseAllOtherVideos(index);
-
-            loadedController.setVolume(1.0);
-            loadedController.play();
-            _controllerStates[index] = true;
-            _userPaused[index] = false;
-            _applyLoopingBehavior(loadedController);
-            _attachEndListenerIfNeeded(loadedController, index);
-            _attachBufferingListenerIfNeeded(loadedController, index);
-
-            // **NEW: Start view tracking for current video**
-            if (index < _videos.length) {
-              final currentVideo = _videos[index];
-              _viewTracker.startViewTracking(
-                currentVideo.id,
-                videoUploaderId: currentVideo.uploader.id,
-              );
-              AppLogger.log(
-                '▶️ Started view tracking for current video: ${currentVideo.id}',
-              );
-            }
-
-            AppLogger.log('✅ Video autoplay started after preloading');
-            _pendingAutoplayAfterLogin = false;
-          }
+        if (mounted && index == _currentIndex) {
+          forcePlayCurrent();
         }
       });
     }

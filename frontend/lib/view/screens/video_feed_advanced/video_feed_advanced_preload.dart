@@ -1,12 +1,6 @@
 part of 'package:vayu/view/screens/video_feed_advanced.dart';
 
 extension _VideoFeedPreload on _VideoFeedAdvancedState {
-  void _startPreloading() {
-    _preloadTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
-      _preloadNearbyVideos();
-    });
-  }
-
   void _preloadNearbyVideos() {
     if (_videos.isEmpty) return;
 
@@ -40,15 +34,24 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
     sharedPool.cleanupDistantControllers(_currentIndex, keepRange: keepRange);
 
+    // **NEW: Background preload of second page immediately after first page**
+    if (!_hasStartedBackgroundPreload &&
+        _videos.isNotEmpty &&
+        _hasMore &&
+        !_isLoadingMore) {
+      AppLogger.log(
+          '🚀 Background Preload: Starting to load Page 2 in background...');
+      _hasStartedBackgroundPreload = true;
+      _loadMoreVideos();
+    }
+
     // **FIXED: Dynamic loading trigger based on total videos**
     // For small lists (like first page with 4 videos), trigger much earlier
-    // For larger lists, use 12 videos from end
+    // For larger lists, use 7 videos from end
     final distanceFromEnd = _videos.length - _currentIndex;
     if (_hasMore && !_isLoadingMore) {
-      // **PROACTIVE: Dynamic trigger - earlier for small lists, later for large lists**
-      // If total videos < 10, trigger when 3 videos from end (increased from 2 for fast scrolling)
-      // Otherwise, trigger when 12 videos from end
-      final triggerDistance = _videos.length < 10 ? 3 : 12;
+      // **PROACTIVE: Trigger when 7 videos from end**
+      const triggerDistance = 7;
       if (distanceFromEnd <= triggerDistance) {
         AppLogger.log(
           '📡 Triggering load more: index=$_currentIndex, total=${_videos.length}, distanceFromEnd=$distanceFromEnd, triggerDistance=$triggerDistance, hasMore=$_hasMore',
@@ -205,18 +208,17 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
         if (mounted && controller.value.isInitialized) {
           final isPlaying = controller.value.isPlaying;
-          setState(() {
-            _firstFrameReady[index] ??= ValueNotifier<bool>(false);
-            if (_firstFrameReady[index]!.value != true) {
-              _firstFrameReady[index]!.value = true;
-            }
-            if (!_userPaused.containsKey(index)) {
-              _userPaused[index] = false;
-            }
-            if (!_controllerStates.containsKey(index)) {
-              _controllerStates[index] = isPlaying;
-            }
-          });
+          // **OPTIMIZED: No setState needed - just update maps directly**
+          _firstFrameReady[index] ??= ValueNotifier<bool>(false);
+          if (_firstFrameReady[index]!.value != true) {
+            _firstFrameReady[index]!.value = true;
+          }
+          if (!_userPaused.containsKey(index)) {
+            _userPaused[index] = false;
+          }
+          if (!_controllerStates.containsKey(index)) {
+            _controllerStates[index] = isPlaying;
+          }
           AppLogger.log(
             '🔄 Triggered rebuild for reused controller at index $index',
           );
@@ -238,15 +240,14 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         );
 
         if (mounted) {
-          setState(() {
-            _firstFrameReady[index] ??= ValueNotifier<bool>(false);
-            if (!_userPaused.containsKey(index)) {
-              _userPaused[index] = false;
-            }
-            if (!_controllerStates.containsKey(index)) {
-              _controllerStates[index] = false;
-            }
-          });
+          // **OPTIMIZED: No setState needed - just update maps directly**
+          _firstFrameReady[index] ??= ValueNotifier<bool>(false);
+          if (!_userPaused.containsKey(index)) {
+            _userPaused[index] = false;
+          }
+          if (!_controllerStates.containsKey(index)) {
+            _controllerStates[index] = false;
+          }
           AppLogger.log(
             '🔄 Triggered rebuild after controller initialization for index $index',
           );
@@ -308,19 +309,21 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
           if (isReady) {
             _firstFrameReady[index]?.value = true;
             try {
-              await controller.pause();
+              // **FIX: Don't pause if it's the current video - let it keep playing!**
+              if (index != _currentIndex) {
+                await controller.pause();
+              }
               await controller.setVolume(1.0);
             } catch (_) {}
 
             if (mounted) {
-              setState(() {
-                if (!_userPaused.containsKey(index)) {
-                  _userPaused[index] = false;
-                }
-                if (!_controllerStates.containsKey(index)) {
-                  _controllerStates[index] = false;
-                }
-              });
+              // **OPTIMIZED: No setState needed - just update maps directly**
+              if (!_userPaused.containsKey(index)) {
+                _userPaused[index] = false;
+              }
+              if (!_controllerStates.containsKey(index)) {
+                _controllerStates[index] = false;
+              }
               AppLogger.log(
                 '🔄 Triggered rebuild when first frame ready for index $index',
               );
@@ -739,302 +742,6 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
     return null;
   }
 
-  void _onPageChanged(int index) {
-    if (index == _currentIndex) return;
-
-    // **CRITICAL FIX: Immediate check for fast scrolling - no debounce when close to end**
-    // This ensures trigger happens even during fast scrolling
-    if (index < _videos.length && _hasMore && !_isLoadingMore) {
-      final distanceFromEnd = _videos.length - index;
-      final triggerDistance =
-          _videos.length < 10 ? 3 : 12; // More aggressive: 3 for small lists
-
-      if (distanceFromEnd <= triggerDistance) {
-        AppLogger.log(
-          '⚡ IMMEDIATE (fast scroll): index=$index, total=${_videos.length}, distanceFromEnd=$distanceFromEnd, triggerDistance=$triggerDistance',
-        );
-        // Trigger immediately without debounce for fast scrolling
-        _loadMoreVideos();
-        _preloadNearbyVideos();
-      }
-    }
-
-    _pageChangeTimer?.cancel();
-    _pageChangeTimer = Timer(const Duration(milliseconds: 150), () {
-      _handlePageChangeDebounced(index);
-    });
-  }
-
-  void _handlePageChangeDebounced(int index) {
-    if (!mounted || index == _currentIndex) return;
-
-    _lifecyclePaused = false;
-
-    _lastAccessedLocal[_currentIndex] = DateTime.now();
-
-    if (_currentIndex < _videos.length) {
-      final previousVideo = _videos[_currentIndex];
-      _viewTracker.stopViewTracking(previousVideo.id);
-      AppLogger.log(
-        '⏸️ Stopped view tracking for previous video: ${previousVideo.id}',
-      );
-
-      _userPaused[_currentIndex] = false;
-    }
-
-    _controllerPool.forEach((idx, controller) {
-      if (controller.value.isInitialized && controller.value.isPlaying) {
-        try {
-          controller.pause();
-          _controllerStates[idx] = false;
-        } catch (_) {}
-      }
-    });
-
-    _videoControllerManager.pauseAllVideosOnTabChange();
-
-    final sharedPool = SharedVideoControllerPool();
-    sharedPool.pauseAllControllers();
-
-    _currentIndex = index;
-    _autoAdvancedForIndex.remove(index);
-
-    // **MEMORY MANAGEMENT: Periodic cleanup on page change**
-    // Cleanup every 10 pages to prevent memory buildup
-    if (index % 10 == 0 &&
-        _videos.length > VideoFeedStateFieldsMixin._videosCleanupThreshold) {
-      _cleanupOldVideosFromList();
-    }
-
-    // **CRITICAL FIX: Check if we need to load more videos BEFORE checking if we're at the end**
-    // This ensures new videos are loaded when approaching the end
-    _reprimeWindowIfNeeded();
-
-    // **FIXED: Dynamic immediate check - trigger earlier for small lists**
-    // This prevents grey screen by ensuring videos load and preload immediately without debounce delay
-    bool isCloseToEnd = false;
-    if (index < _videos.length && _hasMore && !_isLoadingMore) {
-      final distanceFromEnd = _videos.length - index;
-      // **PROACTIVE: Dynamic trigger - earlier for small lists, later for large lists**
-      // If total videos < 10, trigger when 3 videos from end (increased from 2 for fast scrolling)
-      // Otherwise, trigger when 12 videos from end
-      final triggerDistance = _videos.length < 10 ? 3 : 12;
-      if (distanceFromEnd <= triggerDistance) {
-        isCloseToEnd = true;
-        AppLogger.log(
-          '📡 Immediate load more check: index=$index, total=${_videos.length}, distanceFromEnd=$distanceFromEnd, triggerDistance=$triggerDistance',
-        );
-        _loadMoreVideos();
-        // **CRITICAL: Also call _preloadNearbyVideos() immediately (not debounced) when close to end**
-        // This ensures preloading happens immediately for seamless playback
-        _preloadNearbyVideos();
-      }
-    }
-
-    // **FIXED: Try to load more videos first before restarting**
-    // Only restart if we've truly reached the end AND there are no more videos to load
-    if (index >= _videos.length && !_isRefreshing) {
-      // If we have more videos available, try loading them first
-      if (_hasMore && !_isLoadingMore) {
-        AppLogger.log(
-          '📡 Reached end but more videos available, loading more...',
-        );
-        _loadMoreVideos();
-        // Wait a bit for videos to load before restarting
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted &&
-              index >= _videos.length &&
-              !_hasMore &&
-              !_isRefreshing) {
-            AppLogger.log(
-              '🔄 No more videos available, restarting feed...',
-            );
-            startOver();
-          }
-        });
-        return;
-      } else if (!_hasMore) {
-        // Only restart if we truly have no more videos
-        AppLogger.log(
-          '🔄 Reached end of feed at index $index, no more videos, restarting...',
-        );
-        startOver();
-        return;
-      }
-    }
-
-    final activeController = _controllerPool[_currentIndex];
-    if (activeController != null && activeController.value.isInitialized) {
-      try {
-        activeController.setVolume(1.0);
-      } catch (_) {}
-    }
-
-    VideoPlayerController? controllerToUse;
-
-    if (index < _videos.length) {
-      final video = _videos[index];
-      _markVideoAsSeen(video);
-
-      controllerToUse = sharedPool.getControllerForInstantPlay(video.id);
-
-      if (controllerToUse != null && controllerToUse.value.isInitialized) {
-        AppLogger.log(
-          '⚡ INSTANT: Reusing controller from shared pool for video ${video.id}',
-        );
-
-        _controllerPool[index] = controllerToUse;
-        _controllerStates[index] = false;
-        _preloadedVideos.add(index);
-        _lastAccessedLocal[index] = DateTime.now();
-        _firstFrameReady[index] ??= ValueNotifier<bool>(false);
-        _firstFrameReady[index]!.value = true;
-      } else if (sharedPool.isVideoLoaded(video.id)) {
-        controllerToUse = sharedPool.getController(video.id);
-        if (controllerToUse != null && controllerToUse.value.isInitialized) {
-          _controllerPool[index] = controllerToUse;
-          _controllerStates[index] = false;
-          _preloadedVideos.add(index);
-          _lastAccessedLocal[index] = DateTime.now();
-          _firstFrameReady[index] ??= ValueNotifier<bool>(false);
-          _firstFrameReady[index]!.value = true;
-        }
-      }
-    }
-
-    if (controllerToUse == null && _controllerPool.containsKey(index)) {
-      controllerToUse = _controllerPool[index];
-      if (controllerToUse != null && !controllerToUse.value.isInitialized) {
-        AppLogger.log('⚠️ Controller exists but not initialized, disposing...');
-        try {
-          controllerToUse.dispose();
-        } catch (e) {
-          AppLogger.log('Error disposing controller: $e');
-        }
-        _controllerPool.remove(index);
-        _controllerStates.remove(index);
-        _preloadedVideos.remove(index);
-        _lastAccessedLocal.remove(index);
-        controllerToUse = null;
-      } else if (controllerToUse != null &&
-          controllerToUse.value.isInitialized) {
-        _lastAccessedLocal[index] = DateTime.now();
-        _firstFrameReady[index] ??= ValueNotifier<bool>(false);
-        _firstFrameReady[index]!.value = true;
-      }
-    }
-
-    if (controllerToUse != null && controllerToUse.value.isInitialized) {
-      if (_mainController?.currentIndex != 0 || !_isScreenVisible) {
-        AppLogger.log('⏸️ Autoplay blocked (not visible)');
-        return;
-      }
-
-      if (_userPaused[index] == true) {
-        AppLogger.log(
-          '⏸️ Autoplay suppressed: user has manually paused video at index $index',
-        );
-        return;
-      }
-
-      if (!_allowAutoplay('page change autoplay')) {
-        return;
-      }
-      _pauseAllOtherVideos(index);
-
-      controllerToUse.setVolume(1.0);
-      controllerToUse.play();
-      _controllerStates[index] = true;
-      _userPaused[index] = false;
-      _ensureWakelockForVisibility();
-      _applyLoopingBehavior(controllerToUse);
-      _attachEndListenerIfNeeded(controllerToUse, index);
-      _attachBufferingListenerIfNeeded(controllerToUse, index);
-
-      if (index < _videos.length) {
-        final currentVideo = _videos[index];
-        _viewTracker.startViewTracking(
-          currentVideo.id,
-          videoUploaderId: currentVideo.uploader.id,
-        );
-        AppLogger.log(
-          '▶️ Started view tracking for current video: ${currentVideo.id}',
-        );
-
-        // **NEW: Preload creator's profile in background for instant profile opening**
-        if (currentVideo.uploader.id.isNotEmpty &&
-            currentVideo.uploader.id != 'unknown') {
-          ProfilePreloader().preloadProfile(currentVideo.uploader.id);
-        }
-      }
-
-      // **OPTIMIZED: Skip debounced preload if already called immediately (when close to end)**
-      if (!isCloseToEnd) {
-        _preloadNearbyVideosDebounced();
-      }
-      return;
-    }
-
-    if (!_controllerPool.containsKey(index)) {
-      AppLogger.log(
-        '🔄 Video not preloaded, preloading and will autoplay when ready',
-      );
-      _preloadVideo(index).then((_) {
-        if (mounted &&
-            _currentIndex == index &&
-            _controllerPool.containsKey(index)) {
-          if (_mainController?.currentIndex != 0 || !_isScreenVisible) {
-            AppLogger.log('⏸️ Autoplay blocked after preload (not visible)');
-            return;
-          }
-          final loadedController = _controllerPool[index];
-          if (loadedController != null &&
-              loadedController.value.isInitialized) {
-            _lastAccessedLocal[index] = DateTime.now();
-
-            if (!_allowAutoplay('post preload autoplay')) {
-              return;
-            }
-            _pauseAllOtherVideos(index);
-
-            loadedController.setVolume(1.0);
-            loadedController.play();
-            _controllerStates[index] = true;
-            _userPaused[index] = false;
-            _ensureWakelockForVisibility();
-            _applyLoopingBehavior(loadedController);
-            _attachEndListenerIfNeeded(loadedController, index);
-            _attachBufferingListenerIfNeeded(loadedController, index);
-
-            if (index < _videos.length) {
-              final currentVideo = _videos[index];
-              _viewTracker.startViewTracking(
-                currentVideo.id,
-                videoUploaderId: currentVideo.uploader.id,
-              );
-              AppLogger.log(
-                '▶️ Started view tracking for current video: ${currentVideo.id}',
-              );
-
-              // **NEW: Preload creator's profile in background for instant profile opening**
-              if (currentVideo.uploader.id.isNotEmpty &&
-                  currentVideo.uploader.id != 'unknown') {
-                ProfilePreloader().preloadProfile(currentVideo.uploader.id);
-              }
-            }
-
-            AppLogger.log('✅ Video autoplay started after preloading');
-          }
-        }
-      });
-    }
-
-    // **OPTIMIZED: Skip debounced preload if already called immediately (when close to end)**
-    if (!isCloseToEnd) {
-      _preloadNearbyVideosDebounced();
-    }
-  }
-
   void _preloadNearbyVideosDebounced() {
     _preloadDebounceTimer?.cancel();
     _preloadDebounceTimer = Timer(const Duration(milliseconds: 300), () {
@@ -1098,6 +805,22 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       if (_isBuffering[index] == isBuffering) return;
 
       _isBuffering[index] = isBuffering;
+
+      // **NEW: Handle Slow Connection feedback timer**
+      if (isBuffering) {
+        _bufferingTimers[index]?.cancel();
+        _bufferingTimers[index] = Timer(const Duration(seconds: 5), () {
+          if (mounted && _isBuffering[index] == true) {
+            _isSlowConnectionVN[index] ??= ValueNotifier<bool>(false);
+            _isSlowConnectionVN[index]!.value = true;
+          }
+        });
+      } else {
+        _bufferingTimers[index]?.cancel();
+        _bufferingTimers.remove(index);
+        _isSlowConnectionVN[index]?.value = false;
+      }
+
       final notifier = _isBufferingVN[index] ??= ValueNotifier<bool>(
         isBuffering,
       );

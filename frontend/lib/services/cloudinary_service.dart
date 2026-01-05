@@ -580,11 +580,10 @@ class CloudinaryService {
   /// **NEW: Check if backend upload endpoints are available**
   Future<bool> isBackendUploadAvailable() async {
     try {
-      final response = await http
-          .get(
-            Uri.parse('${AppConfig.baseUrl}/api/upload/health'),
-          )
-          .timeout(const Duration(seconds: 5));
+      final response = await httpClientService.get(
+        Uri.parse('${AppConfig.baseUrl}/api/upload/health'),
+        timeout: const Duration(seconds: 5),
+      );
       return response.statusCode == 200;
     } catch (e) {
       return false;

@@ -7,10 +7,10 @@ import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
-import 'package:http/http.dart' as http;
 import 'package:vayu/services/video_service.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/logout_service.dart';
+import 'package:vayu/core/services/http_client_service.dart';
 import 'package:vayu/view/screens/create_ad_screen_refactored.dart';
 import 'package:vayu/view/screens/ad_management_screen.dart';
 import 'package:vayu/view/screens/upload_screen/widgets/upload_advanced_settings_section.dart';
@@ -1080,20 +1080,14 @@ class _UploadScreenState extends State<UploadScreen> {
             if (token != null) {
               try {
                 final baseUrl = await AppConfig.getBaseUrlWithFallback();
-                final response = await http
-                    .post(
+                final response = await httpClientService.post(
                   Uri.parse('$baseUrl/api/videos/check-duplicate'),
                   headers: {
                     'Authorization': 'Bearer $token',
                     'Content-Type': 'application/json',
                   },
                   body: json.encode({'videoHash': videoHash}),
-                )
-                    .timeout(
-                  const Duration(seconds: 10),
-                  onTimeout: () {
-                    throw TimeoutException('Duplicate check timed out');
-                  },
+                  timeout: const Duration(seconds: 10),
                 );
 
                 if (response.statusCode == 200) {

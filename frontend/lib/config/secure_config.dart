@@ -98,11 +98,6 @@ class SecureConfig {
       // Test if required values can be accessed
       final baseUrlTest = baseUrl;
       final razorpayKeyIdTest = razorpayKeyId;
-      final razorpayKeySecretTest = razorpayKeySecret;
-      final razorpayWebhookSecretTest = razorpayWebhookSecret;
-      final cloudinaryCloudNameTest = cloudinaryCloudName;
-      final cloudinaryApiKeyTest = cloudinaryApiKey;
-      final cloudinaryApiSecretTest = cloudinaryApiSecret;
 
       print('✅ Secure configuration validated successfully');
       print('🔍 Base URL: $baseUrlTest');
