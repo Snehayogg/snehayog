@@ -23,7 +23,7 @@ async function calculateFileHash(filePath) {
   return new Promise((resolve, reject) => {
     const hash = crypto.createHash('sha256');
     const stream = fsSync.createReadStream(filePath);
-    
+
     stream.on('data', (data) => hash.update(data));
     stream.on('end', () => resolve(hash.digest('hex')));
     stream.on('error', (error) => reject(error));
@@ -110,7 +110,7 @@ const upload = multer({
       'video/webm',
       'video/flv'
     ];
-    
+
     if (allowedMimeTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
@@ -139,20 +139,20 @@ router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
       const { default: service } = await import('../services/hybridVideoService.js');
       hybridVideoService = service;
     }
-    
+
     // **NEW: Validate video file with hybrid service**
     const videoValidation = await hybridVideoService.validateVideo(videoPath);
     if (!videoValidation.isValid) {
       await fs.unlink(videoPath);
-      return res.status(400).json({ 
-        error: 'Invalid video file', 
-        details: videoValidation.error 
+      return res.status(400).json({
+        error: 'Invalid video file',
+        details: videoValidation.error
       });
     }
 
     console.log('✅ Video validation passed');
     console.log('📊 Video info:', videoValidation);
-    
+
     // **NEW: Show cost estimate**
     const costEstimate = hybridVideoService.getCostEstimate(videoValidation.sizeInMB);
     console.log('💰 Cost estimate:', costEstimate);
@@ -173,14 +173,14 @@ router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
     } catch (hashError) {
       console.error('❌ Error calculating file hash:', hashError);
       await fs.unlink(videoPath);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Failed to process video file',
         details: 'Error calculating file hash'
       });
     }
 
     // **NEW: Check for duplicate video (same user, same hash)**
-    const existingVideo = await Video.findOne({ 
+    const existingVideo = await Video.findOne({
       uploader: user._id,
       videoHash: videoHash
     });
@@ -191,11 +191,11 @@ router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
         existingVideoName: existingVideo.videoName,
         hash: videoHash.substring(0, 16) + '...'
       });
-      
+
       // Clean up uploaded file
       await fs.unlink(videoPath);
-      
-      return res.status(409).json({ 
+
+      return res.status(409).json({
         error: 'Duplicate video detected',
         message: 'You have already uploaded this video',
         existingVideo: {
@@ -208,24 +208,24 @@ router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
 
     // **NEW: Get video dimensions safely**
     const videoInfo = await hybridVideoService.getOriginalVideoInfo(videoPath);
-    const aspectRatio = videoInfo.width && videoInfo.height ? 
-      videoInfo.width / videoInfo.height : 9/16; // Default to 9:16 if dimensions unavailable
+    const aspectRatio = videoInfo.width && videoInfo.height ?
+      videoInfo.width / videoInfo.height : 9 / 16; // Default to 9:16 if dimensions unavailable
 
     // **NEW: Create initial video record with pending status**
     // **FIX: Use proper URL format instead of local file path**
     const baseUrl = process.env.SERVER_URL || 'http://192.168.0.199:5001';
     const relativePath = videoPath.replace(/\\/g, '/').replace(process.cwd().replace(/\\/g, '/'), '');
     const tempVideoUrl = `${baseUrl}${relativePath}`;
-    
+
     console.log('🔗 Generated temp video URL:', tempVideoUrl);
-    
+
     const video = new Video({
       videoName: videoName || req.file.originalname,
       description: description || '',
       videoUrl: tempVideoUrl, // Proper URL format, will be updated after processing
       thumbnailUrl: '', // Will be generated during processing
       uploader: user._id, // Use user's ObjectId, not Google ID
-      videoType: 'yog',
+      videoType: (videoInfo.duration && videoInfo.duration > 60) ? 'vayu' : 'yog',
       aspectRatio: aspectRatio,
       duration: videoInfo.duration || 0,
       originalSize: videoValidation.size,
@@ -248,7 +248,7 @@ router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
     console.log('🔄 Starting background processing for video:', video._id);
     console.log('📁 Video path:', videoPath);
     console.log('👤 User ID:', userId);
-    
+
     // Start processing in background with proper error handling
     processVideoHybrid(video._id, videoPath, videoName, userId).catch(error => {
       console.error('❌ Background processing failed:', error);
@@ -270,7 +270,7 @@ router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error in video upload:', error);
-    
+
     // **NEW: Clean up uploaded file on error**
     if (req.file) {
       try {
@@ -280,9 +280,9 @@ router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
       }
     }
 
-    res.status(500).json({ 
-      error: 'Video upload failed', 
-      details: error.message 
+    res.status(500).json({
+      error: 'Video upload failed',
+      details: error.message
     });
   }
 });
@@ -290,17 +290,17 @@ router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
 // **NEW: URL normalization function**
 function normalizeVideoUrl(url) {
   if (!url) return url;
-  
+
   // **FIX: Replace backslashes with forward slashes**
   let normalizedUrl = url.replace(/\\/g, '/');
-  
+
   // **FIX: Ensure proper URL format**
   if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
     // If it's a relative path, make it absolute
     const baseUrl = process.env.SERVER_URL || 'http://10.118.107.18:5001';
     normalizedUrl = `${baseUrl}/${normalizedUrl}`;
   }
-  
+
   // **FIX: Ensure single forward slashes between path segments (but preserve protocol slashes)**
   // Only normalize multiple slashes in the path part, not the protocol
   if (normalizedUrl.includes('://')) {
@@ -310,11 +310,11 @@ function normalizeVideoUrl(url) {
   } else {
     normalizedUrl = normalizedUrl.replace(/\/+/g, '/');
   }
-  
+
   console.log('🔧 URL normalization:');
   console.log('   Original:', url);
   console.log('   Normalized:', normalizedUrl);
-  
+
   return normalizedUrl;
 }
 
@@ -325,17 +325,17 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
     console.log('📁 Video path:', videoPath);
     console.log('📝 Video name:', videoName);
     console.log('👤 User ID:', userId);
-    
+
     // **FIX: Sanitize video name to remove invalid characters for Cloudinary**
     const sanitizedVideoName = videoName.replace(/[^a-zA-Z0-9\s_-]/g, '_').replace(/\s+/g, '_').substring(0, 50);
     console.log('📝 Sanitized video name:', sanitizedVideoName);
-    
+
     // **NEW: Lazy load hybrid service to ensure env vars are loaded**
     if (!hybridVideoService) {
       const { default: service } = await import('../services/hybridVideoService.js');
       hybridVideoService = service;
     }
-    
+
     // **NEW: Update status to processing**
     const video = await Video.findById(videoId);
     if (!video) {
@@ -358,11 +358,11 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
     try {
       hybridResult = await Promise.race([
         hybridVideoService.processVideoHybrid(
-          videoPath, 
-          sanitizedVideoName, 
+          videoPath,
+          sanitizedVideoName,
           userId
         ),
-        new Promise((_, reject) => 
+        new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Hybrid processing timeout after 10 minutes')), 10 * 60 * 1000)
         )
       ]);
@@ -388,13 +388,13 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
     // **FIX: Validate and normalize URLs before saving**
     const normalizedVideoUrl = normalizeVideoUrl(hybridResult.videoUrl);
     const normalizedThumbnailUrl = normalizeVideoUrl(hybridResult.thumbnailUrl);
-    
+
     video.videoUrl = normalizedVideoUrl; // R2 video URL with FREE bandwidth
     video.thumbnailUrl = normalizedThumbnailUrl; // R2 thumbnail URL
-    
+
     console.log('🔗 Final video URL:', normalizedVideoUrl);
     console.log('🖼️ Final thumbnail URL:', normalizedThumbnailUrl);
-    
+
     // **NEW: Clear old quality URLs (single format now)**
     video.preloadQualityUrl = null;
     video.lowQualityUrl = normalizedVideoUrl; // Same as main URL (480p)
@@ -411,7 +411,7 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
       video.hlsPlaylistUrl = null;
       video.hlsMasterPlaylistUrl = null;
     }
-    
+
     video.processingStatus = 'completed';
     video.processingProgress = 100;
 
@@ -451,7 +451,7 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
 
   } catch (error) {
     console.error('❌ Error in hybrid video processing:', error);
-    
+
     try {
       // **NEW: Update video status to failed**
       const video = await Video.findById(videoId);
@@ -500,9 +500,9 @@ router.get('/video/:videoId/status', verifyToken, async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error getting video status:', error);
-    res.status(500).json({ 
-      error: 'Failed to get video status', 
-      details: error.message 
+    res.status(500).json({
+      error: 'Failed to get video status',
+      details: error.message
     });
   }
 });
@@ -522,8 +522,8 @@ router.post('/video/:videoId/retry', verifyToken, async (req, res) => {
 
     // **NEW: Check if video processing failed**
     if (video.processingStatus !== 'failed') {
-      return res.status(400).json({ 
-        error: 'Video is not in failed state' 
+      return res.status(400).json({
+        error: 'Video is not in failed state'
       });
     }
 
@@ -549,9 +549,9 @@ router.post('/video/:videoId/retry', verifyToken, async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error retrying video processing:', error);
-    res.status(500).json({ 
-      error: 'Failed to retry video processing', 
-      details: error.message 
+    res.status(500).json({
+      error: 'Failed to retry video processing',
+      details: error.message
     });
   }
 });
@@ -570,9 +570,9 @@ router.get('/videos', verifyToken, async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error getting user videos:', error);
-    res.status(500).json({ 
-      error: 'Failed to get videos', 
-      details: error.message 
+    res.status(500).json({
+      error: 'Failed to get videos',
+      details: error.message
     });
   }
 });
@@ -665,27 +665,27 @@ router.get('/video/:videoId/status', verifyToken, async (req, res) => {
 
     // Validate video ID
     if (!videoId || !mongoose.Types.ObjectId.isValid(videoId)) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Invalid video ID' 
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid video ID'
       });
     }
 
     // Find the video
     const video = await Video.findById(videoId);
     if (!video) {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'Video not found' 
+      return res.status(404).json({
+        success: false,
+        error: 'Video not found'
       });
     }
 
     // **FIX: Compare against the user's ObjectId, not Google ID**
     const owner = await User.findOne({ googleId: userId });
     if (!owner || video.uploader.toString() !== owner._id.toString()) {
-      return res.status(403).json({ 
-        success: false, 
-        error: 'Access denied' 
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied'
       });
     }
 
@@ -710,10 +710,10 @@ router.get('/video/:videoId/status', verifyToken, async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error getting video status:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       error: 'Failed to get video status',
-      details: error.message 
+      details: error.message
     });
   }
 });

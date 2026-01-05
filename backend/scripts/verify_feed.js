@@ -6,7 +6,7 @@ const PATH = '/api/videos';
 
 function getJson(port, query) {
     return new Promise((resolve, reject) => {
-        const url = `http://localhost:${port}${PATH}${query}`;
+        const url = `http://0.0.0.0:${port}${PATH}${query}`;
         http.get(url, (res) => {
             let data = '';
             res.on('data', (chunk) => data += chunk);

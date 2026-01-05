@@ -1081,7 +1081,17 @@ router.get('/', async (req, res) => {
 
       if (normalizedVideoType === 'yog' || normalizedVideoType === 'vayu') {
         baseQueryFilter.videoType = normalizedVideoType;
-        console.log(`📹 Filtering by videoType: ${normalizedVideoType}`);
+
+        // **NEW: Strict duration filtering to clean up mixed feeds**
+        if (normalizedVideoType === 'vayu') {
+          // Vayu = Long form (> 60s)
+          baseQueryFilter.duration = { $gt: 60 };
+        } else {
+          // Yog = Shorts (<= 60s)
+          baseQueryFilter.duration = { $lte: 60 };
+        }
+
+        console.log(`📹 Filtering by videoType: ${normalizedVideoType} (Strict duration check applied)`);
 
         // **DEBUG: Check how many videos match this filter**
         const matchingCount = await Video.countDocuments(baseQueryFilter);
