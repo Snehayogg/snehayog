@@ -595,8 +595,6 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
              _hasMore = hasMore || uniqueNewVideos.isNotEmpty; 
              _totalVideos = total;
              
-             // No page jump needed since we just appended to the end
-             
           } else {
              // **SCENARIO 2: No Cache (Cold Start) -> REPLACE**
              // Standard behavior
