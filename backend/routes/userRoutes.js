@@ -616,15 +616,15 @@ router.post('/unfollow', verifyToken, async (req, res) => {
 // ✅ Route to check if current user is following another user
 router.get('/isfollowing/:userId', verifyToken, async (req, res) => {
   try {
-    console.log('🔍 IsFollowing API: Request received');
-    console.log('🔍 IsFollowing API: Request params:', req.params);
-    console.log('🔍 IsFollowing API: Current user from token:', req.user);
+    // console.log('🔍 IsFollowing API: Request received');
+    // console.log('🔍 IsFollowing API: Request params:', req.params);
+    // console.log('🔍 IsFollowing API: Current user from token:', req.user);
     
     const { userId } = req.params;
     const currentUserId = req.user.id; // This is now the Google user ID
 
-    console.log('🔍 IsFollowing API: userId to check:', userId);
-    console.log('🔍 IsFollowing API: currentUserId:', currentUserId);
+    // console.log('🔍 IsFollowing API: userId to check:', userId);
+    // console.log('🔍 IsFollowing API: currentUserId:', currentUserId);
 
     if (currentUserId === userId) {
       return res.json({ isFollowing: false });

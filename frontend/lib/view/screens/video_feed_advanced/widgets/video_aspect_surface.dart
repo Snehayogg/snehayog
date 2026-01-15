@@ -21,8 +21,7 @@ class VideoAspectSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final screenWidth = constraints.maxWidth;
-        final screenHeight = constraints.maxHeight;
+        
 
         final Size videoSize = controller.value.size;
         final int rotation = controller.value.rotationCorrection;

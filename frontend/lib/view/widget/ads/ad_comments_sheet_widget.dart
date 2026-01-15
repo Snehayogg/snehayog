@@ -366,13 +366,12 @@ class _AdCommentsSheetWidgetState extends State<AdCommentsSheetWidget> {
     final userProfilePic = user['profilePic'] ?? '';
     final content = comment['content'] ?? '';
     final likes = comment['likes'] ?? 0;
-    final likedBy = List<String>.from(comment['likedBy'] ?? []);
+
     final createdAt = comment['createdAt'] ?? '';
     final commentId = comment['_id'] ?? '';
 
     // Check if current user liked this comment (you'll need to get current user ID)
-    const isLiked = false; // TODO: Get current user ID and check if liked
-
+    const isLiked = false; 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       child: Row(

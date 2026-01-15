@@ -38,8 +38,8 @@ class GoogleSignInController extends ChangeNotifier {
         return;
       }
 
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
+      // GoogleSignInAuthentication not needed for this implementation yet
+      // final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
 
       final user = UserEntity(
         id: googleUser.id,

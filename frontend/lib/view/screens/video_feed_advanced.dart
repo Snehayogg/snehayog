@@ -18,13 +18,14 @@ import 'package:vayu/services/active_ads_service.dart';
 import 'package:vayu/services/video_view_tracker.dart';
 import 'package:vayu/services/ad_refresh_notifier.dart';
 import 'package:vayu/services/background_profile_preloader.dart';
-import 'package:vayu/services/profile_preloader.dart';
+
 import 'package:vayu/services/ad_impression_service.dart';
 import 'package:vayu/view/widget/ads/carousel_ad_widget.dart';
 import 'package:vayu/view/screens/video_feed_advanced/widgets/banner_ad_section.dart';
 import 'package:vayu/view/screens/video_feed_advanced/widgets/heart_animation.dart';
 import 'package:vayu/services/connectivity_service.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/view/screens/profile_screen.dart';
 import 'package:vayu/view/screens/login_screen.dart';
@@ -40,9 +41,14 @@ import 'package:vayu/utils/app_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'package:vayu/services/earnings_service.dart';
-import 'package:vayu/core/utils/video_engagement_ranker.dart';
+
 import 'package:vayu/config/admob_config.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:vayu/view/widget/video_feed_skeleton.dart';
+
+import 'package:vayu/features/video/data/datasources/feed_local_datasource.dart';
+import 'package:vayu/features/video/data/datasources/video_local_datasource.dart';
+import 'package:vayu/services/video_cache_proxy_service.dart';
 
 part 'video_feed_advanced/video_feed_advanced_state_fields.dart';
 part 'video_feed_advanced/video_feed_advanced_playback.dart';
@@ -90,12 +96,7 @@ Future<void> _debugLog(String location, String message,
 }
 // #endregion
 
-/// **ISOLATE HELPER: Top-level function for compute()**
-/// Must be top-level for isolate communication
-/// This function runs VideoEngagementRanker.rankVideos() in a separate isolate
-List<VideoModel> _rankVideosIsolateHelper(List<VideoModel> videos) {
-  return VideoEngagementRanker.rankVideos(videos);
-}
+
 
 class VideoFeedAdvanced extends StatefulWidget {
   final int? initialIndex;
@@ -138,6 +139,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     // Initialize services
     _initializeServices();
+    _checkDeviceCapabilities();
+  }
+
+  /// **Helper to allow extensions to call setState safely**
+  void safeSetState(VoidCallback fn) {
+    if (mounted) {
+      setState(fn);
+    }
   }
 
   @override
@@ -344,6 +353,17 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         _controllerStates[_currentIndex] = true;
         _userPaused[_currentIndex] = false;
         _pendingAutoplayAfterLogin = false;
+        
+        // **NEW: Start view tracking with videoHash**
+        if (_currentIndex < _videos.length) {
+          final video = _videos[_currentIndex];
+          _viewTracker.startViewTracking(
+            video.id, 
+            videoUploaderId: video.uploader.id,
+            videoHash: video.videoHash,
+          );
+        }
+        
         AppLogger.log('✅ VideoFeedAdvanced: Current video autoplay started');
       }
     } else {
@@ -375,6 +395,17 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             _controllerStates[_currentIndex] = true;
             _userPaused[_currentIndex] = false;
             _pendingAutoplayAfterLogin = false;
+            
+            // **NEW: Start view tracking with videoHash**
+            if (_currentIndex < _videos.length) {
+              final video = _videos[_currentIndex];
+              _viewTracker.startViewTracking(
+                video.id, 
+                videoUploaderId: video.uploader.id,
+                videoHash: video.videoHash,
+              );
+            }
+            
             AppLogger.log(
               '✅ VideoFeedAdvanced: Current video autoplay started after preloading',
             );
@@ -513,47 +544,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     return true;
   }
 
-  /// **PAUSE CURRENT VIDEO: When screen becomes hidden**
-  void _pauseCurrentVideo() {
-    // **NEW: Stop view tracking when pausing**
-    if (_currentIndex < _videos.length) {
-      final currentVideo = _videos[_currentIndex];
-      _viewTracker.stopViewTracking(currentVideo.id);
-    }
 
-    // Pause local controller pool
-    if (_controllerPool.containsKey(_currentIndex)) {
-      final controller = _controllerPool[_currentIndex];
-
-      if (controller != null &&
-          controller.value.isInitialized &&
-          controller.value.isPlaying) {
-        controller.pause();
-        _controllerStates[_currentIndex] = false;
-      }
-    }
-
-    // Also pause VideoControllerManager videos
-    _videoControllerManager.pauseAllVideosOnTabChange();
-  }
-
-  void _pauseAllVideosOnTabSwitch() {
-    // Pause all active controllers in the pool
-    _controllerPool.forEach((index, controller) {
-      if (controller.value.isInitialized && controller.value.isPlaying) {
-        controller.pause();
-        _controllerStates[index] = false;
-      }
-    });
-
-    // Also pause VideoControllerManager videos
-    _videoControllerManager.pauseAllVideosOnTabChange();
-    SharedVideoControllerPool().pauseAllControllers();
-
-    // Update screen visibility state
-    _isScreenVisible = false;
-    _disableWakelock();
-  }
 
   /// **NEW: Pause videos before navigating away (e.g., to creator profile)**
   void _pauseVideosForProfileNavigation() {
@@ -806,7 +797,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
           if (v.isInitialized && v.position > Duration.zero && !v.isBuffering) {
             _firstFrameReady[index]?.value = true;
             try {
-              await controller.pause();
+              // **FIX: Only pause if NOT the current index**
+              // If it is the current index, we want it to keep playing (autoplay fix)
+              if (index != _currentIndex) {
+                await controller.pause();
+              }
               await controller.setVolume(1.0);
             } catch (_) {}
 
@@ -1105,6 +1100,20 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   }
 
   void _cleanupOldControllers() {
+    // **OPTIMIZATION: Skip cleanup if we are scrolling nearby**
+    // Only run if we are "far enough" or pool is growing too large
+    if (_controllerPool.length < 5) return;
+    
+    // Check if we need to clean up distant controllers
+    bool needsCleanup = false;
+    for (final index in _controllerPool.keys) {
+      if ((index - _currentIndex).abs() > 8) {
+        needsCleanup = true;
+        break;
+      }
+    }
+    if (!needsCleanup) return;
+
     final sharedPool = SharedVideoControllerPool();
 
     // **UNIFIED STRATEGY: Let shared pool handle cleanup based on distance**
@@ -1126,7 +1135,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
       // Remove local tracking for distant or invalid controllers
       final distance = (index - _currentIndex).abs();
-      if (distance > 3 || _controllerPool.length > 5) {
+      // **RELAXED CLEANUP: Increased from 3 to 8**
+      if (distance > 8 || _controllerPool.length > 8) {
         controllersToRemove.add(index);
       }
     }
@@ -1155,6 +1165,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       _controllerStates.remove(index);
       _preloadedVideos.remove(index);
       _isBuffering.remove(index);
+      // **CRITICAL FIX: Reset firstFrameReady so thumbnail shows if we scroll back**
+      if (_firstFrameReady.containsKey(index)) {
+        _firstFrameReady[index]?.value = false;
+        _firstFrameReady.remove(index);
+      }
       _bufferingListeners.remove(index);
       _videoEndListeners.remove(index);
       _lastAccessedLocal.remove(index);
@@ -1219,23 +1234,22 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   void _onPageChanged(int index) {
     if (index == _currentIndex) return;
 
-    // **CRITICAL FIX: Pause current video IMMEDIATELY to stop audio overlap**
+    // **OPTIMIZATION: Rapid Pause Strategy**
+    // Instead of iterating all controllers (O(N)), directly pause the one we know is playing.
+    
+    // 1. Pause current local controller if active
     if (_currentIndex < _videos.length) {
-      // Pause local controller if exists
       if (_controllerPool.containsKey(_currentIndex)) {
         final currentController = _controllerPool[_currentIndex];
-        if (currentController != null &&
-            currentController.value.isInitialized &&
+        if (currentController != null && 
+            currentController.value.isInitialized && 
             currentController.value.isPlaying) {
           currentController.pause();
           _controllerStates[_currentIndex] = false;
-          AppLogger.log(
-              '⏸️ _onPageChanged: Immediate pause for index $_currentIndex');
         }
       }
-
-      // **SYNCHRONOUS PAUSE: Pause shared pool controller IMMEDIATELY**
-      // waiting for microtask allows overlap.
+      
+      // 2. Pause shared controller if active (redundancy check)
       final video = _videos[_currentIndex];
       final sharedPool = SharedVideoControllerPool();
       if (sharedPool.hasController(video.id)) {
@@ -1246,41 +1260,29 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       }
     }
 
-    // **AGGRESSIVE SAFETY: Pause ANY other playing video to ensure 100% silence**
-    // This catches edge cases in fast scrolling where internal state might lag
-    _controllerPool.forEach((idx, controller) {
-      if (idx != index && controller.value.isPlaying) {
-        try {
-          controller.pause();
-          _controllerStates[idx] = false;
-        } catch (_) {}
-      }
-    });
-
-    // **CRITICAL FIX: Immediate check for fast scrolling - no debounce when close to end**
-    // This ensures trigger happens even during fast scrolling
+    // **CRITICAL FIX: Load More Trigger (Fast Scroll)**
+    // Trigger immediately without debounce if we are near the end.
     if (index < _videos.length && _hasMore && !_isLoadingMore) {
       final distanceFromEnd = _videos.length - index;
-      const triggerDistance = 7; // Fixed trigger when 7 videos remain
+      // **PRELOAD TRIGGER INCREASED**: Trigger load when 15 videos remain (full page buffer)
+      const triggerDistance = 15;
 
       if (distanceFromEnd <= triggerDistance) {
-        AppLogger.log(
-          '⚡ IMMEDIATE (fast scroll): index=$index, total=${_videos.length}, distanceFromEnd=$distanceFromEnd, triggerDistance=$triggerDistance',
-        );
-        // Trigger immediately without debounce for fast scrolling
         _loadMoreVideos();
-        _preloadNearbyVideos();
       }
     }
 
+    // **INSTANT PRELOAD: Removed to improve fast scrolling performance.**
+    // Rely on _preloadNearbyVideosDebounced to handle preloading when scrolling slows down.
+
+
+    // **INSTANT PLAYBACK: Removed debounce to play immediately on scroll snap**
     _pageChangeTimer?.cancel();
-    _pageChangeTimer = Timer(const Duration(milliseconds: 150), () {
-      _handlePageChangeDebounced(index);
-    });
+    _handlePageChange(index);
   }
 
-  /// **DEBOUNCED PAGE CHANGE HANDLER**
-  void _handlePageChangeDebounced(int index) {
+  /// **PAGE CHANGE HANDLER**
+  void _handlePageChange(int index) {
     if (!mounted) return;
 
     // **LRU: Track access time for previous index**
@@ -1298,23 +1300,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       _userPaused[_currentIndex] = false;
     }
 
-    // **CRITICAL: Pause ALL videos (including current) before switching to new one**
-    // Pause videos from local controller pool
-    _controllerPool.forEach((idx, controller) {
-      if (controller.value.isInitialized && controller.value.isPlaying) {
-        try {
-          controller.pause();
-          _controllerStates[idx] = false;
-        } catch (_) {}
-      }
-    });
+    // **OPTIMIZATION: Single Pass Pause**
+    // Use the optimized pause method instead of manually iterating multiple pools.
+    _pauseAllOtherVideos(index); // This pauses local pool, shared pool, and manager videos
 
-    // **CRITICAL FIX: Also pause videos from VideoControllerManager**
-    _videoControllerManager.pauseAllVideosOnTabChange();
-
-    // **CRITICAL FIX: Also pause videos from SharedVideoControllerPool**
-    final sharedPool = SharedVideoControllerPool();
-    sharedPool.pauseAllControllers();
 
     // **IMMEDIATE SYNC: Update internal index (moved from _onPageChanged)**
     _currentIndex = index;
@@ -1354,6 +1343,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // No force-unmute; priming excludes current index.
 
     // **UNIFIED STRATEGY: Use shared pool as primary source (Instant playback)**
+    final sharedPool = SharedVideoControllerPool();
     VideoPlayerController? controllerToUse;
 
     if (index < _videos.length) {
@@ -1701,8 +1691,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // (Removed first-frame tracking listener per revert)
   }
 
-  @override
-  final Map<int, VoidCallback> _videoEndListeners = {};
+
 
   void _applyLoopingBehavior(VideoPlayerController controller) {
     controller.setLooping(!_autoScrollEnabled);
@@ -1905,15 +1894,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   }
 
   void _navigateToLoginScreen() {
-    // **NEW: Only show sign-in prompt if 5 minutes have passed**
     if (!_canShowSignInPrompt()) {
-      final timeRemaining =
-          _signInPromptDelay - DateTime.now().difference(_screenFirstOpenedAt!);
-      final minutesRemaining = timeRemaining.inMinutes;
-      final secondsRemaining = timeRemaining.inSeconds % 60;
-      AppLogger.log(
-        '⏱️ Sign-in prompt delayed. Time remaining: ${minutesRemaining}m ${secondsRemaining}s',
-      );
+      if (_screenFirstOpenedAt != null) {
+        final timeRemaining = _signInPromptDelay - DateTime.now().difference(_screenFirstOpenedAt!);
+        final minutesRemaining = timeRemaining.inMinutes;
+        final secondsRemaining = timeRemaining.inSeconds % 60;
+        AppLogger.log(
+          '⏱️ Sign-in prompt delayed. Time remaining: ${minutesRemaining}m ${secondsRemaining}s',
+        );
+      }
       return;
     }
 
@@ -2317,11 +2306,29 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               body: Stack(
                 children: [
                   _isLoading && _videos.isEmpty
-                      ? Center(child: _buildGreenSpinner(size: 40))
+                      ? const VideoFeedSkeleton()
                       : _videos.isEmpty && _errorMessage != null
-                          ? _buildErrorState()
+                          ? RefreshIndicator(
+                              onRefresh: refreshVideos,
+                              child: SingleChildScrollView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                child: SizedBox(
+                                  height: MediaQuery.of(context).size.height,
+                                  child: _buildErrorState(),
+                                ),
+                              ),
+                            )
                           : _videos.isEmpty
-                              ? _buildEmptyState()
+                              ? RefreshIndicator(
+                                  onRefresh: refreshVideos,
+                                  child: SingleChildScrollView(
+                                    physics: const AlwaysScrollableScrollPhysics(),
+                                    child: SizedBox(
+                                      height: MediaQuery.of(context).size.height,
+                                      child: _buildEmptyState(),
+                                    ),
+                                  ),
+                                )
                               : _buildVideoFeed(),
                   // **OFFLINE INDICATOR: Show when no internet connection**
                   _buildOfflineIndicator(),
@@ -2580,8 +2587,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     memoryInfo.forEach((key, value) {
       AppLogger.log('   $key: $value');
     });
-
-    AppLogger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   }
 
   /// **MANUAL CACHE STATUS CHECK: Call this method to check cache status**
@@ -2691,13 +2696,13 @@ class _ThrottledProgressBarState extends State<_ThrottledProgressBar> {
       onPanUpdate: widget.onSeek,
       child: Container(
         height: 4,
-        color: Colors.black.withOpacity(0.2),
+        color: Colors.black.withValues(alpha: 0.2),
         child: Stack(
           children: [
             Container(
               height: 2,
               margin: const EdgeInsets.only(top: 1),
-              color: Colors.grey.withOpacity(0.2),
+              color: Colors.grey.withValues(alpha: 0.2),
             ),
             // Progress bar filled portion
             Positioned(

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -474,53 +475,50 @@ class _MainScreenState extends State<MainScreen>
                   ),
                 ],
               ),
-              child: SafeArea(
-                bottom: true, // Ensure bottom safe area is respected
-                child: Container(
-                  height: 60, // Keep same height but optimize spacing
-                  padding: const EdgeInsets.only(
-                    left: 4, // Reduced from 8 to 4
-                    right: 4, // Reduced from 8 to 4
-                    top: 2, // Reduced from 4 to 2
-                    bottom: 2, // Reduced from 4 to 2
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildNavItem(
-                        index: 0,
-                        currentIndex: mainController.currentIndex,
-                        icon: Icons.play_circle_filled,
-                        label: 'Yug',
-                        onTap: () => _handleNavTap(0, mainController),
-                        mainController: mainController,
-                      ),
-                      _buildNavItem(
-                        index: 1,
-                        currentIndex: mainController.currentIndex,
-                        icon: Icons.video_camera_front_rounded,
-                        label: 'Vayu',
-                        onTap: () => _handleNavTap(1, mainController),
-                        mainController: mainController,
-                      ),
-                      _buildNavItem(
-                        index: 2,
-                        currentIndex: mainController.currentIndex,
-                        icon: Icons.add,
-                        label: 'Upload',
-                        onTap: () => _handleNavTap(2, mainController),
-                        mainController: mainController,
-                      ),
-                      _buildNavItem(
-                        index: 3,
-                        currentIndex: mainController.currentIndex,
-                        icon: Icons.person_outline_rounded,
-                        label: 'Profile',
-                        onTap: () => _handleNavTap(3, mainController),
-                        mainController: mainController,
-                      ),
-                    ],
-                  ),
+              child: Container(
+                height: 60 + MediaQuery.of(context).padding.bottom,
+                padding: EdgeInsets.only(
+                  left: 4,
+                  right: 4,
+                  top: 2,
+                  bottom: math.max(2.0, MediaQuery.of(context).padding.bottom),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildNavItem(
+                      index: 0,
+                      currentIndex: mainController.currentIndex,
+                      icon: Icons.play_circle_filled,
+                      label: 'Yug',
+                      onTap: () => _handleNavTap(0, mainController),
+                      mainController: mainController,
+                    ),
+                    _buildNavItem(
+                      index: 1,
+                      currentIndex: mainController.currentIndex,
+                      icon: Icons.video_camera_front_rounded,
+                      label: 'Vayu',
+                      onTap: () => _handleNavTap(1, mainController),
+                      mainController: mainController,
+                    ),
+                    _buildNavItem(
+                      index: 2,
+                      currentIndex: mainController.currentIndex,
+                      icon: Icons.add,
+                      label: 'Upload',
+                      onTap: () => _handleNavTap(2, mainController),
+                      mainController: mainController,
+                    ),
+                    _buildNavItem(
+                      index: 3,
+                      currentIndex: mainController.currentIndex,
+                      icon: Icons.person_outline_rounded,
+                      label: 'Profile',
+                      onTap: () => _handleNavTap(3, mainController),
+                      mainController: mainController,
+                    ),
+                  ],
                 ),
               ),
             ),

@@ -19,6 +19,29 @@ extension _VideoFeedPersistence on _VideoFeedAdvancedState {
       // **NEW: Save timestamp for cache validation**
       await prefs.setInt(
           _kSavedStateTimestampKey, DateTime.now().millisecondsSinceEpoch);
+
+      // **AGGRESSIVE CACHING: Save current videos (last 3 viewed) as "Page 1"**
+      // This ensures 0ms load on next startup with these specific videos
+      if (_videos.isNotEmpty) {
+        try {
+          // Get current video and next 2 (total 3)
+          final count = _videos.length;
+          final start = _currentIndex.clamp(0, count - 1);
+          final end = (start + 3).clamp(0, count); // Exclusive end
+          
+          if (end > start) {
+            final videosToSave = _videos.sublist(start, end);
+            if (videosToSave.isNotEmpty) {
+              final feedLocalDataSource = FeedLocalDataSource();
+              // Cache as Page 1 so it loads immediately on restart
+              await feedLocalDataSource.cacheFeed(1, widget.videoType, videosToSave);
+              AppLogger.log('💾 Aggressive Caching: Saved ${videosToSave.length} videos (starting at idx $_currentIndex) as Page 1');
+            }
+          }
+        } catch (e) {
+          AppLogger.log('⚠️ Error saving aggressive cache: $e');
+        }
+      }
     } catch (e) {
       AppLogger.log('❌ Error saving background state: $e');
     }

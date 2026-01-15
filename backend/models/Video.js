@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import View from './View.js';
 
 const videoSchema = new mongoose.Schema({
   videoName: {
@@ -36,33 +37,8 @@ const videoSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  // **NEW: Detailed view tracking for reels-style system**
-  viewDetails: [{
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true
-    },
-    viewCount: {
-      type: Number,
-      default: 1,
-      max: 10 // Maximum 10 views per user
-    },
-    lastViewedAt: {
-      type: Date,
-      default: Date.now
-    },
-    viewDurations: [{
-      viewedAt: {
-        type: Date,
-        default: Date.now
-      },
-      duration: {
-        type: Number,
-        default: 4 // Duration in seconds before counting as view
-      }
-    }]
-  }],
+  // **Refactored: viewDetails removed for performance. Views are now tracked in 'View' collection.**
+  
   shares: {
     type: Number,
     default: 0
@@ -165,7 +141,7 @@ const videoSchema = new mongoose.Schema({
   
   // **NEW: Quality metadata**
   qualitiesGenerated: [{
-    quality: String, // preload, low, medium, high
+    quality: String, 
     url: String,
     size: Number,
     resolution: {
@@ -268,43 +244,25 @@ videoSchema.methods.addQualityVersion = function(quality, url, metadata) {
   return this.save();
 };
 
-videoSchema.methods.incrementView = function(userId, duration = 2) { // **CHANGED: Reduced from 4 to 2 seconds for more lenient view counting**
-  // Find existing view record for this user
-  const existingView = this.viewDetails.find(view => 
-    view.user.toString() === userId.toString()
+// **PERFORMANCE FIX: Separate View Tracking**
+// Instead of embedding views in the Video document (which causes massive documents),
+// we now use a separate 'View' collection.
+
+videoSchema.methods.incrementView = async function(userId, duration = 2) {
+  // 1. Create a View record (Fire-and-Forget Strategy)
+  // We do NOT await this. It runs in the background.
+  View.create({
+    video: this._id,
+    user: userId,
+    duration: duration
+  }).catch(err => console.error('Error logging view (background):', err));
+
+  // 2. Atomically increment the total views counter
+  // usage of $inc ensures no views are lost during concurrent writes
+  return this.constructor.updateOne(
+    { _id: this._id },
+    { $inc: { views: 1 } }
   );
-
-  if (existingView) {
-    // User has viewed before - check if under limit (max 10 views)
-    if (existingView.viewCount < 10) {
-      existingView.viewCount += 1;
-      existingView.lastViewedAt = new Date();
-      existingView.viewDurations.push({
-        viewedAt: new Date(),
-        duration: duration
-      });
-      
-      // Increment total views count
-      this.views += 1;
-    }
-    // If already at 10 views, don't increment
-  } else {
-    // New viewer - add first view
-    this.viewDetails.push({
-      user: userId,
-      viewCount: 1,
-      lastViewedAt: new Date(),
-      viewDurations: [{
-        viewedAt: new Date(),
-        duration: duration
-      }]
-    });
-    
-    // Increment total views count
-    this.views += 1;
-  }
-
-  return this.save();
 };
 
 export default mongoose.model('Video', videoSchema);

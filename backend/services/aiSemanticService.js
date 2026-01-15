@@ -160,9 +160,7 @@ class AISemanticService {
       }
       
       // Extract video text
-      const videoText = `${videoContent.videoName || videoContent.title || ''} ${videoContent.description || ''}`.trim();
-      
-      console.log('📹 Video text for AI:', videoText);
+      const videoText = `${videoContent.videoName || videoContent.title || ''} ${videoContent.description || ''}`.trim(); 
       
       if (!videoText) return [];
       
@@ -172,8 +170,6 @@ class AISemanticService {
         console.log('⚠️ Failed to get video embedding');
         return [];
       }
-      
-      console.log('🤖 Comparing against', ads.length, 'ads');
       
       // Score each ad
       const scoredAds = [];
@@ -188,9 +184,9 @@ class AISemanticService {
           const score = this.cosineSimilarity(videoEmbedding, adEmbedding);
           
           // Log top scores for debugging
-          if (score > 0.2) {
-            console.log(`  📊 Score ${score.toFixed(3)}: Ad "${ad.title}" vs Video "${videoText.substring(0, 50)}"`);
-          }
+           if (score > 0.2) {
+             // console.log(`  📊 Score ${score.toFixed(3)}: Ad "${ad.title}" vs Video "${videoText.substring(0, 50)}"`);
+           }
           
           scoredAds.push({ ad, score });
         } catch (error) {
@@ -201,7 +197,7 @@ class AISemanticService {
       // Sort by score
       scoredAds.sort((a, b) => b.score - a.score);
       
-      console.log(`📊 Top 3 scores: ${scoredAds.slice(0, 3).map(s => s.score.toFixed(3)).join(', ')}`);
+      // console.log(`📊 Top 3 scores: ${scoredAds.slice(0, 3).map(s => s.score.toFixed(3)).join(', ')}`);
       
       // **OPTIMIZED THRESHOLD: 0.15 for better ad coverage**
       // Lower threshold means more ads will match semantically
@@ -210,7 +206,7 @@ class AISemanticService {
         .slice(0, 5) // Return top 5 instead of 3 for more variety
         .map(item => item.ad);
       
-      console.log(`✅ AI found ${topMatches.length} matching ads (threshold: 0.15)`);
+      // console.log(`✅ AI found ${topMatches.length} matching ads (threshold: 0.15)`);
       
       return topMatches;
     } catch (error) {

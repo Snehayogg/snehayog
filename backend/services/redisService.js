@@ -596,6 +596,184 @@ class RedisService {
       };
     }
   }
+  /**
+   * Push values to the tail of a list
+   * @param {string} key - List key
+   * @param {string[]} values - Values to push
+   * @returns {Promise<number>} - New length of list
+   */
+  async rPush(key, values) {
+    if (!this.isConnected || !this.client || values.length === 0) return 0;
+    try {
+      // Ensure values are strings
+      const stringValues = values.map(v => typeof v === 'string' ? v : JSON.stringify(v));
+      return await this.client.rPush(key, stringValues);
+    } catch (error) {
+      console.error(`❌ Redis: Error rPush to ${key}:`, error.message);
+      return 0;
+    }
+  }
+
+  /**
+   * Push value to the head of a list
+   * @param {string} key - List key
+   * @param {string|string[]} value - Value(s) to push
+   * @returns {Promise<number>} - New length of list
+   */
+  async lPush(key, value) {
+    if (!this.isConnected || !this.client) return 0;
+    try {
+      // Handle single value or array
+      const values = Array.isArray(value) ? value : [value];
+      const stringValues = values.map(v => typeof v === 'string' ? v : JSON.stringify(v));
+      
+      if (stringValues.length === 0) return 0;
+      return await this.client.lPush(key, stringValues);
+    } catch (error) {
+      console.error(`❌ Redis: Error lPush to ${key}:`, error.message);
+      return 0;
+    }
+  }
+
+  /**
+   * Pop value(s) from the head of a list
+   * @param {string} key - List key
+   * @param {number} count - Number of elements to pop (optional, default 1)
+   * @returns {Promise<string|string[]|null>} - Popped value(s)
+   */
+  async lPop(key, count = null) {
+    if (!this.isConnected || !this.client) return null;
+    try {
+      if (count && count > 1) {
+        // ROBUST: Use Pipeline for batch pop (1 Round Trip)
+        // Works on all Redis versions and ensures latency reduction
+        const pipeline = this.client.multi();
+        for(let i=0; i<count; i++) pipeline.lPop(key);
+        const results = await pipeline.exec();
+        // Filter out nulls (if queue had fewer items than count)
+        const videos = results.filter(Boolean);
+        return videos.length > 0 ? videos : null;
+      }
+      return await this.client.lPop(key);
+    } catch (error) {
+      console.error(`❌ Redis: Error lPop from ${key}:`, error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Get range of elements from a list
+   * @param {string} key - List key
+   * @param {number} start - Start index
+   * @param {number} stop - Stop index
+   * @returns {Promise<string[]>} - Array of values
+   */
+  async lRange(key, start, stop) {
+    if (!this.isConnected || !this.client) return [];
+    try {
+      return await this.client.lRange(key, start, stop);
+    } catch (error) {
+      console.error(`❌ Redis: Error lRange from ${key}:`, error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Trim list to specified range
+   * @param {string} key - List key
+   * @param {number} start - Start index
+   * @param {number} stop - Stop index
+   * @returns {Promise<boolean>} - Success status
+   */
+  async lTrim(key, start, stop) {
+    if (!this.isConnected || !this.client) return false;
+    try {
+      await this.client.lTrim(key, start, stop);
+      return true;
+    } catch (error) {
+      console.error(`❌ Redis: Error lTrim ${key}:`, error.message);
+      return false;
+    }
+  }
+
+  /**
+   * Get length of a list
+   * @param {string} key - List key
+   * @returns {Promise<number>} - Length of list
+   */
+  async lLen(key) {
+    if (!this.isConnected || !this.client) return 0;
+    try {
+      return await this.client.lLen(key);
+    } catch (error) {
+      console.error(`❌ Redis: Error lLen ${key}:`, error.message);
+      return 0;
+    }
+  }
+  /**
+   * Smart Push to Feed Queue (Lua Script)
+   * Inserts at index 2 if the last pushed creator is the same (Prevent Sequence Spam)
+   * @param {string} queueKey - Feed queue key
+   * @param {string} videoId - Video ID to push
+   * @param {string} uploaderId - Creator ID (for spam check)
+   */
+  async smartPushToFeed(queueKey, videoId, uploaderId) {
+    if (!this.isConnected || !this.client) return false;
+
+    try {
+      const lastCreatorKey = `${queueKey}:last_creator`;
+      
+      // Lua Script: Atomic Check & Insert
+      // KEYS[1] = queueKey
+      // KEYS[2] = lastCreatorKey
+      // ARGV[1] = videoId
+      // ARGV[2] = uploaderId
+      const script = `
+        local queueKey = KEYS[1]
+        local lastCreatorKey = KEYS[2]
+        local videoId = ARGV[1]
+        local uploaderId = ARGV[2]
+
+        local lastCreator = redis.call("GET", lastCreatorKey)
+
+        if lastCreator == uploaderId then
+          -- SPAM DETECTED: Insert deeper (Index 2/3rd pos) to verify buffer
+          -- 1. Pop top 2 items
+          local v0 = redis.call("LPOP", queueKey)
+          local v1 = redis.call("LPOP", queueKey)
+
+          -- 2. Push NEW video (will be at 3rd pos after restore)
+          redis.call("LPUSH", queueKey, videoId)
+
+          -- 3. Restore top items (Push v1 then v0 to preserve order)
+          if v1 then redis.call("LPUSH", queueKey, v1) end
+          if v0 then redis.call("LPUSH", queueKey, v0) end
+          
+          -- Don't update last_creator (keep it blocking for subsequence)
+          return "buffered"
+        else
+          -- NORMAL: Push to top
+          redis.call("LPUSH", queueKey, videoId)
+          redis.call("SET", lastCreatorKey, uploaderId)
+          redis.call("EXPIRE", lastCreatorKey, 3600) -- 1h TTL
+          return "top"
+        end
+      `;
+
+      // Execute Lua Script
+      // Redis v4 structure: .eval(script, { keys: [], arguments: [] })
+      await this.client.eval(script, {
+        keys: [queueKey, lastCreatorKey],
+        arguments: [videoId, uploaderId]
+      });
+
+      return true;
+    } catch (error) {
+      console.error(`❌ Redis: SmartPush error for ${queueKey}:`, error.message);
+      // Fallback: Normal Push if Lua fails
+      return this.lPush(queueKey, videoId);
+    }
+  }
 }
 
 // Export singleton instance

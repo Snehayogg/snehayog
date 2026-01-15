@@ -55,10 +55,22 @@ class VideoCacheProxyService {
     }
 
     final encodedUrl = Uri.encodeComponent(originalUrl);
+    
+    // **HLS SUPPORT: Use special route for manifests**
+    if (originalUrl.contains('.m3u8')) {
+      return 'http://localhost:$_port/proxy-hls?url=$encodedUrl';
+    }
+
     return 'http://localhost:$_port/proxy?url=$encodedUrl';
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
+    // **ROUTING**
+    if (request.uri.path == '/proxy-hls') {
+      await _handleHlsManifestRequest(request);
+      return;
+    }
+
     if (request.uri.path != '/proxy') {
       request.response.statusCode = HttpStatus.notFound;
       await request.response.close();
@@ -108,6 +120,89 @@ class VideoCacheProxyService {
     await response.close();
   }
 
+
+
+  /// **HLS MANIFEST REWRITER**
+  /// Fetches the .m3u8, rewrites internal URLs to point to this proxy, and serves it.
+  Future<void> _handleHlsManifestRequest(HttpRequest request) async {
+    final url = request.uri.queryParameters['url'];
+    if (url == null || url.isEmpty) {
+      request.response.statusCode = HttpStatus.badRequest;
+      await request.response.close();
+      return;
+    }
+
+    try {
+      final client = http.Client();
+      final remoteUri = Uri.parse(url);
+      final response = await client.get(remoteUri);
+      client.close();
+
+      if (response.statusCode != 200) {
+        request.response.statusCode = response.statusCode;
+        await request.response.close();
+        return;
+      }
+
+      final String originalManifest = response.body;
+      final StringBuffer modifiedManifest = StringBuffer();
+      
+      // Determine base URL for resolving relative paths
+      final String baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
+
+      // Simple parser: Iterate lines and rewrite URLs
+      const LineSplitter splitter = LineSplitter();
+      final List<String> lines = splitter.convert(originalManifest);
+
+      for (String line in lines) {
+        if (line.trim().isEmpty) {
+          modifiedManifest.writeln(line);
+          continue;
+        }
+
+        if (line.startsWith('#')) {
+           // It's a tag (like #EXT-X-STREAM-INF), preserve it
+           // Check if it's a URI tag if needed, but usually URIs are on their own lines 
+           // or part of a tag like #EXT-X-KEY:METHOD=AES-128,URI="key.php"
+           // For simplicity, we handle standard lines. Complex tag URI rewriting requires regex.
+           modifiedManifest.writeln(line);
+        } else {
+          // This line is a URL (segment or sub-playlist)
+          String segmentUrl = line.trim();
+          
+          // Resolve relative URLs
+          if (!segmentUrl.startsWith('http')) {
+             segmentUrl = Uri.parse(baseUrl).resolve(segmentUrl).toString();
+          }
+
+          final encodedSegmentUrl = Uri.encodeComponent(segmentUrl);
+          String localUrl;
+
+          if (segmentUrl.contains('.m3u8')) {
+             // Recursively proxy sub-playlists
+             localUrl = 'http://localhost:$_port/proxy-hls?url=$encodedSegmentUrl';
+          } else {
+             // Proxy segments (TS, KEY, etc.) using simple binary proxy
+             localUrl = 'http://localhost:$_port/proxy?url=$encodedSegmentUrl';
+          }
+          
+          modifiedManifest.writeln(localUrl);
+        }
+      }
+
+      // Serve modified manifest
+      request.response.headers.add(HttpHeaders.contentTypeHeader, 'application/vnd.apple.mpegurl');
+      request.response.headers.add('Access-Control-Allow-Origin', '*');
+      request.response.write(modifiedManifest.toString());
+      await request.response.close();
+
+    } catch (e) {
+      AppLogger.log('❌ Proxy: HLS Manifest rewriting failed: $e');
+      request.response.statusCode = HttpStatus.internalServerError;
+      await request.response.close();
+    }
+  }
+
   Future<void> _streamAndCache(
       String url, File cacheFile, HttpRequest request) async {
     final client = http.Client();
@@ -127,6 +222,7 @@ class VideoCacheProxyService {
       final localResponse = request.response;
       localResponse.statusCode = remoteResponse.statusCode;
       remoteResponse.headers.forEach((name, value) {
+        // HLS chunks might need specific content types
         localResponse.headers.set(name, value);
       });
 
@@ -221,6 +317,76 @@ class VideoCacheProxyService {
       AppLogger.log('🧹 Proxy Cache: Cleaned up $deletedCount files');
     } catch (e) {
       AppLogger.log('❌ Proxy Cache: Cleanup error: $e');
+    }
+  }
+
+  /// **NEW: Get a random available video URL from cache for instant splash screen**
+  /// Returns null if no cached videos found.
+  /// Smartly rotates videos to avoid showing same one every time.
+  Future<String?> getRandomCachedVideoUrl() async {
+    if (_cachePath == null) return null;
+    final dir = Directory(_cachePath!);
+    if (!await dir.exists()) return null;
+
+    try {
+      final List<FileSystemEntity> entities = await dir.list().toList();
+      final List<File> files = entities.whereType<File>().toList();
+
+      if (files.isEmpty) return null;
+
+      // Filter for substantial files (e.g. > 1MB) to ensure it's playable
+      final validFiles = <File>[];
+      for (var file in files) {
+        if (await file.length() > 1024 * 1024) {
+          validFiles.add(file);
+        }
+      }
+
+      if (validFiles.isEmpty) return null;
+
+      // Smart Rotation: Pick a random one
+      // In a real app, we could store 'lastShownSplash' in SharedPreferences
+      // to ensure we cycle through them.
+      validFiles.shuffle();
+      final File selectedFile = validFiles.first;
+
+      // We need to reverse-engineer the URL from the file hash if possible,
+      // OR we just return the local file path directly if the player supports it.
+      // Since VideoPlayerController.file() works, we can return the path.
+      return selectedFile.path;
+    } catch (e) {
+      AppLogger.log('❌ Proxy: Error finding cached video: $e');
+      return null;
+    }
+  }
+  /// **NEW: Check if a URL is cached and playable (file exists and > 1MB)**
+  Future<bool> isCached(String url) async {
+    if (_cachePath == null || url.isEmpty) return false;
+    
+    try {
+      final String fileKey = md5.convert(utf8.encode(url)).toString();
+      final String filePath = '$_cachePath/$fileKey.chunk';
+      final file = File(filePath);
+
+      AppLogger.log('🔍 ProxyDebug: Checking cache for URL: $url');
+      AppLogger.log('   Key: $fileKey');
+      AppLogger.log('   Path: $filePath');
+
+      if (await file.exists()) {
+        final length = await file.length();
+        final isSubstantial = length > 1024 * 1024;
+        AppLogger.log(
+            '   Result: File Exists. Size: ${(length / 1024 / 1024).toStringAsFixed(2)} MB. Playable (>1MB)? $isSubstantial');
+        
+        // Return true if file is substantial enough to play (e.g. > 1MB)
+        return isSubstantial;
+      } else {
+        AppLogger.log('   Result: File does NOT exist.');
+      }
+      return false;
+    } catch (e) {
+      AppLogger.log('❌ ProxyDebug: Error checking cache: $e');
+      return false;
     }
   }
 }

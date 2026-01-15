@@ -114,7 +114,6 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
     }
 
     _videoControllerManager.pauseAllVideosOnTabChange();
-    SharedVideoControllerPool().pauseAllControllers();
   }
 
   void _pauseAllVideosOnTabSwitch() {

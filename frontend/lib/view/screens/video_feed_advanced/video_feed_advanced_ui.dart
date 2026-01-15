@@ -7,11 +7,10 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
       child: PageView.builder(
         controller: _pageController,
         scrollDirection: Axis.vertical,
-        // **CUSTOM PHYSICS: Aggressive snapping (15% threshold, velocity sensitive)**
-        physics:
-            const VayuScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+        // **CUSTOM PHYSICS: Removed VayuScrollPhysics for standard feeling**
+        physics: const AlwaysScrollableScrollPhysics(),
         onPageChanged: _onPageChanged,
-        allowImplicitScrolling: false,
+        allowImplicitScrolling: true, // **FIX: Enable to preload next widget and smooth out scroll start**
         itemCount: _getTotalItemCount(),
         itemBuilder: (context, index) {
           return _buildFeedItem(index);
@@ -73,6 +72,63 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     );
   }
 
+  // **NEW: Individual Video Error State widget**
+  Widget _buildVideoErrorState(int index, String error) {
+    return Container(
+      color: Colors.black,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.white54, size: 48),
+            const SizedBox(height: 12),
+            const Text(
+              'Playback Error',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+             const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Text(
+                _getUserFriendlyErrorMessage(error),
+                style: const TextStyle(color: Colors.white54, fontSize: 11),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () {
+                 // Retry logic: clear error and reload
+                 safeSetState(() {
+                    _videoErrors.remove(index);
+                    _loadingVideos.add(index); // Show spinner
+                    _isBuffering[index] = false; // Reset buffering state
+                    _isBufferingVN[index]?.value = false;
+                 });
+                 // Force reload
+                 _preloadVideo(index).then((_) {
+                    if (mounted && index == _currentIndex) {
+                       _tryAutoplayCurrentImmediate(index);
+                    }
+                 });
+              },
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white24,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -130,74 +186,73 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
   }
 
   int _getTotalItemCount() {
-    // **FIXED: Always add ONE extra item**
-    // This ensures:
-    // - When `_hasMore` is true → extra item is used as a loading indicator to fetch next page.
-    // - When `_hasMore` is false → extra item is used to seamlessly restart the feed (startOver).
-    // Without this extra item, PageView cannot scroll past the last video and scrolling feels "blocked".
-    return _videos.length + 1;
+    // **FIXED: Always add THREE extra items (buffer) to allow scrolling past end**
+    // This solves "Blocked Scrolling" issue when next video isn't ready.
+    // User can drag into these placeholders, triggering the loader.
+    return _videos.length + 3;
   }
 
   Widget _buildFeedItem(int index) {
     final totalVideos = _videos.length;
     final videoIndex = index;
 
+    // **NEW: Pre-fetch Trigger (Buffer 6 videos - Aggressive for Fast Scroll)**
+    // Trigger load more when user is within 6 videos of the end (approx 50% through batch)
+    // This helps prevent hitting the "Loading more videos" screen even when scrolling fast
+    if (mounted && totalVideos > 0 && index >= totalVideos - 6 && !_isLoadingMore && !_isRefreshing && _hasMore) {
+       WidgetsBinding.instance.addPostFrameCallback((_) {
+          _loadMoreVideos();
+       });
+    }
+
     if (videoIndex >= totalVideos) {
       // **SEAMLESS END-OF-FEED ITEM**
       // Show last video as placeholder while new videos load (invisible transition)
       // This creates seamless experience - user sees video, not loading state
 
-      if (totalVideos > 0) {
-        // **OPTIMIZED: Show last video as seamless placeholder**
+      if (totalVideos > 0 && videoIndex == totalVideos) {
+        // **Format: First extra item = Copy of Last Video (Seamless)**
         final lastVideoIndex = totalVideos - 1;
         final lastVideo = _videos[lastVideoIndex];
         final lastController = _getController(lastVideoIndex);
 
         // **IMMEDIATE TRIGGER: Load more videos immediately if not already loading**
-        // This prevents grey screen by ensuring videos start loading as soon as user reaches end
-        if (mounted && !_isRefreshing) {
-          if (_hasMore && !_isLoadingMore) {
-            // Load more videos silently (no visible loading state)
-            AppLogger.log(
-              '📡 UI: Fallback pre-fetching triggered at index $index (End-of-feed reached)',
-            );
-            // Trigger immediately without waiting
-            _loadMoreVideos();
-          } else if (!_hasMore && !_isLoadingMore) {
-            // No more videos from backend → restart feed from beginning
-            AppLogger.log(
-              '🔄 UI: No more videos available, restarting feed from beginning...',
-            );
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted && !_isRefreshing) {
-                startOver();
-              }
-            });
-          }
+        if (mounted && !_isRefreshing && !_isLoadingMore) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+             AppLogger.log('📡 UI: End-of-feed reached at index $index. Triggering _loadMoreVideos');
+             _loadMoreVideos();
+          });
         }
 
-        // **CRITICAL: Return last video widget immediately instead of loading indicator**
-        // This creates seamless experience - user sees video while new ones load
-        // Use WidgetsBinding to ensure immediate render without delay
+        // Return duplicate of last video for seamless feel
         return _buildVideoItem(
           lastVideo,
           lastController,
-          false, // Not active, just seamless placeholder
+          false, // Not active
           lastVideoIndex,
         );
       }
 
-      // **FALLBACK: Black container instead of grey screen**
-      // Only if no videos at all (shouldn't happen in normal flow)
+      // **FALLBACK: Loading Skeleton for subsequent items (index > totalVideos)**
+      // This gives visual feedback that "more is coming" if user scrolls deep
       return Container(
         width: double.infinity,
         height: double.infinity,
-        color: Colors.black, // Black instead of grey for better UX
-        child: _isLoading
-            ? const Center(
-                child: CircularProgressIndicator(color: Colors.white),
-              )
-            : const SizedBox.shrink(),
+        color: Colors.black, // Black background
+        child: const Center(
+          child: Column(
+             mainAxisAlignment: MainAxisAlignment.center,
+             children: [
+                SizedBox(
+                   width: 30,
+                   height: 30,
+                   child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white24)
+                ),
+                SizedBox(height: 16),
+                Text("Loading more videos...", style: TextStyle(color: Colors.white24, fontSize: 12)),
+             ]
+          ),
+        ),
       );
     }
 
@@ -219,6 +274,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     }
 
     return Container(
+      key: ValueKey('video_${video.id}'), // **FIX: Stable key to prevent player recreation on feed update**
       width: double.infinity,
       height: double.infinity,
       color: Colors.black,
@@ -252,6 +308,11 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     bool isActive,
     int index,
   ) {
+    // **NEW: Check for error state**
+    if (_videoErrors.containsKey(index)) {
+      return _buildVideoErrorState(index, _videoErrors[index]!);
+    }
+
     return Container(
       width: double.infinity,
       height: double.infinity,
@@ -366,16 +427,16 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                                     color: Colors.black.withOpacity(0.7),
                                     borderRadius: BorderRadius.circular(20),
                                   ),
-                                  child: Row(
+                                  child: const Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      const Icon(
+                                       Icon(
                                         Icons.wifi_off_rounded,
                                         color: Colors.orange,
                                         size: 16,
                                       ),
-                                      const SizedBox(width: 8),
-                                      const Text(
+                                       SizedBox(width: 8),
+                                      Text(
                                         'Slow Internet Connection',
                                         style: TextStyle(
                                           color: Colors.white,
@@ -461,47 +522,16 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
   }
 
   Widget _buildBannerAd(VideoModel video, int index) {
-    // **FIXED: Always prepare custom ad data for fallback, even when AdMob is configured**
-    final bool shouldUseAdMob = AdMobConfig.isConfigured();
-
-    // **FIXED: Always log banner ad status for debugging**
-    AppLogger.log(
-      '🔍 _buildBannerAd: Video index=$index, _adsLoaded=$_adsLoaded, Total banner ads=${_bannerAds.length}, Locked ads=${_lockedBannerAdByVideoId.length}, AdMob configured: $shouldUseAdMob',
-    );
-
     // **FIXED: Prepare custom ad data for fallback (even when AdMob is configured)**
     Map<String, dynamic>? adData;
 
     if (_lockedBannerAdByVideoId.containsKey(video.id)) {
       adData = _lockedBannerAdByVideoId[video.id];
-      if (adData != null) {
-        AppLogger.log(
-          '🔒 Using locked ad for video ${video.videoName} (index $index): ${adData['title']} (ID: ${adData['id']})',
-        );
-      }
     } else if (_adsLoaded && _bannerAds.isNotEmpty) {
       final adIndex = index % _bannerAds.length;
       if (adIndex < _bannerAds.length) {
         adData = _bannerAds[adIndex];
-        AppLogger.log(
-          '🔄 Showing banner ad ${adIndex + 1}/${_bannerAds.length} for video ${video.videoName} (index $index): ${adData['title']} (ID: ${adData['id']})',
-        );
         _lockedBannerAdByVideoId[video.id] = adData;
-      } else {
-        AppLogger.log(
-          '⚠️ Invalid adIndex $adIndex for bannerAds length ${_bannerAds.length}',
-        );
-      }
-    } else {
-      // **FIXED: Log when banner ads are not available**
-      if (!_adsLoaded) {
-        AppLogger.log(
-          '⚠️ _buildBannerAd: Ads not loaded yet for video ${video.videoName} (index $index)',
-        );
-      } else if (_bannerAds.isEmpty) {
-        AppLogger.log(
-          '⚠️ _buildBannerAd: No banner ads available from backend for video ${video.videoName} (index $index)',
-        );
       }
     }
 
@@ -546,8 +576,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           }
         }
       },
-      useGoogleAds:
-          shouldUseAdMob, // **FIXED: Use AdMob if configured, fallback to custom ads**
+      useGoogleAds: AdMobConfig.isConfigured(), // **FIXED: Use AdMob if configured, fallback to custom ads**
     );
   }
 
@@ -615,17 +644,10 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             : _getDetectedAspectRatio(
                 controller); // Use detected ratio from video controller
 
-        final Size videoSize = controller.value.size;
-        final int rotation = controller.value.rotationCorrection;
+        // final Size videoSize = controller.value.size; // Unused
+        // final int rotation = controller.value.rotationCorrection; // Unused
 
-        AppLogger.log('🎬 MODEL aspect ratio: $modelAspectRatio');
-        AppLogger.log(
-            '🎬 Video dimensions: ${videoSize.width}x${videoSize.height}');
-        AppLogger.log('🎬 Rotation: $rotation degrees');
-        AppLogger.log(
-            '🎬 Using MODEL aspect ratio for display (preserved from 480p encoding)');
-
-        _debugAspectRatio(controller);
+        // _debugAspectRatio(controller); // Disabled for performance
 
         // **FIX: Use model aspect ratio to determine portrait vs landscape**
         // Portrait videos have aspect ratio < 1.0 (height > width)
@@ -651,10 +673,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     );
   }
 
-  bool _isPortraitVideo(double aspectRatio) {
-    const double portraitThreshold = 0.7;
-    return aspectRatio < portraitThreshold;
-  }
+  // _isPortraitVideo removed (unused)
 
   /// **Get detected aspect ratio from video controller**
   /// This ensures videos display in their original aspect ratio even if model doesn't have one
@@ -690,94 +709,20 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     double modelAspectRatio,
     VideoModel currentVideo,
   ) {
-    // **FIX: Use original resolution from video model if available, otherwise use aspect ratio**
-    // This ensures videos display at their original resolution (1080x1920, etc.)
-    // Try to get original resolution from video model
-    double? originalWidth;
-    double? originalHeight;
-
-    // Check if video model has originalResolution field (from backend)
-    if (currentVideo.originalResolution != null) {
-      originalWidth = currentVideo.originalResolution!['width']?.toDouble();
-      originalHeight = currentVideo.originalResolution!['height']?.toDouble();
-    }
-
-    double displayWidth;
-    double displayHeight;
-
-    // If we have original resolution, use it; otherwise calculate from aspect ratio
-    if (originalWidth != null &&
-        originalHeight != null &&
-        originalWidth > 0 &&
-        originalHeight > 0) {
-      AppLogger.log(
-        '🎬 Using original resolution: ${originalWidth}x$originalHeight',
-      );
-
-      // Start with original dimensions
-      displayWidth = originalWidth;
-      displayHeight = originalHeight;
-
-      // Scale down to fit screen while maintaining aspect ratio
-      if (displayHeight > screenHeight) {
-        final scale = screenHeight / displayHeight;
-        displayHeight = screenHeight;
-        displayWidth = displayWidth * scale;
-      }
-      if (displayWidth > screenWidth) {
-        final scale = screenWidth / displayWidth;
-        displayWidth = screenWidth;
-        displayHeight = displayHeight * scale;
-      }
-    } else if (screenHeight > 0 && modelAspectRatio > 0) {
-      // Fallback: Calculate from aspect ratio
-      displayHeight = screenHeight;
-      displayWidth = displayHeight * modelAspectRatio;
-
-      // If video is wider than screen, scale down to fit screen width
-      if (displayWidth > screenWidth) {
-        displayWidth = screenWidth;
-        displayHeight = displayWidth / modelAspectRatio;
-      }
-    } else {
-      // Final fallback: Use controller size
-      final Size videoSize = controller.value.size;
-      final int rotation = controller.value.rotationCorrection;
-      displayWidth = videoSize.width;
-      displayHeight = videoSize.height;
-      if (rotation == 90 || rotation == 270) {
-        displayWidth = videoSize.height;
-        displayHeight = videoSize.width;
-      }
-    }
-
     AppLogger.log(
-      '🎬 MODEL Portrait video - Model aspect ratio: $modelAspectRatio',
+      '🎬 MODEL Portrait video - Aspect Ratio: $modelAspectRatio',
     );
-    AppLogger.log(
-      '🎬 MODEL Portrait video - Original resolution: ${originalWidth ?? "N/A"}x${originalHeight ?? "N/A"}',
-    );
-    AppLogger.log(
-      '🎬 MODEL Portrait video - Screen size: ${screenWidth}x$screenHeight',
-    );
-    AppLogger.log(
-      '🎬 MODEL Portrait video - Display size: ${displayWidth}x$displayHeight',
-    );
-
-    // **FIX: Use AspectRatio widget to ensure correct aspect ratio, then FittedBox for fitting**
+    
+    // **FIX: Simplified to use standard AspectRatio widget**
+    // This removes usage of originalResolution logic which might be causing sizing issues
+    // and relies on standard Flutter widgets to respect aspect ratio.
     return AspectRatio(
       aspectRatio: modelAspectRatio,
-      child: FittedBox(
-        fit: BoxFit.contain,
-        child: SizedBox(
-          width: displayWidth,
-          height: displayHeight,
-          child:
-              _buildVideoPlayerWidget(controller, displayWidth, displayHeight),
-        ),
-      ),
+      child: VideoPlayer(controller),
     );
   }
+
+  // _debugAspectRatio removed (unused)
 
   Widget _buildLandscapeVideoFromModel(
     VideoPlayerController controller,
@@ -786,156 +731,23 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     double modelAspectRatio,
     VideoModel currentVideo,
   ) {
-    // **FIX: Use original resolution from video model if available, otherwise use aspect ratio**
-    // This ensures videos display at their original resolution
-    // Try to get original resolution from video model
-    double? originalWidth;
-    double? originalHeight;
+    // Simplification for release build
+    // AppLogger.log('🎬 MODEL Landscape video - Aspect Ratio: $modelAspectRatio');
 
-    // Check if video model has originalResolution field (from backend)
-    if (currentVideo.originalResolution != null) {
-      originalWidth = currentVideo.originalResolution!['width']?.toDouble();
-      originalHeight = currentVideo.originalResolution!['height']?.toDouble();
-    }
-
-    double displayWidth;
-    double displayHeight;
-
-    // If we have original resolution, use it; otherwise calculate from aspect ratio
-    if (originalWidth != null &&
-        originalHeight != null &&
-        originalWidth > 0 &&
-        originalHeight > 0) {
-      AppLogger.log(
-        '🎬 Using original resolution: ${originalWidth}x$originalHeight',
-      );
-
-      // Start with original dimensions
-      displayWidth = originalWidth;
-      displayHeight = originalHeight;
-
-      // Scale down to fit screen while maintaining aspect ratio
-      if (displayWidth > screenWidth) {
-        final scale = screenWidth / displayWidth;
-        displayWidth = screenWidth;
-        displayHeight = displayHeight * scale;
-      }
-      if (displayHeight > screenHeight) {
-        final scale = screenHeight / displayHeight;
-        displayHeight = screenHeight;
-        displayWidth = displayWidth * scale;
-      }
-    } else if (screenWidth > 0 && modelAspectRatio > 0) {
-      // Fallback: Calculate from aspect ratio
-      displayWidth = screenWidth;
-      displayHeight = displayWidth / modelAspectRatio;
-
-      // If video is taller than screen, scale down to fit screen height
-      if (displayHeight > screenHeight) {
-        displayHeight = screenHeight;
-        displayWidth = displayHeight * modelAspectRatio;
-      }
-    } else {
-      // Final fallback: Use controller size
-      final Size videoSize = controller.value.size;
-      final int rotation = controller.value.rotationCorrection;
-      displayWidth = videoSize.width;
-      displayHeight = videoSize.height;
-      if (rotation == 90 || rotation == 270) {
-        displayWidth = videoSize.height;
-        displayHeight = videoSize.width;
-      }
-    }
-
-    AppLogger.log(
-      '🎬 MODEL Landscape video - Model aspect ratio: $modelAspectRatio',
-    );
-    AppLogger.log(
-      '🎬 MODEL Landscape video - Original resolution: ${originalWidth ?? "N/A"}x${originalHeight ?? "N/A"}',
-    );
-    AppLogger.log(
-      '🎬 MODEL Landscape video - Screen size: ${screenWidth}x$screenHeight',
-    );
-    AppLogger.log(
-      '🎬 MODEL Landscape video - Display size: ${displayWidth}x$displayHeight',
-    );
-
-    // **FIX: Use AspectRatio widget to ensure correct aspect ratio, then FittedBox for fitting**
+    // **FIX: Simplified to use standard AspectRatio widget**
+    // This ensures the video always fits the screen width while maintaining aspect ratio
+    // without fragile manual calculations or originalResolution dependency.
     return AspectRatio(
       aspectRatio: modelAspectRatio,
-      child: FittedBox(
-        fit: BoxFit.contain,
-        child: SizedBox(
-          width: displayWidth,
-          height: displayHeight,
-          child:
-              _buildVideoPlayerWidget(controller, displayWidth, displayHeight),
-        ),
-      ),
-    );
-  }
-
-  /// **WEB FIX: Build video player widget with explicit sizing for web compatibility**
-  Widget _buildVideoPlayerWidget(
-    VideoPlayerController controller,
-    double width,
-    double height,
-  ) {
-    // **WEB FIX: Ensure video player has explicit sizing and proper container for web**
-    // Check if controller is initialized before rendering
-    if (!controller.value.isInitialized) {
-      return Container(
-        width: width,
-        height: height,
-        color: Colors.black,
-        child: const Center(
-          child: CircularProgressIndicator(color: Colors.white),
-        ),
-      );
-    }
-
-    return Container(
-      width: width,
-      height: height,
-      color: Colors.black,
       child: VideoPlayer(controller),
     );
   }
 
-  void _debugAspectRatio(VideoPlayerController controller) {
-    final Size videoSize = controller.value.size;
-    final int rotation = controller.value.rotationCorrection;
+  /// **WEB FIX: Build video player widget with explicit sizing for web compatibility**
 
-    double videoWidth = videoSize.width;
-    double videoHeight = videoSize.height;
 
-    if (rotation == 90 || rotation == 270) {
-      videoWidth = videoSize.height;
-      videoHeight = videoSize.width;
-    }
-
-    final double aspectRatio = videoWidth / videoHeight;
-    final bool isPortrait = aspectRatio < 1.0 || _isPortraitVideo(aspectRatio);
-
-    final currentVideo = _videos[_currentIndex];
-    final double modelAspectRatio = currentVideo.aspectRatio;
-
-    AppLogger.log('🔍 ASPECT RATIO DEBUG:');
-    AppLogger.log('🔍 MODEL aspect ratio: $modelAspectRatio');
-    AppLogger.log('🔍 Raw size: ${videoSize.width}x${videoSize.height}');
-    AppLogger.log('🔍 Rotation: $rotation degrees');
-    AppLogger.log('🔍 Corrected size: ${videoWidth}x$videoHeight');
-    AppLogger.log('🔍 DETECTED aspect ratio: $aspectRatio');
-    AppLogger.log('🔍 Is portrait (detected): $isPortrait');
-    AppLogger.log('🔍 Expected 9:16 ratio: ${9.0 / 16.0}');
-    AppLogger.log(
-      '🔍 Difference from 9:16 (detected): ${(aspectRatio - (9.0 / 16.0)).abs()}',
-    );
-    AppLogger.log(
-      '🔍 Difference from 9:16 (model): ${(modelAspectRatio - (9.0 / 16.0)).abs()}',
-    );
-    AppLogger.log('🔍 Using MODEL aspect ratio for display');
-  }
+  // Debug logic removed for release build
+  // void _debugAspectRatio(VideoPlayerController controller) { ... }
 
   Widget _buildVideoThumbnail(VideoModel video) {
     final index = _videos.indexOf(video);
@@ -975,8 +787,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                   );
                 },
                 onEnd: () {
-                  // This is a hack to loop the animation
-                  // (TweenAnimationBuilder doesn't loop naturally, but we can state-target it)
+
                 },
                 child: child,
               );
@@ -1030,10 +841,6 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
   }
 
   Widget _buildEarningsLabel(VideoModel video) {
-    // **NOTE: Show earnings label for all videos - earnings API will return 0 for non-owned videos**
-    // The backend API handles ownership checks, so we can safely show the label
-    // If the video doesn't belong to the user, earnings will just be 0.00
-
     return GestureDetector(
       onTap: () => _showEarningsBottomSheet(),
       child: FutureBuilder<double>(

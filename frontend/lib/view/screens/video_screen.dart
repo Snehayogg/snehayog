@@ -10,12 +10,14 @@ class VideoScreen extends StatefulWidget {
   final int? initialIndex;
   final List<VideoModel>? initialVideos;
   final String? initialVideoId;
+  final String? videoType; // **NEW: Allow passing videoType**
 
   const VideoScreen({
     Key? key,
     this.initialIndex,
     this.initialVideos,
     this.initialVideoId,
+    this.videoType,
   }) : super(key: key);
 
   @override
@@ -96,12 +98,11 @@ class _VideoScreenState extends State<VideoScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // When videos come from profile, don't filter by videoType
-    // Only use videoType when loading from API (no initialVideos)
-    final String? videoType =
-        widget.initialVideos == null || widget.initialVideos!.isEmpty
+    // **FIXED: Respect passed videoType (e.g. 'vayu') even if initialVideos are present**
+    final String? videoType = widget.videoType ??
+        (widget.initialVideos == null || widget.initialVideos!.isEmpty
             ? 'yog'
-            : null;
+            : null);
 
     // Wrap in Scaffold + SafeArea so UI matches Yug tab full-screen layout
     return Scaffold(

@@ -16,6 +16,7 @@ import 'package:vayu/config/app_config.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/services/connectivity_service.dart';
 import 'package:vayu/core/services/http_client_service.dart';
+import 'package:vayu/features/video/data/datasources/video_local_datasource.dart';
 
 /// Eliminates code duplication and provides consistent API
 class VideoService {
@@ -170,8 +171,15 @@ class VideoService {
       // **BACKEND-FIRST: Get auth token for authenticated users (optional - don't fail if missing)**
       Map<String, String> headers = {
         'Content-Type': 'application/json',
-        if (platformId.isNotEmpty) 'x-device-id': platformId,
       };
+      
+      if (platformId.isNotEmpty) {
+         headers['x-device-id'] = platformId;
+         // AppLogger.log('📱 VideoService: Added x-device-id header: $platformId'); 
+      } else {
+         AppLogger.log('⚠️ VideoService: Platform ID is empty! Header not added.');
+      }
+
       try {
         final token = await AuthService.getToken();
         if (token != null && token.isNotEmpty) {
@@ -273,16 +281,33 @@ class VideoService {
             );
           }
 
-          return VideoModel.fromJson(json);
+          final video = VideoModel.fromJson(json);
+          
+          // **DEBUG: Check for empty IDs which cause PageView key collisions**
+          if (video.id.isEmpty) {
+            AppLogger.log('❌ VideoService: Critical Error - Parsed video with EMPTY ID! Name: ${video.videoName}');
+            // Fallback: Generate a random ID to prevent key collision crashes
+            // This is a band-aid; backend should fix the root cause.
+            return video.copyWith(id: 'temp_${DateTime.now().microsecondsSinceEpoch}');
+          }
+          
+          return video;
         }).toList();
 
-        return {
+        final result = {
           'videos': List<VideoModel>.from(videos),
           'hasMore': responseData['hasMore'] ?? false,
           'total': responseData['total'] ?? videos.length,
           'currentPage': responseData['currentPage'] ?? page,
           'totalPages': responseData['totalPages'] ?? 1,
         };
+
+        // **CACHE: Save fresh videos to Hive**
+        // We use unawaited to not block the UI return
+        // ignore: unawaited_futures
+        _cacheVideosIfApplicable(videos, videoType, page);
+
+        return result;
       } else {
         // **ENHANCED: Better error handling for non-200 responses**
         AppLogger.log(
@@ -309,11 +334,59 @@ class VideoService {
       }
     } catch (e) {
       AppLogger.log('❌ VideoService: Error in getVideos: $e');
+
+      // **OFFLINE FALLBACK: Try Hive Cache**
+      if (page == 1) {
+        try {
+          // Lazy load the data source to avoid circular dependency issues if any
+          // Ideally passed via constructor but using direct instantiation for service patch
+          // Imports are needed: import '../features/video/data/datasources/video_local_datasource.dart';
+
+          final _localDataSource = VideoLocalDataSource();
+          final videoTypeKey =
+              videoType ?? 'yog'; // default to yog for cache key if null
+
+          final cachedVideos =
+              await _localDataSource.getCachedVideoFeed(videoTypeKey);
+
+          if (cachedVideos != null && cachedVideos.isNotEmpty) {
+            AppLogger.log(
+                '✅ VideoService: Returning CACHED videos (Offline Mode)');
+            return {
+              'videos': cachedVideos,
+              'hasMore': false,
+              'total': cachedVideos.length,
+              'currentPage': 1,
+              'totalPages': 1,
+              'isOffline': true,
+            };
+          }
+        } catch (cacheError) {
+          AppLogger.log('⚠️ VideoService: Cache fallback failed: $cacheError');
+        }
+      }
+
       // **FIX: Add device info for debugging**
       AppLogger.log(
         '❌ VideoService: Error details - page: $page, videoType: $videoType, limit: $limit',
       );
       rethrow;
+    }
+  }
+
+  /// **Helper to cache videos (called after successful fetch)**
+  Future<void> _cacheVideosIfApplicable(
+      List<VideoModel> videos, String? videoType, int page) async {
+    if (page == 1 && videos.isNotEmpty) {
+      try {
+        final _localDataSource = VideoLocalDataSource();
+        final type = videoType ?? 'yog';
+        if (type == 'yog' || type == 'vayu') {
+          await _localDataSource.cacheVideoFeed(videos, type);
+        }
+      } catch (e) {
+        AppLogger.log('⚠️ VideoService: Failed to cache videos: $e');
+      }
     }
   }
 
@@ -1334,73 +1407,6 @@ class VideoService {
       AppLogger.log('❌ VideoService: Error getting auth headers: $e');
       rethrow;
     }
-  }
-
-  /// **Optimized HTTP request with retry logic**
-  Future<http.Response> _makeRequest(
-    Future<http.Response> Function() requestFn, {
-    int maxRetries = 2,
-    Duration retryDelay = const Duration(seconds: 1),
-    Duration timeout = const Duration(seconds: 15),
-  }) async {
-    int attempts = 0;
-    Exception? lastException;
-
-    while (attempts < maxRetries) {
-      try {
-        final response = await requestFn().timeout(timeout);
-
-        // **FIX: Return response even if not 200 - let caller handle it**
-        // Only retry on network errors, not HTTP errors
-        if (response.statusCode == 200) return response;
-
-        // **NEW: Log non-200 responses but don't retry (they're valid HTTP responses)**
-        AppLogger.log(
-          '⚠️ VideoService: Non-200 response (${response.statusCode}), attempt ${attempts + 1}/$maxRetries',
-        );
-
-        // **FIX: Return response even if not 200 - backend errors should be handled by caller**
-        // Only retry on actual network failures (socket errors, timeouts)
-        if (response.statusCode >= 500) {
-          // Server error - might be temporary, retry
-          attempts++;
-          if (attempts < maxRetries) {
-            AppLogger.log('🔄 VideoService: Retrying after server error...');
-            await Future.delayed(retryDelay * attempts);
-            continue;
-          }
-        }
-
-        // Return the response (even if error) - let caller decide what to do
-        return response;
-      } catch (e) {
-        lastException = e is Exception ? e : Exception(e.toString());
-        attempts++;
-
-        AppLogger.log(
-          '❌ VideoService: Request failed (attempt $attempts/$maxRetries): $lastException',
-        );
-
-        // **FIX: Only retry on network-related errors, not all errors**
-        if (attempts < maxRetries &&
-            (e.toString().contains('timeout') ||
-                e.toString().contains('socket') ||
-                e.toString().contains('connection') ||
-                e.toString().contains('network'))) {
-          AppLogger.log('🔄 VideoService: Retrying after network error...');
-          await Future.delayed(retryDelay * attempts);
-          continue;
-        }
-
-        // If not retryable or max retries reached, throw
-        if (attempts >= maxRetries) {
-          rethrow;
-        }
-      }
-    }
-
-    throw lastException ??
-        Exception('Request failed after $maxRetries attempts');
   }
 
   // **AD INTEGRATION METHODS - From original VideoService**

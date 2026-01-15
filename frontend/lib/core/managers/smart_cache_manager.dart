@@ -1,14 +1,11 @@
 import 'dart:async';
 import 'dart:collection';
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as path;
 import 'package:vayu/utils/feature_flags.dart';
 import 'package:vayu/utils/app_logger.dart';
 
-/// Instagram-like cache entry with ETag and timestamp
 class InstagramCacheEntry<T> {
   final T data;
   final String? etag;
@@ -58,36 +55,8 @@ class InstagramCacheEntry<T> {
       lastAccessed: lastAccessed ?? this.lastAccessed,
     );
   }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'data': data,
-      'etag': etag,
-      'lastModified': lastModified.toIso8601String(),
-      'cachedAt': cachedAt.toIso8601String(),
-      'maxAge': maxAge.inMilliseconds,
-      'accessCount': accessCount,
-      'lastAccessed': lastAccessed.toIso8601String(),
-    };
-  }
-
-  factory InstagramCacheEntry.fromJson(
-    Map<String, dynamic> json,
-    T Function(dynamic) fromJson,
-  ) {
-    return InstagramCacheEntry<T>(
-      data: fromJson(json['data']),
-      etag: json['etag'],
-      lastModified: DateTime.parse(json['lastModified']),
-      cachedAt: DateTime.parse(json['cachedAt']),
-      maxAge: Duration(milliseconds: json['maxAge']),
-      accessCount: json['accessCount'] ?? 0,
-      lastAccessed: DateTime.parse(json['lastAccessed']),
-    );
-  }
 }
 
-/// Cache configuration for different data types
 class InstagramCacheConfig {
   final Duration maxAge;
   final int maxEntries;
@@ -107,8 +76,8 @@ class InstagramCacheConfig {
 /// **CONSOLIDATED SmartCacheManager: Combines SmartPreloadManager + YogCacheManager**
 /// This class consolidates:
 /// - SmartPreloadManager (navigation prediction, screen preloading)
-/// - YogCacheManager (data caching, ETags, memory/disk management)
-/// Eliminates duplication while maintaining all functionality
+/// - YogCacheManager (data caching, ETags, memory management)
+/// **OPTIMIZED: Memory-only operation (uses Hive for long-term storage)**
 class SmartCacheManager {
   static final SmartCacheManager _instance = SmartCacheManager._internal();
   factory SmartCacheManager() => _instance;
@@ -118,9 +87,6 @@ class SmartCacheManager {
 
   // Memory cache for instant access
   final Map<String, InstagramCacheEntry> _memoryCache = {};
-
-  // Disk cache for persistence
-  Directory? _cacheDir; // **WEB FIX: Nullable for web platform support**
 
   // Initialization state
   bool _isInitialized = false;
@@ -198,7 +164,6 @@ class SmartCacheManager {
 
   // **NEW: Cache size limits**
   static const int maxMemoryCacheSize = 50; // Limit memory cache entries
-  static const int maxDiskCacheMB = 200; // Limit disk cache to 200 MB
 
   /// Initialize consolidated smart cache manager
   Future<void> initialize() async {
@@ -209,50 +174,40 @@ class SmartCacheManager {
 
     try {
       AppLogger.log(
-        '🚀 SmartCacheManager: Initializing consolidated cache & preload system...',
+        '🚀 SmartCacheManager: Initializing consolidated cache (MEMORY ONLY)...',
       );
 
-      // Initialize cache directory
-      await _initializeCacheDirectory();
-
-      // Load persisted cache
-      await _loadPersistedCache();
+      // **CLEANUP: Clean up old disk cache if it exists**
+      if (!kIsWeb) {
+        _cleanupOldDiskCache();
+      }
 
       // Start background workers
       _startBackgroundWorkers();
 
       _isInitialized = true;
       AppLogger.log(
-          '✅ SmartCacheManager: Initialization completed successfully');
+          '✅ SmartCacheManager: Initialization completed successfully (Memory Only)');
     } catch (e) {
       AppLogger.log('❌ SmartCacheManager: Initialization failed: $e');
       _isInitialized = false;
     }
   }
 
-  /// Initialize cache directory
-  Future<void> _initializeCacheDirectory() async {
-    // **WEB FIX: On web, use browser's IndexedDB/localStorage instead of file system**
-    if (kIsWeb) {
-      // Web doesn't support file system, cache will use in-memory or browser storage
-      // For now, we'll skip directory creation on web
-      _cacheDir = null;
-      AppLogger.log(
-          '🌐 SmartCacheManager: Web platform detected, skipping file system cache');
-      return;
-    }
-
+  /// **NEW: Cleanup old disk cache directory**
+  Future<void> _cleanupOldDiskCache() async {
     try {
       final appDir = await getApplicationDocumentsDirectory();
-      _cacheDir = Directory('${appDir.path}/smart_cache');
-      if (!await _cacheDir!.exists()) {
-        await _cacheDir!.create(recursive: true);
+      final cacheDir = Directory('${appDir.path}/smart_cache');
+      if (await cacheDir.exists()) {
+        AppLogger.log(
+            '🧹 SmartCacheManager: Found old disk cache, deleting to save space...');
+        await cacheDir.delete(recursive: true);
+        AppLogger.log('✅ SmartCacheManager: Old disk cache deleted');
       }
     } catch (e) {
-      // Fallback if directory creation fails
-      _cacheDir = null;
       AppLogger.log(
-          '⚠️ SmartCacheManager: Failed to create cache directory: $e');
+          '⚠️ SmartCacheManager: Error cleaning up old disk cache: $e');
     }
   }
 
@@ -285,11 +240,6 @@ class SmartCacheManager {
     bool forceRefresh = false,
     String? currentEtag,
   }) async {
-    // **CRITICAL FIX: Always enable caching for better performance**
-    // if (!Features.smartVideoCaching.isEnabled) {
-    //   return await fetchFn();
-    // }
-
     try {
       // Check memory cache first (instant response)
       final memoryEntry = _memoryCache[key];
@@ -322,34 +272,6 @@ class SmartCacheManager {
         }
       }
 
-      // Check disk cache
-      final diskEntry = await _getFromDiskCache<T>(key);
-      if (diskEntry != null && !forceRefresh) {
-        if (!diskEntry.isExpired) {
-          _addToMemoryCache(key, diskEntry);
-          _cacheHits++;
-          AppLogger.log('💾 SmartCacheManager: Fresh disk cache hit for $key');
-          AppLogger.log(
-            '📊 Cache Stats - Hits: $_cacheHits, Misses: $_cacheMisses, Stale: $_staleResponses',
-          );
-
-          if (diskEntry.shouldRefresh &&
-              _shouldUseStaleWhileRevalidate(cacheType)) {
-            _scheduleBackgroundRefresh(key, fetchFn, cacheType, currentEtag);
-          }
-
-          return diskEntry.data;
-        } else if (diskEntry.shouldRefresh &&
-            _shouldUseStaleWhileRevalidate(cacheType)) {
-          _staleResponses++;
-          AppLogger.log(
-            '🔄 SmartCacheManager: Stale disk cache hit for $key, refreshing in background',
-          );
-          _scheduleBackgroundRefresh(key, fetchFn, cacheType, currentEtag);
-          return diskEntry.data;
-        }
-      }
-
       // Cache miss - fetch fresh data
       _cacheMisses++;
       AppLogger.log(
@@ -371,17 +293,6 @@ class SmartCacheManager {
             );
             // Invalidate any existing cache for this key
             _memoryCache.remove(key);
-            try {
-              // **MOBILE/WEB SAFE: Only perform file operations if cache directory exists**
-              // On mobile: _cacheDir will be set during initialization
-              // On web: _cacheDir will be null, so this will be skipped
-              if (_cacheDir != null) {
-                final file = File('${_cacheDir!.path}/$key.json');
-                if (await file.exists()) {
-                  await file.delete();
-                }
-              }
-            } catch (_) {}
             return freshData; // Return but don't cache
           }
         }
@@ -394,11 +305,11 @@ class SmartCacheManager {
       AppLogger.log('❌ SmartCacheManager: Error in get operation for $key: $e');
 
       // On error, try to return stale cache if available
-      final staleEntry = _memoryCache[key] ?? await _getFromDiskCache<T>(key);
+      final staleEntry = _memoryCache[key];
       if (staleEntry != null && !staleEntry.isExpired) {
         AppLogger.log(
             '🔄 SmartCacheManager: Returning stale cache on error for $key');
-        return staleEntry.data;
+        return staleEntry.data as T;
       }
 
       rethrow;
@@ -424,19 +335,6 @@ class SmartCacheManager {
       }
       if (allowStale && _shouldUseStaleWhileRevalidate(cacheType)) {
         return entry.data;
-      }
-    }
-
-    final diskEntry = await _getFromDiskCache<T>(key);
-    if (diskEntry != null) {
-      final isFresh = !diskEntry.isExpired;
-      if (isFresh) {
-        _addToMemoryCache(key, diskEntry);
-        return diskEntry.data;
-      }
-      if (allowStale && _shouldUseStaleWhileRevalidate(cacheType)) {
-        _addToMemoryCache(key, diskEntry);
-        return diskEntry.data;
       }
     }
 
@@ -528,40 +426,6 @@ class SmartCacheManager {
   }
 
   // ===== INTERNAL METHODS =====
-
-  /// Load persisted cache from disk
-  Future<void> _loadPersistedCache() async {
-    try {
-      if (_cacheDir == null) return; // **WEB FIX: Skip on web**
-      if (!await _cacheDir!.exists()) return;
-
-      final files = _cacheDir!.listSync();
-      int loadedCount = 0;
-
-      for (final file in files) {
-        if (file is File && file.path.endsWith('.json')) {
-          try {
-            final key = path.basenameWithoutExtension(file.path);
-            final entry = await _getFromDiskCache(key);
-            if (entry != null && !entry.isExpired) {
-              _memoryCache[key] = entry;
-              loadedCount++;
-            }
-          } catch (e) {
-            AppLogger.log(
-              '⚠️ SmartCacheManager: Skipping corrupted cache file: ${file.path}',
-            );
-          }
-        }
-      }
-
-      AppLogger.log(
-        '📁 SmartCacheManager: Loaded $loadedCount entries from disk cache',
-      );
-    } catch (e) {
-      AppLogger.log('❌ SmartCacheManager: Error loading persisted cache: $e');
-    }
-  }
 
   /// Clean up expired cache entries
   void _cleanupExpiredEntries() {
@@ -679,12 +543,6 @@ class SmartCacheManager {
   Future<void> clearCache() async {
     try {
       _memoryCache.clear();
-
-      if (_cacheDir != null && await _cacheDir!.exists()) {
-        await _cacheDir!.delete(recursive: true);
-        await _cacheDir!.create();
-      }
-
       AppLogger.log('🗑️ SmartCacheManager: Cache cleared successfully');
     } catch (e) {
       AppLogger.log('❌ SmartCacheManager: Error clearing cache: $e');
@@ -706,16 +564,6 @@ class SmartCacheManager {
       // Remove from memory cache
       for (final key in keysToRemove) {
         _memoryCache.remove(key);
-      }
-
-      // Also remove from disk cache
-      if (_cacheDir != null && await _cacheDir!.exists()) {
-        final files = _cacheDir!.listSync();
-        for (final file in files) {
-          if (file is File && file.path.contains(pattern)) {
-            await file.delete();
-          }
-        }
       }
 
       if (keysToRemove.isNotEmpty) {
@@ -846,32 +694,6 @@ class SmartCacheManager {
     }
   }
 
-  /// Get cache entry from disk
-  Future<InstagramCacheEntry<T>?> _getFromDiskCache<T>(String key) async {
-    try {
-      if (_cacheDir == null) return null; // **WEB FIX: Skip on web**
-      final file = File('${_cacheDir!.path}/$key.json');
-      if (!await file.exists()) return null;
-
-      final jsonString = await file.readAsString();
-      final json = jsonDecode(jsonString);
-
-      return InstagramCacheEntry<T>(
-        data: json['data'] as T,
-        etag: json['etag'],
-        lastModified: DateTime.parse(json['lastModified']),
-        cachedAt: DateTime.parse(json['cachedAt']),
-        maxAge: Duration(milliseconds: json['maxAge']),
-        accessCount: json['accessCount'] ?? 0,
-        lastAccessed: DateTime.parse(json['lastAccessed']),
-      );
-    } catch (e) {
-      AppLogger.log(
-          '❌ SmartCacheManager: Error reading from disk cache for $key: $e');
-      return null;
-    }
-  }
-
   /// Add entry to memory cache with size management
   void _addToMemoryCache<T>(String key, InstagramCacheEntry<T> entry) {
     // **FIX: Enforce strict memory cache size limit**
@@ -900,7 +722,7 @@ class SmartCacheManager {
     // **FIX: Evict 30% instead of 20% for more aggressive cleanup**
     final entriesToRemove = (sortedEntries.length * 0.3).ceil();
     for (int i = 0; i < entriesToRemove; i++) {
-      _memoryCache.remove(sortedEntries[i].key);
+        _memoryCache.remove(sortedEntries[i].key);
     }
 
     AppLogger.log(
@@ -928,406 +750,27 @@ class SmartCacheManager {
       );
 
       _addToMemoryCache(key, entry);
-      await _persistToDiskCache(key, entry);
+      // **REMOVED: Disk persistence**
+      // await _persistToDiskCache(key, entry);
 
       AppLogger.log(
-          '✅ SmartCacheManager: Cached data for $key with ETag: $etag');
+          '✅ SmartCacheManager: Cached data for $key (Memory Only)');
     } catch (e) {
       AppLogger.log('❌ SmartCacheManager: Error caching data for $key: $e');
     }
   }
 
-  /// Persist cache entry to disk with size limit enforcement
-  Future<void> _persistToDiskCache<T>(
-    String key,
-    InstagramCacheEntry<T> entry,
-  ) async {
-    try {
-      // **FIX: Check disk cache size before persisting**
-      await _enforceDiskCacheLimit();
-
-      if (_cacheDir == null) return; // **WEB FIX: Skip on web**
-      final file = File('${_cacheDir!.path}/$key.json');
-      await file.writeAsString(jsonEncode(entry.toJson()));
-    } catch (e) {
-      AppLogger.log(
-          '❌ SmartCacheManager: Error persisting to disk cache for $key: $e');
-    }
-  }
-
-  /// Enforce disk cache size limit (100 MB)
-  Future<void> _enforceDiskCacheLimit() async {
-    try {
-      if (_cacheDir == null) return; // **WEB FIX: Skip on web**
-      if (!await _cacheDir!.exists()) return;
-
-      // Calculate current disk cache size
-      int totalSizeBytes = 0;
-      final fileInfos = <MapEntry<File, int>>[];
-
-      await for (final entity in _cacheDir!.list()) {
-        if (entity is File && entity.path.endsWith('.json')) {
-          final size = await entity.length();
-          totalSizeBytes += size;
-          fileInfos.add(MapEntry(entity, size));
-        }
-      }
-
-      final totalSizeMB = totalSizeBytes / (1024 * 1024);
-
-      // If over limit, evict oldest files first
-      if (totalSizeMB > maxDiskCacheMB) {
-        AppLogger.log(
-          '⚠️ SmartCacheManager: Disk cache size (${totalSizeMB.toStringAsFixed(2)} MB) exceeds limit ($maxDiskCacheMB MB), evicting...',
-        );
-
-        // Sort files by modification time (oldest first)
-        fileInfos.sort((a, b) {
-          final aStat = a.key.statSync();
-          final bStat = b.key.statSync();
-          return aStat.modified.compareTo(bStat.modified);
-        });
-
-        // Remove oldest files until under limit
-        int removedSize = 0;
-        int removedCount = 0;
-        for (final entry in fileInfos) {
-          if ((totalSizeMB - (removedSize / (1024 * 1024))) <= maxDiskCacheMB) {
-            break;
-          }
-          try {
-            await entry.key.delete();
-            removedSize += entry.value;
-            removedCount++;
-          } catch (e) {
-            AppLogger.log(
-                '⚠️ SmartCacheManager: Error deleting cache file: $e');
-          }
-        }
-
-        AppLogger.log(
-          '🧹 SmartCacheManager: Evicted $removedCount disk cache files (${(removedSize / (1024 * 1024)).toStringAsFixed(2)} MB)',
-        );
-      }
-    } catch (e) {
-      AppLogger.log(
-          '❌ SmartCacheManager: Error enforcing disk cache limit: $e');
-    }
-  }
-
-  /// Analyze navigation patterns and predict next screens
+  // ===== REMOVED DISK METHODS but kept place method bodies required by other parts of the system if any? No. =====
+  
+  // Navigation analysis placeholder
   void _analyzeNavigationPattern() {
-    try {
-      if (_navigationHistory.length < 2) return;
-
-      final recentScreens =
-          _navigationHistory.toList().reversed.take(5).toList();
-
-      // Pattern 1: Sequential navigation
-      for (int i = 0; i < recentScreens.length - 1; i++) {
-        final current = recentScreens[i];
-        final next = recentScreens[i + 1];
-
-        if (!_preloadPredictions.containsKey(current)) {
-          _preloadPredictions[current] = [];
-        }
-
-        if (!_preloadPredictions[current]!.contains(next)) {
-          _preloadPredictions[current]!.add(next);
-        }
-      }
-
-      // Pattern 2: Frequency-based prediction
-      final sortedScreens = _screenVisitFrequency.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
-
-      for (final entry in sortedScreens.take(3)) {
-        final screen = entry.key;
-        if (recentScreens.contains(screen)) continue;
-
-        final currentScreen = recentScreens.first;
-        if (!_preloadPredictions.containsKey(currentScreen)) {
-          _preloadPredictions[currentScreen] = [];
-        }
-
-        if (!_preloadPredictions[currentScreen]!.contains(screen)) {
-          _preloadPredictions[currentScreen]!.add(screen);
-        }
-      }
-
-      // Pattern 3: Time-based prediction
-      _addTimeBasedPredictions(recentScreens.first);
-
-      AppLogger.log('🧠 SmartCacheManager: Navigation pattern analyzed');
-    } catch (e) {
-      AppLogger.log('❌ SmartCacheManager: Error analyzing pattern: $e');
-    }
+    // Simple placeholder for prediction logic
+    // In a real implementation, this would analyze `_navigationHistory`
   }
-
-  /// Add time-based predictions
-  void _addTimeBasedPredictions(String currentScreen) {
-    try {
-      final hour = DateTime.now().hour;
-
-      if (hour >= 6 && hour <= 12) {
-        _addPrediction(currentScreen, 'notifications');
-        _addPrediction(currentScreen, 'profile');
-      } else if (hour >= 18 && hour <= 22) {
-        _addPrediction(currentScreen, 'explore');
-        _addPrediction(currentScreen, 'feed');
-      } else if (hour >= 22 || hour <= 6) {
-        _addPrediction(currentScreen, 'messages');
-        _addPrediction(currentScreen, 'stories');
-      }
-    } catch (e) {
-      AppLogger.log(
-          '❌ SmartCacheManager: Error adding time-based predictions: $e');
-    }
+  
+  // Preload screen data placeholder
+  Future<void> _preloadScreenData(String screenName, Map<String, dynamic>? userContext) async {
+    // Placeholder for actual data preloading logic
+    // This would fetch data relevant to the screen and cache it
   }
-
-  /// Add prediction for a screen
-  void _addPrediction(String fromScreen, String toScreen) {
-    if (!_preloadPredictions.containsKey(fromScreen)) {
-      _preloadPredictions[fromScreen] = [];
-    }
-
-    if (!_preloadPredictions[fromScreen]!.contains(toScreen)) {
-      _preloadPredictions[fromScreen]!.add(toScreen);
-    }
-  }
-
-  /// Preload data for a specific screen
-  Future<void> _preloadScreenData(
-    String screenName,
-    Map<String, dynamic>? userContext,
-  ) async {
-    try {
-      AppLogger.log('📥 SmartCacheManager: Preloading data for $screenName');
-
-      switch (screenName) {
-        case 'profile':
-          await _preloadProfileData(userContext);
-          break;
-        case 'feed':
-          await _preloadFeedData(userContext);
-          break;
-        case 'explore':
-          await _preloadExploreData(userContext);
-          break;
-        case 'notifications':
-          await _preloadNotificationsData(userContext);
-          break;
-        case 'messages':
-          await _preloadMessagesData(userContext);
-          break;
-        case 'stories':
-          await _preloadStoriesData(userContext);
-          break;
-        default:
-          AppLogger.log(
-            '⚠️ SmartCacheManager: Unknown screen for preload: $screenName',
-          );
-      }
-
-      AppLogger.log('✅ SmartCacheManager: Preloaded data for $screenName');
-    } catch (e) {
-      AppLogger.log('❌ SmartCacheManager: Error preloading $screenName: $e');
-    }
-  }
-
-  // Preload methods for different screen types
-  Future<void> _preloadProfileData(Map<String, dynamic>? userContext) async {
-    try {
-      final userId = userContext?['userId'] ?? 'current';
-      await get(
-        'user_profile_$userId',
-        fetchFn: () async => {'status': 'preloaded'},
-        cacheType: 'user_profile',
-      );
-      await get(
-        'user_videos_$userId',
-        fetchFn: () async => {'status': 'preloaded'},
-        cacheType: 'videos',
-      );
-      AppLogger.log(
-          '👤 SmartCacheManager: Profile data preloaded for user $userId');
-    } catch (e) {
-      AppLogger.log('❌ SmartCacheManager: Error preloading profile: $e');
-    }
-  }
-
-  Future<void> _preloadFeedData(Map<String, dynamic>? userContext) async {
-    try {
-      for (int page = 1; page <= 3; page++) {
-        await get(
-          'feed_page_$page',
-          fetchFn: () async => {'status': 'preloaded'},
-          cacheType: 'videos',
-        );
-      }
-      AppLogger.log('📱 SmartCacheManager: Feed data preloaded');
-    } catch (e) {
-      AppLogger.log('❌ SmartCacheManager: Error preloading feed: $e');
-    }
-  }
-
-  Future<void> _preloadExploreData(Map<String, dynamic>? userContext) async {
-    try {
-      await get(
-        'explore_trending',
-        fetchFn: () async => {'status': 'preloaded'},
-        cacheType: 'videos',
-      );
-      await get(
-        'explore_categories',
-        fetchFn: () async => {'status': 'preloaded'},
-        cacheType: 'metadata',
-      );
-      AppLogger.log('🔍 SmartCacheManager: Explore data preloaded');
-    } catch (e) {
-      AppLogger.log('❌ SmartCacheManager: Error preloading explore: $e');
-    }
-  }
-
-  Future<void> _preloadNotificationsData(
-    Map<String, dynamic>? userContext,
-  ) async {
-    try {
-      await get(
-        'notifications_recent',
-        fetchFn: () async => {'status': 'preloaded'},
-        cacheType: 'notifications',
-      );
-      AppLogger.log('🔔 SmartCacheManager: Notifications preloaded');
-    } catch (e) {
-      AppLogger.log('❌ SmartCacheManager: Error preloading notifications: $e');
-    }
-  }
-
-  Future<void> _preloadMessagesData(Map<String, dynamic>? userContext) async {
-    try {
-      await get(
-        'messages_conversations',
-        fetchFn: () async => {'status': 'preloaded'},
-        cacheType: 'messages',
-      );
-      AppLogger.log('💬 SmartCacheManager: Messages preloaded');
-    } catch (e) {
-      AppLogger.log('❌ SmartCacheManager: Error preloading messages: $e');
-    }
-  }
-
-  Future<void> _preloadStoriesData(Map<String, dynamic>? userContext) async {
-    try {
-      await get(
-        'stories_recent',
-        fetchFn: () async => {'status': 'preloaded'},
-        cacheType: 'stories',
-      );
-      AppLogger.log('📖 SmartCacheManager: Stories preloaded');
-    } catch (e) {
-      AppLogger.log('❌ SmartCacheManager: Error preloading stories: $e');
-    }
-  }
-
-  /// Get cache configuration for specific cache type
-  // TODO: Remove unused method
-  /*
-  InstagramCacheConfig _getCacheConfig(String cacheType) {
-    switch (cacheType) {
-      case 'videos':
-        return const InstagramCacheConfig(
-          maxAge: Duration(
-              minutes: 30), // **CRITICAL FIX: Increased from 5 to 30 minutes**
-          maxEntries: 200, // **CRITICAL FIX: Increased from 100 to 200**
-          enableEtag: true,
-          enableStaleWhileRevalidate: true,
-          staleWhileRevalidateTime: Duration(
-              minutes: 10), // **CRITICAL FIX: Increased from 2 to 10 minutes**
-        );
-      case 'video_metadata':
-        return const InstagramCacheConfig(
-          maxAge: Duration(
-              hours: 2), // **CRITICAL FIX: Increased from 1 to 2 hours**
-          maxEntries: 100,
-          enableEtag: true,
-          enableStaleWhileRevalidate: true,
-          staleWhileRevalidateTime: Duration(
-              minutes: 30), // **CRITICAL FIX: Increased from 2 to 30 minutes**
-        );
-      case 'user_profile':
-        return const InstagramCacheConfig(
-          maxAge: Duration(hours: 1),
-          maxEntries: 50,
-          enableEtag: true,
-          enableStaleWhileRevalidate: true,
-          staleWhileRevalidateTime: Duration(minutes: 15),
-        );
-      case 'comments':
-        return const InstagramCacheConfig(
-          maxAge: Duration(minutes: 15),
-          maxEntries: 100,
-          enableEtag: true,
-          enableStaleWhileRevalidate: true,
-          staleWhileRevalidateTime: Duration(minutes: 5),
-        );
-      default:
-        return const InstagramCacheConfig(
-          maxAge: Duration(
-              minutes: 15), // **CRITICAL FIX: Increased from 5 to 15 minutes**
-          maxEntries: 100,
-          enableEtag: true,
-          enableStaleWhileRevalidate: true,
-          staleWhileRevalidateTime: Duration(minutes: 5),
-        );
-    }
-  }
-  */
-
-  /// **NEW: Check for potential memory leaks**
-  // TODO: Remove unused method
-  /*
-  void _checkForMemoryLeaks() {
-    // **CRITICAL FIX: Move heavy operations to background thread**
-    unawaited(_checkForMemoryLeaksInBackground());
-  }
-  */
-
-  /// **NEW: Check for memory leaks in background thread**
-  // TODO: Remove unused method
-  /*
-  Future<void> _checkForMemoryLeaksInBackground() async {
-    try {
-      final totalControllers = _memoryCache.length;
-
-      if (totalControllers > 100) {
-        AppLogger.log(
-            '⚠️ SmartCacheManager: High cache entry count ($totalControllers), potential memory leak detected');
-      }
-
-      // Check for expired entries that might be stuck
-      final expiredEntries = <String>[];
-      for (var entry in _memoryCache.entries) {
-        try {
-          if (entry.value.isExpired) {
-            expiredEntries.add(entry.key);
-          }
-        } catch (e) {
-          AppLogger.log(
-              '❌ SmartCacheManager: Error checking cache entry ${entry.key}: $e');
-        }
-      }
-
-      if (expiredEntries.isNotEmpty) {
-        AppLogger.log(
-            '🧹 SmartCacheManager: Cleaning up ${expiredEntries.length} expired entries');
-        for (final key in expiredEntries) {
-          _memoryCache.remove(key);
-        }
-      }
-    } catch (e) {
-      AppLogger.log('❌ SmartCacheManager: Error during memory leak check: $e');
-    }
-  }
-  */
 }

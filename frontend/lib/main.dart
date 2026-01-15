@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -20,12 +21,12 @@ import 'package:vayu/services/video_service.dart' as vsvc;
 import 'package:vayu/core/services/hls_warmup_service.dart';
 import 'package:vayu/core/managers/smart_cache_manager.dart';
 import 'package:vayu/model/video_model.dart';
+import 'package:vayu/services/notification_service.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/background_profile_preloader.dart';
 import 'package:vayu/services/location_onboarding_service.dart';
 import 'package:vayu/services/welcome_onboarding_service.dart';
 import 'package:vayu/view/screens/welcome_onboarding_screen.dart';
-import 'package:http/http.dart' as http;
 import 'package:vayu/core/services/http_client_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/core/managers/shared_video_controller_pool.dart';
@@ -33,6 +34,7 @@ import 'package:vayu/core/managers/video_controller_manager.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/services/app_remote_config_service.dart';
 import 'package:vayu/services/video_cache_proxy_service.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -40,14 +42,22 @@ void main() async {
   // **NEW: Initialize Video Cache Proxy for persistent caching**
   await videoCacheProxy.initialize();
 
-  // **OPTIMIZED: Firebase and notifications disabled (not active currently)**
-  // try {
-  //   await Firebase.initializeApp();
-  //   final notificationService = NotificationService();
-  //   unawaited(notificationService.initialize()); // Initialize in background
-  // } catch (e) {
-  //   print('⚠️ Error initializing Firebase: $e');
-  // }
+  // **NEW: Initialize Hive for Instant Data Loading**
+  await Hive.initFlutter();
+  await Hive.openBox('video_feed_cache');
+
+  // **SPLASH PREFETCH: Start network calls immediately while splash is visible**
+  // This runs in parallel with app startup to ensure fresh data is ready ASAP
+  unawaited(_splashPrefetch());
+
+  // **OPTIMIZED: Firebase and notifications enabled**
+  try {
+    await Firebase.initializeApp();
+    final notificationService = NotificationService();
+    unawaited(notificationService.initialize()); // Initialize in background
+  } catch (e) {
+    print('Error initializing Firebase: $e');
+  }
 
   // **OPTIMIZED: Start app immediately, initialize services in background**
   runApp(
@@ -69,7 +79,10 @@ void main() async {
   );
 
   // **BACKGROUND: Initialize heavy services after app starts**
-  _initializeServicesInBackground();
+  // **OPTIMIZED: Delay heavy initialization to let UI settle first (Fixes startup lag/audio break)**
+  Future.delayed(const Duration(seconds: 3), () {
+     _initializeServicesInBackground();
+  });
 
   // **OPTIMIZED: Check server connectivity non-blocking (don't wait for it)**
   unawaited(_checkServerConnectivity());
@@ -78,22 +91,20 @@ void main() async {
 /// **OPTIMIZED: Check server connectivity and set optimal URL (non-blocking)**
 Future<void> _checkServerConnectivity() async {
   try {
-    print('🔍 Main: Checking server connectivity...');
+
     // Clear any cached URLs to force fresh check
     AppConfig.clearCache();
     final workingUrl = await AppConfig.checkAndUpdateServerUrl();
-    print('✅ Main: Using server URL: $workingUrl');
-    print('✅ Main: All API calls will go to: $workingUrl');
+
 
     // In development mode, verify local server is accessible
     if (workingUrl.contains('192.168') ||
         workingUrl.contains('localhost') ||
         workingUrl.contains('127.0.0.1')) {
-      print('🔧 Main: LOCAL SERVER MODE - Make sure backend is running!');
-      print('🔧 Main: Test connection: $workingUrl/api/health');
+
     }
   } catch (e) {
-    print('❌ Main: Error checking server connectivity: $e');
+
   }
 }
 
@@ -102,11 +113,9 @@ void _initializeServicesInBackground() async {
   try {
     // **NEW: Initialize backend-driven config first (non-blocking)**
     unawaited(AppRemoteConfigService.instance.initialize().then((_) {
-      print(
-          '✅ AppRemoteConfigService initialized - Backend-driven texts enabled');
+
     }).catchError((e) {
-      print(
-          '⚠️ AppRemoteConfigService initialization failed (using defaults): $e');
+
     }));
 
     // **OPTIMIZED: Initialize AdMob non-blocking (don't wait for it)**
@@ -124,15 +133,15 @@ void _initializeServicesInBackground() async {
           );
           await MobileAds.instance
               .updateRequestConfiguration(requestConfiguration);
-          print('✅ AdMob: RequestConfiguration updated');
+
         } catch (e) {
-          print('⚠️ AdMob: Error updating RequestConfiguration: $e');
+
         }
 
         ErrorLoggingService.logServiceInitialization('AdMob');
-        print('✅ AdMob: Initialized and configured');
+
       } catch (e) {
-        print('⚠️ AdMob: Error initializing: $e');
+
       }
     }());
 
@@ -143,15 +152,20 @@ void _initializeServicesInBackground() async {
       DeviceOrientation.landscapeRight,
     ]);
 
-    print('✅ Background services initialized successfully');
 
-    // **CLEANUP: Perform periodic proxy cache cleanup**
-    unawaited(videoCacheProxy.cleanCache());
+
+    // **CLEANUP: Perform periodic proxy cache cleanup (LOW PRIORITY)**
+    // Delay further to ensure it doesn't compete with video playback
+    Future.delayed(const Duration(seconds: 5), () {
+       unawaited(videoCacheProxy.cleanCache());
+    });
 
     // Splash-time prefetch: fetch first page and warm up first few videos
-    unawaited(_splashPrefetch());
+    // This is less critical now that we have "Instant Splash" from Hive
+    // Splash-time prefetch has been moved to main() for earlier execution
+    // unawaited(_splashPrefetch());
   } catch (e) {
-    print('⚠️ Error initializing background services: $e');
+
   }
 }
 
@@ -169,7 +183,7 @@ Future<void> _splashPrefetch() async {
           Uri.parse('$base/api/health'),
           timeout: const Duration(seconds: 3),
         );
-        print('✅ TLS warmup ok');
+
       } catch (_) {}
     }());
 
@@ -178,7 +192,7 @@ Future<void> _splashPrefetch() async {
     final yogResult = await cacheManager.get<Map<String, dynamic>>(
       yogCacheKey,
       fetchFn: () async {
-        print('🚀 SplashPrefetch: Fetching Yug videos for cache');
+
         return await videoService.getVideos(
             page: 1,
             limit: 10,
@@ -191,7 +205,7 @@ Future<void> _splashPrefetch() async {
     if (yogResult != null) {
       final List<VideoModel> videos =
           (yogResult['videos'] as List<dynamic>).cast<VideoModel>();
-      print('✅ SplashPrefetch: Cached ${videos.length} Yug videos');
+
 
       // **NEW: Pre-initialize first video controller for instant playback**
       if (videos.isNotEmpty) {
@@ -200,9 +214,9 @@ Future<void> _splashPrefetch() async {
           final controllerManager = VideoControllerManager();
           // Pre-create controller for faster first video load
           unawaited(controllerManager.preloadController(0, firstVideo));
-          print('🚀 SplashPrefetch: Pre-initialized first video controller');
+
         } catch (e) {
-          print('⚠️ SplashPrefetch: Failed to pre-initialize controller: $e');
+
         }
       }
 
@@ -219,6 +233,10 @@ Future<void> _splashPrefetch() async {
 
         // **NEW: Persistent chunk caching for instant reload**
         unawaited(videoCacheProxy.prefetchChunk(url));
+        
+        // **OPTIMIZED: Throttle warmup to avoid CPU spikes during playback**
+        // Yield to main thread between heavy network/disk ops
+        await Future.delayed(const Duration(milliseconds: 300));
       }
     }
 
@@ -235,13 +253,13 @@ Future<void> _splashPrefetch() async {
           cacheType: 'videos',
           maxAge: const Duration(minutes: 15),
         );
-        print('✅ SplashPrefetch: Cached Vayu videos in background');
+
       } catch (e) {
-        print('⚠️ SplashPrefetch: Vayu cache failed (non-critical): $e');
+
       }
     }());
   } catch (e) {
-    print('⚠️ SplashPrefetch failed: $e');
+
     // Best-effort prefetch; ignore failures
   }
 }
@@ -298,6 +316,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         mainController.saveStateForBackground();
         // **NEW: Pause all videos when app becomes inactive**
         _pauseAllVideosGlobally();
+        // **AGGRESSIVE CACHING: Save stale videos for next cold start**
+        Provider.of<VideoProvider>(context, listen: false).saveStaleVideos();
         hotUIManager.handleAppLifecycleChange(state);
         break;
       case AppLifecycleState.paused:
@@ -307,6 +327,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         mainController.saveStateForBackground();
         // **NEW: Pause all videos when app is paused (minimized)**
         _pauseAllVideosGlobally();
+        // **AGGRESSIVE CACHING: Save stale videos for next cold start**
+        Provider.of<VideoProvider>(context, listen: false).saveStaleVideos();
         // **HOT UI: Preserve state when app goes to background**
         hotUIManager.handleAppLifecycleChange(state);
         break;
@@ -314,6 +336,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ErrorLoggingService.logAppLifecycle('Detached');
         // **NEW: Pause all videos when app is detached**
         _pauseAllVideosGlobally();
+        // **AGGRESSIVE CACHING: Save stale videos for next cold start**
+        // Note: Context might be unstable here, but worth a try
+        try {
+           Provider.of<VideoProvider>(context, listen: false).saveStaleVideos();
+        } catch (_) {}
         hotUIManager.handleAppLifecycleChange(state);
         break;
       case AppLifecycleState.hidden:
@@ -374,30 +401,30 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         _handleIncomingUri(initial);
       }
     } catch (e) {
-      print('❌ Error getting initial URI: $e');
+
     }
 
     // Listen for links while app is running
     _sub = appLinks.uriLinkStream.listen((Uri uri) {
       _handleIncomingUri(uri);
     }, onError: (err) {
-      print('❌ Deep link stream error: $err');
+
     });
   }
 
   Future<void> _handleIncomingUri(Uri uri) async {
-    print('🔗 Deep link received: $uri');
+
 
     // **FIX: Handle referral code from query parameters**
     final referralCode = uri.queryParameters['ref'];
     if (referralCode != null && referralCode.isNotEmpty) {
-      print('🎁 Referral code detected: $referralCode');
+
       try {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('pending_referral_code', referralCode);
-        print('✅ Referral code saved to SharedPreferences');
+
       } catch (e) {
-        print('❌ Error saving referral code: $e');
+
       }
     }
 
@@ -443,7 +470,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       if (uri.queryParameters.containsKey('id')) {
         videoId = uri.queryParameters['id']?.trim();
         if (videoId?.isNotEmpty == true) {
-          print('🎬 Deep link: Found video ID in query parameter: $videoId');
+  
         }
       }
 
@@ -456,7 +483,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             segments.indexWhere((s) => s.toLowerCase() == 'video');
         if (videoIndex != -1 && videoIndex < segments.length - 1) {
           videoId = segments[videoIndex + 1].trim();
-          print('🎬 Deep link: Found video ID in path segments: $videoId');
+
         } else if (segments.isNotEmpty) {
           // Fallback: use last segment if it's not 'video'
           final lastSegment = segments.last;
@@ -464,8 +491,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               lastSegment.toLowerCase() != 'video' &&
               lastSegment != '/') {
             videoId = lastSegment.trim();
-            print(
-                '🎬 Deep link: Using last path segment as video ID: $videoId');
+
           }
         }
       }
@@ -479,27 +505,23 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               pathParts.indexWhere((p) => p.toLowerCase() == 'video');
           if (videoIndex != -1 && videoIndex < pathParts.length - 1) {
             videoId = pathParts[videoIndex + 1].trim();
-            print('🎬 Deep link: Extracted video ID from path: $videoId');
+
           } else if (pathParts.length == 1 &&
               pathParts[0].toLowerCase() != 'video') {
             // Single segment that's not 'video' might be the ID
             videoId = pathParts[0].trim();
-            print(
-                '🎬 Deep link: Using single path segment as video ID: $videoId');
+
           }
         }
       }
 
       // **VALIDATION: Ensure video ID is valid**
       if (videoId != null && videoId.isNotEmpty && videoId != '/') {
-        print('✅ Deep link: Valid video ID extracted: $videoId');
-        print('🔗 Deep link: Full URI: $uri');
-        print('🔗 Deep link: Path segments: ${uri.pathSegments}');
+
         _navigateToVideo(videoId);
       } else {
         // If it's a referral root link without a specific video, just open home
-        print('ℹ️ Deep link: No valid video ID found, opening home');
-        print('🔗 Deep link: URI was: $uri');
+
         if (mounted) Navigator.pushNamed(context, '/home');
       }
     }
@@ -508,7 +530,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         uri.host == 'snehayog.site' &&
         (uri.path == '/' || uri.path.isEmpty) &&
         referralCode != null) {
-      print('ℹ️ Root referral link received, opening home');
+
       if (mounted) Navigator.pushNamed(context, '/home');
     }
   }
@@ -581,16 +603,14 @@ class _AuthWrapperState extends State<AuthWrapper> {
       final userData = await authService.getUserData();
 
       if (userData != null) {
-        print(
-            '✅ AuthWrapper: User is authenticated, starting background profile preloading');
+
         final preloader = BackgroundProfilePreloader();
         unawaited(preloader.forcePreload()); // Non-blocking
       } else {
-        print(
-            'ℹ️ AuthWrapper: User not authenticated, skipping background preloading');
+
       }
     } catch (e) {
-      print('⚠️ AuthWrapper: Error starting background preloading: $e');
+
     }
   }
 
@@ -633,7 +653,7 @@ class _MainScreenWithLocationCheckState
     _hasCheckedWelcome = true;
 
     try {
-      print('🔍 MainScreenWithLocationCheck: Checking welcome onboarding...');
+
       final shouldShow =
           await WelcomeOnboardingService.shouldShowWelcomeOnboarding();
 
@@ -649,8 +669,7 @@ class _MainScreenWithLocationCheckState
         }
       }
     } catch (e) {
-      print(
-          '❌ MainScreenWithLocationCheck: Error checking welcome onboarding: $e');
+
       if (mounted) {
         setState(() {
           _shouldShowWelcome = false;
@@ -676,15 +695,13 @@ class _MainScreenWithLocationCheckState
     _hasCheckedLocation = true;
 
     try {
-      print(
-          '📍 MainScreenWithLocationCheck: Checking location in background...');
+
 
       // Check if we should show location onboarding
       final shouldShow =
           await LocationOnboardingService.shouldShowLocationOnboarding();
 
-      print(
-          '📍 MainScreenWithLocationCheck: Should show location dialog: $shouldShow');
+
 
       // If we should show the native permission dialog, show it after a delay
       if (shouldShow && mounted) {
@@ -696,8 +713,7 @@ class _MainScreenWithLocationCheckState
         });
       }
     } catch (e) {
-      print(
-          '❌ MainScreenWithLocationCheck: Error checking location permission: $e');
+
     }
   }
 
@@ -706,8 +722,7 @@ class _MainScreenWithLocationCheckState
     if (!mounted) return;
 
     try {
-      print(
-          '📍 MainScreenWithLocationCheck: Requesting location permission...');
+
 
       // Check current permission status first
       final hasPermission =
@@ -718,20 +733,18 @@ class _MainScreenWithLocationCheckState
         final granted =
             await LocationOnboardingService.showLocationOnboarding(context);
 
-        print(
-            '📍 MainScreenWithLocationCheck: Location permission result: $granted');
+
 
         if (granted) {
-          print('✅ Location permission granted via dialog');
+
         } else {
-          print('❌ Location permission denied via dialog');
+
         }
       } else {
-        print('✅ Location permission already granted');
+
       }
     } catch (e) {
-      print(
-          '❌ MainScreenWithLocationCheck: Error requesting location permission: $e');
+
     }
   }
 

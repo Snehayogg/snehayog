@@ -21,109 +21,71 @@ class PlatformIdService {
   /// Always returns the same platform ID, even after app data is cleared
   /// This ensures watch history can be matched across app sessions
   Future<String> getPlatformId() async {
-    // Return cached value if available (in-memory)
-    if (_cachedPlatformId != null) {
-      return _cachedPlatformId!;
-    }
-
     try {
-      // **FIXED: Check SharedPreferences first for persistent platform ID**
+      // 1. Return cached value if available (fastest)
+      if (_cachedPlatformId != null && _cachedPlatformId!.isNotEmpty) {
+        return _cachedPlatformId!;
+      }
+
       final prefs = await SharedPreferences.getInstance();
-      final storedPlatformId = prefs.getString(_storageKey);
       
-      if (storedPlatformId != null && storedPlatformId.isNotEmpty) {
-        // Use stored platform ID (persists across app reopens)
-        _cachedPlatformId = storedPlatformId;
+      // 2. Check SharedPreferences for persistent ID
+      String? storedPlatformId = prefs.getString(_storageKey);
+      if (storedPlatformId != null && storedPlatformId.trim().isNotEmpty) {
+        _cachedPlatformId = storedPlatformId.trim();
         if (kDebugMode) {
-          print(
-              '✅ PlatformIdService: Using stored platform ID: ${_cachedPlatformId!.substring(0, 8)}...');
+          print('✅ PlatformIdService: Using stored persistent ID: $_cachedPlatformId');
         }
         return _cachedPlatformId!;
       }
 
-      // No stored ID - generate new one from device
+      // 3. Generate new ID if none stored
       final deviceInfo = DeviceInfoPlugin();
-      String platformId;
+      String newPlatformId = '';
 
-      if (defaultTargetPlatform == TargetPlatform.android) {
-        final androidInfo = await deviceInfo.androidInfo;
-        // Android ID persists across app reinstalls (but not factory reset)
-        platformId = androidInfo.id;
-
-        // Validate Android ID (skip emulator ID)
-        if (platformId.isEmpty || platformId == '9774d56d682e549c') {
-          if (kDebugMode) {
-            print(
-                '⚠️ PlatformIdService: Invalid Android ID (emulator or empty), generating persistent fallback');
-          }
-          // **FIXED: Generate persistent fallback ID (not timestamp-based)**
-          // Use device model + Android ID hash for consistency
-          final model = androidInfo.model.isNotEmpty ? androidInfo.model : 'unknown';
-          platformId = 'android_${model}_${androidInfo.id.hashCode.abs()}';
+      try {
+        if (defaultTargetPlatform == TargetPlatform.android) {
+          final androidInfo = await deviceInfo.androidInfo;
+          newPlatformId = androidInfo.id;
+        } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+          final iosInfo = await deviceInfo.iosInfo;
+          newPlatformId = iosInfo.identifierForVendor ?? '';
         }
-      } else if (defaultTargetPlatform == TargetPlatform.iOS) {
-        final iosInfo = await deviceInfo.iosInfo;
-        // Identifier for Vendor persists across reinstalls of same vendor's apps
-        platformId = iosInfo.identifierForVendor ?? '';
-
-        // Fallback to persistent ID if identifierForVendor is null (rare case)
-        if (platformId.isEmpty) {
-          if (kDebugMode) {
-            print(
-                '⚠️ PlatformIdService: iOS identifierForVendor is null, generating persistent fallback');
-          }
-          // **FIXED: Generate persistent fallback ID (not timestamp-based)**
-          final model = iosInfo.model.isNotEmpty ? iosInfo.model : 'unknown';
-          final name = iosInfo.name.isNotEmpty ? iosInfo.name : 'unknown';
-          platformId = 'ios_${model}_${name.hashCode.abs()}';
+      } catch (deviceError) {
+        if (kDebugMode) {
+          print('⚠️ PlatformIdService: Error getting device info: $deviceError');
         }
-      } else {
-        // Fallback for other platforms - use persistent identifier
-        platformId = '${defaultTargetPlatform.name}_persistent';
       }
 
-      // **CRITICAL: Store platform ID in SharedPreferences for persistence**
-      await prefs.setString(_storageKey, platformId);
+      // 4. Validate and Fallback
+      if (newPlatformId.trim().isEmpty || newPlatformId == '9774d56d682e549c') {
+         // Generate robust fallback using timestamp and random number
+         final timestamp = DateTime.now().millisecondsSinceEpoch;
+         final random = (timestamp % 10000) + 1000;
+         newPlatformId = 'fallback_${defaultTargetPlatform.name}_${timestamp}_$random';
+         
+         if (kDebugMode) {
+           print('⚠️ PlatformIdService: Generated fallback ID: $newPlatformId');
+         }
+      }
+
+      // 5. Store and return
+      await prefs.setString(_storageKey, newPlatformId);
+      _cachedPlatformId = newPlatformId;
       
-      // Cache in memory
-      _cachedPlatformId = platformId;
-
       if (kDebugMode) {
-        print(
-            '✅ PlatformIdService: Generated and stored platform ID: ${_cachedPlatformId!.substring(0, 8)}...');
+        print('✅ PlatformIdService: Generated and stored NEW Platform ID: $newPlatformId');
       }
+      
+      return newPlatformId;
 
-      return _cachedPlatformId!;
     } catch (e) {
+      // Ultimate failsafe
+      final fallback = 'emergency_fallback_${DateTime.now().millisecondsSinceEpoch}';
       if (kDebugMode) {
-        print('❌ PlatformIdService: Error getting platform ID: $e');
+         print('❌ PlatformIdService: Critical error, using emergency fallback: $e');
       }
-
-      // **FIXED: Try to get stored fallback ID first**
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final storedId = prefs.getString(_storageKey);
-        if (storedId != null && storedId.isNotEmpty) {
-          _cachedPlatformId = storedId;
-          return storedId;
-        }
-      } catch (_) {
-        // Ignore SharedPreferences errors
-      }
-
-      // Last resort: Generate a persistent fallback ID (not timestamp-based)
-      final fallbackId = 'fallback_persistent_${defaultTargetPlatform.name}';
-      _cachedPlatformId = fallbackId;
-      
-      // Try to store it
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_storageKey, fallbackId);
-      } catch (_) {
-        // Ignore storage errors
-      }
-      
-      return fallbackId;
+      return _cachedPlatformId ?? fallback;
     }
   }
 

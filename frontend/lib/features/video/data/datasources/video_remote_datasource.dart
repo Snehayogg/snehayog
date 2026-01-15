@@ -21,6 +21,7 @@ class VideoRemoteDataSource {
     int page = 1,
     int limit = 10,
     bool clearSession = false,
+    String videoType = 'yog', // **NEW: Support video type filtering**
   }) async {
     try {
       // **FIXED: Send platform ID and Auth Token for session persistence**
@@ -36,9 +37,9 @@ class VideoRemoteDataSource {
         // Ignore auth errors - proceed as anonymous
       }
 
-      // Add platformId to query params
+      // Add platformId and videoType to query params
       final url =
-          '${NetworkHelper.videosEndpoint}?page=$page&limit=$limit&platformId=$platformId${clearSession ? '&clearSession=true' : ''}';
+          '${NetworkHelper.videosEndpoint}?page=$page&limit=$limit&videoType=$videoType&platformId=$platformId${clearSession ? '&clearSession=true' : ''}';
 
       final headers = <String, String>{
         'Content-Type': 'application/json',

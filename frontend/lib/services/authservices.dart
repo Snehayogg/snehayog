@@ -174,6 +174,7 @@ class AuthService {
                 headers: {
                   'Content-Type': 'application/json',
                   'Authorization': 'Bearer ${authData['token']}',
+                  if (platformId.isNotEmpty) 'x-device-id': platformId,
                 },
                 body: jsonEncode({
                   'platformId': platformId,
@@ -706,8 +707,8 @@ class AuthService {
       String? token = prefs.getString('jwt_token');
       String? fallbackUser = prefs.getString('fallback_user');
 
-      AppLogger.log('🔍 AuthService: Token found: ${'Yes'}');
-      AppLogger.log('🔍 AuthService: Fallback user found: ${'Yes'}');
+      AppLogger.log('🔍 AuthService: Token found: ${token != null ? "Yes" : "No"}');
+      AppLogger.log('🔍 AuthService: Fallback user found: ${fallbackUser != null ? "Yes" : "No"}');
 
       // **IMPROVED: Validate JWT token before using it - be conservative about removal**
       if (!skipTokenRefresh && token != null && !isTokenValid(token)) {
@@ -725,7 +726,8 @@ class AuthService {
             AppLogger.log(
                 '❌ AuthService: Token is expired and refresh failed, clearing token');
             await prefs.remove('jwt_token');
-            token = null;
+            // Don't set token to null yet - we might still use it for offline access if we have fallback data
+            // token = null; 
           } else {
             AppLogger.log(
                 'ℹ️ AuthService: Token validation failed but token appears valid, keeping it (may be network issue)');
@@ -757,13 +759,10 @@ class AuthService {
       // Try to verify token with backend and get actual user data
       try {
         AppLogger.log('🔍 Attempting to verify token with backend...');
-        if (token != null) {
-          AppLogger.log(
-              '🔍 Token being sent (first 20 chars): ${token.substring(0, 20)}...');
-          AppLogger.log('🔍 Token length: ${token.length}');
-          AppLogger.log('🔍 Token type: ${token.runtimeType}');
-        } else {
-          AppLogger.log('🔍 Token is null!');
+        
+        // If no token, we can't fetch from backend, skip directly to fallback
+        if (token == null) {
+           throw Exception('No token available for backend verification');
         }
 
         final response = await httpClientService.get(
@@ -800,40 +799,20 @@ class AuthService {
           };
         } else {
           AppLogger.log('⚠️ Backend returned status: ${response.statusCode}');
-          // If backend returns error, still try to use fallback if available
-          AppLogger.log('🔄 Backend error, using fallback user data');
-          if (fallbackDataMap != null) {
-            final userData = fallbackDataMap;
-            return {
-              'id': userData['id'],
-              'googleId': userData['googleId'] ??
-                  userData['id'], // Add googleId if available
-              'name': userData['name'],
-              'email': userData['email'],
-              'profilePic': userData['profilePic'],
-              'token': token,
-              'isFallback': true,
-            };
-          }
+          throw Exception('Backend returned ${response.statusCode}');
         }
       } catch (e) {
         AppLogger.log('⚠️ Error fetching user profile from backend: $e');
-        // **IMPROVED: If backend is unreachable, use fallback data if available**
-        // Don't remove token on network errors - user might just be offline
-        final isNetworkError = e.toString().contains('SocketException') ||
-            e.toString().contains('Connection refused') ||
-            e.toString().contains('timeout') ||
-            e.toString().contains('Failed host lookup');
-
-        if (isNetworkError) {
-          AppLogger.log(
-              '🔄 Network error detected, using fallback user data (preserving session)');
-        } else {
-          AppLogger.log('🔄 Backend error, using fallback user data');
-        }
-
+        
+        // **CRITICAL FIX: OFFLINE SUPPORT**
+        // If backend fetch fails (offline, timeout, server error, or invalid token),
+        // we MUST return fallback data if available so ProfileScreen knows WHO to load from cache.
+        
         if (fallbackDataMap != null) {
           final userData = fallbackDataMap;
+          AppLogger.log(
+               '✅ Using fallback user data for offline access (User: ${userData['name']})');
+          
           return {
             'id': userData['id'],
             'googleId': userData['googleId'] ??
@@ -841,7 +820,7 @@ class AuthService {
             'name': userData['name'],
             'email': userData['email'],
             'profilePic': userData['profilePic'],
-            'token': token,
+            'token': token, // Can be null or invalid, doesn't matter for local cache access
             'isFallback': true,
           };
         } else if (token != null && isTokenValid(token)) {

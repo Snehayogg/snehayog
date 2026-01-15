@@ -21,18 +21,17 @@ class VideoControllerFactory {
 
     // **FIXED: Prefer MP4 URLs over HLS for better ExoPlayer compatibility**
     if (videoUrl.isNotEmpty && !videoUrl.contains('.m3u8')) {
-      print('🎬 VideoControllerFactory: Using 480p MP4 URL: $videoUrl');
+
     } else if (isHLS &&
         video.hlsPlaylistUrl != null &&
         video.hlsPlaylistUrl!.isNotEmpty) {
       videoUrl = video.hlsPlaylistUrl!;
-      print('🎬 VideoControllerFactory: Using HLS playlist URL: $videoUrl');
+
     } else if (isHLS &&
         video.hlsMasterPlaylistUrl != null &&
         video.hlsMasterPlaylistUrl!.isNotEmpty) {
       videoUrl = video.hlsMasterPlaylistUrl!;
-      print(
-          '🎬 VideoControllerFactory: Using HLS master playlist URL: $videoUrl');
+
     }
 
     // Get standardized 480p quality preset
@@ -53,7 +52,7 @@ class VideoControllerFactory {
     final optimizedUrl = await smartCache.get<String>(
           cacheKey,
           fetchFn: () async {
-            print('🔄 VideoControllerFactory: Generating fresh optimized URL');
+
             return VideoPlayerConfigService.getOptimizedVideoUrl(
                 videoUrl, qualityPreset);
           },
@@ -76,23 +75,17 @@ class VideoControllerFactory {
     }
 
     // Get buffering configuration
-    final bufferingConfig =
-        VideoPlayerConfigService.getBufferingConfig(qualityPreset);
 
-    print(
-        '🎬 VideoControllerFactory: Creating controller for ${video.videoName}');
-    print('🎬 VideoControllerFactory: Original URL: ${video.videoUrl}');
-    print('🎬 VideoControllerFactory: Final URL: $optimizedUrl');
-    print(
-        '🎬 VideoControllerFactory: Quality Preset: ${qualityPreset.name} (${qualityPreset.targetResolution})');
-    print(
-        '🎬 VideoControllerFactory: Buffer Size: ${bufferingConfig.initialBufferSize}s');
-    print('🎬 VideoControllerFactory: Is HLS: $isHLS');
-    print('🎬 VideoControllerFactory: HLS Encoded: ${video.isHLSEncoded}');
-    print(
-        '🎬 VideoControllerFactory: HLS Variants: ${video.hlsVariants?.length ?? 0}');
-    print(
-        '🎬 VideoControllerFactory: Cache Strategy: ${isHLS ? "HLS-Adaptive" : "Standard"}');
+
+
+
+
+
+
+
+
+
+
 
     // Best-effort warm-up for HLS (manifest + first segments)
     if (optimizedUrl.contains('.m3u8')) {
@@ -147,14 +140,12 @@ class VideoControllerFactory {
         video.hlsPlaylistUrl != null &&
         video.hlsPlaylistUrl!.isNotEmpty) {
       videoUrl = video.hlsPlaylistUrl!;
-      print(
-          '🎬 VideoControllerFactory: Using HLS playlist URL for quality: $videoUrl');
+
     } else if (isHLS &&
         video.hlsMasterPlaylistUrl != null &&
         video.hlsMasterPlaylistUrl!.isNotEmpty) {
       videoUrl = video.hlsMasterPlaylistUrl!;
-      print(
-          '🎬 VideoControllerFactory: Using HLS master playlist URL for quality: $videoUrl');
+
     }
 
     final qualityPreset =
@@ -167,11 +158,9 @@ class VideoControllerFactory {
 
     final headers = VideoPlayerConfigService.getOptimizedHeaders(proxiedUrl);
 
-    print(
-        '🎬 VideoControllerFactory: Creating controller with quality: $qualityUseCase');
-    print(
-        '🎬 VideoControllerFactory: Quality Preset: ${qualityPreset.name} (${qualityPreset.targetResolution})');
-    print('🎬 VideoControllerFactory: Is HLS: $isHLS');
+
+
+
 
     return VideoPlayerController.networkUrl(
       Uri.parse(proxiedUrl),

@@ -194,7 +194,13 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         // **OPTIMIZED: Fetch backend revenue in background (non-blocking)**
         Future.microtask(() async {
           try {
-            if (revenueData == null || forceRefresh) {
+            // **FIX: Always fetch from backend if:
+            // 1. No cached data
+            // 2. Force refresh requested
+            // 3. Current displayed revenue is 0 (to verify if it's really 0)
+            final currentRevenue =
+                (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
+            if (revenueData == null || forceRefresh || currentRevenue == 0.0) {
               AppLogger.log(
                   '🔄 CreatorRevenueScreen: Fetching fresh revenue from backend...');
               final freshRevenueData =

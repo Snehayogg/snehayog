@@ -283,7 +283,7 @@ class _LocationPermissionDialogState extends State<LocationPermissionDialog> {
       // Try to get a quick location to verify permission works
       LocationAccuracy accuracy =
           _selectedPrecise ? LocationAccuracy.high : LocationAccuracy.medium;
-      Position? position = await Geolocator.getCurrentPosition(
+      await Geolocator.getCurrentPosition(
         locationSettings: LocationSettings(
           accuracy: accuracy,
           timeLimit: const Duration(seconds: 5),
@@ -292,7 +292,7 @@ class _LocationPermissionDialogState extends State<LocationPermissionDialog> {
 
       _showPermissionGranted();
     } catch (e) {
-      print('Error requesting location permission: $e');
+
       _showPermissionDenied();
     } finally {
       if (mounted) {
@@ -499,10 +499,10 @@ class LocationPermissionExample extends StatelessWidget {
                   context,
                   appName: 'Vayug',
                   onGranted: () {
-                    print('✅ Location permission granted!');
+
                   },
                   onDenied: () {
-                    print('❌ Location permission denied');
+
                   },
                 );
 

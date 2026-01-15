@@ -18,23 +18,10 @@ class AdTargetingService {
     String adType = 'banner',
   }) async {
     try {
-      print('==================================================');
-      print('🎯🎯🎯 AD TARGETING REQUEST 🎯🎯🎯');
-      print('==================================================');
-      print(
-          '🎯 AdTargetingService: Getting targeted ads for video: ${video.id}');
-      print('🎯 Video name: ${video.videoName}');
-      print('🎯 Video description: ${video.description}');
-
       // Create cache key for this video
-      final cacheKey = 'targeted_ads_${video.id}_$adType';
-
       // **FIX: Force refresh to prevent stale targeting**
       // Always fetch fresh ads to ensure proper per-video targeting
       // Cache was causing sequential ad display instead of targeted ads
-      print(
-          '🔄 AdTargetingService: Force refreshing targeted ads for video ${video.id}');
-
       // Prepare video data for backend using available fields
       final videoData = {
         'id': video.id,
@@ -64,37 +51,28 @@ class AdTargetingService {
         }),
       );
 
-      print('📡 API Response received');
 
-      print('🔍 AdTargetingService: Response status: ${response.statusCode}');
-      print('🔍 AdTargetingService: Response body: ${response.body}');
+
+
 
       if (response.statusCode == 200) {
         final result = json.decode(response.body) as Map<String, dynamic>;
 
         // **FIX: Don't cache targeted ads to prevent stale targeting**
         // Caching was causing ads to not refresh based on video content
-        print(
-            '✅ AdTargetingService: Found ${result['ads']?.length ?? 0} targeted ads for video: ${video.videoName}');
-        print('🎯 Targeting insights: ${result['insights']}');
+
+
 
         // Log which ads were returned for debugging
-        if (result['ads'] != null && (result['ads'] as List).isNotEmpty) {
-          for (int i = 0; i < (result['ads'] as List).length; i++) {
-            final ad = (result['ads'] as List)[i];
-            print(
-                '   Ad $i: ${ad['title']} - Targeting Score: ${ad['targetingScore'] ?? 'N/A'}');
-          }
-        }
+
 
         return result;
       } else {
-        print(
-            '❌ AdTargetingService: Backend error ${response.statusCode}: ${response.body}');
+
         throw Exception('Failed to get targeted ads: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ AdTargetingService: Error getting targeted ads: $e');
+
 
       // Return fallback result
       return {

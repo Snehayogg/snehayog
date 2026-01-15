@@ -365,7 +365,7 @@ class AdService {
       final updatedAd = await updateAdStatus(adId, 'active');
 
       // **NEW: Record payment and revenue split**
-      // await _recordPaymentAndRevenue(adId, paymentDetails); // Temporarily commented
+      // _recordPaymentAndRevenue(adId, paymentDetails); // Temporarily commented
 
       return updatedAd;
     } catch (e) {
@@ -373,36 +373,7 @@ class AdService {
     }
   }
 
-  // **NEW: Record payment and calculate revenue split**
-  Future<void> _recordPaymentAndRevenue(
-    String adId,
-    Map<String, dynamic> paymentDetails,
-  ) async {
-    try {
-      final amount = paymentDetails['amount'] / 100.0; // Convert from paise
-      // final revenueSplit = _razorpayService.calculateRevenueSplit(amount); // Temporarily commented
 
-      await httpClientService.post(
-        Uri.parse('$baseUrl/api/ads/$adId/payment'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization':
-              'Bearer ${(await _authService.getUserData())?['token']}',
-        },
-        body: json.encode({
-          'paymentId': paymentDetails['id'],
-          'amount': amount,
-          'currency': paymentDetails['currency'],
-          'paymentMethod': paymentDetails['method'],
-          // 'creatorRevenue': revenueSplit['creator'],
-          // 'platformRevenue': revenueSplit['platform'],
-          'status': 'completed',
-        }),
-      );
-    } catch (e) {
-      AppLogger.log('Error recording payment: $e');
-    }
-  }
 
   // Get user's ads
   Future<List<AdModel>> getUserAds() async {

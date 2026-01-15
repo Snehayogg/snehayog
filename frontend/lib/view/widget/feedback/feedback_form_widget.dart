@@ -44,20 +44,15 @@ class _FeedbackFormWidgetState extends State<FeedbackFormWidget> {
     try {
       // Get device info
       final deviceInfo = DeviceInfoPlugin();
-      String deviceInfoString = '';
 
       if (Theme.of(context).platform == TargetPlatform.android) {
         final androidInfo = await deviceInfo.androidInfo;
-        deviceInfoString =
-            '${androidInfo.model} - Android ${androidInfo.version.release}';
       } else if (Theme.of(context).platform == TargetPlatform.iOS) {
         final iosInfo = await deviceInfo.iosInfo;
-        deviceInfoString = '${iosInfo.model} - iOS ${iosInfo.systemVersion}';
       }
 
       // Get app version
       final packageInfo = await PackageInfo.fromPlatform();
-      final appVersion = '${packageInfo.version} (${packageInfo.buildNumber})';
 
       final success = await _feedbackService.submitFeedback(
         rating: _rating,

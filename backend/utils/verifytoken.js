@@ -95,4 +95,67 @@ export const verifyToken = async (req, res, next) => {
     }
 };
 
+
+// **NEW: Passive Token Verification**
+// Does NOT block request if token is missing/invalid.
+// Just tries to set req.user so rate limiter can use it.
+export const passiveVerifyToken = async (req, res, next) => {
+    try {
+        const token = req.headers.authorization?.split(' ')[1];
+        
+        if (!token) {
+            return next(); // No token, just proceed as guest
+        }
+
+        // Try Google Access Token (People API)
+        try {
+            const response = await fetch(`https://www.googleapis.com/oauth2/v2/userinfo?access_token=${token}`);
+            if (response.ok) {
+                const userInfo = await response.json();
+                req.user = { 
+                    id: userInfo.id,
+                    googleId: userInfo.id,
+                    email: userInfo.email,
+                    name: userInfo.name
+                };
+                return next();
+            }
+        } catch (e) { /* Ignore */ }
+
+        // Try ID Token
+        try {
+            const ticket = await client.verifyIdToken({
+                idToken: token,
+                audience: GOOGLE_CLIENT_ID,
+            });
+            const payload = ticket.getPayload();
+            req.user = { 
+                id: payload.sub,
+                googleId: payload.sub,
+                email: payload.email,
+                name: payload.name
+            };
+            return next();
+        } catch (e) { /* Ignore */ }
+
+        // Try JWT
+        try {
+            const JWT_SECRET = process.env.JWT_SECRET || config.auth.jwtSecret;
+            const decoded = jwt.verify(token, JWT_SECRET);
+            req.user = {
+                ...decoded,
+                googleId: decoded.id
+            };
+            return next();
+        } catch (e) { /* Ignore */ }
+
+        // If all fail, just proceed without req.user
+        next();
+
+    } catch (error) {
+        // Safety net - never block in passive mode
+        next();
+    }
+};
+
 export default verifyToken;

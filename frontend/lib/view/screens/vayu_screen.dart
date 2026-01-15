@@ -116,6 +116,7 @@ class _VayuScreenState extends State<VayuScreen> {
           builder: (context) => VideoScreen(
             initialVideos: _videos,
             initialIndex: index,
+            videoType: 'vayu', // **FIX: Enforce Long Form videos in feed**
           ),
         ),
       );
@@ -291,6 +292,9 @@ class _VayuScreenState extends State<VayuScreen> {
   Widget _buildVideoCard(int index) {
     final video = _videos[index];
 
+    print(
+        'BuildVideoCard: ${video.videoName} Duration: ${video.duration.inSeconds}s');
+
     return InkWell(
       onTap: () => _navigateToVideo(index),
       child: Column(
@@ -322,7 +326,7 @@ class _VayuScreenState extends State<VayuScreen> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.8),
+                      color: Colors.black.withOpacity(0.85),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(

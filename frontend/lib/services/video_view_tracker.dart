@@ -29,13 +29,14 @@ class VideoViewTracker {
     String videoId, {
     int? duration,
     String? videoUploaderId,
+    String? videoHash, // **NEW: Accept videoHash**
   }) async {
     try {
       final effectiveDuration =
           duration ?? AppConstants.videoViewCountThreshold.inSeconds;
 
       AppLogger.log(
-          '🎯 VideoViewTracker: Attempting to increment view for video $videoId');
+          '🎯 VideoViewTracker: Attempting to increment view for video $videoId (hash: $videoHash)');
 
       // **CRITICAL FIX: Watch tracking should work for BOTH authenticated AND anonymous users**
       // Get platformId first (always available, even for anonymous users)
@@ -47,6 +48,12 @@ class VideoViewTracker {
       Map<String, String> headers = {
         'Content-Type': 'application/json',
       };
+      
+      // **FIX: Always add device ID header for consistent tracking**
+      if (platformId.isNotEmpty) {
+        headers['x-device-id'] = platformId;
+      }
+
       if (token != null && token.isNotEmpty) {
         headers['Authorization'] = 'Bearer $token';
       }
@@ -60,6 +67,11 @@ class VideoViewTracker {
           'completed':
               false, // Initial watch tracking - will be marked completed in increment-view
         };
+        
+        // **NEW: Send videoHash**
+        if (videoHash != null) {
+          watchBody['videoHash'] = videoHash;
+        }
 
         // **BACKEND-FIRST: Always send platformId as fallback (even if token exists, it might be invalid)**
         // This ensures watch tracking works even if token verification fails
@@ -161,6 +173,11 @@ class VideoViewTracker {
       if (platformId.isNotEmpty) {
         incrementBody['platformId'] = platformId;
       }
+      
+      // **NEW: Send videoHash**
+      if (videoHash != null) {
+        incrementBody['videoHash'] = videoHash;
+      }
 
       final response = await httpClientService.post(
         url,
@@ -202,7 +219,7 @@ class VideoViewTracker {
   }
 
   /// Start tracking view for a video - will increment after 2 seconds
-  void startViewTracking(String videoId, {String? videoUploaderId}) {
+  void startViewTracking(String videoId, {String? videoUploaderId, String? videoHash}) {
     AppLogger.log(
         '🎯 VideoViewTracker: Starting view tracking for video $videoId');
 
@@ -220,7 +237,7 @@ class VideoViewTracker {
       final viewKey = '${videoId}_current_session';
       if (!_viewedVideos.contains(viewKey)) {
         final success =
-            await incrementView(videoId, videoUploaderId: videoUploaderId);
+            await incrementView(videoId, videoUploaderId: videoUploaderId, videoHash: videoHash);
         if (success) {
           _viewedVideos.add(viewKey);
           AppLogger.log('✅ VideoViewTracker: View counted for video $videoId');
@@ -299,10 +316,10 @@ class VideoViewTracker {
   /// **NEW: Track video completion for watch history**
   /// This should work for BOTH authenticated and anonymous users,
   /// matching the logic used in [incrementView] for /watch tracking.
-  Future<void> trackVideoCompletion(String videoId, {int? duration}) async {
+  Future<void> trackVideoCompletion(String videoId, {int? duration, String? videoHash}) async {
     try {
       AppLogger.log(
-          '📊 VideoViewTracker: Tracking video completion for $videoId');
+          '📊 VideoViewTracker: Tracking video completion for $videoId (hash: $videoHash)');
 
       // Get platformId (works for anonymous + authenticated users)
       final platformIdService = PlatformIdService();
@@ -314,6 +331,11 @@ class VideoViewTracker {
       final headers = <String, String>{
         'Content-Type': 'application/json',
       };
+      
+      if (platformId.isNotEmpty) {
+        headers['x-device-id'] = platformId;
+      }
+      
       if (token != null && token.isNotEmpty) {
         headers['Authorization'] = 'Bearer $token';
       }
@@ -322,6 +344,11 @@ class VideoViewTracker {
         'duration': duration ?? 0,
         'completed': true, // Mark as completed
       };
+      
+      // **NEW: Send videoHash**
+      if (videoHash != null) {
+        body['videoHash'] = videoHash;
+      }
 
       // Always include platformId as fallback identity (same as incrementView)
       if (platformId.isNotEmpty) {

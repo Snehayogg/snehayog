@@ -16,6 +16,7 @@ import 'package:vayu/utils/feature_flags.dart';
 import 'package:vayu/core/constants/profile_constants.dart';
 import 'package:vayu/core/managers/smart_cache_manager.dart';
 import 'package:vayu/utils/app_logger.dart';
+import 'package:vayu/features/profile/data/datasources/profile_local_datasource.dart';
 
 // Import for unawaited
 
@@ -84,10 +85,13 @@ class ProfileStateManager extends ChangeNotifier {
   bool get isVideosLoading => _isVideosLoading;
 
   // Profile management
-  Future<void> loadUserData(String? userId, {bool forceRefresh = false}) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+  Future<void> loadUserData(String? userId,
+      {bool forceRefresh = false, bool silent = false}) async {
+    if (!silent) {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+    }
 
     try {
       AppLogger.log(
@@ -104,6 +108,50 @@ class ProfileStateManager extends ChangeNotifier {
           '🔄 ProfileStateManager: Logged in user keys: ${loggedInUser?.keys.toList()}');
       AppLogger.log(
           '🔄 ProfileStateManager: Logged in user values: ${loggedInUser?.values.toList()}');
+
+      // **PARALLEL OPTIMIZATION: Start loading videos IMMEDIATELY**
+      // Now that we have the loggedInUser, we can determine the correct ID and start video loading.
+      // Don't wait for profile data to load. This eliminates the waterfall.
+      if (userId != null) {
+        // If we have an explicit userId (viewing other creator), start loading their videos now
+        AppLogger.log('🚀 ProfileStateManager: Starting PARALLEL video load for $userId');
+        loadUserVideos(userId, forceRefresh: forceRefresh, silent: silent).catchError((e) {
+             AppLogger.log('⚠️ ProfileStateManager: Parallel video load error: $e');
+        });
+      } else if (loggedInUser != null) {
+        // If viewing own profile, derive ID from logged in user
+        final myId = loggedInUser['googleId'] ?? loggedInUser['id'];
+        if (myId != null) {
+           AppLogger.log('🚀 ProfileStateManager: Starting PARALLEL video load for own profile ($myId)');
+           loadUserVideos(myId.toString(), forceRefresh: forceRefresh, silent: silent).catchError((e) {
+              AppLogger.log('⚠️ ProfileStateManager: Parallel video load error: $e');
+           });
+        }
+      }
+
+      // **INSTANT LOAD: Try Hive Cache First**
+      final profileLocalDataSource = ProfileLocalDataSource();
+      if (!forceRefresh) {
+        try {
+          // Use userId if provided, otherwise deduce from loggedInUser
+          final targetUserId =
+              userId ?? loggedInUser?['id'] ?? loggedInUser?['googleId'];
+          if (targetUserId != null) {
+            final cachedData =
+                await profileLocalDataSource.getCachedUserData(targetUserId);
+            if (cachedData != null) {
+              AppLogger.log(
+                  '✅ ProfileStateManager: Instant load from Hive for $targetUserId');
+              _userData = Map<String, dynamic>.from(cachedData);
+              nameController.text = _userData?['name']?.toString() ?? '';
+              _isLoading = false; // Show content immediately
+              notifyListeners();
+            }
+          }
+        } catch (e) {
+          AppLogger.log('⚠️ ProfileStateManager: Hive cache read failed: $e');
+        }
+      }
 
       // **FIXED: Allow loading creator profiles without authentication**
       // Only require authentication for own profile (userId == null)
@@ -190,16 +238,9 @@ class ProfileStateManager extends ChangeNotifier {
       AppLogger.log(
           '🔄 ProfileStateManager: User data values: ${_userData?.values.toList()}');
 
-      // **OPTIMIZATION: Load videos in parallel with profile data (non-blocking)**
-      final videoUserId = userId ?? _userData?['googleId'] ?? _userData?['id'];
-      if (videoUserId != null && videoUserId.toString().isNotEmpty) {
-        // **OPTIMIZATION: Start video loading in parallel (don't wait)**
-        loadUserVideos(videoUserId.toString(), forceRefresh: forceRefresh)
-            .catchError((e) {
-          AppLogger.log(
-              '⚠️ ProfileStateManager: Error loading videos in parallel: $e');
-        });
-      }
+      // **OPTIMIZATION: Video loading was already started in parallel at the top of this method**
+      // We don't need to trigger it again here.
+
 
       // **NEW: Populate UserProvider cache when loading another creator's profile**
       // This ensures follower count is available in UserProvider for ProfileStatsWidget
@@ -247,6 +288,16 @@ class ProfileStateManager extends ChangeNotifier {
       notifyListeners();
       AppLogger.log(
           '🔄 ProfileStateManager: User data loaded successfully, videos will be loaded separately');
+
+      // **CACHE: Save to Hive**
+      if (_userData != null) {
+        final targetUserId =
+            userId ?? _userData?['googleId'] ?? _userData?['id'];
+        if (targetUserId != null) {
+          // ignore: unawaited_futures
+          ProfileLocalDataSource().cacheUserData(targetUserId, _userData!);
+        }
+      }
     } catch (e) {
       AppLogger.log('❌ ProfileStateManager: Error loading user data: $e');
       _error = 'Error loading user data: ${e.toString()}';
@@ -325,12 +376,16 @@ class ProfileStateManager extends ChangeNotifier {
             userData['followingCount'] = localFollowing;
           }
         } else {
-          userData = Map<String, dynamic>.from(loggedInUser);
+           // **FIX: If backend fetch returns null (e.g. 404), throw error instead of fallback**
+           // This allows loadUserData to keep cached data instead of overwriting with basic auth data
+           throw Exception('Backend returned null for user profile');
         }
       } catch (e) {
         AppLogger.log(
-            '⚠️ ProfileStateManager: Failed to fetch own profile from backend, using local: $e');
-        userData = Map<String, dynamic>.from(loggedInUser);
+            '⚠️ ProfileStateManager: Failed to fetch own profile from backend: $e');
+        // **CRITICAL FIX: Do NOT fall back to basic auth data here**
+        // Rethrow so loadUserData knows the fetch failed and can preserve cached data
+        rethrow;
       }
     } else {
       try {
@@ -408,6 +463,8 @@ class ProfileStateManager extends ChangeNotifier {
     } catch (e) {
       AppLogger.log(
           '⚠️ ProfileStateManager: Primary id fetch failed for $userId: $e');
+      // Rethrow to allow caller to handle error (and preserve cache)
+      rethrow;
     }
 
     if (videos.isEmpty) {
@@ -443,18 +500,43 @@ class ProfileStateManager extends ChangeNotifier {
   }
 
   Future<void> loadUserVideos(String? userId,
-      {bool forceRefresh = false}) async {
+      {bool forceRefresh = false, bool silent = false}) async {
     AppLogger.log(
-        '🔄 ProfileStateManager: loadUserVideos called with userId: $userId, forceRefresh: $forceRefresh');
+        '🔄 ProfileStateManager: loadUserVideos called with userId: $userId, forceRefresh: $forceRefresh, silent: $silent');
 
-    _isVideosLoading = true;
-    notifyListeners();
+    if (!silent) {
+      _isVideosLoading = true;
+      notifyListeners();
+    }
 
     try {
       final loggedInUser = await _authService.getUserData();
       final bool isMyProfile = userId == null ||
           userId == loggedInUser?['id'] ||
           userId == loggedInUser?['googleId'];
+
+      // **INSTANT LOAD: Try Hive Cache First**
+      // Calculate targetId early to check cache
+      String? targetId = userId;
+      if (targetId == null && loggedInUser != null) {
+        targetId = loggedInUser['googleId'] ?? loggedInUser['id'];
+      }
+
+      if (!forceRefresh && targetId != null) {
+        try {
+          final cachedVideos =
+              await ProfileLocalDataSource().getCachedUserVideos(targetId);
+          if (cachedVideos != null && cachedVideos.isNotEmpty) {
+            AppLogger.log(
+                '✅ ProfileStateManager: Instant video load from Hive for $targetId');
+            _userVideos = cachedVideos;
+            _isVideosLoading = false; // Stop spinner immediately if cache found
+            notifyListeners();
+          }
+        } catch (e) {
+          AppLogger.log('⚠️ ProfileStateManager: Hive video read failed: $e');
+        }
+      }
 
       // **FIX: Clear SmartCache if forceRefresh is true**
       if (forceRefresh) {
@@ -482,22 +564,26 @@ class ProfileStateManager extends ChangeNotifier {
           userId,
           isMyProfile: isMyProfile,
           forceRefresh: forceRefresh,
+          silent: silent,
         );
       } else {
         await _loadUserVideosDirect(
           userId,
           isMyProfile: isMyProfile,
+          silent: silent,
         );
       }
 
-      // **FIXED: Ensure videos are loaded even if caching fails**
-      if (_userVideos.isEmpty) {
-        AppLogger.log(
-            '⚠️ ProfileStateManager: No videos loaded, trying direct fallback');
-        await _loadUserVideosDirect(
-          userId,
-          isMyProfile: isMyProfile,
-        );
+      // **CACHE: Save videos to Hive**
+      // Note: _loadUserVideosWithCaching/Direct populate _userVideos
+      if (_userVideos.isNotEmpty && targetId != null) {
+        try {
+          // ignore: unawaited_futures
+          ProfileLocalDataSource().cacheUserVideos(targetId, _userVideos);
+        } catch (e) {
+          AppLogger.log(
+              '⚠️ ProfileStateManager: Failed to cache videos to Hive: $e');
+        }
       }
 
       AppLogger.log(
@@ -512,10 +598,14 @@ class ProfileStateManager extends ChangeNotifier {
       await _loadUserVideosDirect(
         userId,
         isMyProfile: isMyProfile,
+        silent: silent,
       );
     } finally {
-      _isVideosLoading = false;
-      notifyListeners();
+      // Ensure spinner is stopped even if we didn't hit cache
+      if (_isVideosLoading) {
+        _isVideosLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -523,6 +613,7 @@ class ProfileStateManager extends ChangeNotifier {
     String? userId, {
     required bool isMyProfile,
     bool forceRefresh = false,
+    bool silent = false,
   }) async {
     try {
       AppLogger.log(
@@ -544,7 +635,7 @@ class ProfileStateManager extends ChangeNotifier {
         AppLogger.log(
             '⚠️ ProfileStateManager: targetUserId is empty, cannot load videos');
         _userVideos = [];
-        notifyListeners();
+        if (!silent) notifyListeners();
         return;
       }
 
@@ -559,7 +650,7 @@ class ProfileStateManager extends ChangeNotifier {
           isMyProfile: isMyProfile,
         );
         _userVideos = videos;
-        notifyListeners();
+        notifyListeners(); // Always notify when data changes
         return;
       }
 
@@ -640,10 +731,20 @@ class ProfileStateManager extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       AppLogger.log('❌ ProfileStateManager: Error in cached video loading: $e');
-      await _loadUserVideosDirect(
-        userId,
-        isMyProfile: isMyProfile,
-      );
+      // **FIX: On error, try direct loading ONLY if it's not a network error**
+      // If it's a network error, we want to preserve whatever we have
+      if (!e.toString().toLowerCase().contains('socket') && 
+          !e.toString().toLowerCase().contains('network') &&
+          !e.toString().toLowerCase().contains('connection')) {
+         await _loadUserVideosDirect(
+          userId,
+          isMyProfile: isMyProfile,
+          silent: silent,
+        );
+      } else {
+        // Rethrow so loadUserVideos knows about the error
+        rethrow;
+      }
     }
   }
 
@@ -651,6 +752,7 @@ class ProfileStateManager extends ChangeNotifier {
   Future<void> _loadUserVideosDirect(
     String? userId, {
     required bool isMyProfile,
+    bool silent = false,
   }) async {
     try {
       AppLogger.log(
@@ -683,7 +785,10 @@ class ProfileStateManager extends ChangeNotifier {
       AppLogger.log(
           '🔍 ProfileStateManager: Direct loading - idsToTry: $candidateIds');
 
-      _userVideos = [];
+      // **FIX: Don't clear existing videos before we know we have new ones**
+      // _userVideos = []; 
+      
+      bool foundVideos = false;
       for (final candidateId in candidateIds) {
         try {
           AppLogger.log(
@@ -691,6 +796,7 @@ class ProfileStateManager extends ChangeNotifier {
           final videos = await _videoService.getUserVideos(candidateId);
           if (videos.isNotEmpty) {
             _userVideos = videos;
+            foundVideos = true;
             AppLogger.log(
                 '✅ ProfileStateManager: Loaded ${videos.length} videos using id: $candidateId');
             break;
@@ -704,13 +810,17 @@ class ProfileStateManager extends ChangeNotifier {
         }
       }
 
-      // Notify UI regardless
-      notifyListeners();
+      // **FIX: Only clear if we really have nothing and no errors occurred**
+      if (!foundVideos && candidateIds.isNotEmpty && _userVideos.isEmpty) {
+           notifyListeners();
+      } else {
+        notifyListeners();
+      }
     } catch (e) {
       AppLogger.log('❌ ProfileStateManager: Error in direct video loading: $e');
       _error = '${ProfileConstants.errorLoadingVideos}${e.toString()}';
-      _userVideos = [];
-      notifyListeners();
+      if (!silent) notifyListeners();
+      rethrow;
     }
   }
 

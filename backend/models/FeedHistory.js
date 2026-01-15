@@ -18,6 +18,10 @@ const FeedHistorySchema = new mongoose.Schema({
         required: true,
         index: true
     },
+    videoHash: {
+        type: String,
+        index: true // Index for fast lookup of "seen content"
+    },
     seenAt: {
         type: Date,
         default: Date.now,
@@ -40,17 +44,28 @@ FeedHistorySchema.index({ userId: 1, seenAt: 1 });
  * Static method to mark videos as seen
  * Uses bulkWrite for performance since we might mark batch of 10 videos at once
  */
-FeedHistorySchema.statics.markAsSeen = async function (userId, videoIds) {
-    if (!videoIds || videoIds.length === 0) return;
+FeedHistorySchema.statics.markAsSeen = async function (userId, videos) {
+    if (!videos || videos.length === 0) return;
 
-    const uniqueVideoIds = [...new Set(videoIds.map(id => id.toString()))];
-    const ops = uniqueVideoIds.map(videoId => ({
-        updateOne: {
-            filter: { userId, videoId },
-            update: { $set: { seenAt: new Date() } }, // Update timestamp to NOW (becomes "most recently used")
-            upsert: true
-        }
-    }));
+    // Normalize input: can be array of IDs or array of Video objects
+    // We prefer Video objects so we can extract videoHash
+    const ops = videos.map(v => {
+        const videoId = v._id || v;
+        const videoHash = v.videoHash; // Might be undefined if passing just IDs
+        
+        return {
+            updateOne: {
+                filter: { userId, videoId },
+                update: { 
+                    $set: { 
+                        seenAt: new Date(),
+                        ...(videoHash ? { videoHash } : {}) // Only update hash if provided
+                    } 
+                }, 
+                upsert: true
+            }
+        };
+    });
 
     try {
         await this.bulkWrite(ops, { ordered: false });
@@ -70,6 +85,23 @@ FeedHistorySchema.statics.getSeenVideoIds = async function (userId) {
         return new Set(docs.map(d => d.videoId.toString()));
     } catch (error) {
         console.error('❌ Error fetching seen history:', error);
+        return new Set();
+    }
+};
+
+/**
+ * **NEW: Get all seen content hashes for a user**
+ * Used to filter out duplicates regardless of video ID
+ */
+FeedHistorySchema.statics.getSeenContentHashes = async function (userId) {
+    try {
+        const docs = await this.find({ 
+            userId, 
+            videoHash: { $exists: true, $ne: null } 
+        }).select('videoHash').lean();
+        return new Set(docs.map(d => d.videoHash));
+    } catch (error) {
+        console.error('❌ Error fetching seen hashes:', error);
         return new Set();
     }
 };

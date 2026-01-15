@@ -8,9 +8,14 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   set _isLoading(bool value) => _isLoadingVN.value = value;
 
   String? _currentUserId;
+  int _previousIndex = 0;
   final ValueNotifier<int> _currentIndexVN = ValueNotifier<int>(0);
   int get _currentIndex => _currentIndexVN.value;
-  set _currentIndex(int value) => _currentIndexVN.value = value;
+  set _currentIndex(int value) {
+    _previousIndex = _currentIndexVN.value;
+    _currentIndexVN.value = value;
+  }
+  int _currentPage = 1;
 
   final Set<String> _followingUsers = {};
   final Set<String> _seenVideoKeys = <String>{};
@@ -35,7 +40,7 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   double? _screenHeight;
 
   // Decoder priming
-  int get _decoderPrimeBudget => 2;
+  int get _decoderPrimeBudget => 3;
   int _primedStartIndex = -1;
 
   // Ad and analytics services
@@ -90,6 +95,7 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   final Map<int, VoidCallback> _bufferingListeners = {};
   final Map<int, VoidCallback> _videoEndListeners = {};
 
+
   // Resume tracking
   final Map<int, bool> _wasPlayingBeforeNavigation = {};
 
@@ -97,7 +103,11 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   final Set<int> _preloadedVideos = {};
   final Set<int> _loadingVideos = {};
   final Set<int> _initializingVideos = {};
-  int get _maxConcurrentInitializations => 2;
+  // **OPTIMIZED: Reduced from 4 to 2 for "Sniper" pipeline loading**
+  // Focus bandwidth on next 2 videos for max speed instead of spreading thin
+  // **OPTIMIZED: Increased from 2 to 4 for faster scrolling**
+  // Focus bandwidth on next 4 videos for better responsiveness
+  int get _maxConcurrentInitializations => 4;
   final Map<int, int> _preloadRetryCount = {};
   int get _maxRetryAttempts => 2;
   Timer? _preloadTimer;
@@ -112,23 +122,17 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   final Map<String, VideoPlayerController> _retainedByVideoId = {};
   final Set<int> _retainedIndices = {};
 
+  // Infinite scrollingtrollers for refresh
+
   // Infinite scrolling
-  // **OPTIMIZED: Increased to 15 for earlier loading - next batch loads when 15 videos from end**
-  int get _infiniteScrollThreshold => 15;
+  // **OPTIMIZED: Increased to 20 for earlier loading - next batch loads when 20 videos from end**
   final ValueNotifier<bool> _isLoadingMoreVN = ValueNotifier<bool>(false);
   bool get _isLoadingMore => _isLoadingMoreVN.value;
   set _isLoadingMore(bool value) => _isLoadingMoreVN.value = value;
 
-  int _currentPage = 1;
-  // **OPTIMIZED: Load 4 videos on first page for instant loading, then 15 for subsequent pages**
-  int get _videosPerPage {
-    // First page: only 3 videos for instant display (reduces load time significantly)
-    if (_currentPage == 1 && _videos.isEmpty) {
-      return 3;
-    }
-    // Subsequent pages: 15 videos for seamless UX
-    return 15;
-  }
+  // **OPTIMIZED: Constant 15 videos per page to prevent offset/skipping bugs**
+  // Variable page size (5 then 15) caused backend to skip videos 5-15.
+  int get _videosPerPage => 15;
 
   final ValueNotifier<bool> _hasMoreVN = ValueNotifier<bool>(true);
   bool get _hasMore => _hasMoreVN.value;
@@ -137,7 +141,11 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   bool _isLoadingRemainingVideos =
       false; // Track background loading of remaining videos
 
-  // **MEMORY MANAGEMENT: Limit videos in memory to prevent memory issues**
+  // **NEW: Video Error Tracking**
+  // Stores error messages for videos that failed to load or play
+  final Map<int, String> _videoErrors = {};
+
+  // Playback StateMANAGEMENT: Limit videos in memory to prevent memory issues**
   // Keep max 300 videos (15 pages) - removes old videos automatically
   // Each VideoModel ~5-10KB, so 300 videos = ~1.5-3MB (safe)
   // For 5000+ videos, this prevents 50MB+ memory usage

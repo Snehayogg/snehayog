@@ -23,7 +23,7 @@ class SharedVideoControllerPool {
   final Map<String, int> _videoIndices =
       {}; // Track video indices for smart cleanup
   static const int _maxSharedPoolSize =
-      7; // Max controllers in shared pool (optimized for memory)
+      8; // Max controllers in shared pool (optimized for memory)
 
   // **CACHE STATISTICS**
   int _cacheHits = 0;
@@ -114,6 +114,31 @@ class SharedVideoControllerPool {
 
     AppLogger.log(
         '✅ SharedPool: Controller added, total controllers: ${_controllerPool.length}');
+  }
+
+  /// **NEW: Smart Cleanup within specific range (optimized for preloading)**
+  void cleanupSmart(int currentIndex, int startRange, int endRange) {
+    final toRemove = <String>[];
+
+    for (final entry in _videoIndices.entries) {
+      final videoId = entry.key;
+      final index = entry.value;
+
+      // Keep only videos within the safe range [startRange, endRange]
+      // Also keep the current video explicitly
+      if (index != currentIndex && (index < startRange || index > endRange)) {
+        toRemove.add(videoId);
+      }
+    }
+
+    for (final videoId in toRemove) {
+      disposeController(videoId);
+    }
+
+    if (toRemove.isNotEmpty) {
+      AppLogger.log(
+          '🧹 SharedPool: Smart cleaned up ${toRemove.length} controllers outside range [$startRange, $endRange]');
+    }
   }
 
   /// **NEW: Cleanup controllers far from current index**

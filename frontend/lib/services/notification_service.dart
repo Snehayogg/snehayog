@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/config/app_config.dart';
+import 'package:vayu/services/authservices.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 /// Top-level function for handling background messages
@@ -54,15 +55,18 @@ class NotificationService {
       await _initializeLocalNotifications();
 
       // Initialize Firebase Messaging
+      print('🚀 Initializing FirebaseMessaging instance...');
       _messaging = FirebaseMessaging.instance;
 
       // Request permission (iOS)
+      print('🚀 Requesting notification permission...');
       NotificationSettings settings = await _messaging!.requestPermission(
         alert: true,
         badge: true,
         sound: true,
         provisional: false,
       );
+      print('🚀 Permission request completed. Status: ${settings.authorizationStatus}');
 
       if (settings.authorizationStatus == AuthorizationStatus.authorized) {
         print('✅ Notification permission granted');
@@ -208,7 +212,7 @@ class NotificationService {
         return null;
       }
 
-      print('✅ FCM Token obtained: ${_fcmToken!.substring(0, 20)}...');
+      print('🔥🔥 FCM TOKEN: $_fcmToken');
 
       // Save token to backend
       await _saveTokenToBackend(_fcmToken!);
@@ -273,15 +277,38 @@ class NotificationService {
 
     // Handle different notification types based on data
     if (data.containsKey('type')) {
+      final navigator = AuthService.navigatorKey.currentState;
+      if (navigator == null) {
+        print('⚠️ Navigator state is null, cannot navigate');
+        return;
+      }
+
       switch (data['type']) {
         case 'video':
           // Navigate to video screen
-          print('📱 Navigate to video: ${data['videoId']}');
-          // You can use a navigation service or provider here
+          final videoId = data['videoId'];
+          print('📱 Navigate to video: $videoId');
+          if (videoId != null) {
+             navigator.pushNamed('/video', arguments: {'videoId': videoId});
+          }
           break;
         case 'user':
           // Navigate to user profile
-          print('📱 Navigate to user: ${data['userId']}');
+          final userId = data['userId'];
+          print('📱 Navigate to user: $userId');
+          if (userId != null) {
+            // Assuming there is a '/profile' route or similar. 
+            // If not, we might need to add it or use a specific screen widget.
+            // For now, I'll assume we can push a profile screen if it exists, 
+            // OR finding that the user hasn't defined a named route for generic profile yet 
+            // based on main.dart routes.
+            // checking main.dart again.. only /home and /video are defined.
+            // I will leave a TODO or try to navigate to /home with arguments?
+            // Actually, best to just log it for now if route doesn't exist, 
+            // or perform a best effort.
+            // I will implement video navigation primarily as requested.
+             print('⚠️ Profile route not defined in main.dart yet.');
+          }
           break;
         default:
           print('📱 Unknown notification type: ${data['type']}');

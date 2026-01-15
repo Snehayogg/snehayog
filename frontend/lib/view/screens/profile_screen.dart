@@ -12,6 +12,7 @@ import 'package:vayu/model/usermodel.dart';
 import 'package:vayu/core/services/profile_screen_logger.dart';
 import 'dart:async';
 import 'package:share_plus/share_plus.dart';
+import 'package:vayu/features/profile/data/datasources/profile_local_datasource.dart';
 import 'package:vayu/core/services/http_client_service.dart';
 import 'package:vayu/view/widget/profile/profile_header_widget.dart';
 import 'package:vayu/view/widget/profile/profile_stats_widget.dart';
@@ -215,48 +216,29 @@ class _ProfileScreenState extends State<ProfileScreen>
             Future.microtask(() async {
               try {
                 AppLogger.log('🔄 ProfileScreen: Background refresh started');
-                await _stateManager.loadUserData(widget.userId);
+                // Determine userId to use
+                final userIdForRefresh = widget.userId;
 
-                if (_stateManager.userData != null) {
-                  await _cacheProfileData(_stateManager.userData!);
-                  // **FIXED: Load videos for creator profiles using widget.userId**
-                  final videoUserId = widget.userId ??
-                      _stateManager.userData!['googleId'] ??
-                      _stateManager.userData!['_id'] ??
-                      _stateManager.userData!['id'];
-                  if (videoUserId != null) {
-                    await _loadVideos();
-                  }
+                // 1. Refresh user profile data (force refresh, silent)
+                await _stateManager.loadUserData(
+                  userIdForRefresh,
+                  forceRefresh: true,
+                  silent: true,
+                );
 
-                  // **NEW: Refresh earnings data in background (only for own profile)**
-                  await _refreshEarningsData();
-
-                  AppLogger.log(
-                      '✅ ProfileScreen: Background refresh completed');
-                } else {
-                  // **FIX: If refresh fails, show error but keep cached data visible**
-                  AppLogger.log(
-                      '⚠️ ProfileScreen: Background refresh returned null data');
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          AppText.get('error_refresh_cache'),
-                        ),
-                        backgroundColor: Colors.orange,
-                        duration: const Duration(seconds: 3),
-                        action: SnackBarAction(
-                          label: AppText.get('btn_retry', fallback: 'Retry'),
-                          textColor: Colors.white,
-                          onPressed: () => _loadData(forceRefresh: true),
-                        ),
-                      ),
-                    );
-                  }
+                // 2. Refresh videos (force refresh, silent)
+                if (mounted) {
+                  await _loadVideos(forceRefresh: true, silent: true);
                 }
-              } catch (e) {
+
+                // 3. Refresh earnings
+                if (mounted) {
+                  await _refreshEarningsData(forceRefresh: true);
+                }
                 AppLogger.log(
-                    '⚠️ ProfileScreen: Background refresh failed: $e');
+                    '✅ ProfileScreen: Background refresh completed');
+              } catch (e) {
+                AppLogger.log('⚠️ ProfileScreen: Background refresh failed: $e');
                 // **FIX: Show error to user with retry option**
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -462,7 +444,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   /// **OPTIMIZED: Load videos from server (can run in background)**
   /// **CRITICAL: When forceRefresh=true, COMPLETELY bypass cache and fetch fresh data from server**
-  Future<void> _loadVideos({bool forceRefresh = false}) async {
+  Future<void> _loadVideos(
+      {bool forceRefresh = false, bool silent = false}) async {
     try {
       // **FIX: Better handling of null userData with retry**
       if (_stateManager.userData == null) {
@@ -504,19 +487,11 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       if (userIdForVideos != null) {
         AppLogger.log(
-            '📡 ProfileScreen: Loading videos for user: $userIdForVideos (forceRefresh: $forceRefresh, viewing creator: ${widget.userId != null})');
-
-        // Respect the incoming forceRefresh flag:
-        // - forceRefresh=true  → bypass SmartCache for videos (manual pull‑to‑refresh, delete, etc.)
-        // - forceRefresh=false → allow SmartCache/video caching to work for faster loads
+            '🔄 ProfileScreen: Loading videos for $userIdForVideos (force: $forceRefresh, silent: $silent)');
         await _stateManager
-            .loadUserVideos(userIdForVideos, forceRefresh: forceRefresh)
-            .timeout(
-          const Duration(seconds: 20),
-          onTimeout: () {
-            throw Exception('Video loading timed out');
-          },
-        );
+            .loadUserVideos(userIdForVideos,
+                forceRefresh: forceRefresh, silent: silent)
+            .timeout(const Duration(seconds: 10));
 
         // **FIXED: Mark videos as loaded/attempted after successful load**
         // This prevents reloading when creator has no videos
@@ -1839,7 +1814,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               ),
             ),
 
-            // Videos section skeleton
+            // Videos section skeleton (Instagram-like 3-column, tighter spacing)
             RepaintBoundary(
               child: Padding(
                 padding: ResponsiveHelper.getAdaptivePadding(context),
@@ -1857,7 +1832,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     ),
                     const SizedBox(height: 16),
 
-                    // Video grid skeleton (Instagram-like 3-column, tighter spacing)
+                    // Video grid skeleton
                     GridView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
@@ -2594,43 +2569,29 @@ class _ProfileScreenState extends State<ProfileScreen>
   /// Shows cached data instantly when user navigates back to same profile
   Future<Map<String, dynamic>?> _loadCachedProfileData() async {
     try {
-      final cacheManager = SmartCacheManager();
-      await cacheManager.initialize();
+      // **OPTIMIZATION: Use ProfileLocalDataSource (Hive) for instant load**
+      final loggedInUser = await _authService.getUserData();
+      final loggedInUserId = loggedInUser?['googleId'] ?? loggedInUser?['id'];
+      
+      // Determine the correct user ID to fetch
+      final String? targetUserId = widget.userId ?? loggedInUserId;
 
-      if (!cacheManager.isInitialized) {
+      if (targetUserId == null) {
         ProfileScreenLogger.logDebugInfo(
-            'ℹ️ SmartCacheManager not initialized, will fetch from server');
+            'ℹ️ No user ID found for cache lookup');
         return null;
       }
 
-      // **OPTIMIZATION: Use same cache key format as ProfileStateManager**
-      final loggedInUser = await _authService.getUserData();
-      String cacheKey;
-      if (widget.userId != null) {
-        // For creator profiles, use userId directly
-        cacheKey = 'user_profile_${widget.userId}';
-      } else {
-        // For own profile, resolve cache key same way as ProfileStateManager
-        final loggedInUserId = loggedInUser?['googleId'] ?? loggedInUser?['id'];
-        cacheKey = loggedInUserId != null
-            ? 'user_profile_$loggedInUserId'
-            : 'user_profile_self';
-      }
-
-      // **OPTIMIZATION: Use peek() to check cache without triggering fetch**
-      final cachedProfile = await cacheManager.peek<Map<String, dynamic>>(
-        cacheKey,
-        cacheType: 'user_profile',
-        allowStale: true, // Allow stale cache for instant display
-      );
+      final dataSource = ProfileLocalDataSource();
+      final cachedProfile = await dataSource.getCachedUserData(targetUserId);
 
       if (cachedProfile != null) {
         ProfileScreenLogger.logDebugInfo(
-            '⚡ Loading profile from SmartCacheManager (INSTANT - cache persists when user navigates back)');
+            '⚡ Loading profile from Hive Cache (INSTANT - cache persists when user navigates back)');
         return cachedProfile;
       } else {
         ProfileScreenLogger.logDebugInfo(
-            'ℹ️ No profile cache found in SmartCacheManager - will fetch from server');
+            'ℹ️ No profile cache found in Hive for $targetUserId - will fetch from server');
       }
     } catch (e) {
       ProfileScreenLogger.logWarning('Error loading cached profile data: $e');
@@ -2643,43 +2604,23 @@ class _ProfileScreenState extends State<ProfileScreen>
   /// Cache persists when user navigates back to same profile
   Future<void> _cacheProfileData(Map<String, dynamic> profileData) async {
     try {
-      final cacheManager = SmartCacheManager();
-      await cacheManager.initialize();
+      // **OPTIMIZATION: Cache to Hive via ProfileLocalDataSource**
+      final loggedInUser = await _authService.getUserData();
+      final loggedInUserId = loggedInUser?['googleId'] ?? loggedInUser?['id'];
+      
+      final String? targetUserId = widget.userId ?? loggedInUserId;
 
-      if (!cacheManager.isInitialized) {
+      if (targetUserId == null) {
         ProfileScreenLogger.logDebugInfo(
-            '⚠️ SmartCacheManager not initialized, skipping cache');
+            '⚠️ No user ID found, skipping Hive cache');
         return;
       }
 
-      // **OPTIMIZATION: Use same cache key format as ProfileStateManager**
-      final loggedInUser = await _authService.getUserData();
-      final isOtherUser = widget.userId != null;
-      String cacheKey;
-      if (widget.userId != null) {
-        // For creator profiles, use userId directly
-        cacheKey = 'user_profile_${widget.userId}';
-      } else {
-        // For own profile, resolve cache key same way as ProfileStateManager
-        final loggedInUserId = loggedInUser?['googleId'] ?? loggedInUser?['id'];
-        cacheKey = loggedInUserId != null
-            ? 'user_profile_$loggedInUserId'
-            : 'user_profile_self';
-      }
-
-      // **OPTIMIZATION: Cache via get() with fetchFn (cache data we already have)**
-      await cacheManager.get<Map<String, dynamic>>(
-        cacheKey,
-        cacheType: 'user_profile',
-        maxAge: isOtherUser
-            ? const Duration(days: 7) // 7 days for other users
-            : const Duration(hours: 24), // 24 hours for own profile
-        fetchFn: () async =>
-            profileData, // Return already fetched data to cache it
-      );
+      final dataSource = ProfileLocalDataSource();
+      await dataSource.cacheUserData(targetUserId, profileData);
 
       ProfileScreenLogger.logDebugInfo(
-          '✅ Profile data cached to SmartCacheManager (persists when user navigates back)');
+          '✅ Profile data cached to Hive (persists when user navigates back)');
     } catch (e) {
       ProfileScreenLogger.logWarning('Error caching profile data: $e');
     }
@@ -2854,54 +2795,56 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  /// Clear profile cache (including earnings cache)
   Future<void> _clearProfileCache() async {
     try {
+      // 1. Clear Legacy SharedPreferences Cache (Earnings & Old Profile Data)
       final prefs = await SharedPreferences.getInstance();
       final cacheKey = _getProfileCacheKey();
 
+      // Clear old profile keys (safe to keep for cleanup)
       await prefs.remove('profile_cache_$cacheKey');
       await prefs.remove('profile_cache_timestamp_$cacheKey');
       await prefs.remove('profile_videos_cache_$cacheKey');
       await prefs.remove('profile_videos_cache_timestamp_$cacheKey');
 
-      // **SIMPLIFIED: Clear earnings cache**
+      // Clear Earnings Cache (Still in SharedPreferences)
       final userId = widget.userId ??
           _stateManager.userData?['googleId'] ??
           _stateManager.userData?['id'];
+          
       if (userId != null) {
         await prefs.remove('earnings_cache_$userId');
         await prefs.remove('earnings_cache_timestamp_$userId');
       }
 
-      ProfileScreenLogger.logDebugInfo(
-          'Profile cache cleared (including earnings)');
+      // 2. Clear Hive Cache (New Profile & Video Data)
+      final dataSource = ProfileLocalDataSource();
+      
+      final idsToClear = <String>{
+        if (widget.userId != null && widget.userId!.isNotEmpty)
+          widget.userId!,
+        if (_stateManager.userData?['googleId'] != null &&
+            _stateManager.userData!['googleId'].toString().isNotEmpty)
+          _stateManager.userData!['googleId'].toString(),
+         if (_stateManager.userData?['id'] != null &&
+            _stateManager.userData!['id'].toString().isNotEmpty)
+          _stateManager.userData!['id'].toString(),
+      };
 
-      final smartCache = SmartCacheManager();
-      await smartCache.initialize();
-      if (smartCache.isInitialized) {
-        final idsToClear = <String>{
-          if (widget.userId != null && widget.userId!.isNotEmpty)
-            widget.userId!,
-          if (_stateManager.userData?['googleId'] != null &&
-              _stateManager.userData!['googleId'].toString().isNotEmpty)
-            _stateManager.userData!['googleId'].toString(),
-          if (_stateManager.userData?['id'] != null &&
-              _stateManager.userData!['id'].toString().isNotEmpty)
-            _stateManager.userData!['id'].toString(),
-        };
+      // Also clear "self" if logged in
+      final loggedInUser = await _authService.getUserData();
+       if (loggedInUser != null) {
+          if (loggedInUser['id'] != null) idsToClear.add(loggedInUser['id']);
+          if (loggedInUser['googleId'] != null) idsToClear.add(loggedInUser['googleId']);
+       }
 
-        if (idsToClear.isEmpty) {
-          idsToClear.add('self');
-        }
-
-        for (final id in idsToClear) {
-          final pattern = 'user_profile_$id';
-          await smartCache.clearCacheByPattern(pattern);
-          AppLogger.log(
-              '🧹 ProfileScreen: Cleared SmartCache entry pattern $pattern');
-        }
+      for (final id in idsToClear) {
+        await dataSource.clearUserCache(id);
+        ProfileScreenLogger.logDebugInfo(
+            '🧹 ProfileScreen: Cleared Hive cache for user $id');
       }
+      
+      AppLogger.log('🧹 ProfileScreen: Profile cache cleared successfully');
     } catch (e) {
       ProfileScreenLogger.logWarning('Error clearing profile cache: $e');
     }

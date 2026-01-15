@@ -3,67 +3,123 @@ import '../datasources/video_remote_datasource.dart';
 import '../../domain/repositories/video_repository.dart';
 import '../../domain/entities/video_entity.dart';
 import '../../../../model/video_model.dart';
+import '../datasources/video_local_datasource.dart';
+import '../../../../utils/app_logger.dart';
 // import '../models/comment_model.dart'; // Not needed - we only work with entities
 
 /// Implementation of the VideoRepository interface
 /// This class coordinates between different data sources
 class VideoRepositoryImpl implements VideoRepository {
   final VideoRemoteDataSource _remoteDataSource;
+  final VideoLocalDataSource _localDataSource;
 
-  VideoRepositoryImpl({VideoRemoteDataSource? remoteDataSource})
-      : _remoteDataSource = remoteDataSource ?? VideoRemoteDataSource();
+  VideoRepositoryImpl(
+      {VideoRemoteDataSource? remoteDataSource,
+      VideoLocalDataSource? localDataSource})
+      : _remoteDataSource = remoteDataSource ?? VideoRemoteDataSource(),
+        _localDataSource = localDataSource ?? VideoLocalDataSource();
 
   @override
   Future<Map<String, dynamic>> getVideos({
     int page = 1,
     int limit = 10,
     bool clearSession = false,
+    String videoType = 'yog', // Added videoType support
   }) async {
     try {
+      // 1. Attempt to fetch fresh data from network
       final result = await _remoteDataSource.getVideos(
         page: page,
         limit: limit,
         clearSession: clearSession,
+        videoType: videoType,
       );
 
-      // Convert VideoModel to VideoEntity
-      final videos = (result['videos'] as List<dynamic>)
-          .cast<VideoModel>()
-          .map((model) => VideoEntity(
-                id: model.id,
-                title: model.videoName,
-                description: model.description ?? '',
-                videoUrl: model.videoUrl,
-                thumbnailUrl: model.thumbnailUrl,
-                originalVideoUrl: model.videoUrl,
-                uploaderId: model.uploader.id,
-                uploaderName: model.uploader.name,
-                uploadTime: model.uploadedAt,
-                views: model.views,
-                likes: model.likes,
-                shares: model.shares,
-                comments: model.comments
-                    .map((c) => CommentEntity(
-                          id: c.id,
-                          text: c.text,
-                          userId: c.userId,
-                          userName: c.userName,
-                          createdAt: c.createdAt,
-                        ))
-                    .toList(),
-                videoType: model.videoType,
-                link: model.link,
-                isLongVideo: model.videoType == 'yog',
-              ))
-          .toList();
+      // 2. Convert to Models for caching (Remote usually returns Models map)
+      // The remote data source returns a Map with 'videos' as List<VideoModel>
+      final videoModels =
+          (result['videos'] as List<dynamic>).cast<VideoModel>();
+
+      // 3. Cache the first page of relevant feeds
+      if (page == 1 && videoModels.isNotEmpty) {
+        if (videoType == 'yog' || videoType == 'vayu') {
+          await _localDataSource.cacheVideoFeed(videoModels, videoType);
+        }
+      }
+
+      // 4. Convert to Entities for Domain Layer
+      final videos =
+          videoModels.map((model) => _mapModelToEntity(model)).toList();
 
       return {
         'videos': videos,
         'hasMore': result['hasMore'] ?? false,
       };
     } catch (e) {
+      // 5. Network failed? Try Cache Fallback (Offline Mode)
+      if (page == 1) {
+        AppLogger.log(
+            '⚠️ VideoRepository: Network failed, trying local cache for $videoType');
+        final cachedModels =
+            await _localDataSource.getCachedVideoFeed(videoType);
+
+        if (cachedModels != null && cachedModels.isNotEmpty) {
+          final videos =
+              cachedModels.map((model) => _mapModelToEntity(model)).toList();
+
+          return {
+            'videos': videos,
+            'hasMore': false, // No pagination in offline mode
+            'isOffline': true,
+          };
+        }
+      }
       rethrow;
     }
+  }
+
+  /// Helper to get cached videos directly (for instant load before network)
+  Future<List<VideoEntity>> getCachedVideos(String videoType) async {
+    try {
+      final cachedModels = await _localDataSource.getCachedVideoFeed(videoType);
+      if (cachedModels != null) {
+        return cachedModels.map((model) => _mapModelToEntity(model)).toList();
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /// Helper to map Model to Entity to reduce duplication
+  VideoEntity _mapModelToEntity(VideoModel model) {
+    return VideoEntity(
+      id: model.id,
+      title: model.videoName,
+      description: model.description ?? '',
+      videoUrl: model.videoUrl,
+      thumbnailUrl: model.thumbnailUrl,
+      originalVideoUrl: model.videoUrl,
+      uploaderId: model.uploader.id,
+      uploaderName: model.uploader.name,
+      uploadTime: model.uploadedAt,
+      views: model.views,
+      likes: model.likes,
+      shares: model.shares,
+      comments: model.comments
+          .map((c) => CommentEntity(
+                id: c.id,
+                text: c.text,
+                userId: c.userId,
+                userName: c.userName,
+                createdAt: c.createdAt,
+              ))
+          .toList(),
+      videoType: model.videoType,
+      link: model.link,
+      isLongVideo:
+          model.videoType == 'yog', // Note: Check logic 'yog' vs 'vayu'
+    );
   }
 
   @override

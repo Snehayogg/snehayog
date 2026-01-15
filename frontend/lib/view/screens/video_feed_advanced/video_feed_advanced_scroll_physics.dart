@@ -43,11 +43,11 @@ class VayuScrollPhysics extends ScrollPhysics {
 
     double targetPage = currentPage.toDouble();
 
-    // Custom Velocity Threshold (Sensitive)
-    const double velocityThreshold = 100.0; // Lowered for sensitivity
+    // Custom Velocity Threshold (Sensitive - lowered from 100.0)
+    const double velocityThreshold = 20.0;
 
-    // Custom Swipe Threshold (15% - 20%)
-    const double swipeThreshold = 0.15;
+    // Custom Swipe Threshold (12% - lowered from 15%)
+    const double swipeThreshold = 0.12;
 
     // 1. Velocity Check (Fast Swipe)
     if (velocity.abs() > velocityThreshold) {

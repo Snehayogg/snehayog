@@ -49,9 +49,15 @@ const app = express();
 app.set('etag', 'strong');
 
 const createCacheMiddleware = (cacheHeader) => (req, res, next) => {
-  if (req.method !== 'GET' || req.headers.authorization) {
+  if (req.method !== 'GET') {
     return next();
   }
+  // **FIX: Allow caching if explicitly marked 'public', even with Auth header**
+  // Only skip caching if it's NOT public AND has auth header
+  if (req.headers.authorization && !cacheHeader.includes('public')) {
+    return next();
+  }
+  
   res.set('Cache-Control', cacheHeader);
   res.set('Vary', 'Authorization');
   return next();
@@ -110,6 +116,9 @@ if (assetLinksPackageName && assetLinksFingerprints.length > 0) {
 // Middleware
 app.use(compression()); // Enable gzip compression
 app.use('/.well-known', express.static(path.join(__dirname, 'public/.well-known')))
+// Rate Limiter Imports
+import { globalLimiter, apiLimiter } from './middleware/rateLimiter.js';
+
 // **ENHANCED: CORS Configuration for Flutter app and Railway**
 app.use(cors({
   origin: function (origin, callback) {
@@ -168,11 +177,18 @@ app.use(cors({
     'Access-Control-Request-Method',
     'Access-Control-Request-Headers',
     'x-admin-key',
-    'X-Admin-Key'
+    'X-Admin-Key',
+    'X-RateLimit-Limit',
+    'X-RateLimit-Remaining',
+    'X-RateLimit-Reset',
+    'Retry-After'
   ],
-  exposedHeaders: ['Content-Length', 'Content-Range', 'Accept-Ranges'],
+  exposedHeaders: ['Content-Length', 'Content-Range', 'Accept-Ranges', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'Retry-After'],
   maxAge: 86400
 }));
+
+// Apply Global Rate Limiter (Catch-all for safety)
+app.use(globalLimiter);
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -216,16 +232,6 @@ app.get("/app-ads.txt", (req, res) => {
   res.sendFile(path.join(__dirname, "app-ads.txt"));
 });
 
-// **FIXED: Add error handler for HLS files**
-app.use('/hls', (err, req, res, next) => {
-  console.error('❌ HLS serving error:', err);
-  if (err.code === 'ENOENT') {
-    res.status(404).json({ error: 'HLS file not found', path: req.path });
-  } else {
-    res.status(500).json({ error: 'Internal server error serving HLS file' });
-  }
-});
-
 
 // API Routes
 // Note: /api/app-config is excluded from API versioning as it's needed for version detection
@@ -244,12 +250,17 @@ apiRouter.use('/admin', adminRoutes);
 apiRouter.use('/upload', uploadRoutes);
 apiRouter.use('/feedback', feedbackRoutes);
 apiRouter.use('/referrals', referralRoutes);
-apiRouter.use('/reports', reportRoutes);
+apiRouter.use('/report', reportRoutes);
 apiRouter.use('/notifications', notificationRoutes);
 apiRouter.use('/search', searchRoutes);
 
 // Apply versioning middleware to the API router
-app.use('/api', apiVersioning, apiRouter);
+import { verifyToken, passiveVerifyToken } from './utils/verifytoken.js';
+
+// Apply versioning middleware to the API router
+// **NEW: Apply Passive Auth BEFORE Rate Limiter**
+// This ensures req.user is populated so we can limit by User ID instead of IP
+app.use('/api', apiVersioning, passiveVerifyToken, apiLimiter, apiRouter);
 
 // **FIX: Root route handler for referral links: https://snehayog.site/?ref=CODE
 // This handles referral links and tries to open the app

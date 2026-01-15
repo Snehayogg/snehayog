@@ -45,14 +45,14 @@ class GoogleSignInController extends ChangeNotifier {
           };
           _isLoading = false;
           notifyListeners();
-          print('✅ GoogleSignInController: Using cached user data (instant)');
+
 
           // Refresh from backend in background (non-blocking)
           unawaited(_refreshUserDataInBackground());
           return;
         }
       } catch (e) {
-        print('⚠️ GoogleSignInController: Error loading cached data: $e');
+
       }
 
       _isLoading = true;
@@ -61,34 +61,29 @@ class GoogleSignInController extends ChangeNotifier {
       // Check if user is already logged in
       final isLoggedIn = await _authService.isLoggedIn();
       if (isLoggedIn) {
-        print(
-            '✅ GoogleSignInController: User is already logged in, getting user data...');
+
         _userData = await _authService.getUserData();
-        print(
-            '✅ GoogleSignInController: User data loaded: ${_userData?['email']}');
+
       } else {
-        print(
-            'ℹ️ GoogleSignInController: User is not logged in, attempting auto-login...');
+
 
         // **NEW: Try auto-login with device ID (for persistent login after reinstall)**
         try {
           final autoLoginResult = await _authService.autoLoginWithPlatformId();
           if (autoLoginResult != null) {
-            print('✅ GoogleSignInController: Auto-login successful!');
+
             _userData = autoLoginResult;
           } else {
-            print(
-                'ℹ️ GoogleSignInController: Auto-login not available - user needs to login manually');
+
             _userData = null;
           }
         } catch (e) {
-          print(
-              '⚠️ GoogleSignInController: Auto-login failed (non-critical): $e');
+
           _userData = null;
         }
       }
     } catch (e) {
-      print('⚠️ GoogleSignInController: Error during background init: $e');
+
       _error = e.toString();
       _userData = null; // Ensure userData is null on error
     } finally {
@@ -99,7 +94,7 @@ class GoogleSignInController extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> signIn() async {
     try {
-      print('🔐 GoogleSignInController: Starting sign in...');
+
 
       _isLoading = true;
       _error = null;
@@ -109,19 +104,17 @@ class GoogleSignInController extends ChangeNotifier {
       if (userInfo != null) {
         _userData = userInfo;
         _error = null;
-        print(
-            '✅ GoogleSignInController: Sign in successful for: ${userInfo['email']}');
+
       } else {
         _error = 'Sign in failed';
-        print(
-            '❌ GoogleSignInController: Sign in failed - No user data returned');
+
       }
 
       _isLoading = false;
       notifyListeners();
       return userInfo;
     } catch (e) {
-      print('❌ GoogleSignInController: Error during sign in: $e');
+
       _error = e.toString();
       _isLoading = false;
       notifyListeners();
@@ -131,7 +124,7 @@ class GoogleSignInController extends ChangeNotifier {
 
   Future<void> signOut() async {
     try {
-      print('🚪 GoogleSignInController: Starting sign out...');
+
 
       await _authService.signOut();
 
@@ -140,10 +133,10 @@ class GoogleSignInController extends ChangeNotifier {
       _error = null;
       _isLoading = false;
 
-      print('✅ GoogleSignInController: Sign out completed - State cleared');
+
       notifyListeners();
     } catch (e) {
-      print('❌ GoogleSignInController: Error during sign out: $e');
+
       _error = e.toString();
       notifyListeners();
     }
@@ -158,7 +151,7 @@ class GoogleSignInController extends ChangeNotifier {
   /// **FIXED: Force refresh authentication state after account switch**
   Future<void> refreshAuthState() async {
     try {
-      print('🔄 GoogleSignInController: Refreshing authentication state...');
+
 
       _isLoading = true;
       notifyListeners();
@@ -167,18 +160,17 @@ class GoogleSignInController extends ChangeNotifier {
       _userData = await _authService.getUserData();
 
       if (_userData != null) {
-        print(
-            '✅ GoogleSignInController: Auth state refreshed for: ${_userData?['email']}');
+
         _error = null;
       } else {
-        print('⚠️ GoogleSignInController: No user data found after refresh');
+
         _error = 'No authentication data found';
       }
 
       _isLoading = false;
       notifyListeners();
     } catch (e) {
-      print('❌ GoogleSignInController: Error refreshing auth state: $e');
+
       _error = e.toString();
       _isLoading = false;
       notifyListeners();
@@ -192,10 +184,10 @@ class GoogleSignInController extends ChangeNotifier {
       if (freshData != null) {
         _userData = freshData;
         notifyListeners();
-        print('✅ GoogleSignInController: User data refreshed from backend');
+
       }
     } catch (e) {
-      print('⚠️ GoogleSignInController: Error refreshing user data: $e');
+
       // Keep cached data on error
     }
   }

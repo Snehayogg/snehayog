@@ -8,6 +8,8 @@ import 'package:vayu/core/managers/smart_cache_manager.dart';
 import 'package:vayu/core/managers/video_controller_manager.dart';
 import 'package:vayu/services/platform_id_service.dart';
 
+import 'package:hive_flutter/hive_flutter.dart';
+
 class VideoProvider extends ChangeNotifier {
   final VideoService _videoService = VideoService();
 
@@ -33,12 +35,12 @@ class VideoProvider extends ChangeNotifier {
     // Prevent multiple simultaneous calls
     if (_loadState == VideoLoadState.loading ||
         _loadState == VideoLoadState.loadingMore) {
-      print('⚠️ VideoProvider: Already loading videos, skipping request');
+
       return;
     }
 
     if (!_hasMore && !isInitialLoad) {
-      print('⚠️ VideoProvider: No more videos to load');
+
       return;
     }
 
@@ -48,17 +50,49 @@ class VideoProvider extends ChangeNotifier {
       _currentPage = AppConstants.initialPage;
       _videos.clear();
       _hasMore = true;
-      print(
-          '🔄 VideoProvider: VideoType changed to $videoType, resetting pagination');
+
+    }
+
+    // 0) **AGGRESSIVE CACHING (Hive):** Load stale videos immediately (0ms)
+    // This runs synchronously or very fast to show something instantly
+    if (isInitialLoad && _videos.isEmpty) {
+      try {
+        final box = Hive.box('video_feed_cache');
+        if (box.containsKey('stale_video_list')) {
+          final dynamic staleData = box.get('stale_video_list');
+          if (staleData != null) {
+            final List<dynamic> rawList = staleData as List<dynamic>;
+            final staleVideos = _deserializeVideoList(rawList);
+            
+            if (staleVideos.isNotEmpty) {
+              _videos = staleVideos;
+              _loadState = VideoLoadState.loaded; // Show content immediately
+              notifyListeners();
+              
+              // Pre-create first controller for stale video
+              try {
+                final firstVideo = _videos.first;
+                 unawaited(VideoControllerManager().preloadController(0, firstVideo));
+              } catch (_) {}
+              
+              // Continue to fetch fresh data in background...
+              // We set state back to loading to indicate background activity if needed,
+              // but for smooth UX, we might keep it 'loaded' and just update silently?
+              // Let's keep it 'loading' so any spinners know network is active, 
+              // but the list is already populated.
+              _loadState = VideoLoadState.loading; 
+            }
+          }
+        }
+      } catch (e) {
+        // Ignore Hive errors, proceed to normal load
+      }
     }
 
     _setLoadState(
         isInitialLoad ? VideoLoadState.loading : VideoLoadState.loadingMore);
 
     try {
-      print(
-          '🔄 VideoProvider: Loading videos, page: $_currentPage, videoType: $videoType');
-
       // 1) Try instant render from SmartCacheManager (cache-first on initial load)
       final smartCache = SmartCacheManager();
       if (!smartCache.isInitialized) {
@@ -75,7 +109,11 @@ class VideoProvider extends ChangeNotifier {
 
       bool cachedMarkedAsEnd = false;
 
+      // Note: SmartCacheManager is Memory-Only now, so it won't help on restart.
+      // We rely on the Hive block above for restart caching.
+      
       if (isInitialLoad) {
+          // ... (Existing SmartCacheManager logic kept for in-session navigation) ...
         try {
           final cached = await smartCache.peek<Map<String, dynamic>>(
             cacheKey,
@@ -83,36 +121,24 @@ class VideoProvider extends ChangeNotifier {
           );
 
           if (cached != null) {
+             // ... existing logic ...
             final cachedVideos = _deserializeVideoList(cached['videos']);
             if (cachedVideos.isNotEmpty) {
-              print(
-                  '⚡ VideoProvider: Instant render from cache: ${cachedVideos.length} videos');
               _videos = cachedVideos;
-
               final cachedHasMore = cached['hasMore'] as bool? ?? true;
               cachedMarkedAsEnd = !cachedHasMore;
               _hasMore = cachedHasMore;
-
               notifyListeners();
-              // Pre-create first controller for zero-wait playback
+             
               try {
                 final firstVideo = _videos.first;
                 unawaited(
                     VideoControllerManager().preloadController(0, firstVideo));
                 VideoControllerManager().pinIndices({0});
-                print(
-                    '🚀 VideoProvider: Precreating first VideoPlayerController');
-              } catch (e) {
-                print(
-                    '⚠️ VideoProvider: Failed to precreate first controller: $e');
-              }
-              // Keep loadState as loading while fresh data fetches below
+              } catch (e) {}
             }
           }
-        } catch (e) {
-          print(
-              '⚠️ VideoProvider: Cache-first read failed (continuing with network): $e');
-        }
+        } catch (e) {}
       }
 
       // 2) Network fetch for fresh data
@@ -120,7 +146,7 @@ class VideoProvider extends ChangeNotifier {
         cacheKey,
         cacheType: 'videos',
         maxAge: const Duration(minutes: 15),
-        forceRefresh: !isInitialLoad || cachedMarkedAsEnd,
+        forceRefresh: !isInitialLoad || cachedMarkedAsEnd, // Removed forceRefresh on initial if we want cache, but standard logic
         fetchFn: () async {
           final result = await _videoService.getVideos(
             page: _currentPage,
@@ -146,6 +172,7 @@ class VideoProvider extends ChangeNotifier {
       final bool hasMore = response['hasMore'] as bool? ?? false;
 
       if (isInitialLoad) {
+        // Replace stale videos with fresh ones
         _videos = fetchedVideos;
       } else {
         _videos.addAll(fetchedVideos);
@@ -155,18 +182,32 @@ class VideoProvider extends ChangeNotifier {
       _currentPage++;
       _errorMessage = null;
       _setLoadState(VideoLoadState.loaded);
-      print(
-          '✅ VideoProvider: Successfully loaded ${fetchedVideos.length} videos');
+
     } catch (e) {
-      print('❌ VideoProvider: Error loading videos: $e');
       _errorMessage = e.toString();
       _setLoadState(VideoLoadState.error);
     }
   }
 
+  /// **NEW: Save current videos as stale data for next launch**
+  Future<void> saveStaleVideos() async {
+    try {
+      if (_videos.isEmpty) return;
+      
+      // Save top 3 videos
+      final videosToSave = _videos.take(3).map((v) => v.toJson()).toList();
+      
+      final box = Hive.box('video_feed_cache');
+      await box.put('stale_video_list', videosToSave);
+      
+    } catch (e) {
+      // Ignore errors
+    }
+  }
+
   /// Refresh videos (reset and reload)
   Future<void> refreshVideos() async {
-    print('🔄 VideoProvider: Refreshing videos from server...');
+
     _videos.clear();
     _currentPage = AppConstants.initialPage;
     _hasMore = true;
@@ -177,7 +218,7 @@ class VideoProvider extends ChangeNotifier {
   /// Start over - reset pagination and reload from beginning
   /// This allows users to restart the feed after watching all videos
   Future<void> startOver() async {
-    print('🔄 VideoProvider: Starting over - resetting to first page...');
+
     _videos.clear();
     _currentPage = AppConstants.initialPage;
     _hasMore = true;
@@ -188,9 +229,9 @@ class VideoProvider extends ChangeNotifier {
     try {
       final cacheManager = SmartCacheManager();
       await cacheManager.invalidateVideoCache(videoType: _currentVideoType);
-      print('🗑️ VideoProvider: Invalidated video cache for fresh start');
+
     } catch (e) {
-      print('⚠️ VideoProvider: Failed to invalidate cache: $e');
+
     }
 
     await loadVideos(isInitialLoad: true, videoType: _currentVideoType);
@@ -259,7 +300,7 @@ class VideoProvider extends ChangeNotifier {
   /// Delete video by ID (for real-time updates)
   Future<void> deleteVideo(String videoId) async {
     try {
-      print('🗑️ VideoProvider: Deleting video: $videoId');
+
 
       // Remove video from local list immediately for instant UI update
       final index = _videos.indexWhere((v) => v.id == videoId);
@@ -267,18 +308,18 @@ class VideoProvider extends ChangeNotifier {
         _videos.removeAt(index);
         notifyListeners(); // Update UI immediately
 
-        print('✅ VideoProvider: Video removed from local list, UI updated');
+
       }
 
       // Call backend to delete video
       await _videoService.deleteVideo(videoId);
-      print('✅ VideoProvider: Video deleted from backend successfully');
+
     } catch (e) {
-      print('❌ VideoProvider: Error deleting video: $e');
+
 
       // If backend deletion failed, restore the video in the list
       await refreshVideos();
-      print('🔄 VideoProvider: Restored video list after deletion failure');
+
 
       _errorMessage = 'Failed to delete video: $e';
       notifyListeners();
@@ -288,7 +329,7 @@ class VideoProvider extends ChangeNotifier {
   /// Bulk delete videos (for real-time updates)
   Future<void> bulkDeleteVideos(List<String> videoIds) async {
     try {
-      print('🗑️ VideoProvider: Bulk deleting ${videoIds.length} videos');
+
 
       // Remove videos from local list immediately for instant UI update
       final videosToRemove = <VideoModel>[];
@@ -301,7 +342,7 @@ class VideoProvider extends ChangeNotifier {
       }
 
       notifyListeners(); // Update UI immediately
-      print('✅ VideoProvider: Videos removed from local list, UI updated');
+
 
       // Call backend to delete videos
       bool allDeleted = true;
@@ -310,35 +351,34 @@ class VideoProvider extends ChangeNotifier {
           final success = await _videoService.deleteVideo(videoId);
           if (!success) {
             allDeleted = false;
-            print('❌ VideoProvider: Failed to delete video: $videoId');
+
           }
         } catch (e) {
           allDeleted = false;
-          print('❌ VideoProvider: Error deleting video $videoId: $e');
+
         }
       }
 
       if (allDeleted) {
-        print('✅ VideoProvider: Videos deleted from backend successfully');
+
 
         // **NEW: Invalidate SmartCacheManager cache to prevent deleted videos from showing**
         try {
           final cacheManager = SmartCacheManager();
           await cacheManager.invalidateVideoCache(videoType: _currentVideoType);
-          print('🗑️ VideoProvider: Invalidated video cache after deletion');
+
         } catch (e) {
-          print('⚠️ VideoProvider: Failed to invalidate cache: $e');
+
         }
       } else {
         throw Exception('Some videos failed to delete');
       }
     } catch (e) {
-      print('❌ VideoProvider: Error bulk deleting videos: $e');
+
 
       // If backend deletion failed, restore the videos in the list
       await refreshVideos();
-      print(
-          '🔄 VideoProvider: Restored video list after bulk deletion failure');
+
 
       _errorMessage = 'Failed to delete videos: $e';
       notifyListeners();
@@ -351,7 +391,7 @@ class VideoProvider extends ChangeNotifier {
     if (index != -1) {
       _videos.removeAt(index);
       notifyListeners();
-      print('✅ VideoProvider: Video removed from list: $videoId');
+
     }
   }
 
@@ -367,7 +407,7 @@ class VideoProvider extends ChangeNotifier {
     }
     if (removedCount > 0) {
       notifyListeners();
-      print('✅ VideoProvider: Removed $removedCount videos from list');
+
     }
   }
 
@@ -375,7 +415,7 @@ class VideoProvider extends ChangeNotifier {
   void addVideo(VideoModel video) {
     _videos.insert(0, video); // Add at the beginning
     notifyListeners();
-    print('✅ VideoProvider: Video added to list: ${video.videoName}');
+
   }
 
   /// Update video in list (for edits)
@@ -384,7 +424,7 @@ class VideoProvider extends ChangeNotifier {
     if (index != -1) {
       _videos[index] = video;
       notifyListeners();
-      print('✅ VideoProvider: Video updated in list: ${video.videoName}');
+
     }
   }
 
@@ -396,24 +436,24 @@ class VideoProvider extends ChangeNotifier {
 
   /// **FIXED: Clear all videos and reset state on logout**
   void clearAllVideos() {
-    print('🗑️ VideoProvider: Clearing all videos and resetting state...');
+
     _videos.clear();
     _currentPage = AppConstants.initialPage;
     _hasMore = true;
     _errorMessage = null;
     _loadState = VideoLoadState.initial;
-    print('✅ VideoProvider: All videos cleared and state reset');
+
     notifyListeners();
   }
 
   /// Filter videos by type (yug/vayu)
   Future<void> filterVideosByType(String videoType) async {
     if (videoType != 'yog' && videoType != 'vayu') {
-      print('⚠️ VideoProvider: Invalid videoType: $videoType');
+
       return;
     }
 
-    print('🔍 VideoProvider: Filtering videos by type: $videoType');
+
     await loadVideos(isInitialLoad: true, videoType: videoType);
   }
 
@@ -429,7 +469,7 @@ class VideoProvider extends ChangeNotifier {
 
   /// Load all videos (no filter)
   Future<void> loadAllVideos() async {
-    print('🔍 VideoProvider: Loading all videos (no filter)');
+
     await loadVideos(isInitialLoad: true, videoType: null);
   }
 
@@ -452,14 +492,14 @@ class VideoProvider extends ChangeNotifier {
           try {
             parsedVideos.add(VideoModel.fromJson(item));
           } catch (e) {
-            print('⚠️ VideoProvider: Failed to deserialize cached video: $e');
+
           }
         } else if (item is Map) {
           try {
             parsedVideos
                 .add(VideoModel.fromJson(Map<String, dynamic>.from(item)));
           } catch (e) {
-            print('⚠️ VideoProvider: Failed to deserialize cached video: $e');
+
           }
         }
       }

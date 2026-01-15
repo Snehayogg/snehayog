@@ -37,11 +37,11 @@ router.get('/health', (req, res) => {
 // **NEW: Get creator's payout profile with dynamic thresholds**
 router.get('/profile', verifyToken, async (req, res) => {
   try {
-    console.log('🔍 Profile request received');
-    console.log('🔍 User from token:', req.user);
+    // console.log('🔍 Profile request received');
+    // console.log('🔍 User from token:', req.user);
     
     const creatorId = req.user.id;
-    console.log('🔍 Creator ID:', creatorId);
+    // console.log('🔍 Creator ID:', creatorId);
     
     const user = await User.findOne({ googleId: creatorId });
     
@@ -50,16 +50,7 @@ router.get('/profile', verifyToken, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    console.log('✅ User found:', {
-      id: user._id,
-      googleId: user.googleId,
-      name: user.name,
-      email: user.email,
-      country: user.country,
-      preferredCurrency: user.preferredCurrency,
-      preferredPaymentMethod: user.preferredPaymentMethod,
-      hasPaymentDetails: !!user.paymentDetails
-    });
+    // console.log('✅ User found:', { ... });
 
     // **NEW: Check if this is first payout**
     const existingPayouts = await CreatorPayout.find({ 
@@ -70,11 +61,11 @@ router.get('/profile', verifyToken, async (req, res) => {
     const isFirstPayout = existingPayouts === 0;
     const payoutCount = existingPayouts;
 
-    console.log('🔍 Payout info:', {
+    /* console.log('🔍 Payout info:', {
       existingPayouts,
       isFirstPayout,
       payoutCount
-    });
+    }); */
 
     const response = {
       creator: {
@@ -113,8 +104,8 @@ router.get('/profile', verifyToken, async (req, res) => {
       isFirstPayout: isFirstPayout
     };
 
-    console.log('✅ Profile response prepared:', response);
-    console.log('🔍 Payment details in response:', response.paymentDetails);
+    // console.log('✅ Profile response prepared:', response);
+    // console.log('🔍 Payment details in response:', response.paymentDetails);
     res.json(response);
   } catch (error) {
     console.error('❌ Payout profile error:', error);
@@ -126,19 +117,10 @@ router.get('/profile', verifyToken, async (req, res) => {
 // **NEW: Update creator's payment method**
 router.put('/payment-method', verifyToken, async (req, res) => {
   try {
-    console.log('🔍 Payment method update request received');
-    console.log('🔍 Request body:', req.body);
-    console.log('🔍 User from token:', req.user);
+    // console.log('🔍 Payment method update request received');
     
     const creatorId = req.user.id;
     const { paymentMethod, paymentDetails, currency, country, taxInfo } = req.body;
-
-    console.log('🔍 Creator ID:', creatorId);
-    console.log('🔍 Payment method:', paymentMethod);
-    console.log('🔍 Payment details:', paymentDetails);
-    console.log('🔍 Currency:', currency);
-    console.log('🔍 Country:', country);
-    console.log('🔍 Tax info:', taxInfo);
 
     // Find user by Google ID
     const user = await User.findOne({ googleId: creatorId });
@@ -147,16 +129,11 @@ router.put('/payment-method', verifyToken, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    console.log('✅ User found:', {
-      id: user._id,
-      googleId: user.googleId,
-      name: user.name,
-      email: user.email
-    });
+    // console.log('✅ User found:', { ... });
 
     // Validate payment method based on country
     const availableMethods = _getAvailablePaymentMethods(country || user?.country || 'IN');
-    console.log('🔍 Available payment methods for country', country || user?.country || 'IN', ':', availableMethods);
+    // console.log('🔍 Available payment methods for country', country || user?.country || 'IN', ':', availableMethods);
     
     if (!availableMethods.includes(paymentMethod)) {
       console.log('❌ Payment method not available:', paymentMethod);
@@ -165,13 +142,12 @@ router.put('/payment-method', verifyToken, async (req, res) => {
       });
     }
 
-    console.log('✅ Payment method validation passed');
+    // console.log('✅ Payment method validation passed');
 
     // Prepare update data
     const updateData = {
       preferredPaymentMethod: paymentMethod,
       paymentDetails: paymentDetails,
-      preferredCurrency: currency,
       country: country
     };
 
@@ -180,7 +156,7 @@ router.put('/payment-method', verifyToken, async (req, res) => {
       updateData.taxInfo = taxInfo;
     }
 
-    console.log('🔍 Update data:', updateData);
+    // console.log('🔍 Update data:', updateData);
 
     // Update user's payment preferences
     const updatedUser = await User.findByIdAndUpdate(
@@ -194,12 +170,11 @@ router.put('/payment-method', verifyToken, async (req, res) => {
       return res.status(500).json({ error: 'Failed to update user profile' });
     }
 
-    console.log('✅ User updated successfully:', {
+    /* console.log('✅ User updated successfully:', {
       id: updatedUser._id,
       preferredPaymentMethod: updatedUser.preferredPaymentMethod,
-      preferredCurrency: updatedUser.preferredCurrency,
       country: updatedUser.country
-    });
+    }); */
 
     res.json({ message: 'Payment method updated successfully' });
   } catch (error) {

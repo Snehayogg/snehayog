@@ -11,8 +11,12 @@ import User from '../models/User.js';
 let hybridVideoService;
 import { verifyToken } from '../utils/verifytoken.js';
 import cloudflareR2Service from '../services/cloudflareR2Service.js';
+import { uploadLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
+
+// **NEW: Apply Upload Rate Limiter to all routes in this file**
+router.use(uploadLimiter);
 
 /**
  * Calculate SHA256 hash of a file
@@ -432,7 +436,7 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
         width: 854,
         height: 480
       },
-      bitrate: '800k',
+      bitrate: '550k',
       generatedAt: new Date()
     }];
 

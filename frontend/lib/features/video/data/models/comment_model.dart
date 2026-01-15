@@ -11,7 +11,6 @@ class CommentModel extends CommentEntity {
     required super.createdAt,
   });
 
-
   factory CommentModel.fromJson(Map<String, dynamic> json) {
     return CommentModel(
       id: json['_id'] ?? json['id'] ?? '',
@@ -36,7 +35,6 @@ class CommentModel extends CommentEntity {
   }
 
   /// Creates a copy of this model with updated values
-  @override
   CommentModel copyWith({
     String? id,
     String? text,

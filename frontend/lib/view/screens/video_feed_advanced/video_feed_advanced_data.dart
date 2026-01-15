@@ -1,12 +1,6 @@
 part of 'package:vayu/view/screens/video_feed_advanced.dart';
 
 extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
-  /// **ISOLATE HELPER: Runs heavy ranking computation in isolate**
-  /// This prevents UI freezes by moving VideoEngagementRanker.rankVideos() off the main thread
-  Future<List<VideoModel>> _rankVideosInIsolate(List<VideoModel> videos) async {
-    // Use compute to run heavy ranking in isolate
-    return await compute(_rankVideosIsolateHelper, videos);
-  }
 
   Future<void> _loadVideos(
       {int page = 1,
@@ -18,116 +12,99 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
           '🔄 Loading videos - Page: $page, Append: $append, UseCache: $useCache');
       _printCacheStatus();
 
-      // **NEW: Try to load from cache first (instant) if not appending and cache is enabled**
-      // **OPTIMIZATION: Skip cache if clearSession is true (fresh videos requested)**
-      if (useCache && !append && page == 1 && !clearSession) {
-        try {
-          await _cacheManager.initialize();
-          final cacheKey = 'videos_page_${page}_${widget.videoType ?? 'yog'}';
 
-          // **Use peek to get cached data without triggering fetch**
-          final cachedData = await _cacheManager.peek<Map<String, dynamic>>(
-            cacheKey,
-            cacheType: 'videos',
-            allowStale: true, // Allow stale cache for instant load
-          );
 
-          if (cachedData != null && cachedData['videos'] != null) {
-            final cachedVideos =
-                (cachedData['videos'] as List).cast<VideoModel>();
-            if (cachedVideos.isNotEmpty) {
-              AppLogger.log(
-                  '✅ Loaded ${cachedVideos.length} videos from cache (instant)');
+    // **CHANGED: SKIP Standard Cache Load here**
+    // We want to avoid "Proxy Miss" (Old video buffering).
+    // If Instant Splash failed, go straight to API.
+    
+    // **AGGRESSIVE CACHING: Try loading stale videos FIRST (0ms)**
+    if (page == 1 && !append) {
+      AppLogger.log('🚀 Aggressive Caching: Checking for stale/offline videos... (0ms target)');
+      try {
+        final feedLocalDataSource = FeedLocalDataSource();
+        var cachedVideos =
+            await feedLocalDataSource.getCachedFeed(page, widget.videoType);
 
-              // Restore state from saved preferences
-              final prefs = await SharedPreferences.getInstance();
-              final savedVideoId = prefs.getString(_kSavedVideoIdKey);
+        // **FALLBACK: Check VideoLocalDataSource (used by Splash Prefetch & VideoService)**
+        if (cachedVideos == null || cachedVideos.isEmpty) {
+           try {
+             final videoLocalDataSource = VideoLocalDataSource();
+             // Map null videoType to 'yog' or 'vayu' default
+             final typeKey = widget.videoType ?? 'yog';
+             cachedVideos = await videoLocalDataSource.getCachedVideoFeed(typeKey);
+             if (cachedVideos != null && cachedVideos.isNotEmpty) {
+                AppLogger.log('✅ Aggressive Caching: Loaded ${cachedVideos.length} videos from Global Cache (Splash Prefetch)');
+             }
+           } catch (_) {}
+        }
 
-              // Rank cached videos (async - runs in isolate)
-              final rankedVideos = await _rankVideosWithEngagement(
-                cachedVideos,
-                preserveVideoKey: savedVideoId != null
-                    ? cachedVideos
-                        .firstWhere((v) => v.id == savedVideoId,
-                            orElse: () => cachedVideos.first)
-                        .id
-                    : null,
-              );
+        if (cachedVideos != null && cachedVideos.isEmpty) {
+             cachedVideos = null; // Normalize empty list to null for check below
+        }
 
-              // **CRITICAL FIX: If all cached videos were filtered out, use original cached videos as fallback**
-              final videosToUse =
-                  rankedVideos.isEmpty && cachedVideos.isNotEmpty
-                      ? cachedVideos
-                      : rankedVideos;
-
-              if (rankedVideos.isEmpty && cachedVideos.isNotEmpty) {
-                AppLogger.log(
-                    '⚠️ VideoFeedAdvanced: All ${cachedVideos.length} cached videos were filtered out! Using original cached videos as fallback.');
+        if (cachedVideos != null) {
+          AppLogger.log(
+              '✅ Aggressive Caching: Loaded ${cachedVideos.length} stale videos immediately');
+          if (mounted) {
+            safeSetState(() {
+              _videos = cachedVideos!; // Force non-null
+              _currentIndex = 0;
+              // Don't set isLoading=false yet, keep spinner if needed, 
+              // or set it false to show videos immediately? User said "show those stale videos immediately".
+              // So let's show them.
+              _isLoading = false; 
+              _errorMessage = null; 
+            });
+            // Try to autoplay first one safely
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && _videos.isNotEmpty) {
+                 _preloadVideo(0);
+                 _tryAutoplayCurrent();
               }
-
-              // Find saved video index
-              int? restoredIndex;
-              if (savedVideoId != null) {
-                restoredIndex =
-                    videosToUse.indexWhere((v) => v.id == savedVideoId);
-                if (restoredIndex == -1) restoredIndex = null;
-              }
-
-              if (mounted) {
-                // **OPTIMIZED: Use ValueNotifiers for granular updates**
-                _videos = videosToUse;
-                if (restoredIndex != null) {
-                  _currentIndex = restoredIndex;
-                } else {
-                  _currentIndex = 0;
-                }
-                _isLoading = false;
-
-                // Jump to saved index
-                if (restoredIndex != null && _pageController.hasClients) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (_pageController.hasClients) {
-                      _pageController.jumpToPage(restoredIndex!);
-                    }
-                  });
-                }
-
-                // **OPTIMIZED: Preload first video immediately for instant playback**
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted && _videos.isNotEmpty) {
-                    // Preload current video immediately (don't wait)
-                    _preloadVideo(_currentIndex);
-
-                    // Try autoplay immediately (no delay - autoplay checks controller readiness)
-                    _tryAutoplayCurrent();
-                  }
-                });
-
-                AppLogger.log(
-                    '✅ Instant resume: Showing cached videos, refreshing in background');
-              }
-
-              // **Load fresh data in background (non-blocking)**
-              _loadVideosFromAPI(
-                      page: page, append: append, clearSession: clearSession)
-                  .catchError((e) {
-                AppLogger.log('⚠️ Background refresh failed: $e');
-              });
-              return;
-            }
+            });
           }
-        } catch (e) {
-          AppLogger.log('⚠️ Error loading from cache: $e, falling back to API');
+        }
+      } catch (e) {
+         AppLogger.log('⚠️ Aggressive Caching failed: $e');
+      }
+    }
+
+    // **Load from API directly**
+    // This will fetch FRESH videos in background and update the list (replacing stale ones)
+    await _loadVideosFromAPI(
+        page: page, append: append, clearSession: clearSession);
+
+    // **OFFLINE FALLBACK: If API failed (videos empty), TRY Cache**
+    if (_videos.isEmpty && !append && page == 1) {
+      AppLogger.log(
+          '⚠️ API failed or returned empty. Attempting Offline Fallback via Hive Cache...');
+      final feedLocalDataSource = FeedLocalDataSource();
+      final cachedVideos =
+          await feedLocalDataSource.getCachedFeed(page, widget.videoType);
+
+      if (cachedVideos != null && cachedVideos.isNotEmpty) {
+        AppLogger.log(
+            '✅ OFFLINE FALLBACK: Loaded ${cachedVideos.length} videos from Hive cache');
+        if (mounted) {
+          safeSetState(() {
+            _videos = cachedVideos;
+            _currentIndex = 0;
+            _isLoading = false;
+            _errorMessage = null; // Clear API error since we have cache
+          });
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _videos.isNotEmpty) {
+              _preloadVideo(0);
+              _tryAutoplayCurrent();
+            }
+          });
         }
       }
-
-      // **FALLBACK: Load from API directly**
-      await _loadVideosFromAPI(
-          page: page, append: append, clearSession: clearSession);
+    }
     } catch (e) {
       AppLogger.log('❌ Error loading videos: $e');
       if (mounted) {
-        // **OPTIMIZED: Use ValueNotifiers for granular updates**
         _isLoading = false;
         _errorMessage = e.toString();
       }
@@ -136,7 +113,9 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
 
   /// **NEW: Load videos from API (separate method for background refresh)**
   Future<void> _loadVideosFromAPI(
-      {int page = 1, bool append = false, bool clearSession = false}) async {
+      {int page = 1,
+      bool append = false,
+      bool clearSession = false}) async {
     // #region agent log
     _debugLog(
         'video_feed_advanced_data.dart:109',
@@ -217,46 +196,41 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
           AppLogger.log('❌ VideoFeedAdvanced: response["videos"] is NULL!');
           newVideos = <VideoModel>[];
         } else if (videosList is List) {
-          // **FIX: Convert List<Map<String, dynamic>> to List<VideoModel> using fromJson**
           AppLogger.log(
               '🔍 VideoFeedAdvanced: videosList is List, length: ${videosList.length}');
+          
           if (videosList.isNotEmpty) {
-            final firstItem = videosList.first;
-            AppLogger.log(
-                '🔍 VideoFeedAdvanced: First item type: ${firstItem.runtimeType}');
-            AppLogger.log(
-                '🔍 VideoFeedAdvanced: First item is VideoModel: ${firstItem is VideoModel}');
-            AppLogger.log(
-                '🔍 VideoFeedAdvanced: First item is Map: ${firstItem is Map<String, dynamic>}');
-
-            if (firstItem is VideoModel) {
-              // Already VideoModel objects (VideoService already converts them)
-              newVideos = videosList.cast<VideoModel>();
-              AppLogger.log(
-                  '✅ VideoFeedAdvanced: Videos already VideoModel objects (from VideoService), length: ${newVideos.length}');
-            } else if (firstItem is Map<String, dynamic>) {
-              // Convert Map to VideoModel using fromJson (most common case after HTTP)
-              newVideos = videosList
+             // **PERFORMANCE OPTIMIZATION: Parse in background Isolate**
+             // Parsing large JSON lists frames on the UI thread. We offload this to a separate thread.
+             
+             // First, ensure the list is List<dynamic> or List<Map<String, dynamic>>
+             // We pass the raw list to the isolate
+             try {
+                // Must act as List<dynamic> for the isolate, but we might need to cast elements if they are not raw standard types
+                final rawList = videosList; 
+                
+                // Using compute to run parseVideos in a background isolate
+                newVideos = await compute(_parseVideosInIsolate, rawList);
+                
+                AppLogger.log(
+                  '✅ VideoFeedAdvanced: Parsed ${newVideos.length} videos in background isolate',
+                );
+             } catch (isolateError) {
+                AppLogger.log('❌ VideoFeedAdvanced: Isolate parsing failed: $isolateError. Falling back to main thread.');
+                // Fallback to main thread parsing if isolate fails (e.g. if objects are not transferable)
+                 newVideos = videosList
                   .map((item) {
-                    try {
-                      return VideoModel.fromJson(item as Map<String, dynamic>);
-                    } catch (e) {
-                      AppLogger.log(
-                          '❌ VideoFeedAdvanced: Error parsing video: $e');
-                      AppLogger.log(
-                          '   Video data: ${item.toString().substring(0, 200)}');
-                      return null;
+                    if (item is VideoModel) return item;
+                    if (item is Map<String, dynamic>) {
+                        try {
+                          return VideoModel.fromJson(item);
+                        } catch (_) { return null; }
                     }
+                    return null;
                   })
                   .whereType<VideoModel>()
                   .toList();
-              AppLogger.log(
-                  '✅ VideoFeedAdvanced: Converted ${newVideos.length} videos from Map to VideoModel (${videosList.length - newVideos.length} failed to parse)');
-            } else {
-              AppLogger.log(
-                  '❌ VideoFeedAdvanced: Unknown video item type: ${firstItem.runtimeType}');
-              newVideos = <VideoModel>[];
-            }
+             }
           } else {
             newVideos = <VideoModel>[];
             AppLogger.log('⚠️ VideoFeedAdvanced: Videos list is empty');
@@ -326,6 +300,26 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       AppLogger.log('   Page: $currentPage / $totalPages');
       AppLogger.log('   Has More: $hasMore');
       AppLogger.log('   Total Videos Available: $total');
+
+      // **NEW: Cache loaded videos to Hive**
+      if (newVideos.isNotEmpty && !clearSession) {
+        try {
+          final feedLocalDataSource = FeedLocalDataSource();
+          // ignore: unawaited_futures
+          feedLocalDataSource.cacheFeed(
+            currentPage,
+            widget.videoType,
+            newVideos,
+          );
+        } catch (e) {
+          AppLogger.log('⚠️ FeedLocalDataSource: Failed to cache feed: $e');
+        }
+      }
+
+      // **SIMPLIFIED: No Deduplication**
+      // Trust backend to return unique videos
+      // seenIds/uniqueNewVideos logic removed
+
 
       if (newVideos.isEmpty && page == 1) {
         AppLogger.log(
@@ -534,266 +528,117 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       if (!mounted) return;
 
       if (append) {
-        final rankedNewVideos = _filterAndRankNewVideos(newVideos);
+        // **SIMPLIFIED: Direct append (Backend is source of truth)**
+        // **SIMPLIFIED: Direct Append without deduplication**
+        final validNewVideos = newVideos;
 
-        // **OPTIMIZED: Use ValueNotifiers for granular updates**
-        if (rankedNewVideos.isNotEmpty) {
-          _videos.addAll(rankedNewVideos);
-
-          // **MEMORY MANAGEMENT: Cleanup old videos to prevent memory issues**
-          // Remove videos that are far from current index to keep memory usage low
-          _cleanupOldVideosFromList();
-        } else {
-          // **FIXED: If all videos filtered out, still update hasMore based on backend response**
-          // This prevents infinite loading attempts when user has watched all videos
-          AppLogger.log(
-            '⚠️ No new videos after filtering, but backend says hasMore=$hasMore',
-          );
+          
+        if (mounted) {
+          safeSetState(() {
+            if (validNewVideos.isNotEmpty) {
+               _videos.addAll(validNewVideos);
+               
+               // **MEMORY MANAGEMENT: Cleanup old videos**
+               _cleanupOldVideosFromList();
+            } else if (_hasMore && newVideos.isNotEmpty) {
+               // **CRITICAL: If backend sent videos but ALL were duplicates, fetch next page immediately**
+               // This prevents "End of Feed" false positive
+               AppLogger.log('⚠️ VideoFeedAdvanced: All appended videos were duplicates. Fetching next page...');
+               Future.microtask(() => _loadMoreVideos());
+            }
+            
+            _errorMessage = null; 
+            _currentPage = currentPage;
+            _hasMore = hasMore;
+            _totalVideos = total;
+            
+            _markCurrentVideoAsSeen();
+          });
         }
-        _currentPage = currentPage;
-        // **FIXED: hasMore should respect backend response, but also check if we got videos**
-        // If backend says hasMore but we filtered all out, we might need to stop
-        final bool inferredHasMore = rankedNewVideos.isNotEmpty
-            ? (hasMore || newVideos.length == _videosPerPage)
-            : hasMore &&
-                newVideos.length ==
-                    _videosPerPage; // Only continue if backend returned full page
-        _hasMore = inferredHasMore;
-        _totalVideos = total;
-        // **CRITICAL FIX: Clear error message when videos are successfully loaded**
-        if (_videos.isNotEmpty) {
-          _errorMessage = null;
-        }
-
-        _markCurrentVideoAsSeen();
-
-        _markCurrentVideoAsSeen();
       } else {
-        // **NEW: Try to preserve current video ID when refreshing from background**
-        String? preserveVideoId;
-        if (_currentIndex >= 0 && _currentIndex < _videos.length) {
-          preserveVideoId = _videos[_currentIndex].id;
-        }
-
-        // **FALLBACK: Try to get from saved preferences if current index is invalid**
-        if (preserveVideoId == null) {
-          try {
-            final prefs = await SharedPreferences.getInstance();
-            preserveVideoId = prefs.getString(_kSavedVideoIdKey);
-          } catch (_) {}
-        }
-
-        // #region agent log
-        _debugLog(
-            'video_feed_advanced_data.dart:310',
-            'Before ranking',
-            {
-              'inputVideosCount': newVideos.length,
-              'preserveKey': preserveKey,
-              'preserveVideoId': preserveVideoId,
-            },
-            'A');
-        // #endregion
-
-        AppLogger.log(
-            '🔍 VideoFeedAdvanced: Before ranking - newVideos.length: ${newVideos.length}');
-        // **IMPROVED: Remove duplicates BEFORE ranking to ensure no duplicates in feed**
-        final uniqueNewVideos = <String, VideoModel>{};
-        for (final video in newVideos) {
-          final key = videoIdentityKey(video);
-          if (key.isNotEmpty && !uniqueNewVideos.containsKey(key)) {
-            uniqueNewVideos[key] = video;
-          }
-        }
-
-        final deduplicatedVideos = uniqueNewVideos.values.toList();
-        AppLogger.log(
-            '🔍 Deduplication: ${newVideos.length} videos → ${deduplicatedVideos.length} unique videos');
-
-        final rankedVideos = await _rankVideosWithEngagement(
-          deduplicatedVideos,
-          preserveVideoKey: preserveKey ?? (preserveVideoId),
-        );
-        AppLogger.log(
-            '🔍 VideoFeedAdvanced: After ranking - rankedVideos.length: ${rankedVideos.length}');
-
-        // #region agent log
-        _debugLog(
-            'video_feed_advanced_data.dart:318',
-            'After ranking',
-            {
-              'inputVideosCount': newVideos.length,
-              'rankedVideosCount': rankedVideos.length,
-              'filteredOut': newVideos.length - rankedVideos.length,
-            },
-            'A');
-        // #endregion
-
-        // **DEBUG: Log video counts after ranking**
-        AppLogger.log('🔍 VideoFeedAdvanced: After ranking:');
-        AppLogger.log('   Input videos: ${newVideos.length}');
-        AppLogger.log('   Ranked videos: ${rankedVideos.length}');
-
-        // **CRITICAL FIX: If all videos were filtered out, use original videos as fallback**
-        final videosToUse = rankedVideos.isEmpty && newVideos.isNotEmpty
-            ? newVideos
-            : rankedVideos;
-
-        if (rankedVideos.isEmpty && newVideos.isNotEmpty) {
-          AppLogger.log(
-              '   ⚠️ WARNING: All ${newVideos.length} videos were filtered out! Using original videos as fallback.');
-          if (newVideos.isNotEmpty) {
-            AppLogger.log('   First video ID: ${newVideos.first.id}');
-            AppLogger.log(
-                '   First video key: ${videoIdentityKey(newVideos.first)}');
-            AppLogger.log(
-                '   First video videoUrl: ${newVideos.first.videoUrl}');
-            AppLogger.log(
-                '   First video videoName: ${newVideos.first.videoName}');
-          }
-        }
-
-        int? nextIndex;
-        if (preserveKey != null) {
-          final candidateIndex = videosToUse.indexWhere(
-            (video) => videoIdentityKey(video) == preserveKey,
-          );
-          if (candidateIndex != -1) {
-            nextIndex = candidateIndex;
-          }
-        } else if (preserveVideoId != null) {
-          // **NEW: Try to find by video ID**
-          final candidateIndex = videosToUse.indexWhere(
-            (video) => video.id == preserveVideoId,
-          );
-          if (candidateIndex != -1) {
-            nextIndex = candidateIndex;
-          }
+        // **SEAMLESS MERGE STRATEGY (User Request):**
+        // Instead of replacing cached videos ("Swap"), we APPEND fresh videos to the end.
+        // This ensures the user continues watching cached content smoothly, and can scroll down to new content.
+        
+        final videosToUse = newVideos;
+        
+        if (videosToUse.isEmpty) {
+           AppLogger.log('⚠️ VideoFeedAdvanced: API returned empty list on refresh');
         }
 
         if (mounted) {
-          // **OPTIMIZED: Use ValueNotifiers for granular updates**
-          _videos = videosToUse;
+          // Check if we have cached videos currently shown
+          final hasCachedVideos = _videos.isNotEmpty;
+          
+          if (hasCachedVideos) {
+             // **SCENARIO 1: Cache exists -> MERGE (Append)**
+             // Filter duplicates (fresh videos that might essentially be the same as cached ones)
+             // We use ID or IdentityKey for deduplication
+             final currentIds = _videos.map((v) => v.id).toSet();
+             final uniqueNewVideos = videosToUse.where((v) => !currentIds.contains(v.id)).toList();
+             
+             if (uniqueNewVideos.isNotEmpty) {
+                // **APPEND** to the end
+                // Do NOT reset _currentIndex (keep user watching current video)
+                _videos.addAll(uniqueNewVideos);
+                
+                AppLogger.log(
+                   '✅ VideoFeedAdvanced: SEAMLESS MERGE - Appended ${uniqueNewVideos.length} fresh videos to existing ${_videos.length - uniqueNewVideos.length} cached videos.',
+                );
+             } else {
+                AppLogger.log('ℹ️ VideoFeedAdvanced: All fresh videos were duplicates of cached videos. No changes made.');
+             }
+             
+             // Ensure UI state matches
+             _errorMessage = null;
+             _currentPage = currentPage; 
+             _hasMore = hasMore || uniqueNewVideos.isNotEmpty; 
+             _totalVideos = total;
+             
+             // No page jump needed since we just appended to the end
+             
+          } else {
+             // **SCENARIO 2: No Cache (Cold Start) -> REPLACE**
+             // Standard behavior
+             _videos = videosToUse;
+             _currentIndex = 0;
+             
+             if (_pageController.hasClients) {
+                _pageController.jumpToPage(0);
+             }
+             
+             AppLogger.log(
+               '✅ VideoFeedAdvanced: Fresh Load - Replaced empty list with ${videosToUse.length} videos.',
+             );
+          }
+
           // **DEBUG: Log final state**
           AppLogger.log('✅ VideoFeedAdvanced: State updated:');
           AppLogger.log('   _videos.length: ${_videos.length}');
           AppLogger.log('   _errorMessage: $_errorMessage');
           AppLogger.log('   _isLoading: $_isLoading');
           AppLogger.log('   _currentIndex: $_currentIndex');
-
-          if (nextIndex != null) {
-            _currentIndex = nextIndex;
-          } else if (_currentIndex >= _videos.length) {
-            _currentIndex = 0;
-          }
-          _currentPage = currentPage;
-          final bool inferredHasMore =
-              hasMore || newVideos.length == _videosPerPage;
-          _hasMore = inferredHasMore;
-          _totalVideos = total;
-          // **CRITICAL FIX: Clear error message when videos are successfully loaded**
+          
+          // Clear error if success
           _errorMessage = null;
-
-          // **OPTIMIZED: Load remaining videos in background if we only loaded 5 initially**
-          // This ensures instant display while loading remaining videos non-blocking
-          if (page == 1 &&
-              !append &&
-              limit == 5 &&
-              hasMore &&
-              !_isLoadingRemainingVideos) {
-            AppLogger.log(
-                '🚀 VideoFeedAdvanced: Loading remaining videos in background...');
-            _isLoadingRemainingVideos = true;
-
-            // Load remaining videos after a short delay to not block UI
-            Future.delayed(const Duration(milliseconds: 300), () async {
-              if (!mounted || _isLoadingRemainingVideos == false) return;
-
-              try {
-                AppLogger.log(
-                    '📡 VideoFeedAdvanced: Fetching remaining videos (limit: 25)...');
-                final remainingResponse = await _videoService.getVideos(
-                  page: 1,
-                  limit: 25, // Load remaining 25 videos (30 - 5 = 25)
-                  videoType: widget.videoType,
-                );
-
-                if (!mounted) return;
-
-                // Parse remaining videos
-                List<VideoModel> remainingVideos;
-                final remainingVideosList = remainingResponse['videos'];
-                if (remainingVideosList is List &&
-                    remainingVideosList.isNotEmpty) {
-                  final firstItem = remainingVideosList.first;
-                  if (firstItem is VideoModel) {
-                    remainingVideos = remainingVideosList.cast<VideoModel>();
-                  } else if (firstItem is Map<String, dynamic>) {
-                    remainingVideos = remainingVideosList
-                        .map((item) {
-                          try {
-                            return VideoModel.fromJson(
-                                item as Map<String, dynamic>);
-                          } catch (e) {
-                            AppLogger.log(
-                                '❌ Error parsing remaining video: $e');
-                            return null;
-                          }
-                        })
-                        .whereType<VideoModel>()
-                        .toList();
-                  } else {
-                    remainingVideos = <VideoModel>[];
-                  }
-
-                  // Remove duplicates (videos that might already be in _videos)
-                  final existingVideoIds =
-                      _videos.map((v) => videoIdentityKey(v)).toSet();
-                  final uniqueRemainingVideos = remainingVideos
-                      .where((v) =>
-                          !existingVideoIds.contains(videoIdentityKey(v)))
-                      .toList();
-
-                  if (uniqueRemainingVideos.isNotEmpty && mounted) {
-                    AppLogger.log(
-                        '✅ VideoFeedAdvanced: Adding ${uniqueRemainingVideos.length} remaining videos to feed');
-
-                    // Rank and filter remaining videos (async - runs in isolate)
-                    final rankedRemaining = await _rankVideosWithEngagement(
-                      uniqueRemainingVideos,
-                      preserveVideoKey: null,
-                    );
-
-                    if (mounted && rankedRemaining.isNotEmpty) {
-                      // **OPTIMIZED: Use ValueNotifiers for granular updates**
-                      _videos.addAll(rankedRemaining);
-                      // Update hasMore based on response
-                      _hasMore = remainingResponse['hasMore'] as bool? ?? false;
-                      AppLogger.log(
-                          '✅ VideoFeedAdvanced: Background load complete. Total videos: ${_videos.length}');
-                    }
-                  }
+          
+          // **PRIORITY LOGIC: Preload Page 2 IMMEDIATELY**
+          // Since we just "appended" Page 1 to Cache, we might have a long list now.
+          // But logically we should still prepare the *next* batch from backend (Page 2)
+          if (page == 1 && videosToUse.isNotEmpty) {
+             Future.microtask(() {
+                if (mounted && _hasMore) {
+                   AppLogger.log('🚀 PRIORITY: Preloading Page 2 immediately for seamless scrolling...');
+                   _loadVideosFromAPI(
+                     page: 2, 
+                     append: true, 
+                     clearSession: false
+                   );
                 }
-              } catch (e) {
-                AppLogger.log(
-                    '⚠️ VideoFeedAdvanced: Error loading remaining videos: $e');
-              } finally {
-                if (mounted) {
-                  _isLoadingRemainingVideos = false;
-                }
-              }
-            });
-          }
-
-          // **NEW: Update page controller if index changed**
-          if (nextIndex != null && _pageController.hasClients) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_pageController.hasClients && _currentIndex == nextIndex) {
-                _pageController.jumpToPage(nextIndex!);
-              }
-            });
+             });
           }
         }
+
 
         _markCurrentVideoAsSeen();
 
@@ -891,221 +736,13 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     List<VideoModel> videos, {
     String? preserveVideoKey,
   }) async {
-    if (videos.isEmpty) return <VideoModel>[];
-
-    AppLogger.log(
-        '🔍 _rankVideosWithEngagement: Processing ${videos.length} videos');
-
-    // **TEMPORARY DEBUG: Log first video details to check if IDs are valid**
-    if (videos.isNotEmpty) {
-      final firstVideo = videos.first;
-      AppLogger.log('🔍 _rankVideosWithEngagement: First video details:');
-      AppLogger.log('   ID: "${firstVideo.id}"');
-      AppLogger.log('   ID isEmpty: ${firstVideo.id.isEmpty}');
-      AppLogger.log('   videoUrl: "${firstVideo.videoUrl}"');
-      AppLogger.log('   videoUrl isEmpty: ${firstVideo.videoUrl.isEmpty}');
-      AppLogger.log('   videoName: "${firstVideo.videoName}"');
-      AppLogger.log('   videoName isEmpty: ${firstVideo.videoName.isEmpty}');
-      final testKey = videoIdentityKey(firstVideo);
-      AppLogger.log('   videoIdentityKey: "$testKey"');
-      AppLogger.log('   videoIdentityKey isEmpty: ${testKey.isEmpty}');
-    }
-
-    // #region agent log
-    _debugLog(
-        'video_feed_advanced_data.dart:462',
-        'Ranking started',
-        {
-          'inputVideosCount': videos.length,
-        },
-        'A');
-
-    // **BACKEND-FIRST: Backend already filters watched videos and shuffles**
-    // Frontend only needs to:
-    // 1. Remove duplicates within the same batch
-    // 2. Preserve current video if needed
-    // 3. Rank by engagement (optional, backend already does some ranking)
-
-    final Map<String, VideoModel> uniqueVideos = {};
-    int emptyKeyCount = 0;
-    int duplicateCount = 0;
-
-    for (final video in videos) {
-      final key = videoIdentityKey(video);
-
-      // #region agent log
-      if (key.isEmpty) {
-        _debugLog(
-            'video_feed_advanced_data.dart:477',
-            'Empty key detected',
-            {
-              'videoId': video.id,
-              'videoUrl': video.videoUrl,
-              'videoName': video.videoName,
-            },
-            'A');
-      }
-      // #endregion
-
-      if (key.isEmpty) {
-        emptyKeyCount++;
-        AppLogger.log(
-            '⚠️ Video has empty key: id=${video.id}, videoUrl=${video.videoUrl}, videoName=${video.videoName}');
-        continue;
-      }
-
-      // **FIXED: Don't filter by _seenVideoKeys in initial ranking - backend already handles this**
-      // Only filter duplicates within the batch
-      // **REASON**: Backend already excludes watched videos, frontend filtering causes empty pages
-      // We only use _seenVideoKeys to prevent showing same video twice in same session
-      // But for pagination, we should trust backend and not filter again
-
-      // Only check for duplicates in current batch
-      // Backend already filters watched videos, this is just an extra safety layer.
-      if (!uniqueVideos.containsKey(key)) {
-        uniqueVideos[key] = video;
-      } else {
-        duplicateCount++;
-        AppLogger.log(
-            '⚠️ Duplicate video found: key=$key, videoName=${video.videoName}');
-      }
-    }
-
-    // #region agent log
-    _debugLog(
-        'video_feed_advanced_data.dart:495',
-        'Ranking results',
-        {
-          'emptyKeyCount': emptyKeyCount,
-          'duplicateCount': duplicateCount,
-          'uniqueVideosCount': uniqueVideos.length,
-          'inputVideosCount': videos.length,
-        },
-        'A');
-    // #endregion
-
-    AppLogger.log('🔍 _rankVideosWithEngagement: Results:');
-    AppLogger.log('   Empty keys: $emptyKeyCount');
-    AppLogger.log('   Duplicates: $duplicateCount');
-    AppLogger.log('   Unique videos: ${uniqueVideos.length}');
-
-    if (uniqueVideos.isEmpty) {
-      // #region agent log
-      _debugLog(
-          'video_feed_advanced_data.dart:503',
-          'All videos filtered out',
-          {
-            'emptyKeyCount': emptyKeyCount,
-            'duplicateCount': duplicateCount,
-          },
-          'A');
-      // #endregion
-
-      AppLogger.log(
-          '⚠️ VideoFeedAdvanced: All videos are duplicates in this batch');
-      return <VideoModel>[];
-    }
-
-    final uniqueList = uniqueVideos.values.toList();
-
-    // **PERFORMANCE FIX: Run heavy ranking computation in isolate to prevent UI freezes**
-    // This moves VideoEngagementRanker.rankVideos() off the main thread
-    AppLogger.log('⚡ Running video ranking in isolate (non-blocking)...');
-    var rankedVideos = await _rankVideosInIsolate(uniqueList);
-    AppLogger.log('✅ Video ranking completed in isolate');
-
-    // **YUG TAB RANDOMIZATION: Shuffle order for Yug feed while preserving current video if needed**
-    // This is fast, so we keep it on main thread
-    if (widget.videoType == 'yog') {
-      AppLogger.log(
-          '🎲 _rankVideosWithEngagement: Shuffling videos for Yug tab (videoType=yog)');
-      rankedVideos.shuffle();
-    }
-
-    // **CREATOR DIVERSITY: Avoid long streaks from the same creator**
-    // This is fast, so we keep it on main thread
-    rankedVideos = _applyCreatorDiversity(rankedVideos, maxConsecutive: 2);
-
-    // **PRESERVE: Keep current video at the beginning if specified**
-    // This is fast, so we keep it on main thread
-    if (preserveVideoKey != null) {
-      final preserveIndex = rankedVideos.indexWhere(
-        (video) => videoIdentityKey(video) == preserveVideoKey,
-      );
-      if (preserveIndex > 0) {
-        final preservedVideo = rankedVideos.removeAt(preserveIndex);
-        rankedVideos.insert(0, preservedVideo);
-      }
-    }
-
-    AppLogger.log(
-        '🎲 VideoFeedAdvanced: Processed ${rankedVideos.length} videos (backend already filtered watched videos and shuffled)');
-
-    return rankedVideos;
+    // **SIMPLIFIED: Trust Backend Order**
+    // We removed _rankVideosInIsolate to prevent conflicts with backend logic.
+    // The backend now handles diversity and ranking (FeedQueueService).
+    return videos;
   }
 
-  List<VideoModel> _filterAndRankNewVideos(List<VideoModel> videos) {
-    if (videos.isEmpty) return <VideoModel>[];
 
-    final Map<String, VideoModel> uniqueNewVideos = {};
-    final existingKeys = <String>{
-      for (final existing in _videos) videoIdentityKey(existing),
-    };
-
-    int filteredByExisting = 0;
-    int filteredByDuplicate = 0;
-
-    for (final video in videos) {
-      final key = videoIdentityKey(video);
-      if (key.isEmpty) continue;
-
-      // **FIXED: Don't filter by _seenVideoKeys when appending - backend already handles watched videos**
-      // Only filter duplicates within current batch and videos already in _videos list
-      // **REASON**: Backend already excludes watched videos, so frontend shouldn't filter them again
-      // This prevents empty pages when user has watched many videos
-
-      // **FILTER: Skip already loaded videos in current list**
-      if (existingKeys.contains(key)) {
-        filteredByExisting++;
-        continue;
-      }
-      // **FILTER: Skip duplicates in this batch**
-      if (uniqueNewVideos.containsKey(key)) {
-        filteredByDuplicate++;
-        continue;
-      }
-      uniqueNewVideos[key] = video;
-    }
-
-    AppLogger.log(
-        '🔍 _filterAndRankNewVideos: Filtered ${videos.length} videos:');
-    AppLogger.log('   - Filtered by existing: $filteredByExisting');
-    AppLogger.log('   - Filtered by duplicate: $filteredByDuplicate');
-    AppLogger.log('   - Unique new videos: ${uniqueNewVideos.length}');
-
-    // **IMPROVED: No fallback - return empty if all filtered out**
-    // Backend should handle variety and prevent duplicates, frontend should trust it
-    // If all videos are filtered out, it means user has seen them all - better to show empty than duplicates
-    if (uniqueNewVideos.isEmpty && videos.isNotEmpty) {
-      AppLogger.log(
-        '⚠️ All videos filtered out! This may indicate all videos have been seen or backend needs to provide more variety.',
-      );
-      // Don't show duplicates - return empty and let backend handle pagination properly
-    }
-
-    if (uniqueNewVideos.isEmpty) return <VideoModel>[];
-
-    // **RANKING: Rank by engagement first**
-    var rankedVideos =
-        VideoEngagementRanker.rankVideos(uniqueNewVideos.values.toList());
-    // **SHUFFLE: Then shuffle to show random order**
-    rankedVideos.shuffle();
-
-    // **CREATOR DIVERSITY: Avoid long streaks from same creator in newly loaded batch**
-    rankedVideos = _applyCreatorDiversity(rankedVideos, maxConsecutive: 2);
-
-    return rankedVideos;
-  }
 
   /// **BACKEND-FIRST: Mark video as seen (in-memory cache only)**
   /// Backend handles persistent storage via WatchHistory
@@ -1120,55 +757,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     }
   }
 
-  /// **CREATOR DIVERSITY: Limit how many consecutive videos from the same creator can appear**
-  List<VideoModel> _applyCreatorDiversity(
-    List<VideoModel> rankedVideos, {
-    int maxConsecutive = 2,
-  }) {
-    if (rankedVideos.length <= 1 || maxConsecutive <= 0) {
-      return rankedVideos;
-    }
 
-    String creatorIdOf(VideoModel v) =>
-        v.uploader.googleId?.trim().isNotEmpty == true
-            ? v.uploader.googleId!.trim()
-            : v.uploader.id.trim();
-
-    final result = <VideoModel>[];
-    final remaining = List<VideoModel>.from(rankedVideos);
-
-    while (remaining.isNotEmpty) {
-      int pickIndex = 0;
-
-      if (result.isNotEmpty) {
-        final lastCreator = creatorIdOf(result.last);
-
-        // Count how many of the last videos are from the same creator
-        int streak = 0;
-        for (int i = result.length - 1; i >= 0; i--) {
-          if (creatorIdOf(result[i]) == lastCreator) {
-            streak++;
-          } else {
-            break;
-          }
-        }
-
-        if (streak >= maxConsecutive) {
-          // Try to find a video from a different creator
-          final idx = remaining.indexWhere(
-            (v) => creatorIdOf(v) != lastCreator,
-          );
-          if (idx != -1) {
-            pickIndex = idx;
-          }
-        }
-      }
-
-      result.add(remaining.removeAt(pickIndex));
-    }
-
-    return result;
-  }
 
   void _markCurrentVideoAsSeen() {
     if (_currentIndex < 0 || _currentIndex >= _videos.length) return;
@@ -1187,8 +776,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     final keepStart =
         (currentIndex - VideoFeedStateFieldsMixin._videosKeepRange)
             .clamp(0, _videos.length);
-    final keepEnd = (currentIndex + VideoFeedStateFieldsMixin._videosKeepRange)
-        .clamp(0, _videos.length);
+
 
     // Calculate how many videos to remove
     final videosToRemove =
@@ -1404,13 +992,8 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     }
   }
 
-  /// Start over - reset to first video and reload feed from beginning
-  /// This allows users to restart the feed after watching all videos
   Future<void> startOver() async {
-    AppLogger.log(
-        '🔄 VideoFeedAdvanced: _startOver() called - restarting from beginning');
-
-    if (_isLoading || _isRefreshing) {
+    if (_isRefreshing) {
       AppLogger.log(
         '⚠️ VideoFeedAdvanced: Already refreshing/loading, ignoring duplicate call',
       );
@@ -1661,19 +1244,6 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     AppLogger.log('✅ _stopAllVideosAndClearControllers: Cleanup complete');
   }
 
-  Future<void> _invalidateVideoCache() async {
-    try {
-      AppLogger.log('🗑️ VideoFeedAdvanced: Invalidating video cache keys');
-      await _cacheManager.initialize();
-      await _cacheManager.invalidateVideoCache(
-        videoType: widget.videoType,
-      );
-      AppLogger.log('✅ VideoFeedAdvanced: Video cache invalidated');
-    } catch (e) {
-      AppLogger.log('⚠️ VideoFeedAdvanced: Error invalidating cache: $e');
-    }
-  }
-
   Future<void> refreshAds() async {
     AppLogger.log('🔄 VideoFeedAdvanced: refreshAds() called');
 
@@ -1719,17 +1289,22 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     }
   }
 
-  void _onVideoChanged(int newIndex) {
-    if (_currentIndex != newIndex) {
-      // **OPTIMIZED: Use ValueNotifier for granular update**
-      _currentIndex = newIndex;
-      AppLogger.log('🔄 VideoFeedAdvanced: Video changed to index $newIndex');
-    }
-  }
+
 
   Future<void> _loadMoreVideos() async {
     if (!_hasMore) {
-      AppLogger.log('✅ All videos loaded (hasMore: false)');
+      AppLogger.log('✅ All fresh videos loaded (hasMore: false). Switching to LRU/History mode...');
+      // **LRU FALLBACK logic**:
+      // If backend says "No more new videos", we trigger a fetch with clearSession=true
+      // This tells backend: "Okay, filter is too strict, give me anything (LRU/Random)"
+      // We do this by calling _loadVideos(..., clearSession: true)
+      // But we must be careful not to create an infinite loop of clearing sessions.
+      // So we only do this if we haven't already switched to a "History" mode concept, 
+      // or simply rely on the fact that clearSession=true will return videos, and next time hasMore might be true.
+      
+      // For now, let's keep it simple: If feed end reached, load next page with clearSession=true to get recycle content
+      // But we append it.
+      await _loadVideos(page: 1, append: true, clearSession: true);
       return;
     }
 
@@ -1747,6 +1322,16 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     try {
       final videosCountBefore = _videos.length;
       await _loadVideos(page: _currentPage + 1, append: true);
+      
+      // **RECURSIVE FETCH FIX: If we loaded a page but it resulted in 0 NEW videos (due to deduplication),**
+      // **we must IMMEDIATELY try the next page, otherwise the user sees a loading spinner that never finishes.**
+      if (mounted && _videos.length == videosCountBefore && _hasMore) {
+         AppLogger.log('⚠️ Page ${_currentPage} resulted in 0 new videos (all duplicates). Recursively fetching next page...');
+         // Recursive call to keep digging until we find content or hit end
+         await _loadMoreVideos(); 
+         return; // Return early after recursion
+      }
+
       AppLogger.log('✅ Loaded more videos successfully');
 
       // **CRITICAL: Immediately preload newly loaded videos for seamless playback**
@@ -1787,4 +1372,31 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       _isLoadingMore = false; // No setState, no UI rebuild
     }
   }
+}
+
+
+/// **Top-Level Function for Isolate Parsing**
+/// Must be outside any class to be usable by compute()
+List<VideoModel> _parseVideosInIsolate(dynamic rawList) {
+  if (rawList is! List) return [];
+  
+  return rawList.map((item) {
+    // If it's already a VideoModel (not likely across isolate boundary, but good safety)
+    if (item is VideoModel) {
+      return item;
+    }
+    // Standard case: it's a Map
+    if (item is Map) {
+       // Convert Map<dynamic, dynamic> to Map<String, dynamic> if needed
+       // JSON decoding usually produces Map<String, dynamic>, but sometimes Map<dynamic, dynamic>
+       try {
+         final Map<String, dynamic> typedMap = Map<String, dynamic>.from(item);
+         return VideoModel.fromJson(typedMap);
+       } catch (e) {
+         // Silently fail for one bad item
+         return null; 
+       }
+    }
+    return null;
+  }).whereType<VideoModel>().toList();
 }

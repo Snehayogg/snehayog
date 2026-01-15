@@ -22,6 +22,7 @@ class AppLogger {
     // **WEB FIX: Also use print() for web to ensure logs appear in browser console**
     // debugPrint might not always work on web, so we add print() as fallback
     if (kIsWeb) {
+      // ignore: avoid_print
       print(formatted);
     }
   }

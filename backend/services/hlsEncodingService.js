@@ -57,9 +57,9 @@ class HLSEncodingService {
 
       // Quality presets optimized for HLS streaming (480p only)
       const qualityPresets = {
-        low: { crf: 25, audioBitrate: '64k' },    // Lower quality, smaller file
-        medium: { crf: 23, audioBitrate: '96k' }, // Balanced quality (recommended for 480p)
-        high: { crf: 20, audioBitrate: '128k' }   // Higher quality, larger file
+        low: { crf: 28, audioBitrate: '48k' },    // Lower quality, smaller file
+        medium: { crf: 26, audioBitrate: '64k' }, // Balanced for mobile data (approx 480p)
+        high: { crf: 23, audioBitrate: '128k' }   // Higher quality
       };
 
       // **FIX: Use original resolution instead of fixed 480p**
@@ -74,13 +74,13 @@ class HLSEncodingService {
         
         // Calculate bitrate based on resolution (higher resolution = higher bitrate)
         if (originalHeight > 1080) {
-          targetBitrate = '5000k'; // 1080p+ videos
+          targetBitrate = '3000k'; // 1080p+ (Reduced from 5000k)
         } else if (originalHeight > 720) {
-          targetBitrate = '3000k'; // 720p-1080p videos
+          targetBitrate = '1500k'; // 720p-1080p (Reduced from 3000k)
         } else if (originalHeight > 480) {
-          targetBitrate = '1500k'; // 480p-720p videos
+          targetBitrate = '900k'; // 480p-720p (Reduced from 1500k)
         } else {
-          targetBitrate = '800k'; // Below 480p
+          targetBitrate = '550k'; // Below 480p (Targeting ~3MB per minute)
         }
         
         selectedResolution = {
@@ -268,38 +268,38 @@ async checkFFmpegInstallation() {
     const variants = [
       { 
         name: '720p', 
-        crf: 20, 
+        crf: 24, 
         width: 720, 
         height: 1280, // 9:16 aspect ratio
-        audioBitrate: '128k', 
-        targetBitrate: '2000k',
+        audioBitrate: '96k', 
+        targetBitrate: '1200k',
         segmentDuration: 2 // 2 seconds for instant startup
       },
       { 
         name: '480p', 
-        crf: 20, 
+        crf: 26, 
         width: 480, 
         height: 854, // 9:16 aspect ratio
-        audioBitrate: '96k', 
-        targetBitrate: '1000k',
+        audioBitrate: '64k', 
+        targetBitrate: '550k',
         segmentDuration: 2
       },
       { 
         name: '360p', 
-        crf: 20, 
+        crf: 28, 
         width: 360, 
         height: 640, // 9:16 aspect ratio
-        audioBitrate: '64k', 
-        targetBitrate: '500k',
+        audioBitrate: '48k', 
+        targetBitrate: '350k',
         segmentDuration: 2
       },
       { 
         name: '240p', 
-        crf: 20, 
+        crf: 30, 
         width: 240, 
         height: 426, // 9:16 aspect ratio
-        audioBitrate: '48k', 
-        targetBitrate: '200k',
+        audioBitrate: '32k', 
+        targetBitrate: '150k',
         segmentDuration: 2
       }
     ];
@@ -443,10 +443,10 @@ async checkFFmpegInstallation() {
    */
   estimateBandwidth(variant) {
     const baseBandwidth = {
-      '720p': 2000000,  // 2.0 Mbps for 720p (increased for better quality)
-      '480p': 1000000,  // 1.0 Mbps for 480p (increased for better quality)
-      '360p': 500000,   // 500 Kbps for 360p (new quality level)
-      '240p': 200000    // 200 Kbps for 240p (optimized for slow connections)
+      '720p': 1200000,  // 1.2 Mbps for 720p
+      '480p': 550000,   // 550 Kbps for 480p (Mobile optimized)
+      '360p': 350000,   // 350 Kbps for 360p
+      '240p': 150000    // 150 Kbps for 240p
     };
     
     return baseBandwidth[variant.name] || 1000000; // Default to 480p bitrate
@@ -600,38 +600,38 @@ async checkFFmpegInstallation() {
     return [
       { 
         name: '720p', 
-        crf: 20, 
+        crf: 24, 
         width: 720, 
         height: 1280, // 9:16 aspect ratio
-        audioBitrate: '128k', 
-        targetBitrate: '2000k',
+        audioBitrate: '96k', 
+        targetBitrate: '1200k',
         segmentDuration: 2
       },
       { 
         name: '480p', 
-        crf: 20, 
+        crf: 26, 
         width: 480, 
         height: 854, // 9:16 aspect ratio
-        audioBitrate: '96k', 
-        targetBitrate: '1000k',
+        audioBitrate: '64k', 
+        targetBitrate: '550k',
         segmentDuration: 2
       },
       { 
         name: '360p', 
-        crf: 20, 
+        crf: 28, 
         width: 360, 
         height: 640, // 9:16 aspect ratio
-        audioBitrate: '64k', 
-        targetBitrate: '500k',
+        audioBitrate: '48k', 
+        targetBitrate: '350k',
         segmentDuration: 2
       },
       { 
         name: '240p', 
-        crf: 20, 
+        crf: 30, 
         width: 240, 
         height: 426, // 9:16 aspect ratio
-        audioBitrate: '48k', 
-        targetBitrate: '200k',
+        audioBitrate: '32k', 
+        targetBitrate: '150k',
         segmentDuration: 2
       }
     ];

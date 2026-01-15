@@ -4,8 +4,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 class RazorpayService {
   String? _keyId;
-  String? _keySecret;
-  String? _webhookSecret;
   String? _baseUrl;
 
   void initialize({
@@ -15,8 +13,6 @@ class RazorpayService {
     required String baseUrl,
   }) {
     _keyId = keyId;
-    _keySecret = keySecret;
-    _webhookSecret = webhookSecret;
     _baseUrl = baseUrl;
   }
 
@@ -39,9 +35,7 @@ class RazorpayService {
         );
       }
 
-      print('🔍 RazorpayService: Creating order with backend...');
-      print('🔍 RazorpayService: Base URL: $_baseUrl');
-      print('🔍 RazorpayService: Amount: $amount $currency');
+
 
       // Create order on backend first
       final orderResponse = await http
@@ -63,10 +57,7 @@ class RazorpayService {
           )
           .timeout(const Duration(seconds: 30));
 
-      print(
-        '🔍 RazorpayService: Backend response status: ${orderResponse.statusCode}',
-      );
-      print('🔍 RazorpayService: Backend response body: ${orderResponse.body}');
+
 
       if (orderResponse.statusCode != 200) {
         final errorBody = json.decode(orderResponse.body);
@@ -78,7 +69,7 @@ class RazorpayService {
       final orderData = json.decode(orderResponse.body);
       final orderId = orderData['order']['id'];
 
-      print('✅ RazorpayService: Order created successfully: $orderId');
+
 
       // **FIXED: Create proper Razorpay payment URL with test mode**
       final paymentUrl = _createRazorpayPaymentUrl(
@@ -92,16 +83,12 @@ class RazorpayService {
         userName: userName,
       );
 
-      print('🔍 RazorpayService: Payment URL created: $paymentUrl');
+
 
       // **NEW: Validate URL format**
       try {
         final uri = Uri.parse(paymentUrl);
-        print('🔍 RazorpayService: Parsed URI: $uri');
-        print('🔍 RazorpayService: URI scheme: ${uri.scheme}');
-        print('🔍 RazorpayService: URI host: ${uri.host}');
-        print('🔍 RazorpayService: URI path: ${uri.path}');
-        print('🔍 RazorpayService: URI query: ${uri.query}');
+
 
         // **NEW: Validate that it's a proper Razorpay URL**
         if (uri.host != 'checkout.razorpay.com') {
@@ -112,25 +99,21 @@ class RazorpayService {
           throw Exception('Invalid Razorpay path: ${uri.path}');
         }
 
-        print('✅ RazorpayService: URL validation passed');
+
 
         // **NEW: Debug URL parameters**
-        print('🔍 RazorpayService: Key ID: ${_keyId?.substring(0, 10)}...');
-        print('🔍 RazorpayService: Amount in paise: ${(amount * 100).round()}');
-        print('🔍 RazorpayService: Order ID: $orderId');
+
       } catch (e) {
-        print('❌ RazorpayService: URL parsing error: $e');
+
         throw Exception('Invalid payment URL format: $e');
       }
 
       // **NEW: Test if URL can be launched before attempting to launch**
       final canLaunch = await canLaunchUrl(Uri.parse(paymentUrl));
-      print('🔍 RazorpayService: Can launch URL: $canLaunch');
+
 
       if (!canLaunch) {
-        print(
-          '❌ RazorpayService: Cannot launch URL - trying alternative method',
-        );
+
         // Try launching with different mode
         final launchedAlternative = await launchUrl(
           Uri.parse(paymentUrl),
@@ -143,25 +126,21 @@ class RazorpayService {
           );
         }
 
-        print(
-          '✅ RazorpayService: Payment page launched with alternative method',
-        );
+
         return;
       }
 
       // **FIXED: Launch payment URL with proper error handling**
-      print('🔍 RazorpayService: Attempting to launch payment URL...');
+
       final launched = await launchUrl(
         Uri.parse(paymentUrl),
         mode: LaunchMode.externalApplication,
       );
 
-      print('🔍 RazorpayService: Launch result: $launched');
+
 
       if (!launched) {
-        print(
-          '❌ RazorpayService: Failed to launch with external mode, trying platform default',
-        );
+
 
         // Try with platform default mode as fallback
         final launchedFallback = await launchUrl(
@@ -173,13 +152,13 @@ class RazorpayService {
           throw Exception('Failed to launch payment page. Please try again.');
         }
 
-        print('✅ RazorpayService: Payment page launched with fallback method');
+
         return;
       }
 
-      print('✅ RazorpayService: Payment page launched successfully');
+
     } catch (e) {
-      print('❌ RazorpayService: Error making payment: $e');
+
       onError('Error making payment: $e');
     }
   }
@@ -238,13 +217,11 @@ class RazorpayService {
     final paymentUrl =
         'https://checkout.razorpay.com/v1/checkout.html?$queryString';
 
-    print('🔍 RazorpayService: Generated payment URL: $paymentUrl');
-    print('🔍 RazorpayService: Query string length: ${queryString.length}');
-    print('🔍 RazorpayService: URL length: ${paymentUrl.length}');
+
 
     // **NEW: Validate URL length (Razorpay has limits)**
     if (paymentUrl.length > 2000) {
-      print('⚠️ RazorpayService: URL too long, using simplified version');
+
       // Create simplified URL with essential parameters only
       final simplifiedParams = {
         'key': _keyId ?? '',
@@ -270,7 +247,7 @@ class RazorpayService {
       final simplifiedUrl =
           'https://checkout.razorpay.com/v1/checkout.html?$simplifiedQueryString';
 
-      print('🔍 RazorpayService: Simplified URL: $simplifiedUrl');
+
       return simplifiedUrl;
     }
 

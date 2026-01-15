@@ -1,5 +1,6 @@
 import express from 'express';
 import { verifyToken } from '../utils/verifytoken.js';
+import { requireAdminDashboardKey } from '../middleware/adminDashboardAuth.js';
 import { 
   sendNotificationToUser, 
   sendNotificationToUsers, 
@@ -49,24 +50,17 @@ router.post('/token', verifyToken, async (req, res) => {
 
 /**
  * POST /api/notifications/send
- * Send notification to a specific user (admin only or self)
+ * Send notification to a specific user (Admin Dashboard Only)
  */
-router.post('/send', verifyToken, async (req, res) => {
+router.post('/send', requireAdminDashboardKey, async (req, res) => {
   try {
     const { googleId, title, body, data } = req.body;
-    const currentUser = req.user;
 
-    // Allow users to send to themselves, or implement admin check
     if (!googleId || !title || !body) {
       return res.status(400).json({ 
         error: 'googleId, title, and body are required' 
       });
     }
-
-    // Optional: Add admin check here
-    // if (currentUser.role !== 'admin' && currentUser.googleId !== googleId) {
-    //   return res.status(403).json({ error: 'Unauthorized' });
-    // }
 
     const result = await sendNotificationToUser(googleId, {
       title,
@@ -94,9 +88,9 @@ router.post('/send', verifyToken, async (req, res) => {
 
 /**
  * POST /api/notifications/send-multiple
- * Send notification to multiple users
+ * Send notification to multiple users (Admin Dashboard Only)
  */
-router.post('/send-multiple', verifyToken, async (req, res) => {
+router.post('/send-multiple', requireAdminDashboardKey, async (req, res) => {
   try {
     const { googleIds, title, body, data } = req.body;
 
@@ -139,9 +133,9 @@ router.post('/send-multiple', verifyToken, async (req, res) => {
 
 /**
  * POST /api/notifications/broadcast
- * Send notification to all users (admin only)
+ * Send notification to all users (Admin Dashboard Only)
  */
-router.post('/broadcast', verifyToken, async (req, res) => {
+router.post('/broadcast', requireAdminDashboardKey, async (req, res) => {
   try {
     const { title, body, data } = req.body;
 
@@ -150,11 +144,6 @@ router.post('/broadcast', verifyToken, async (req, res) => {
         error: 'title and body are required' 
       });
     }
-
-    // Optional: Add admin check here
-    // if (req.user.role !== 'admin') {
-    //   return res.status(403).json({ error: 'Admin access required' });
-    // }
 
     const result = await sendNotificationToAll({
       title,
@@ -183,9 +172,9 @@ router.post('/broadcast', verifyToken, async (req, res) => {
 
 /**
  * GET /api/notifications/monthly/status
- * Get monthly notification cron job status
+ * Get monthly notification cron job status (Admin Dashboard Only)
  */
-router.get('/monthly/status', verifyToken, async (req, res) => {
+router.get('/monthly/status', requireAdminDashboardKey, async (req, res) => {
   try {
     const status = monthlyNotificationCron.getStatus();
     res.json({
@@ -200,15 +189,10 @@ router.get('/monthly/status', verifyToken, async (req, res) => {
 
 /**
  * POST /api/notifications/monthly/trigger
- * Manually trigger monthly notification (for testing)
+ * Manually trigger monthly notification (Admin Dashboard Only)
  */
-router.post('/monthly/trigger', verifyToken, async (req, res) => {
+router.post('/monthly/trigger', requireAdminDashboardKey, async (req, res) => {
   try {
-    // Optional: Add admin check here
-    // if (req.user.role !== 'admin') {
-    //   return res.status(403).json({ error: 'Admin access required' });
-    // }
-
     console.log('🔧 Manual trigger of monthly notification requested');
     await monthlyNotificationCron.triggerManually();
     

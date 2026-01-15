@@ -395,6 +395,49 @@
         </div>
 
         <div class="dashboard-section">
+            <h2 class="section-title">📢 Notification Center</h2>
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 10px;">
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">Target (Google ID)</label>
+                    <input type="text" id="notifTarget" placeholder="Leave blank to broadcast to ALL users" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                    <small style="color: #666;">Enter a specific Google ID to send to one user, or leave empty to send to everyone.</small>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">Title</label>
+                    <input type="text" id="notifTitle" placeholder="Notification Title" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">Body</label>
+                    <textarea id="notifBody" placeholder="Notification Message" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; min-height: 80px;"></textarea>
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">Data JSON (Optional)</label>
+                    <textarea id="notifData" placeholder='{"type": "video", "videoId": "..."}' style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-family: monospace;"></textarea>
+                </div>
+
+                <button class="btn btn-primary" onclick="sendNotification()">
+                    🚀 Send Notification
+                </button>
+            </div>
+        </div>
+
+        <div class="dashboard-section">
+            <h2 class="section-title">🎬 Video Management</h2>
+            <div class="filter-controls">
+                <input type="text" id="videoSearch" placeholder="Search videos by name or description..."
+                    oninput="searchVideos()">
+                <button class="btn btn-primary btn-sm" onclick="loadVideos()">Load Videos</button>
+                <button class="btn btn-warning btn-sm" onclick="resetVideoFilters()">Reset</button>
+            </div>
+            <div id="videosList">
+                <p>Click "Load Videos" to view all videos</p>
+            </div>
+        </div>
+
+        <div class="dashboard-section">
             <h2 class="section-title">👥 All Creators</h2>
             <div class="filter-controls">
                 <input type="text" id="creatorSearch" placeholder="Search by name, email, Google ID, or UPI"
@@ -459,18 +502,9 @@
             </div>
         </div>
 
-        <div class="dashboard-section">
-            <h2 class="section-title">🎬 Video Management</h2>
-            <div class="filter-controls">
-                <input type="text" id="videoSearch" placeholder="Search videos by name or description..."
-                    oninput="searchVideos()">
-                <button class="btn btn-primary btn-sm" onclick="loadVideos()">Load Videos</button>
-                <button class="btn btn-warning btn-sm" onclick="resetVideoFilters()">Reset</button>
-            </div>
-            <div id="videosList">
-                <p>Click "Load Videos" to view all videos</p>
-            </div>
-        </div>
+
+
+
 
         <div class="dashboard-section">
             <h2 class="section-title">⚙️ System Controls</h2>
@@ -483,6 +517,9 @@
                 </button>
                 <button class="btn btn-warning" onclick="stopScheduler()">
                     🛑 Stop Scheduler
+                </button>
+                <button class="btn btn-danger" onclick="resetMonthlyPayouts()" style="background-color: #dc3545; color: white;">
+                    ⚠️ Reset Monthly Payouts
                 </button>
             </div>
         </div>
@@ -649,19 +686,34 @@
             const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
             // Always allow marking (for tracking each month's payment)
-            if (markedCreators.has(creatorId)) {
-                // Already marked - allow re-marking for new month
-                markedCreators.add(creatorId);
-                saveMarkedCreators();
-                showSuccess(`Marked payout as done for ${currentMonth} ✅`);
-            } else {
-                // First time marking
-                markedCreators.add(creatorId);
-                saveMarkedCreators();
-                showSuccess(`Marked payout as done for ${currentMonth} ✅`);
-            }
-
+            markedCreators.add(creatorId);
+            saveMarkedCreators();
+            showSuccess(`Marked payout as done for ${currentMonth} ✅`);
+            
             filterCreators();
+        }
+
+        // **NEW: Allow unmarking (Reset to Pending/Unpaid)**
+        function unmarkCreatorPaid(encodedId) {
+            const creatorId = decodeURIComponent(encodedId);
+            if (!creatorId) return;
+
+            if (confirm('Are you sure you want to mark this creator as UNPAID?')) {
+                markedCreators.delete(creatorId);
+                saveMarkedCreators();
+                showSuccess('Creator marked as Unpaid (Pending) ↺');
+                filterCreators();
+            }
+        }
+
+        // **NEW: Reset ALL monthly payouts**
+        function resetMonthlyPayouts() {
+            if (confirm('⚠️ ARE YOU SURE? \n\nThis will RESET the "Paid" status for ALL creators.\n\nUse this ONLY at the start of a new month to clear previous month\'s records.\n\nThis cannot be undone!')) {
+                markedCreators.clear();
+                saveMarkedCreators();
+                showSuccess('All payment statuses have been RESET for the new month 🗓️');
+                filterCreators();
+            }
         }
 
         loadMarkedCreators();
@@ -728,6 +780,13 @@
             document.body.removeChild(textarea);
         }
 
+        let showAllCreators = false; // State for Show More/Less
+
+        function toggleShowAllCreators() {
+            showAllCreators = !showAllCreators;
+            filterCreators(); // Re-render with new state
+        }
+
         function renderCreators(creators) {
             const container = document.getElementById('creatorsList');
             const summaryContainer = document.getElementById('creatorsSummary');
@@ -749,13 +808,11 @@
                 const isMarked = isCreatorMarked(creator.id);
 
                 // **USE FRONTEND CALCULATED VALUES ONLY** (not backend values)
-                // Priority: frontendCalculatedRevenue > creatorRevenueINR > 0
                 const frontendRev = creator.frontendCalculatedRevenue;
                 const net = frontendRev ? frontendRev.creator : Number(creator.creatorRevenueINR ?? creator.totalEarningsINR ?? 0);
                 const gross = frontendRev ? frontendRev.gross : Number(creator.grossRevenueINR ?? net);
                 const platform = frontendRev ? frontendRev.platform : Math.max(Number(creator.platformRevenueINR ?? (gross - net)), 0);
 
-                // Use frontend calculated ad views if available
                 const totalAdViews = frontendRev ?
                     (frontendRev.bannerViews + frontendRev.carouselViews) :
                     Number(creator.totalAdViews || 0);
@@ -833,7 +890,12 @@
                 </div>
             `;
 
-            const tableRows = creators.map((creator) => {
+            // **NEW: Logic for Show More / Show Less**
+            const INITIAL_LIMIT = 10;
+            const displayCreators = showAllCreators ? creators : creators.slice(0, INITIAL_LIMIT);
+            const hiddenCount = creators.length - displayCreators.length;
+
+            const tableRows = displayCreators.map((creator) => {
                 const name = escapeHtml(creator.name || 'Unknown');
                 const email = escapeHtml(creator.email || '—');
                 const googleId = escapeHtml(creator.googleId || '—');
@@ -908,8 +970,16 @@
                     // Always show button, but show different text if already marked
                     const buttonText = isMarked ? 'Mark Paid Again' : 'Mark Paid';
                     const buttonClass = isMarked ? 'btn btn-warning btn-sm' : 'btn btn-success btn-sm';
+                    
+                    // **NEW: Click badge to UNMARK (Reset to pending)**
                     const statusBadge = isMarked
-                        ? `<span class="status-badge status-paid" style="margin-right: 8px;">${markedBadge} Paid ✅</span>`
+                        ? `<span class="status-badge status-paid" 
+                                style="margin-right: 8px; cursor: pointer; border: 1px solid #155724;" 
+                                onclick="unmarkCreatorPaid('${encodedId}')"
+                                title="Click to mark as UNPAID (Pending)">
+                                ${markedBadge} Paid ✅ 
+                                <small style="font-size: 0.7em;">(Click to Undo)</small>
+                           </span>`
                         : '';
 
                     pendingCell = `
@@ -951,6 +1021,19 @@
                 `;
             }).join('');
 
+            // **NEW: Show More/Less Button**
+            let showMoreButton = '';
+            if (creators.length > INITIAL_LIMIT) {
+                const btnText = showAllCreators ? 'Show Less' : `Show More (+${hiddenCount})`;
+                showMoreButton = `
+                    <div style="text-align: center; margin-top: 15px;">
+                        <button onclick="toggleShowAllCreators()" class="btn btn-primary" style="background-color: #667eea; border-radius: 25px; padding: 10px 30px;">
+                            ${btnText}
+                        </button>
+                    </div>
+                `;
+            }
+
             container.innerHTML = `
                 <div style="overflow-x: auto;">
                     <table class="payout-table">
@@ -974,6 +1057,7 @@
                         </tbody>
                     </table>
                 </div>
+                ${showMoreButton}
             `;
         }
 
@@ -1896,6 +1980,74 @@
             loadVideos();
         }
 
+        function nextVideoPage() {
+            currentVideoPage++;
+            loadVideos();
+        }
+
+        async function sendNotification() {
+            const target = document.getElementById('notifTarget').value.trim();
+            const title = document.getElementById('notifTitle').value.trim();
+            const body = document.getElementById('notifBody').value.trim();
+            const dataStr = document.getElementById('notifData').value.trim();
+
+            if (!title || !body) {
+                showError('Title and Body are required');
+                return;
+            }
+
+            let dataObj = {};
+            if (dataStr) {
+                try {
+                    dataObj = JSON.parse(dataStr);
+                } catch (e) {
+                    showError('Invalid JSON in Data field');
+                    return;
+                }
+            }
+
+            if (!confirm(`Are you sure you want to send this notification to ${target ? target : 'ALL USERS'}?`)) {
+                return;
+            }
+
+            try {
+                // Determine endpoint based on target
+                const endpoint = target ? `${API_BASE}/notifications/send` : `${API_BASE}/notifications/broadcast`;
+                const payload = {
+                    title,
+                    body,
+                    data: dataObj
+                };
+
+                if (target) {
+                    payload.googleId = target;
+                }
+
+                setLoading(true);
+                const response = await authorizedFetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    showSuccess(`Notification sent! Success: ${result.successCount || 1}, Failed: ${result.failureCount || 0}`);
+                    // Clear inputs
+                    document.getElementById('notifTitle').value = '';
+                    document.getElementById('notifBody').value = '';
+                    document.getElementById('notifData').value = '';
+                } else {
+                    showError(`Failed: ${result.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                console.error('Error sending notification:', error);
+                showError(`Error: ${error.message}`);
+            } finally {
+                setLoading(false);
+            }
+        }
     </script>
 </body>
 

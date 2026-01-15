@@ -43,11 +43,6 @@ router.post('/impressions/banner', async (req, res) => {
       );
     }
 
-    console.log('📊 Tracking banner ad impression:');
-    console.log('   Video ID:', videoId);
-    console.log('   Ad ID:', adId);
-    console.log('   User ID:', userId);
-
     if (!adId) {
       return res.status(400).json({ error: 'Ad ID is required' });
     }
@@ -85,9 +80,9 @@ router.post('/impressions/banner', async (req, res) => {
           impressionType: 'view',
           timestamp: new Date()
         });
-        console.log(`✅ Video-specific banner impression tracked: Video ${videoId}, Ad ${adId}`);
+        // console.log(`✅ Video-specific banner impression tracked: Video ${videoId}, Ad ${adId}`);
       } else {
-        console.log(`⚠️ Duplicate impression prevented: Video ${videoId}, Ad ${adId}`);
+        // console.log(`⚠️ Duplicate impression prevented: Video ${videoId}, Ad ${adId}`);
       }
     } catch (impressionError) {
       // Log error but don't fail the request
@@ -98,7 +93,7 @@ router.post('/impressions/banner', async (req, res) => {
     creative.impressions = (creative.impressions || 0) + 1;
     await creative.save();
 
-    console.log(`✅ Banner ad impression tracked. Ad: ${adId}, Global count: ${creative.impressions}`);
+    // console.log(`✅ Banner ad impression tracked. Ad: ${adId}, Global count: ${creative.impressions}`);
 
     res.status(200).json({ 
       success: true,
@@ -127,11 +122,11 @@ router.post('/impressions/carousel', async (req, res) => {
       );
     }
 
-    console.log('📊 Tracking carousel ad impression:');
-    console.log('   Video ID:', videoId);
-    console.log('   Ad ID:', adId);
-    console.log('   User ID:', userId);
-    console.log('   Scroll Position:', scrollPosition);
+    // console.log('📊 Tracking carousel ad impression:');
+    // console.log('   Video ID:', videoId);
+    // console.log('   Ad ID:', adId);
+    // console.log('   User ID:', userId);
+    // console.log('   Scroll Position:', scrollPosition);
 
     if (!adId) {
       return res.status(400).json({ error: 'Ad ID is required' });
@@ -183,7 +178,7 @@ router.post('/impressions/carousel', async (req, res) => {
     creative.impressions = (creative.impressions || 0) + 1;
     await creative.save();
 
-    console.log(`✅ Carousel ad impression tracked. Ad: ${adId}, Global count: ${creative.impressions}`);
+    // console.log(`✅ Carousel ad impression tracked. Ad: ${adId}, Global count: ${creative.impressions}`);
 
     res.status(200).json({ 
       success: true,
@@ -262,11 +257,11 @@ router.post('/impressions/banner/view', async (req, res) => {
       );
     }
 
-    console.log('👁️ Tracking banner ad VIEW (minimum duration):');
-    console.log('   Video ID:', videoId);
-    console.log('   Ad ID:', adId);
-    console.log('   User ID:', userId);
-    console.log('   View Duration:', viewDuration);
+    // console.log('👁️ Tracking banner ad VIEW (minimum duration):');
+    // console.log('   Video ID:', videoId);
+    // console.log('   Ad ID:', adId);
+    // console.log('   User ID:', userId);
+    // console.log('   View Duration:', viewDuration);
 
     if (!adId || !videoId) {
       return res.status(400).json({ error: 'Ad ID and Video ID are required' });
@@ -325,7 +320,7 @@ router.post('/impressions/banner/view', async (req, res) => {
       );
       impression.frequencyCap = impression.frequencyCap || DAILY_VIEW_FREQUENCY_CAP;
       await impression.save();
-      console.log(`✅ Banner ad VIEW tracked: Video ${videoId}, Ad ${adId}, Duration: ${viewDuration}s`);
+      // console.log(`✅ Banner ad VIEW tracked: Video ${videoId}, Ad ${adId}, Duration: ${viewDuration}s`);
     } else {
       // Create new viewed impression record
       await AdImpression.create({
@@ -340,7 +335,7 @@ router.post('/impressions/banner/view', async (req, res) => {
         frequencyCap: DAILY_VIEW_FREQUENCY_CAP,
         timestamp: new Date()
       });
-      console.log(`✅ New banner ad VIEW created: Video ${videoId}, Ad ${adId}, Duration: ${viewDuration}s`);
+      // console.log(`✅ New banner ad VIEW created: Video ${videoId}, Ad ${adId}, Duration: ${viewDuration}s`);
     }
 
     res.status(200).json({ 
@@ -372,11 +367,11 @@ router.post('/impressions/carousel/view', async (req, res) => {
       );
     }
 
-    console.log('👁️ Tracking carousel ad VIEW (minimum duration):');
-    console.log('   Video ID:', videoId);
-    console.log('   Ad ID:', adId);
-    console.log('   User ID:', userId);
-    console.log('   View Duration:', viewDuration);
+    // console.log('👁️ Tracking carousel ad VIEW (minimum duration):');
+    // console.log('   Video ID:', videoId);
+    // console.log('   Ad ID:', adId);
+    // console.log('   User ID:', userId);
+    // console.log('   View Duration:', viewDuration);
 
     if (!adId || !videoId) {
       return res.status(400).json({ error: 'Ad ID and Video ID are required' });
@@ -434,7 +429,7 @@ router.post('/impressions/carousel/view', async (req, res) => {
       );
       impression.frequencyCap = impression.frequencyCap || DAILY_VIEW_FREQUENCY_CAP;
       await impression.save();
-      console.log(`✅ Carousel ad VIEW tracked: Video ${videoId}, Ad ${adId}, Duration: ${viewDuration}s`);
+      // console.log(`✅ Carousel ad VIEW tracked: Video ${videoId}, Ad ${adId}, Duration: ${viewDuration}s`);
     } else {
       await AdImpression.create({
         videoId: videoId,
@@ -448,7 +443,7 @@ router.post('/impressions/carousel/view', async (req, res) => {
         frequencyCap: DAILY_VIEW_FREQUENCY_CAP,
         timestamp: new Date()
       });
-      console.log(`✅ New carousel ad VIEW created: Video ${videoId}, Ad ${adId}, Duration: ${viewDuration}s`);
+      // console.log(`✅ New carousel ad VIEW created: Video ${videoId}, Ad ${adId}, Duration: ${viewDuration}s`);
     }
 
     res.status(200).json({ 
@@ -473,7 +468,7 @@ router.get('/views/video/:videoId/banner', async (req, res) => {
     const { videoId } = req.params;
     const { month, year } = req.query; // Optional month/year filtering
 
-    console.log(`👁️ Getting banner ad VIEWS (for revenue) for video: ${videoId}`);
+    // console.log(`👁️ Getting banner ad VIEWS (for revenue) for video: ${videoId}`);
 
     // Build query with optional month filtering
     const query = {
@@ -492,13 +487,13 @@ router.get('/views/video/:videoId/banner', async (req, res) => {
         $gte: startDate,
         $lt: endDate
       };
-      console.log(`📅 Filtering banner views for month ${month}/${year}`);
+      // console.log(`📅 Filtering banner views for month ${month}/${year}`);
     }
 
     // **FIXED: Count only VIEWS (isViewed = true), not impressions**
     const viewCount = await AdImpression.countDocuments(query);
 
-    console.log(`✅ Banner VIEWS for video ${videoId}: ${viewCount}${month && year ? ` (Month: ${month}/${year})` : ' (All-time)'}`);
+    // console.log(`✅ Banner VIEWS for video ${videoId}: ${viewCount}${month && year ? ` (Month: ${month}/${year})` : ' (All-time)'}`);
 
     res.status(200).json({ count: viewCount });
   } catch (error) {
@@ -516,7 +511,7 @@ router.get('/views/video/:videoId/carousel', async (req, res) => {
     const { videoId } = req.params;
     const { month, year } = req.query; // Optional month/year filtering
 
-    console.log(`👁️ Getting carousel ad VIEWS (for revenue) for video: ${videoId}`);
+    // console.log(`👁️ Getting carousel ad VIEWS (for revenue) for video: ${videoId}`);
 
     // Build query with optional month filtering
     const query = {
@@ -535,13 +530,13 @@ router.get('/views/video/:videoId/carousel', async (req, res) => {
         $gte: startDate,
         $lt: endDate
       };
-      console.log(`📅 Filtering carousel views for month ${month}/${year}`);
+      // console.log(`📅 Filtering carousel views for month ${month}/${year}`);
     }
 
     // **FIXED: Count only VIEWS (isViewed = true), not impressions**
     const viewCount = await AdImpression.countDocuments(query);
 
-    console.log(`✅ Carousel VIEWS for video ${videoId}: ${viewCount}${month && year ? ` (Month: ${month}/${year})` : ' (All-time)'}`);
+    // console.log(`✅ Carousel VIEWS for video ${videoId}: ${viewCount}${month && year ? ` (Month: ${month}/${year})` : ' (All-time)'}`);
 
     res.status(200).json({ count: viewCount });
   } catch (error) {

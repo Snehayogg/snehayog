@@ -54,7 +54,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
   final CarouselAdService _carouselAdService = CarouselAdService();
   final AdImpressionService _adImpressionService = AdImpressionService();
   final AuthService _authService = AuthService();
-  final VideoService _videoService = VideoService();
+
 
   @override
   void initState() {
@@ -766,8 +766,6 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
 
     // Store original state for rollback
     final wasLiked = _isLiked;
-    final originalLikes = widget.carouselAd.likes;
-    final originalLikedBy = List<String>.from(widget.carouselAd.likedBy);
 
     try {
       // Optimistic UI update

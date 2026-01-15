@@ -31,7 +31,7 @@ class AppConstants {
   // View tracking constants
   // **RELAXED** to make genuine views count more easily
   static const Duration videoViewCountThreshold =
-      Duration(seconds: 1); // Video view count threshold (1 second)
+      Duration(seconds: 2); // Video view count threshold (1 second)
   static const Duration adViewCountThreshold =
       Duration(seconds: 2); // Ad view count threshold (2 seconds)
 

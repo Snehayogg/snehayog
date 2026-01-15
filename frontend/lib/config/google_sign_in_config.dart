@@ -17,7 +17,7 @@ class GoogleSignInConfig {
   static String get platformClientId {
     // Check for web platform first (kIsWeb works on all platforms)
     if (kIsWeb) {
-      print('🌐 Web platform detected, using Web client ID');
+
       return webClientId;
     }
 
@@ -26,12 +26,12 @@ class GoogleSignInConfig {
       if (Platform.isAndroid) return clientId;
       if (Platform.isIOS) return iosClientId;
       if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
-        print('🌐 Desktop platform detected, using Web client ID');
+
         return webClientId;
       }
     } catch (e) {
       // Fallback for web if Platform check fails
-      print('🌐 Platform detection failed, using Web client ID as fallback');
+
       return webClientId;
     }
     return webClientId;
@@ -55,51 +55,7 @@ class GoogleSignInConfig {
   }
 
   static void printConfig() {
-    print('🔧 Google Sign-In Configuration:');
-    print('   📱 Android Client ID: $clientId');
-    print('   🍎 iOS Client ID: $iosClientId');
-    print('   🌐 Web Client ID: $webClientId');
-    print('   📦 Package Name: com.example.snehayog');
-    print('   🎯 Scopes: ${scopes.join(', ')}');
 
-    // Safe platform detection - check web first
-    String platformInfo = 'Unknown';
-    if (kIsWeb) {
-      platformInfo = 'Web Browser';
-    } else {
-      try {
-        platformInfo = Platform.operatingSystem;
-      } catch (e) {
-        platformInfo = 'Unknown';
-      }
-    }
-    print('   🌐 Platform: $platformInfo');
-
-    print('   🌐 Using Client ID: $platformClientId');
-
-    if (isConfigured) {
-      print('   ✅ Configuration is present');
-    } else {
-      print('   ❌ Configuration is missing');
-    }
-
-    if (isValidClientId) {
-      print('   ✅ OAuth 2.0 Client ID format is valid');
-    } else {
-      print('   ❌ OAuth 2.0 Client ID format is invalid');
-      print('   🔧 Please check your Firebase Console configuration');
-    }
-
-    // Additional OAuth 2.0 validation
-    print('   🔐 OAuth 2.0 Validation:');
-    print(
-        '      - Android: ${clientId.contains('apps.googleusercontent.com') ? '✅' : '❌'}');
-    print(
-        '      - iOS: ${iosClientId.contains('apps.googleusercontent.com') ? '✅' : '❌'}');
-    print(
-        '      - Web: ${webClientId.contains('apps.googleusercontent.com') ? '✅' : '❌'}');
-    print(
-        '      - Project ID Match: ${clientId.contains('406195883653') ? '✅' : '❌'}');
   }
 
   // ✅ Get detailed error information

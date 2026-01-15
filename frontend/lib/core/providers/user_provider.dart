@@ -61,7 +61,7 @@ class UserProvider extends ChangeNotifier {
       _followStatusCache[normalizedId] = isFollowing;
       return isFollowing;
     } catch (e) {
-      print('Error checking follow status: $e');
+
       return false;
     } finally {
       _loadingFollowStatus.remove(normalizedId);
@@ -92,7 +92,7 @@ class UserProvider extends ChangeNotifier {
       }
       return userData;
     } catch (e) {
-      print('Error getting user data: $e');
+
       return null;
     } finally {
       _loadingUserData.remove(normalizedId);
@@ -125,9 +125,8 @@ class UserProvider extends ChangeNotifier {
           Future.microtask(() async {
             try {
               await getUserDataWithFollowers(normalizedId);
-            } catch (e) {
-              print('Error fetching user data after follow: $e');
-            }
+
+            } catch (_) {}
           });
         }
 
@@ -135,7 +134,7 @@ class UserProvider extends ChangeNotifier {
       }
       return success;
     } catch (e) {
-      print('Error following user: $e');
+
       return false;
     }
   }
@@ -167,9 +166,8 @@ class UserProvider extends ChangeNotifier {
           Future.microtask(() async {
             try {
               await getUserDataWithFollowers(normalizedId);
-            } catch (e) {
-              print('Error fetching user data after unfollow: $e');
-            }
+
+            } catch (_) {}
           });
         }
 
@@ -177,7 +175,7 @@ class UserProvider extends ChangeNotifier {
       }
       return success;
     } catch (e) {
-      print('Error unfollowing user: $e');
+
       return false;
     }
   }
@@ -205,14 +203,13 @@ class UserProvider extends ChangeNotifier {
       final userData = await authService.getUserData();
 
       if (userData != null && userData['id'] != null) {
-        print(
-            '🔄 UserProvider: Loading current user data for ID: ${userData['id']}');
+
         await getUserDataWithFollowers(userData['id']);
       } else {
-        print('❌ UserProvider: No current user data available');
+
       }
     } catch (e) {
-      print('❌ UserProvider: Error loading current user data: $e');
+
     }
   }
 
@@ -224,7 +221,7 @@ class UserProvider extends ChangeNotifier {
         return;
       }
 
-      print('🔄 UserProvider: Refreshing user data for ID: $normalizedId');
+
 
       // **FIXED: Clear user data cache first to force fresh data fetch**
       _userDataCache.remove(normalizedId);
@@ -242,17 +239,16 @@ class UserProvider extends ChangeNotifier {
           _userDataCache[normalizedId] = userData;
           // **NOTE: Follow status cache is NOT updated here**
           // It's refreshed separately using checkFollowStatus() which is more reliable
-          print(
-              '✅ UserProvider: User data refreshed successfully for ID: $normalizedId');
+
         }
       } catch (e) {
-        print('Error getting user data: $e');
+
       } finally {
         _loadingUserData.remove(normalizedId);
         notifyListeners();
       }
     } catch (e) {
-      print('❌ UserProvider: Error refreshing user data for ID $userId: $e');
+
     }
   }
 
@@ -286,12 +282,12 @@ class UserProvider extends ChangeNotifier {
 
   /// **FIXED: Clear all caches and state on logout**
   void clearAllCaches() {
-    print('🗑️ UserProvider: Clearing all caches and state...');
+
     _followStatusCache.clear();
     _loadingFollowStatus.clear();
     _userDataCache.clear();
     _loadingUserData.clear();
-    print('✅ UserProvider: All caches cleared');
+
     notifyListeners();
   }
 

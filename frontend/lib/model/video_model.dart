@@ -18,6 +18,8 @@ class VideoModel {
   final double earnings;
   // **NEW: Original video resolution (width x height)**
   final Map<String, dynamic>? originalResolution;
+  // **NEW: Video content hash for duplicate detection**
+  final String? videoHash;
   // HLS Streaming fields
   final String? hlsMasterPlaylistUrl;
   final String? hlsPlaylistUrl;
@@ -61,6 +63,7 @@ class VideoModel {
     this.processingProgress = 100,
     this.processingError,
     this.originalResolution, // **NEW: Original video resolution**
+    this.videoHash, // **NEW: Video hash**
   }) : comments = comments; // **FIXED: Initialize the field**
 
   factory VideoModel.fromJson(Map<String, dynamic> json) {
@@ -356,6 +359,7 @@ class VideoModel {
             return null;
           }
         }(),
+        videoHash: json['videoHash']?.toString(), // **NEW: Parse video hash**
       );
     } catch (e, stackTrace) {
       print('❌ VideoModel.fromJson Error: $e');
@@ -393,6 +397,7 @@ class VideoModel {
       'hlsVariants': hlsVariants,
       'isHLSEncoded': isHLSEncoded,
       'lowQualityUrl': lowQualityUrl, // 480p URL
+      'videoHash': videoHash, // **NEW: Parse video hash**
     };
   }
 
@@ -420,6 +425,7 @@ class VideoModel {
     List<Map<String, dynamic>>? hlsVariants,
     bool? isHLSEncoded,
     String? lowQualityUrl, // 480p URL
+    String? videoHash, // **NEW: Add videoHash to copyWith**
   }) {
     return VideoModel(
       id: id ?? this.id,
@@ -447,6 +453,7 @@ class VideoModel {
       hlsVariants: hlsVariants ?? this.hlsVariants,
       isHLSEncoded: isHLSEncoded ?? this.isHLSEncoded,
       lowQualityUrl: lowQualityUrl ?? this.lowQualityUrl, // 480p URL
+      videoHash: videoHash ?? this.videoHash, // **NEW: Handle videoHash**
     );
   }
 
@@ -473,7 +480,7 @@ class VideoModel {
   /// Get 480p quality URL (standardized for all videos)
   String get480pUrl() {
     // Always use 480p quality for consistent streaming
-    return lowQualityUrl ?? videoUrl;
+    return lowQualityUrl?.isNotEmpty == true ? lowQualityUrl! : videoUrl;
   }
 }
 
