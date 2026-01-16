@@ -1417,6 +1417,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       // **CRITICAL: Pause ALL other videos before playing current video**
       _pauseAllOtherVideos(index);
 
+      // **FIX: Reset position to start when switching to this video**
+      // This ensures previous session or background play doesn't affect new view
+      controllerToUse.seekTo(Duration.zero);
+
       controllerToUse.setVolume(1.0);
       controllerToUse.play();
       _controllerStates[index] = true;

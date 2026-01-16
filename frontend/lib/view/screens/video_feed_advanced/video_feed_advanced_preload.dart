@@ -182,6 +182,13 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         }
       }
 
+      // **FIX: Ensure background videos are PAUSED if reused**
+      // If we grabbed a playing controller for a future/past video, stop it now.
+      if (controller != null && index != _currentIndex && controller.value.isPlaying) {
+        AppLogger.log('⏸️ Pausing reused background controller at index $index');
+        controller.pause();
+      }
+
       // If no controller in shared pool, create new one
       if (controller == null) {
         // **HLS SUPPORT: Check if URL is HLS and configure accordingly**
@@ -211,7 +218,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
           if (videoUrl.contains('.m3u8')) {
             AppLogger.log('🎬 HLS Video detected: $videoUrl');
             AppLogger.log('🎬 HLS Video duration: ${video.duration}');
-            await controller.initialize().timeout(
+            await controller!.initialize().timeout(
               const Duration(seconds: 12), // **OPTIMIZED: 30s -> 12s (Fail Fast)**
               onTimeout: () {
                 throw Exception('HLS video initialization timeout');
@@ -221,7 +228,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
           } else {
              AppLogger.log('🎬 Regular Video detected: $videoUrl');
             // **FIXED: Add timeout and better error handling for regular videos**
-            await controller.initialize().timeout(
+            await controller!.initialize().timeout(
               const Duration(seconds: 8), // **OPTIMIZED: 10s -> 8s (Fail Fast)**
               onTimeout: () {
                 throw Exception('Video initialization timeout');
@@ -229,6 +236,13 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
             );
             AppLogger.log('✅ Regular Video initialized successfully');
           }
+          
+          // **DEFENSIVE FIX: Ensure new controller didn't auto-start**
+          if (index != _currentIndex && controller!.value.isPlaying) {
+             AppLogger.log('⏸️ Auto-started video paused at index $index');
+             controller.pause();
+          }
+
         } finally {
           _initializingVideos.remove(index);
         }
