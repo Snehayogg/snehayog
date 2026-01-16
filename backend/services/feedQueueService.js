@@ -61,11 +61,13 @@ class FeedQueueService {
     
     // Trigger Background Refill if low
     if (currentLength < this.REFILL_THRESHOLD) {
-      // console.log(`⚡ FeedQueue: Queue low (${currentLength}), triggering background refill...`);
+      console.log(`⚡ FeedQueue: Queue LOW (${currentLength} < ${this.REFILL_THRESHOLD}) for ${userId}. triggering background refill...`);
       // Fire and forget - do NOT await
       this.generateAndPushFeed(userId, videoType).catch(err => 
         console.error(`⚠️ FeedQueue: Background refill error for ${userId}:`, err.message)
       );
+    } else {
+      console.log(`ℹ️ FeedQueue: Queue OK (${currentLength}) for ${userId}`);
     }
 
     // Pop available items (Try to get 'count', but accept less)
@@ -95,7 +97,7 @@ class FeedQueueService {
     if (videos.length < count) {
        const t3 = Date.now();
        const needed = count - videos.length;
-      //  console.log(`❄️ FeedQueue: Queue exhausted (got ${videos.length}). Fetching ${needed} from Safety Net immediately.`);
+       console.log(`❄️ FeedQueue: Queue exhausted (got ${videos.length}). Fetching ${needed} from Safety Net immediately.`);
        
        // Calculate exclusion list (Recent History + Current Buffer) to avoid duplicates
        // We accept a small chance of duplicates here for the sake of speed
@@ -149,7 +151,7 @@ class FeedQueueService {
     const length = await redisService.lLen(queueKey);
 
     if (length < this.REFILL_THRESHOLD) {
-      // console.log(`⚡ FeedQueue: Queue low (${length} < ${this.REFILL_THRESHOLD}) for ${userId} [${videoType}]. Refilling...`);
+      console.log(`⚡ FeedQueue: checkAndRefill - Queue LOW (${length} < ${this.REFILL_THRESHOLD}) for ${userId}. Refilling...`);
       await this.generateAndPushFeed(userId, videoType);
     }
   }
@@ -158,12 +160,9 @@ class FeedQueueService {
    * Generate personalized feed and push to Redis queue
    * @returns {Promise<number>} - Number of videos pushed
    */
-  /**
-   * Generate personalized feed and push to Redis queue
-   * @returns {Promise<number>} - Number of videos pushed
-   */
   async generateAndPushFeed(userId, videoType = 'yog') {
     const start = Date.now();
+    console.log(`♻️ Refill STARTED for ${userId}`);
     try {
       // 1. Fetch Candidates (FAST - Constant Time)
       // Instead of excluding huge list of seen IDs in DB query, we fetch "Fresh & Popular" candidates first.
@@ -180,10 +179,13 @@ class FeedQueueService {
       let candidates = await Video.find(candidateQuery)
         .sort({ createdAt: -1 })
         .limit(300) 
-        .select('_id uploader createdAt likes views shares score finalScore videoType')
+        .select('_id uploader createdAt likes views shares score finalScore videoType videoHash')
         .lean();
 
-      if (candidates.length === 0) return 0;
+      if (candidates.length === 0) {
+          console.log(`⚠️ Refill: No candidates found!`);
+          return 0;
+      }
 
       // 2. Fetch User History (LIMITED)
       // We only care if they've seen videos *within* our candidate pool.
@@ -225,6 +227,8 @@ class FeedQueueService {
         return true;
       });
 
+      console.log(`🔍 Refill: Filtered ${candidates.length} candidates -> ${freshVideos.length} fresh videos`);
+
       // Fallback: If Filter Left Nothing?
       // We now handle this by backfilling from Fallback at the end before pushing.
 
@@ -260,7 +264,7 @@ class FeedQueueService {
       
       if (toPushIds.length < this.BATCH_SIZE) {
           const needed = this.BATCH_SIZE - toPushIds.length;
-          // console.log(`📉 FeedQueue: Fresh content low (${toPushIds.length}/${this.BATCH_SIZE}). Backfilling ${needed} from Fallback...`);
+           console.log(`📉 FeedQueue: Fresh content low (${toPushIds.length}/${this.BATCH_SIZE}). Backfilling ${needed} from Fallback...`);
           
           const fallbackIds = await this.getFallbackIds(userId, videoType, needed, [...seenVideoIds, ...toPushIds]);
           toPushIds = [...toPushIds, ...fallbackIds];
@@ -276,8 +280,10 @@ class FeedQueueService {
       if (toPushIds.length > 0) {
         await redisService.rPush(queueKey, toPushIds);
         // Trim to strict limit
-        // await redisService.lTrim(queueKey, 0, this.QUEUE_SIZE_LIMIT - 1);
-        // console.log(`✅ FeedQueue: Pushed ${toPushIds.length} videos to ${queueKey}`);
+        await redisService.lTrim(queueKey, 0, this.QUEUE_SIZE_LIMIT - 1);
+        console.log(`✅ FeedQueue: Pushed ${toPushIds.length} videos to ${queueKey}. Refill took ${Date.now() - start}ms`);
+      } else {
+        console.log(`⚠️ Refill: No videos to push after all steps.`);
       }
 
       return toPushIds.length;

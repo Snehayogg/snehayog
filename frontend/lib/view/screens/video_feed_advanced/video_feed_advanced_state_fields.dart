@@ -137,9 +137,7 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   final ValueNotifier<bool> _hasMoreVN = ValueNotifier<bool>(true);
   bool get _hasMore => _hasMoreVN.value;
   set _hasMore(bool value) => _hasMoreVN.value = value;
-  int? _totalVideos;
-  bool _isLoadingRemainingVideos =
-      false; // Track background loading of remaining videos
+
 
   // **NEW: Video Error Tracking**
   // Stores error messages for videos that failed to load or play

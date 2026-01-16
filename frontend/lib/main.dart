@@ -80,7 +80,8 @@ void main() async {
 
   // **BACKGROUND: Initialize heavy services after app starts**
   // **OPTIMIZED: Delay heavy initialization to let UI settle first (Fixes startup lag/audio break)**
-  Future.delayed(const Duration(seconds: 3), () {
+  // Increased delay to 5 seconds to ensure player is fully stable
+  Future.delayed(const Duration(seconds: 5), () {
      _initializeServicesInBackground();
   });
 
@@ -91,20 +92,16 @@ void main() async {
 /// **OPTIMIZED: Check server connectivity and set optimal URL (non-blocking)**
 Future<void> _checkServerConnectivity() async {
   try {
-
     // Clear any cached URLs to force fresh check
     AppConfig.clearCache();
     final workingUrl = await AppConfig.checkAndUpdateServerUrl();
-
 
     // In development mode, verify local server is accessible
     if (workingUrl.contains('192.168') ||
         workingUrl.contains('localhost') ||
         workingUrl.contains('127.0.0.1')) {
-
     }
   } catch (e) {
-
   }
 }
 
@@ -113,9 +110,7 @@ void _initializeServicesInBackground() async {
   try {
     // **NEW: Initialize backend-driven config first (non-blocking)**
     unawaited(AppRemoteConfigService.instance.initialize().then((_) {
-
     }).catchError((e) {
-
     }));
 
     // **OPTIMIZED: Initialize AdMob non-blocking (don't wait for it)**
@@ -135,13 +130,11 @@ void _initializeServicesInBackground() async {
               .updateRequestConfiguration(requestConfiguration);
 
         } catch (e) {
-
         }
 
         ErrorLoggingService.logServiceInitialization('AdMob');
 
       } catch (e) {
-
       }
     }());
 
@@ -152,8 +145,6 @@ void _initializeServicesInBackground() async {
       DeviceOrientation.landscapeRight,
     ]);
 
-
-
     // **CLEANUP: Perform periodic proxy cache cleanup (LOW PRIORITY)**
     // Delay further to ensure it doesn't compete with video playback
     Future.delayed(const Duration(seconds: 5), () {
@@ -162,10 +153,11 @@ void _initializeServicesInBackground() async {
 
     // Splash-time prefetch: fetch first page and warm up first few videos
     // This is less critical now that we have "Instant Splash" from Hive
-    // Splash-time prefetch has been moved to main() for earlier execution
-    // unawaited(_splashPrefetch());
+    // Delayed by 2 seconds to avoid competing with initial UI render
+    Future.delayed(const Duration(seconds: 2), () {
+        unawaited(_splashPrefetch());
+    });
   } catch (e) {
-
   }
 }
 

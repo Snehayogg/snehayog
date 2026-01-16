@@ -19,6 +19,8 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     // If Instant Splash failed, go straight to API.
     
     // **AGGRESSIVE CACHING: Try loading stale videos FIRST (0ms)**
+    // **EXPERIMENT: DISABLED to remove Startup Jank/Lag**
+    /*
     if (page == 1 && !append) {
       AppLogger.log('🚀 Aggressive Caching: Checking for stale/offline videos... (0ms target)');
       try {
@@ -69,11 +71,23 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
          AppLogger.log('⚠️ Aggressive Caching failed: $e');
       }
     }
+    */
 
     // **Load from API directly**
     // This will fetch FRESH videos in background and update the list (replacing stale ones)
-    await _loadVideosFromAPI(
-        page: page, append: append, clearSession: clearSession);
+    // **OPTIMIZED: If we have cached videos, DELAY the API call to let UI render smoothly**
+    if (_videos.isNotEmpty && page == 1 && !append) {
+      AppLogger.log('⏳ Aggressive Caching: Delaying API fetch by 2s to prioritize UI/Player...');
+      Future.delayed(const Duration(seconds: 2), () async {
+        if (mounted) {
+          await _loadVideosFromAPI(
+              page: page, append: append, clearSession: clearSession);
+        }
+      });
+    } else {
+       await _loadVideosFromAPI(
+          page: page, append: append, clearSession: clearSession);
+    }
 
     // **OFFLINE FALLBACK: If API failed (videos empty), TRY Cache**
     if (_videos.isEmpty && !append && page == 1) {
@@ -486,7 +500,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
                   _currentPage =
                       fallbackResponse['currentPage'] as int? ?? page;
                   _hasMore = fallbackResponse['hasMore'] as bool? ?? false;
-                  _totalVideos = fallbackResponse['total'] as int? ?? 0;
+
                   // **CRITICAL FIX: Clear error message when videos are successfully loaded**
                   _errorMessage = null;
                   _markCurrentVideoAsSeen();
@@ -513,7 +527,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
               _currentIndex = 0;
               _currentPage = retryResponse['currentPage'] as int? ?? page;
               _hasMore = retryResponse['hasMore'] as bool? ?? false;
-              _totalVideos = retryResponse['total'] as int? ?? 0;
+
               // **CRITICAL FIX: Clear error message when videos are successfully loaded**
               _errorMessage = null;
               _markCurrentVideoAsSeen();
@@ -550,7 +564,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
             _errorMessage = null; 
             _currentPage = currentPage;
             _hasMore = hasMore;
-            _totalVideos = total;
+
             
             _markCurrentVideoAsSeen();
           });
@@ -593,7 +607,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
              _errorMessage = null;
              _currentPage = currentPage; 
              _hasMore = hasMore || uniqueNewVideos.isNotEmpty; 
-             _totalVideos = total;
+
              
           } else {
              // **SCENARIO 2: No Cache (Cold Start) -> REPLACE**

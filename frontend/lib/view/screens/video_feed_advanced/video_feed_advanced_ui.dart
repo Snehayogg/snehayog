@@ -7,8 +7,9 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
       child: PageView.builder(
         controller: _pageController,
         scrollDirection: Axis.vertical,
-        // **CUSTOM PHYSICS: Removed VayuScrollPhysics for standard feeling**
-        physics: const AlwaysScrollableScrollPhysics(),
+        // **CUSTOM PHYSICS: Enabled VayuScrollPhysics for better snap/velocity control**
+        physics: const VayuScrollPhysics(),
+        // physics: const AlwaysScrollableScrollPhysics(),
         onPageChanged: _onPageChanged,
         allowImplicitScrolling: true, // **FIX: Enable to preload next widget and smooth out scroll start**
         itemCount: _getTotalItemCount(),

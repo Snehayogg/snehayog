@@ -307,7 +307,13 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
       // **SMART AUTOPLAY: If this video finished loading and user is watching it, PLAY NOW**
       if (mounted && index == _currentIndex) {
-         AppLogger.log('🎯 Smart Autoplay: Video $index finished loading and is active. Playing now.');
+         AppLogger.log('🎯 Smart Autoplay: Video $index finished loading and is active. Calling Play.');
+         
+         // **CRITICAL FIX: Explicitly call play() instantly to avoid any state race conditions**
+         if (controller.value.isInitialized) {
+             await controller.play();
+         }
+         
          _tryAutoplayCurrentImmediate(index);
       }
 
@@ -366,6 +372,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       }
     }
   }
+
 
   String? _validateAndFixVideoUrl(String url) {
     if (url.isEmpty) return null;
@@ -545,12 +552,47 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       final position = value.position;
       final remaining = duration - position;
 
-      final bool isCompleted = !value.isPlaying &&
+      // **FIX: Robust completion check with Debounce**
+      // Sometimes videos stall near the end or duration updates (HLS).
+      // We check if it "looks" done, but wait to verify it stays done.
+      final bool looksComplete = !value.isPlaying &&
           !value.isBuffering &&
           remaining <= const Duration(milliseconds: 250);
 
-      if (isCompleted) {
-        _handleVideoCompleted(index);
+      if (looksComplete) {
+        // **DEBOUNCE: Wait 250ms to ensure it's truly the end**
+        // This prevents triggering if:
+        // 1. Duration updates (HLS)
+        // 2. Playback resumes (buffering glitch)
+        // 3. User seeks back
+        Future.delayed(const Duration(milliseconds: 250), () {
+          if (!mounted) return;
+          
+          // Check controller again
+          final newValue = controller.value;
+          if (!newValue.isInitialized) return;
+          
+          // If status changed, abort
+          if (newValue.isPlaying) return;
+          if (newValue.isBuffering) return;
+          
+          // Check user intent
+          if (_userPaused[index] == true) return;
+          if (_autoAdvancedForIndex.contains(index)) return;
+
+          // Re-calculate remaining time (crucial for HLS duration updates)
+          final newDuration = newValue.duration;
+          final newPosition = newValue.position;
+          final newRemaining = newDuration - newPosition;
+
+          // Only trigger if STILL close to end
+          if (newRemaining <= const Duration(milliseconds: 300)) {
+            AppLogger.log('✅ Video $index confirmed complete (Debounced). Auto-advancing...');
+            _handleVideoCompleted(index);
+          } else {
+             AppLogger.log('⚠️ Video $index false completion detected (Duration grew?). Remaining: ${newRemaining.inMilliseconds}ms');
+          }
+        });
       }
     }
 
@@ -716,7 +758,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
   // **NEW: Immediate autoplay helper that doesn't wait for full buffer**
   void _tryAutoplayCurrentImmediate(int index) {
-    if (_videos.isEmpty || _isLoading) return;
+    // **FIX: Removed _isLoading check so video plays even if feed is refreshing**
+    if (_videos.isEmpty) return;
     if (index != _currentIndex) return; // Make sure index hasn't changed
     // **CRITICAL FIX: Use _shouldAutoplayForContext instead of _allowAutoplay**
     // This ensures Yug tab visibility is checked before autoplay
