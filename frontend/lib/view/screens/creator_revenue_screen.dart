@@ -357,17 +357,6 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     }
   }
 
-  _VideoStats _getVideoStats(VideoModel video) {
-    final stats = _videoStatsMap[video.id];
-    if (stats != null) {
-      return stats;
-    }
-    // **FIX: If stats not calculated yet, return 0 but log for debugging**
-    AppLogger.log(
-        '⚠️ CreatorRevenueScreen: Video stats not found for ${video.id} - revenue calculation may still be in progress');
-    return const _VideoStats(0.0, 0);
-  }
-
   /// **FIXED: Get total ad VIEWS for current month (not impressions) - for display purposes**
   Future<int> _getTotalAdImpressionsForVideo(String videoId) async {
     try {
@@ -722,8 +711,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
 
           const SizedBox(height: 24),
 
-          // **NEW: Video Revenue Breakdown**
-          _buildVideoRevenueBreakdownCard(),
+
         ],
       ),
     );
@@ -1582,170 +1570,9 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     );
   }
 
-  Widget _buildVideoRevenueBreakdownCard() {
-    if (_userVideos.isEmpty) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Center(
-            child: Column(
-              children: [
-                Icon(Icons.video_library, size: 48, color: Colors.grey[400]),
-                const SizedBox(height: 16),
-                Text(
-                  AppText.get('revenue_no_videos'),
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey[600],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  AppText.get('revenue_upload_to_earn'),
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[500],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
 
-    return Card(
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  AppText.get('revenue_video_breakdown'),
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => _showDetailedVideoAnalytics(),
-                  child: Text(AppText.get('btn_view_all')),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
 
-            // Show top 5 videos by revenue
-            ..._userVideos.take(5).map((video) {
-              final stats = _getVideoStats(video);
-              final revenue = stats.earnings;
-              final adImpressions = stats.adViews;
 
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey[200]!),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              video.videoName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          Text(
-                            '₹${revenue.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          _buildVideoStat(
-                              AppText.get('revenue_views'), '${video.views}'),
-                          const SizedBox(width: 16),
-                          _buildVideoStat(
-                              AppText.get('revenue_likes'), '${video.likes}'),
-                          const SizedBox(width: 16),
-                          _buildVideoStat(AppText.get('revenue_comments'),
-                              '${video.comments.length}'),
-                          const SizedBox(width: 16),
-                          _buildVideoStat(AppText.get('revenue_ad_impressions'),
-                              '$adImpressions'),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
-
-            if (_userVideos.length > 5)
-              Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: Center(
-                  child: Text(
-                    AppText.get('revenue_and_more',
-                            fallback: '... and {count} more videos')
-                        .replaceAll(
-                            '{count}', (_userVideos.length - 5).toString()),
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 14,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildVideoStat(String label, String value) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 12,
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            color: Colors.grey[600],
-          ),
-        ),
-      ],
-    );
-  }
 
   void _showWithdrawalDialog() {
     showDialog(
@@ -1809,66 +1636,5 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   /// Show detailed video analytics
-  void _showDetailedVideoAnalytics() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(AppText.get('revenue_detailed_analytics')),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: SingleChildScrollView(
-            child: Column(
-              children: _userVideos.map((video) {
-                final stats = _getVideoStats(video);
-                final revenue = stats.earnings;
-                final adImpressions = stats.adViews;
 
-                return ListTile(
-                  leading: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      video.thumbnailUrl,
-                      width: 50,
-                      height: 50,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          width: 50,
-                          height: 50,
-                          color: Colors.grey[300],
-                          child: const Icon(Icons.video_library, size: 24),
-                        );
-                      },
-                    ),
-                  ),
-                  title: Text(
-                    video.videoName,
-                    style: const TextStyle(fontSize: 14),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text(AppText.get('revenue_impressions',
-                          fallback: '{count} impressions')
-                      .replaceAll('{count}', adImpressions.toString())),
-                  trailing: Text(
-                    '₹${revenue.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green,
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(AppText.get('btn_close')),
-          ),
-        ],
-      ),
-    );
-  }
 }

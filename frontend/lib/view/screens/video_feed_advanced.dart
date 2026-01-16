@@ -40,7 +40,7 @@ import 'package:vayu/view/widget/custom_share_widget.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/controller/google_sign_in_controller.dart';
-import 'package:vayu/services/earnings_service.dart';
+
 
 import 'package:vayu/config/admob_config.dart';
 import 'package:path_provider/path_provider.dart';

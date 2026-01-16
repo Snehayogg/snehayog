@@ -170,7 +170,7 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   final Map<int, ValueNotifier<bool>> _showHeartAnimation = {};
 
   // Earnings cache
-  final Map<String, double> _earningsCache = {};
+
 
   // Persisted state keys
   String get _kSavedFeedIndexKey => 'video_feed_saved_index';

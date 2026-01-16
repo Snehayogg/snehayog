@@ -207,15 +207,6 @@ class _UploaderAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Debug logging to see what data we're getting
-    print(
-        '🖼️ _UploaderAvatar: Building avatar for uploader: ${uploader.name}');
-    print('🖼️ _UploaderAvatar: profilePic: "${uploader.profilePic}"');
-    print(
-        '🖼️ _UploaderAvatar: profilePic.isEmpty: ${uploader.profilePic.isEmpty}');
-    print(
-        '🖼️ _UploaderAvatar: profilePic.length: ${uploader.profilePic.length}');
-
     return CircleAvatar(
       radius: AppConstants.avatarRadius,
       backgroundColor: Colors.grey,

@@ -13,7 +13,6 @@ class VideoOverlay extends StatelessWidget {
   final VoidCallback onShare;
   final VoidCallback onOpenCarouselAd;
   final VoidCallback onOpenProfile;
-  final Widget earningsLabel;
   final Widget followButton;
 
   const VideoOverlay({
@@ -27,7 +26,6 @@ class VideoOverlay extends StatelessWidget {
     required this.onShare,
     required this.onOpenCarouselAd,
     required this.onOpenProfile,
-    required this.earningsLabel,
     required this.followButton,
   }) : super(key: key);
 
@@ -36,7 +34,6 @@ class VideoOverlay extends StatelessWidget {
     return RepaintBoundary(
       child: Stack(
         children: [
-          Positioned(top: 52, right: 8, child: earningsLabel),
           Positioned(
             bottom: 8,
             left: 0,

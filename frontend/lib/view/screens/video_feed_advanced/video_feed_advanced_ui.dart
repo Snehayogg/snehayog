@@ -827,72 +827,9 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     );
   }
 
-  Future<double> _calculateEarningsFromAdViews(VideoModel video) async {
-    if (_earningsCache.containsKey(video.id)) {
-      return _earningsCache[video.id]!;
-    }
-    try {
-      final totalEarnings =
-          await EarningsService.calculateCreatorRevenueForVideo(video.id);
-      _earningsCache[video.id] = totalEarnings;
-      return totalEarnings;
-    } catch (_) {
-      return 0.0;
-    }
-  }
 
-  Widget _buildEarningsLabel(VideoModel video) {
-    return GestureDetector(
-      onTap: () => _showEarningsBottomSheet(),
-      child: FutureBuilder<double>(
-        future: _calculateEarningsFromAdViews(video),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: Colors.green.withOpacity(0.6),
-                  width: 1,
-                ),
-              ),
-              child: const Text(
-                '...',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            );
-          }
 
-          final earnings = snapshot.data ?? 0.0;
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: Colors.green.withOpacity(0.6),
-                width: 1,
-              ),
-            ),
-            child: Text(
-              '₹${earnings.toStringAsFixed(2)}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
+
 
   Widget _buildVideoOverlay(VideoModel video, int index) {
     // **REELS/SHORTS STYLE: Position at absolute bottom with zero spacing**
@@ -906,11 +843,6 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         return RepaintBoundary(
           child: Stack(
             children: [
-              Positioned(
-                top: 52,
-                right: 8,
-                child: _buildEarningsLabel(video),
-              ),
               // **Video info at absolute bottom - Reels/Shorts style**
               Positioned(
                 bottom:
@@ -1269,44 +1201,6 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           ),
         );
       },
-    );
-  }
-
-  /// **NEW: Show Earnings Bottom Sheet with video details**
-  Future<void> _showEarningsBottomSheet() async {
-    // Show earnings only for the CURRENT video user is watching in Yug tab
-    if (_currentIndex < 0 || _currentIndex >= _videos.length) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Current video not found'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-
-    final currentVideo = _videos[_currentIndex];
-
-    if (!mounted) return;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => DraggableScrollableSheet(
-        expand: false,
-        // Yug tab: compact bottom sheet for single-video earnings
-        initialChildSize: 0.5, // 50% of screen height by default
-        minChildSize: 0.3, // Can be dragged down to 30%
-        maxChildSize: 0.9, // Can be expanded up to 90%
-        builder: (context, scrollController) => EarningsBottomSheetContent(
-          videos: [currentVideo],
-          scrollController: scrollController,
-        ),
-      ),
     );
   }
 }
