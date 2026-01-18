@@ -65,7 +65,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
        
        // Wait for Stage 2 (Content) - Critical for Video Loading
        // We revert to waiting here to ensure data is ready before Home screen mounts
-       await AppInitializationManager.instance.initializeStage2(context);
+       AppInitializationManager.instance.initializeStage2(context);
        
        _navigateToHome();
     });

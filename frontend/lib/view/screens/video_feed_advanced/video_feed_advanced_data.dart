@@ -1325,6 +1325,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
   Future<void> _loadMoreVideos() async {
     if (!_hasMore) {
       AppLogger.log('✅ All fresh videos loaded (hasMore: false). Switching to LRU/History mode...');
+      AppLogger.log('🔄 Calling _loadVideos(page: 1, append: true, clearSession: true) to fetch fallback content');
       // **LRU FALLBACK logic**:
       // If backend says "No more new videos", we trigger a fetch with clearSession=true
       // This tells backend: "Okay, filter is too strict, give me anything (LRU/Random)"

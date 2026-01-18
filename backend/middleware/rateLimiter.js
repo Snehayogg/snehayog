@@ -48,8 +48,7 @@ const handler = (req, res, next, options) => {
 // Applies to everything to prevent total server crash
 export const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5000, // **INCREASED**: 5000 requests per IP to support shared Wi-Fi
+  max: 20000, // **INCREASED**: 20000 requests per IP (User requested 4x increase)
   // This is just a safety net for DoS. The specific API limiters handle per-user logic.
   standardHeaders: true,
   legacyHeaders: false,
@@ -67,9 +66,9 @@ export const globalLimiter = rateLimit({
 // Generous limit for normal app usage (feed scrolling, etc.)
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // **INCREASED**: 1000 requests per 15 mins (approx 1.1 req/sec)
-  // vayu-feed scroll consumes ~10 requests per scroll, so 300 was too low.
-  // 1000 allows for heavy usage without blocking legit users.
+  max: 4000, // **INCREASED**: 4000 requests per 15 mins (User requested 4x increase)
+  // vayu-feed scroll consumes ~10 requests per scroll.
+  // 4000 allows for very heavy usage without blocking legit users.
   standardHeaders: true,
   legacyHeaders: false,
   store: getStore('api'),
@@ -82,7 +81,7 @@ export const apiLimiter = rateLimit({
 // Strict limit to prevent brute-force password guessing
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Max 10 attempts
+  max: 40, // **INCREASED**: 40 attempts (User requested 4x increase)
   standardHeaders: true,
   legacyHeaders: false,
   store: getStore('auth'),
@@ -96,11 +95,11 @@ export const authLimiter = rateLimit({
 // Prevents storage exhaustion and bandwidth abuse
 export const uploadLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10, // Max 10 uploads per hour
+  max: 40, // **INCREASED**: 40 uploads per hour (User requested 4x increase)
   standardHeaders: true,
   legacyHeaders: false,
   store: getStore('upload'),
   keyGenerator: keyGenerator, // Use User ID (Users must be logged in to upload)
-  message: 'Upload limit reached. You can only upload 10 videos per hour.',
+  message: 'Upload limit reached. You can only upload 40 videos per hour.',
   handler: handler,
 });

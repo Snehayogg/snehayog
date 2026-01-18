@@ -114,13 +114,27 @@ class FeedQueueService {
              .select('videoId')
              .lean();
            history.forEach(h => fallbackSeenIds.add(h.videoId.toString()));
-         } catch (e) { /* ignore */ }
+           console.log(`🔍 FeedQueue: Safety Net loaded ${history.length} seen IDs for user ${userId} to exclude.`);
+         } catch (e) { 
+           console.error('⚠️ FeedQueue: Error fetching FeedHistory for Safety Net:', e);
+         }
        }
 
        const fallbackIds = await this.getFallbackIds(userId, videoType, needed, Array.from(fallbackSeenIds));
-       videos.push(...fallbackIds);
-       tFallback = Date.now() - t3;
-    }
+     console.log(`🔍 FeedQueue: Safety Net returned ${fallbackIds.length} fallback IDs.`);
+     
+     // **LAST RESORT: If Safety Net returned 0 (likely because user has seen EVERYTHING),**
+     // **Fetch RANDOM videos ignoring history to prevent infinite loop of empty responses.**
+     if (fallbackIds.length === 0) {
+        console.log(`❄️ FeedQueue: Safety Net returned 0 videos. User might have seen everything. Triggering LAST RESORT (Ignore History).`);
+        const lastResortIds = await this.getFallbackIds(userId, videoType, needed, []); // Pass empty exclude list
+        console.log(`🔥 FeedQueue: LAST RESORT returned ${lastResortIds.length} videos.`);
+        videos.push(...lastResortIds);
+     } else {
+        videos.push(...fallbackIds);
+     }
+     tFallback = Date.now() - t3;
+  }
 
     // Populate video details
     const t4 = Date.now();
@@ -138,7 +152,7 @@ class FeedQueueService {
 
     // **VERIFICATION: Log specific video IDs being served**
     result.forEach((v, index) => {
-        console.log(`🎬 [${index}] Serving Video: ${v._id} (Hash: ${v.videoHash || 'none'})`);
+        console.log(`🎬 [${index}] Serving Video: ${v._id} (Hash: ${v.videoHash || 'none'}) - Name: ${v.videoName}`);
     });
 
     return result;
