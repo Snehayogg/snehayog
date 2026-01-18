@@ -1,6 +1,6 @@
 [build]
-builder = "DOCKERFILE"
-buildCommand = "cd snehayog/backend && npm install && npm run setup:ffmpeg"
+builder = "NIXPACKS"
+buildCommand = "cd snehayog/backend && npm install"
 
 [deploy]
 healthcheckPath = "/health"
