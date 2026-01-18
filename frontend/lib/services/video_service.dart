@@ -1320,7 +1320,7 @@ class VideoService {
       final resolvedBaseUrl = await getBaseUrlWithFallback();
       final response = await http
           .get(Uri.parse('$resolvedBaseUrl/api/health'))
-          .timeout(const Duration(seconds: 5));
+          .timeout(const Duration(seconds: 15));
       return response.statusCode == 200;
     } catch (e) {
       return false;
