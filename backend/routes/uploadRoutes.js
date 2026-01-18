@@ -368,7 +368,7 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
           userId
         ),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Hybrid processing timeout after 10 minutes')), 10 * 60 * 1000)
+          setTimeout(() => reject(new Error('Hybrid processing timeout after 30 minutes')), 30 * 60 * 1000)
         )
       ]);
       console.log('✅ Hybrid processing completed successfully');

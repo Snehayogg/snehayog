@@ -1,0 +1,11 @@
+# Nixpacks configuration for Railway
+# This ensures FFmpeg is installed in the environment
+
+[phases.setup]
+nixPkgs = ["...", "ffmpeg"]
+
+[phases.build]
+cmds = ["npm install"]
+
+[start]
+cmd = "npm start"

@@ -724,7 +724,7 @@ class _UploadScreenState extends State<UploadScreen> {
   /// **NEW: Wait for video processing to complete**
   Future<Map<String, dynamic>?> _waitForProcessingCompletion(
       String videoId) async {
-    const maxWaitTime = Duration(minutes: 10); // Maximum wait time
+    const maxWaitTime = Duration(minutes: 30); // Maximum wait time (30m)
     const checkInterval = Duration(seconds: 3); // Poll faster to avoid UI stall
     final startTime = DateTime.now();
 
@@ -743,10 +743,13 @@ class _UploadScreenState extends State<UploadScreen> {
           final processingProgress =
               (videoData?['processingProgress'] ?? 0) as int;
           final videoUrl = (videoData?['videoUrl'] ?? '').toString();
+          final errorMsg = (videoData?['processingError'] ?? '').toString();
 
           AppLogger.log(
               '🔄 Processing status: $processingStatus ($processingProgress%)');
-          AppLogger.log('🔗 Current videoUrl: $videoUrl');
+          if (errorMsg.isNotEmpty) {
+             AppLogger.log('⚠️ Processing error reported: $errorMsg');
+          }
 
           // **NO setState: Update progress using ValueNotifier**
           if (mounted) {
@@ -777,8 +780,8 @@ class _UploadScreenState extends State<UploadScreen> {
             };
           } else if (processingStatus == 'failed') {
             AppLogger.log(
-                '❌ Video processing failed: ${videoData?['processingError']}');
-            return null;
+                '❌ Video processing failed: $errorMsg');
+            throw Exception('Processing failed: $errorMsg');
           }
         } else {
           AppLogger.log(
@@ -788,13 +791,14 @@ class _UploadScreenState extends State<UploadScreen> {
         // Wait before checking again
         await Future.delayed(checkInterval);
       } catch (e) {
+        if (e.toString().contains('Processing failed:')) rethrow;
         AppLogger.log('⚠️ Error checking processing status: $e');
         await Future.delayed(checkInterval);
       }
     }
 
     AppLogger.log('⏰ Processing timeout - maximum wait time exceeded');
-    return null;
+    throw Exception('Video processing timed out after 30 minutes.');
   }
 
   /// **Show beautiful success dialog**

@@ -2,21 +2,64 @@ import ffmpeg from 'fluent-ffmpeg';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { spawnSync } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// **FIX: Use static binaries for robustness**
-import ffmpegStatic from 'ffmpeg-static';
-import ffprobeStatic from 'ffprobe-static';
+// **FIX: Robust FFmpeg Path Selection**
+// 1. Try system-installed FFmpeg (from Nixpacks/apt)
+// 2. Fallback to static binaries (npm packages)
 
-// Set paths explicitly
-ffmpeg.setFfmpegPath(ffmpegStatic);
-ffmpeg.setFfprobePath(ffprobeStatic.path);
+let ffmpegPath = null;
+let ffprobePath = null;
 
-console.log('🔧 HLSEncodingService: Configured static FFmpeg paths');
-console.log('   FFmpeg:', ffmpegStatic);
-console.log('   FFprobe:', ffprobeStatic.path);
+try {
+  // Check system FFmpeg
+  const systemFfmpeg = spawnSync('which', ['ffmpeg']);
+  if (systemFfmpeg.status === 0 && systemFfmpeg.stdout.toString().trim()) {
+      ffmpegPath = systemFfmpeg.stdout.toString().trim();
+      console.log('🔧 HLSEncodingService: Found system FFmpeg at:', ffmpegPath);
+  }
+
+  // Check system FFprobe
+  const systemFfprobe = spawnSync('which', ['ffprobe']);
+  if (systemFfprobe.status === 0 && systemFfprobe.stdout.toString().trim()) {
+      ffprobePath = systemFfprobe.stdout.toString().trim();
+      console.log('🔧 HLSEncodingService: Found system FFprobe at:', ffprobePath);
+  }
+} catch (e) {
+  console.log('⚠️ HLSEncodingService: Failed to check system paths:', e.message);
+}
+
+// Fallback to static if system not found
+if (!ffmpegPath) {
+  try {
+      const ffmpegStatic = (await import('ffmpeg-static')).default;
+      ffmpegPath = ffmpegStatic;
+      console.log('🔧 HLSEncodingService: Using static FFmpeg at:', ffmpegPath);
+  } catch (e) {
+      console.error('❌ HLSEncodingService: Failed to load ffmpeg-static:', e);
+  }
+}
+
+if (!ffprobePath) {
+  try {
+      const ffprobeStatic = (await import('ffprobe-static')).default;
+      ffprobePath = ffprobeStatic.path;
+      console.log('🔧 HLSEncodingService: Using static FFprobe at:', ffprobePath);
+  } catch (e) {
+       console.error('❌ HLSEncodingService: Failed to load ffprobe-static:', e);
+  }
+}
+
+// Set paths
+if (ffmpegPath) ffmpeg.setFfmpegPath(ffmpegPath);
+if (ffprobePath) ffmpeg.setFfprobePath(ffprobePath);
+
+console.log('🔧 HLSEncodingService: Final Configuration');
+console.log('   FFmpeg:', ffmpegPath || '❌ NOT FOUND');
+console.log('   FFprobe:', ffprobePath || '❌ NOT FOUND');
 
 
 class HLSEncodingService {

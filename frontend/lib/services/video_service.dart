@@ -1096,10 +1096,10 @@ class VideoService {
 
       // **Send request**
       final streamedResponse = await request.send().timeout(
-        const Duration(minutes: 10),
+        const Duration(minutes: 30),
         onTimeout: () {
           throw TimeoutException(
-            'Upload timed out. Please check your internet connection and try again.',
+            'Upload likely failed or is taking too long (30m limit). Please check your internet connection.',
           );
         },
       );
@@ -1572,7 +1572,7 @@ class VideoService {
 
       // Send request
       final response = await request.send().timeout(
-            const Duration(minutes: 10),
+            const Duration(minutes: 30),
           );
 
       final responseBody = await response.stream.bytesToString();
