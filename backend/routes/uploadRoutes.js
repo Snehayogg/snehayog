@@ -186,7 +186,8 @@ router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
     // **NEW: Check for duplicate video (same user, same hash)**
     const existingVideo = await Video.findOne({
       uploader: user._id,
-      videoHash: videoHash
+      videoHash: videoHash,
+      processingStatus: { $ne: 'failed' } // Allow retry if previous attempt failed
     });
 
     if (existingVideo) {

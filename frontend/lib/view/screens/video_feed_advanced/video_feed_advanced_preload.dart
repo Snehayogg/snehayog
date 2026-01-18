@@ -146,7 +146,11 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         AppLogger.log(
           '❌ Invalid video URL for video $index: ${video.videoUrl}',
         );
-        _loadingVideos.remove(index);
+        if (mounted) {
+          safeSetState(() {
+            _loadingVideos.remove(index);
+          });
+        }
         return;
       }
 
@@ -333,7 +337,9 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
     } catch (e) {
       if (mounted) {
-        _loadingVideos.remove(index);
+        safeSetState(() {
+           _loadingVideos.remove(index);
+        });
       }
       final retryCount = _preloadRetryCount[index] ?? 0;
       if (e.toString().contains('NO_MEMORY') ||

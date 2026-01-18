@@ -6,7 +6,7 @@ import '../core/services/http_client_service.dart';
 class AppConfig {
   // **MANUAL: Development mode control**
   static const bool _isDevelopment =
-      false; // Set to true for local testing, false for production
+      true; // Set to true for local testing, false for production
 
   // **NEW: Smart URL selection with fallback**
   static String? _cachedBaseUrl;

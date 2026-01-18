@@ -32,13 +32,13 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
   try {
     const { userId } = req.params;
     
-    console.log('🔍 Creator revenue request for user:', userId);
-    console.log('🔍 Request headers:', req.headers);
-    console.log('🔍 Authenticated user from token:', req.user);
+    // console.log('🔍 Creator revenue request for user:', userId);
+    // console.log('🔍 Request headers:', req.headers);
+    // console.log('🔍 Authenticated user from token:', req.user);
     
     // Find user by Google ID
     const user = await User.findOne({ googleId: userId });
-    console.log('🔍 Database query result:', user ? 'User found' : 'User not found');
+    // console.log('🔍 Database query result:', user ? 'User found' : 'User not found');
     
     if (!user) {
       console.log('❌ User not found for Google ID:', userId);
@@ -72,11 +72,13 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
       impressionType: 'view'
     });
 
+    /*
     console.log('📊 Actual Ad Impressions:', {
       bannerImpressions,
       carouselImpressions,
       totalImpressions: bannerImpressions + carouselImpressions
     });
+    */
 
     // Calculate video statistics (for display purposes only)
     let totalViews = 0;
@@ -102,6 +104,7 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
     const totalExactRevenueINR = bannerRevenueINR + carouselRevenueINR;
     const totalExactCreatorRevenueINR = totalExactRevenueINR * 0.80; // 80% to creator
 
+    /*
     console.log('💰 Revenue Breakdown (Based on Actual Ad Impressions):', {
       bannerImpressions,
       carouselImpressions,
@@ -112,6 +115,7 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
       creatorRevenue: totalExactCreatorRevenueINR.toFixed(2),
       note: 'Revenue calculated from actual ad impressions (realtime)'
     });
+    */
 
     // Get actual payout records if they exist
     const CreatorPayout = (await import('../../models/CreatorPayout.js')).default;
@@ -164,6 +168,7 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
     const currentMonthTotalRevenue = currentMonthBannerRevenue + currentMonthCarouselRevenue;
     const currentMonthCreatorRevenue = currentMonthTotalRevenue * 0.80;
     
+    /*
     console.log('💰 Current Month Revenue Calculation:', {
       totalVideos: videoIds.length,
       currentMonthBannerImpressions,
@@ -173,6 +178,7 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
       currentMonthCreatorRevenue: currentMonthCreatorRevenue.toFixed(2),
       note: 'Counting impressions for ALL videos in current month (not just videos uploaded this month)'
     });
+    */
     
     // **Last Month** - Count actual impressions for ALL videos (regardless of upload date)
     const lastMonthBannerImpressions = await AdImpression.countDocuments({
@@ -258,6 +264,7 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
       }))
     };
 
+    /*
     console.log('✅ Creator revenue data sent (Based on Actual Ad Impressions):', {
       userId: userId,
       bannerImpressions,
@@ -269,6 +276,7 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
       totalExactCreatorRevenue: totalExactCreatorRevenueINR.toFixed(2),
       note: 'Revenue calculated from actual ad impressions (realtime) - Banner (₹10 CPM) + Carousel (₹30 CPM)'
     });
+    */
 
     res.json(response);
 

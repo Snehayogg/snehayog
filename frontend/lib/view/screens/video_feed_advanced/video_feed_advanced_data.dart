@@ -14,6 +14,35 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
 
 
 
+    // **NEW: Check for Pre-fetched Vital Content (Stage 2)**
+    if (page == 1 && !append && AppInitializationManager.instance.initialVideos != null) {
+      final preFetchedVideos = AppInitializationManager.instance.initialVideos!;
+      if (preFetchedVideos.isNotEmpty) {
+        AppLogger.log('🚀 VideoFeedAdvanced: Using Stage 2 Pre-fetched videos (${preFetchedVideos.length})');
+        
+        if (mounted) {
+          safeSetState(() {
+            _videos = preFetchedVideos;
+            _currentIndex = 0;
+            _isLoading = false;
+            _errorMessage = null;
+          });
+          
+          // Clear it so we don't reuse it on manual refresh
+          AppInitializationManager.instance.initialVideos = null;
+
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+             if (mounted && _videos.isNotEmpty) {
+                 _preloadVideo(0);
+                 _tryAutoplayCurrent();
+                 Future.microtask(() => _loadMoreVideos());
+             }
+          });
+          return;
+        }
+      }
+    }
+
     // **CHANGED: SKIP Standard Cache Load here**
     // We want to avoid "Proxy Miss" (Old video buffering).
     // If Instant Splash failed, go straight to API.
@@ -89,7 +118,9 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
           page: page, append: append, clearSession: clearSession);
     }
 
-    // **OFFLINE FALLBACK: If API failed (videos empty), TRY Cache**
+    // **OFFLINE FALLBACK: DISABLED per user request**
+    // We want FRESH content every time. Backend is fast enough.
+    /*
     if (_videos.isEmpty && !append && page == 1) {
       AppLogger.log(
           '⚠️ API failed or returned empty. Attempting Offline Fallback via Hive Cache...');
@@ -116,6 +147,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         }
       }
     }
+    */
     } catch (e) {
       AppLogger.log('❌ Error loading videos: $e');
       if (mounted) {
@@ -315,20 +347,13 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       AppLogger.log('   Has More: $hasMore');
       AppLogger.log('   Total Videos Available: $total');
 
-      // **NEW: Cache loaded videos to Hive**
-      if (newVideos.isNotEmpty && !clearSession) {
-        try {
-          final feedLocalDataSource = FeedLocalDataSource();
-          // ignore: unawaited_futures
-          feedLocalDataSource.cacheFeed(
-            currentPage,
-            widget.videoType,
-            newVideos,
-          );
-        } catch (e) {
-          AppLogger.log('⚠️ FeedLocalDataSource: Failed to cache feed: $e');
-        }
-      }
+      // **REMOVED: Hive Caching as per user request**
+      // if (newVideos.isNotEmpty && !clearSession) {
+      //   try {
+      //     final feedLocalDataSource = FeedLocalDataSource();
+      //    feedLocalDataSource.cacheFeed(...)
+      //   } catch (e) {}
+      // }
 
       // **SIMPLIFIED: No Deduplication**
       // Trust backend to return unique videos
@@ -586,28 +611,22 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
           
           if (hasCachedVideos) {
              // **SCENARIO 1: Cache exists -> MERGE (Append)**
-             // Filter duplicates (fresh videos that might essentially be the same as cached ones)
-             // We use ID or IdentityKey for deduplication
-             final currentIds = _videos.map((v) => v.id).toSet();
-             final uniqueNewVideos = videosToUse.where((v) => !currentIds.contains(v.id)).toList();
+             // **CHANGED: Removed Session Deduplication Logic per user request**
+             // Simply append all new videos to the end.
              
-             if (uniqueNewVideos.isNotEmpty) {
+             if (videosToUse.isNotEmpty) {
                 // **APPEND** to the end
-                // Do NOT reset _currentIndex (keep user watching current video)
-                _videos.addAll(uniqueNewVideos);
+                _videos.addAll(videosToUse);  
                 
                 AppLogger.log(
-                   '✅ VideoFeedAdvanced: SEAMLESS MERGE - Appended ${uniqueNewVideos.length} fresh videos to existing ${_videos.length - uniqueNewVideos.length} cached videos.',
+                   '✅ VideoFeedAdvanced: SEAMLESS MERGE - Appended ${videosToUse.length} fresh videos to existing ${_videos.length - videosToUse.length} cached videos.',
                 );
-             } else {
-                AppLogger.log('ℹ️ VideoFeedAdvanced: All fresh videos were duplicates of cached videos. No changes made.');
              }
              
              // Ensure UI state matches
              _errorMessage = null;
              _currentPage = currentPage; 
-             _hasMore = hasMore || uniqueNewVideos.isNotEmpty; 
-
+             _hasMore = hasMore || videosToUse.isNotEmpty; 
              
           } else {
              // **SCENARIO 2: No Cache (Cold Start) -> REPLACE**

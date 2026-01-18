@@ -3,6 +3,7 @@ import 'package:vayu/utils/responsive_helper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'dart:io'; // Added for File
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/core/managers/profile_state_manager.dart';
 import 'package:vayu/core/managers/smart_cache_manager.dart';
@@ -14,8 +15,7 @@ import 'dart:async';
 import 'package:share_plus/share_plus.dart';
 import 'package:vayu/features/profile/data/datasources/profile_local_datasource.dart';
 import 'package:vayu/core/services/http_client_service.dart';
-import 'package:vayu/view/widget/profile/profile_header_widget.dart';
-import 'package:vayu/view/widget/profile/profile_stats_widget.dart';
+// Removed ProfileHeaderWidget and ProfileStatsWidget imports
 import 'package:vayu/view/widget/profile/profile_videos_widget.dart';
 import 'package:vayu/view/widget/profile/profile_menu_widget.dart';
 import 'package:vayu/view/widget/profile/profile_dialogs_widget.dart';
@@ -79,8 +79,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       false); // Default to false - show notice until confirmed
   final ValueNotifier<bool> _isCheckingUpiId = ValueNotifier<bool>(false);
 
-  // **NEW: Refresh counter to force ProfileStatsWidget to reload earnings**
-  int _earningsRefreshCounter = 0;
+  // Removed _earningsRefreshCounter as it is unused
 
   // **NEW: Track if videos have been loaded/checked for this profile session**
   // This prevents reloading when creator has no videos
@@ -88,6 +87,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   String? _lastLoadedUserId; // Track which user's videos we've loaded
 
   @override
+
   void initState() {
     super.initState();
     ProfileScreenLogger.logProfileScreenInit();
@@ -382,7 +382,29 @@ class _ProfileScreenState extends State<ProfileScreen>
             return; // Success - exit retry loop
           } else {
             // If no user ID, wait for videos anyway (fallback)
-            await _loadVideos(forceRefresh: forceRefresh);
+            try {
+              await _loadVideos(forceRefresh: forceRefresh);
+            } catch (e) {
+              AppLogger.log(
+                  '⚠️ ProfileScreen: Error loading videos during retry sequence: $e');
+              // Don't fail the whole profile load if only videos fail
+              // The user will see the profile header and can retry loading videos
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                        '${AppText.get('error_videos_load')}: ${_getUserFriendlyError(e)}'),
+                    backgroundColor: Colors.orange,
+                    duration: const Duration(seconds: 3),
+                    action: SnackBarAction(
+                      label: AppText.get('btn_retry', fallback: 'Retry'),
+                      textColor: Colors.white,
+                      onPressed: () => _loadVideos(forceRefresh: true),
+                    ),
+                  ),
+                );
+              }
+            }
             _isLoading.value = false;
             return; // Success - exit retry loop
           }
@@ -491,7 +513,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         await _stateManager
             .loadUserVideos(userIdForVideos,
                 forceRefresh: forceRefresh, silent: silent)
-            .timeout(const Duration(seconds: 10));
+            .timeout(const Duration(seconds: 30));
 
         // **FIXED: Mark videos as loaded/attempted after successful load**
         // This prevents reloading when creator has no videos
@@ -590,11 +612,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       // **FAST: Refresh earnings after manual refresh**
       _refreshEarningsData(forceRefresh: true).catchError((e) {
         // Silent fail
-      });
-
-      // **NEW: Increment refresh counter to force ProfileStatsWidget to reload earnings**
-      setState(() {
-        _earningsRefreshCounter++;
       });
 
       _isLoading.value = false;
@@ -1246,7 +1263,11 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  /// Show How to Earn guidance (same style as UploadScreen's What to Upload)
+
+
+
+
+  /// Show How to Earn guidance
   void _showHowToEarnDialog() {
     ProfileDialogsWidget.showHowToEarnDialog(
       context,
@@ -1686,14 +1707,6 @@ class _ProfileScreenState extends State<ProfileScreen>
             }
 
             // Determine if viewing own profile (authController already passed as parameter)
-            final loggedInUserId = authController.userData?['id']?.toString() ??
-                authController.userData?['googleId']?.toString();
-            final displayedUserId = widget.userId ??
-                _stateManager.userData?['googleId']?.toString() ??
-                _stateManager.userData?['id']?.toString();
-            final bool isViewingOwnProfile = loggedInUserId != null &&
-                loggedInUserId.isNotEmpty &&
-                loggedInUserId == displayedUserId;
 
             // If we reach here, we have user data and can show the profile
             return RefreshIndicator(
@@ -1706,16 +1719,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                     const GoogleAdMobBannerWidget(
                       adUnitId: 'ca-app-pub-2359959043864469/8166031130',
                     ),
-                    ProfileHeaderWidget(
-                      stateManager: _stateManager,
-                      userId: widget.userId,
-                      onEditProfile: _handleEditProfile,
-                      onSaveProfile: _handleSaveProfile,
-                      onCancelEdit: _handleCancelEdit,
-                      onProfilePhotoChange: _handleProfilePhotoChange,
-                      onShowHowToEarn:
-                          isViewingOwnProfile ? _showHowToEarnDialog : null,
-                    ),
+                    // Profile Header Widget Removed (Integrated into _buildProfileContent)
+
                     _buildProfileContent(userProvider, userModel),
                   ],
                 ),
@@ -1882,16 +1887,30 @@ class _ProfileScreenState extends State<ProfileScreen>
                       letterSpacing: -0.5,
                     ),
                   )
-                : Text(
-                    stateManager.userData?['name'] ??
-                        AppText.get('profile_title'),
-                    style: const TextStyle(
-                      color: Color(0xFF1A1A1A),
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
+                : (stateManager.isEditing
+                    ? TextField(
+                        controller: stateManager.nameController,
+                        style: const TextStyle(
+                          color: Color(0xFF1A1A1A),
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        decoration: const InputDecoration(
+                          border: UnderlineInputBorder(),
+                          hintText: 'Enter your name',
+                        ),
+                        autofocus: true,
+                      )
+                    : Text(
+                        stateManager.userData?['name'] ??
+                            AppText.get('profile_title'),
+                        style: const TextStyle(
+                          color: Color(0xFF1A1A1A),
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.5,
+                        ),
+                      )),
             leading: isViewingOwnProfile
                 ? IconButton(
                     icon: const Icon(Icons.menu,
@@ -2065,6 +2084,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Widget _buildProfileContent(UserProvider userProvider, UserModel? userModel) {
+    // Determine if viewing own profile
     final authController =
         Provider.of<GoogleSignInController>(context, listen: false);
     final loggedInUserId = authController.userData?['id']?.toString() ??
@@ -2081,7 +2101,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       child: Column(
         children: [
           // UPI ID Notice Banner (only for own profile without UPI ID)
-          // Shown near the top, more compact for better use of vertical space.
           if (isViewingOwnProfile)
             ValueListenableBuilder<bool>(
               valueListenable: _isCheckingUpiId,
@@ -2101,82 +2120,163 @@ class _ProfileScreenState extends State<ProfileScreen>
                 );
               },
             ),
-          // Stats Section (kept tight under banner for compact layout)
-          ProfileStatsWidget(
-            stateManager: _stateManager,
-            userId: widget.userId,
-            isVideosLoaded: _stateManager.userVideos.isNotEmpty,
-            isFollowersLoaded: true,
-            refreshKey:
-                _earningsRefreshCounter, // **NEW: Pass refresh key to force reload**
-            onFollowersTap: () {
-              // **SIMPLIFIED: Simple followers tap**
-              AppLogger.log('🔄 ProfileScreen: Followers tapped');
-            },
-            // **FIXED: Navigate to CreatorRevenueScreen when earnings is tapped (only for own profile)**
-            onEarningsTap: isViewingOwnProfile ? _handleEarningsTap : null,
-          ),
 
-          const SizedBox(height: 16),
-
-          // Action Buttons Section
-          RepaintBoundary(
+          // **NEW: Compact Profile Header (Side-by-Side Avatar + Stats)**
+          Container(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Container(
-                    height: 29,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: const Color(0xFF10B981), width: 1.5),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // **1. Avatar (Left Side)**
+                    _buildCompactAvatar(),
+                    const SizedBox(width: 20),
+
+                    // **2. Stats Row (Right Side)**
+                    // Followers, Videos, Earnings(Recommendations)
+                    Expanded(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: _buildCompactStatItem(
+                              label: 'Followers',
+                              valueBuilder: (context) => _getFollowersCountString(context),
+                            ),
+                          ),
+                           Container(
+                            height: 24,
+                            width: 1,
+                            color: Colors.grey[300],
+                          ),
+                          Expanded(
+                            child: _buildCompactStatItem(
+                              label: 'Videos',
+                              valueBuilder: (context) => _stateManager.userVideos.length.toString(),
+                            ),
+                          ),
+                           Container(
+                            height: 24,
+                            width: 1,
+                            color: Colors.grey[300],
+                          ),
+                          Expanded(
+                            child: _buildCompactStatItem(
+                              label: 'Earnings',
+                              isHighlighted: true,
+                              valueBuilder: (context) => '₹${_stateManager.cachedEarnings.toStringAsFixed(2)}',
+                              onTap: isViewingOwnProfile ? _handleEarningsTap : null,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    child: ElevatedButton.icon(
-                      onPressed: _handleReferFriends,
-                      icon: const Icon(
-                        Icons.share,
-                        color: Color(0xFF10B981),
-                        size: 12,
-                      ),
-                      label: Text(
-                        AppText.get('profile_refer_friends'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF10B981),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: -0.1,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 0),
-                        minimumSize: const Size.fromHeight(29),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide.none,
-                        ),
-                      ),
-                    ),
+                  ],
+                ),
+                
+                const SizedBox(height: 12),
+                
+                // **3. Bio Section (Below Header)**
+                Text(
+                  _stateManager.userData?['bio'] ?? '',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF4B5563),
+                    fontSize: 14,
                   ),
+                ),
+
+                const SizedBox(height: 16),
+
+                // Action Buttons
+                Row(
+                  children: [
+                    if (isViewingOwnProfile)
+                      Expanded(
+                        child: _stateManager.isEditing
+                            ? Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton(
+                                      onPressed: _handleCancelEdit,
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.red,
+                                        side: const BorderSide(color: Colors.red),
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 10),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                      ),
+                                      child: const Text('Cancel'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      onPressed: _handleSaveProfile,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 10),
+                                        elevation: 0,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                      ),
+                                      child: const Text('Save'),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : ElevatedButton.icon(
+                                onPressed: _showHowToEarnDialog,
+                                icon: const Icon(Icons.workspace_premium,
+                                    size: 18),
+                                label: const Text('How to Earn'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF10B981),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 10),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  elevation: 0,
+                                ),
+                              ),
+                      ),
+                    if (isViewingOwnProfile && !_stateManager.isEditing) ...[
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: _handleReferFriends,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF3B82F6),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: const Text('Refer Friends'),
+                        ),
+                      ),
+                    ]
+                  ],
                 ),
               ],
             ),
           ),
 
-          // Content Tabs: Your Videos | My Recommendations (icon-based)
+          const SizedBox(height: 8),
+
+          // Content Tabs: Your Videos | Recommendations (icon-based)
           ValueListenableBuilder<int>(
             valueListenable: _activeProfileTabIndex,
             builder: (context, activeIndex, child) {
@@ -2188,26 +2288,15 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
 
           // Videos Section
-          // Swipe horizontally across content area to switch tabs
           ValueListenableBuilder<int>(
             valueListenable: _activeProfileTabIndex,
             builder: (context, activeIndex, child) {
-              return GestureDetector(
-                onHorizontalDragEnd: (details) {
-                  final velocity = details.primaryVelocity ?? 0;
-                  if (velocity < 0 && activeIndex == 0) {
-                    _activeProfileTabIndex.value = 1;
-                  } else if (velocity > 0 && activeIndex == 1) {
-                    _activeProfileTabIndex.value = 0;
-                  }
-                },
-                child: activeIndex == 0
-                    ? ProfileVideosWidget(
-                        stateManager: _stateManager,
-                        showHeader: false,
-                      )
-                    : _buildRecommendationsSection(),
-              );
+              return activeIndex == 0
+                  ? ProfileVideosWidget(
+                      stateManager: _stateManager,
+                      showHeader: false,
+                    )
+                  : _buildRecommendationsSection();
             },
           ),
         ],
@@ -2215,11 +2304,149 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  /// Compact icon-only tabs
+  // **NEW: Helper to build compact avatar**
+  Widget _buildCompactAvatar() {
+    return GestureDetector(
+      onTap: _stateManager.isEditing ? _handleProfilePhotoChange : null,
+      child: Stack(
+        children: [
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: const Color(0xFFE5E7EB),
+                width: 2,
+              ),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(40),
+              child: Consumer<ProfileStateManager>(
+                builder: (context, stateManager, child) {
+                  final profilePic = stateManager.userData?['profilePic'];
+                  if (profilePic != null && profilePic.isNotEmpty) {
+                    if (profilePic.startsWith('http')) {
+                      return Image.network(profilePic, fit: BoxFit.cover);
+                    } else {
+                      return Image.file(File(profilePic), fit: BoxFit.cover);
+                    }
+                  }
+                  return Container(
+                    color: Colors.grey[200],
+                    child: const Icon(Icons.person, color: Colors.grey, size: 40),
+                  );
+                },
+              ),
+            ),
+          ),
+          if (_stateManager.isEditing)
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.4),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.camera_alt,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // **NEW: Helper for compact stats**
+  Widget _buildCompactStatItem({
+    required String label,
+    required String Function(BuildContext) valueBuilder,
+    bool isHighlighted = false,
+    VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Builder(builder: (context) {
+             return Text(
+               valueBuilder(context),
+               style: TextStyle(
+                 color: isHighlighted ? const Color(0xFF2563EB) : const Color(0xFF111827),
+                 fontSize: 18,
+                 fontWeight: FontWeight.w700,
+               ),
+             );
+          }),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF6B7280),
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getFollowersCountString(BuildContext context) {
+    // 1. Try getting from ProfileStateManager first (immediate)
+    if (_stateManager.userData != null) {
+      final followersCount = _stateManager.userData!['followersCount'] ??
+          _stateManager.userData!['followers'];
+
+      if (followersCount != null) {
+        final count = followersCount is int
+            ? followersCount
+            : (int.tryParse(followersCount.toString()) ?? 0);
+        if (count > 0) return count.toString();
+      }
+    }
+
+    // 2. Fallback to UserProvider (async loaded)
+    final List<String> idsToTry = <String?>[
+      widget.userId,
+      _stateManager.userData?['googleId'],
+      _stateManager.userData?['_id'] ?? _stateManager.userData?['id'],
+    ]
+        .where((e) => e != null && (e).isNotEmpty)
+        .map((e) => e as String)
+        .toList()
+        .toSet()
+        .toList();
+
+    if (idsToTry.isNotEmpty) {
+      try {
+        final userProvider = Provider.of<UserProvider>(context, listen: false);
+        for (final candidateId in idsToTry) {
+          final userModel = userProvider.getUserData(candidateId);
+          if (userModel?.followersCount != null &&
+              userModel!.followersCount > 0) {
+            return userModel.followersCount.toString();
+          }
+        }
+      } catch (e) {
+        // Ignore provider errors if context is unstable
+      }
+    }
+
+    return '0';
+  }
+
+  /// Compact tabs: Videos | Recommendations
   Widget _ProfileTabs(
       {required int activeIndex, required ValueChanged<int> onSelect}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F4F6),
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: Row(
         children: [
           Expanded(
@@ -2228,38 +2455,30 @@ class _ProfileScreenState extends State<ProfileScreen>
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
-                  color:
-                      activeIndex == 0 ? const Color(0xFF111827) : Colors.white,
+                  color: activeIndex == 0 ? Colors.white : Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                  boxShadow: activeIndex == 0 ? [
+                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, offset: const Offset(0, 1))
+                  ] : [],
                 ),
-                child: Icon(
-                  Icons.video_library,
-                  size: 18,
-                  color:
-                      activeIndex == 0 ? Colors.white : const Color(0xFF111827),
-                ),
+                child: Center(child: Text('Videos', style: TextStyle(fontWeight: FontWeight.w600, color: activeIndex == 0 ? Colors.black : Colors.grey))),
               ),
             ),
           ),
-          const SizedBox(width: 10),
           Expanded(
             child: GestureDetector(
               onTap: () => onSelect(1),
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
-                  color:
-                      activeIndex == 1 ? const Color(0xFF111827) : Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                   color: activeIndex == 1 ? Colors.white : Colors.transparent,
+                   borderRadius: BorderRadius.circular(8),
+                    boxShadow: activeIndex == 1 ? [
+                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, offset: const Offset(0, 1))
+                  ] : [],
                 ),
-                child: Icon(
-                  Icons.shopping_bag,
-                  size: 18,
-                  color:
-                      activeIndex == 1 ? Colors.white : const Color(0xFF111827),
-                ),
+                 child: Center(child: Text('Top Earner', style: TextStyle(fontWeight: FontWeight.w600, color: activeIndex == 1 ? Colors.black : Colors.grey))),
+
               ),
             ),
           ),
@@ -2267,6 +2486,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       ),
     );
   }
+
 
   /// Recommendations tab – shows Top Earners from following (3-column grid)
   Widget _buildRecommendationsSection() {

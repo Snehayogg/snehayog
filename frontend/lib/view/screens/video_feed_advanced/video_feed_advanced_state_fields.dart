@@ -107,7 +107,7 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   // Focus bandwidth on next 2 videos for max speed instead of spreading thin
   // **OPTIMIZED: Increased from 2 to 4 for faster scrolling**
   // Focus bandwidth on next 4 videos for better responsiveness
-  int get _maxConcurrentInitializations => 4;
+  int get _maxConcurrentInitializations => 2;
   final Map<int, int> _preloadRetryCount = {};
   int get _maxRetryAttempts => 2;
   Timer? _preloadTimer;

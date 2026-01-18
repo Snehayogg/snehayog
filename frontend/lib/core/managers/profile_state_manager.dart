@@ -12,6 +12,8 @@ import 'package:vayu/services/cloudflare_r2_service.dart';
 import 'package:vayu/services/user_service.dart';
 import 'package:vayu/services/payment_setup_service.dart';
 import 'package:vayu/services/video_service.dart';
+import 'package:vayu/services/earnings_service.dart'; // Add this import
+
 import 'package:vayu/utils/feature_flags.dart';
 import 'package:vayu/core/constants/profile_constants.dart';
 import 'package:vayu/core/managers/smart_cache_manager.dart';
@@ -43,6 +45,10 @@ class ProfileStateManager extends ChangeNotifier {
   bool _isSelecting = false;
   bool _isVideosLoading = false;
   final Set<String> _selectedVideoIds = {};
+  
+  // Earnings state
+  double _cachedEarnings = 0.0;
+
 
   // Controllers
   final TextEditingController nameController = TextEditingController();
@@ -83,6 +89,8 @@ class ProfileStateManager extends ChangeNotifier {
   Set<String> get selectedVideoIds => _selectedVideoIds;
   bool get hasSelectedVideos => _selectedVideoIds.isNotEmpty;
   bool get isVideosLoading => _isVideosLoading;
+  double get cachedEarnings => _cachedEarnings;
+
 
   // Profile management
   Future<void> loadUserData(String? userId,
@@ -601,13 +609,41 @@ class ProfileStateManager extends ChangeNotifier {
         silent: silent,
       );
     } finally {
-      // Ensure spinner is stopped even if we didn't hit cache
       if (_isVideosLoading) {
         _isVideosLoading = false;
         notifyListeners();
       }
+      
+      // Load earnings after videos are loaded
+      if (_userVideos.isNotEmpty) {
+        _loadEarnings();
+      }
     }
   }
+
+  /// Load earnings for the current video set
+  Future<void> _loadEarnings() async {
+    try {
+      if (_userVideos.isEmpty) {
+        _cachedEarnings = 0.0;
+        notifyListeners();
+        return;
+      }
+      
+      // Use EarningsService to calculate
+      final totalRevenue = await EarningsService.calculateCreatorTotalRevenueForVideos(
+        _userVideos,
+        timeout: const Duration(seconds: 3),
+      );
+      
+      _cachedEarnings = totalRevenue;
+      notifyListeners();
+      AppLogger.log('💰 ProfileStateManager: Calculated earnings: ₹$_cachedEarnings');
+    } catch (e) {
+      AppLogger.log('⚠️ ProfileStateManager: Failed to calculate earnings: $e');
+    }
+  }
+
 
   Future<void> _loadUserVideosWithCaching(
     String? userId, {

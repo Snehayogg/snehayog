@@ -40,6 +40,7 @@ import 'package:vayu/view/widget/custom_share_widget.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/controller/google_sign_in_controller.dart';
+import 'package:vayu/core/managers/app_initialization_manager.dart';
 
 
 import 'package:vayu/config/admob_config.dart';
@@ -122,6 +123,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         AutomaticKeepAliveClientMixin,
         VideoFeedStateFieldsMixin {
   final Map<String, bool> _likeInProgress = {};
+  Timer? _pageChangeDebounceTimer; // **NEW: Timer for debouncing page rapid scrolls**
 
   @override
   bool get wantKeepAlive => true;
@@ -165,21 +167,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         _ensureWakelockForVisibility();
         _lifecyclePaused = false;
 
-        // **NEW: Refresh feed if app was in background for > 30 minutes**
-        bool shouldForceRefresh = false;
-        if (_lastPausedAt != null) {
-          final timeInBackground = DateTime.now().difference(_lastPausedAt!);
-          if (timeInBackground.inMinutes >= 30) {
-            AppLogger.log(
-                '🔄 VideoFeedAdvanced: App resumed after ${timeInBackground.inMinutes} mins. Triggering fresh feed load.');
-            shouldForceRefresh = true;
-          }
-          _lastPausedAt = null; // Clear after use
-        }
-
-        if (shouldForceRefresh) {
-          _loadVideos(page: 1, append: false, clearSession: false);
-        }
+        // **FIX: Removed arbitrary 30-minute forced refresh**
+        // Let the OS manage memory. If app is still alive, resume where we left off.
+        // If OS killed it, proper state restoration (coming next) will handle it.
+        _lastPausedAt = null; // Clear after use
 
         // Try restoring state after resume
         _restoreBackgroundStateIfAny().then((_) {
@@ -190,9 +181,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               );
               return;
             }
-            // If we just triggered a refresh, don't try to autoplay old current index
-            if (shouldForceRefresh) return;
-
+            
             final openedFromProfile = widget.initialVideos != null &&
                 widget.initialVideos!.isNotEmpty;
             if (openedFromProfile) {
@@ -540,6 +529,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       AppLogger.log('⏸️ Autoplay blocked ($context) due to lifecycle pause.');
       return false;
     }
+    // **FIX: Extra safeguard - check actual system lifecycle state**
+    if (WidgetsBinding.instance.lifecycleState != null && 
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+      AppLogger.log('⏸️ Autoplay blocked ($context): System state is ${WidgetsBinding.instance.lifecycleState}');
+      return false;
+    }
     return true;
   }
 
@@ -782,10 +777,18 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         final bool shouldPrime = _canPrimeIndex(index);
         if (shouldPrime) {
           try {
-            await controller.setVolume(0.0);
-            // Tiny seek helps codecs surface a real frame
-            await controller.seekTo(const Duration(milliseconds: 1));
-            await controller.play();
+            // **FIX: Rigorous lifecycle check before priming**
+            if (_lifecyclePaused) {
+               AppLogger.log('⏸️ Priming skipped: Lifecycle paused');
+            } else if (WidgetsBinding.instance.lifecycleState != null && 
+                WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+               AppLogger.log('⏸️ Priming skipped: App not resumed (system state: ${WidgetsBinding.instance.lifecycleState})'); 
+            } else {
+              await controller.setVolume(0.0);
+              // Tiny seek helps codecs surface a real frame
+              await controller.seekTo(const Duration(milliseconds: 1));
+              await controller.play();
+            }
           } catch (_) {}
         }
 
@@ -1259,25 +1262,26 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       }
     }
 
-    // **CRITICAL FIX: Load More Trigger (Fast Scroll)**
-    // Trigger immediately without debounce if we are near the end.
-    if (index < _videos.length && _hasMore && !_isLoadingMore) {
-      final distanceFromEnd = _videos.length - index;
-      // **PRELOAD TRIGGER INCREASED**: Trigger load when 15 videos remain (full page buffer)
-      const triggerDistance = 15;
+    // **CRITICAL FIX: Removed synchronous _loadMoreVideos trigger**
+    // It is already handled in _handlePageChange (debounced) and _buildFeedItem (UI builder).
+    // Removing it here prevents API spam during fast scrolling.
 
-      if (distanceFromEnd <= triggerDistance) {
-        _loadMoreVideos();
+    // **FIX: Fast Scroll Debounce Logic**
+    // If user is scrolling fast, cancel previous timer and restart
+    // This prevents "Fire Hose" effect of loading every skipped video
+    _pageChangeDebounceTimer?.cancel();
+    _pageChangeDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted && index == _currentIndex) { // Ensure index is still valid
+         _handlePageChange(index);
       }
+    });
+
+    // **IMMEDIATE VISUAL FEEDBACK:**
+    // Even while debouncing, we update the index locally so UI (like page number) can update
+    // But we DO NOT trigger heavy video loading yet.
+    if (_currentIndex != index) {
+      _currentIndex = index;
     }
-
-    // **INSTANT PRELOAD: Removed to improve fast scrolling performance.**
-    // Rely on _preloadNearbyVideosDebounced to handle preloading when scrolling slows down.
-
-
-    // **INSTANT PLAYBACK: Removed debounce to play immediately on scroll snap**
-    _pageChangeTimer?.cancel();
-    _handlePageChange(index);
   }
 
   /// **PAGE CHANGE HANDLER**
@@ -1310,6 +1314,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     // **FIXED: Reset user paused state for the NEW video so it can autoplay**
     _userPaused[index] = false;
+
+    // **RESUME FEATURE: Save state immediately when user settles on a page**
+    // This ensures we can resume even if app crashes or is killed ungracefully
+    if (mounted) {
+      _saveBackgroundState();
+    }
 
     // **MEMORY MANAGEMENT: Periodic cleanup on page change**
     if (index % 10 == 0 &&

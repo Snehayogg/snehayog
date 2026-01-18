@@ -8,7 +8,7 @@ import 'package:vayu/core/managers/smart_cache_manager.dart';
 import 'package:vayu/core/managers/video_controller_manager.dart';
 import 'package:vayu/services/platform_id_service.dart';
 
-import 'package:hive_flutter/hive_flutter.dart';
+// import 'package:hive_flutter/hive_flutter.dart';
 
 class VideoProvider extends ChangeNotifier {
   final VideoService _videoService = VideoService();
@@ -53,40 +53,9 @@ class VideoProvider extends ChangeNotifier {
 
     }
 
-    // 0) **AGGRESSIVE CACHING (Hive):** Load stale videos immediately (0ms)
-    // This runs synchronously or very fast to show something instantly
+    // 0) **AGGRESSIVE CACHING REMOVED** - functionality replaced by AppInitializationManager in UI
     if (isInitialLoad && _videos.isEmpty) {
-      try {
-        final box = Hive.box('video_feed_cache');
-        if (box.containsKey('stale_video_list')) {
-          final dynamic staleData = box.get('stale_video_list');
-          if (staleData != null) {
-            final List<dynamic> rawList = staleData as List<dynamic>;
-            final staleVideos = _deserializeVideoList(rawList);
-            
-            if (staleVideos.isNotEmpty) {
-              _videos = staleVideos;
-              _loadState = VideoLoadState.loaded; // Show content immediately
-              notifyListeners();
-              
-              // Pre-create first controller for stale video
-              try {
-                final firstVideo = _videos.first;
-                 unawaited(VideoControllerManager().preloadController(0, firstVideo));
-              } catch (_) {}
-              
-              // Continue to fetch fresh data in background...
-              // We set state back to loading to indicate background activity if needed,
-              // but for smooth UX, we might keep it 'loaded' and just update silently?
-              // Let's keep it 'loading' so any spinners know network is active, 
-              // but the list is already populated.
-              _loadState = VideoLoadState.loading; 
-            }
-          }
-        }
-      } catch (e) {
-        // Ignore Hive errors, proceed to normal load
-      }
+       // No-op
     }
 
     _setLoadState(
@@ -189,20 +158,9 @@ class VideoProvider extends ChangeNotifier {
     }
   }
 
-  /// **NEW: Save current videos as stale data for next launch**
+  /// **REMOVED: Stale video saving (Hive)**
   Future<void> saveStaleVideos() async {
-    try {
-      if (_videos.isEmpty) return;
-      
-      // Save top 3 videos
-      final videosToSave = _videos.take(3).map((v) => v.toJson()).toList();
-      
-      final box = Hive.box('video_feed_cache');
-      await box.put('stale_video_list', videosToSave);
-      
-    } catch (e) {
-      // Ignore errors
-    }
+    // No-op
   }
 
   /// Refresh videos (reset and reload)

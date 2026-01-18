@@ -88,7 +88,8 @@ extension _VideoFeedPersistence on _VideoFeedAdvancedState {
       if (savedTimestamp != null) {
         final savedTime = DateTime.fromMillisecondsSinceEpoch(savedTimestamp);
         final hoursSinceSaved = DateTime.now().difference(savedTime).inHours;
-        if (hoursSinceSaved > 24) {
+        // **FIX: Extend expiry to 7 days (168 hours) for "Resume" feature**
+        if (hoursSinceSaved > 168) {
           AppLogger.log(
               'ℹ️ Saved state is too old ($hoursSinceSaved hours), ignoring');
           // Clear old state
