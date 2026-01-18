@@ -6,6 +6,19 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// **FIX: Use static binaries for robustness**
+import ffmpegStatic from 'ffmpeg-static';
+import ffprobeStatic from 'ffprobe-static';
+
+// Set paths explicitly
+ffmpeg.setFfmpegPath(ffmpegStatic);
+ffmpeg.setFfprobePath(ffprobeStatic.path);
+
+console.log('🔧 HLSEncodingService: Configured static FFmpeg paths');
+console.log('   FFmpeg:', ffmpegStatic);
+console.log('   FFprobe:', ffprobeStatic.path);
+
+
 class HLSEncodingService {
   constructor() {
     // Ensure HLS output directory exists

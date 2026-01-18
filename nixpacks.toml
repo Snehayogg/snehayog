@@ -1,0 +1,5 @@
+[phases.setup]
+nixPkgs = ["ffmpeg"]
+
+[env]
+NODE_ENV = "production"
