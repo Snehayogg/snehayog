@@ -142,16 +142,38 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
         return;
       }
 
-      // **FIX: If initialVideoId is provided (deep link), fetch that video first**
-      if (widget.initialVideoId != null && widget.initialVideos == null) {
+      // **FIX: If initialVideoId is provided (deep link), OR if we have a saved video ID (cold start restore), fetch that video first**
+      String? targetVideoId = widget.initialVideoId;
+      
+      // **NEW: Check saved state if not a deep link**
+      if (targetVideoId == null && widget.initialVideos == null) {
         try {
-          final targetVideoId = widget.initialVideoId!.trim();
+          final prefs = await SharedPreferences.getInstance();
+          final savedId = prefs.getString(_kSavedVideoIdKey);
+          // Only use saved ID if it's recent (less than 12 hours) to avoid restoring very old state
+          final savedTimestamp = prefs.getInt(_kSavedStateTimestampKey);
+          if (savedId != null && savedTimestamp != null) {
+             final savedTime = DateTime.fromMillisecondsSinceEpoch(savedTimestamp);
+             final hoursSince = DateTime.now().difference(savedTime).inHours;
+             if (hoursSince < 12) {
+               targetVideoId = savedId;
+               AppLogger.log('🔄 Restoring saved state: Video ID $targetVideoId (from $hoursSince hours ago)');
+             }
+          }
+        } catch (_) {}
+      }
+
+      // **FIX: If initialVideoId is provided (deep link), fetch that video first**
+      if ((targetVideoId != null || widget.initialVideoId != null) && widget.initialVideos == null) {
+        try {
+          final effectiveTargetId = targetVideoId ?? widget.initialVideoId!;
+          final cleanTargetId = effectiveTargetId.trim();
           AppLogger.log(
-            '🔗 VideoFeedAdvanced: Deep link detected (cold start), fetching video: $targetVideoId',
+            '🔗 VideoFeedAdvanced: Target video detected (deep link or restore), fetching: $cleanTargetId',
           );
 
           // Fetch the target video first
-          final targetVideo = await _videoService.getVideoById(targetVideoId);
+          final targetVideo = await _videoService.getVideoById(cleanTargetId);
           AppLogger.log(
             '✅ VideoFeedAdvanced: Fetched deep link video: ${targetVideo.videoName} (ID: ${targetVideo.id})',
           );
@@ -162,14 +184,14 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
           if (mounted) {
             // **FIX: For shared/deep link videos, ALWAYS put target video at index 0**
             // This ensures the correct video plays regardless of where it appears in the feed
-            final normalizedTargetId = targetVideoId.trim().toLowerCase();
+            final normalizedTargetId = cleanTargetId.toLowerCase();
 
             // Remove video from list if it exists (to avoid duplicates)
             _videos.removeWhere((v) {
               final normalizedVideoId = v.id.trim().toLowerCase();
               return normalizedVideoId == normalizedTargetId ||
-                  v.id.trim() == targetVideoId ||
-                  v.id == targetVideoId;
+                  v.id.trim() == cleanTargetId ||
+                  v.id == cleanTargetId;
             });
 
             // **CRITICAL: Always insert shared video at index 0 BEFORE any ranking**
@@ -183,7 +205,7 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
               _videos,
               preserveVideoKey: deepLinkVideoKey.isNotEmpty
                   ? deepLinkVideoKey
-                  : targetVideoId,
+                  : cleanTargetId,
             );
 
             // **CRITICAL FIX: If all videos were filtered out, use original videos as fallback**
@@ -199,10 +221,10 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
             // **VERIFY: Ensure deep link video is still at index 0 after ranking**
             final verifyIndex = _videos.indexWhere((v) {
               final normalizedId = v.id.trim().toLowerCase();
-              final normalizedTargetId = targetVideoId.trim().toLowerCase();
+              final normalizedTargetId = cleanTargetId.toLowerCase();
               return normalizedId == normalizedTargetId ||
-                  v.id.trim() == targetVideoId ||
-                  v.id == targetVideoId ||
+                  v.id.trim() == cleanTargetId ||
+                  v.id == cleanTargetId ||
                   videoIdentityKey(v) == deepLinkVideoKey;
             });
 
@@ -226,19 +248,19 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
             if (_videos.isNotEmpty) {
               final videoAtZero = _videos[0];
               final videoAtZeroId = videoAtZero.id.trim().toLowerCase();
-              final targetIdLower = targetVideoId.trim().toLowerCase();
+              final targetIdLower = cleanTargetId.toLowerCase();
               if (videoAtZeroId != targetIdLower &&
-                  videoAtZero.id.trim() != targetVideoId &&
-                  videoAtZero.id != targetVideoId) {
+                  videoAtZero.id.trim() != cleanTargetId &&
+                  videoAtZero.id != cleanTargetId) {
                 AppLogger.log(
-                  '⚠️ VideoFeedAdvanced: Video at index 0 does not match target! Expected: $targetVideoId, Got: ${videoAtZero.id}',
+                  '⚠️ VideoFeedAdvanced: Video at index 0 does not match target! Expected: $cleanTargetId, Got: ${videoAtZero.id}',
                 );
                 // Last resort: find and move the correct video to index 0
                 final correctVideoIndex = _videos.indexWhere((v) {
                   final normalizedId = v.id.trim().toLowerCase();
                   return normalizedId == targetIdLower ||
-                      v.id.trim() == targetVideoId ||
-                      v.id == targetVideoId;
+                      v.id.trim() == cleanTargetId ||
+                      v.id == cleanTargetId;
                 });
                 if (correctVideoIndex != -1 && correctVideoIndex != 0) {
                   final correctVideo = _videos.removeAt(correctVideoIndex);
@@ -249,7 +271,7 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
                 }
               } else {
                 AppLogger.log(
-                  '✅ VideoFeedAdvanced: Verified deep link video is at index 0 (ID: $targetVideoId, Name: ${videoAtZero.videoName})',
+                  '✅ VideoFeedAdvanced: Verified deep link video is at index 0 (ID: $cleanTargetId, Name: ${videoAtZero.videoName})',
                 );
               }
             }
@@ -293,7 +315,7 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
             }
 
             AppLogger.log(
-              '✅ VideoFeedAdvanced: Deep link video ready at index 0 (ID: $targetVideoId, videoName: ${targetVideo.videoName})',
+              '✅ VideoFeedAdvanced: Deep link video ready at index 0 (ID: $cleanTargetId, videoName: ${targetVideo.videoName})',
             );
 
             // **OPTIMIZED: Use ValueNotifiers for granular updates**
@@ -426,9 +448,9 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
       });
 
       if (mounted) {
-        if (!_isColdStart) {
-          await _restoreBackgroundStateIfAny();
-        }
+        // **FIX: Restore saved state (index/position) even on cold start**
+        // This enables "Resume where you left off" feature
+        await _restoreBackgroundStateIfAny();
 
         // **FIX: Only set isLoading = false if videos are actually loaded**
         // If videos list is still empty, keep loading state or show error

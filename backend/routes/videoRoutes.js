@@ -904,6 +904,7 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
         comments: videoObj.comments || []
       };
 
+      /*
       console.log(`🎬 Video ${result.videoName}:`, {
         id: result._id,
         hasVideoUrl: !!result.videoUrl,
@@ -913,15 +914,18 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
         uploader: result.uploader.name,
         uploaderGoogleId: result.uploader.googleId
       });
+      */
 
       return result;
     }));
 
+    /*
     console.log('✅ Sending videos response:', {
       totalVideos: videosWithUrls.length,
       firstVideo: videosWithUrls.length > 0 ? videosWithUrls[0].videoName : 'None',
       lastVideo: videosWithUrls.length > 0 ? videosWithUrls[videosWithUrls.length - 1].videoName : 'None'
     });
+    */
 
     // **NEW: Cache the response for 10 minutes (600 seconds)**
     if (redisService.getConnectionStatus()) {

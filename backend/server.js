@@ -482,6 +482,8 @@ const gracefulShutdown = async (signal) => {
     // Stop cron jobs
     monthlyNotificationCron.stop();
     recommendationScoreCron.stop();
+    // console.log('🚀 Running initial score calculation on startup...');
+    // RecommendationService.recalculateScopes();
 
     // Disconnect Redis
     if (redisService.getConnectionStatus()) {

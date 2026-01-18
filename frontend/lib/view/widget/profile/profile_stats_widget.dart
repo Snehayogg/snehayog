@@ -355,7 +355,7 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
         headers: {
           'Authorization': 'Bearer ${userData['token']}',
         },
-        timeout: const Duration(seconds: 8),
+        timeout: const Duration(seconds: 15),
       );
 
       if (response.statusCode == 200) {
@@ -365,31 +365,8 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
 
         if (response.body.isEmpty) {
           AppLogger.log(
-              '⚠️ ProfileStatsWidget: Empty response body from API - trying frontend calculation as fallback');
-          // **FIX: Try frontend calculation before showing 0**
-          if (widget.stateManager.userVideos.isNotEmpty) {
-            try {
-              final frontendCalculated = await _calculateCurrentMonthEarnings();
-              if (frontendCalculated > 0.0) {
-                AppLogger.log(
-                  '✅ ProfileStatsWidget: Empty API response but frontend calculated ₹${frontendCalculated.toStringAsFixed(2)} - using frontend calculation',
-                );
-                if (mounted) {
-                  setState(() {
-                    _earnings = frontendCalculated;
-                    _isLoadingEarnings = false;
-                  });
-                }
-                return;
-              }
-            } catch (e) {
-              AppLogger.log(
-                '⚠️ ProfileStatsWidget: Frontend calculation fallback failed: $e',
-              );
-            }
-          }
-          // Only show 0 if frontend calculation also fails or no videos
-          if (mounted) {
+              '⚠️ ProfileStatsWidget: Empty response body from API');
+           if (mounted) {
             setState(() {
               _earnings = 0.0;
               _isLoadingEarnings = false;
@@ -410,208 +387,43 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
             (data['thisMonth'] as num?)?.toDouble() ?? 0.0;
 
         AppLogger.log(
-          '💰 ProfileStatsWidget: Monthly earnings loaded from API: ₹${thisMonthEarnings.toStringAsFixed(2)} (this month)',
+          '💰 ProfileStatsWidget: Monthly earnings loaded from API: ₹${thisMonthEarnings.toStringAsFixed(2)}',
         );
 
-        // **FIX: If API returns 0, ALWAYS try frontend calculation as fallback**
-        double finalEarnings = thisMonthEarnings;
-        if (thisMonthEarnings == 0.0) {
-          // **ENHANCED: Always try frontend calculation if API returns 0, even if videos are loading**
-          // Wait a bit for videos to load if they're still loading
-          if (widget.stateManager.isVideosLoading) {
-            AppLogger.log(
-              '⏳ ProfileStatsWidget: Videos still loading, waiting for videos before frontend calculation...',
-            );
-            // Wait up to 3 seconds for videos to load
-            for (int i = 0; i < 6; i++) {
-              await Future.delayed(const Duration(milliseconds: 500));
-              if (!widget.stateManager.isVideosLoading) {
-                break;
-              }
-            }
-          }
-
-          if (widget.stateManager.userVideos.isNotEmpty) {
-            try {
-              final frontendCalculated = await _calculateCurrentMonthEarnings();
-              if (frontendCalculated > 0.0) {
-                AppLogger.log(
-                  '✅ ProfileStatsWidget: API returned 0 but frontend calculated ₹${frontendCalculated.toStringAsFixed(2)} - using frontend calculation',
-                );
-                finalEarnings = frontendCalculated;
-              } else {
-                AppLogger.log(
-                  '⚠️ ProfileStatsWidget: API returned 0 and frontend calculation also returned 0',
-                );
-              }
-            } catch (e) {
-              AppLogger.log(
-                '⚠️ ProfileStatsWidget: Frontend calculation fallback failed: $e',
-              );
-            }
-          } else {
-            AppLogger.log(
-              '⚠️ ProfileStatsWidget: API returned 0 but no videos available for frontend calculation',
-            );
-          }
-        }
-
+        // **CRITICAL FIX: TRUST THE BACKEND. Do NOT fallback to frontend calculation.**
+        // Frontend calculation is based on 'userVideos' which is PAGINATED (first 10 videos).
+        // Calculating earnings from 10 videos when user has 100 will result in "Fake" (undercounted) earnings.
+        // If Backend says 0, it means 0 (or backend issue), but frontend partial sum is misleading.
+        
         if (mounted) {
           setState(() {
-            _earnings = finalEarnings;
+            _earnings = thisMonthEarnings;
             _isLoadingEarnings = false;
           });
         }
+      
       } else {
         AppLogger.log(
             '⚠️ ProfileStatsWidget: API returned status ${response.statusCode}, body: ${response.body}');
-        // **FIXED: Fallback to CURRENT MONTH calculation (not all-time)**
-        if (widget.stateManager.userVideos.isNotEmpty) {
-          try {
-            final currentMonthRevenue = await _calculateCurrentMonthEarnings();
-            AppLogger.log(
-                '💰 ProfileStatsWidget: Using fallback calculation (CURRENT MONTH): ₹${currentMonthRevenue.toStringAsFixed(2)}');
-            if (mounted) {
-              setState(() {
-                _earnings = currentMonthRevenue;
-                _isLoadingEarnings = false;
-              });
-            }
-          } catch (e) {
-            AppLogger.log(
-                '❌ ProfileStatsWidget: Fallback calculation failed: $e');
-            if (mounted) {
-              setState(() {
-                _earnings = 0.0;
-                _isLoadingEarnings = false;
-              });
-            }
-          }
-        } else {
-          // **FIX: Try frontend calculation even when videos list is empty (might be loading)**
-          // Wait a bit for videos to load if they're still loading
-          if (widget.stateManager.isVideosLoading) {
-            AppLogger.log(
-              '⏳ ProfileStatsWidget: Videos still loading, waiting before frontend calculation...',
-            );
-            // Wait up to 3 seconds for videos to load
-            for (int i = 0; i < 6; i++) {
-              await Future.delayed(const Duration(milliseconds: 500));
-              if (!widget.stateManager.isVideosLoading) {
-                break;
-              }
-            }
-          }
-
-          if (widget.stateManager.userVideos.isNotEmpty) {
-            try {
-              final currentMonthRevenue =
-                  await _calculateCurrentMonthEarnings();
-              if (currentMonthRevenue > 0.0) {
-                AppLogger.log(
-                  '✅ ProfileStatsWidget: API failed but frontend calculated ₹${currentMonthRevenue.toStringAsFixed(2)} - using frontend calculation',
-                );
-                if (mounted) {
-                  setState(() {
-                    _earnings = currentMonthRevenue;
-                    _isLoadingEarnings = false;
-                  });
-                }
-                return;
-              }
-            } catch (e) {
-              AppLogger.log(
-                '⚠️ ProfileStatsWidget: Frontend calculation failed: $e',
-              );
-            }
-          }
-
-          // Only show 0 if frontend calculation also fails or no videos
-          if (mounted) {
-            setState(() {
-              _earnings = 0.0;
-              _isLoadingEarnings = false;
-            });
-          }
-        }
-      }
-    } catch (e, stackTrace) {
-      AppLogger.log('❌ ProfileStatsWidget: Error loading earnings: $e');
-      AppLogger.log('Stack trace: $stackTrace');
-
-      // **DEBUG: Log more details about the error**
-      if (e.toString().contains('timeout') ||
-          e.toString().contains('TimeoutException')) {
-        AppLogger.log(
-            '⚠️ ProfileStatsWidget: Request timed out - API might be slow');
-      } else if (e.toString().contains('SocketException') ||
-          e.toString().contains('network')) {
-        AppLogger.log(
-            '⚠️ ProfileStatsWidget: Network error - check internet connection');
-      } else if (e.toString().contains('FormatException') ||
-          e.toString().contains('json')) {
-        AppLogger.log(
-            '⚠️ ProfileStatsWidget: JSON parsing error - API response might be malformed');
-      }
-
-      // **FIXED: Fallback to CURRENT MONTH calculation on error (not all-time)**
-      // **ENHANCED: Wait for videos to load if they're still loading**
-      if (widget.stateManager.isVideosLoading) {
-        AppLogger.log(
-          '⏳ ProfileStatsWidget: Videos still loading, waiting before fallback calculation...',
-        );
-        // Wait up to 3 seconds for videos to load
-        for (int i = 0; i < 6; i++) {
-          await Future.delayed(const Duration(milliseconds: 500));
-          if (!widget.stateManager.isVideosLoading) {
-            break;
-          }
-        }
-      }
-
-      if (widget.stateManager.userVideos.isNotEmpty) {
-        try {
-          AppLogger.log(
-              '🔄 ProfileStatsWidget: Attempting fallback calculation (CURRENT MONTH) from videos...');
-          final currentMonthRevenue = await _calculateCurrentMonthEarnings();
-          if (currentMonthRevenue > 0.0) {
-            AppLogger.log(
-                '✅ ProfileStatsWidget: Fallback calculation result (CURRENT MONTH): ₹${currentMonthRevenue.toStringAsFixed(2)}');
-            if (mounted) {
-              setState(() {
-                _earnings = currentMonthRevenue;
-                _isLoadingEarnings = false;
-              });
-            }
-          } else {
-            AppLogger.log(
-                '⚠️ ProfileStatsWidget: Fallback calculation returned 0');
-            if (mounted) {
-              setState(() {
-                _earnings = 0.0;
-                _isLoadingEarnings = false;
-              });
-            }
-          }
-        } catch (fallbackError) {
-          AppLogger.log(
-              '❌ ProfileStatsWidget: Fallback calculation also failed: $fallbackError');
-          if (mounted) {
-            setState(() {
-              _earnings = 0.0;
-              _isLoadingEarnings = false;
-            });
-          }
-        }
-      } else {
-        AppLogger.log(
-            '⚠️ ProfileStatsWidget: No videos available for fallback calculation');
+        
+        // **CRITICAL FIX: Do NOT fallback to frontend calculation on error.**
+        // Show 0 or error state rather than partial "fake" data.
         if (mounted) {
           setState(() {
             _earnings = 0.0;
             _isLoadingEarnings = false;
           });
         }
+      }
+    } catch (e, stackTrace) {
+      AppLogger.log('❌ ProfileStatsWidget: Error loading earnings: $e');
+      AppLogger.log('Stack trace: $stackTrace');
+
+      if (mounted) {
+         setState(() {
+            _earnings = 0.0;
+            _isLoadingEarnings = false;
+         });
       }
     }
   }

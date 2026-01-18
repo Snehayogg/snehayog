@@ -74,13 +74,18 @@ class _VayuScreenState extends State<VayuScreen> {
       final List<VideoModel> newVideos = result['videos'];
       final bool hasMore = result['hasMore'] ?? false;
 
+      // **FILTER: Only include videos longer than 1 minute (60 seconds)**
+      final List<VideoModel> longFormVideos =
+          newVideos.where((v) => v.duration.inSeconds > 60).toList();
+
       setState(() {
         if (refresh) {
-          _videos = newVideos;
+          _videos = longFormVideos;
         } else {
           final existingIds = _videos.map((v) => v.id).toSet();
-          final uniqueNewVideos =
-              newVideos.where((v) => !existingIds.contains(v.id)).toList();
+          final uniqueNewVideos = longFormVideos
+              .where((v) => !existingIds.contains(v.id))
+              .toList();
           _videos.addAll(uniqueNewVideos);
         }
 

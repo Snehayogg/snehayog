@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'dart:async';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:vayu/view/homescreen.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -11,55 +8,29 @@ import 'package:vayu/controller/main_controller.dart';
 import 'package:vayu/core/providers/video_provider.dart';
 import 'package:vayu/core/providers/user_provider.dart';
 import 'package:vayu/view/screens/video_screen.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'package:vayu/core/services/error_logging_service.dart';
 import 'package:vayu/core/managers/hot_ui_state_manager.dart';
 import 'package:vayu/core/theme/app_theme.dart';
-import 'package:vayu/config/app_config.dart';
 import 'package:app_links/app_links.dart';
-import 'package:vayu/services/video_service.dart' as vsvc;
-import 'package:vayu/core/services/hls_warmup_service.dart';
-import 'package:vayu/core/managers/smart_cache_manager.dart';
-import 'package:vayu/model/video_model.dart';
-import 'package:vayu/services/notification_service.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/background_profile_preloader.dart';
 import 'package:vayu/services/location_onboarding_service.dart';
 import 'package:vayu/services/welcome_onboarding_service.dart';
 import 'package:vayu/view/screens/welcome_onboarding_screen.dart';
-import 'package:vayu/core/services/http_client_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/core/managers/shared_video_controller_pool.dart';
 import 'package:vayu/core/managers/video_controller_manager.dart';
 import 'package:vayu/utils/app_logger.dart';
-import 'package:vayu/services/app_remote_config_service.dart';
-import 'package:vayu/services/video_cache_proxy_service.dart';
-import 'package:hive_flutter/hive_flutter.dart';
+import 'package:vayu/view/screens/splash_screen.dart';
+// import 'package:vayu/core/managers/app_initialization_manager.dart';
+import 'package:vayu/core/services/error_logging_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // **NEW: Initialize Video Cache Proxy for persistent caching**
-  await videoCacheProxy.initialize();
+  // **STAGE 1: BASIC CONFIG (Moved to Splash Screen for Parallelism)**
+  // await AppInitializationManager.instance.initializeStage1();
 
-  // **NEW: Initialize Hive for Instant Data Loading**
-  await Hive.initFlutter();
-  await Hive.openBox('video_feed_cache');
-
-  // **SPLASH PREFETCH: Start network calls immediately while splash is visible**
-  // This runs in parallel with app startup to ensure fresh data is ready ASAP
-  unawaited(_splashPrefetch());
-
-  // **OPTIMIZED: Firebase and notifications enabled**
-  try {
-    await Firebase.initializeApp();
-    final notificationService = NotificationService();
-    unawaited(notificationService.initialize()); // Initialize in background
-  } catch (e) {
-    print('Error initializing Firebase: $e');
-  }
-
-  // **OPTIMIZED: Start app immediately, initialize services in background**
+  // **OPTIMIZED: Start app immediately**
   runApp(
     MultiProvider(
       providers: [
@@ -77,184 +48,10 @@ void main() async {
       ),
     ),
   );
-
-  // **BACKGROUND: Initialize heavy services after app starts**
-  // **OPTIMIZED: Delay heavy initialization to let UI settle first (Fixes startup lag/audio break)**
-  // Increased delay to 5 seconds to ensure player is fully stable
-  Future.delayed(const Duration(seconds: 5), () {
-     _initializeServicesInBackground();
-  });
-
-  // **OPTIMIZED: Check server connectivity non-blocking (don't wait for it)**
-  unawaited(_checkServerConnectivity());
 }
+// Removed redundant _checkServerConnectivity and _initializeServicesInBackground (moved to Manager)
 
-/// **OPTIMIZED: Check server connectivity and set optimal URL (non-blocking)**
-Future<void> _checkServerConnectivity() async {
-  try {
-    // Clear any cached URLs to force fresh check
-    AppConfig.clearCache();
-    final workingUrl = await AppConfig.checkAndUpdateServerUrl();
-
-    // In development mode, verify local server is accessible
-    if (workingUrl.contains('192.168') ||
-        workingUrl.contains('localhost') ||
-        workingUrl.contains('127.0.0.1')) {
-    }
-  } catch (e) {
-  }
-}
-
-/// **OPTIMIZED: Initialize heavy services in background**
-void _initializeServicesInBackground() async {
-  try {
-    // **NEW: Initialize backend-driven config first (non-blocking)**
-    unawaited(AppRemoteConfigService.instance.initialize().then((_) {
-    }).catchError((e) {
-    }));
-
-    // **OPTIMIZED: Initialize AdMob non-blocking (don't wait for it)**
-    unawaited(() async {
-      try {
-        await MobileAds.instance.initialize();
-
-        // Configure AdMob RequestConfiguration for better ad loading
-        // This helps with ad delivery and debugging
-        try {
-          final requestConfiguration = RequestConfiguration(
-            // In release builds, real ads will be served
-            // Test device IDs can be added here if needed for testing
-            testDeviceIds: kDebugMode ? [] : [], // Empty in release = real ads
-          );
-          await MobileAds.instance
-              .updateRequestConfiguration(requestConfiguration);
-
-        } catch (e) {
-        }
-
-        ErrorLoggingService.logServiceInitialization('AdMob');
-
-      } catch (e) {
-      }
-    }());
-
-    // Set orientation in background
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
-
-    // **CLEANUP: Perform periodic proxy cache cleanup (LOW PRIORITY)**
-    // Delay further to ensure it doesn't compete with video playback
-    Future.delayed(const Duration(seconds: 5), () {
-       unawaited(videoCacheProxy.cleanCache());
-    });
-
-    // Splash-time prefetch: fetch first page and warm up first few videos
-    // This is less critical now that we have "Instant Splash" from Hive
-    // Delayed by 2 seconds to avoid competing with initial UI render
-    Future.delayed(const Duration(seconds: 2), () {
-        unawaited(_splashPrefetch());
-    });
-  } catch (e) {
-  }
-}
-
-/// Prefetch first page of videos and warm HLS while splash/logo is visible
-Future<void> _splashPrefetch() async {
-  try {
-    final videoService = vsvc.VideoService();
-    final cacheManager = SmartCacheManager();
-    await cacheManager.initialize();
-
-    unawaited(() async {
-      try {
-        final base = await vsvc.VideoService.getBaseUrlWithFallback();
-        await httpClientService.get(
-          Uri.parse('$base/api/health'),
-          timeout: const Duration(seconds: 3),
-        );
-
-      } catch (_) {}
-    }());
-
-    // **ENHANCED: Cache Yug tab videos (most common tab) for instant loading**
-    const yogCacheKey = 'videos_page_1_yog';
-    final yogResult = await cacheManager.get<Map<String, dynamic>>(
-      yogCacheKey,
-      fetchFn: () async {
-
-        return await videoService.getVideos(
-            page: 1,
-            limit: 10,
-            videoType: 'yog'); // Increased limit for better cache
-      },
-      cacheType: 'videos',
-      maxAge: const Duration(minutes: 15), // Cache for 15 minutes
-    );
-
-    if (yogResult != null) {
-      final List<VideoModel> videos =
-          (yogResult['videos'] as List<dynamic>).cast<VideoModel>();
-
-
-      // **NEW: Pre-initialize first video controller for instant playback**
-      if (videos.isNotEmpty) {
-        try {
-          final firstVideo = videos.first;
-          final controllerManager = VideoControllerManager();
-          // Pre-create controller for faster first video load
-          unawaited(controllerManager.preloadController(0, firstVideo));
-
-        } catch (e) {
-
-        }
-      }
-
-      // Warm-up manifests for first few HLS URLs
-      for (final video in videos.take(3)) {
-        final url = video.hlsPlaylistUrl?.isNotEmpty == true
-            ? video.hlsPlaylistUrl!
-            : (video.hlsMasterPlaylistUrl?.isNotEmpty == true
-                ? video.hlsMasterPlaylistUrl!
-                : video.videoUrl);
-        if (url.contains('.m3u8')) {
-          unawaited(HlsWarmupService().warmUp(url));
-        }
-
-        // **NEW: Persistent chunk caching for instant reload**
-        unawaited(videoCacheProxy.prefetchChunk(url));
-        
-        // **OPTIMIZED: Throttle warmup to avoid CPU spikes during playback**
-        // Yield to main thread between heavy network/disk ops
-        await Future.delayed(const Duration(milliseconds: 300));
-      }
-    }
-
-    // **OPTIONAL: Also preload Vayu tab videos in background (non-blocking)**
-    unawaited(() async {
-      try {
-        const vayuCacheKey = 'videos_page_1_vayu';
-        await cacheManager.get<Map<String, dynamic>>(
-          vayuCacheKey,
-          fetchFn: () async {
-            return await videoService.getVideos(
-                page: 1, limit: 10, videoType: 'vayu');
-          },
-          cacheType: 'videos',
-          maxAge: const Duration(minutes: 15),
-        );
-
-      } catch (e) {
-
-      }
-    }());
-  } catch (e) {
-
-    // Best-effort prefetch; ignore failures
-  }
-}
+// _splashPrefetch removed (logic moved to AppInitializationManager)
 
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
@@ -561,7 +358,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           return VideoScreen(initialVideoId: videoId);
         },
       },
-      home: const AuthWrapper(),
+      home: const SplashScreen(),
     );
   }
 }

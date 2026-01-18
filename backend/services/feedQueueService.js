@@ -12,9 +12,9 @@ import mongoose from 'mongoose';
  */
 class FeedQueueService {
   constructor() {
-    this.QUEUE_SIZE_LIMIT = 100; // Max items in Redis list per user
-    this.REFILL_THRESHOLD = 30;  // Refill when below this (Buffered for speed)
-    this.BATCH_SIZE = 50;        // Generate this many videos at once
+    this.QUEUE_SIZE_LIMIT = 30; // Max items in Redis list per user (Reduced from 100 for freshness)
+    this.REFILL_THRESHOLD = 20;  // Refill when below this (Buffered for speed)
+    this.BATCH_SIZE = 30;        // Generate this many videos at once
   }
 
 
@@ -134,11 +134,12 @@ class FeedQueueService {
     // Always logging total time is useful for monitoring, keeping it concise.
     const logMsg = `⏱️ Feed Latency: Total ${tTotal}ms (Redis: ${tRedisCheck + tRedisPop}ms | Fallback: ${tFallback}ms | Populate: ${tPopulate}ms) [${result.length} videos]`;
     
-    if (tTotal > 500) {
-      console.warn(`⚠️ SLOW FEED: ${logMsg}`);
-    } else {
-      console.log(logMsg);
-    }
+    console.log(logMsg);
+
+    // **VERIFICATION: Log specific video IDs being served**
+    result.forEach((v, index) => {
+        console.log(`🎬 [${index}] Serving Video: ${v._id} (Hash: ${v.videoHash || 'none'})`);
+    });
 
     return result;
   }
@@ -164,73 +165,87 @@ class FeedQueueService {
     const start = Date.now();
     console.log(`♻️ Refill STARTED for ${userId}`);
     try {
-      // 1. Fetch Candidates (FAST - Constant Time)
-      // Instead of excluding huge list of seen IDs in DB query, we fetch "Fresh & Popular" candidates first.
-      
-      const candidateQuery = { 
-        processingStatus: 'completed'
-      };
-      
-      if (videoType === 'vayu') candidateQuery.duration = { $gt: 60 };
-      else candidateQuery.duration = { $lte: 60 }; // Default yog
-
-      // Fetch latest 300 videos (Candidate Pool)
-      // This is always fast regardless of user history size
-      let candidates = await Video.find(candidateQuery)
-        .sort({ createdAt: -1 })
-        .limit(300) 
-        .select('_id uploader createdAt likes views shares score finalScore videoType videoHash')
-        .lean();
-
-      if (candidates.length === 0) {
-          console.log(`⚠️ Refill: No candidates found!`);
-          return 0;
-      }
-
-      // 2. Fetch User History (LIMITED)
-      // We only care if they've seen videos *within* our candidate pool.
+      // 1. Fetch User History (LIMITED)
       const seenVideoIds = new Set();
-      const seenHashes = new Set(); // **NEW: Track seen content hashes**
+      const seenHashes = new Set();
       
-      // Add what's currently in the queue to exclusion list
       const queueKey = this.getQueueKey(userId, videoType);
       const queuedIds = await redisService.lRange(queueKey, 0, -1);
       queuedIds.forEach(id => seenVideoIds.add(id));
 
       if (FeedHistory) {
          try {
-           // **OPTIMIZATION: Parallel Fetch**
+           console.log(`🔍 Refill Logic: userId type: ${typeof userId}, value: ${userId}`);
            const [recentSeenDocs, seenHashList] = await Promise.all([
-             FeedHistory.find({ userId }).sort({ seenAt: -1 }).limit(500).select('videoId').lean(),
+             FeedHistory.find({ userId }).sort({ seenAt: -1 }).select('videoId').lean(),
              FeedHistory.getSeenContentHashes(userId)
            ]);
-            
+           console.log(`🔍 Refill Logic: Loaded ${recentSeenDocs.length} seen IDs and ${seenHashList.length} hashes from DB.`);
            recentSeenDocs.forEach(doc => seenVideoIds.add(doc.videoId.toString()));
            seenHashList.forEach(hash => seenHashes.add(hash));
-           
-           // console.log(`🔍 FeedQueue: Loaded ${seenVideoIds.size} seen IDs and ${seenHashes.size} seen hashes for filtering`);
          } catch (e) {
             console.error('⚠️ FeedQueue: Error fetching history:', e.message);
          }
       }
 
-      // 3. In-Memory Filter (Candidates - Seen)
-      // **UPDATED: Filter by BOTH ID AND Content Hash**
-      let freshVideos = candidates.filter(v => {
-        const id = v._id.toString();
-        const hash = v.videoHash;
-        
-        // Filter out if ID is seen OR if Hash is seen (Classic Duplicate + Content Duplicate)
-        if (seenVideoIds.has(id)) return false;
-        if (hash && seenHashes.has(hash)) return false;
-        
-        return true;
-      });
+      // 2. Iterative Batch Search (The "Next 300" Strategy)
+      // Logic: Fetch batch 1 (0-300). Filter. If not enough? Fetch batch 2 (300-600). Repeat.
+      
+      let freshVideos = [];
+      let skip = 0;
+      const BATCH_SIZE_QUERY = 300;
+      const MAX_PAGES = 5; // Search up to 1500 videos deep (safety limit)
+      let pageCount = 0;
 
-      console.log(`🔍 Refill: Filtered ${candidates.length} candidates -> ${freshVideos.length} fresh videos`);
+      while (freshVideos.length < this.BATCH_SIZE && pageCount < MAX_PAGES) {
+          const candidateQuery = { processingStatus: 'completed' };
+          if (videoType === 'vayu') candidateQuery.duration = { $gt: 60 };
+          else candidateQuery.duration = { $lte: 60 };
 
-      // Fallback: If Filter Left Nothing?
-      // We now handle this by backfilling from Fallback at the end before pushing.
+          // Fetch Batch
+          const candidates = await Video.find(candidateQuery)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(BATCH_SIZE_QUERY)
+            .select('_id uploader createdAt likes views shares score finalScore videoType videoHash')
+            .lean();
+
+          if (candidates.length === 0) {
+              console.log(`ℹ️ Refill: DB exhausted at skip ${skip}. No more videos.`);
+              break; // End of DB
+          }
+
+          // Filter Batch
+          const currentBatchFresh = candidates.filter(v => {
+            const id = v._id.toString();
+            const hash = v.videoHash;
+            if (seenVideoIds.has(id)) return false;
+            if (hash && seenHashes.has(hash)) return false;
+            return true;
+          });
+
+          console.log(`🔍 Refill [Page ${pageCount + 1}]: Scanned ${skip}-${skip + candidates.length}. Found ${currentBatchFresh.length} fresh.`);
+          
+          freshVideos.push(...currentBatchFresh);
+          
+          skip += BATCH_SIZE_QUERY;
+          pageCount++;
+      }
+
+      console.log(`✅ Refill: Total Fresh Found: ${freshVideos.length} after scanning ${pageCount} pages.`);
+
+      // Fallback: If Filter Left Nothing? (Truly exhausted everyone)
+      if (freshVideos.length < this.BATCH_SIZE) {
+          console.log(`❄️ Refill: Catalog fully watched (found only ${freshVideos.length}). Filling remainder from Fallback (Re-runs).`);
+          const needed = this.BATCH_SIZE - freshVideos.length;
+          const fallbackIds = await this.getFallbackIds(userId, videoType, needed, []);
+          
+          const fallbackVideos = await Video.find({ _id: { $in: fallbackIds } })
+            .select('_id uploader createdAt likes views shares score finalScore videoType videoHash')
+            .lean();
+            
+          freshVideos.push(...fallbackVideos);
+      }
 
 
       // 4. Apply Diversity Ordering (No same creator back-to-back)
@@ -269,9 +284,6 @@ class FeedQueueService {
           const fallbackIds = await this.getFallbackIds(userId, videoType, needed, [...seenVideoIds, ...toPushIds]);
           toPushIds = [...toPushIds, ...fallbackIds];
           
-          if (fallbackIds.length > 0) {
-            //  console.log(`✅ FeedQueue: Backfilled ${fallbackIds.length} fallback videos into queue.`);
-          }
       }
       
       // Limit to Batch Size (in case we had too many fresh ones)
@@ -281,6 +293,11 @@ class FeedQueueService {
         await redisService.rPush(queueKey, toPushIds);
         // Trim to strict limit
         await redisService.lTrim(queueKey, 0, this.QUEUE_SIZE_LIMIT - 1);
+        
+        // **NEW: Set TTL to 30 Minutes (1800 seconds)**
+        // This ensures stale queues auto-expire if user doesn't return soon
+        await redisService.expire(queueKey, 1800);
+        
         console.log(`✅ FeedQueue: Pushed ${toPushIds.length} videos to ${queueKey}. Refill took ${Date.now() - start}ms`);
       } else {
         console.log(`⚠️ Refill: No videos to push after all steps.`);
@@ -475,9 +492,6 @@ class FeedQueueService {
 
     // Filter out nulls (deleted videos)
     const finalVideos = videos.filter(Boolean);
-    
-    // Log final absolute time
-    // console.log(`⏱️ FeedQueue: populated ${finalVideos.length} videos in ${Date.now() - start}ms`);
     
     return finalVideos;
   }

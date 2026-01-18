@@ -119,8 +119,7 @@ class AdCleanupService {
    */
   async runCleanup() {
     try {
-      console.log('🚀 AdCleanupService: Running full cleanup...');
-      
+      // console.log('🚀 AdCleanupService: Running full cleanup...');
       const statusUpdateResult = await this.updateCampaignStatuses();
       const deletionResult = await this.cleanupExpiredAds();
       

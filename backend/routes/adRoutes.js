@@ -2,6 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import AdCampaign from '../models/AdCampaign.js';
 import AdCreative from '../models/AdCreative.js';
+import Video from '../models/Video.js';
 import Invoice from '../models/Invoice.js';
 import cloudinary from '../config/cloudinary.js';
 import fs from 'fs';
@@ -540,13 +541,13 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
       try {
       const { userId } = req.params;
       
-      console.log('🔍 Creator revenue request for user:', userId);
-      console.log('🔍 Request headers:', req.headers);
-      console.log('🔍 Authenticated user from token:', req.user);
+      // console.log('🔍 Creator revenue request for user:', userId);
+      // console.log('🔍 Request headers:', req.headers);
+      // console.log('🔍 Authenticated user from token:', req.user);
       
       // Find user by Google ID
       const user = await User.findOne({ googleId: userId });
-      console.log('🔍 Database query result:', user ? 'User found' : 'User not found');
+      // console.log('🔍 Database query result:', user ? 'User found' : 'User not found');
       
       if (!user) {
         console.log('❌ User not found for Google ID:', userId);
@@ -556,9 +557,10 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
         return res.status(404).json({ error: 'User not found' });
       }
 
-    // Get user's videos to calculate potential revenue
-    const userVideos = await user.getVideos();
-    console.log('🔍 Found videos for user:', userVideos.length);
+    // **FIXED: Use direct Video query instead of user.getVideos() to ensure all videos are found**
+    // This fixes issues where user.videos array might be out of sync
+    const userVideos = await Video.find({ uploader: user._id });
+    console.log('🔍 Found videos for user (Direct Query):', userVideos.length);
 
     // Get video IDs for querying ad impressions
     const videoIds = userVideos.map(video => video._id);
@@ -567,6 +569,7 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
     const AdImpression = (await import('../models/AdImpression.js')).default;
     
     // Count actual banner ad impressions for user's videos
+    // **FIX: Use simple count (no isViewed check) to match Admin Dashboard logic**
     const bannerImpressions = await AdImpression.countDocuments({
       videoId: { $in: videoIds },
       adType: 'banner',
@@ -574,17 +577,20 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
     });
 
     // Count actual carousel ad impressions for user's videos
+    // **FIX: Use simple count (no isViewed check) to match Admin Dashboard logic**
     const carouselImpressions = await AdImpression.countDocuments({
       videoId: { $in: videoIds },
       adType: 'carousel',
       impressionType: 'view'
     });
 
+    /*
     console.log('📊 Actual Ad Impressions:', {
       bannerImpressions,
       carouselImpressions,
       totalImpressions: bannerImpressions + carouselImpressions
     });
+    */
 
     // Calculate video statistics (for display purposes only)
     let totalViews = 0;
@@ -610,6 +616,7 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
     const totalExactRevenueINR = bannerRevenueINR + carouselRevenueINR;
     const totalExactCreatorRevenueINR = totalExactRevenueINR * 0.80; // 80% to creator
     
+    /*
     console.log('💰 Revenue Breakdown (Based on Actual Ad Impressions):', {
       bannerImpressions,
       carouselImpressions,
@@ -620,6 +627,7 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
       creatorRevenue: totalExactCreatorRevenueINR.toFixed(2),
       note: 'Revenue calculated from actual ad impressions (realtime)'
     });
+    */
 
     // Get actual payout records if they exist
     const CreatorPayout = (await import('../models/CreatorPayout.js')).default;
@@ -672,6 +680,7 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
     const currentMonthTotalRevenue = currentMonthBannerRevenue + currentMonthCarouselRevenue;
     const currentMonthCreatorRevenue = currentMonthTotalRevenue * 0.80;
     
+    /*
     console.log('💰 Current Month Revenue Calculation:', {
       totalVideos: videoIds.length,
       currentMonthBannerImpressions,
@@ -681,6 +690,7 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
       currentMonthCreatorRevenue: currentMonthCreatorRevenue.toFixed(2),
       note: 'Counting impressions for ALL videos in current month (not just videos uploaded this month)'
     });
+    */
     
     // **Last Month** - Count actual impressions for ALL videos (regardless of upload date)
     const lastMonthBannerImpressions = await AdImpression.countDocuments({
@@ -765,6 +775,7 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
       }))
     };
 
+    /*
     console.log('✅ Creator revenue data sent (Based on Actual Ad Impressions):', {
       userId: userId,
       bannerImpressions,
@@ -776,6 +787,7 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
       totalExactCreatorRevenue: totalExactCreatorRevenueINR.toFixed(2),
       note: 'Revenue calculated from actual ad impressions (realtime) - Banner (₹10 CPM) + Carousel (₹30 CPM)'
     });
+    */
 
     res.json(response);
 
@@ -1313,6 +1325,54 @@ router.post('/cleanup/expired', async (req, res) => {
   } catch (error) {
     console.error('❌ Error in manual cleanup:', error);
     res.status(500).json({ error: 'Failed to cleanup expired ads' });
+  }
+});
+
+// **NEW: Endpoint to get ad views for a specific video and ad type (for mobile calculation)**
+router.get('/views/video/:videoId/:adType', verifyToken, async (req, res) => {
+  try {
+    const { videoId, adType } = req.params;
+    const { month, year } = req.query;
+
+    // **FIX: Use simple count (no isViewed check) to match Admin Dashboard logic**
+    // This ensures consistency between mobile and admin dashboard
+    const query = {
+      videoId: videoId,
+      adType: adType, // 'banner' or 'carousel'
+      impressionType: 'view'
+    };
+
+    // Add date filtering if month/year provided
+    if (month && year) {
+      const monthInt = parseInt(month); // 1-12
+      const yearInt = parseInt(year);
+      
+      // Mobile sends 1-indexed month, JS Date uses 0-indexed
+      const startDate = new Date(yearInt, monthInt - 1, 1);
+      const endDate = new Date(yearInt, monthInt, 1);
+      
+      query.timestamp = {
+        $gte: startDate,
+        $lt: endDate
+      };
+    }
+
+    // Dynamic import to avoid circular dependencies if any
+    const AdImpression = (await import('../models/AdImpression.js')).default;
+    const count = await AdImpression.countDocuments(query);
+
+    console.log(`👁️ /views/video: ${adType} views for ${videoId} (${month ? month + '/' + year : 'all time'}): ${count}`);
+    
+    res.json({
+      success: true,
+      count: count,
+      videoId,
+      adType,
+      period: month ? `${month}/${year}` : 'all_time'
+    });
+  } catch (error) {
+    console.error('❌ Error fetching ad views:', error);
+    res.status(500).json({ error: 'Failed to fetch ad views' });
   }
 });
 
