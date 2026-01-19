@@ -12,6 +12,10 @@ import RecommendationService from '../services/recommendationService.js';
 const router = express.Router();
 
 
+
+
+
+
 // Admin feedback endpoints
 router.get('/feedback', requireAdminDashboardKey, async (req, res) => {
   try {
@@ -209,7 +213,11 @@ router.get('/creators', requireAdminDashboardKey, async (req, res) => {
           $group: {
             _id: '$uploader',
             totalViews: { $sum: '$views' },
-            totalVideos: { $sum: 1 }
+            totalVideos: {
+              $sum: {
+                $cond: [{ $eq: ['$processingStatus', 'completed'] }, 1, 0]
+              }
+            }
           }
         }
       ]),
@@ -483,8 +491,8 @@ router.get('/creators', requireAdminDashboardKey, async (req, res) => {
 // ✅ Route to get platform-wide statistics
 router.get('/stats', requireAdminDashboardKey, async (req, res) => {
   try {
-    // Get total videos count
-    const totalVideos = await Video.countDocuments({});
+    // Get total videos count (completed only)
+    const totalVideos = await Video.countDocuments({ processingStatus: 'completed' });
 
     // **NEW: Get daily upload count (videos uploaded today)**
     const today = new Date();
@@ -496,7 +504,8 @@ router.get('/stats', requireAdminDashboardKey, async (req, res) => {
       createdAt: {
         $gte: today,
         $lt: tomorrow
-      }
+      },
+      processingStatus: 'completed'
     });
 
     // Calculate total earnings across all creators
@@ -574,14 +583,20 @@ router.get('/creators/monthly-earnings', requireAdminDashboardKey, async (req, r
     const targetMonth = month !== undefined ? parseInt(month) : now.getMonth();
     const targetYear = year !== undefined ? parseInt(year) : now.getFullYear();
 
+    console.log(`📊 Admin Fetch Monthly Earnings: Request Month=${month}, Year=${year}`);
+    console.log(`📊 Parsed Target: Month=${targetMonth}, Year=${targetYear}`);
+
     // Calculate Last Month (relative to target)
     const lastMonth = targetMonth === 0 ? 11 : targetMonth - 1;
     const lastMonthYear = targetMonth === 0 ? targetYear - 1 : targetYear;
 
-    const currentMonthStart = new Date(targetYear, targetMonth, 1);
-    const currentMonthEnd = new Date(targetYear, targetMonth + 1, 1);
-    const lastMonthStart = new Date(lastMonthYear, lastMonth, 1);
-    const lastMonthEnd = new Date(lastMonthYear, lastMonth + 1, 1);
+    // Use UTC dates to match database timestamp storage (avoid TZ shifts)
+    const currentMonthStart = new Date(Date.UTC(targetYear, targetMonth, 1));
+    const currentMonthEnd = new Date(Date.UTC(targetYear, targetMonth + 1, 1));
+    const lastMonthStart = new Date(Date.UTC(lastMonthYear, lastMonth, 1));
+    const lastMonthEnd = new Date(Date.UTC(lastMonthYear, lastMonth + 1, 1));
+
+    console.log(`📊 Date Range: Current [${currentMonthStart.toISOString()} - ${currentMonthEnd.toISOString()}]`);
 
     const bannerCpm = AD_CONFIG?.BANNER_CPM ?? 10;
     const carouselCpm = AD_CONFIG?.DEFAULT_CPM ?? 30;
@@ -699,7 +714,8 @@ router.get('/creators/monthly-earnings', requireAdminDashboardKey, async (req, r
         // **NEW: Count videos uploaded in the target month**
         const videosUploaded = await Video.countDocuments({
           uploader: creator._id,
-          createdAt: { $gte: currentMonthStart, $lt: currentMonthEnd }
+          createdAt: { $gte: currentMonthStart, $lt: currentMonthEnd },
+          processingStatus: 'completed'
         });
 
         return {

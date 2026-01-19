@@ -8,8 +8,6 @@ import 'package:vayu/services/ad_service.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/video_service.dart';
 import 'package:vayu/model/video_model.dart';
-import 'package:vayu/services/ad_impression_service.dart';
-import 'package:vayu/services/earnings_service.dart';
 import 'package:vayu/services/logout_service.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/utils/app_text.dart';
@@ -32,14 +30,11 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   final AdService _adService = AdService();
   final AuthService _authService = AuthService();
   final VideoService _videoService = VideoService();
-  final AdImpressionService _adImpressionService = AdImpressionService();
-
   Map<String, dynamic>? _revenueData;
   List<VideoModel> _userVideos = [];
   final Map<String, double> _videoRevenueMap = {};
   final Map<String, _VideoStats> _videoStatsMap = {};
-  double _totalRevenue = 0.0;
-  double _grossRevenue = 0.0;
+  // Removed _totalRevenue and _grossRevenue
   bool _isLoading = true;
   String? _errorMessage;
   int _currentMonthViews = 0;
@@ -131,25 +126,38 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   Future<void> _fetchRevenueData(String userId, bool forceRefresh) async {
-      // **1. Try Cache First**
+      // **1. Try Cache First (only if NOT forced)**
       Map<String, dynamic>? revenueData;
       if (!forceRefresh) {
         revenueData = await _loadCachedEarningsData(userId);
-        if (revenueData != null) {
+          if (revenueData != null) {
           AppLogger.log('⚡ CreatorRevenueScreen: Using cached earnings data');
+          final thisMonth = (revenueData['thisMonth'] as num?)?.toDouble() ?? 0.0;
+          AppLogger.log('💰 Revenue Display: Month: ${DateTime.now().month} | Source: Frontend Cache | Amount: $thisMonth');
           if (mounted) {
             setState(() {
               _revenueData = revenueData;
             });
           }
         }
+      } else {
+        // **FORCE REFRESH: Clear cache to ensure fresh fetch**
+        AppLogger.log('🔄 CreatorRevenueScreen: Force refresh requested - Clearing cache');
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('earnings_cache_$userId');
+        await prefs.remove('earnings_cache_timestamp_$userId');
       }
 
       // **2. Fetch from Backend if needed**
       if (revenueData == null || forceRefresh) {
         try {
           AppLogger.log('🔄 CreatorRevenueScreen: Fetching fresh revenue from backend...');
-          final freshRevenueData = await _adService.getCreatorRevenueSummary();
+          
+          // **FIX: If local cache is missing/expired, we want FRESH data from server, not Stale Service Cache**
+          // So we force service refresh if we are here (meaning either forceRefresh=true OR revenueData=null)
+          final shouldForceService = forceRefresh || revenueData == null;
+          
+          final freshRevenueData = await _adService.getCreatorRevenueSummary(forceRefresh: shouldForceService);
           
           await _cacheEarningsData(freshRevenueData, userId);
           
@@ -158,6 +166,8 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
               _revenueData = freshRevenueData;
             });
           }
+          final thisMonth = (freshRevenueData['thisMonth'] as num?)?.toDouble() ?? 0.0;
+          AppLogger.log('💰 Revenue Display: Month: ${DateTime.now().month} | Source: Backend API | Amount: $thisMonth');
           AppLogger.log('✅ CreatorRevenueScreen: Revenue updated from backend');
         } catch (e) {
            AppLogger.log('⚠️ CreatorRevenueScreen: Backend revenue fetch failed: $e');
@@ -175,6 +185,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
       }
   }
 
+  /// **OPTIMIZED: Parse per-video revenue from backend response**
   Future<void> _fetchVideosAndCalculateStats(
     String userId, 
     Map<String, dynamic> userMap,
@@ -182,7 +193,6 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   ) async {
       try {
         AppLogger.log('🔍 CreatorRevenueScreen: Loading videos...');
-        // This might timeout/fail, but it won't block revenue display
         final videos = await _videoService.getUserVideos(userId);
         
         if (mounted) {
@@ -191,32 +201,42 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
           });
         }
 
-        // Calculate frontend stats for video breakdown
-        try {
-          await _calculateTotalRevenue(userMap);
-          
-          // **SYNC CHECK**: If backend returned 0, use frontend total
-          if (mounted && _revenueData != null) {
-             final backendThisMonth = (_revenueData!['thisMonth'] as num?)?.toDouble() ?? 0.0;
-             if (backendThisMonth == 0.0 && _totalRevenue > 0.0) {
-                setState(() {
-                   _revenueData!['thisMonth'] = _totalRevenue;
-                });
+        // **NEW: Parse per-video revenue from Backend API response**
+        if (_revenueData != null && _revenueData!.containsKey('videos')) {
+           final List<dynamic> videoStatsList = _revenueData!['videos'] ?? [];
+           
+           _videoRevenueMap.clear();
+           _videoStatsMap.clear();
+
+           for (var stat in videoStatsList) {
+             final String videoId = stat['videoId']?.toString() ?? '';
+             final double creatorRevenue = (stat['creatorRevenue'] as num?)?.toDouble() ?? 0.0;
+             final int views = (stat['views'] as num?)?.toInt() ?? 0;
+             // We can also get ad impressions from backend if needed
+             final int adImpressions = (stat['totalAdImpressions'] as num?)?.toInt() ?? 0;
+             
+             if (videoId.isNotEmpty) {
+               _videoRevenueMap[videoId] = creatorRevenue;
+               _videoStatsMap[videoId] = _VideoStats(creatorRevenue, adImpressions > 0 ? adImpressions : views);
              }
-          }
-        } catch (e) {
-           AppLogger.log('⚠️ CreatorRevenueScreen: Stats calculation error: $e');
+           }
+           
+           AppLogger.log('✅ CreatorRevenueScreen: Parsed revenue for ${_videoRevenueMap.length} videos from backend');
+        } else {
+           AppLogger.log('⚠️ CreatorRevenueScreen: No video revenue details in backend response');
         }
+
+        // **OPTIMIZED: Calculate monthly views in background (non-blocking)**
+        Future.microtask(() => _calculateMonthlyViews(userMap));
 
       } catch (e) {
          AppLogger.log('❌ CreatorRevenueScreen: Failed to fetch videos: $e');
-         // **NON-BLOCKING ERROR UI**
          if (mounted) {
            ScaffoldMessenger.of(context).showSnackBar(
-             SnackBar(
-               content: Text('Unable to load video details. Revenue may be estimated.'),
+            const SnackBar(
+               content: Text('Unable to load video details.'),
                backgroundColor: Colors.orange,
-               duration: const Duration(seconds: 4),
+               duration:  Duration(seconds: 4),
              ),
            );
          }
@@ -275,9 +295,9 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
           return null;
         }
 
-        // **OPTIMIZED: Extended cache duration to 1 hour for faster loading**
+        // **OPTIMIZED: Cache duration reduced to 3 min for fresher data**
         // Manual refresh will bypass cache via forceRefresh flag
-        if (age < const Duration(hours: 1)) {
+        if (age < const Duration(minutes: 3)) {
           // Cache is fresh and from current month - use it
           AppLogger.log(
               '⚡ CreatorRevenueScreen: Using cached earnings (${age.inMinutes}m old)');
@@ -311,117 +331,6 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
       AppLogger.log('✅ CreatorRevenueScreen: Earnings cached');
     } catch (e) {
       AppLogger.log('❌ CreatorRevenueScreen: Error caching earnings: $e');
-    }
-  }
-
-  /// **FIXED: Get total ad VIEWS for current month (not impressions) - for display purposes**
-  Future<int> _getTotalAdImpressionsForVideo(String videoId) async {
-    try {
-      // **FIXED: Get current month views only**
-      final now = DateTime.now();
-      final currentMonth = now.month - 1; // 0-indexed for backend
-      final currentYear = now.year;
-
-      final bannerViews = await _adImpressionService.getBannerAdViewsForMonth(
-          videoId, currentMonth, currentYear);
-
-      final carouselViews = await _adImpressionService
-          .getCarouselAdViewsForMonth(videoId, currentMonth, currentYear);
-
-      // Total views = Banner + Carousel
-      final totalViews = bannerViews + carouselViews;
-
-      AppLogger.log(
-          '📊 Video $videoId (Current Month ${now.month}/$currentYear): Banner VIEWS: $bannerViews, Carousel VIEWS: $carouselViews, Total VIEWS: $totalViews');
-
-      return totalViews;
-    } catch (e) {
-      AppLogger.log('❌ Error getting ad views: $e');
-      return 0;
-    }
-  }
-
-  /// **OPTIMIZED: Calculate total revenue from all videos (current month only) - faster timeout**
-  Future<void> _calculateTotalRevenue(Map<String, dynamic> userData) async {
-    try {
-      // **FIXED: Calculate only current month earnings**
-      final now = DateTime.now();
-      final currentMonth = now.month - 1; // 0-indexed for backend
-      final currentYear = now.year;
-
-      AppLogger.log(
-          '💰 CreatorRevenueScreen: Calculating current month (${now.month}/$currentYear) earnings for ${_userVideos.length} videos');
-
-      // **OPTIMIZED: Use shorter timeout for faster calculation (2 seconds instead of 3)**
-      final statsFutures = _userVideos.map((video) async {
-        // **FIXED: Use current month earnings calculation with faster timeout**
-        final earningsFuture = EarningsService.calculateVideoRevenueForMonth(
-          video.id,
-          currentMonth,
-          currentYear,
-          timeout: const Duration(seconds: 2), // **OPTIMIZED: Faster timeout**
-        );
-        final viewsFuture = _getTotalAdImpressionsForVideo(video.id);
-
-        // **OPTIMIZED: Run earnings and views in parallel**
-        final results = await Future.wait([earningsFuture, viewsFuture]);
-        final grossEarnings = results[0] as double;
-        final views = results[1] as int;
-
-        final creatorEarnings =
-            EarningsService.creatorShareFromGross(grossEarnings);
-
-        return MapEntry(video.id, (
-          stats: _VideoStats(creatorEarnings, views),
-          gross: grossEarnings,
-          creator: creatorEarnings,
-        ));
-      }).toList();
-
-      final statsEntries = await Future.wait(statsFutures);
-
-      double grossRevenue = 0.0;
-      double creatorRevenue = 0.0;
-      _videoRevenueMap
-        ..clear()
-        ..addEntries(statsEntries.map(
-          (entry) => MapEntry(entry.key, entry.value.creator),
-        ));
-      _videoStatsMap
-        ..clear()
-        ..addEntries(statsEntries.map((entry) => MapEntry(
-              entry.key,
-              entry.value.stats,
-            )));
-
-      for (final entry in statsEntries) {
-        grossRevenue += entry.value.gross;
-        creatorRevenue += entry.value.creator;
-      }
-
-      if (mounted) {
-        setState(() {
-          _totalRevenue = creatorRevenue;
-          _grossRevenue = grossRevenue;
-        });
-      }
-
-      // **OPTIMIZED: Calculate monthly views in background (non-blocking)**
-      Future.microtask(() => _calculateMonthlyViews(userData));
-
-      AppLogger.log(
-          '💰 CreatorRevenueScreen: Creator earnings calculated: ₹${creatorRevenue.toStringAsFixed(2)} (gross: ₹${grossRevenue.toStringAsFixed(2)})');
-      AppLogger.log(
-          '💰 CreatorRevenueScreen: Video revenue breakdown: $_videoRevenueMap');
-    } catch (e) {
-      AppLogger.log('❌ Error calculating total revenue: $e');
-      // **FALLBACK: Set to 0 if calculation fails**
-      if (mounted) {
-        setState(() {
-          _totalRevenue = 0.0;
-          _grossRevenue = 0.0;
-        });
-      }
     }
   }
 
@@ -494,39 +403,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     }
   }
 
-  /// Get revenue analytics summary
-  Map<String, dynamic> _getRevenueAnalytics() {
-    try {
-      final topPerformingVideo = _userVideos.isNotEmpty
-          ? _userVideos.reduce((a, b) =>
-              (_videoRevenueMap[a.id] ?? 0.0) > (_videoRevenueMap[b.id] ?? 0.0)
-                  ? a
-                  : b)
-          : null;
 
-      final averageRevenuePerVideo =
-          _userVideos.isNotEmpty ? _totalRevenue / _userVideos.length : 0.0;
-
-      return {
-        'total_revenue': _totalRevenue,
-        'creator_revenue': _totalRevenue,
-        'gross_revenue': _grossRevenue,
-        'platform_fee':
-            (_grossRevenue - _totalRevenue).clamp(0.0, double.infinity),
-        'total_videos': _userVideos.length,
-        'average_revenue_per_video': averageRevenuePerVideo,
-        'top_performing_video': topPerformingVideo?.videoName,
-        'top_performing_revenue': topPerformingVideo != null
-            ? _videoRevenueMap[topPerformingVideo.id] ?? 0.0
-            : 0.0,
-        'revenue_breakdown': _videoRevenueMap,
-        'calculation_timestamp': DateTime.now().toIso8601String(),
-      };
-    } catch (e) {
-      AppLogger.log('❌ Error getting revenue analytics: $e');
-      return {};
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -628,8 +505,10 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
       );
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+    return RefreshIndicator(
+      onRefresh: () async => await _loadRevenueData(forceRefresh: true),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -671,27 +550,25 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
 
         ],
       ),
-    );
+    ));
   }
 
   Widget _buildRevenueOverviewCard() {
-    // **FIXED: Use backend API value, but fallback to frontend calculation if API returns 0**
-    final backendThisMonth =
-        (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
+    // **FIXED: Use backend API value directly - no fallback**
+    final thisMonth = (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
     final lastMonth = (_revenueData?['lastMonth'] as num?)?.toDouble() ?? 0.0;
 
-    // **FIX: If backend returns 0 but frontend has calculated revenue, use frontend**
-    // This ensures accurate display when backend API might not have updated data
-    final thisMonth = backendThisMonth > 0.0 ? backendThisMonth : _totalRevenue;
-
-    // **FIXED: Calculate gross and platform fee from current month earnings**
-    final creatorRevenue =
-        thisMonth; // Use current month earnings (calculated if backend is 0)
+    // **FIXED: Calculate gross from current month earnings**
+    final creatorRevenue = thisMonth;
+    
+    // Calculate gross based on creator share formula (Gross = Creator / 0.8)
     final grossRevenue = thisMonth > 0
         ? thisMonth / AppConfig.creatorRevenueShare
-        : 0.0; // Always calculate from backend API value
+        : 0.0;
+        
     final calculatedPlatformFee =
         (grossRevenue - creatorRevenue).clamp(0.0, double.infinity);
+        
     final platformSharePercent =
         (AppConfig.platformRevenueShare * 100).toStringAsFixed(0);
 
@@ -1133,10 +1010,10 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   Widget _buildRevenueAnalyticsCard() {
-    // **FIXED: Use backend API value, but fallback to frontend calculation if API returns 0**
-    final backendThisMonth =
+    // **FIXED: Use backend API value directly - no fallback**
+    final thisMonth =
         (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
-    final thisMonth = backendThisMonth > 0.0 ? backendThisMonth : _totalRevenue;
+    
     final thisMonthGross =
         thisMonth > 0 ? thisMonth / AppConfig.creatorRevenueShare : 0.0;
     final thisMonthPlatformFee =
@@ -1242,12 +1119,11 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   Widget _buildRevenueBreakdownCard() {
-    // **FIXED: Use backend API value, but fallback to frontend calculation if API returns 0**
-    final backendThisMonth =
+    // **FIXED: Use backend API value directly - no fallback**
+    final thisMonth =
         (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
-    final thisMonth = backendThisMonth > 0.0 ? backendThisMonth : _totalRevenue;
-    final creatorRevenue =
-        thisMonth; // Current month creator earnings from backend
+    
+    final creatorRevenue = thisMonth;
     final grossRevenue =
         thisMonth > 0 ? thisMonth / AppConfig.creatorRevenueShare : 0.0;
     final platformFee =
@@ -1593,5 +1469,42 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   /// Show detailed video analytics
+
+  /// Show detailed video analytics
+  Map<String, dynamic> _getRevenueAnalytics() {
+    try {
+      final topPerformingVideo = _userVideos.isNotEmpty
+          ? _userVideos.reduce((a, b) =>
+              (_videoRevenueMap[a.id] ?? 0.0) > (_videoRevenueMap[b.id] ?? 0.0)
+                  ? a
+                  : b)
+          : null;
+
+      // Calculate totals from map if needed, or use _revenueData
+      final thisMonth = (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
+      final grossRevenue = thisMonth / AppConfig.creatorRevenueShare;
+
+      final averageRevenuePerVideo =
+          _userVideos.isNotEmpty ? thisMonth / _userVideos.length : 0.0;
+
+      return {
+        'total_revenue': thisMonth,
+        'creator_revenue': thisMonth,
+        'gross_revenue': grossRevenue,
+        'platform_fee': (grossRevenue - thisMonth).clamp(0.0, double.infinity),
+        'total_videos': _userVideos.length,
+        'average_revenue_per_video': averageRevenuePerVideo,
+        'top_performing_video': topPerformingVideo?.videoName,
+        'top_performing_revenue': topPerformingVideo != null
+            ? _videoRevenueMap[topPerformingVideo.id] ?? 0.0
+            : 0.0,
+        'revenue_breakdown': _videoRevenueMap,
+        'calculation_timestamp': DateTime.now().toIso8601String(),
+      };
+    } catch (e) {
+      AppLogger.log('❌ Error getting revenue analytics: $e');
+      return {};
+    }
+  }
 
 }

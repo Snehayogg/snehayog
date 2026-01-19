@@ -807,14 +807,14 @@
             const totals = creators.reduce((acc, creator) => {
                 const isMarked = isCreatorMarked(creator.id);
 
-                // **USE FRONTEND CALCULATED VALUES ONLY** (not backend values)
-                const frontendRev = creator.frontendCalculatedRevenue;
-                const net = frontendRev ? frontendRev.creator : Number(creator.creatorRevenueINR ?? creator.totalEarningsINR ?? 0);
-                const gross = frontendRev ? frontendRev.gross : Number(creator.grossRevenueINR ?? net);
-                const platform = frontendRev ? frontendRev.platform : Math.max(Number(creator.platformRevenueINR ?? (gross - net)), 0);
+                // **USE BACKEND VALUES** (server-side calculation)
+                const backendRev = creator.backendCalculatedRevenue;
+                const net = backendRev ? backendRev.creator : Number(creator.creatorRevenueINR ?? creator.totalEarningsINR ?? 0);
+                const gross = backendRev ? backendRev.gross : Number(creator.grossRevenueINR ?? net);
+                const platform = backendRev ? backendRev.platform : Math.max(Number(creator.platformRevenueINR ?? (gross - net)), 0);
 
-                const totalAdViews = frontendRev ?
-                    (frontendRev.bannerViews + frontendRev.carouselViews) :
+                const totalAdViews = backendRev ?
+                    (backendRev.bannerViews + backendRev.carouselViews) :
                     Number(creator.totalAdViews || 0);
 
                 const pendingAmount = Number(creator.pendingEarningsINR || net || 0);
@@ -847,10 +847,10 @@
             });
 
             summaryContainer.innerHTML = `
-                <div style="margin-bottom: 12px; padding: 10px; background: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 4px;">
-                    <strong>💻 Frontend Revenue Calculation Active</strong>
+                <div style="margin-bottom: 12px; padding: 10px; background: #d4edda; border-left: 4px solid #28a745; border-radius: 4px;">
+                    <strong>✅ Backend Revenue Calculation Active</strong>
                     <p style="margin: 5px 0 0 0; font-size: 0.9rem; color: #555;">
-                        Revenue values are calculated using frontend method (same as Creator App). 
+                        Revenue values are fetched directly from the Server (consistent with App). 
                         CPM: Banner ₹10, Carousel ₹30 | Creator Share: 80%
                     </p>
                 </div>
@@ -903,54 +903,54 @@
                 const upiIdRaw = creator.paymentDetails?.upiId || '—';
                 const upiId = upiIdRaw === '—' ? upiIdRaw : escapeHtml(upiIdRaw);
 
-                // **USE FRONTEND CALCULATED VALUES FIRST** (priority over backend)
-                const frontendRev = creator.frontendCalculatedRevenue;
+                // **USE BACKEND VALUES**
+                const backendRev = creator.backendCalculatedRevenue;
 
-                const totalAdViews = frontendRev ?
-                    (frontendRev.bannerViews + frontendRev.carouselViews) :
+                const totalAdViews = backendRev ?
+                    (backendRev.bannerViews + backendRev.carouselViews) :
                     Number(creator.totalAdViews || 0);
 
-                const netEarnings = frontendRev ?
-                    frontendRev.creator :
+                const netEarnings = backendRev ?
+                    backendRev.creator :
                     Number(creator.creatorRevenueINR ?? creator.totalEarningsINR ?? 0);
 
-                const grossEarnings = frontendRev ?
-                    frontendRev.gross :
+                const grossEarnings = backendRev ?
+                    backendRev.gross :
                     Number(creator.grossRevenueINR ?? netEarnings);
 
-                const platformRevenue = frontendRev ?
-                    frontendRev.platform :
+                const platformRevenue = backendRev ?
+                    backendRev.platform :
                     Math.max(Number(creator.platformRevenueINR ?? (grossEarnings - netEarnings)), 0);
 
                 const pendingAmount = Number(creator.pendingEarningsINR || netEarnings || 0);
                 const isMarked = isCreatorMarked(creator.id);
                 const encodedId = encodeURIComponent(creator.id);
 
-                // Get monthly earnings data (use frontend if available)
+                // Get monthly earnings data (use backend if available)
                 const monthlyData = monthlyEarningsData[creator.id] || {
-                    thisMonth: frontendRev ? frontendRev.creator : 0,
+                    thisMonth: backendRev ? backendRev.creator : 0,
                     lastMonth: 0,
-                    currentMonthGrossRevenue: frontendRev ? frontendRev.gross : 0,
-                    currentMonthTotalAdViews: frontendRev ? (frontendRev.bannerViews + frontendRev.carouselViews) : 0,
+                    currentMonthGrossRevenue: backendRev ? backendRev.gross : 0,
+                    currentMonthTotalAdViews: backendRev ? (backendRev.bannerViews + backendRev.carouselViews) : 0,
                     currentMonthTotalViews: 0
                 };
 
-                // Use current month data for these columns (prioritize frontend)
+                // Use current month data for these columns
                 const currentMonthTotalViews = monthlyData.currentMonthTotalViews || 0;
-                const currentMonthTotalAdViews = frontendRev ?
-                    (frontendRev.bannerViews + frontendRev.carouselViews) :
+                const currentMonthTotalAdViews = backendRev ?
+                    (backendRev.bannerViews + backendRev.carouselViews) :
                     (monthlyData.currentMonthTotalAdViews || 0);
 
-                const currentMonthEarnings = frontendRev ?
-                    frontendRev.creator :
+                const currentMonthEarnings = backendRev ?
+                    backendRev.creator :
                     (monthlyData.thisMonth || 0);
 
-                const currentMonthGrossRevenue = frontendRev ?
-                    frontendRev.gross :
+                const currentMonthGrossRevenue = backendRev ?
+                    backendRev.gross :
                     (monthlyData.currentMonthGrossRevenue || 0);
 
-                const currentMonthPlatformRevenue = frontendRev ?
-                    frontendRev.platform :
+                const currentMonthPlatformRevenue = backendRev ?
+                    backendRev.platform :
                     (currentMonthGrossRevenue - currentMonthEarnings);
 
                 const previousMonthEarnings = monthlyData.lastMonth || 0;
@@ -1127,134 +1127,12 @@
             document.getElementById('creatorSort').value = 'earnings';
             const statusSelect = document.getElementById('creatorStatusFilter');
             if (statusSelect) {
-                statusSelect.value = 'all';
+                    statusSelect.value = 'all';
             }
             renderCreators(creatorData);
         }
 
-        // **NEW: Frontend Revenue Calculation (Same as creator_revenue_screen.dart)**
-        // CPM Configuration - Must match AppConfig in Flutter app
-        const BANNER_CPM = 10;      // ₹10 per 1000 impressions
-        const CAROUSEL_CPM = 30;    // ₹30 per 1000 impressions
-        const CREATOR_SHARE = 0.80; // 80% to creator
-        const PLATFORM_SHARE = 0.20; // 20% to platform
 
-        /**
-         * Calculate revenue from ad impressions (frontend calculation)
-         * @param {number} bannerViews - Banner ad views
-         * @param {number} carouselViews - Carousel ad views
-         * @returns {object} - { gross, creator, platform }
-         */
-        function calculateRevenueFromViews(bannerViews, carouselViews) {
-            const bannerRevenue = (bannerViews / 1000.0) * BANNER_CPM;
-            const carouselRevenue = (carouselViews / 1000.0) * CAROUSEL_CPM;
-            const grossRevenue = bannerRevenue + carouselRevenue;
-            const creatorRevenue = grossRevenue * CREATOR_SHARE;
-            const platformRevenue = grossRevenue * PLATFORM_SHARE;
-
-            return {
-                gross: grossRevenue,
-                creator: creatorRevenue,
-                platform: platformRevenue,
-                breakdown: {
-                    bannerRevenue,
-                    carouselRevenue,
-                    bannerViews,
-                    carouselViews
-                }
-            };
-        }
-
-        /**
-         * Fetch ad impressions for a creator's videos
-         * @param {string} creatorId - Creator's ID (googleId)
-         * @param {Array} videoIds - Array of video IDs
-         * @param {number} month - Month filter (0-11)
-         * @param {number} year - Year filter
-         * @returns {object} - { bannerViews, carouselViews }
-         */
-        async function fetchCreatorAdImpressions(creatorId, videoIds, month, year) {
-            try {
-                if (!videoIds || videoIds.length === 0) {
-                    return { bannerViews: 0, carouselViews: 0 };
-                }
-
-                // Use provided date or default to current
-                const now = new Date();
-                const targetMonth = month !== undefined ? month : now.getMonth();
-                const targetYear = year !== undefined ? year : now.getFullYear();
-
-                const response = await authorizedFetch(
-                    `${API_BASE}/admin/creators/${encodeURIComponent(creatorId)}/ad-impressions?month=${targetMonth}&year=${targetYear}`
-                );
-
-                if (response && response.ok) {
-                    const data = await response.json();
-                    return {
-                        bannerViews: data.bannerViews || 0,
-                        carouselViews: data.carouselViews || 0
-                    };
-                }
-
-                return { bannerViews: 0, carouselViews: 0 };
-            } catch (error) {
-                console.warn(`Error fetching ad impressions for ${creatorId}:`, error);
-                return { bannerViews: 0, carouselViews: 0 };
-            }
-        }
-
-
-
-        /**
-         * Calculate revenue for all creators using frontend calculation
-         * @param {Array} creators - Array of creator objects
-         * @param {number} month - Month filter (optional)
-         * @param {number} year - Year filter (optional)
-         * @returns {Promise<Map>} - Map of creatorId to calculated revenue
-         */
-        /**
-         * Calculate revenue for all creators using frontend calculation
-         * @param {Array} creators - Array of creator objects (from /creators)
-         * @param {Array} monthlyStats - Array of monthly stats (from /monthly-earnings)
-         * @returns {Promise<Map>} - Map of creatorId to calculated revenue
-         */
-        async function calculateAllCreatorsRevenue(creators, monthlyStats) {
-            const revenueMap = new Map();
-
-            // Create map of monthly stats for O(1) lookup
-            const statsMap = new Map();
-            if (monthlyStats && Array.isArray(monthlyStats)) {
-                monthlyStats.forEach(stat => {
-                    statsMap.set(String(stat.creatorId), stat);
-                });
-            }
-
-            console.log('💰 Starting frontend revenue calculation for', creators.length, 'creators using monthly stats');
-
-            // Calculate revenue synchronously using provided stats
-            creators.forEach((creator) => {
-                try {
-                    const creatorId = String(creator.id || creator._id);
-                    const stats = statsMap.get(creatorId);
-
-                    // Use stats from monthly-earnings endpoint if available
-                    const bannerViews = stats ? (stats.currentMonthBannerViews || 0) : 0;
-                    const carouselViews = stats ? (stats.currentMonthCarouselViews || 0) : 0;
-
-                    // Calculate revenue
-                    const revenue = calculateRevenueFromViews(
-                        bannerViews,
-                        carouselViews
-                    );
-
-                    revenueMap.set(creatorId, revenue);
-                } catch (error) {
-                    console.error(`Error calculating revenue for ${creator.name}:`, error);
-                }
-            });
-
-            return revenueMap;
-        }
 
         function initDateFilters() {
             const now = new Date();
@@ -1263,31 +1141,39 @@
 
             periodSelect.innerHTML = '';
 
-            // 1. Current Month
+            // 1. Current Month (App Logic: 1st to End of Month)
+            // Month index 0-11 matches App's logic (Dart Month - 1)
             const currentMonth = now.getMonth();
             const currentYear = now.getFullYear();
+            
             const currentOption = document.createElement('option');
             currentOption.value = `${currentMonth}|${currentYear}`;
             const currentMonthName = now.toLocaleString('default', { month: 'long' });
-            currentOption.textContent = `${currentMonthName} ${currentYear} (Current)`;
+            // Explicitly show dates for clarity, matching App's "This Month" concept
+            const lastDayCurrent = new Date(currentYear, currentMonth + 1, 0).getDate();
+            currentOption.textContent = `${currentMonthName} ${currentYear} (1-${lastDayCurrent})`;
             periodSelect.appendChild(currentOption);
 
-            // 2. Previous Month
-            const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            // 2. Previous Month (App Logic: 1st to End of Previous Month)
+            const prevDate = new Date(currentYear, currentMonth - 1, 1);
             const prevMonth = prevDate.getMonth();
             const prevYear = prevDate.getFullYear();
+            
             const prevOption = document.createElement('option');
             prevOption.value = `${prevMonth}|${prevYear}`;
             const prevMonthName = prevDate.toLocaleString('default', { month: 'long' });
-            prevOption.textContent = `${prevMonthName} ${prevYear} (Previous)`;
+            const lastDayPrev = new Date(prevYear, prevMonth + 1, 0).getDate();
+            prevOption.textContent = `${prevMonthName} ${prevYear} (1-${lastDayPrev})`;
             periodSelect.appendChild(prevOption);
 
-            // Default to Current
+            // Default to 'Current' to match App's default view
             periodSelect.value = `${currentMonth}|${currentYear}`;
         }
 
         async function loadCreators() {
             const container = document.getElementById('creatorsList');
+            const summaryContainer = document.getElementById('creatorsSummary'); // Ensure we have reference
+
             try {
                 container.innerHTML = '<p>Loading creators...</p>';
 
@@ -1329,66 +1215,75 @@
                     const monthlyData = await monthlyResponse.json();
                     if (monthlyData.success && monthlyData.creators) {
                         monthlyStats = monthlyData.creators;
-
                         // Initialize monthlyEarningsData for later use
                         monthlyEarningsData = {};
+                        
+
                     }
                 }
 
-                // **NEW: Calculate revenue on frontend with DATE FILTER**
-                // Now uses monthlyStats to avoid N+1 network requests
-                console.log('💰 Admin Dashboard: Calculating frontend revenue for all creators using monthly stats...');
-                const frontendRevenueMap = await calculateAllCreatorsRevenue(creatorData, monthlyStats);
+                // **NEW: Use Backend Revenue Values (Server-Side Calculation)**
+                // We no longer calculate revenue on the client side. We use the values provided by the backend.
+                console.log('💰 Admin Dashboard: Using server-side revenue calculation from monthly stats...');
+                
+                // Create map of monthly stats for O(1) lookup
+                const statsMap = new Map();
+                if (monthlyStats && Array.isArray(monthlyStats)) {
+                    monthlyStats.forEach(stat => {
+                        statsMap.set(String(stat.creatorId), stat);
+                    });
+                }
 
-                // **NEW: Merge frontend calculations with creator data**
+                // **NEW: Merge backend calculations with creator data**
                 creatorData.forEach(creator => {
-                    const frontendRevenue = frontendRevenueMap.get(creator.id);
-                    if (frontendRevenue) {
-                        // Add frontend calculated revenue to creator object
-                        creator.frontendCalculatedRevenue = {
-                            gross: frontendRevenue.gross,
-                            creator: frontendRevenue.creator,
-                            platform: frontendRevenue.platform,
-                            bannerRevenue: frontendRevenue.breakdown.bannerRevenue,
-                            carouselRevenue: frontendRevenue.breakdown.carouselRevenue,
-                            bannerViews: frontendRevenue.breakdown.bannerViews,
-                            carouselViews: frontendRevenue.breakdown.carouselViews
+                    const creatorId = String(creator.id || creator._id);
+                    const stats = statsMap.get(creatorId);
+                    
+                    if (stats) {
+                        // **CRITICAL: Use Backend Calculated Values**
+                        // These values come from adminRoutes.js which uses the exact same logic as adRoutes.js
+                        const backendNet = stats.thisMonth || 0;
+                        const backendGross = stats.currentMonthGrossRevenue || 0;
+                        const backendPlatform = backendGross - backendNet;
+                        
+                        // We attach these for use in renderCreators
+                        creator.backendCalculatedRevenue = {
+                            gross: backendGross,
+                            creator: backendNet,
+                            platform: backendPlatform,
+                            // Verify if breakdown is available, otherwise default to 0
+                            bannerRevenue: 0, // Backend aggregated these, didn't send breakdown separately in summary list
+                            carouselRevenue: 0,
+                            bannerViews: stats.currentMonthBannerViews || 0,
+                            carouselViews: stats.currentMonthCarouselViews || 0
                         };
 
-                        // **CRITICAL: Override backend values with frontend calculation**
-                        // This ensures revenue shown matches exactly what creator sees in app
-                        creator.creatorRevenueINR = frontendRevenue.creator;
-                        creator.grossRevenueINR = frontendRevenue.gross;
-                        creator.platformRevenueINR = frontendRevenue.platform;
-
-                        console.log(`✅ ${creator.name}: Frontend=₹${frontendRevenue.creator.toFixed(2)}, Backend=₹${creator.totalEarningsINR || 0}`);
+                        // Override main properties for sorting/display
+                        creator.creatorRevenueINR = backendNet;
+                        creator.grossRevenueINR = backendGross;
+                        creator.platformRevenueINR = backendPlatform;
+                        
+                        if (backendNet > 0) {
+                             console.log(`✅ ${creator.name}: Backend Revenue=₹${backendNet.toFixed(2)}`);
+                        }
                     }
                 });
 
                 // Build monthlyEarningsData map
                 if (monthlyStats.length > 0) {
                     monthlyStats.forEach(creator => {
-                        // Check if we have frontend calculation for this creator
-                        const frontendRevenue = frontendRevenueMap.get(creator.creatorId);
-
                         monthlyEarningsData[creator.creatorId] = {
-                            // **USE FRONTEND CALCULATION for current month if available**
-                            thisMonth: frontendRevenue ? frontendRevenue.creator : (creator.thisMonth || 0),
+                            // **USE BACKEND VALUES**
+                            thisMonth: creator.thisMonth || 0,
                             lastMonth: creator.lastMonth || 0,
-                            currentMonthGrossRevenue: frontendRevenue ? frontendRevenue.gross : (creator.currentMonthGrossRevenue || 0),
-                            currentMonthTotalAdViews: frontendRevenue ?
-                                (frontendRevenue.breakdown.bannerViews + frontendRevenue.breakdown.carouselViews) :
-                                (creator.currentMonthTotalAdViews || 0),
+                            currentMonthGrossRevenue: creator.currentMonthGrossRevenue || 0,
+                            currentMonthTotalAdViews: (creator.currentMonthTotalAdViews || 0),
                             currentMonthTotalViews: creator.currentMonthTotalViews || 0
                         };
-
-                        if (frontendRevenue) {
-                            console.log(`📊 ${creator.creatorId}: Using FRONTEND calculation for thisMonth: ₹${frontendRevenue.creator.toFixed(2)}`);
-                        }
                     });
                 }
 
-                console.log('✅ Admin Dashboard: Revenue calculation complete. Displaying creators...');
+                console.log('✅ Admin Dashboard: Revenue data ready. Displaying creators...');
                 renderCreators(creatorData);
                 // Re-apply current filters after data refresh
                 filterCreators();

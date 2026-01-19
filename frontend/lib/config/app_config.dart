@@ -1,12 +1,13 @@
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../core/services/http_client_service.dart';
 
-/// Optimized app configuration for better performance and smaller size
+/// Optimized app configuration for better performonce andsmaller size
 class AppConfig {
-  // **MANUAL: Development mode control**
+  // **MANUAL: Development mode control*
   static const bool _isDevelopment =
-      true; // Set to true for local testing, false for production
+     false; // to true for local testing, false for production
 
   // **NEW: Smart URL selection with fallback**
   static String? _cachedBaseUrl;
@@ -95,126 +96,81 @@ class AppConfig {
     return null;
   }
 
-  // **OPTIMIZED: Try all servers in parallel instead of sequentially**
+  // **OPTIMIZED: Try all servers in parallel and return the FIRST successful one (Race Condition)**
   static Future<String> getBaseUrlWithFallback() async {
-    // **FIX: For web, always use localhost**
-    if (kIsWeb) {
-      if (_isDevelopment) {
-        print('🌐 AppConfig.getBaseUrlWithFallback: WEB DEVELOPMENT MODE');
-        print('🌐 Using: $_localWebBaseUrl');
-        print('🌐 Make sure your backend is running on $_localWebBaseUrl');
-        _cachedBaseUrl = _localWebBaseUrl;
-        return _localWebBaseUrl;
-      }
-      // Production web ke liye
-      if (_cachedBaseUrl != null) {
-        return _cachedBaseUrl!;
-      }
-      return _customDomainUrl;
-    }
-
-    // In explicit development mode, always use local server and skip remote checks
-    if (_isDevelopment) {
-      print('🔧 AppConfig.getBaseUrlWithFallback: DEVELOPMENT MODE');
-      print('🔧 Forcing local server: $_localIpBaseUrl');
-      print('🔧 Make sure your backend is running on $_localIpBaseUrl');
-      _cachedBaseUrl = _localIpBaseUrl;
-      return _localIpBaseUrl;
-    }
-
-    // **FIX: Use cache if available (don't clear it every time!)**
-    if (_cachedBaseUrl != null) {
-      return _cachedBaseUrl!;
-    }
-
-    print('🔍 AppConfig: Starting parallel server connectivity check...');
-    print(
-        '🔍 AppConfig: Checking all servers simultaneously for faster response');
-
-    // **OPTIMIZED: Check all servers in parallel instead of sequentially**
-    final localServerUrl = kIsWeb ? _localWebBaseUrl : _localIpBaseUrl;
-    final futures = [
-      _checkServer(_customDomainUrl),
-      _checkServer(_railwayUrl),
-      _checkServer(localServerUrl),
-    ];
-
-    // Wait for all checks to complete in parallel
-    final results = await Future.wait(futures);
-
-    // Use first successful result (priority order: Custom Domain → Railway → Local Server)
-    for (final url in results) {
-      if (url != null) {
-        print('✅ AppConfig: Selected server: $url');
-        _cachedBaseUrl = url;
-        return url;
-      }
-    }
-
-    // All servers failed - use default custom domain as last resort
-    print(
-        '⚠️ AppConfig: All servers unreachable, using default custom domain as last resort');
-    _cachedBaseUrl = _customDomainUrl;
-    return _cachedBaseUrl!;
+    return _findBestServerUrl(source: 'getBaseUrlWithFallback');
   }
 
   // **OPTIMIZED: Check server connectivity - parallel checks for faster response**
   static Future<String> checkAndUpdateServerUrl() async {
+     return _findBestServerUrl(source: 'checkAndUpdateServerUrl');
+  }
+
+  // **NEW: Private helper to implement "Race to Success" pattern**
+  static Future<String> _findBestServerUrl({required String source}) async {
     // **FIX: For web, always use localhost**
     if (kIsWeb) {
       if (_isDevelopment) {
-        print('🌐 AppConfig.checkAndUpdateServerUrl: WEB DEVELOPMENT MODE');
-        print('🌐 Skipping connectivity check, using: $_localWebBaseUrl');
-        print('🌐 Make sure your backend is running on $_localWebBaseUrl');
+        print('🌐 AppConfig.$source: WEB DEVELOPMENT MODE');
+        print('🌐 Using: $_localWebBaseUrl');
         _cachedBaseUrl = _localWebBaseUrl;
         return _localWebBaseUrl;
       }
-      // Production web ke liye
-      if (_cachedBaseUrl != null) {
-        return _cachedBaseUrl!;
-      }
+      if (_cachedBaseUrl != null) return _cachedBaseUrl!;
       return _customDomainUrl;
     }
 
     // In explicit development mode, always use local server
     if (_isDevelopment) {
-      print('🔧 AppConfig.checkAndUpdateServerUrl: DEVELOPMENT MODE');
-      print(
-          '🔧 Skipping connectivity check, forcing local server: $_localIpBaseUrl');
-      print('🔧 Make sure your backend is running on $_localIpBaseUrl');
+      print('🔧 AppConfig.$source: DEVELOPMENT MODE');
+      print('🔧 Forcing local server: $_localIpBaseUrl');
       _cachedBaseUrl = _localIpBaseUrl;
       return _localIpBaseUrl;
     }
 
-    print('🔍 AppConfig: Starting parallel server connectivity check...');
-    print(
-        '🔍 AppConfig: Checking all servers simultaneously for faster response');
-
-    // **OPTIMIZED: Check all servers in parallel instead of sequentially**
-    const localServerUrl = kIsWeb ? _localWebBaseUrl : _localIpBaseUrl;
-    final futures = [
-      _checkServer(_customDomainUrl),
-      _checkServer(_railwayUrl),
-      _checkServer(localServerUrl),
-    ];
-
-    // Wait for all checks to complete in parallel
-    final results = await Future.wait(futures);
-
-    // Use first successful result (priority order: Custom Domain → Railway → Local Server)
-    for (final url in results) {
-      if (url != null) {
-        print('✅ AppConfig: Selected server: $url');
-        _cachedBaseUrl = url;
-        return url;
-      }
+    // Use cache if available
+    if (_cachedBaseUrl != null) {
+      return _cachedBaseUrl!;
     }
 
-    // If all servers fail, return default
-    print(
-        '⚠️ AppConfig: All servers failed, using default custom domain as last resort');
-    _cachedBaseUrl = _customDomainUrl;
-    return _cachedBaseUrl!;
+    print('🔍 AppConfig: Starting parallel "Race to Success" check...');
+    
+    final localServerUrl = kIsWeb ? _localWebBaseUrl : _localIpBaseUrl;
+    
+    // Create a completer to handle the "first success" logic
+    final completer = Completer<String>();
+    
+    // Define the candidate servers
+    final candidates = [
+      _customDomainUrl,
+      _railwayUrl,
+      localServerUrl,
+    ];
+    
+    int completedCount = 0;
+    
+    // Launch all checks simultaneously
+    for (final url in candidates) {
+      _checkServer(url).then((verifiedUrl) {
+        // If we found a valid URL and haven't finished yet, declare victory!
+        if (verifiedUrl != null && !completer.isCompleted) {
+          print('✅ AppConfig: FAST WINNER found: $verifiedUrl');
+          completer.complete(verifiedUrl);
+        }
+      }).whenComplete(() {
+        completedCount++;
+        // If all checks finished and none succeeded, use fallback
+        if (completedCount == candidates.length && !completer.isCompleted) {
+          print('⚠️ AppConfig: All servers unreachable, using default fallback');
+          completer.complete(_customDomainUrl);
+        }
+      });
+    }
+
+    // Wait for the winner (or default fallback)
+    final winner = await completer.future;
+    _cachedBaseUrl = winner;
+    return winner;
   }
 
   // **NEW: Reset cached URL (useful for retry scenarios)**
@@ -285,14 +241,6 @@ class AppConfig {
       'displayFrequency': 3, // Every 3rd screen
       'priority': 2, // Medium priority
       'estimatedImpressionsPerDay': 25000,
-    },
-    'video feed ad': {
-      'cpm': 30.0,
-      'maxFileSize': 100 * 1024 * 1024, // 100MB
-      'supportedFormats': ['mp4', 'webm', 'avi', 'mov', 'mkv'],
-      'displayFrequency': 4, // Every 4th screen
-      'priority': 3, // Highest priority
-      'estimatedImpressionsPerDay': 15000,
     },
   };
 

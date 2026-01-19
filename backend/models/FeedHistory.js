@@ -71,7 +71,7 @@ FeedHistorySchema.statics.markAsSeen = async function (userId, videos) {
         const result = await this.bulkWrite(ops, { ordered: false });
         // **DEBUG LOG ON REQUEST**
         if (result.upsertedCount > 0 || result.modifiedCount > 0) {
-            console.log(`👁️ FeedHistory: Marked ${ops.length} videos as seen for ${userId} (Upserted: ${result.upsertedCount}, Modified: ${result.modifiedCount}) at ${new Date().toISOString()}`);
+// console.log(`👁️ FeedHistory: Marked ${ops.length} videos as seen for ${userId} (Upserted: ${result.upsertedCount}, Modified: ${result.modifiedCount}) at ${new Date().toISOString()}`);
         }
     } catch (error) {
         console.error('❌ Error marking videos as seen:', error);

@@ -385,7 +385,7 @@ router.get('/:id', async (req, res) => {
     if (cacheKeyGuess) {
       const cachedProfile = await getCachedResponse(cacheKeyGuess);
       if (cachedProfile) {
-        console.log('⚡ User profile API: Cache hit for', id);
+// console.log('⚡ User profile API: Cache hit for', id);
         return res.json(cachedProfile);
       }
     }

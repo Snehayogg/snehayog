@@ -56,8 +56,8 @@ class VideoService {
     if (_currentVisibleVideoIndex != newIndex) {
       final oldIndex = _currentVisibleVideoIndex;
       _currentVisibleVideoIndex = newIndex;
-      AppLogger.log(
-          '🎬 VideoService: Video index changed from $oldIndex to $newIndex');
+      /* AppLogger.log(
+          '🎬 VideoService: Video index changed from $oldIndex to $newIndex'); */
 
       for (final listener in _videoIndexChangeListeners) {
         try {
@@ -73,9 +73,9 @@ class VideoService {
   void updateVideoScreenState(bool isActive) {
     if (_isVideoScreenActive != isActive) {
       _isVideoScreenActive = isActive;
-      AppLogger.log(
+      /* AppLogger.log(
         '🔄 VideoService: Video screen state changed to ${isActive ? "ACTIVE" : "INACTIVE"}',
-      );
+      ); */
 
       for (final listener in _videoScreenStateListeners) {
         try {
@@ -91,9 +91,9 @@ class VideoService {
   void updateAppForegroundState(bool inForeground) {
     if (_isAppInForeground != inForeground) {
       _isAppInForeground = inForeground;
-      AppLogger.log(
+      /* AppLogger.log(
         '📱 VideoService: App foreground state changed to ${inForeground ? "FOREGROUND" : "BACKGROUND"}',
-      );
+      ); */
     }
   }
 
@@ -141,7 +141,7 @@ class VideoService {
     try {
       // Get base URL with Railway first, local fallback
       final baseUrl = await getBaseUrlWithFallback();
-      AppLogger.log('🔍 VideoService: Using base URL: $baseUrl');
+      // AppLogger.log('🔍 VideoService: Using base URL: $baseUrl');
 
       String url = '$baseUrl/api/videos?page=$page&limit=$limit';
       final normalizedType = videoType?.toLowerCase();
@@ -149,7 +149,7 @@ class VideoService {
       String? apiVideoType = normalizedType;
       if (normalizedType == 'yog' || normalizedType == 'vayu') {
         url += '&videoType=$apiVideoType';
-        AppLogger.log('🔍 VideoService: Filtering by videoType: $apiVideoType');
+        // AppLogger.log('🔍 VideoService: Filtering by videoType: $apiVideoType');
       }
 
       // **BACKEND-FIRST: Get platformId for anonymous users**
@@ -157,8 +157,8 @@ class VideoService {
       final platformId = await platformIdService.getPlatformId();
       if (platformId.isNotEmpty) {
         url += '&platformId=$platformId';
-        AppLogger.log(
-            '📱 VideoService: Using platformId for personalized feed');
+        /* AppLogger.log(
+            '📱 VideoService: Using platformId for personalized feed'); */
       }
 
       // **NEW: Add clearSession parameter to clear backend session state**
@@ -184,10 +184,10 @@ class VideoService {
         final token = await AuthService.getToken();
         if (token != null && token.isNotEmpty) {
           headers['Authorization'] = 'Bearer $token';
-          AppLogger.log(
-              '✅ VideoService: Using authenticated request for personalized feed');
+          /* AppLogger.log(
+              '✅ VideoService: Using authenticated request for personalized feed'); */
         } else {
-          AppLogger.log('ℹ️ VideoService: No auth token - using regular feed');
+          // AppLogger.log('ℹ️ VideoService: No auth token - using regular feed');
         }
       } catch (e) {
         AppLogger.log(
@@ -222,20 +222,20 @@ class VideoService {
                 '⚠️ VideoService: Backend reports 0 total videos in database!');
           }
         } else {
-          AppLogger.log(
-              '✅ VideoService: Received ${videoList.length} videos from API (page: $page, videoType: $videoType)');
+          /* AppLogger.log(
+              '✅ VideoService: Received ${videoList.length} videos from API (page: $page, videoType: $videoType)'); */
         }
 
         final videos = videoList.map((json) {
           // **DEBUG: Log all video data for debugging**
-          AppLogger.log(
+          /* AppLogger.log(
               '🔍 VideoService: Video data for ${json['videoName']}:');
           AppLogger.log('  - videoUrl: ${json['videoUrl']}');
           AppLogger.log('  - hlsPlaylistUrl: ${json['hlsPlaylistUrl']}');
           AppLogger.log(
               '  - hlsMasterPlaylistUrl: ${json['hlsMasterPlaylistUrl']}');
           AppLogger.log('  - isHLSEncoded: ${json['isHLSEncoded']}');
-          AppLogger.log('  - hlsVariants: ${json['hlsVariants']?.length ?? 0}');
+          AppLogger.log('  - hlsVariants: ${json['hlsVariants']?.length ?? 0}'); */
 
           // **HLS URL Priority**: Use HLS for better streaming
           if (json['hlsPlaylistUrl'] != null &&
@@ -250,8 +250,7 @@ class VideoService {
             } else {
               json['videoUrl'] = hlsUrl;
             }
-            AppLogger.log(
-                '🔗 VideoService: Using HLS Playlist URL: ${json['videoUrl']}');
+            // AppLogger.log('🔗 VideoService: Using HLS Playlist URL: ${json['videoUrl']}');
           } else if (json['hlsMasterPlaylistUrl'] != null &&
               json['hlsMasterPlaylistUrl'].toString().isNotEmpty) {
             String masterUrl = json['hlsMasterPlaylistUrl'].toString();
@@ -263,8 +262,7 @@ class VideoService {
             } else {
               json['videoUrl'] = masterUrl;
             }
-            AppLogger.log(
-                '🔗 VideoService: Using HLS Master URL: ${json['videoUrl']}');
+            // AppLogger.log('🔗 VideoService: Using HLS Master URL: ${json['videoUrl']}');
           } else {
             // **Fallback**: Ensure relative URLs are complete
             if (json['videoUrl'] != null &&
@@ -276,9 +274,9 @@ class VideoService {
               }
               json['videoUrl'] = '$baseUrl/$videoUrl';
             }
-            AppLogger.log(
+            /* AppLogger.log(
               '🔗 VideoService: Using original video URL: ${json['videoUrl']}',
-            );
+            ); */
           }
 
           final video = VideoModel.fromJson(json);
@@ -402,7 +400,7 @@ class VideoService {
       final videoId = id.trim();
       final url = '$resolvedBaseUrl/api/videos/$videoId';
 
-      AppLogger.log('📡 VideoService: Fetching video by ID: $videoId');
+      // AppLogger.log('📡 VideoService: Fetching video by ID: $videoId');
 
       final res = await http
           .get(Uri.parse(url))
@@ -413,9 +411,9 @@ class VideoService {
       if (res.statusCode == 200) {
         final videoData = json.decode(res.body);
         final video = VideoModel.fromJson(videoData);
-        AppLogger.log(
+        /* AppLogger.log(
           '✅ VideoService: Successfully fetched video: ${video.videoName} (ID: ${video.id})',
-        );
+        ); */
         return video;
       } else if (res.statusCode == 404) {
         AppLogger.log('❌ VideoService: Video not found (404): $videoId');

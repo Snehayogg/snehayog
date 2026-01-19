@@ -627,7 +627,7 @@ class _CommentsSheetWidgetState extends State<CommentsSheetWidget> {
 
   // **Helper for date formatting**
   String _getFormattedDate(DateTime? date) {
-    if (date == null) return '';
+    if (date == null || date.year == 1970) return '';
     return "${date.day}/${date.month}/${date.year}";
   }
 
