@@ -1323,17 +1323,17 @@ router.post('/:id/watch', async (req, res) => {
     // **REDIS OPTIMIZATION: Also track in Redis for ultra-fast batch filtering**
     if (redisService.getConnectionStatus()) {
       await redisService.addToLongTermWatchHistory(identityId, [videoId.toString()]);
-      console.log(`🚀 Watch history synced to Redis for ${identityId}`);
+// console.log(`🚀 Watch history synced to Redis for ${identityId}`);
     }
 
-    console.log(`✅ Watch tracked successfully for ${isAuthenticated ? 'authenticated (googleId)' : 'anonymous (deviceId)'} user`);
+// console.log(`✅ Watch tracked successfully for ${isAuthenticated ? 'authenticated (googleId)' : 'anonymous (deviceId)'} user`);
 
     // **NEW: Mark as SEEN in FeedHistory to prevent re-impression**
     try {
       if (identityId) {
         // **FIX: Pass videoHash as part of the object in the array**
         await FeedHistory.markAsSeen(identityId, [{ _id: videoId, videoHash: videoHash }]);
-        console.log(`👁️ Marked video ${videoId} as seen for ${identityId} (Hash: ${videoHash ? 'Yes' : 'No'})`);
+// console.log(`👁️ Marked video ${videoId} as seen for ${identityId} (Hash: ${videoHash ? 'Yes' : 'No'})`);
       }
     } catch (err) {
        console.error('❌ Error marking video as seen:', err.message);
@@ -1353,7 +1353,7 @@ router.post('/:id/watch', async (req, res) => {
       // Clear feed cache (user will see updated feed after watching)
       const feedCachePattern = `feed:${identityId}:*`;
       await redisService.clearPattern(feedCachePattern);
-      console.log(`🧹 Cleared feed cache for: ${identityId}`);
+// console.log(`🧹 Cleared feed cache for: ${identityId}`);
 
       // Clear unwatched IDs cache (for backward compatibility)
       const unwatchedCachePattern = `videos:unwatched:ids:${identityId}:*`;
@@ -1397,7 +1397,7 @@ router.post('/sync-watch-history', verifyToken, async (req, res) => {
       const deviceHistory = await redisService.getLongTermWatchHistory(deviceId);
       if (deviceHistory.size > 0) {
         await redisService.addToLongTermWatchHistory(googleId, Array.from(deviceHistory));
-        console.log(`🚀 Redis Sync: ${deviceHistory.size} videos synced from ${deviceId} to ${googleId}`);
+// console.log(`🚀 Redis Sync: ${deviceHistory.size} videos synced from ${deviceId} to ${googleId}`);
       }
     }
 
@@ -1405,13 +1405,13 @@ router.post('/sync-watch-history', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'deviceId is required' });
     }
 
-    console.log('🔄 Syncing watch history:', { googleId, deviceId });
+// console.log('🔄 Syncing watch history:', { googleId, deviceId });
 
     // Get watch history for both identifiers
     const watchedByUserId = await WatchHistory.getUserWatchedVideoIds(googleId, null);
     const watchedByDeviceId = await WatchHistory.getUserWatchedVideoIds(deviceId, null);
 
-    console.log(`📊 Watch history before sync: ${watchedByUserId.length} (userId) + ${watchedByDeviceId.length} (deviceId)`);
+// console.log(`📊 Watch history before sync: ${watchedByUserId.length} (userId) + ${watchedByDeviceId.length} (deviceId)`);
 
     // Merge: Copy all deviceId watch history to userId
     // This ensures authenticated user gets all their anonymous watch history
@@ -1489,14 +1489,14 @@ router.post('/sync-watch-history', verifyToken, async (req, res) => {
     const finalWatchedByUserId = await WatchHistory.getUserWatchedVideoIds(googleId, null);
     const finalWatchedByDeviceId = await WatchHistory.getUserWatchedVideoIds(deviceId, null);
 
-    console.log(`✅ Watch history sync complete: ${syncedCount} videos synced to userId, ${reverseSyncedCount} to deviceId`);
-    console.log(`📊 Watch history after sync: ${finalWatchedByUserId.length} (userId) + ${finalWatchedByDeviceId.length} (deviceId)`);
+// console.log(`✅ Watch history sync complete: ${syncedCount} videos synced to userId, ${reverseSyncedCount} to deviceId`);
+// console.log(`📊 Watch history after sync: ${finalWatchedByUserId.length} (userId) + ${finalWatchedByDeviceId.length} (deviceId)`);
 
     // Clear cache for both identifiers
     if (redisService.getConnectionStatus()) {
       await redisService.clearPattern(`videos:unwatched:ids:${googleId}:*`);
       await redisService.clearPattern(`videos:unwatched:ids:${deviceId}:*`);
-      console.log('🧹 Cleared cache for both identifiers');
+// console.log('🧹 Cleared cache for both identifiers');
     }
 
     res.json({
@@ -1929,7 +1929,7 @@ router.post('/:id/watch', async (req, res) => {
             const userInfo = await googleResponse.json();
             userId = userInfo.id;
             isAuthenticated = true;
-            console.log(`✅ Watch tracking: Using authenticated user (Google ID: ${userId})`);
+// console.log(`✅ Watch tracking: Using authenticated user (Google ID: ${userId})`);
           } else {
             // Try JWT token
             const jwt = (await import('jsonwebtoken')).default;
@@ -1939,7 +1939,7 @@ router.post('/:id/watch', async (req, res) => {
                 const decoded = jwt.verify(token, JWT_SECRET);
                 userId = decoded.id || decoded.googleId;
                 isAuthenticated = true;
-                console.log(`✅ Watch tracking: Using authenticated user (JWT, ID: ${userId})`);
+// console.log(`✅ Watch tracking: Using authenticated user (JWT, ID: ${userId})`);
               } catch (jwtError) {
                 // Token invalid - will use deviceId (this is OK, not an error)
                 console.log(`ℹ️ Watch tracking: Token verification failed, using deviceId fallback (deviceId: ${deviceId ? 'present' : 'missing'})`);
@@ -1975,6 +1975,7 @@ router.post('/:id/watch', async (req, res) => {
       return res.status(400).json({ error: 'Invalid video ID' });
     }
 
+/*
     console.log('📊 Tracking video watch:', {
       identityId,
       userId: userId || 'none',
@@ -1984,6 +1985,7 @@ router.post('/:id/watch', async (req, res) => {
       duration,
       completed
     });
+    */
 
     // **HYBRID VIEW LOGIC: Distinction between "Skim" and "Watch"**
     // 1. Skim (< 5s): Temporary Redis storage (seen recently) - prevents immediate repetition but valid for recycling
@@ -1995,7 +1997,7 @@ router.post('/:id/watch', async (req, res) => {
 
     if (isSkim) {
       // **SKIM PATH: Store in Redis only (Temporary)**
-      console.log(`👀 Skim detected (${duration}s): Storing in temporary Redis set for ${identityId}`);
+// console.log(`👀 Skim detected (${duration}s): Storing in temporary Redis set for ${identityId}`);
       if (redisService.getConnectionStatus()) {
         const skimKey = `videos:seen_recently:${identityId}`;
         await redisService.addToSet(skimKey, [videoId]);
@@ -2008,7 +2010,7 @@ router.post('/:id/watch', async (req, res) => {
 
     } else {
       // **WATCH PATH: Permanent DB storage (Existing Logic)**
-      console.log(`✅ True Watch detected (${duration}s): Storing in DB History for ${identityId}`);
+// console.log(`✅ True Watch detected (${duration}s): Storing in DB History for ${identityId}`);
 
       const watchEntry = await WatchHistory.trackWatch(identityId, videoId, {
         duration,
@@ -2030,12 +2032,12 @@ router.post('/:id/watch', async (req, res) => {
       // Clear watch history cache (will be refreshed on next feed request)
       const watchHistoryPattern = `watch:history:${identityId}*`;
       await redisService.clearPattern(watchHistoryPattern);
-      console.log(`🧹 Cleared watch history cache for: ${identityId}`);
+// console.log(`🧹 Cleared watch history cache for: ${identityId}`);
 
       // Clear feed cache (user will see updated feed after watching)
       const feedCachePattern = `feed:${identityId}:*`;
       await redisService.clearPattern(feedCachePattern);
-      console.log(`🧹 Cleared feed cache for: ${identityId}`);
+// console.log(`🧹 Cleared feed cache for: ${identityId}`);
 
       // Clear unwatched IDs cache (for backward compatibility)
       const unwatchedCachePattern = `videos:unwatched:ids:${identityId}:*`;
@@ -2760,6 +2762,7 @@ router.post('/:id/increment-view', async (req, res) => {
     const videoId = req.params.id;
     const { userId, duration = 2, deviceId, videoHash } = req.body; // **IMPROVED: Added deviceId and videoHash support**
 
+/*
     console.log('🎯 View increment request:', {
       videoId,
       userId,
@@ -2768,6 +2771,7 @@ router.post('/:id/increment-view', async (req, res) => {
       videoHash: videoHash ? 'Provided' : 'Missing',
       timestamp: new Date().toISOString()
     });
+*/
 
     // Validate video ID
     if (!videoId || !mongoose.Types.ObjectId.isValid(videoId)) {

@@ -14,12 +14,10 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         // physicalRamSize is in MB (device_info_plus)
         final ramInMB = (androidInfo.physicalRamSize).toDouble();
         _isLowEndDevice = androidInfo.isLowRamDevice || (ramInMB <= 4096);
-        AppLogger.log('📱 Device Capability: ${_isLowEndDevice ? "Low End" : "High End"} (RAM: ${(ramInMB / 1024).toStringAsFixed(1)} GB)');
-        // iOS memory management is better, but safe default
-        // final iosInfo = await DeviceInfoPlugin().iosInfo;
+        // AppLogger.log('📱 Device Capability: ${_isLowEndDevice ? "Low End" : "High End"} (RAM: ${(ramInMB / 1024).toStringAsFixed(1)} GB)');
         // iPhone 8 or older / iPads with < 3GB RAM could be considered low end
         // Simple heuristic: assume modern iOS devices are high end unless very old
-        _isLowEndDevice = false; 
+        // _isLowEndDevice = false; // logic would go here if needed
       }
     } catch (e) {
       AppLogger.log('⚠️ Error checking device capabilities: $e');
@@ -63,6 +61,25 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         }
     }
 
+    // **2.5. LIGHTWEIGHT PREFETCH (Distant Future)**
+    // Download HLS manifests for videos further down WITHOUT creating players.
+    // Window: +3 to +5 (High End), +2 to +3 (Low End)
+    final int prefetchStart = _currentIndex + nextWindow + 1;
+    final int prefetchEnd = _currentIndex + nextWindow + 3;
+    
+    for (int i = prefetchStart; i <= prefetchEnd && i < _videos.length; i++) {
+       final video = _videos[i];
+       // Only prefetch HLS to avoid "Truncated MP4" issues
+       final hlsUrl = video.hlsPlaylistUrl?.isNotEmpty == true
+           ? video.hlsPlaylistUrl
+           : video.hlsMasterPlaylistUrl;
+           
+       if (hlsUrl != null && hlsUrl.isNotEmpty) {
+           // Fire and forget prefetch (1MB is plenty for manifests)
+           videoCacheProxy.prefetchChunk(hlsUrl, megabytes: 1);
+       }
+    }
+
     // **3. CLEANUP (The "Focus Mode")**
     // Aggressively kill anything outside our smart windows
     // Calculate keep range based on windows
@@ -77,8 +94,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         _hasMore &&
         !_isLoadingMore) {
       // One-time log, okay to keep
-      AppLogger.log(
-          '🚀 Background Preload: Starting to load Page 2 in background...');
+      /* AppLogger.log(
+          '🚀 Background Preload: Starting to load Page 2 in background...'); */
       _hasStartedBackgroundPreload = true;
       _loadMoreVideos();
     }
@@ -101,7 +118,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
     if (_loadingVideos.contains(index)) {
       // Ensure we re-check smart autoplay even if skipping load
       if (mounted && index == _currentIndex) {
-        AppLogger.log('⏳ Video $index already loading, queuing smart autoplay check');
+        // AppLogger.log('⏳ Video $index already loading, queuing smart autoplay check');
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && index == _currentIndex) {
              _tryAutoplayCurrentImmediate(index);
@@ -112,13 +129,15 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
     }
 
     // **NEW: Check if we're already at max concurrent initializations**
-    if (_initializingVideos.length >= _maxConcurrentInitializations &&
+    // **VIP PASS: If it's the current video, BYPASS this check and load immediately!**
+    if (index != _currentIndex && 
+        _initializingVideos.length >= _maxConcurrentInitializations &&
         !_preloadedVideos.contains(index) &&
         !_loadingVideos.contains(index)) {
       // Queue this video for later initialization
-      AppLogger.log(
+      /* AppLogger.log(
         '⏳ Max concurrent initializations reached, deferring video $index',
-      );
+      ); */
       Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted && !_preloadedVideos.contains(index)) {
           _preloadVideo(index);
@@ -127,17 +146,27 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       return;
     }
 
-    _loadingVideos.add(index);
+    // **RELEVANCY CHECK: Abort if video is too far from current index (Zombie Load Check)**
+    // This prevents "Ghost Loading" when user scrolls fast past this video.
+    if (mounted && (index - _currentIndex).abs() > 3) {
+      // AppLogger.log('🛑 Aborting preload for video $index (Too far from $_currentIndex)');
+      _loadingVideos.remove(index); // Ensure we clear the loading flag
+      return;
+    }
 
     // **CACHE STATUS CHECK ON PRELOAD**
-    AppLogger.log('🔄 Preloading video $index');
+    // AppLogger.log('🔄 Preloading video $index');
     _printCacheStatus();
+
 
     String? videoUrl;
     VideoPlayerController? controller;
     bool isReused = false;
 
-    try {
+    try { 
+      // **CRITICAL FIX: Start tracking loading immediately inside TRY block to ensure cleanup in FINALLY**
+      _loadingVideos.add(index);
+      
       final video = _videos[index];
 
       // **FIXED: Resolve playable URL (handles share page URLs)**
@@ -154,7 +183,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         return;
       }
 
-      AppLogger.log('🎬 Preloading video $index with URL: $videoUrl');
+      // AppLogger.log('🎬 Preloading video $index with URL: $videoUrl');
 
       // **UNIFIED STRATEGY: Check shared pool FIRST for instant playback**
       final sharedPool = SharedVideoControllerPool();
@@ -166,9 +195,9 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       if (instantController != null) {
         controller = instantController;
         isReused = true;
-        AppLogger.log(
+        /* AppLogger.log(
           '⚡ INSTANT: Reusing controller from shared pool for video: ${video.id}',
-        );
+        ); */
         // **CRITICAL: Add to local tracking for UI updates**
         _controllerPool[index] = controller;
         _lastAccessedLocal[index] = DateTime.now();
@@ -178,9 +207,9 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         if (fallbackController != null) {
           controller = fallbackController;
           isReused = true;
-          AppLogger.log(
+          /* AppLogger.log(
             '♻️ Reusing controller from shared pool for video: ${video.id}',
-          );
+          ); */
           _controllerPool[index] = controller;
           _lastAccessedLocal[index] = DateTime.now();
         }
@@ -189,7 +218,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       // **FIX: Ensure background videos are PAUSED if reused**
       // If we grabbed a playing controller for a future/past video, stop it now.
       if (controller != null && index != _currentIndex && controller.value.isPlaying) {
-        AppLogger.log('⏸️ Pausing reused background controller at index $index');
+        // AppLogger.log('⏸️ Pausing reused background controller at index $index');
         controller.pause();
       }
 
@@ -220,40 +249,43 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         try {
           // **HLS SUPPORT: Add HLS-specific configuration**
           if (videoUrl.contains('.m3u8')) {
-            AppLogger.log('🎬 HLS Video detected: $videoUrl');
-            AppLogger.log('🎬 HLS Video duration: ${video.duration}');
-            await controller!.initialize().timeout(
-              const Duration(seconds: 12), // **OPTIMIZED: 30s -> 12s (Fail Fast)**
+            // AppLogger.log('🎬 HLS Video detected: $videoUrl');
+            // AppLogger.log('🎬 HLS Video duration: ${video.duration}');
+            // **FIX: Removed unnecessary bang operator & unnecessary null-aware**
+            await controller?.initialize().timeout(
+              const Duration(seconds: 12), // **RESTORED: 12s HLS Timeout**
               onTimeout: () {
                 throw Exception('HLS video initialization timeout');
               },
             );
-            AppLogger.log('✅ HLS Video initialized successfully');
+            // AppLogger.log('✅ HLS Video initialized successfully');
           } else {
-             AppLogger.log('🎬 Regular Video detected: $videoUrl');
+             // AppLogger.log('🎬 Regular Video detected: $videoUrl');
             // **FIXED: Add timeout and better error handling for regular videos**
-            await controller!.initialize().timeout(
-              const Duration(seconds: 8), // **OPTIMIZED: 10s -> 8s (Fail Fast)**
+            // **FIX: Removed unnecessary bang operator & unnecessary null-aware**
+            await controller?.initialize().timeout(
+              const Duration(seconds: 8), // **RESTORED: 8s Regular Timeout**
               onTimeout: () {
                 throw Exception('Video initialization timeout');
               },
             );
-            AppLogger.log('✅ Regular Video initialized successfully');
+            // AppLogger.log('✅ Regular Video initialized successfully');
           }
           
           // **DEFENSIVE FIX: Ensure new controller didn't auto-start**
-          if (index != _currentIndex && controller!.value.isPlaying) {
-             AppLogger.log('⏸️ Auto-started video paused at index $index');
-             controller.pause();
+          // **FIX: Removed unnecessary null-aware**
+          if (index != _currentIndex && controller?.value.isPlaying == true) {
+             // AppLogger.log('⏸️ Auto-started video paused at index $index');
+             controller?.pause();
           }
 
         } finally {
           _initializingVideos.remove(index);
         }
       } else {
-        AppLogger.log(
+        /* AppLogger.log(
           '♻️ Skipping initialization - reusing initialized controller',
-        );
+        ); */
 
         if (mounted && controller.value.isInitialized) {
           final isPlaying = controller.value.isPlaying;
@@ -268,9 +300,9 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
           if (!_controllerStates.containsKey(index)) {
             _controllerStates[index] = isPlaying;
           }
-          AppLogger.log(
+          /* AppLogger.log(
             '🔄 Triggered rebuild for reused controller at index $index',
-          );
+          ); */
         }
       }
 
@@ -287,9 +319,9 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         final sharedPool = SharedVideoControllerPool();
         final video = _videos[index];
         sharedPool.addController(video.id, controller, index: index);
-        AppLogger.log(
+        /* AppLogger.log(
           '✅ Added video controller to shared pool: ${video.id} (index: $index)',
-        );
+        ); */
 
         // **FIX: Trigger rebuild after controller initialization**
         if (mounted) {
@@ -325,12 +357,11 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
       // **SMART AUTOPLAY: If this video finished loading and user is watching it, PLAY NOW**
       if (mounted && index == _currentIndex) {
-         AppLogger.log('🎯 Smart Autoplay: Video $index finished loading and is active. Calling Play.');
+         // AppLogger.log('🎯 Smart Autoplay: Video $index finished loading and is active. Calling Play.');
          
-         // **CRITICAL FIX: Explicitly call play() instantly to avoid any state race conditions**
-         if (controller.value.isInitialized) {
-             await controller.play();
-         }
+         // **CRITICAL FIX: Removed explicit await controller.play() here as it causes race conditions**
+         // If user scrolls away while this plays, onPageChanged might miss pausing it.
+         // We rely solely on _tryAutoplayCurrentImmediate below which has proper index guards.
          
          _tryAutoplayCurrentImmediate(index);
       }
@@ -342,14 +373,16 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         });
       }
       final retryCount = _preloadRetryCount[index] ?? 0;
+      
+      // **CRITICAL: Handle OOM specially (back off longer)**
       if (e.toString().contains('NO_MEMORY') ||
           e.toString().contains('OutOfMemory')) {
         if (retryCount < _maxRetryAttempts) {
           _preloadRetryCount[index] = retryCount + 1;
-          _cleanupOldControllers();
-          final retryDelay = Duration(milliseconds: 500 * (retryCount + 1));
+          _cleanupOldControllers(); // Clean memory aggressively
+          final retryDelay = Duration(milliseconds: 1000 * (retryCount + 1));
           AppLogger.log(
-            '🔄 Retrying video $index after ${retryDelay.inSeconds} seconds (attempt ${retryCount + 1}/$_maxRetryAttempts)...',
+            '🔄 MEMORY ERROR: Retrying video $index after ${retryDelay.inSeconds}s...',
           );
           Future.delayed(retryDelay, () {
             if (mounted && !_preloadedVideos.contains(index)) {
@@ -357,9 +390,6 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
             }
           });
         } else {
-          AppLogger.log(
-            '❌ Max retry attempts reached for video $index (NO_MEMORY)',
-          );
           _preloadRetryCount.remove(index);
         }
       } else if (videoUrl != null && videoUrl.contains('.m3u8')) {
@@ -446,7 +476,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       if (video.lowQualityUrl != null && video.lowQualityUrl!.isNotEmpty) {
          if (!video.lowQualityUrl!.contains('.m3u8')) {
             final url = _validateAndFixVideoUrl(video.lowQualityUrl!);
-            AppLogger.log('🎬 Using 480p (Low Quality) URL: $url');
+            // AppLogger.log('🎬 Using 480p (Low Quality) URL: $url');
             return url;
          }
       }
@@ -475,7 +505,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
        // If I am at index 5, kill index 1 or 9 (distance > 8)
        // Relaxed from 4 to 8 to prevent aggressive cancellation during medium-speed scrolling
        if (distance > 8) { 
-          AppLogger.log('🛑 Cancelled pending preload for video $index (Too far: $distance)');
+          // AppLogger.log('🛑 Cancelled pending preload for video $index (Too far: $distance)');
           _initializingVideos.remove(index);
           _loadingVideos.remove(index);
           
@@ -540,9 +570,9 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
     }
 
     if (controllersToRemove.isNotEmpty) {
-      AppLogger.log(
+      /* AppLogger.log(
         '🧹 Cleaned up ${controllersToRemove.length} local controller trackings',
-      );
+      ); */
     }
   }
 

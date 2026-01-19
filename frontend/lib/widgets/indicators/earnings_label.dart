@@ -9,7 +9,10 @@ class EarningsLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<double>(
-      future: EarningsService.calculateCreatorRevenueForVideo(video.id),
+      future: EarningsService.calculateCreatorRevenueForVideo(
+        video.id,
+        uploaderId: video.uploader.id,
+      ),
       builder: (context, snapshot) {
         final value = snapshot.data ?? video.earnings;
         return Container(

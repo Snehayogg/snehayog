@@ -29,7 +29,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:vayu/services/ad_service.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/view/search/video_creator_search_delegate.dart';
-import 'package:vayu/services/earnings_service.dart';
 import 'package:vayu/model/video_model.dart';
 import 'package:vayu/view/screens/creator_revenue_screen.dart';
 import 'package:vayu/utils/app_text.dart';
@@ -3101,21 +3100,35 @@ class _EarningsBottomSheetContentState
   Future<void> _loadEarnings() async {
     setState(() => _isLoading = true);
     try {
-      // To keep loading time reasonable, cap the number of videos we query
-      final videosToLoad = widget.videos.take(50).toList();
+      final authService = AuthService();
+      final userData = await authService.getUserData();
+      final userId = userData?['googleId'] ?? userData?['id'];
 
-      await Future.wait(
-        videosToLoad.map((video) async {
-          try {
-            // **FIX: Use LIFETIME Earnings to match the video label exactly**
-            final creatorEarnings =
-                await EarningsService.calculateCreatorRevenueForVideo(video.id);
-            _videoEarnings[video.id] = creatorEarnings;
-          } catch (e) {
-            _videoEarnings[video.id] = 0.0;
-          }
-        }),
-      );
+      if (userId == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = 'earnings_cache_$userId';
+      final cachedDataJson = prefs.getString(cacheKey);
+
+      if (cachedDataJson != null) {
+        final Map<String, dynamic> revenueData = json.decode(cachedDataJson);
+        if (revenueData.containsKey('videos')) {
+           final List<dynamic> videoStatsList = revenueData['videos'] ?? [];
+           
+           for (var stat in videoStatsList) {
+             final String videoId = stat['videoId']?.toString() ?? '';
+             final double creatorRevenue = (stat['creatorRevenue'] as num?)?.toDouble() ?? 0.0;
+             if (videoId.isNotEmpty) {
+               _videoEarnings[videoId] = creatorRevenue;
+             }
+           }
+        }
+      }
+    } catch (e) {
+      AppLogger.log('⚠️ Error loading earnings for bottom sheet: $e');
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);

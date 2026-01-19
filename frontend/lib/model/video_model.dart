@@ -171,8 +171,8 @@ class VideoModel {
           return uploader;
         }(),
         uploadedAt: json['uploadedAt'] != null
-            ? DateTime.tryParse(json['uploadedAt'].toString()) ?? DateTime.now()
-            : DateTime.now(),
+            ? DateTime.tryParse(json['uploadedAt'].toString()) ?? DateTime(1970)
+            : DateTime(1970),
         likedBy: () {
           try {
             if (json['likedBy'] == null) {

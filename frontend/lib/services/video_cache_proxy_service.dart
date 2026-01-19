@@ -132,19 +132,35 @@ class VideoCacheProxyService {
       return;
     }
 
-    try {
-      final client = http.Client();
-      final remoteUri = Uri.parse(url);
-      final response = await client.get(remoteUri);
-      client.close();
+    final String fileKey = md5.convert(utf8.encode(url)).toString();
+    final String filePath = '$_cachePath/$fileKey.chunk';
+    final file = File(filePath);
+    String originalManifest;
 
-      if (response.statusCode != 200) {
-        request.response.statusCode = response.statusCode;
-        await request.response.close();
-        return;
+    try {
+      if (await file.exists()) {
+        AppLogger.log('⚡ Proxy: Manifest Cache HIT for $fileKey');
+        originalManifest = await file.readAsString();
+      } else {
+        final client = http.Client();
+        final remoteUri = Uri.parse(url);
+        final response = await client.get(remoteUri);
+        client.close();
+
+        if (response.statusCode != 200) {
+          request.response.statusCode = response.statusCode;
+          await request.response.close();
+          return;
+        }
+        originalManifest = response.body;
+
+        // Fire and forget to avoid blocking response
+        file.writeAsString(originalManifest).catchError((e) {
+          AppLogger.log('⚠️ Proxy: Failed to cache manifest: $e');
+          return file; // Return file to satisfy Future<File> expectation
+        });
       }
 
-      final String originalManifest = response.body;
       final StringBuffer modifiedManifest = StringBuffer();
       
       // Determine base URL for resolving relative paths

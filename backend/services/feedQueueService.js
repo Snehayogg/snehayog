@@ -471,7 +471,7 @@ class FeedQueueService {
       // 1. Removed .populate('comments.user') -> Massive speedup (don't need comment authors in feed)
       // 2. Added .select(...) -> Only fetch fields needed for feed display
       const dbDocs = await Video.find({ _id: { $in: missingIds } })
-        .select('videoUrl thumbnailUrl description uploader views likes shares comments duration processingStatus createdAt videoType videoHash videoName tags')
+        .select('videoUrl thumbnailUrl description uploader views likes shares comments duration processingStatus createdAt uploadedAt videoType videoHash videoName tags')
         .populate('uploader', 'name profilePic googleId username')
         .lean();
 

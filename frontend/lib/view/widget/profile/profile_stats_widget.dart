@@ -3,12 +3,11 @@ import 'package:provider/provider.dart';
 import 'package:vayu/core/managers/profile_state_manager.dart';
 import 'package:vayu/core/providers/user_provider.dart';
 import 'package:vayu/core/services/profile_screen_logger.dart';
-import 'package:vayu/services/earnings_service.dart';
+
+import 'package:vayu/services/ad_service.dart';
 import 'package:vayu/services/authservices.dart';
-import 'package:vayu/config/app_config.dart';
 import 'package:vayu/utils/app_logger.dart';
-import 'dart:convert';
-import 'package:vayu/core/services/http_client_service.dart';
+
 
 class ProfileStatsWidget extends StatefulWidget {
   final ProfileStateManager stateManager;
@@ -35,6 +34,7 @@ class ProfileStatsWidget extends StatefulWidget {
 }
 
 class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
+  final AdService _adService = AdService();
   double _earnings = 0.0;
   bool _isLoadingEarnings = true;
   int _lastVideoCount = -1;
@@ -91,54 +91,7 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
     super.dispose();
   }
 
-  /// **OPTIMIZED: Calculate current month earnings from videos (parallel processing like CreatorRevenueScreen)**
-  Future<double> _calculateCurrentMonthEarnings() async {
-    try {
-      if (widget.stateManager.userVideos.isEmpty) {
-        return 0.0;
-      }
 
-      final now = DateTime.now();
-      final currentMonth = now.month - 1; // 0-indexed for backend
-      final currentYear = now.year;
-
-      AppLogger.log(
-          '💰 ProfileStatsWidget: Calculating current month (${now.month}/$currentYear) earnings for ${widget.stateManager.userVideos.length} videos');
-
-      // **OPTIMIZED: Calculate all videos in parallel (like CreatorRevenueScreen)**
-      final earningsFutures = widget.stateManager.userVideos.map((video) async {
-        try {
-          final grossEarnings =
-              await EarningsService.calculateVideoRevenueForMonth(
-            video.id,
-            currentMonth,
-            currentYear,
-            timeout:
-                const Duration(seconds: 2), // **OPTIMIZED: Faster timeout**
-          );
-          return EarningsService.creatorShareFromGross(grossEarnings);
-        } catch (e) {
-          AppLogger.log(
-              '⚠️ ProfileStatsWidget: Error calculating earnings for video ${video.id}: $e');
-          return 0.0;
-        }
-      }).toList();
-
-      // **OPTIMIZED: Wait for all calculations in parallel**
-      final earnings = await Future.wait(earningsFutures);
-      final totalCreatorEarnings =
-          earnings.fold<double>(0.0, (sum, earning) => sum + earning);
-
-      AppLogger.log(
-          '💰 ProfileStatsWidget: Current month earnings calculated: ₹${totalCreatorEarnings.toStringAsFixed(2)}');
-
-      return totalCreatorEarnings;
-    } catch (e) {
-      AppLogger.log(
-          '❌ ProfileStatsWidget: Error calculating current month earnings: $e');
-      return 0.0;
-    }
-  }
 
   /// **FIXED: Load monthly earnings from backend API (not all-time)**
   /// **ENHANCED: Uses backend API which calculates current month earnings correctly**
@@ -154,277 +107,107 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
       return;
     }
 
-    // **OPTIMIZED: For other creators, show cached earnings immediately, load fresh in background**
-    // This provides instant earnings display with fresh data update
-    if (widget.userId != null) {
-      final creatorId = widget.userId!;
-      final cacheKey = 'creator_earnings_$creatorId';
+      // **FIXED: Use backend API for ALL users (own profile AND other creators)**
+      // Backend now supports fetching revenue for any user ID
+      // If forceRefresh, we bypass cache
+      
+      // Determine target user ID
+      String targetUserId;
+      if (widget.userId != null) {
+        targetUserId = widget.userId!;
+      } else {
+        // Own profile
+        final userData = await _authService.getUserData();
+        if (userData == null) {
+           _finalEarningsUpdate(0.0);
+           return;
+        }
+        targetUserId = userData['googleId'] ?? userData['id'];
+      if (targetUserId.isEmpty) {
+           _finalEarningsUpdate(0.0);
+           return;
+      }
+      }
+
+      final cacheKey = 'creator_earnings_$targetUserId';
       final now = DateTime.now();
 
-      // **STEP 1: Check cache first - show immediately if available (unless force refresh)**
-      // **CRITICAL: Manual refresh bypasses cache completely**
-      double? cachedEarnings;
-      DateTime? cacheTime;
-
+      // **STEP 1: Check cache first (unless force refresh)**
       if (!forceRefresh) {
-        cachedEarnings = _creatorEarningsCache[cacheKey];
-        cacheTime = _creatorEarningsCacheTimestamp[cacheKey];
+        final cachedEarnings = _creatorEarningsCache[cacheKey];
+        final cacheTime = _creatorEarningsCacheTimestamp[cacheKey];
 
         if (cachedEarnings != null && cacheTime != null) {
           final cacheAge = now.difference(cacheTime);
-          // **OPTIMIZED: Use 1-hour cache for other creators (balance between freshness and performance)**
-          final cacheDuration = const Duration(hours: 1);
-          if (cacheAge < cacheDuration) {
-            AppLogger.log(
-                '⚡ ProfileStatsWidget: Using cached earnings for creator $creatorId (${cacheAge.inMinutes}m old): ₹${cachedEarnings.toStringAsFixed(2)}');
+          if (cacheAge < const Duration(hours: 1)) {
             if (mounted) {
               setState(() {
-                _earnings = cachedEarnings!;
+                _earnings = cachedEarnings;
                 _isLoadingEarnings = false;
               });
             }
-            // **OPTIMIZED: Still fetch fresh in background (non-blocking)**
-            // This ensures cache is updated even if user doesn't manually refresh
-            _fetchFreshEarningsInBackground(creatorId, cacheKey);
+            // Fetch fresh in background
+            _loadProfileEarnings(targetUserId, forceRefresh: true);
             return;
-          } else {
-            AppLogger.log(
-                '🔄 ProfileStatsWidget: Cache expired for creator $creatorId (${cacheAge.inHours}h old), fetching fresh...');
           }
         }
-      } else {
-        AppLogger.log(
-            '🔄 ProfileStatsWidget: Force refresh requested - bypassing cache for creator $creatorId');
       }
 
-      // **STEP 2: No cache or cache expired or force refresh - calculate IMMEDIATELY (like CreatorRevenueScreen)**
-      if (widget.stateManager.userVideos.isNotEmpty) {
-        // **CRITICAL FIX: Calculate frontend earnings IMMEDIATELY (not in background)**
-        // This ensures earnings show instantly, just like CreatorRevenueScreen
-        try {
-          AppLogger.log(
-              '💰 ProfileStatsWidget: Calculating earnings IMMEDIATELY for creator profile (${forceRefresh ? "force refresh" : "no cache"})...');
+      // **STEP 2: Fetch from BACKEND API**
+      await _loadProfileEarnings(targetUserId, forceRefresh: forceRefresh);
+  }
 
-          // **OPTIMIZED: Calculate earnings immediately using parallel processing**
-          final totalRevenue =
-              await EarningsService.calculateCreatorTotalRevenueForVideos(
-            widget.stateManager.userVideos,
-            timeout:
-                const Duration(seconds: 2), // **OPTIMIZED: Faster timeout**
-          );
-
-          // **CACHE: Store earnings in cache**
-          _creatorEarningsCache[cacheKey] = totalRevenue;
-          _creatorEarningsCacheTimestamp[cacheKey] = now;
-
-          if (mounted) {
-            setState(() {
-              _earnings = totalRevenue;
-              _isLoadingEarnings = false;
-            });
-            AppLogger.log(
-                '✅ ProfileStatsWidget: Earnings calculated and cached IMMEDIATELY: ₹${totalRevenue.toStringAsFixed(2)}');
-          }
-        } catch (e) {
-          AppLogger.log(
-              '⚠️ ProfileStatsWidget: Earnings calculation failed: $e');
-          // **FALLBACK: Use cached value even if calculation fails**
-          if (cachedEarnings != null && mounted) {
-            setState(() {
-              _earnings = cachedEarnings!;
-              _isLoadingEarnings = false;
-            });
-          } else if (mounted) {
-            setState(() {
-              _earnings = 0.0;
-              _isLoadingEarnings = false;
-            });
-          }
-        }
-      } else {
-        // No videos - show 0 immediately
-        if (mounted) {
-          setState(() {
-            _earnings = 0.0;
-            _isLoadingEarnings = false;
-          });
-        }
-        // Cache 0 earnings too
-        _creatorEarningsCache[cacheKey] = 0.0;
-        _creatorEarningsCacheTimestamp[cacheKey] = now;
-      }
-      return;
-    }
-
-    // **OWN PROFILE: Use backend API for monthly earnings**
+  void _finalEarningsUpdate(double value) {
     if (mounted) {
       setState(() {
-        _isLoadingEarnings = true;
+        _earnings = value;
+        _isLoadingEarnings = false;
       });
     }
-
-    // **OWN PROFILE: Load earnings from backend API**
-    await _loadOwnProfileEarnings(forceRefresh: forceRefresh);
   }
 
-  /// **NEW: Fetch fresh earnings in background (non-blocking) for creators**
-  Future<void> _fetchFreshEarningsInBackground(
-      String creatorId, String cacheKey) async {
+
+
+
+  // **Refactored: Load earnings from backend API for ANY user ID**
+  Future<void> _loadProfileEarnings(String userId, {bool forceRefresh = false}) async {
     try {
-      if (widget.stateManager.userVideos.isEmpty) {
-        return;
+      if (userId.isEmpty) {
+         _finalEarningsUpdate(0.0);
+         return;
       }
-
-      AppLogger.log(
-          '🔄 ProfileStatsWidget: Fetching fresh earnings in background for creator: $creatorId');
-
-      // Calculate earnings from videos
-      final earnings =
-          await EarningsService.calculateCreatorTotalRevenueForVideos(
-        widget.stateManager.userVideos,
-        timeout: const Duration(seconds: 3),
+      
+      // Use AdService to fetch earnings (wraps API + Cache)
+      final response = await _adService.getCreatorRevenueSummary(
+        userId: userId, 
+        forceRefresh: forceRefresh
       );
 
-      // **UPDATE CACHE: Store fresh earnings**
-      _creatorEarningsCache[cacheKey] = earnings;
-      _creatorEarningsCacheTimestamp[cacheKey] = DateTime.now();
-
-      // **UPDATE UI: Only update if value changed significantly (avoid flicker)**
-      if (mounted && (_earnings - earnings).abs() > 0.01) {
-        setState(() {
-          _earnings = earnings;
-        });
-        AppLogger.log(
-            '✅ ProfileStatsWidget: Background earnings updated for creator $creatorId: ₹${earnings.toStringAsFixed(2)}');
-      } else {
-        AppLogger.log(
-            'ℹ️ ProfileStatsWidget: Background earnings unchanged for creator $creatorId: ₹${earnings.toStringAsFixed(2)}');
-      }
-    } catch (e) {
-      // Silent fail - keep showing cached value
-      AppLogger.log(
-          '⚠️ ProfileStatsWidget: Background earnings fetch failed (non-critical): $e');
-    }
-  }
-
-  // **OWN PROFILE: Continue with backend API call**
-  Future<void> _loadOwnProfileEarnings({bool forceRefresh = false}) async {
-    try {
-      final userData = await _authService.getUserData();
-      if (userData == null) {
-        AppLogger.log(
-            '⚠️ ProfileStatsWidget: No user data, showing 0 earnings');
-        if (mounted) {
-          setState(() {
-            _earnings = 0.0;
-            _isLoadingEarnings = false;
-          });
-        }
-        return;
-      }
-
-      final userId = userData['googleId'] ?? userData['id'];
-      if (userId == null) {
-        AppLogger.log('⚠️ ProfileStatsWidget: No userId, showing 0 earnings');
-        if (mounted) {
-          setState(() {
-            _earnings = 0.0;
-            _isLoadingEarnings = false;
-          });
-        }
-        return;
-      }
-
-      AppLogger.log(
-          '💰 ProfileStatsWidget: Loading monthly earnings from backend API for user: $userId');
-
-      // **FIX: Use backend API which returns current month earnings**
-      final baseUrl = await AppConfig.getBaseUrlWithFallback();
-
-      // **FIX: Add timestamp to prevent caching when force refresh**
-      final uri = forceRefresh
-          ? Uri.parse(
-              '$baseUrl/api/ads/creator/revenue/$userId?_t=${DateTime.now().millisecondsSinceEpoch}')
-          : Uri.parse('$baseUrl/api/ads/creator/revenue/$userId');
-
-      AppLogger.log(
-          '📡 ProfileStatsWidget: Fetching earnings from: $uri (forceRefresh: $forceRefresh)');
-
-      final response = await httpClientService.get(
-        uri,
-        headers: {
-          'Authorization': 'Bearer ${userData['token']}',
-        },
-        timeout: const Duration(seconds: 15),
-      );
-
-      if (response.statusCode == 200) {
-        // **DEBUG: Log raw response to diagnose issues**
-        AppLogger.log(
-            '🔍 ProfileStatsWidget: API response body: ${response.body}');
-
-        if (response.body.isEmpty) {
-          AppLogger.log(
-              '⚠️ ProfileStatsWidget: Empty response body from API');
-           if (mounted) {
-            setState(() {
-              _earnings = 0.0;
-              _isLoadingEarnings = false;
-            });
-          }
-          return;
-        }
-
-        final data = json.decode(response.body) as Map<String, dynamic>;
-
-        // **DEBUG: Log full response data**
-        AppLogger.log(
-          '🔍 ProfileStatsWidget: Full API response - thisMonth: ${data['thisMonth']}, lastMonth: ${data['lastMonth']}, totalRevenue: ${data['totalRevenue']}, adRevenue: ${data['adRevenue']}',
-        );
-
-        // **USE CURRENT MONTH EARNINGS (not all-time)**
-        final thisMonthEarnings =
-            (data['thisMonth'] as num?)?.toDouble() ?? 0.0;
-
-        AppLogger.log(
-          '💰 ProfileStatsWidget: Monthly earnings loaded from API: ₹${thisMonthEarnings.toStringAsFixed(2)}',
-        );
-
-        // **CRITICAL FIX: TRUST THE BACKEND. Do NOT fallback to frontend calculation.**
-        // Frontend calculation is based on 'userVideos' which is PAGINATED (first 10 videos).
-        // Calculating earnings from 10 videos when user has 100 will result in "Fake" (undercounted) earnings.
-        // If Backend says 0, it means 0 (or backend issue), but frontend partial sum is misleading.
+      // Parse response
+      if (response.isNotEmpty && response.containsKey('thisMonth')) {
+        final thisMonthEarnings = (response['thisMonth'] as num?)?.toDouble() ?? 0.0;
         
+        AppLogger.log(
+            '💰 ProfileStatsWidget: Loaded backend earnings for $userId: ₹$thisMonthEarnings');
+
         if (mounted) {
           setState(() {
             _earnings = thisMonthEarnings;
             _isLoadingEarnings = false;
           });
+          
+          // Flash cache update
+          final cacheKey = 'creator_earnings_$userId';
+          _creatorEarningsCache[cacheKey] = thisMonthEarnings;
+          _creatorEarningsCacheTimestamp[cacheKey] = DateTime.now();
         }
-      
       } else {
-        AppLogger.log(
-            '⚠️ ProfileStatsWidget: API returned status ${response.statusCode}, body: ${response.body}');
-        
-        // **CRITICAL FIX: Do NOT fallback to frontend calculation on error.**
-        // Show 0 or error state rather than partial "fake" data.
-        if (mounted) {
-          setState(() {
-            _earnings = 0.0;
-            _isLoadingEarnings = false;
-          });
-        }
+        AppLogger.log('⚠️ ProfileStatsWidget: API returned empty or invalid data');
+        _finalEarningsUpdate(0.0);
       }
-    } catch (e, stackTrace) {
+    } catch (e) {
       AppLogger.log('❌ ProfileStatsWidget: Error loading earnings: $e');
-      AppLogger.log('Stack trace: $stackTrace');
-
-      if (mounted) {
-         setState(() {
-            _earnings = 0.0;
-            _isLoadingEarnings = false;
-         });
-      }
+      _finalEarningsUpdate(0.0);
     }
   }
 

@@ -12,7 +12,7 @@ import 'package:vayu/services/cloudflare_r2_service.dart';
 import 'package:vayu/services/user_service.dart';
 import 'package:vayu/services/payment_setup_service.dart';
 import 'package:vayu/services/video_service.dart';
-import 'package:vayu/services/earnings_service.dart'; // Add this import
+import 'package:vayu/services/ad_service.dart';
 
 import 'package:vayu/utils/feature_flags.dart';
 import 'package:vayu/core/constants/profile_constants.dart';
@@ -622,6 +622,7 @@ class ProfileStateManager extends ChangeNotifier {
   }
 
   /// Load earnings for the current video set
+  /// **UPDATED: Aligns with Admin Dashboard & Revenue Screen (Current Month Earnings)**
   Future<void> _loadEarnings() async {
     try {
       if (_userVideos.isEmpty) {
@@ -629,16 +630,49 @@ class ProfileStateManager extends ChangeNotifier {
         notifyListeners();
         return;
       }
-      
-      // Use EarningsService to calculate
-      final totalRevenue = await EarningsService.calculateCreatorTotalRevenueForVideos(
-        _userVideos,
-        timeout: const Duration(seconds: 3),
-      );
-      
-      _cachedEarnings = totalRevenue;
+
+      double earnings = 0.0;
+      bool usedBackend = false;
+
+      // 1. Determine if this is "my" profile
+      final loggedInUser = await _authService.getUserData();
+      bool isMyProfile = false;
+      if (_userData != null && loggedInUser != null) {
+        final profileId = _userData!['googleId']?.toString() ?? _userData!['id']?.toString();
+        final myId = loggedInUser['googleId']?.toString() ?? loggedInUser['id']?.toString();
+        // Loose comparison
+        isMyProfile = (profileId != null && myId != null && profileId == myId);
+      }
+
+      // 2. Try fetching Monthly Summary from Backend (Only for own profile)
+      // This matches CreatorRevenueScreen logic exactly
+      if (isMyProfile) {
+        try {
+          final adService = AdService();
+          final summary = await adService.getCreatorRevenueSummary();
+          // Summary returns { 'thisMonth': double, 'lastMonth': double, ... }
+          if (summary != null && summary.containsKey('thisMonth')) {
+             final thisMonth = summary['thisMonth'];
+             if (thisMonth is num && thisMonth > 0) {
+                 earnings = thisMonth.toDouble();
+                 usedBackend = true;
+                 AppLogger.log('💰 ProfileStateManager: Using AdService monthly earnings: ₹$earnings');
+             }
+          }
+        } catch (e) {
+          AppLogger.log('⚠️ ProfileStateManager: AdService fetch failed: $e');
+        }
+      }
+
+      // 3. Fallback: REMOVED Client-Side Calculation
+      // We rely solely on the backend. If backend fails or returns nothing, we show 0.
+      if (!usedBackend) {
+        earnings = 0.0;
+        AppLogger.log('💰 ProfileStateManager: No backend earnings data, setting to 0');
+      }
+
+      _cachedEarnings = earnings;
       notifyListeners();
-      AppLogger.log('💰 ProfileStateManager: Calculated earnings: ₹$_cachedEarnings');
     } catch (e) {
       AppLogger.log('⚠️ ProfileStateManager: Failed to calculate earnings: $e');
     }
