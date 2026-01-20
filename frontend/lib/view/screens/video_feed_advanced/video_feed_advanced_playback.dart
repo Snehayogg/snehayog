@@ -78,6 +78,8 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
       controller.play();
       _controllerStates[_currentIndex] = true;
       _userPaused[_currentIndex] = false; // **Ensure user paused is reset**
+      _userPausedVN[_currentIndex]?.value = false; // **Sync VN**
+      _ensureWakelockForVisibility();
       _ensureWakelockForVisibility();
       return;
     }
@@ -91,6 +93,8 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
         c.play();
         _controllerStates[_currentIndex] = true;
         _userPaused[_currentIndex] = false;
+        _userPausedVN[_currentIndex]?.value = false; // **Sync VN**
+        _ensureWakelockForVisibility();
         _ensureWakelockForVisibility();
       }
     });

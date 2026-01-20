@@ -22,8 +22,26 @@ class SharedVideoControllerPool {
       {}; // Track when each video was last accessed
   final Map<String, int> _videoIndices =
       {}; // Track video indices for smart cleanup
-  static const int _maxSharedPoolSize =
-      8; // Max controllers in shared pool (optimized for memory)
+  
+  // **DYNAMIC CONFIG: Default to safe limit (4), upgradeable to 8 for High-End**
+  int _maxPoolSize = 4;
+
+  /// **Configure pool based on device capabilities**
+  void configurePool({required bool isLowEndDevice}) {
+    // High-end: 8 controllers (Smooth instant play)
+    // Low-end: 4 controllers (Safe from crashes)
+    _maxPoolSize = isLowEndDevice ? 4 : 8;
+    
+    AppLogger.log(
+      '📱 SharedPool Configured: ${_maxPoolSize} active controllers '
+      '(${isLowEndDevice ? "Low End Mode" : "High End Mode"})'
+    );
+    
+    // If shrinking, trigger immediate eviction
+    if (_controllerPool.length > _maxPoolSize) {
+       _evictLRUIfNeeded();
+    }
+  }
 
   // **CACHE STATISTICS**
   int _cacheHits = 0;
@@ -183,7 +201,7 @@ class SharedVideoControllerPool {
 
   /// **LRU Eviction: Remove least recently used controllers**
   void _evictLRUIfNeeded({String? excluding}) {
-    if (_controllerPool.length < _maxSharedPoolSize) return;
+    if (_controllerPool.length < _maxPoolSize) return;
 
     // Sort by last accessed time (oldest first)
     final sortedEntries = _lastAccessed.entries.toList()
@@ -191,7 +209,7 @@ class SharedVideoControllerPool {
 
     // Calculate how many to remove
     final toRemove = _controllerPool.length -
-        _maxSharedPoolSize +
+        _maxPoolSize +
         1; // +1 for new controller
 
     int removed = 0;
@@ -211,26 +229,34 @@ class SharedVideoControllerPool {
   }
 
   /// **Dispose controller and remove from pool**
-  void disposeController(String videoId) {
+  Future<void> disposeController(String videoId) async {
     if (_controllerPool.containsKey(videoId)) {
       final controller = _controllerPool[videoId]!;
-      try {
-        // **PROPER CLEANUP: Pause and mute before disposal**
-        if (controller.value.isInitialized) {
-          controller.pause();
-          controller.setVolume(0.0);
-        }
-        controller.removeListener(_listeners[videoId] ?? () {});
-        controller.dispose();
-      } catch (e) {
-        AppLogger.log('⚠️ SharedPool: Error disposing controller $videoId: $e');
-      }
-
+      
+      // **CRITICAL: Remove from pool IMMEDIATELY to prevent reuse while disposing**
       _controllerPool.remove(videoId);
       _controllerStates.remove(videoId);
       _listeners.remove(videoId);
       _lastAccessed.remove(videoId); // Remove LRU tracking
       _videoIndices.remove(videoId); // Remove index tracking
+
+      try {
+        // **PROPER CLEANUP: Pause and mute before disposal**
+        // This ensures audio actually stops before the object is killed
+        if (controller.value.isInitialized) {
+          // Fire and forget pause to avoid blocking UI, but ensure it runs
+          controller.pause(); 
+          controller.setVolume(0.0);
+        }
+        controller.removeListener(_listeners[videoId] ?? () {});
+        
+        // Delay disposal slightly to allow pause to propagate to native layer
+        Future.delayed(const Duration(milliseconds: 100), () {
+           controller.dispose();
+        });
+      } catch (e) {
+        AppLogger.log('⚠️ SharedPool: Error disposing controller $videoId: $e');
+      }
 
       AppLogger.log('🗑️ SharedPool: Disposed controller for video: $videoId');
     }

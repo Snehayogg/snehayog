@@ -44,12 +44,13 @@ class VayuScrollPhysics extends ScrollPhysics {
     double targetPage = currentPage.toDouble();
 
     // Custom Velocity Threshold (Increased to prevent accidental snap-back on finger lift)
-    // Was 20.0 (too sensitive), was 1000.0 (too strict), now 300.0 (balanced)
-    const double velocityThreshold = 300.0;
+    // Was 300.0 -> Now 2000.0 to ignore "reverse hooks" (thumb curl at end of swipe)
+    // This allows the Distance Check (swipeThreshold) to take over.
+    const double velocityThreshold = 2000.0;
 
     // Custom Swipe Threshold (5% - lowered from 12%)
     // Easier to drag to next video without needing a fast flick
-    const double swipeThreshold = 0.05;
+    const double swipeThreshold = 0.04;
 
     // 1. Velocity Check (Fast Swipe)
     if (velocity.abs() > velocityThreshold) {

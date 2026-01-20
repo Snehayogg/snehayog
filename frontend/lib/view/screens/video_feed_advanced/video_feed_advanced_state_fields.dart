@@ -58,7 +58,7 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   // Cache status tracking
   final int _cacheHits = 0;
   final int _cacheMisses = 0;
-  int _preloadHits = 0;
+  final _preloadHits = 0;
   final int _totalRequests = 0;
 
   // Ad state - **OPTIMIZED: Using ValueNotifiers for granular updates**
@@ -84,6 +84,9 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   final Map<int, bool> _controllerStates = {};
   final int _maxPoolSize = 7;
   final Map<int, bool> _userPaused = {};
+  // **OPTIMIZED: ValueNotifier for user paused state to avoid full rebuilds**
+  final Map<int, ValueNotifier<bool>> _userPausedVN = {};
+  
   final Map<int, bool> _isBuffering = {};
   final Set<int> _togglingVideos = {};
   final Map<int, ValueNotifier<bool>> _isBufferingVN = {};
@@ -94,6 +97,8 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   final Map<int, DateTime> _lastAccessedLocal = {};
   final Map<int, VoidCallback> _bufferingListeners = {};
   final Map<int, VoidCallback> _videoEndListeners = {};
+  // **NEW: Track Error Listeners explicitly for cleanup**
+  final Map<int, VoidCallback> _errorListeners = {};
 
 
   // Resume tracking
@@ -107,7 +112,14 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   // Focus bandwidth on next 2 videos for max speed instead of spreading thin
   // **OPTIMIZED: Increased from 2 to 4 for faster scrolling**
   // Focus bandwidth on next 4 videos for better responsiveness
+  // **ADAPTIVE: Dynamic concurrency based on network health**
+  // **REFINED: Always allow 2 (Current + Next) even in Low Data Mode**
   int get _maxConcurrentInitializations => 2;
+  
+  // **NEW: Adaptive Network State**
+  bool _isLowBandwidthMode = false;
+  int _consecutiveSmoothPlays = 0;
+  
   final Map<int, int> _preloadRetryCount = {};
   int get _maxRetryAttempts => 2;
   Timer? _preloadTimer;

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:vayu/core/managers/profile_state_manager.dart';
 import 'package:vayu/core/services/auto_scroll_settings.dart';
-import 'package:vayu/view/screens/creator_payout_dashboard.dart';
+
 import 'package:vayu/view/screens/creator_payment_setup_screen.dart';
 
 class ProfileMenuWidget extends StatelessWidget {
@@ -15,7 +15,6 @@ class ProfileMenuWidget extends StatelessWidget {
   final VoidCallback? onShowFeedback;
   final VoidCallback? onShowFAQ;
   final VoidCallback? onEnterSelectionMode;
-  final VoidCallback? onShowSettings;
   final VoidCallback? onLogout;
   final VoidCallback? onGoogleSignIn;
   final Future<bool> Function()? onCheckPaymentSetupStatus;
@@ -31,7 +30,6 @@ class ProfileMenuWidget extends StatelessWidget {
     this.onShowFeedback,
     this.onShowFAQ,
     this.onEnterSelectionMode,
-    this.onShowSettings,
     this.onLogout,
     this.onGoogleSignIn,
     this.onCheckPaymentSetupStatus,
@@ -128,26 +126,7 @@ class ProfileMenuWidget extends StatelessWidget {
                       });
                     }
 
-                    // Creator Dashboard
-                    menuItems.add({
-                      'title': 'Dashboard',
-                      'icon': Icons.dashboard,
-                      'color': Colors.purple,
-                      'onTap': () async {
-                        Navigator.pop(context);
-                        // Add a small delay to ensure drawer closes completely
-                        await Future.delayed(const Duration(milliseconds: 300));
-                        if (context.mounted) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  const CreatorPayoutDashboard(),
-                            ),
-                          );
-                        }
-                      },
-                    });
+
 
                     // Payment Setup
                     menuItems.add({
@@ -216,16 +195,7 @@ class ProfileMenuWidget extends StatelessWidget {
                       },
                     });
 
-                    // Settings
-                    menuItems.add({
-                      'title': 'Settings',
-                      'icon': Icons.settings,
-                      'color': Colors.grey,
-                      'onTap': () {
-                        Navigator.pop(context);
-                        onShowSettings?.call();
-                      },
-                    });
+
 
                     // Sign Out
                     menuItems.add({

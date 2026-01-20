@@ -59,16 +59,25 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     ]).animate(_controller);
 
     // Start animation immediately
-    _controller.forward().then((_) async {
-       // Wait for Stage 1 (Config) - Critical
-       await AppInitializationManager.instance.initializeStage1();
-       
-       // Wait for Stage 2 (Content) - Critical for Video Loading
-       // We revert to waiting here to ensure data is ready before Home screen mounts
-       AppInitializationManager.instance.initializeStage2(context);
-       
+    // Start animation immediately
+    _controller.forward().then((_) {
        _navigateToHome();
     });
+
+    // Fire initialization in background (don't await for navigation)
+    _startBackgroundInitialization();
+  }
+
+  Future<void> _startBackgroundInitialization() async {
+     // Wait for Stage 1 (Config) - Critical
+     await AppInitializationManager.instance.initializeStage1();
+     
+     if (mounted) {
+       // Fire Stage 2 (Content) - Critical for Video Loading
+       // We do NOT wait for this to finish before navigation trigger
+       // It runs in parallel with animation.
+       AppInitializationManager.instance.initializeStage2(context);
+     }
   }
 
   void _navigateToHome() {
