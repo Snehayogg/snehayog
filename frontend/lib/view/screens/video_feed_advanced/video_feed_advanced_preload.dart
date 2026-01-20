@@ -15,10 +15,11 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         final ramInMB = (androidInfo.physicalRamSize).toDouble();
         _isLowEndDevice = androidInfo.isLowRamDevice || (ramInMB <= 4096);
         // AppLogger.log('📱 Device Capability: ${_isLowEndDevice ? "Low End" : "High End"} (RAM: ${(ramInMB / 1024).toStringAsFixed(1)} GB)');
-        // iPhone 8 or older / iPads with < 3GB RAM could be considered low end
-        // Simple heuristic: assume modern iOS devices are high end unless very old
-        // _isLowEndDevice = false; // logic would go here if needed
       }
+      
+      // **DYNAMIC POOL: Configure shared pool based on device power**
+      SharedVideoControllerPool().configurePool(isLowEndDevice: _isLowEndDevice);
+      
     } catch (e) {
       AppLogger.log('⚠️ Error checking device capabilities: $e');
     }
@@ -135,15 +136,49 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         !_preloadedVideos.contains(index) &&
         !_loadingVideos.contains(index)) {
       // Queue this video for later initialization
-      /* AppLogger.log(
-        '⏳ Max concurrent initializations reached, deferring video $index',
-      ); */
       Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted && !_preloadedVideos.contains(index)) {
           _preloadVideo(index);
         }
       });
       return;
+    }
+
+    // **ADAPTIVE PRELOADING: "Buffer Gate" for Low Internet**
+    if (_isLowBandwidthMode && mounted && index > _currentIndex) {
+      // 1. Strictly forbid n+2, n+3 etc.
+      if (index > _currentIndex + 1) {
+        // AppLogger.log('🛑 Low Bandwidth: Skipped far-future video $index');
+        _loadingVideos.remove(index);
+        return;
+      }
+
+      // 2. Throttle n+1 if current video is struggling (STRICT MODE)
+      // Check if current video is buffering or hasn't started yet
+      bool currentIsStruggling = _isBuffering[_currentIndex] == true;
+
+      // Also check controller state directly for accuracy
+      if (!currentIsStruggling && _controllerPool.containsKey(_currentIndex)) {
+        final currentCtrl = _controllerPool[_currentIndex];
+        if (currentCtrl != null &&
+            currentCtrl.value.isInitialized &&
+            currentCtrl.value.isBuffering) {
+          currentIsStruggling = true;
+        }
+      }
+
+      if (currentIsStruggling) {
+        // AppLogger.log('🛑 Low Bandwidth bottleneck: Pausing preload of $index to save bandwidth for current video');
+        _loadingVideos.remove(index);
+
+        // Retry in 2 seconds (Give current video time to recover)
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted && !_preloadedVideos.contains(index)) {
+            _preloadVideo(index); // Recursive retry until gate opens
+          }
+        });
+        return;
+      }
     }
 
     // **RELEVANCY CHECK: Abort if video is too far from current index (Zombie Load Check)**
@@ -166,6 +201,15 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
     try { 
       // **CRITICAL FIX: Start tracking loading immediately inside TRY block to ensure cleanup in FINALLY**
       _loadingVideos.add(index);
+      
+      // **FIX: Clear any previous error state when starting a new load**
+      // This ensures transient errors don't stick if a retry succeeds
+      if (mounted && _videoErrors.containsKey(index)) {
+         safeSetState(() {
+            _videoErrors.remove(index);
+         });
+      }
+
       
       final video = _videos[index];
 
@@ -297,6 +341,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
           if (!_userPaused.containsKey(index)) {
             _userPaused[index] = false;
           }
+           _userPausedVN[index] ??= ValueNotifier<bool>(false); // **Init VN**
           if (!_controllerStates.containsKey(index)) {
             _controllerStates[index] = isPlaying;
           }
@@ -325,16 +370,16 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
         // **FIX: Trigger rebuild after controller initialization**
         if (mounted) {
-          // **FIXED: Use safeSetState instead of raw setState**
-          safeSetState(() {
-            _firstFrameReady[index] ??= ValueNotifier<bool>(false);
+          // **OPTIMIZED: Removed safeSetState, using ValueNotifiers for granular updates**
+             _firstFrameReady[index] ??= ValueNotifier<bool>(false);
             if (!_userPaused.containsKey(index)) {
               _userPaused[index] = false;
             }
+             _userPausedVN[index] ??= ValueNotifier<bool>(false); // **Init VN**
+
             if (!_controllerStates.containsKey(index)) {
               _controllerStates[index] = false;
             }
-          });
         }
 
         // Apply behaviors and listeners
@@ -352,6 +397,34 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
               _forceMountPlayer[index]?.value = true;
             }
           });
+        }
+
+        // **SMART BUFFER: Restore Decoder Priming (Download start of video)**
+        // This ensures "Instant Play" by pre-rendering the first frame
+        if (!isReused) {
+           final bool shouldPrime = _canPrimeIndex(index);
+           if (shouldPrime) {
+             try {
+               // **FIX: Rigorous lifecycle check before priming**
+               if (_lifecyclePaused) {
+                  // AppLogger.log('⏸️ Priming skipped: Lifecycle paused');
+               } else if (WidgetsBinding.instance.lifecycleState != null && 
+                   WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+                  // AppLogger.log('⏸️ Priming skipped: App not resumed'); 
+               } else {
+                 // Tiny seek helps codecs surface a real frame & download first chunk
+                 await controller.setVolume(0.0);
+                 // **FIX: Ensure we PAUSE after "kicking" the decoder**
+                 await controller.initialize(); // Ensure initialized before play
+                 await controller.seekTo(const Duration(milliseconds: 1));
+                 await controller.play();
+                 await Future.delayed(const Duration(milliseconds: 50)); // Tiny render window
+                 await controller.pause();
+                 // Note: We leave volume at 0.0 to prevent blips. 
+                 // It gets reset to 1.0 in _video_feed_advanced_playback.dart when 'active'.
+               }
+             } catch (_) {}
+           }
         }
       }
 
@@ -481,6 +554,23 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
          }
       }
 
+      // 3. **Deep Link Handling (snehayog.site)**
+      final uri = Uri.tryParse(video.videoUrl);
+      if (uri != null &&
+          uri.host.contains('snehayog.site') &&
+          uri.pathSegments.isNotEmpty &&
+          uri.pathSegments.first == 'video') {
+        try {
+          final details = await VideoService().getVideoById(video.id);
+          final candidate = details.hlsPlaylistUrl?.isNotEmpty == true
+              ? details.hlsPlaylistUrl
+              : details.videoUrl;
+          if (candidate != null && candidate.isNotEmpty) {
+            return _validateAndFixVideoUrl(candidate);
+          }
+        } catch (_) {}
+      }
+
       // 3. **Final Fallback: videoUrl**
       // Checks main URL. Note: VideoService might have already optimized this to HLS.
       return _validateAndFixVideoUrl(video.videoUrl);
@@ -531,7 +621,9 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       final distance = (index - _currentIndex).abs();
       // Keep slightly more controllers for reliability (was 3, then 5)
       // Relaxed to 5 to prevent aggressive cleanup during fast scroll
-      if (distance > 5 || _controllerPool.length > 8) {
+      // Remove controllers more than keepRange away
+      // **OPTIMIZED: Tightened from 5 to 3 to save memory/codecs**
+      if (distance > 3 || (_controllerPool.length > 4 && distance > 2)) {
         controllersToRemove.add(index);
       }
     }
@@ -543,8 +635,20 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         final videoId = _videos[index].id;
         if (!sharedPool.isVideoLoaded(videoId) && ctrl != null) {
           try {
+            // **FIX: Pause explicitly before disposal**
+            if (ctrl.value.isInitialized) {
+               ctrl.pause();
+               ctrl.setVolume(0.0);
+            }
             ctrl.removeListener(_bufferingListeners[index] ?? () {});
             ctrl.removeListener(_videoEndListeners[index] ?? () {});
+            ctrl.removeListener(_bufferingListeners[index] ?? () {});
+            ctrl.removeListener(_videoEndListeners[index] ?? () {});
+            // **NEW: Remove leaked error listener**
+            if (_errorListeners.containsKey(index)) {
+               ctrl.removeListener(_errorListeners[index]!);
+               _errorListeners.remove(index);
+            }
             ctrl.dispose();
           } catch (e) {
             AppLogger.log('⚠️ Error disposing controller at index $index: $e');
@@ -567,6 +671,10 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       _initializingVideos.remove(index);
       _preloadRetryCount.remove(index);
       _videoErrors.remove(index); // **FIX: Clear error state on cleanup**
+        // **NEW: Cleanup Error Listener**
+        if (_errorListeners.containsKey(index)) {
+             _errorListeners.remove(index);
+        }
     }
 
     if (controllersToRemove.isNotEmpty) {
@@ -659,49 +767,113 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       controller.removeListener(existingListener);
     }
 
-    void handleBuffering() {
+    // **STALL DETECTOR STATE**
+    Duration? lastPosition;
+    DateTime? lastMoveTime;
+
+    void handlePlaybackStatus() {
       if (!mounted) return;
       final value = controller.value;
       if (!value.isInitialized) return;
 
       final bool isBuffering = value.isBuffering;
-      if (_isBuffering[index] == isBuffering) return;
+      
+      // **1. BUFFERING LOGIC**
+      if (_isBuffering[index] != isBuffering) {
+          _isBuffering[index] = isBuffering;
 
-      _isBuffering[index] = isBuffering;
-
-      // **NEW: Handle Slow Connection feedback timer**
-      if (isBuffering) {
-        _bufferingTimers[index]?.cancel();
-        _bufferingTimers[index] = Timer(const Duration(seconds: 5), () {
-          if (mounted && _isBuffering[index] == true) {
-            _isSlowConnectionVN[index] ??= ValueNotifier<bool>(false);
-            _isSlowConnectionVN[index]!.value = true;
+          // **NEW: Handle Slow Connection feedback timer**
+          if (isBuffering) {
+            _bufferingTimers[index]?.cancel();
+            
+            // **ADAPTIVE: Immediate trigger for Low Bandwidth Mode**
+            if (!_isLowBandwidthMode && mounted) {
+               // Don't switch mode immediately, wait a bit to avoid false positives on seek
+               // _isLowBandwidthMode = true; 
+            }
+            _consecutiveSmoothPlays = 0; // Reset recovery counter
+    
+            _bufferingTimers[index] = Timer(const Duration(seconds: 5), () {
+              if (!mounted) return;
+              
+              if (_isBuffering[index] == true) {
+                 // If still buffering after 5 seconds...
+                 
+                 // 1. Show Slow Internet UI
+                _isSlowConnectionVN[index] ??= ValueNotifier<bool>(false);
+                _isSlowConnectionVN[index]!.value = true;
+                _isLowBandwidthMode = true; // Now we confirm it's slow
+                
+                // 2. **KICKSTART LOGIC (Stale Connection Fix)**
+                final controller = _controllerPool[index];
+                if (controller != null && controller.value.isInitialized) {
+                   AppLogger.log('🐢 Stale Buffering detected at index $index. Attempting Kickstart...');
+                   try {
+                      final position = controller.value.position;
+                      controller.seekTo(position); // Re-trigger buffer fill
+                   } catch (e) {
+                      AppLogger.log('❌ Kickstart failed: $e');
+                   }
+                }
+              }
+            });
+          } else {
+            _bufferingTimers[index]?.cancel();
+            _bufferingTimers.remove(index);
+            _isSlowConnectionVN[index]?.value = false;
           }
-        });
-      } else {
-        _bufferingTimers[index]?.cancel();
-        _bufferingTimers.remove(index);
-        _isSlowConnectionVN[index]?.value = false;
+    
+          final notifier = _isBufferingVN[index] ??= ValueNotifier<bool>(
+            isBuffering,
+          );
+          if (notifier.value != isBuffering) {
+            notifier.value = isBuffering;
+          }
       }
-
-      final notifier = _isBufferingVN[index] ??= ValueNotifier<bool>(
-        isBuffering,
-      );
-      if (notifier.value != isBuffering) {
-        notifier.value = isBuffering;
+      
+      // **2. SILENT STALL DETECTION Watchdog**
+      // Detects when video claims to be playing but position isn't moving
+      if (value.isPlaying && !value.isBuffering) {
+          if (lastPosition == value.position) {
+             // Position hasn't moved
+             lastMoveTime ??= DateTime.now();
+             
+             if (DateTime.now().difference(lastMoveTime!) > const Duration(milliseconds: 3000)) {
+                 // **STALL DETECTED (>3s freeze)**
+                 AppLogger.log('❄️ Silent Stall detected at index $index (Frozen for 3s). Kicking...');
+                 
+                 lastMoveTime = DateTime.now(); // Reset to prevent spamming
+                 
+                 // Force kickstart
+                 try {
+                    controller.seekTo(value.position);
+                 } catch (_) {}
+             }
+          } else {
+             // Moving fine
+             lastPosition = value.position;
+             lastMoveTime = DateTime.now();
+          }
+      } else {
+          // Not playing or legitimately buffering, reset stall timer
+          lastMoveTime = null;
       }
     }
 
-    _bufferingListeners[index] = handleBuffering;
-    controller.addListener(handleBuffering);
-    handleBuffering();
+    _bufferingListeners[index] = handlePlaybackStatus;
+    controller.addListener(handlePlaybackStatus);
+    handlePlaybackStatus();
   }
 
   // **NEW: Error Listener to catch runtime playback errors (Grey Screen Fix)**
+  // **FIX: Track listener in map to allow cleanup (Prevent duplicate listeners on reuse)**
   void _attachErrorListenerIfNeeded(
     VideoPlayerController controller,
     int index,
   ) {
+    if (_errorListeners.containsKey(index)) {
+       controller.removeListener(_errorListeners[index]!);
+    }
     void handleError() {
       if (!mounted) return;
       final value = controller.value;
@@ -716,12 +888,26 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
             _loadingVideos.remove(index);
             _isBuffering[index] = false;
             _isBufferingVN[index]?.value = false;
+            
+            // **CRITICAL FIX: Zombie Audio Killer**
+            // If error occurs, immediate kill the controller to stop any background audio
+            try {
+               controller.pause();
+               controller.setVolume(0.0);
+               // Remove from pools immediately
+               _controllerPool.remove(index);
+               if (_controllerPool.containsKey(index)) {
+                  // Double safety
+                  _controllerPool[index]?.dispose(); 
+               }
+            } catch (_) {}
           });
         }
       }
     }
 
     controller.addListener(handleError);
+    _errorListeners[index] = handleError;
   }
 
   void _handleVideoCompleted(int index) {
@@ -744,6 +930,16 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         );
       }
       AppLogger.log('⏹️ Completed video playback for ${video.id}');
+
+      // **ADAPTIVE RECOVERY: If video played smoothly, try to recover**
+      if (_isLowBandwidthMode && mounted) {
+        _consecutiveSmoothPlays++;
+        if (_consecutiveSmoothPlays >= 3) {
+           _isLowBandwidthMode = false;
+           _consecutiveSmoothPlays = 0;
+           // AppLogger.log('✅ Adaptive Network: Recovered to High Bandwidth Mode');
+        }
+      }
     }
 
     _resetControllerForReplay(index);
@@ -864,6 +1060,10 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
               controllerToPlay.value.isInitialized &&
               !controllerToPlay.value.isPlaying &&
               _userPaused[index] != true) {
+            
+            // **CRITICAL FIX: strictly check lifecycle before retrying**
+            if (!_shouldAutoplayForContext('retry immediate')) return;
+
             AppLogger.log(
                 '⚠️ VideoFeedAdvanced: Play command didn\'t start, retrying...');
             try {
@@ -883,11 +1083,16 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
               controllerToPlay.value.isInitialized &&
               !controllerToPlay.value.isPlaying &&
               _userPaused[index] != true) {
+            
+             // **CRITICAL FIX: strictly check lifecycle before retrying**
+            if (!_shouldAutoplayForContext('retry catch')) return;
+
             try {
               controllerToPlay.play();
               _ensureWakelockForVisibility();
               _controllerStates[index] = true;
               _userPaused[index] = false;
+              _userPausedVN[index]?.value = false; // **Sync VN**
               
               // **NEW: Start view tracking with videoHash for retry play**
               if (index < _videos.length) {

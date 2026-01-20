@@ -1433,7 +1433,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                     onShowFAQ: _showFAQDialog,
                     onEnterSelectionMode: () =>
                         _stateManager.enterSelectionMode(),
-                    onShowSettings: _showSettingsBottomSheet,
                     onLogout: _handleLogout,
                     onGoogleSignIn: _handleGoogleSignIn,
                     onCheckPaymentSetupStatus: _checkPaymentSetupStatus,

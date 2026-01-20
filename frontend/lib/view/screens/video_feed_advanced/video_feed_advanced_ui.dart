@@ -310,7 +310,33 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     int index,
   ) {
     // **NEW: Check for error state**
-    if (_videoErrors.containsKey(index)) {
+    // **ZOMBIE AUDIO FIX: Check if error is real or if controller recovered**
+    bool showError = _videoErrors.containsKey(index);
+    if (showError && controller != null && controller.value.isInitialized && !controller.value.hasError) {
+       // If controller is playing or has buffered content, it's likely a stale error
+       // (e.g. transient network error during load, but retry succeeded)
+       if (controller.value.isPlaying || controller.value.buffered.isNotEmpty) {
+          // It's working! Ignore the error and schedule cleanup
+          showError = false;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+             if (mounted && _videoErrors.containsKey(index)) {
+                // AppLogger.log('✅ UI: Auto-recovered from stale error for video $index (Controller is healthy)');
+                safeSetState(() {
+                   _videoErrors.remove(index);
+                   // Reset buffering state to be safe
+                   _isBuffering[index] = false;
+                   _isBufferingVN[index]?.value = false;
+                });
+             }
+          });
+       }
+    }
+
+    if (showError) {
+      // **FINAL SAFETY: Ensure controller is paused if we show error**
+      if (controller != null && controller.value.isPlaying) {
+         controller.pause();
+      }
       return _buildVideoErrorState(index, _videoErrors[index]!);
     }
 
@@ -374,23 +400,29 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           ),
           Positioned.fill(
             child: IgnorePointer(
-              child: Opacity(
-                opacity: _userPaused[index] == true ? 1.0 : 0.0,
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.6),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
+              // **OPTIMIZED: Use ValueListenableBuilder for granular updates - avoid setState**
+              child: ValueListenableBuilder<bool>(
+                valueListenable: _userPausedVN[index] ??= ValueNotifier<bool>(false),
+                builder: (context, isUserPaused, _) {
+                  return Opacity(
+                    opacity: isUserPaused ? 1.0 : 0.0,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.6),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                        child: const Icon(
+                          Icons.play_arrow,
+                          color: Colors.white,
+                          size: 36,
+                        ),
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.play_arrow,
-                      color: Colors.white,
-                      size: 36,
-                    ),
-                  ),
-                ),
+                  );
+                },
               ),
             ),
           ),
@@ -400,61 +432,67 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 valueListenable: _isBufferingVN[index] ??=
                     ValueNotifier<bool>(false),
                 builder: (context, isBuffering, _) {
-                  final show = isBuffering && _userPaused[index] != true;
-                  return Opacity(
-                    opacity: show ? 1.0 : 0.0,
-                    child: Stack(
-                      children: [
-                        const Center(
-                          child: CircularProgressIndicator(color: Colors.white),
-                        ),
-                        // **NEW: Slow Internet message**
-                        ValueListenableBuilder<bool>(
-                          valueListenable: _isSlowConnectionVN[index] ??=
-                              ValueNotifier<bool>(false),
-                          builder: (context, isSlow, _) {
-                            if (!isSlow) return const SizedBox.shrink();
-                            return Positioned(
-                              top: 100,
-                              left: 0,
-                              right: 0,
-                              child: Center(
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 8,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.7),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                       Icon(
-                                        Icons.wifi_off_rounded,
-                                        color: Colors.orange,
-                                        size: 16,
-                                      ),
-                                       SizedBox(width: 8),
-                                      Text(
-                                        'Slow Internet Connection',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
+                   // **OPTIMIZED: Listen to userPausedVN too for correct visibility**
+                   return ValueListenableBuilder<bool>(
+                      valueListenable: _userPausedVN[index] ??= ValueNotifier<bool>(false),
+                      builder: (context, isUserPaused, _) {
+                          final show = isBuffering && !isUserPaused;
+                          return Opacity(
+                            opacity: show ? 1.0 : 0.0,
+                            child: Stack(
+                              children: [
+                                const Center(
+                                  child: CircularProgressIndicator(color: Colors.white),
+                                ),
+                                // **NEW: Slow Internet message**
+                                ValueListenableBuilder<bool>(
+                                  valueListenable: _isSlowConnectionVN[index] ??=
+                                      ValueNotifier<bool>(false),
+                                  builder: (context, isSlow, _) {
+                                    if (!isSlow) return const SizedBox.shrink();
+                                    return Positioned(
+                                      top: 100,
+                                      left: 0,
+                                      right: 0,
+                                      child: Center(
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 8,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.black.withOpacity(0.7),
+                                            borderRadius: BorderRadius.circular(20),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                               Icon(
+                                                Icons.wifi_off_rounded,
+                                                color: Colors.orange,
+                                                size: 16,
+                                              ),
+                                               SizedBox(width: 8),
+                                              Text(
+                                                'Slow Internet Connection',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       ),
-                                    ],
-                                  ),
+                                    );
+                                  },
                                 ),
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  );
+                              ],
+                            ),
+                          );
+                      }
+                   );
                 },
               ),
             ),

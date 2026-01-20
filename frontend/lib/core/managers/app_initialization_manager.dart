@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:vayu/config/app_config.dart';
@@ -13,6 +12,10 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:vayu/services/notification_service.dart';
+import 'package:vayu/services/video_service.dart';
+import 'package:vayu/core/managers/video_controller_manager.dart';
+import 'package:vayu/core/services/hls_warmup_service.dart';
+import 'dart:async'; // For unawaited
 /// **AppInitializationManager**
 /// 
 /// Centralizes and sequences app startup logic to prevent "thundering herd"
@@ -70,13 +73,13 @@ class AppInitializationManager {
       AppLogger.log('🚀 InitManager: Stage 2 (Vital Content) Started');
       final stopwatch = Stopwatch()..start();
 
-      // final videoService = VideoService(); // Unused
+      final videoService = VideoService();
       final authService = AuthService();
 
       await Future.wait([
-        // Task A: Fetch First Page of Videos
         // Task A: Video fetching moved to VideoFeedAdvanced for instant start
-        // _fetchAndPreloadFirstVideos(videoService),
+        // UPDATE: Re-enabled for Splash Prefetch (Parallel)
+        _fetchAndPreloadFirstVideos(videoService),
         
         // Task B: Fetch User Data (Non-blocking for video, but good to have)
         authService.getUserData().then((data) {
@@ -95,7 +98,6 @@ class AppInitializationManager {
     }
   }
 
-  /* 
   /// Helper: Fetch videos and pre-initialize the first one
   Future<void> _fetchAndPreloadFirstVideos(VideoService videoService) async {
     try {
@@ -141,7 +143,6 @@ class AppInitializationManager {
         }
       }
   }
-  */
 
 
   // --- STAGE 3: DEFERRED SERVICES (After Home Mount) ---
