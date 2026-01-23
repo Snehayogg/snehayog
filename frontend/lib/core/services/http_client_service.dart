@@ -95,8 +95,8 @@ class HttpClientService {
           try {
             final metric = response.requestOptions.extra['performance_metric'] as HttpMetric?;
             if (metric != null) {
-              metric.setResponseStatusCode(response.statusCode);
-              metric.setResponseBodySize(response.data?.toString().length ?? 0);
+              metric.httpResponseCode = response.statusCode;
+              metric.responsePayloadSize = response.data?.toString().length;
               await metric.stop();
             }
           } catch (e) {
@@ -108,7 +108,7 @@ class HttpClientService {
           try {
             final metric = error.requestOptions.extra['performance_metric'] as HttpMetric?;
             if (metric != null) {
-              metric.setResponseStatusCode(error.response?.statusCode);
+              metric.httpResponseCode = error.response?.statusCode;
               await metric.stop();
             }
           } catch (e) {
