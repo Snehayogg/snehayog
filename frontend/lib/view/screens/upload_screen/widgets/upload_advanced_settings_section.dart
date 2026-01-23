@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/core/constants/interests.dart';
+import 'package:vayu/view/screens/make_episode_screen.dart';
 
 class UploadAdvancedSettingsSection extends StatelessWidget {
   final ValueNotifier<bool> isExpanded;
@@ -38,13 +39,10 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.tune, color: Colors.blue),
             title: const Text(
-              'Advanced Settings',
+              'Advanced Options',
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
-            subtitle: const Text(
-              'Optional: configure metadata, tags, and external links',
-              style: TextStyle(fontSize: 12),
-            ),
+
             trailing: ValueListenableBuilder<bool>(
               valueListenable: isExpanded,
               builder: (context, expanded, _) {
@@ -67,42 +65,21 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
 
               return Padding(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildAutoFillNotice(),
-                    const SizedBox(height: 16),
+
                     _buildTitleField(),
                     const SizedBox(height: 16),
                     _buildCategorySelector(),
                     const SizedBox(height: 16),
                     _buildLinkField(),
                     const SizedBox(height: 16),
-                    _buildTagInput(),
-                    ValueListenableBuilder<List<String>>(
-                      valueListenable: tags,
-                      builder: (context, currentTags, _) {
-                        if (currentTags.isEmpty) {
-                          return const SizedBox.shrink();
-                        }
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 12),
-                          child: Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: currentTags
-                                .map(
-                                  (tag) => Chip(
-                                    label: Text(tag),
-                                    onDeleted: () => onRemoveTag(tag),
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                        );
-                      },
-                    ),
+                    _buildTagInput(context),
+                    const SizedBox(height: 16),
+                    _buildMakeEpisodeOption(context),
+
                   ],
                 ),
               );
@@ -113,41 +90,20 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
     );
   }
 
-  Widget _buildAutoFillNotice() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: Colors.blue.shade50,
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(Icons.flash_on, size: 16, color: Colors.blue),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            'Quick uploads auto-fill the title from the filename and use your default category. Update below if you need custom metadata.',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.blueGrey.shade700,
-              height: 1.4,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+
 
   Widget _buildTitleField() {
     return TextField(
       controller: titleController,
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
         labelText: 'Video Title',
+        labelStyle: const TextStyle(color: Colors.black87),
         hintText: 'Update the auto-generated title',
-        border: OutlineInputBorder(),
-        prefixIcon: Icon(Icons.title),
+        hintStyle: TextStyle(color: Colors.grey.withOpacity(0.4)),
+        filled: false,
+        fillColor: Colors.transparent,
+        border: const OutlineInputBorder(),
+        prefixIcon: const Icon(Icons.title),
       ),
     );
   }
@@ -168,9 +124,12 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
           initialValue: effectiveValue,
           decoration: const InputDecoration(
             labelText: 'Video Category',
+            filled: false,
+            fillColor: Colors.transparent,
             border: OutlineInputBorder(),
             prefixIcon: Icon(Icons.category),
-            helperText: 'Choose a category to improve targeting',
+            helperText: null,
+            labelStyle: const TextStyle(color: Colors.black87),
           ),
           items: options
               .map(
@@ -190,43 +149,199 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
     return TextField(
       controller: linkController,
       decoration: const InputDecoration(
-        labelText: 'External Link (Visit Now)',
-        hintText: 'Add product or website URL (e.g. https://yourstore.com)',
-        helperText:
-            'Optional for normal videos. Required if you upload a product image so users can Visit Now.',
-        border: OutlineInputBorder(),
-        prefixIcon: Icon(Icons.link),
+        labelText: '',
+        hintText: 'Add a website link',
+        hintStyle:  TextStyle(color: Colors.grey, fontSize: 12),
+        helperText: 'Promote your business',
+        labelStyle:  TextStyle(color: Colors.grey, fontSize: 12),
+        filled: false,
+        fillColor: Colors.transparent,
+        border:  OutlineInputBorder(),
+        prefixIcon:  Icon(Icons.link),
       ),
       keyboardType: TextInputType.url,
     );
   }
 
-  Widget _buildTagInput() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Tags (optional)',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: tagInputController,
-          decoration: InputDecoration(
-            hintText: 'Type a tag and press Add',
-            border: const OutlineInputBorder(),
-            prefixIcon: const Icon(Icons.tag),
-            suffixIcon: IconButton(
-              icon: const Icon(Icons.add),
-              onPressed: () => onAddTag(tagInputController.text),
+  Widget _buildTagInput(BuildContext context) {
+    return InkWell(
+      onTap: () => _showAddTagsBottomSheet(context),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        child: Row(
+          children: [
+            const Icon(Icons.tag, color: Colors.black),
+            const SizedBox(width: 16),
+            const Expanded(
+              child: Text(
+                'Add Tags',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.black87,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
-          ),
-          onSubmitted: onAddTag,
+            IconButton(
+              icon: const Icon(Icons.add, color: Colors.black),
+              onPressed: () => _showAddTagsBottomSheet(context),
+            ),
+          ],
         ),
-      ],
+      ),
+    );
+  }
+
+  void _showAddTagsBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+            left: 16,
+            right: 16,
+            top: 16,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Add Tags',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: tagInputController,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Type a tag and press Add',
+                  hintStyle: TextStyle(color: Colors.grey.withOpacity(0.4)),
+                  filled: false,
+                  fillColor: Colors.transparent,
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.tag),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.add),
+                    onPressed: () {
+                      onAddTag(tagInputController.text);
+                      // Keep the bottom sheet open for adding more tags
+                    },
+                  ),
+                ),
+                onSubmitted: (value) {
+                  onAddTag(value);
+                  // Keep the bottom sheet open
+                },
+              ),
+              const SizedBox(height: 16),
+              ValueListenableBuilder<List<String>>(
+                valueListenable: tags,
+                builder: (context, currentTags, _) {
+                  if (currentTags.isEmpty) {
+                    return const SizedBox(
+                      height: 50,
+                      child: Center(
+                        child: Text(
+                          'No tags added yet',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ),
+                    );
+                  }
+                  return Container(
+                    constraints: const BoxConstraints(maxHeight: 200),
+                    child: SingleChildScrollView(
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: currentTags
+                            .map(
+                              (tag) => Chip(
+                                label: Text(tag),
+                                onDeleted: () => onRemoveTag(tag),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: const Text('Done'),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+  Widget _buildMakeEpisodeOption(BuildContext context) {
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const MakeEpisodeScreen(),
+          ),
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        child: Row(
+          children: [
+            const Icon(Icons.playlist_play, color: Colors.black),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Make a Episode',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  Text(
+                    'Create a series by selecting multiple videos',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.black),
+          ],
+        ),
+      ),
     );
   }
 }

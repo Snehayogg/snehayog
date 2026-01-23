@@ -1,21 +1,6 @@
 part of 'package:vayu/view/screens/video_feed_advanced.dart';
 
 extension _VideoFeedPlayback on _VideoFeedAdvancedState {
-  bool _canPrimeIndex(int index) {
-    final bool isYugVisible =
-        _mainController?.currentIndex == 0 && _isScreenVisible;
-    if (!isYugVisible) return false;
-
-    if (index == _currentIndex) return false;
-
-    final int start = (_currentIndex + 1).clamp(0, _videos.length - 1);
-    final int end = (_currentIndex + _decoderPrimeBudget - 1).clamp(
-      0,
-      _videos.length - 1,
-    );
-    return index >= start && index <= end;
-  }
-
   void _reprimeWindowIfNeeded() {
     final int start = _currentIndex;
     final int end = (_currentIndex + _decoderPrimeBudget - 1).clamp(

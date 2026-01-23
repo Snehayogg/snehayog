@@ -234,8 +234,11 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
             return Consumer<UserProvider>(
               builder: (context, userProvider, child) {
                 final videosLoading = stateManager.isVideosLoading;
-                final videoCountValue =
-                    videosLoading ? '...' : stateManager.userVideos.length;
+                final videoCountValue = videosLoading
+                    ? '...'
+                    : (stateManager.totalVideoCount > 0
+                        ? stateManager.totalVideoCount
+                        : stateManager.userVideos.length);
 
                 return Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,

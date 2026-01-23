@@ -877,7 +877,8 @@ class VideoService {
   }
 
   /// **Get user videos**
-  Future<List<VideoModel>> getUserVideos(String userId) async {
+  Future<List<VideoModel>> getUserVideos(String userId,
+      {bool forceRefresh = false, int page = 1, int limit = 9}) async {
     try {
       // **FIXED: Validate userId before making request**
       if (userId.isEmpty) {
@@ -885,7 +886,12 @@ class VideoService {
       }
 
       final resolvedBaseUrl = await getBaseUrlWithFallback();
-      final url = '$resolvedBaseUrl/api/videos/user/$userId';
+      String url = '$resolvedBaseUrl/api/videos/user/$userId?page=$page&limit=$limit';
+
+      // **NEW: Append refresh=true if forceRefresh is requested**
+      if (forceRefresh) {
+        url += '&refresh=true';
+      }
 
       AppLogger.log('📡 VideoService: Fetching videos for userId: $userId');
       AppLogger.log('📡 VideoService: URL: $url');
@@ -1086,6 +1092,14 @@ class VideoService {
           final String? metadataVideoType = metadata['videoType'] as String?;
           if (metadataVideoType != null && metadataVideoType.isNotEmpty) {
             resolvedVideoType = metadataVideoType;
+          }
+          final String? seriesId = metadata['seriesId'] as String?;
+          if (seriesId != null && seriesId.isNotEmpty) {
+            request.fields['seriesId'] = seriesId;
+          }
+          final int? episodeNumber = metadata['episodeNumber'] as int?;
+          if (episodeNumber != null) {
+            request.fields['episodeNumber'] = episodeNumber.toString();
           }
         }
       } catch (_) {}

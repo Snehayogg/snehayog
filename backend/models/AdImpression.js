@@ -18,6 +18,13 @@ const AdImpressionSchema = new mongoose.Schema({
     ref: 'User',
     required: false // Optional - can track anonymous impressions
   },
+  // **NEW: Direct reference to Creator for O(1) earnings lookup**
+  creatorId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false, // Optional for backward compatibility (will be populated by migration)
+    index: true
+  },
   adType: {
     type: String,
     required: true,

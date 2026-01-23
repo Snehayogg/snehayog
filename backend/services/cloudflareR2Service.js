@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
@@ -26,6 +26,57 @@ class CloudflareR2Service {
       },
     });
   }
+
+  /**
+   * Download a file from R2 to local path
+   * @param {string} key - R2 file key
+   * @param {string} localPath - Destination local path
+   */
+  async downloadFile(key, localPath) {
+    try {
+      // Ensure directory exists
+      const dir = path.dirname(localPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      const command = new GetObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+      });
+
+      const response = await this.s3Client.send(command);
+      
+      // Pipe the stream to a file
+      return new Promise((resolve, reject) => {
+        const pipeline = response.Body.pipe(fs.createWriteStream(localPath));
+        pipeline.on('finish', resolve);
+        pipeline.on('error', reject);
+      });
+    } catch (error) {
+       console.error(`❌ R2 Download Error for ${key}:`, error);
+       throw error;
+    }
+  }
+
+  /**
+   * Delete a file from R2
+   * @param {string} key - R2 file key
+   */
+  async deleteFile(key) {
+    try {
+      const command = new DeleteObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+      });
+      await this.s3Client.send(command);
+      return true;
+    } catch (error) {
+      console.error(`❌ R2 Delete Error for ${key}:`, error);
+      throw error;
+    }
+  }
+
 
   /**
    * Get public URL for an R2 object key

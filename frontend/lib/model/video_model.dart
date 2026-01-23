@@ -34,6 +34,11 @@ class VideoModel {
   final String processingStatus;
   final int processingProgress;
   final String? processingError;
+  // **NEW: Related episodes for series**
+  final List<Map<String, dynamic>>? episodes;
+  // **NEW: Series Metadata**
+  final String? seriesId;
+  final int? episodeNumber;
 
   VideoModel({
     required this.id,
@@ -64,6 +69,9 @@ class VideoModel {
     this.processingError,
     this.originalResolution, // **NEW: Original video resolution**
     this.videoHash, // **NEW: Video hash**
+    this.episodes, // **NEW: Related episodes**
+    this.seriesId,
+    this.episodeNumber,
   }) : comments = comments; // **FIXED: Initialize the field**
 
   factory VideoModel.fromJson(Map<String, dynamic> json) {
@@ -359,7 +367,25 @@ class VideoModel {
             return null;
           }
         }(),
+
         videoHash: json['videoHash']?.toString(), // **NEW: Parse video hash**
+        episodes: () {
+          if (json['episodes'] is List) {
+            return (json['episodes'] as List).map((e) {
+              final map = Map<String, dynamic>.from(e as Map);
+              // Normalize id from _id if needed
+              if (map['id'] == null && map['_id'] != null) {
+                map['id'] = map['_id'].toString();
+              }
+              return map;
+            }).toList();
+          }
+          return null;
+        }(),
+        seriesId: json['seriesId']?.toString(),
+        episodeNumber: (json['episodeNumber'] is int)
+            ? json['episodeNumber']
+            : int.tryParse(json['episodeNumber']?.toString() ?? '0') ?? 0,
       );
     } catch (e, stackTrace) {
       print('❌ VideoModel.fromJson Error: $e');
@@ -383,6 +409,9 @@ class VideoModel {
         '_id': uploader.id,
         'name': uploader.name,
         'profilePic': uploader.profilePic,
+        if (uploader.googleId != null) 'googleId': uploader.googleId,
+        // **FIX: Include totalVideos in persistence so profile stats are correct on cache load**
+        if (uploader.totalVideos != null) 'totalVideos': uploader.totalVideos,
       },
       'uploadedAt': uploadedAt.toIso8601String(),
       'likedBy': likedBy,
@@ -398,6 +427,9 @@ class VideoModel {
       'isHLSEncoded': isHLSEncoded,
       'lowQualityUrl': lowQualityUrl, // 480p URL
       'videoHash': videoHash, // **NEW: Parse video hash**
+      'episodes': episodes,
+      'seriesId': seriesId,
+      'episodeNumber': episodeNumber,
     };
   }
 
@@ -426,6 +458,9 @@ class VideoModel {
     bool? isHLSEncoded,
     String? lowQualityUrl, // 480p URL
     String? videoHash, // **NEW: Add videoHash to copyWith**
+    List<Map<String, dynamic>>? episodes,
+    String? seriesId,
+    int? episodeNumber,
   }) {
     return VideoModel(
       id: id ?? this.id,
@@ -454,6 +489,9 @@ class VideoModel {
       isHLSEncoded: isHLSEncoded ?? this.isHLSEncoded,
       lowQualityUrl: lowQualityUrl ?? this.lowQualityUrl, // 480p URL
       videoHash: videoHash ?? this.videoHash, // **NEW: Handle videoHash**
+      episodes: episodes ?? this.episodes,
+      seriesId: seriesId ?? this.seriesId,
+      episodeNumber: episodeNumber ?? this.episodeNumber,
     );
   }
 
@@ -489,12 +527,16 @@ class Uploader {
   final String name;
   final String profilePic;
   final String? googleId;
+  final int? totalVideos; // **NEW: Total video count from backend**
+  final double? earnings; // **NEW: Total earnings from backend**
 
   Uploader({
     required this.id,
     required this.name,
     required this.profilePic,
     this.googleId,
+    this.totalVideos,
+    this.earnings,
   });
 
   factory Uploader.fromJson(Map<String, dynamic> json) {
@@ -542,6 +584,10 @@ class Uploader {
         name: json['name']?.toString() ?? '',
         profilePic: json['profilePic']?.toString() ?? '',
         googleId: resolvedGoogleId,
+        totalVideos: json['totalVideos'] is int ? json['totalVideos'] : int.tryParse(json['totalVideos']?.toString() ?? ''),
+        earnings: (json['earnings'] is num)
+            ? json['earnings'].toDouble()
+            : double.tryParse(json['earnings']?.toString() ?? '0.0') ?? 0.0,
       );
     } catch (e, stackTrace) {
       print('❌ Uploader.fromJson Error: $e');
@@ -556,12 +602,16 @@ class Uploader {
     String? name,
     String? profilePic,
     String? googleId,
+    int? totalVideos,
+    double? earnings,
   }) {
     return Uploader(
       id: id ?? this.id,
       name: name ?? this.name,
       profilePic: profilePic ?? this.profilePic,
       googleId: googleId ?? this.googleId,
+      totalVideos: totalVideos ?? this.totalVideos,
+      earnings: earnings ?? this.earnings,
     );
   }
 
@@ -571,6 +621,8 @@ class Uploader {
       'name': name,
       'profilePic': profilePic,
       if (googleId != null) 'googleId': googleId,
+      if (totalVideos != null) 'totalVideos': totalVideos,
+      if (earnings != null) 'earnings': earnings,
     };
   }
 }

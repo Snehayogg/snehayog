@@ -213,8 +213,8 @@ class FeedQueueService {
 
       while (freshVideos.length < this.BATCH_SIZE && pageCount < MAX_PAGES) {
           const candidateQuery = { processingStatus: 'completed' };
-          if (videoType === 'vayu') candidateQuery.duration = { $gt: 60 };
-          else candidateQuery.duration = { $lte: 60 };
+          if (videoType === 'vayu') candidateQuery.duration = { $gt: 120 };
+          else candidateQuery.duration = { $lte: 120 };
 
           // Fetch Batch
           const candidates = await Video.find(candidateQuery)
@@ -349,8 +349,8 @@ class FeedQueueService {
              
              // Filter valid, matching type, AND NOT SEEN RECENTLY
              const validLruIds = rawVideos.filter(v => {
-                const isVayu = v.duration > 60;
-                const isYog = v.duration <= 60;
+                const isVayu = v.duration > 120;
+                const isYog = v.duration <= 120;
                 const typeMatch = (videoType === 'vayu' && isVayu) || (videoType !== 'vayu' && isYog);
                 const notExcluded = !excludeSet.has(v._id.toString());
                 return v.processingStatus === 'completed' && typeMatch && notExcluded;
@@ -386,8 +386,8 @@ class FeedQueueService {
         }).filter(Boolean) }
       };
 
-      if (videoType === 'vayu') matchStage.duration = { $gt: 60 };
-      else matchStage.duration = { $lte: 60 };
+      if (videoType === 'vayu') matchStage.duration = { $gt: 120 };
+      else matchStage.duration = { $lte: 120 };
 
       // Use Aggregation with $sample for random selection
       const randomVideos = await Video.aggregate([
@@ -497,7 +497,11 @@ class FeedQueueService {
         }
       });
 
-      // 3. Save Fresh Data to Redis (Async - don't block response)
+      // 3. Populate Series Episodes - MOVED TO END
+      // Logic was here, but it only ran for cache-miss videos. 
+      // Now running it for ALL videos at the end to ensure cached videos get Fresh episodes.
+
+      // 4. Save Fresh Data to Redis (Async - don't block response)
       if (toCache.length > 0 && redisService.getConnectionStatus()) {
         redisService.mset(toCache, 3600) // Cache for 1 hour
           .catch(e => console.error('❌ FeedQueue: Cache Set error:', e.message));
@@ -506,6 +510,47 @@ class FeedQueueService {
 
     // Filter out nulls (deleted videos)
     const finalVideos = videos.filter(Boolean);
+
+    // 5. Populate Series Episodes (moved from above)
+    // Run for ALL videos (Cached + Fresh)
+    const seriesIds = new Set();
+    finalVideos.forEach(v => {
+      if (v.seriesId) seriesIds.add(v.seriesId);
+    });
+
+    if (seriesIds.size > 0) {
+      try {
+        // Fetch all episodes for these series
+        const allEpisodes = await Video.find({ 
+          seriesId: { $in: Array.from(seriesIds) },
+          processingStatus: 'completed'
+        })
+        .select('_id videoName thumbnailUrl episodeNumber seriesId duration')
+        .sort({ episodeNumber: 1 })
+        .lean();
+        
+        // Group by seriesId
+        const episodesMap = new Map();
+        allEpisodes.forEach(ep => {
+          if (!episodesMap.has(ep.seriesId)) {
+             episodesMap.set(ep.seriesId, []);
+          }
+          // Transform ObjectId to string immediately
+          ep._id = ep._id.toString();
+          episodesMap.get(ep.seriesId).push(ep);
+        });
+        
+        // Attach episodes to videos
+        finalVideos.forEach(v => {
+           if (v.seriesId && episodesMap.has(v.seriesId)) {
+              v.episodes = episodesMap.get(v.seriesId);
+           }
+        });
+        
+      } catch (err) {
+         console.error('⚠️ FeedQueue: Error fetching series episodes:', err.message);
+      }
+    }
     
     return finalVideos;
   }

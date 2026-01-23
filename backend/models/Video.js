@@ -181,6 +181,19 @@ const videoSchema = new mongoose.Schema({
     default: 0, // Total watch time in seconds (aggregated from WatchHistory)
     description: 'Total watch time across all users for recommendation scoring'
   },
+  // **NEW: Series/Episode Metadata**
+  seriesId: {
+    type: String,
+    index: true,
+    default: null,
+    description: 'UUID connecting multiple episodes of a series'
+  },
+  episodeNumber: {
+    type: Number,
+    default: 0,
+    description: 'Order of the video in the series'
+  },
+
   finalScore: {
     type: Number,
     default: 0, // Final recommendation score (calculated periodically)
@@ -198,6 +211,7 @@ const videoSchema = new mongoose.Schema({
 
 // **NEW: Index for faster queries**
 videoSchema.index({ uploader: 1, uploadedAt: -1 });
+videoSchema.index({ uploader: 1, createdAt: -1 }); // **OPTIMIZATION: Match route sort order**
 videoSchema.index({ processingStatus: 1 });
 videoSchema.index({ 'qualitiesGenerated.quality': 1 });
 // **NEW: Compound index for faster duplicate queries**

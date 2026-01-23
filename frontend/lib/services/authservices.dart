@@ -30,6 +30,9 @@ class AuthService {
     try {
       AppLogger.log('🔐 Starting Google Sign-In process...');
 
+      // **OPTIMIZED: Start fetching platform ID immediately (in parallel)**
+      final platformIdFuture = PlatformIdService().getPlatformId();
+
       // **NEW: Check configuration before proceeding**
       if (!GoogleSignInConfig.isConfigured) {
         AppLogger.log('❌ Google Sign-In not properly configured!');
@@ -56,10 +59,11 @@ class AuthService {
         AppLogger.log(
             '🔄 Force account picker enabled - clearing previous Google session...');
         try {
-          await _googleSignIn.signOut();
-          await _googleSignIn.disconnect();
+          // **OPTIMIZED: Only signOut, DO NOT disconnect.**
+          // Disconnect revokes consent and slows down re-login.
+          await _googleSignIn.signOut(); 
         } catch (e) {
-          AppLogger.log('ℹ️ Pre sign-in disconnect/signOut ignored: $e');
+          AppLogger.log('ℹ️ Pre sign-in signOut ignored: $e');
         }
 
         // **IMPROVED: Keep fallback_user until successful sign-in to prevent data loss**
@@ -120,8 +124,8 @@ class AuthService {
 
       AppLogger.log('🔑 Got ID token, attempting backend authentication...');
 
-      // **OPTIMIZED: Get platform ID (usually cached, so fast)**
-      final platformId = await PlatformIdService().getPlatformId();
+      // **OPTIMIZED: Await the platform ID that was started earlier**
+      final platformId = await platformIdFuture;
 
       // First, authenticate with backend to get JWT
       try {
@@ -197,63 +201,30 @@ class AuthService {
             }
           }());
 
-          // Then register/update user profile
-          final userData = {
-            'googleId': googleUser.id,
-            'name': googleUser.displayName ?? 'User',
-            'email': googleUser.email,
-            'profilePic': googleUser.photoUrl,
-            'profilePicture': googleUser.photoUrl, // For backend compatibility
-          };
+          // **OPTIMIZED: User registration is handled by /api/auth endpoint**
+          // We no longer need a separate call to /api/users/register
 
-          Map<String, dynamic>? registeredUserData;
+          final backendUser = authData['user'];
+          final isNewUser = backendUser?['isNewUser'] ?? false;
 
-          try {
-            // **OPTIMIZED: Reduced timeout from 8s to 5s for faster sign-in**
-            final registerResponse = await http
-                .post(
-                  Uri.parse('${AppConfig.baseUrl}/api/users/register'),
-                  headers: {'Content-Type': 'application/json'},
-                  body: jsonEncode(userData),
-                )
-                .timeout(const Duration(seconds: 5));
-
-            AppLogger.log(
-                '📡 User registration response status: ${registerResponse.statusCode}');
-
-            if (registerResponse.statusCode == 200 ||
-                registerResponse.statusCode == 201) {
-              AppLogger.log('✅ User registration successful');
-              final regData = jsonDecode(registerResponse.body);
-              registeredUserData = regData['user'];
-
-              // **FIX: Track referral code if present (for new users)**
-              // **OPTIMIZED: Make referral tracking non-blocking (fire and forget)**
-              final isNewUser = regData['user']?['isNewUser'] ?? false;
-              if (isNewUser) {
-                // Fire and forget - don't block sign-in completion
-                unawaited(_trackReferralCodeAsync());
-              }
+          if (isNewUser) {
+             AppLogger.log('✅ New user detected via Auth endpoint');
+             // Fire and forget - don't block sign-in completion
+             unawaited(_trackReferralCodeAsync());
 
               // Show location onboarding for new users
               // Add small delay to ensure context is available
               Future.delayed(const Duration(milliseconds: 500), () {
                 _showLocationOnboardingAfterSignIn();
               });
-            } else {
-              AppLogger.log(
-                  '⚠️ User registration failed: ${registerResponse.body}');
-            }
-          } catch (e) {
-            AppLogger.log('⚠️ User registration error (non-critical): $e');
           }
 
           // **FIXED: Use Google account data if backend data is missing**
           // Priority: 1) Backend registered data, 2) Google account data
           final finalName =
-              registeredUserData?['name'] ?? googleUser.displayName ?? 'User';
-          final finalProfilePic = registeredUserData?['profilePic'] ??
-              registeredUserData?['profilePicture'] ??
+              backendUser?['name'] ?? googleUser.displayName ?? 'User';
+          final finalProfilePic = backendUser?['profilePic'] ??
+              backendUser?['profilePicture'] ??
               googleUser.photoUrl;
 
           // Save to SharedPreferences with fresh Google data

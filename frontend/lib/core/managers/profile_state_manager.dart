@@ -15,7 +15,7 @@ import 'package:vayu/services/video_service.dart';
 import 'package:vayu/services/ad_service.dart';
 
 import 'package:vayu/utils/feature_flags.dart';
-import 'package:vayu/core/constants/profile_constants.dart';
+
 import 'package:vayu/core/managers/smart_cache_manager.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/features/profile/data/datasources/profile_local_datasource.dart';
@@ -60,6 +60,15 @@ class ProfileStateManager extends ChangeNotifier {
   static const Duration _userProfileCacheTime = Duration(hours: 24);
   static const Duration _userVideosCacheTime = Duration(minutes: 45);
 
+  // Video Stats
+  int _totalVideoCount = 0;
+  
+  // Pagination State
+  int _currentPage = 1;
+  bool _isFetchingMore = false;
+  bool _hasMoreVideos = true;
+  static const int _pageSize = 9;
+
   Future<void> _ensureSmartCacheInitialized() async {
     if (_smartCacheInitialized) return;
     try {
@@ -90,6 +99,9 @@ class ProfileStateManager extends ChangeNotifier {
   bool get hasSelectedVideos => _selectedVideoIds.isNotEmpty;
   bool get isVideosLoading => _isVideosLoading;
   double get cachedEarnings => _cachedEarnings;
+  int get totalVideoCount => _totalVideoCount;
+  bool get isFetchingMore => _isFetchingMore;
+  bool get hasMoreVideos => _hasMoreVideos;
 
 
   // Profile management
@@ -464,10 +476,12 @@ class ProfileStateManager extends ChangeNotifier {
   Future<List<VideoModel>> _fetchVideosFromServer(
     String userId, {
     required bool isMyProfile,
+    bool forceRefresh = false,
+    int page = 1,
   }) async {
     List<VideoModel> videos = [];
     try {
-      videos = await _videoService.getUserVideos(userId);
+      videos = await _videoService.getUserVideos(userId, forceRefresh: forceRefresh, page: page, limit: _pageSize);
     } catch (e) {
       AppLogger.log(
           '⚠️ ProfileStateManager: Primary id fetch failed for $userId: $e');
@@ -496,7 +510,7 @@ class ProfileStateManager extends ChangeNotifier {
         AppLogger.log(
             '🔄 ProfileStateManager: Trying alternate id for fetch: $altId');
         try {
-          videos = await _videoService.getUserVideos(altId);
+          videos = await _videoService.getUserVideos(altId, forceRefresh: forceRefresh, page: page, limit: _pageSize);
         } catch (e) {
           AppLogger.log(
               '⚠️ ProfileStateManager: Alternate id fetch also failed: $e');
@@ -507,14 +521,33 @@ class ProfileStateManager extends ChangeNotifier {
     return videos;
   }
 
-  Future<void> loadUserVideos(String? userId,
-      {bool forceRefresh = false, bool silent = false}) async {
-    AppLogger.log(
-        '🔄 ProfileStateManager: loadUserVideos called with userId: $userId, forceRefresh: $forceRefresh, silent: $silent');
+  Future<void> loadMoreVideos() async {
+    if (_isLoading || _isFetchingMore || !_hasMoreVideos) return;
+    
+    // Determine userId
+    final userId = _userData?['googleId'] ?? _userData?['id'];
+    if (userId == null) return;
+    
+    _isFetchingMore = true;
+    notifyListeners();
+    
+    await loadUserVideos(userId, page: _currentPage + 1);
+  }
 
-    if (!silent) {
-      _isVideosLoading = true;
-      notifyListeners();
+  Future<void> loadUserVideos(String? userId,
+      {bool forceRefresh = false, bool silent = false, int page = 1}) async {
+    AppLogger.log(
+        '🔄 ProfileStateManager: loadUserVideos called with userId: $userId, page: $page, forceRefresh: $forceRefresh');
+
+    if (page == 1) {
+      _currentPage = 1;
+      _hasMoreVideos = true;
+      if (!silent) {
+        _isVideosLoading = true;
+        notifyListeners();
+      }
+    } else {
+        _currentPage = page;
     }
 
     try {
@@ -538,6 +571,11 @@ class ProfileStateManager extends ChangeNotifier {
             AppLogger.log(
                 '✅ ProfileStateManager: Instant video load from Hive for $targetId');
             _userVideos = cachedVideos;
+            
+            // Assume has more if we loaded from cache initially, to allow scrolling
+            _hasMoreVideos = true; 
+            _currentPage = 1;
+            
             _isVideosLoading = false; // Stop spinner immediately if cache found
             notifyListeners();
           }
@@ -573,12 +611,14 @@ class ProfileStateManager extends ChangeNotifier {
           isMyProfile: isMyProfile,
           forceRefresh: forceRefresh,
           silent: silent,
+          page: page,
         );
       } else {
         await _loadUserVideosDirect(
           userId,
           isMyProfile: isMyProfile,
           silent: silent,
+          page: page,
         );
       }
 
@@ -607,8 +647,10 @@ class ProfileStateManager extends ChangeNotifier {
         userId,
         isMyProfile: isMyProfile,
         silent: silent,
+         page: page, // Pass page
       );
     } finally {
+      _isFetchingMore = false;
       if (_isVideosLoading) {
         _isVideosLoading = false;
         notifyListeners();
@@ -616,7 +658,47 @@ class ProfileStateManager extends ChangeNotifier {
       
       // Load earnings after videos are loaded
       if (_userVideos.isNotEmpty) {
+        // **FIX: Robust Total Video Count Logic**
+        int? count;
+        
+        // 1. Try uploader.totalVideos from the video list (from aggregation)
+        if (_userVideos.first.uploader.totalVideos != null && 
+            _userVideos.first.uploader.totalVideos! > 0) {
+          count = _userVideos.first.uploader.totalVideos;
+        } 
+        
+        // 2. Try userData['videosCount'] or similar fields if #1 failed
+        if (count == null && _userData != null) {
+           final userVideoCount = _userData!['videosCount'] ?? 
+                                 _userData!['totalVideos'] ?? 
+                                 _userData!['videoCount'];
+           if (userVideoCount is int && userVideoCount > 0) {
+             count = userVideoCount;
+           }
+        }
+
+        // 3. Fallback to list length if everything else fails
+        _totalVideoCount = count ?? _userVideos.length;
+        
+        AppLogger.log(
+              '📊 ProfileStateManager: Final Total Video Count: $_totalVideoCount (Source: ${count != null ? "Backend/User" : "List Length"})');
+
         _loadEarnings();
+      } else {
+        // Even if videos are empty, check if userData has a count (e.g. all deleted but count not updated?)
+        // Or just set to 0
+        if (_userData != null) {
+           final userVideoCount = _userData!['videosCount'] ?? 
+                                 _userData!['totalVideos'] ?? 
+                                 _userData!['videoCount'];
+           if (userVideoCount is int) {
+             _totalVideoCount = userVideoCount;
+           } else {
+             _totalVideoCount = 0;
+           }
+        } else {
+          _totalVideoCount = 0;
+        }
       }
     }
   }
@@ -651,7 +733,7 @@ class ProfileStateManager extends ChangeNotifier {
           final adService = AdService();
           final summary = await adService.getCreatorRevenueSummary();
           // Summary returns { 'thisMonth': double, 'lastMonth': double, ... }
-          if (summary != null && summary.containsKey('thisMonth')) {
+          if (summary.containsKey('thisMonth')) {
              final thisMonth = summary['thisMonth'];
              if (thisMonth is num && thisMonth > 0) {
                  earnings = thisMonth.toDouble();
@@ -666,9 +748,25 @@ class ProfileStateManager extends ChangeNotifier {
 
       // 3. Fallback: REMOVED Client-Side Calculation
       // We rely solely on the backend. If backend fails or returns nothing, we show 0.
+      // 3. Fallback: Check uploader.earnings (sent by backend for this profile)
+      // This is the "Current Month Earnings" calculated by the backend for public display/profile header
+      if (!usedBackend && _userVideos.isNotEmpty) {
+          final uploaderEarnings = _userVideos.first.uploader.earnings;
+          if (uploaderEarnings != null && uploaderEarnings > 0) {
+             earnings = uploaderEarnings;
+             usedBackend = true; // technically came from backend via video list
+             AppLogger.log('💰 ProfileStateManager: Using uploader.earnings from video list: ₹$earnings');
+          }
+      }
+
+      // 4. Fallback: Aggregate from per-video earnings if no summary
       if (!usedBackend) {
-        earnings = 0.0;
-        AppLogger.log('💰 ProfileStateManager: No backend earnings data, setting to 0');
+          double aggregated = 0.0;
+          for (var video in _userVideos) {
+            aggregated += video.earnings;
+          }
+          earnings = aggregated;
+          AppLogger.log('💰 ProfileStateManager: Aggregated earnings from video list: ₹$earnings');
       }
 
       _cachedEarnings = earnings;
@@ -684,10 +782,11 @@ class ProfileStateManager extends ChangeNotifier {
     required bool isMyProfile,
     bool forceRefresh = false,
     bool silent = false,
+    int page = 1,
   }) async {
     try {
       AppLogger.log(
-          '🔄 ProfileStateManager: Loading videos with smart caching for userId: $userId, forceRefresh: $forceRefresh');
+          '🔄 ProfileStateManager: Loading videos with smart caching for userId: $userId, page: $page');
 
       final loggedInUser = await _authService.getUserData();
       String? resolvedId;
@@ -718,13 +817,26 @@ class ProfileStateManager extends ChangeNotifier {
         final videos = await _fetchVideosFromServer(
           targetUserId,
           isMyProfile: isMyProfile,
+          forceRefresh: forceRefresh,
+          page: page,
         );
-        _userVideos = videos;
+        
+        if (page == 1) {
+             _userVideos = videos;
+        } else {
+             // Append videos
+             _userVideos.addAll(videos);
+        }
+        
+        // Update pagination status
+        _hasMoreVideos = videos.length >= _pageSize;
+        
         notifyListeners(); // Always notify when data changes
         return;
       }
 
-      if (_smartCacheInitialized) {
+      // **SMART CACHING LOGIC (Only for Page 1)**
+      if (_smartCacheInitialized && page == 1) {
         final smartCacheKey = _resolveVideoCacheKey(targetUserId);
         AppLogger.log(
             '🧠 ProfileStateManager: Fetching videos from smart cache: $smartCacheKey');
@@ -737,6 +849,8 @@ class ProfileStateManager extends ChangeNotifier {
             final videos = await _fetchVideosFromServer(
               targetUserId,
               isMyProfile: isMyProfile,
+              forceRefresh: forceRefresh,
+              page: 1, // Cache is always page 1
             );
             // **NOTE: Keep views in cache for initial display, but refresh them after loading**
             return {
@@ -747,9 +861,12 @@ class ProfileStateManager extends ChangeNotifier {
           },
         );
 
-        if (payload != null) {
+        if (payload != null && page == 1) { // Only use cache for page 1
           final hydratedVideos = _deserializeCachedVideos(payload);
           _userVideos = hydratedVideos;
+          _hasMoreVideos = true; // Assume true if cached
+          _currentPage = 1;
+
           AppLogger.log(
               '⚡ ProfileStateManager: Smart cache served ${_userVideos.length} videos (refreshing view counts from server)');
 
@@ -759,6 +876,8 @@ class ProfileStateManager extends ChangeNotifier {
               final freshVideos = await _fetchVideosFromServer(
                 targetUserId,
                 isMyProfile: isMyProfile,
+                forceRefresh: true, // Always force refresh when refreshing view counts
+                page: 1,
               );
 
               // Update view counts for cached videos with fresh data
@@ -792,12 +911,20 @@ class ProfileStateManager extends ChangeNotifier {
       }
 
       AppLogger.log(
-          '📡 ProfileStateManager: Fetching fresh videos for $targetUserId');
+          '📡 ProfileStateManager: Fetching fresh videos for $targetUserId (Page $page)');
       final videos = await _fetchVideosFromServer(
         targetUserId,
         isMyProfile: isMyProfile,
+        forceRefresh: forceRefresh,
+        page: page,
       );
-      _userVideos = videos;
+
+      if (page == 1) {
+        _userVideos = videos;
+      } else {
+        _getAllVideosUnique(videos);
+      }
+      
       notifyListeners();
     } catch (e) {
       AppLogger.log('❌ ProfileStateManager: Error in cached video loading: $e');
@@ -823,76 +950,67 @@ class ProfileStateManager extends ChangeNotifier {
     String? userId, {
     required bool isMyProfile,
     bool silent = false,
+    int page = 1,
   }) async {
     try {
       AppLogger.log(
-          '🔄 ProfileStateManager: Loading videos directly for userId: $userId');
+          '📡 ProfileStateManager: Direct loading videos for $userId (Page $page)');
 
       final loggedInUser = await _authService.getUserData();
-      AppLogger.log(
-          '🔍 ProfileStateManager: Direct loading - isMyProfile: $isMyProfile');
-      AppLogger.log(
-          '🔍 ProfileStateManager: Direct loading - userId parameter: $userId');
-      AppLogger.log(
-          '🔍 ProfileStateManager: Direct loading - loggedInUser id: ${loggedInUser?['id']}');
-      AppLogger.log(
-          '🔍 ProfileStateManager: Direct loading - loggedInUser googleId: ${loggedInUser?['googleId']}');
-
-      // Build a prioritized list of IDs to try (googleId then Mongo _id, then provided userId)
-      final candidateIds = <String?>[
-        if (isMyProfile) loggedInUser?['googleId']?.toString(),
-        if (isMyProfile) loggedInUser?['id']?.toString(),
-        if (!isMyProfile) userId?.toString(),
-        if (!isMyProfile) _userData?['googleId']?.toString(),
-        if (!isMyProfile) _userData?['id']?.toString(),
-      ]
-          .whereType<String>()
-          .map((value) => value.trim())
-          .where((value) => value.isNotEmpty)
-          .toSet()
-          .toList();
-
-      AppLogger.log(
-          '🔍 ProfileStateManager: Direct loading - idsToTry: $candidateIds');
-
-      // **FIX: Don't clear existing videos before we know we have new ones**
-      // _userVideos = []; 
-      
-      bool foundVideos = false;
-      for (final candidateId in candidateIds) {
-        try {
-          AppLogger.log(
-              '🔍 ProfileStateManager: Trying VideoService.getUserVideos with id: $candidateId');
-          final videos = await _videoService.getUserVideos(candidateId);
-          if (videos.isNotEmpty) {
-            _userVideos = videos;
-            foundVideos = true;
-            AppLogger.log(
-                '✅ ProfileStateManager: Loaded ${videos.length} videos using id: $candidateId');
-            break;
-          } else {
-            AppLogger.log(
-                'ℹ️ ProfileStateManager: No videos for id: $candidateId, trying next');
-          }
-        } catch (e) {
-          AppLogger.log(
-              '⚠️ ProfileStateManager: Error fetching videos for id $candidateId: $e');
+      String? resolvedId;
+      if (isMyProfile) {
+        resolvedId = loggedInUser?['googleId']?.toString();
+        if (resolvedId == null || resolvedId.trim().isEmpty) {
+          resolvedId = loggedInUser?['id']?.toString();
         }
+      } else {
+        resolvedId = userId;
+      }
+      final String targetUserId = resolvedId?.trim() ?? '';
+
+      if (targetUserId.isEmpty) {
+        AppLogger.log(
+            '⚠️ ProfileStateManager: targetUserId is empty, cannot load videos');
+        return;
       }
 
-      // **FIX: Only clear if we really have nothing and no errors occurred**
-      if (!foundVideos && candidateIds.isNotEmpty && _userVideos.isEmpty) {
-           notifyListeners();
+      final videos = await _fetchVideosFromServer(
+        targetUserId,
+        isMyProfile: isMyProfile,
+        forceRefresh: true,
+        page: page,
+      );
+
+      if (page == 1) {
+         _userVideos = videos;
       } else {
-        notifyListeners();
+         _getAllVideosUnique(videos);
       }
+      
+      _hasMoreVideos = videos.length >= _pageSize;
+      notifyListeners();
     } catch (e) {
       AppLogger.log('❌ ProfileStateManager: Error in direct video loading: $e');
-      _error = '${ProfileConstants.errorLoadingVideos}${e.toString()}';
-      if (!silent) notifyListeners();
-      rethrow;
+      _userVideos = [];
+      _error = 'Failed to load videos directly.';
+      notifyListeners();
     }
   }
+
+  void _getAllVideosUnique(List<VideoModel> newVideos) {
+    if (newVideos.isEmpty) return;
+    
+    final existingIds = _userVideos.map((v) => v.id).toSet();
+    for (var video in newVideos) {
+      if (!existingIds.contains(video.id)) {
+        _userVideos.add(video);
+        existingIds.add(video.id);
+      }
+    }
+  }
+
+
+
 
   // Profile editing
   void startEditing() {

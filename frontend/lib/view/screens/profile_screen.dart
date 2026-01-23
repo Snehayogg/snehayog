@@ -33,6 +33,7 @@ import 'package:vayu/model/video_model.dart';
 import 'package:vayu/view/screens/creator_revenue_screen.dart';
 import 'package:vayu/utils/app_text.dart';
 import 'package:vayu/view/widget/ads/google_admob_banner_widget.dart';
+import 'package:vayu/services/video_cache_proxy_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -112,6 +113,11 @@ class _ProfileScreenState extends State<ProfileScreen>
     // Load referral stats
     _loadReferralStats();
     _fetchVerifiedReferralStats();
+
+    // **NEW: Rebuild profile slivers when tab changes**
+    _activeProfileTabIndex.addListener(() {
+      if (mounted) setState(() {});
+    });
   }
 
   /// **PUBLIC METHOD: Called when Profile tab is selected**
@@ -523,6 +529,18 @@ class _ProfileScreenState extends State<ProfileScreen>
 
         AppLogger.log(
             '✅ ProfileScreen: Loaded ${_stateManager.userVideos.length} videos${forceRefresh ? " (fresh from server, not cache)" : ""}');
+            
+        // **NEW: BACKGROUND LOAD - Automatically load next page if available**
+        // This ensures users see more than just the first 9 videos without needing to scroll immediately
+        // and fixes issues where the list is too short to trigger scroll events.
+        if (_stateManager.hasMoreVideos && !_stateManager.isFetchingMore) {
+           AppLogger.log('🚀 ProfileScreen: Triggering background load for next page of videos...');
+           Future.delayed(const Duration(milliseconds: 500), () {
+             if (mounted) {
+               _stateManager.loadMoreVideos();
+             }
+           });
+        }
       }
     } catch (e) {
       AppLogger.log('❌ ProfileScreen: Error loading videos: $e');
@@ -756,6 +774,18 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   void dispose() {
     ProfileScreenLogger.logProfileScreenDispose();
+    
+    // **NEW: Stop all background downloads immediately on exit**
+    try {
+      AppLogger.log('🛑 ProfileScreen: Exiting profile, stopping all background downloads...');
+      final videoCacheProxy = VideoCacheProxyService();
+      // Passing empty list cancels EVERYTHING
+      videoCacheProxy.cancelAllStreamingExcept([]); 
+      videoCacheProxy.cancelAllPrefetches();
+    } catch (e) {
+       AppLogger.log('⚠️ ProfileScreen: Error stopping downloads: $e');
+    }
+
     // **OPTIMIZED: Dispose ValueNotifiers**
     _isLoading.dispose();
     _error.dispose();
@@ -1001,19 +1031,35 @@ class _ProfileScreenState extends State<ProfileScreen>
       final shouldDelete = await _showDeleteConfirmationDialog();
       if (!shouldDelete) return;
 
-      await _stateManager.deleteSelectedVideos();
+      // Show loading indicator
+      _showLoadingDialog();
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(AppText.get('profile_videos_deleted')
-                .replaceAll('{count}', '$initialCount')),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
-          ),
-        );
+      try {
+        await _stateManager.deleteSelectedVideos();
+
+        // Hide loading indicator
+        if (mounted && Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(AppText.get('profile_videos_deleted')
+                  .replaceAll('{count}', '$initialCount')),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+        ProfileScreenLogger.logVideoDeletionSuccess(count: initialCount);
+      } catch (e) {
+        // Hide loading indicator on error
+        if (mounted && Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
+        rethrow;
       }
-      ProfileScreenLogger.logVideoDeletionSuccess(count: initialCount);
     } catch (e) {
       ProfileScreenLogger.logVideoDeletionError(e.toString());
       if (mounted) {
@@ -1032,6 +1078,25 @@ class _ProfileScreenState extends State<ProfileScreen>
         );
       }
     }
+  }
+
+  void _showLoadingDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Center(
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const CircularProgressIndicator(),
+          ),
+        );
+      },
+    );
   }
 
   Future<bool> _showDeleteConfirmationDialog() async {
@@ -1533,93 +1598,92 @@ class _ProfileScreenState extends State<ProfileScreen>
 
             // Show error state
             if (error != null) {
-              if (error == 'No authentication data found' ||
+              final bool isAuthError = error == 'No authentication data found' ||
                   error.contains('authentication') ||
-                  error.contains('Unauthorized')) {
-                // If viewing own profile and authentication error, show sign-in view
-                if (widget.userId == null) {
-                  return _buildSignInView();
-                }
-              }
+                  error.contains('Unauthorized');
 
-              // Otherwise show error with retry (only if signed in)
-              if (authController.isSignedIn) {
-                return RepaintBoundary(
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.error_outline,
-                            size: 64,
-                            color: Colors.red[300],
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            AppText.get('error_load_profile'),
-                            style: TextStyle(
-                              color: Colors.red[700],
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            error.isNotEmpty
-                                ? error
-                                : 'You appear to be signed in, but we couldn\'t load your profile.',
-                            style: TextStyle(
-                              color: Colors.grey[600],
-                              fontSize: 14,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 24),
-
-                          // **ENHANCED: Retry button with loading state**
-                          ValueListenableBuilder<bool>(
-                            valueListenable: _isLoading,
-                            builder: (context, isLoading, child) {
-                              return ElevatedButton.icon(
-                                onPressed: isLoading
-                                    ? null
-                                    : () => _loadData(forceRefresh: true),
-                                icon: isLoading
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2),
-                                      )
-                                    : const Icon(Icons.refresh),
-                                label: Text(isLoading
-                                    ? AppText.get('btn_loading',
-                                        fallback: 'Loading...')
-                                    : AppText.get('btn_retry',
-                                        fallback: 'Retry')),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 24,
-                                    vertical: 12,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              } else {
-                // Not signed in and error occurred - show sign-in view
+              // If viewing own profile and auth error, show sign-in
+              if (widget.userId == null && isAuthError) {
                 return _buildSignInView();
               }
+              
+              // **FIX: Allow viewing other profiles even if not signed in**
+              // If not signed in and viewing own profile -> Sign In
+              if (widget.userId == null && !authController.isSignedIn) {
+                 return _buildSignInView();
+              }
+
+              // Otherwise show error with retry (for both signed-in users and public profiles)
+              return RepaintBoundary(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          size: 64,
+                          color: Colors.red[300],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          AppText.get('error_load_profile'),
+                          style: TextStyle(
+                            color: Colors.red[700],
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          error,
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 14,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 24),
+
+                        // **ENHANCED: Retry button with loading state**
+                        ValueListenableBuilder<bool>(
+                          valueListenable: _isLoading,
+                          builder: (context, isLoading, child) {
+                            return ElevatedButton.icon(
+                              onPressed: isLoading
+                                  ? null
+                                  : () => _loadData(forceRefresh: true),
+                              icon: isLoading
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.refresh),
+                              label: Text(isLoading
+                                  ? AppText.get('btn_loading',
+                                      fallback: 'Loading...')
+                                  : AppText.get('btn_retry',
+                                      fallback: 'Retry')),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                  vertical: 12,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
             }
 
             // Check if we have user data - if viewing own profile and no data, show sign-in view
@@ -1707,22 +1771,76 @@ class _ProfileScreenState extends State<ProfileScreen>
             // Determine if viewing own profile (authController already passed as parameter)
 
             // If we reach here, we have user data and can show the profile
-            return RefreshIndicator(
-              onRefresh: _refreshData,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                child: Column(
-                  children: [
-                    // Google AdMob Banner Ad at the top
-                    const GoogleAdMobBannerWidget(
-                      adUnitId: 'ca-app-pub-2359959043864469/8166031130',
-                    ),
-                    // Profile Header Widget Removed (Integrated into _buildProfileContent)
+            // If we reach here, we have user data and can show the profile
+            return Stack(
+              children: [
+                RefreshIndicator(
+                  onRefresh: _refreshData,
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: (ScrollNotification scrollInfo) {
+                      if (scrollInfo.metrics.pixels >=
+                              scrollInfo.metrics.maxScrollExtent - 1000 && 
+                          !_stateManager.isFetchingMore &&
+                          _stateManager.hasMoreVideos) {
+                        _stateManager.loadMoreVideos();
+                      }
+                      return false;
+                    },
+                    child: CustomScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      slivers: [
+                        // Google AdMob Banner Ad at the top
+                        const SliverToBoxAdapter(
+                          child: GoogleAdMobBannerWidget(
+                            adUnitId: 'ca-app-pub-2359959043864469/8166031130',
+                          ),
+                        ),
 
-                    _buildProfileContent(userProvider, userModel),
-                  ],
+                        ..._buildProfileSlivers(userProvider, userModel),
+                        
+                        // Add padding at bottom to avoid floating spinner covering content
+                        const SliverToBoxAdapter(
+                          child: SizedBox(height: 80),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+
+                // **NEW: Floating Pagination Spinner (Always Visible)**
+                Positioned(
+                  bottom: 30,
+                  left: 0,
+                  right: 0,
+                  child: Consumer<ProfileStateManager>(
+                    builder: (context, stateManager, _) {
+                      if (stateManager.isFetchingMore) {
+                        return Center(
+                          child: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  blurRadius: 10,
+                                  spreadRadius: 2,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            width: 45,
+                            height: 45,
+                            child: const CircularProgressIndicator(strokeWidth: 3),
+                          ),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ),
+              ],
             );
           },
         );
@@ -2081,7 +2199,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  Widget _buildProfileContent(UserProvider userProvider, UserModel? userModel) {
+  List<Widget> _buildProfileSlivers(UserProvider userProvider, UserModel? userModel) {
     // Determine if viewing own profile
     final authController =
         Provider.of<GoogleSignInController>(context, listen: false);
@@ -2095,211 +2213,211 @@ class _ProfileScreenState extends State<ProfileScreen>
             ? loggedInUserId == displayedUserId
             : widget.userId == null;
 
-    return RepaintBoundary(
-      child: Column(
-        children: [
-          // UPI ID Notice Banner (only for own profile without UPI ID)
-          if (isViewingOwnProfile)
-            ValueListenableBuilder<bool>(
-              valueListenable: _isCheckingUpiId,
-              builder: (context, isChecking, child) {
-                if (isChecking) {
-                  return const SizedBox.shrink(); // Don't show while checking
-                }
-                return ValueListenableBuilder<bool>(
-                  valueListenable: _hasUpiId,
-                  builder: (context, hasUpi, child) {
-                    if (hasUpi) {
-                      return const SizedBox
-                          .shrink(); // Don't show if UPI ID is set
-                    }
-                    return _buildUpiIdNoticeBanner();
-                  },
-                );
-              },
-            ),
+    final List<Widget> slivers = [];
 
-          // **NEW: Compact Profile Header (Side-by-Side Avatar + Stats)**
-          Container(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    // **1. Avatar (Left Side)**
-                    _buildCompactAvatar(),
-                    const SizedBox(width: 20),
-
-                    // **2. Stats Row (Right Side)**
-                    // Followers, Videos, Earnings(Recommendations)
-                    Expanded(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: _buildCompactStatItem(
-                              label: 'Followers',
-                              valueBuilder: (context) => _getFollowersCountString(context),
-                            ),
-                          ),
-                           Container(
-                            height: 24,
-                            width: 1,
-                            color: Colors.grey[300],
-                          ),
-                          Expanded(
-                            child: _buildCompactStatItem(
-                              label: 'Videos',
-                              valueBuilder: (context) => _stateManager.userVideos.length.toString(),
-                            ),
-                          ),
-                           Container(
-                            height: 24,
-                            width: 1,
-                            color: Colors.grey[300],
-                          ),
-                          Expanded(
-                            child: _buildCompactStatItem(
-                              label: 'Earnings',
-                              isHighlighted: true,
-                              valueBuilder: (context) => '₹${_stateManager.cachedEarnings.toStringAsFixed(2)}',
-                              onTap: isViewingOwnProfile ? _handleEarningsTap : null,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                
-                const SizedBox(height: 12),
-                
-                // **3. Bio Section (Below Header)**
-                Text(
-                  _stateManager.userData?['bio'] ?? '',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF4B5563),
-                    fontSize: 14,
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Action Buttons
-                Row(
-                  children: [
-                    if (isViewingOwnProfile)
-                      Expanded(
-                        child: _stateManager.isEditing
-                            ? Row(
-                                children: [
-                                  Expanded(
-                                    child: OutlinedButton(
-                                      onPressed: _handleCancelEdit,
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: Colors.red,
-                                        side: const BorderSide(color: Colors.red),
-                                        padding: const EdgeInsets.symmetric(
-                                            vertical: 10),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                      ),
-                                      child: const Text('Cancel'),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: ElevatedButton(
-                                      onPressed: _handleSaveProfile,
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.green,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                            vertical: 10),
-                                        elevation: 0,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                      ),
-                                      child: const Text('Save'),
-                                    ),
-                                  ),
-                                ],
-                              )
-                            : ElevatedButton.icon(
-                                onPressed: _showHowToEarnDialog,
-                                icon: const Icon(Icons.workspace_premium,
-                                    size: 18),
-                                label: const Text('How to Earn'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF10B981),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                      vertical: 10),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  elevation: 0,
-                                ),
-                              ),
-                      ),
-                    if (isViewingOwnProfile && !_stateManager.isEditing) ...[
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: _handleReferFriends,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF3B82F6),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          child: const Text('Refer Friends'),
-                        ),
-                      ),
-                    ]
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 8),
-
-          // Content Tabs: Your Videos | Recommendations (icon-based)
-          ValueListenableBuilder<int>(
-            valueListenable: _activeProfileTabIndex,
-            builder: (context, activeIndex, child) {
-              return _ProfileTabs(
-                activeIndex: activeIndex,
-                onSelect: (i) => _activeProfileTabIndex.value = i,
+    // 1. UPI ID Notice Banner (only for own profile without UPI ID)
+    if (isViewingOwnProfile) {
+      slivers.add(
+        SliverToBoxAdapter(
+          child: ValueListenableBuilder<bool>(
+            valueListenable: _isCheckingUpiId,
+            builder: (context, isChecking, child) {
+              if (isChecking) {
+                return const SizedBox.shrink();
+              }
+              return ValueListenableBuilder<bool>(
+                valueListenable: _hasUpiId,
+                builder: (context, hasUpi, child) {
+                  if (hasUpi) {
+                    return const SizedBox.shrink();
+                  }
+                  return _buildUpiIdNoticeBanner();
+                },
               );
             },
           ),
+        ),
+      );
+    }
 
-          // Videos Section
-          ValueListenableBuilder<int>(
-            valueListenable: _activeProfileTabIndex,
-            builder: (context, activeIndex, child) {
-              return activeIndex == 0
-                  ? ProfileVideosWidget(
-                      stateManager: _stateManager,
-                      showHeader: false,
-                    )
-                  : _buildRecommendationsSection();
-            },
+    // 2. Compact Profile Header
+    slivers.add(
+      SliverToBoxAdapter(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  _buildCompactAvatar(),
+                  const SizedBox(width: 20),
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: _buildCompactStatItem(
+                            label: 'Followers',
+                            valueBuilder: (context) => _getFollowersCountString(context),
+                          ),
+                        ),
+                        Container(
+                          height: 24,
+                          width: 1,
+                          color: Colors.grey[300],
+                        ),
+                        Expanded(
+                          child: _buildCompactStatItem(
+                            label: 'Videos',
+                            valueBuilder: (context) => _stateManager.totalVideoCount.toString(),
+                          ),
+                        ),
+                        Container(
+                          height: 24,
+                          width: 1,
+                          color: Colors.grey[300],
+                        ),
+                        Expanded(
+                          child: _buildCompactStatItem(
+                            label: 'Earnings',
+                            isHighlighted: true,
+                            valueBuilder: (context) => '₹${_stateManager.cachedEarnings.toStringAsFixed(2)}',
+                            onTap: isViewingOwnProfile ? _handleEarningsTap : null,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _stateManager.userData?['bio'] ?? '',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFF4B5563),
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  if (isViewingOwnProfile)
+                    Expanded(
+                      child: _stateManager.isEditing
+                          ? Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed: _handleCancelEdit,
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.red,
+                                      side: const BorderSide(color: Colors.red),
+                                      padding: const EdgeInsets.symmetric(vertical: 10),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                    child: const Text('Cancel'),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: _handleSaveProfile,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.green,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(vertical: 10),
+                                      elevation: 0,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                    child: const Text('Save'),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : ElevatedButton.icon(
+                              onPressed: _showHowToEarnDialog,
+                              icon: const Icon(Icons.workspace_premium, size: 18),
+                              label: const Text('How to Earn'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF10B981),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                elevation: 0,
+                              ),
+                            ),
+                    ),
+                  if (isViewingOwnProfile && !_stateManager.isEditing) ...[
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _handleReferFriends,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF3B82F6),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Refer Friends'),
+                      ),
+                    ),
+                  ]
+                ],
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
+
+    slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 8)));
+
+    // 3. Content Tabs
+    slivers.add(
+      SliverToBoxAdapter(
+        child: ValueListenableBuilder<int>(
+          valueListenable: _activeProfileTabIndex,
+          builder: (context, activeIndex, child) {
+            return _ProfileTabs(
+              activeIndex: activeIndex,
+              onSelect: (i) => _activeProfileTabIndex.value = i,
+            );
+          },
+        ),
+      ),
+    );
+
+    // 4. Videos or Recommendations Section
+    if (_activeProfileTabIndex.value == 0) {
+      slivers.add(
+        ProfileVideosWidget(
+          stateManager: _stateManager,
+          showHeader: false,
+          isSliver: true, // **ENABLE VIRTUALIZATION**
+        ),
+      );
+    } else {
+      slivers.add(
+        SliverToBoxAdapter(
+          child: _buildRecommendationsSection(),
+        ),
+      );
+    }
+
+    return slivers;
   }
 
   // **NEW: Helper to build compact avatar**

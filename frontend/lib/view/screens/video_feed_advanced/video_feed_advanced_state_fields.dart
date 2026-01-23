@@ -108,23 +108,21 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   final Set<int> _preloadedVideos = {};
   final Set<int> _loadingVideos = {};
   final Set<int> _initializingVideos = {};
-  // **OPTIMIZED: Reduced from 4 to 2 for "Sniper" pipeline loading**
-  // Focus bandwidth on next 2 videos for max speed instead of spreading thin
-  // **OPTIMIZED: Increased from 2 to 4 for faster scrolling**
-  // Focus bandwidth on next 4 videos for better responsiveness
-  // **ADAPTIVE: Dynamic concurrency based on network health**
-  // **REFINED: Always allow 2 (Current + Next) even in Low Data Mode**
-  int get _maxConcurrentInitializations => 2;
+  // **OPTIMIZED: Reduced to 1 for maximum performance**
+  // Focus all resources on current video for smoothest playback
+  int get _maxConcurrentInitializations => 1;
   
   // **NEW: Adaptive Network State**
   bool _isLowBandwidthMode = false;
   int _consecutiveSmoothPlays = 0;
   
+  
   final Map<int, int> _preloadRetryCount = {};
-  int get _maxRetryAttempts => 2;
   Timer? _preloadTimer;
   Timer? _pageChangeTimer;
   Timer? _preloadDebounceTimer;
+  // **NEW: Individual debounce timers for each video index**
+  final Map<int, Timer> _preloadDebounceTimers = {};
 
   // First-frame tracking
   final Map<int, ValueNotifier<bool>> _firstFrameReady = {};

@@ -94,12 +94,12 @@ export const authLimiter = rateLimit({
 // 4. UPLOAD LIMITER (Heavy Operations)
 // Prevents storage exhaustion and bandwidth abuse
 export const uploadLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 40, // **INCREASED**: 40 uploads per hour (User requested 4x increase)
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 5, // 5 uploads per minute (User requested)
   standardHeaders: true,
   legacyHeaders: false,
   store: getStore('upload'),
   keyGenerator: keyGenerator, // Use User ID (Users must be logged in to upload)
-  message: 'Upload limit reached. You can only upload 40 videos per hour.',
+  message: 'Upload limit reached. You can only upload 5 videos per minute.',
   handler: handler,
 });

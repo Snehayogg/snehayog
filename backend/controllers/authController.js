@@ -19,9 +19,12 @@ export const googleSignIn = async (req, res) => {
       .select('googleId name email profilePic deviceIds videos');
     console.log('🔍 Auth Controller: Database lookup result:', user);
     
+    let isNewUser = false; // **NEW: Track if user is new**
+
     if (!user) {
       // Create new user
       console.log('🔍 Auth Controller: Creating new user...');
+      isNewUser = true; // **NEW: Set flag**
       user = new User({
         googleId: userData.sub, // Add missing googleId field
         name: userData.name,
@@ -87,6 +90,7 @@ export const googleSignIn = async (req, res) => {
         email: user.email,
         profilePic: user.profilePic,
         videos: user.videos,
+        isNewUser: isNewUser // **NEW: Return isNewUser flag**
       },
     });
   } catch (error) {

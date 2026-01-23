@@ -57,7 +57,6 @@ part 'video_feed_advanced/video_feed_advanced_initialization.dart';
 part 'video_feed_advanced/video_feed_advanced_data.dart';
 part 'video_feed_advanced/video_feed_advanced_preload.dart';
 part 'video_feed_advanced/video_feed_advanced_ui.dart';
-part 'video_feed_advanced/video_feed_advanced_scroll_physics.dart'; // **NEW: Custom physics**
 
 // #region agent log
 // Debug logging helper for instrumentation
@@ -208,7 +207,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   }
 
   void _handleAppMovedToBackground(AppLifecycleState state) {
-    _lastPausedAt = DateTime.now(); // Record when app enters background
+    // **NEW: Background Buffering Strategy**
+    // Trigger independent download of CURRENT video so it's ready when we return.
+    if (_currentIndex < _videos.length) {
+       final url = _videos[_currentIndex].videoUrl;
+       // Fire and forget - this runs in background (IO thread)
+       // We use 10MB to ensure we have a healthy buffer on resume
+       videoCacheProxy.prefetchChunk(url, megabytes: 10).catchError((_) {});
+    }
+
     _saveBackgroundState();
     _pauseAllVideosOnTabSwitch();
     _videoControllerManager.pauseAllVideos();
@@ -218,7 +225,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     _pendingAutoplayAfterLogin = false;
     _ensureWakelockForVisibility();
     AppLogger.log(
-      '📱 VideoFeedAdvanced: Lifecycle state $state triggered background handling; all videos paused.',
+      '📱 VideoFeedAdvanced: Lifecycle state $state triggered background handling; current video buffering initiated.',
     );
   }
 
@@ -439,6 +446,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         // Screen became hidden - pause current video
         _pauseCurrentVideo();
 
+        // **BANDWIDTH FIX: Cancel all prefetches to prioritize Profile screen**
+        videoCacheProxy.cancelAllPrefetches();
+
         // **NEW: Stop background profile preloading**
         _profilePreloader.stopBackgroundPreloading();
         _ensureWakelockForVisibility();
@@ -633,6 +643,37 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // **OPTIMIZATION: Rapid Pause Strategy**
     // Instead of iterating all controllers (O(N)), directly pause the one we know is playing.
     
+    // **NEW: INSTANT RESOURCE PROTECTION (The "Cut Cable" Logic)**
+    // As soon as the user scrolls, we:
+    // 1. Identify "Safe" videos (Current, Next, Prev)
+    // 2. Kill network for EVERYTHING else immediately.
+    // This prevents "Zombie Downloads" from eating bandwidth.
+    if (_currentIndex < _videos.length) {
+      // Build Safe List (URLs we MUST NOT cancel)
+      final List<String> safeUrls = [];
+      
+      // Helper to add all variants of a video (HLS & MP4) to be safe
+      void addSafeVideo(VideoModel v) {
+         if (v.hlsPlaylistUrl?.isNotEmpty == true) safeUrls.add(v.hlsPlaylistUrl!);
+         if (v.hlsMasterPlaylistUrl?.isNotEmpty == true) safeUrls.add(v.hlsMasterPlaylistUrl!);
+         if (v.videoUrl.isNotEmpty) safeUrls.add(v.videoUrl);
+      }
+
+      // 1. Current (Target) Video
+      if (index < _videos.length) addSafeVideo(_videos[index]);
+      
+      // 2. Next Video (if valid)
+      if (index + 1 < _videos.length) addSafeVideo(_videos[index + 1]);
+      
+      // 3. Previous Video (if valid)
+      if (index - 1 >= 0) addSafeVideo(_videos[index - 1]);
+      
+      // **EXECUTE ATOMIC CANCELLATION**
+      // This is Microsecond-level latency (local check) vs Second-level savings (network).
+      videoCacheProxy.cancelAllStreamingExcept(safeUrls);
+    }
+
+
     // 1. Pause current local controller if active
     if (_currentIndex < _videos.length) {
       if (_controllerPool.containsKey(_currentIndex)) {
@@ -725,22 +766,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     _reprimeWindowIfNeeded();
 
-    // **SMART BACKWARD PREFETCH: Bi-directional scrolling support**
-    // Aggressively ensure previous 2 videos are initialized/ready.
-    // Logic:
-    // 1. If currently in "Keep Alive" window (Pool), this returns instantly (Cheap).
-    // 2. If it was disposed (e.g. scroll back from X+5 to X), this STARTS initializing it immediately.
-    // Result: By the time user swipes back to index-1 or index-2, it is ready.
+    // **CENTRALIZED PRELOADING STRATEGY (Strict Cleanup)**
+    // Uses strict directional logic: 
+    // - Down: Keep [n, n+1], Kill [n-1...]
+    // - Up: Keep [n-1, n], Kill [n+1...]
     if (mounted) {
-       if (index > 0) {
-         // Use a slight delay for -2 to prioritize -1 and +1
-         _preloadVideo(index - 1); 
-       }
-       if (index > 1) {
-         Future.delayed(const Duration(milliseconds: 200), () {
-            if (mounted) _preloadVideo(index - 2);
-         });
-       }
+       _preloadNearbyVideos();
     }
 
     // **NEW: Pre-fetching trigger**

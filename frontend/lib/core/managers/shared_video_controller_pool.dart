@@ -23,17 +23,19 @@ class SharedVideoControllerPool {
   final Map<String, int> _videoIndices =
       {}; // Track video indices for smart cleanup
   
-  // **DYNAMIC CONFIG: Default to safe limit (4), upgradeable to 8 for High-End**
-  int _maxPoolSize = 4;
+  // **DYNAMIC CONFIG: Hard limit to prevent NO_MEMORY**
+  // Android usually supports ~16 hardware decoders, but other apps/services might use them.
+  // We stay well below this limit.
+  int _maxPoolSize = 5; 
 
   /// **Configure pool based on device capabilities**
   void configurePool({required bool isLowEndDevice}) {
-    // High-end: 8 controllers (Smooth instant play)
-    // Low-end: 4 controllers (Safe from crashes)
-    _maxPoolSize = isLowEndDevice ? 4 : 8;
+    // High-end: 5 controllers (Current + Next 2 + Prev 2) - Balanced for smooth scroll
+    // Low-end: 3 controllers (Current + Next + Prev) - Minimal safety
+    _maxPoolSize = isLowEndDevice ? 3 : 5;
     
     AppLogger.log(
-      '📱 SharedPool Configured: ${_maxPoolSize} active controllers '
+      '📱 SharedPool Configured: Max $_maxPoolSize active controllers '
       '(${isLowEndDevice ? "Low End Mode" : "High End Mode"})'
     );
     
@@ -41,6 +43,15 @@ class SharedVideoControllerPool {
     if (_controllerPool.length > _maxPoolSize) {
        _evictLRUIfNeeded();
     }
+  }
+
+  /// **PROACTIVE CLEANUP: Ensure space exits BEFORE creating a new controller**
+  /// Call this before `VideoPlayerController.networkUrl()` to prevent OOM.
+  Future<void> makeRoomForNewController() async {
+     if (_controllerPool.length >= _maxPoolSize) {
+        // Evict oldest to make room for 1 new one
+        _evictLRUIfNeeded();
+     }
   }
 
   // **CACHE STATISTICS**
@@ -250,10 +261,9 @@ class SharedVideoControllerPool {
         }
         controller.removeListener(_listeners[videoId] ?? () {});
         
-        // Delay disposal slightly to allow pause to propagate to native layer
-        Future.delayed(const Duration(milliseconds: 100), () {
-           controller.dispose();
-        });
+        // **FIX: Instant disposal to prevent OOM**
+        // Removed delay which caused decoder pile-up during fast scroll
+        controller.dispose();
       } catch (e) {
         AppLogger.log('⚠️ SharedPool: Error disposing controller $videoId: $e');
       }

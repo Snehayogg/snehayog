@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:firebase_performance/firebase_performance.dart';
 import '../../config/app_config.dart';
 import '../../utils/app_logger.dart';
 
@@ -70,6 +71,48 @@ class HttpClientService {
                 return handler.next(error);
               }
             }
+          }
+          return handler.next(error);
+        },
+      ),
+    );
+
+    // **NEW: Firebase Performance Interceptor**
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) async {
+          try {
+            final metric = FirebasePerformance.instance.newHttpMetric(
+                options.uri.toString(), _mapHttpMethod(options.method));
+            options.extra['performance_metric'] = metric;
+            await metric.start();
+          } catch (e) {
+            AppLogger.log('⚠️ Performance Interceptor Error: $e');
+          }
+          return handler.next(options);
+        },
+        onResponse: (response, handler) async {
+          try {
+            final metric = response.requestOptions.extra['performance_metric'] as HttpMetric?;
+            if (metric != null) {
+              metric.setResponseStatusCode(response.statusCode);
+              metric.setResponseBodySize(response.data?.toString().length ?? 0);
+              await metric.stop();
+            }
+          } catch (e) {
+            AppLogger.log('⚠️ Performance Interceptor Response Error: $e');
+          }
+          return handler.next(response);
+        },
+        onError: (error, handler) async {
+          try {
+            final metric = error.requestOptions.extra['performance_metric'] as HttpMetric?;
+            if (metric != null) {
+              metric.setResponseStatusCode(error.response?.statusCode);
+              await metric.stop();
+            }
+          } catch (e) {
+            AppLogger.log('⚠️ Performance Interceptor Error Recovery: $e');
           }
           return handler.next(error);
         },
@@ -407,6 +450,32 @@ class HttpClientService {
       initialize();
     }
     return _dio;
+  }
+
+  /// Map string methods to Firebase HttpMethod enums
+  HttpMethod _mapHttpMethod(String method) {
+    switch (method.toUpperCase()) {
+      case 'GET':
+        return HttpMethod.Get;
+      case 'POST':
+        return HttpMethod.Post;
+      case 'PUT':
+        return HttpMethod.Put;
+      case 'DELETE':
+        return HttpMethod.Delete;
+      case 'PATCH':
+        return HttpMethod.Patch;
+      case 'OPTIONS':
+        return HttpMethod.Options;
+      case 'HEAD':
+        return HttpMethod.Head;
+      case 'TRACE':
+        return HttpMethod.Trace;
+      case 'CONNECT':
+        return HttpMethod.Connect;
+      default:
+        return HttpMethod.Get;
+    }
   }
 }
 

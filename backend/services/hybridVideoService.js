@@ -3,7 +3,6 @@ import cloudflareStreamService from './cloudflareStreamService.js';
 import hlsEncodingService from './hlsEncodingService.js';
 import path from 'path';
 import fs from 'fs';
-import { spawn } from 'child_process';
 
 class HybridVideoService {
   constructor() {
@@ -299,120 +298,20 @@ class HybridVideoService {
    */
   async getOriginalVideoInfo(videoPath) {
     try {
-      const { spawn } = await import('child_process');
+      // Lazy load the service to ensure dependencies are ready
+      const { getVideoMetadata } = await import('./videoMetadataService.js');
       
-      return new Promise((resolve, reject) => {
-        // Check if ffprobe is available first
-        const ffprobeCheck = spawn('ffprobe', ['-version']);
-        
-        ffprobeCheck.on('error', (error) => {
-          console.log('⚠️ FFprobe not available, using fallback video info');
-          console.log('⚠️ Error details:', error.message);
-          // Return fallback video info when ffprobe is not available
-          resolve({
-            width: 720,
-            height: 1280,
-            aspectRatio: 9/16,
-            duration: 30, // Default duration
-            codec: 'unknown',
-            format: 'mp4'
-          });
-        });
-        
-        ffprobeCheck.on('close', (code) => {
-          if (code !== 0) {
-            console.log('⚠️ FFprobe not working, using fallback video info');
-            resolve({
-              width: 720,
-              height: 1280,
-              aspectRatio: 9/16,
-              duration: 30,
-              codec: 'unknown',
-              format: 'mp4'
-            });
-            return;
-          }
-          
-          // FFprobe is available, proceed with normal detection
-          const ffprobe = spawn('ffprobe', [
-            '-v', 'quiet',
-            '-print_format', 'json',
-            '-show_format',
-            '-show_streams',
-            videoPath
-          ]);
-
-          let output = '';
-          let errorOutput = '';
-
-          ffprobe.stdout.on('data', (data) => {
-            output += data.toString();
-          });
-
-          ffprobe.stderr.on('data', (data) => {
-            errorOutput += data.toString();
-          });
-
-          ffprobe.on('close', (code) => {
-            if (code !== 0) {
-              console.log('⚠️ FFprobe failed, using fallback video info');
-              resolve({
-                width: 720,
-                height: 1280,
-                aspectRatio: 9/16,
-                duration: 30,
-                codec: 'unknown',
-                format: 'mp4'
-              });
-              return;
-            }
-
-            try {
-              const info = JSON.parse(output);
-              const videoStream = info.streams.find(stream => stream.codec_type === 'video');
-              
-              if (!videoStream) {
-                console.log('⚠️ No video stream found, using fallback video info');
-                resolve({
-                  width: 720,
-                  height: 1280,
-                  aspectRatio: 9/16,
-                  duration: 30,
-                  codec: 'unknown',
-                  format: 'mp4'
-                });
-                return;
-              }
-
-              const width = parseInt(videoStream.width);
-              const height = parseInt(videoStream.height);
-              const aspectRatio = width / height;
-              
-              console.log('📊 Original video dimensions:', { width, height, aspectRatio });
-              
-              resolve({
-                width,
-                height,
-                aspectRatio,
-                duration: parseFloat(info.format.duration) || 0,
-                size: parseInt(info.format.size) || 0,
-                isPortrait: aspectRatio < 1.0,
-                isLandscape: aspectRatio >= 1.0
-              });
-            } catch (parseError) {
-              console.log('⚠️ Failed to parse video info, using fallback');
-              resolve({
-                width: 720,
-                height: 1280,
-                aspectRatio: 9/16,
-                duration: 30,
-                codec: 'unknown',
-                format: 'mp4'
-              });
-            }
-          });
-        });
+      const metadata = await getVideoMetadata(videoPath);
+      
+      console.log('📊 Original video info (via videoMetadataService):', {
+        width: metadata.width,
+        height: metadata.height,
+        duration: metadata.duration,
+        aspectRatio: metadata.aspectRatio
       });
+
+      return metadata;
+
     } catch (error) {
       console.log('⚠️ Error getting original video info, using fallback:', error.message);
       // Return fallback video info on any error
@@ -422,7 +321,9 @@ class HybridVideoService {
         aspectRatio: 9/16,
         duration: 30,
         codec: 'unknown',
-        format: 'mp4'
+        format: 'mp4',
+        isPortrait: true,
+        isLandscape: false
       };
     }
   }
@@ -617,11 +518,16 @@ class HybridVideoService {
   /**
    * Generate thumbnail using FFmpeg (FREE, local processing)
    */
+  /**
+   * Generate thumbnail using FFmpeg (FREE, local processing)
+   * Uses ffmpeg-static for reliable execution
+   */
   async generateThumbnailWithFFmpeg(videoPath, videoName, userId) {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       try {
         // **FIX: Verify video file exists before generating thumbnail**
         const absoluteVideoPath = path.resolve(videoPath);
+        const fs = await import('fs');
         if (!fs.existsSync(absoluteVideoPath)) {
           console.error(`❌ Video file not found for thumbnail generation: ${absoluteVideoPath}`);
           resolve(null);
@@ -630,72 +536,50 @@ class HybridVideoService {
         
         console.log('📸 Starting thumbnail generation for video:', videoName);
         console.log(`   Video file: ${absoluteVideoPath}`);
-        console.log(`   User ID: ${userId}`);
         
-        // Check if FFmpeg is available first
-        const ffmpegCheck = spawn('ffmpeg', ['-version']);
+        // **FIX: Robust FFmpeg Path Selection (Same as hlsEncodingService)**
+        let ffmpegPath = null;
+        try {
+            const ffmpegStatic = (await import('ffmpeg-static')).default;
+            ffmpegPath = ffmpegStatic;
+            console.log('wrench HybridVideoService: Using static FFmpeg at:', ffmpegPath);
+        } catch (e) {
+            console.error('❌ HybridVideoService: Failed to load ffmpeg-static:', e);
+            // Fallback to system ffmpeg if static fails
+            ffmpegPath = 'ffmpeg';
+        }
+
+        const ffmpeg = (await import('fluent-ffmpeg')).default;
+        if (ffmpegPath) ffmpeg.setFfmpegPath(ffmpegPath);
+          
+        const tempDir = path.join(process.cwd(), 'temp');
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true });
+        }
+          
+        // **FIX: Use unique filename to avoid conflicts**
+        const uniqueId = `${userId}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        const thumbnailPath = path.join(tempDir, `${videoName}_thumb_${uniqueId}.jpg`);
         
-        ffmpegCheck.on('error', (error) => {
-          console.log('⚠️ FFmpeg not available, skipping thumbnail generation');
-          // Return null to indicate no thumbnail was generated
-          resolve(null);
-        });
-        
-        ffmpegCheck.on('close', (code) => {
-          if (code !== 0) {
-            console.log('⚠️ FFmpeg not working, skipping thumbnail generation');
-            resolve(null);
-            return;
-          }
-          
-          // FFmpeg is available, proceed with thumbnail generation
-          const tempDir = path.join(process.cwd(), 'temp');
-          if (!fs.existsSync(tempDir)) {
-            fs.mkdirSync(tempDir, { recursive: true });
-          }
-          
-          // **FIX: Use unique filename with userId and timestamp to avoid conflicts**
-          const uniqueId = `${userId}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-          const thumbnailPath = path.join(tempDir, `${videoName}_thumb_${uniqueId}.jpg`);
-          
-          console.log('📸 Generating thumbnail with FFmpeg...');
-          console.log(`   Input: ${absoluteVideoPath}`);
-          console.log(`   Output: ${thumbnailPath}`);
-          
-          // **FIX: Use absolute video path to ensure correct file is used**
-          // FFmpeg command to extract frame at 1 second
-          const ffmpeg = spawn('ffmpeg', [
-            '-i', absoluteVideoPath,
-            '-ss', '00:00:01.000',  // Capture at 1 second
-            '-vframes', '1',         // Extract 1 frame
-            '-vf', 'scale=320:180',  // Resize to 320x180
-            '-q:v', '2',             // High quality
-            '-y',                    // Overwrite output
-            thumbnailPath
-          ]);
-          
-          let errorOutput = '';
-          
-          ffmpeg.stderr.on('data', (data) => {
-            errorOutput += data.toString();
-          });
-          
-          ffmpeg.on('close', (code) => {
-            if (code === 0) {
-              console.log('✅ Thumbnail generated successfully');
-              resolve(thumbnailPath);
-            } else {
-              console.log('⚠️ FFmpeg thumbnail generation failed, skipping thumbnail');
-              resolve(null);
-            }
-          });
-          
-          ffmpeg.on('error', (error) => {
-            console.log('⚠️ FFmpeg spawn error, skipping thumbnail:', error.message);
+        console.log(`📸 Generating thumbnail to: ${thumbnailPath}`);
+
+        ffmpeg(absoluteVideoPath)
+          .screenshots({
+            count: 1,
+            timestamps: ['10%'], // Take screenshot at 10% mark (better than fixed 1s)
+            filename: path.basename(thumbnailPath),
+            folder: tempDir,
+            size: '320x180'
+          })
+          .on('end', () => {
+            console.log('✅ Thumbnail generated successfully');
+            resolve(thumbnailPath);
+          })
+          .on('error', (err) => {
+            console.error('❌ Thumbnail generation failed:', err.message);
             resolve(null);
           });
-        });
-        
+          
       } catch (error) {
         console.log('⚠️ Thumbnail generation error, skipping thumbnail:', error.message);
         resolve(null);

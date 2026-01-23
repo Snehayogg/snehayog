@@ -8,7 +8,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         controller: _pageController,
         scrollDirection: Axis.vertical,
         // **CUSTOM PHYSICS: Enabled VayuScrollPhysics for better snap/velocity control**
-        physics: const VayuScrollPhysics(),
+        physics: const ScrollPhysics(),
         // physics: const AlwaysScrollableScrollPhysics(),
         onPageChanged: _onPageChanged,
         allowImplicitScrolling: true, // **FIX: Enable to preload next widget and smooth out scroll start**
@@ -1050,6 +1050,17 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                     bottomPadding, // Only SafeArea padding, no extra spacing
                 child: Column(
                   children: [
+                    // **NEW: Episode Action Button**
+                    if (video.episodes != null && video.episodes!.isNotEmpty)
+                      Column(
+                        children: [
+                          _buildVerticalActionButton(
+                            icon: Icons.playlist_play_rounded,
+                            onTap: () => _showEpisodeList(context, video),
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+                      ),
                     _buildVerticalActionButton(
                       icon: _isLiked(video)
                           ? Icons.favorite
@@ -1237,6 +1248,154 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
               ),
             ),
           ),
+        );
+      },
+    );
+  }
+
+  void _showEpisodeList(BuildContext context, VideoModel video) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.5,
+          minChildSize: 0.3,
+          maxChildSize: 0.8,
+          builder: (context, scrollController) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Column(
+                children: [
+                  // Handle bar
+                  Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  // Title
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.playlist_play, color: Colors.black),
+                        const SizedBox(width: 8),
+                        Text(
+                          'More Episodes',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(),
+                  // List
+                  Expanded(
+                    child: GridView.builder(
+                      controller: scrollController,
+                      padding: const EdgeInsets.all(16),
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        crossAxisSpacing: 10,
+                        mainAxisSpacing: 10,
+                        childAspectRatio: 0.7,
+                      ),
+                      itemCount: video.episodes!.length,
+                      itemBuilder: (context, index) {
+                        final episode = video.episodes![index];
+                        // Placeholder thumbnail logic - use video thumbnail if episode doesn't have one
+                        final String thumbnailUrl = episode['thumbnailUrl'] ?? video.thumbnailUrl;
+                        final String sequenceNumber = (index + 1).toString();
+
+                        return GestureDetector(
+                          onTap: () {
+                              Navigator.pop(context);
+                              // Navigate to the selected episode
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => VideoFeedAdvanced(
+                                    initialVideoId: episode['id'] ?? episode['_id'],
+                                    videoType: 'yog', // Episodes are typically 'yog' type
+                                  ),
+                                ),
+                              );
+                              AppLogger.log('Selected episode $sequenceNumber: ${episode['id'] ?? episode['_id']}');
+                          },
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: CachedNetworkImage(
+                                  imageUrl: thumbnailUrl,
+                                  fit: BoxFit.cover,
+                                  placeholder: (context, url) => Container(color: Colors.grey[300]),
+                                  errorWidget: (context, url, error) => Container(
+                                    color: Colors.grey[300],
+                                    child: const Icon(Icons.error),
+                                  ),
+                                ),
+                              ),
+                              // Sequence Number Overlay
+                              Positioned(
+                                top: 4,
+                                left: 4,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.7),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    sequenceNumber,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              // Play Icon Overlay
+                              Center(
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.5),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.play_arrow,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         );
       },
     );

@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import AdCreative from '../../models/AdCreative.js';
 import AdImpression from '../../models/AdImpression.js';
 import User from '../../models/User.js';
+import Video from '../../models/Video.js'; // Import Video model to fetch creatorId
 
 const router = express.Router();
 const DAILY_VIEW_FREQUENCY_CAP = 3;
@@ -71,11 +72,16 @@ router.post('/impressions/banner', async (req, res) => {
       });
 
       if (!existingImpression) {
+        // **NEW: Fetch creatorId from Video**
+        const video = await Video.findById(videoId).select('uploader').lean();
+        const creatorId = video ? video.uploader : null;
+
         // Create new impression record
         await AdImpression.create({
           videoId: videoId,
           adId: adId,
           userId: normalizedUserId,
+          creatorId: creatorId, // **NEW: Save creatorId for fast lookup**
           adType: 'banner',
           impressionType: 'view',
           timestamp: new Date()
@@ -156,11 +162,16 @@ router.post('/impressions/carousel', async (req, res) => {
       });
 
       if (!existingImpression) {
+        // **NEW: Fetch creatorId from Video**
+        const video = await Video.findById(videoId).select('uploader').lean();
+        const creatorId = video ? video.uploader : null;
+
         // Create new impression record
         await AdImpression.create({
           videoId: videoId,
           adId: adId,
           userId: normalizedUserId,
+          creatorId: creatorId, // **NEW: Save creatorId for fast lookup**
           adType: 'carousel',
           impressionType: 'scroll_view',
           timestamp: new Date()
@@ -322,11 +333,16 @@ router.post('/impressions/banner/view', async (req, res) => {
       await impression.save();
       // console.log(`✅ Banner ad VIEW tracked: Video ${videoId}, Ad ${adId}, Duration: ${viewDuration}s`);
     } else {
+      // **NEW: Fetch creatorId from Video**
+      const video = await Video.findById(videoId).select('uploader').lean();
+      const creatorId = video ? video.uploader : null;
+
       // Create new viewed impression record
       await AdImpression.create({
         videoId: videoId,
         adId: adId,
         userId: normalizedUserId,
+        creatorId: creatorId, // **NEW: Save creatorId for fast lookup**
         adType: 'banner',
         impressionType: 'view',
         isViewed: true,
@@ -431,10 +447,15 @@ router.post('/impressions/carousel/view', async (req, res) => {
       await impression.save();
       // console.log(`✅ Carousel ad VIEW tracked: Video ${videoId}, Ad ${adId}, Duration: ${viewDuration}s`);
     } else {
+      // **NEW: Fetch creatorId from Video**
+      const video = await Video.findById(videoId).select('uploader').lean();
+      const creatorId = video ? video.uploader : null;
+
       await AdImpression.create({
         videoId: videoId,
         adId: adId,
         userId: normalizedUserId,
+        creatorId: creatorId, // **NEW: Save creatorId for fast lookup**
         adType: 'carousel',
         impressionType: 'scroll_view',
         isViewed: true,

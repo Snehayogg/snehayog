@@ -19,6 +19,7 @@ import 'package:vayu/config/app_config.dart';
 import 'package:video_player/video_player.dart';
 import 'package:vayu/utils/app_text.dart';
 
+
 class UploadScreen extends StatefulWidget {
   final VoidCallback? onVideoUploaded; // Add callback for video upload success
 
@@ -557,8 +558,8 @@ class _UploadScreenState extends State<UploadScreen> {
       AppLogger.log(
         'File size: $fileSize bytes (${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB)',
       );
-      if (fileSize > 100 * 1024 * 1024) {
-        // 100MB limit
+      if (fileSize > 300 * 1024 * 1024) {
+        // 300MB limit
         throw Exception(AppText.get('upload_error_file_too_large'));
       }
 
@@ -622,6 +623,59 @@ class _UploadScreenState extends State<UploadScreen> {
       // Update to validation phase
       _updateProgressPhase('validation');
 
+      // **NEW: Handle Immediate Queue Success**
+      // The backend returns processingStatus: 'queued'
+      // We should NOT wait here. We should close the screen and let the user know.
+      
+      final String processingStatus = uploadedVideo['processingStatus']?.toString().toLowerCase() ?? '';
+      
+      if (processingStatus == 'queued' || processingStatus == 'processing') {
+         // **New Background Flow**
+         // Don't wait. Just finish.
+         
+          // Update to processing phase just to show movement
+         _updateProgressPhase('processing');
+         
+         // Give it a split second to breathe
+         await Future.delayed(const Duration(milliseconds: 500));
+         
+          AppLogger.log('✅ Video queued successfully! Closing screen.');
+          
+         // Stop unified progress tracking
+         _stopUnifiedProgress();
+         
+         if (mounted) {
+             _unifiedProgress.value = 1.0;
+             _currentPhase.value = 'completed';
+             _phaseDescription.value = 'Upload completed! Processing in background.';
+         }
+
+          // Call the callback to refresh video list
+          if (widget.onVideoUploaded != null) {
+            widget.onVideoUploaded!();
+          }
+
+          // **BATCHED UPDATE: Clear form**
+          _selectedVideo.value = null;
+          _titleController.clear();
+          _linkController.clear();
+          _selectedCategory.value = null;
+          _tags.value = [];
+          
+          if (mounted) {
+               ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Video uploaded! It will appear shortly after processing.'),
+                  backgroundColor: Colors.green,
+                  duration: Duration(seconds: 4),
+                ),
+              );
+              Navigator.pop(context);
+          }
+          return; // EXIT EARLY - Don't wait
+      }
+
+      // **OLD FLOW (Wait for processing - kept for fallback)**
       // Update to processing phase
       _updateProgressPhase('processing');
 
@@ -1383,7 +1437,7 @@ class _UploadScreenState extends State<UploadScreen> {
                       if (!showUploadForm) return const SizedBox.shrink();
                       return Card(
                         child: Padding(
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.all(8),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -1494,7 +1548,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                   },
                                 ),
                               ),
-                              const SizedBox(height: 24),
+                              const SizedBox(height: 4),
                               UploadAdvancedSettingsSection(
                                 isExpanded: _showAdvancedSettings,
                                 onToggle: _toggleAdvancedSettings,
@@ -1511,7 +1565,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                 onAddTag: _handleAddTag,
                                 onRemoveTag: _handleRemoveTag,
                               ),
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 4),
                               SizedBox(
                                 width: double.infinity,
                                 child: OutlinedButton.icon(

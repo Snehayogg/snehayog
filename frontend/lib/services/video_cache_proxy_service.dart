@@ -17,7 +17,9 @@ class VideoCacheProxyService {
   HttpServer? _server;
   int? _port;
   String? _cachePath;
-  final Map<String, bool> _activeDownloads = {};
+  final Map<String, http.Client> _activeDownloads = {};
+  // **NEW: Track active streaming clients (requests from player)**
+  final Map<String, http.Client> _activeProxyStreams = {};
 
   /// Start the local proxy server
   Future<void> initialize() async {
@@ -91,13 +93,10 @@ class VideoCacheProxyService {
     try {
       // **INDUSTRY LOGIC: Serve from disk if exists, else stream and save**
       if (await file.exists()) {
-        AppLogger.log(
-            '⚡ Proxy: Cache HIT for ${url.substring(url.length > 20 ? url.length - 20 : 0)}');
         await _serveLocalFile(file, request);
       } else {
-        AppLogger.log(
-            '🌐 Proxy: Cache MISS, streaming and saving for $fileKey');
-        await _streamAndCache(url, file, request);
+        // **Updated: Pass fileKey for tracking**
+        await _streamAndCache(url, file, request, fileKey);
       }
     } catch (e) {
       AppLogger.log('❌ Proxy: Request handling error: $e');
@@ -139,7 +138,6 @@ class VideoCacheProxyService {
 
     try {
       if (await file.exists()) {
-        AppLogger.log('⚡ Proxy: Manifest Cache HIT for $fileKey');
         originalManifest = await file.readAsString();
       } else {
         final client = http.Client();
@@ -220,8 +218,11 @@ class VideoCacheProxyService {
   }
 
   Future<void> _streamAndCache(
-      String url, File cacheFile, HttpRequest request) async {
+      String url, File cacheFile, HttpRequest request, String fileKey) async {
     final client = http.Client();
+    // **TRACKING: Register this stream so we can cancel it if needed**
+    _activeProxyStreams[fileKey] = client;
+
     try {
       final remoteRequest = http.Request('GET', Uri.parse(url));
 
@@ -260,43 +261,147 @@ class VideoCacheProxyService {
       await localResponse.close();
     } finally {
       client.close();
+      // **CLEANUP: Remove from tracker**
+      _activeProxyStreams.remove(fileKey);
     }
   }
 
-  /// **NEW: Proactively pre-fetch the first few MB of a video to disk**
-  Future<void> prefetchChunk(String url, {int megabytes = 3}) async {
+  /// **NEW: Proactively pre-fetch the first few MB of a video to disk (Resume Support)**
+  /// Uses Range headers to continue buffering where the player left off.
+  Future<void> prefetchChunk(String url, {int megabytes = 5}) async {
     if (url.isEmpty) return;
     final String fileKey = md5.convert(utf8.encode(url)).toString();
     final String filePath = '$_cachePath/$fileKey.chunk';
     final file = File(filePath);
 
-    if (await file.exists()) return; // Already cached
+    // Conflict check: Don't touch if already being written by proxy
+    if (_activeDownloads.containsKey(filePath)) {
+       AppLogger.log('⚠️ Proxy: Skipping prefetch for $fileKey - currently being streamed');
+       return; 
+    }
 
-    AppLogger.log('📥 Proxy: Pre-fetching $megabytes MB for $fileKey');
+    int currentLength = 0;
+    if (await file.exists()) {
+      currentLength = await file.length();
+      // If we already have enough (e.g. > 5MB), skip
+      if (currentLength >= megabytes * 1024 * 1024) {
+         // AppLogger.log('✅ Proxy: Skipping prefetch for $fileKey - already has ${(currentLength/1024/1024).toStringAsFixed(2)}MB');
+         return;
+      }
+    }
+
+      print('📥 Proxy: Background buffering $fileKey (Current: ${(currentLength/1024/1024).toStringAsFixed(2)}MB, Target: ${megabytes}MB)');
 
     final client = http.Client();
+    _activeDownloads[filePath] = client; // Store client for cancellation
+
     try {
       final request = http.Request('GET', Uri.parse(url));
+      
+      // **RESUME LOGIC: Request only missing bytes**
+      if (currentLength > 0) {
+        request.headers['Range'] = 'bytes=$currentLength-';
+      }
+
       final response = await client.send(request);
 
-      final IOSink fileSink = file.openWrite();
+      if (response.statusCode != 200 && response.statusCode != 206) {
+        AppLogger.log('⚠️ Proxy: Background buffer failed status ${response.statusCode}');
+        return;
+      }
+
+      final IOSink fileSink = file.openWrite(mode: FileMode.append);
       int downloaded = 0;
       final int maxBytes = megabytes * 1024 * 1024;
-
+      
+      // Stream and append
       await for (final List<int> chunk in response.stream) {
         fileSink.add(chunk);
         downloaded += chunk.length;
+        
+        // Safety cap
+        if ((currentLength + downloaded) >= maxBytes) break;
+      }
+
+      await fileSink.flush();
+      await fileSink.close();
+      AppLogger.log('✅ Proxy: Background buffered +${(downloaded/1024).toStringAsFixed(1)}KB for $fileKey');
+    } catch (e) {
+      // Silently handle cancellation and errors
+    } finally {
+      client.close();
+      _activeDownloads.remove(filePath);
+    }
+  }
+
+  /// **NEW: Smart Initial Chunk Prefetch for Instant Playback (0.5s Buffer)**
+  /// Downloads only the first 300-500KB of a video for instant playback start.
+  /// The rest of the video is loaded by ExoPlayer in the background.
+  Future<void> prefetchInitialChunk(String url, {int kilobytes = 400}) async {
+    if (url.isEmpty) return;
+    final String fileKey = md5.convert(utf8.encode(url)).toString();
+    final String filePath = '$_cachePath/$fileKey.chunk';
+    final file = File(filePath);
+
+    // Skip if already being downloaded
+    if (_activeDownloads.containsKey(filePath)) {
+       return; 
+    }
+
+    // Check if we already have the initial chunk
+    int currentLength = 0;
+    if (await file.exists()) {
+      currentLength = await file.length();
+      // If we already have the initial chunk (~400KB), skip
+      if (currentLength >= kilobytes * 1024) {
+         return;
+      }
+    }
+
+    AppLogger.log('⚡ Proxy: Prefetching initial ${kilobytes}KB chunk for instant playback');
+
+    final client = http.Client();
+    _activeDownloads[filePath] = client;
+
+    try {
+      final request = http.Request('GET', Uri.parse(url));
+      
+      // Request only the initial chunk using HTTP Range header
+      // Range: bytes=0-409599 (for 400KB)
+      final int endByte = (kilobytes * 1024) - 1;
+      request.headers['Range'] = 'bytes=0-$endByte';
+
+      final response = await client.send(request);
+
+      // Accept both 200 (full response) and 206 (partial content)
+      if (response.statusCode != 200 && response.statusCode != 206) {
+        AppLogger.log('⚠️ Proxy: Initial chunk prefetch failed with status ${response.statusCode}');
+        return;
+      }
+
+      final IOSink fileSink = file.openWrite();
+      int downloaded = 0;
+      final int maxBytes = kilobytes * 1024;
+      
+      // Download the initial chunk
+      await for (final List<int> chunk in response.stream) {
+        fileSink.add(chunk);
+        downloaded += chunk.length;
+        
+        // Stop after downloading requested chunk size
         if (downloaded >= maxBytes) break;
       }
 
+      await fileSink.flush();
       await fileSink.close();
-      AppLogger.log('✅ Proxy: Pre-fetched $downloaded bytes for $fileKey');
     } catch (e) {
-      AppLogger.log('⚠️ Proxy: Pre-fetch failed for $fileKey: $e');
+      // Silently handle cancellation
     } finally {
       client.close();
+      _activeDownloads.remove(filePath);
     }
   }
+
 
   /// Clean up old cache files (LRU implementation)
   Future<void> cleanCache() async {
@@ -403,6 +508,67 @@ class VideoCacheProxyService {
     } catch (e) {
       AppLogger.log('❌ ProxyDebug: Error checking cache: $e');
       return false;
+    }
+  }
+  /// **NEW: Global Cancel All Prefetches**
+  /// Stops all background downloads immediately.
+  void cancelAllPrefetches() {
+    if (_activeDownloads.isEmpty) return;
+
+    // final count = _activeDownloads.length;
+    // AppLogger.log('🛑 Proxy: Cancelling $count active prefetch downloads...');
+    
+    for (final client in _activeDownloads.values) {
+      try {
+        client.close(); // Only closes the client, might not stop stream immediately if not handled
+      } catch (_) {}
+    }
+    
+    _activeDownloads.clear();
+  }
+
+  /// **NEW: Whitelist-based Cancellation Strategy**
+  /// "Cancel everything EXCEPT these specific URLs."
+  /// Prevents Race Conditions by ensuring the Current/Next videos are NEVER killed.
+  /// Performance: Hash checks are in-memory (microseconds), network bandwidth saved is massive (MBs).
+  void cancelAllStreamingExcept(List<String> urlsToKeep) {
+    if (_activeProxyStreams.isEmpty && _activeDownloads.isEmpty) return;
+
+    // 1. Calculate Safe Keys (Hashes) of URLs to Keep
+    //    We use a Set for O(1) lookup speed.
+    final Set<String> keysToKeep = urlsToKeep.where((u) => u.isNotEmpty).map((url) => 
+      md5.convert(utf8.encode(url)).toString()
+    ).toSet();
+
+    // 2. Cancel Active Proxy Streams (The videos currently playing/buffering)
+    final proxyKeysToRemove = _activeProxyStreams.keys.where((key) => !keysToKeep.contains(key)).toList();
+    for (final key in proxyKeysToRemove) {
+      try {
+        _activeProxyStreams[key]?.close();
+        _activeProxyStreams.remove(key);
+      } catch (_) {}
+    }
+
+    // 3. Cancel Active Prefetches (Background downloads)
+    //    _activeDownloads uses filePath as key, which contains the hashKey.
+    final downloadPathsToRemove = _activeDownloads.keys.where((path) {
+        for (final keptKey in keysToKeep) {
+            // Path structure: .../video_chunks/<HASH>.chunk
+            if (path.contains(keptKey)) return false; // Match found! Keep it.
+        }
+        return true; // No match found. Kill it.
+    }).toList();
+
+    for (final path in downloadPathsToRemove) {
+        try {
+            _activeDownloads[path]?.close();
+            _activeDownloads.remove(path);
+        } catch (_) {}
+    }
+    
+    // Log if we actually saved resources
+    if (proxyKeysToRemove.isNotEmpty || downloadPathsToRemove.isNotEmpty) {
+      // AppLogger.log('✂️ Proxy: Instantly freed ${proxyKeysToRemove.length} streams & ${downloadPathsToRemove.length} prefetches. (Safe list size: ${keysToKeep.length})');
     }
   }
 }

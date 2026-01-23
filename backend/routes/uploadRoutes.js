@@ -101,7 +101,7 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB limit
+    fileSize: 300 * 1024 * 1024, // 300MB limit (Updated to match videoRoutes)
     files: 1
   },
   fileFilter: (req, file, cb) => {
@@ -242,7 +242,9 @@ router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
       processingStatus: 'pending',
       processingProgress: 0,
       link: link || '', // **FIX: Include link field from request body**
-      videoHash: videoHash // **NEW: Save hash for duplicate detection**
+      videoHash: videoHash, // **NEW: Save hash for duplicate detection**
+      seriesId: req.body.seriesId || null, // **NEW: Save series ID for connected episodes**
+      episodeNumber: req.body.episodeNumber ? parseInt(req.body.episodeNumber) : 0 // **NEW: Save episode number**
     });
 
     // **NEW: Save video record first**

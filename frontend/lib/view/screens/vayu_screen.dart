@@ -74,9 +74,9 @@ class _VayuScreenState extends State<VayuScreen> {
       final List<VideoModel> newVideos = result['videos'];
       final bool hasMore = result['hasMore'] ?? false;
 
-      // **FILTER: Only include videos longer than 1 minute (60 seconds)**
+      // **FILTER: Only include videos longer than 2 minutes (120 seconds)**
       final List<VideoModel> longFormVideos =
-          newVideos.where((v) => v.duration.inSeconds > 60).toList();
+          newVideos.where((v) => v.duration.inSeconds > 120).toList();
 
       setState(() {
         if (refresh) {
@@ -255,7 +255,7 @@ class _VayuScreenState extends State<VayuScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Upload videos longer than 1 min to see them here',
+              'Upload videos longer than 2 mins to see them here',
               style: TextStyle(color: Colors.white54, fontSize: 14),
             ),
             const SizedBox(height: 24),
