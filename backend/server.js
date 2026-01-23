@@ -194,6 +194,23 @@ app.use(globalLimiter);
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
+// 🚀 PERFORMANCE & ROUTING FIX: Strip redundant /api prefixes
+// This handles bugs where frontend or proxy adds extra /api/api
+app.use((req, res, next) => {
+    if (req.url.startsWith('/api/api')) {
+        const originalUrl = req.url;
+        // Replace multiple occurrences of /api at the start with just one
+        req.url = req.url.replace(/^\/api(\/api)+/, '/api');
+        // console.log(`📡 Route Fix: Corrected ${originalUrl} -> ${req.url}`);
+    
+        // New Relic transaction naming fix (optional but helpful)
+        if (typeof newrelic !== 'undefined') {
+            newrelic.setTransactionName(req.method + ' ' + req.url);
+        }
+    }
+    next();
+});
+
 // Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 

@@ -80,7 +80,8 @@ const UserSchema = new mongoose.Schema({
   // This allows skipping login screen after app reinstall
   deviceIds: [{
     type: String,
-    trim: true
+    trim: true,
+    index: true
   }],
   // **NEW: FCM Token for push notifications**
   fcmToken: {

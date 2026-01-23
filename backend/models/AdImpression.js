@@ -88,7 +88,7 @@ AdImpressionSchema.index(
 AdImpressionSchema.index({ videoId: 1, adType: 1 });
 
 // Index for counting impressions per video
-AdImpressionSchema.index({ videoId: 1, adType: 1, timestamp: 1 });
+AdImpressionSchema.index({ videoId: 1, adType: 1, impressionType: 1, timestamp: 1 });
 
 // **NEW: Index for counting views (isViewed = true) per video**
 AdImpressionSchema.index({ videoId: 1, adType: 1, isViewed: 1 });

@@ -37,7 +37,22 @@ export const verifyToken = async (req, res, next) => {
             return res.status(401).json({ error: 'Access token required' });
         }
 
-        // First, try to verify as Google access token using Google People API
+        // **HIGH-PERFORMANCE AUTH: Check for local JWT first (< 1ms)**
+        try {
+            const JWT_SECRET = process.env.JWT_SECRET || config.auth.jwtSecret;
+            const decoded = jwt.verify(token, JWT_SECRET);
+            
+            req.user = {
+                ...decoded,
+                googleId: decoded.id // Ensure googleId is set for JWT tokens
+            };
+            
+            return next(); // Fast-path: Skip Google API call
+        } catch (jwtError) {
+            // Not a local JWT, fallback to Google verification (slower)
+        }
+
+        // Second, try to verify as Google access token using Google People API (850ms+)
         try {
             // Use the token to get user info from Google
             const response = await fetch(`https://www.googleapis.com/oauth2/v2/userinfo?access_token=${token}`);
@@ -71,22 +86,9 @@ export const verifyToken = async (req, res, next) => {
                 };
                 next();
             } catch (idTokenError) {
-                // Final fallback: try to verify as JWT token
-                try {
-                    const JWT_SECRET = process.env.JWT_SECRET || config.auth.jwtSecret;
-                    const decoded = jwt.verify(token, JWT_SECRET);
-                    
-                    req.user = {
-                        ...decoded,
-                        googleId: decoded.id // Ensure googleId is set for JWT tokens too
-                    };
-                    
-                    next();
-                } catch (jwtError) {
-                    // Only log actual errors (all methods failed)
-                    console.error('❌ Token verification failed - all methods exhausted');
-                    return res.status(401).json({ error: 'Invalid or expired token' });
-                }
+                // All verification methods failed
+                console.error('❌ Token verification failed - all methods exhausted');
+                return res.status(401).json({ error: 'Invalid or expired token' });
             }
         }
     } catch (error) {
@@ -106,6 +108,17 @@ export const passiveVerifyToken = async (req, res, next) => {
         if (!token) {
             return next(); // No token, just proceed as guest
         }
+
+        // **HIGH-PERFORMANCE AUTH: Local JWT check first**
+        try {
+            const JWT_SECRET = process.env.JWT_SECRET || config.auth.jwtSecret;
+            const decoded = jwt.verify(token, JWT_SECRET);
+            req.user = {
+                ...decoded,
+                googleId: decoded.id
+            };
+            return next();
+        } catch (e) { /* Fallback to Google */ }
 
         // Try Google Access Token (People API)
         try {
@@ -134,17 +147,6 @@ export const passiveVerifyToken = async (req, res, next) => {
                 googleId: payload.sub,
                 email: payload.email,
                 name: payload.name
-            };
-            return next();
-        } catch (e) { /* Ignore */ }
-
-        // Try JWT
-        try {
-            const JWT_SECRET = process.env.JWT_SECRET || config.auth.jwtSecret;
-            const decoded = jwt.verify(token, JWT_SECRET);
-            req.user = {
-                ...decoded,
-                googleId: decoded.id
             };
             return next();
         } catch (e) { /* Ignore */ }
