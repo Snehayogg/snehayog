@@ -10,10 +10,18 @@ import cron from 'node-cron';
 
 // **FIX: Don't disable console.log in production - we need it for Railway debugging**
 // Only disable if explicitly requested via DISABLE_CONSOLE_LOG=true
+
 if (process.env.DISABLE_CONSOLE_LOG === 'true') {
   // eslint-disable-next-line no-console
   console.log = () => { };
 }
+
+// Memory Leak Monitor
+setInterval(() => {
+  // Log memory usage in MB
+  const used = process.memoryUsage().rss / 1024 / 1024;
+  console.log(`Memory Usage (RSS): ${Math.round(used * 100) / 100} MB`);
+}, 5000);
 
 // Import database manager
 import databaseManager from './config/database.js';

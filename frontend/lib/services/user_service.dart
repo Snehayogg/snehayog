@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:vayu/services/authservices.dart';
-import 'package:vayu/services/video_service.dart';
 import 'package:vayu/model/usermodel.dart';
 import 'package:vayu/utils/app_logger.dart';
+import 'package:vayu/config/app_config.dart';
 import 'package:vayu/core/services/http_client_service.dart';
 
 class UserService {
@@ -29,9 +29,6 @@ class UserService {
     // Backend /api/users/:id endpoint doesn't require authentication
     final token = (await _authService.getUserData())?['token'];
 
-    // **OPTIMIZATION: Use getBaseUrlWithFallback for better reliability**
-    final baseUrl = await VideoService.getBaseUrlWithFallback();
-
     // **FIXED: Only include Authorization header if token exists**
     final headers = <String, String>{
       'Content-Type': 'application/json',
@@ -41,7 +38,7 @@ class UserService {
     }
 
     // **DEDUPLICATION: Create and store the future before making the request**
-    final requestFuture = _fetchUserById(id, baseUrl, headers);
+    final requestFuture = _fetchUserById(id, headers);
     _pendingRequests[id] = requestFuture;
 
     try {
@@ -58,9 +55,9 @@ class UserService {
 
   /// **PRIVATE: Internal method to actually fetch user data from backend**
   Future<Map<String, dynamic>> _fetchUserById(
-      String id, String baseUrl, Map<String, String> headers) async {
+      String id, Map<String, String> headers) async {
     final response = await httpClientService.get(
-      Uri.parse('$baseUrl/api/users/$id'),
+      Uri.parse('${NetworkHelper.usersEndpoint}/$id'),
       headers: headers,
     );
 
@@ -100,10 +97,8 @@ class UserService {
       AppLogger.log(
           '🔍 Follow API Debug: Using token: ${token.substring(0, 10)}...');
 
-      final baseUrl = await VideoService.getBaseUrlWithFallback();
-
       final response = await httpClientService.post(
-        Uri.parse('$baseUrl/api/users/follow'),
+        Uri.parse('${NetworkHelper.usersEndpoint}/follow'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -150,10 +145,8 @@ class UserService {
       AppLogger.log(
           '🔍 Unfollow API Debug: Making request to unfollow user: $trimmedUserId');
 
-      final baseUrl = await VideoService.getBaseUrlWithFallback();
-
       final response = await httpClientService.post(
-        Uri.parse('$baseUrl/api/users/unfollow'),
+        Uri.parse('${NetworkHelper.usersEndpoint}/unfollow'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -192,10 +185,8 @@ class UserService {
         throw Exception('Not authenticated');
       }
 
-      final baseUrl = await VideoService.getBaseUrlWithFallback();
-
       final response = await httpClientService.get(
-        Uri.parse('$baseUrl/api/users/isfollowing/$trimmedUserId'),
+        Uri.parse('${NetworkHelper.usersEndpoint}/isfollowing/$trimmedUserId'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -223,7 +214,7 @@ class UserService {
     String? profilePic,
   }) async {
     final response = await httpClientService.post(
-      Uri.parse('${VideoService.baseUrl}/api/users/update-profile'),
+      Uri.parse('${NetworkHelper.usersEndpoint}/update-profile'),
       headers: {
         'Content-Type': 'application/json',
       },
@@ -263,8 +254,7 @@ class UserService {
         throw Exception('Not authenticated');
       }
 
-      final baseUrl = await VideoService.getBaseUrlWithFallback();
-      final url = '$baseUrl/api/users/$userId';
+      final url = '${NetworkHelper.usersEndpoint}/$userId';
       AppLogger.log('🔍 UserService: Making request to: $url');
       AppLogger.log(
           '🔍 UserService: Headers: Authorization: Bearer ${token.substring(0, 20)}...');

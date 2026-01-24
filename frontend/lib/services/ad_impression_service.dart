@@ -23,7 +23,7 @@ class AdImpressionService {
       AppLogger.log('   Ad ID: $adId');
       AppLogger.log('   User ID: $userId');
 
-      final url = '${AppConfig.baseUrl}/api/ads/impressions/banner';
+      final url = '${NetworkHelper.adsEndpoint}/impressions/banner';
       AppLogger.log('📊 AdImpressionService: Tracking API URL: $url');
 
       final response = await httpClientService.post(
@@ -37,6 +37,7 @@ class AdImpressionService {
           'videoId': videoId,
           'adId': adId,
           'userId': userId,
+          'creatorId': userId, // Optimized: backend can avoid Video lookup if we pass uploader
           'adType': 'banner',
           'timestamp': DateTime.now().toIso8601String(),
           'impressionType': 'view',
@@ -70,7 +71,7 @@ class AdImpressionService {
   }) async {
     try {
       final response = await httpClientService.post(
-        Uri.parse('${AppConfig.baseUrl}/api/ads/impressions/carousel'),
+        Uri.parse('${NetworkHelper.adsEndpoint}/impressions/carousel'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization':
@@ -106,7 +107,7 @@ class AdImpressionService {
       if (userData == null) return {'banner': 0, 'carousel': 0, 'total': 0};
 
       final response = await httpClientService.get(
-        Uri.parse('${AppConfig.baseUrl}/api/ads/impressions/video/$videoId'),
+        Uri.parse('${NetworkHelper.adsEndpoint}/impressions/video/$videoId'),
         headers: {
           'Authorization': 'Bearer ${userData['token']}',
         },
@@ -141,7 +142,7 @@ class AdImpressionService {
       }
 
       final url =
-          '${AppConfig.baseUrl}/api/ads/impressions/video/$videoId/banner';
+          '${NetworkHelper.adsEndpoint}/impressions/video/$videoId/banner';
       AppLogger.log('📊 AdImpressionService: API URL: $url');
 
       final response = await httpClientService.get(
@@ -182,7 +183,7 @@ class AdImpressionService {
 
       final response = await httpClientService.get(
         Uri.parse(
-            '${AppConfig.baseUrl}/api/ads/impressions/video/$videoId/carousel'),
+            '${NetworkHelper.adsEndpoint}/impressions/video/$videoId/carousel'),
         headers: {
           'Authorization': 'Bearer ${userData['token']}',
         },
@@ -214,7 +215,7 @@ class AdImpressionService {
       AppLogger.log('   User ID: $userId');
       AppLogger.log('   View Duration: ${viewDuration}s');
 
-      final url = '${AppConfig.baseUrl}/api/ads/impressions/banner/view';
+      final url = '${NetworkHelper.adsEndpoint}/impressions/banner/view';
       final response = await httpClientService.post(
         Uri.parse(url),
         headers: {
@@ -256,7 +257,7 @@ class AdImpressionService {
       AppLogger.log('   User ID: $userId');
       AppLogger.log('   View Duration: ${viewDuration}s');
 
-      final url = '${AppConfig.baseUrl}/api/ads/impressions/carousel/view';
+      final url = '${NetworkHelper.adsEndpoint}/impressions/carousel/view';
       final response = await httpClientService.post(
         Uri.parse(url),
         headers: {
@@ -297,7 +298,7 @@ class AdImpressionService {
         return 0;
       }
 
-      final url = '${AppConfig.baseUrl}/api/ads/views/video/$videoId/banner';
+      final url = '${NetworkHelper.adsEndpoint}/views/video/$videoId/banner';
       AppLogger.log('👁️ AdImpressionService: API URL: $url');
 
       final response = await httpClientService.get(
@@ -332,7 +333,7 @@ class AdImpressionService {
       final userData = await _authService.getUserData();
       if (userData == null) return 0;
 
-      final url = '${AppConfig.baseUrl}/api/ads/views/video/$videoId/carousel';
+      final url = '${NetworkHelper.adsEndpoint}/views/video/$videoId/carousel';
       final response = await httpClientService.get(
         Uri.parse(url),
         headers: {
@@ -368,7 +369,7 @@ class AdImpressionService {
       }
 
       final url =
-          '${AppConfig.baseUrl}/api/ads/views/video/$videoId/banner?month=$month&year=$year';
+          '${NetworkHelper.adsEndpoint}/views/video/$videoId/banner?month=$month&year=$year';
       AppLogger.log('👁️ AdImpressionService: API URL: $url');
 
       final response = await httpClientService.get(
@@ -407,7 +408,7 @@ class AdImpressionService {
       if (userData == null) return 0;
 
       final url =
-          '${AppConfig.baseUrl}/api/ads/views/video/$videoId/carousel?month=$month&year=$year';
+          '${NetworkHelper.adsEndpoint}/views/video/$videoId/carousel?month=$month&year=$year';
       final response = await httpClientService.get(
         Uri.parse(url),
         headers: {

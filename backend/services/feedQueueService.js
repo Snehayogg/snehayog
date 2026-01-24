@@ -12,9 +12,9 @@ import mongoose from 'mongoose';
  */
 class FeedQueueService {
   constructor() {
-    this.QUEUE_SIZE_LIMIT = 30; // Max items in Redis list per user (Reduced from 100 for freshness)
-    this.REFILL_THRESHOLD = 20;  // Refill when below this (Buffered for speed)
-    this.BATCH_SIZE = 30;        // Generate this many videos at once
+    this.QUEUE_SIZE_LIMIT = 100; // Max items in Redis list per user (Reduced from 100 for freshness)
+    this.REFILL_THRESHOLD = 40;  // Refill when below this (Buffered for speed)
+    this.BATCH_SIZE = 50;      // Generate this many videos at once
   }
 
 
@@ -59,15 +59,17 @@ class FeedQueueService {
       currentLength = 0;
     }
     
-    // Trigger Background Refill if low
-    if (currentLength < this.REFILL_THRESHOLD) {
-      console.log(`⚡ FeedQueue: Queue LOW (${currentLength} < ${this.REFILL_THRESHOLD}) for ${userId}. triggering background refill...`);
+    // Trigger Background Refill if projected length will be low
+    // **FIX: Proactive Refill** - Check if we will be below threshold AFTER this pop
+    const projectedLength = Math.max(0, currentLength - count);
+    if (projectedLength < this.REFILL_THRESHOLD) {
+      console.log(`⚡ FeedQueue: Queue will be LOW (${projectedLength} < ${this.REFILL_THRESHOLD}) after pop for ${userId}. triggering background refill...`);
       // Fire and forget - do NOT await
       this.generateAndPushFeed(userId, videoType).catch(err => 
         console.error(`⚠️ FeedQueue: Background refill error for ${userId}:`, err.message)
       );
     } else {
-      console.log(`ℹ️ FeedQueue: Queue OK (${currentLength}) for ${userId}`);
+      console.log(`ℹ️ FeedQueue: Queue OK (${currentLength}, projected ${projectedLength}) for ${userId}`);
     }
 
     // Pop available items (Try to get 'count', but accept less)

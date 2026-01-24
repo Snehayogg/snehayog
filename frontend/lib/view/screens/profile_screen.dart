@@ -530,15 +530,12 @@ class _ProfileScreenState extends State<ProfileScreen>
         AppLogger.log(
             '✅ ProfileScreen: Loaded ${_stateManager.userVideos.length} videos${forceRefresh ? " (fresh from server, not cache)" : ""}');
             
-        // **NEW: BACKGROUND LOAD - Automatically load next page if available**
-        // This ensures users see more than just the first 9 videos without needing to scroll immediately
-        // and fixes issues where the list is too short to trigger scroll events.
+        // **NEW: AGGRESSIVE BACKGROUND LOAD - Load all remaining videos**
+        // This ensures the user sees a complete grid quickly without manually scrolling/waiting.
         if (_stateManager.hasMoreVideos && !_stateManager.isFetchingMore) {
-           AppLogger.log('🚀 ProfileScreen: Triggering background load for next page of videos...');
-           Future.delayed(const Duration(milliseconds: 500), () {
-             if (mounted) {
-               _stateManager.loadMoreVideos();
-             }
+           AppLogger.log('🚀 ProfileScreen: Triggering AGGRESSIVE background load for ALL remaining videos...');
+           _stateManager.loadAllVideosInBackground(userIdForVideos).catchError((e) {
+             AppLogger.log('⚠️ ProfileScreen: Background load all failed: $e');
            });
         }
       }
@@ -908,7 +905,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       final token = userData?['token'];
       if (token != null) {
         try {
-          final uri = Uri.parse('${AppConfig.baseUrl}/api/referrals/code');
+          final uri = Uri.parse('${NetworkHelper.apiBaseUrl}/referrals/code');
           final resp = await httpClientService.get(
             uri,
             headers: {'Authorization': 'Bearer $token'},
@@ -958,7 +955,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       final userData = _stateManager.getUserData();
       final token = userData?['token'];
       if (token == null) return;
-      final uri = Uri.parse('${AppConfig.baseUrl}/api/referrals/stats');
+      final uri = Uri.parse('${NetworkHelper.apiBaseUrl}/referrals/stats');
       final resp = await httpClientService.get(
         uri,
         headers: {'Authorization': 'Bearer $token'},
@@ -1778,8 +1775,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                   onRefresh: _refreshData,
                   child: NotificationListener<ScrollNotification>(
                     onNotification: (ScrollNotification scrollInfo) {
+                      // **SMART PAGINATION: Trigger only when close to bottom**
                       if (scrollInfo.metrics.pixels >=
-                              scrollInfo.metrics.maxScrollExtent - 1000 && 
+                              scrollInfo.metrics.maxScrollExtent - 300 && 
                           !_stateManager.isFetchingMore &&
                           _stateManager.hasMoreVideos) {
                         _stateManager.loadMoreVideos();
@@ -1798,48 +1796,34 @@ class _ProfileScreenState extends State<ProfileScreen>
 
                         ..._buildProfileSlivers(userProvider, userModel),
                         
-                        // Add padding at bottom to avoid floating spinner covering content
-                        const SliverToBoxAdapter(
-                          child: SizedBox(height: 80),
+                        // **SMART SPINNER: Pagination loader at the bottom of the grid**
+                        SliverToBoxAdapter(
+                          child: Consumer<ProfileStateManager>(
+                            builder: (context, manager, _) {
+                              if (manager.isFetchingMore) {
+                                return Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 20),
+                                    child: SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.green.shade500),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }
+                              return const SizedBox(height: 80); // Final padding
+                            },
+                          ),
                         ),
                       ],
                     ),
                   ),
                 ),
 
-                // **NEW: Floating Pagination Spinner (Always Visible)**
-                Positioned(
-                  bottom: 30,
-                  left: 0,
-                  right: 0,
-                  child: Consumer<ProfileStateManager>(
-                    builder: (context, stateManager, _) {
-                      if (stateManager.isFetchingMore) {
-                        return Center(
-                          child: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.2),
-                                  blurRadius: 10,
-                                  spreadRadius: 2,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            width: 45,
-                            height: 45,
-                            child: const CircularProgressIndicator(strokeWidth: 3),
-                          ),
-                        );
-                      }
-                      return const SizedBox.shrink();
-                    },
-                  ),
-                ),
               ],
             );
           },
@@ -2243,142 +2227,149 @@ class _ProfileScreenState extends State<ProfileScreen>
     // 2. Compact Profile Header
     slivers.add(
       SliverToBoxAdapter(
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
+        child: Consumer<ProfileStateManager>(
+          builder: (context, stateManager, child) {
+            AppLogger.log('🎨 ProfileScreen: Rebuilding Profile Header (Videos: ${stateManager.totalVideoCount})');
+            return Container(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildCompactAvatar(),
-                  const SizedBox(width: 20),
-                  Expanded(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: _buildCompactStatItem(
-                            label: 'Followers',
-                            valueBuilder: (context) => _getFollowersCountString(context),
-                          ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      _buildCompactAvatar(),
+                      const SizedBox(width: 20),
+                      Expanded(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: _buildCompactStatItem(
+                                label: 'Followers',
+                                valueBuilder: (context) => _getFollowersCountString(context),
+                              ),
+                            ),
+                            Container(
+                              height: 24,
+                              width: 1,
+                              color: Colors.grey[300],
+                            ),
+                            Expanded(
+                              child: _buildCompactStatItem(
+                                label: 'Videos',
+                                valueBuilder: (context) => stateManager.totalVideoCount.toString(),
+                              ),
+                            ),
+                            Container(
+                              height: 24,
+                              width: 1,
+                              color: Colors.grey[300],
+                            ),
+                            Expanded(
+                              child: _buildCompactStatItem(
+                                 label: 'Earnings',
+                                 isHighlighted: true,
+                                 valueBuilder: (context) => stateManager.isEarningsLoading 
+                                   ? 'Loading...' 
+                                   : '₹${stateManager.cachedEarnings.toStringAsFixed(2)}',
+                                 onTap: isViewingOwnProfile ? _handleEarningsTap : null,
+                              ),
+                            ),
+                          ],
                         ),
-                        Container(
-                          height: 24,
-                          width: 1,
-                          color: Colors.grey[300],
-                        ),
-                        Expanded(
-                          child: _buildCompactStatItem(
-                            label: 'Videos',
-                            valueBuilder: (context) => _stateManager.totalVideoCount.toString(),
-                          ),
-                        ),
-                        Container(
-                          height: 24,
-                          width: 1,
-                          color: Colors.grey[300],
-                        ),
-                        Expanded(
-                          child: _buildCompactStatItem(
-                            label: 'Earnings',
-                            isHighlighted: true,
-                            valueBuilder: (context) => '₹${_stateManager.cachedEarnings.toStringAsFixed(2)}',
-                            onTap: isViewingOwnProfile ? _handleEarningsTap : null,
-                          ),
-                        ),
-                      ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    stateManager.userData?['bio'] ?? '',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF4B5563),
+                      fontSize: 14,
                     ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      if (isViewingOwnProfile)
+                        Expanded(
+                          child: stateManager.isEditing
+                              ? Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton(
+                                        onPressed: _handleCancelEdit,
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: Colors.red,
+                                          side: const BorderSide(color: Colors.red),
+                                          padding: const EdgeInsets.symmetric(vertical: 10),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                        ),
+                                        child: const Text('Cancel'),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: ElevatedButton(
+                                        onPressed: _handleSaveProfile,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.green,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(vertical: 10),
+                                          elevation: 0,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                        ),
+                                        child: const Text('Save'),
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : ElevatedButton.icon(
+                                  onPressed: _showHowToEarnDialog,
+                                  icon: const Icon(Icons.workspace_premium, size: 18),
+                                  label: const Text('How to Earn'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF10B981),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                ),
+                        ),
+                      if (isViewingOwnProfile && !stateManager.isEditing) ...[
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _handleReferFriends,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF3B82F6),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: const Text('Refer Friends'),
+                          ),
+                        ),
+                      ]
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              Text(
-                _stateManager.userData?['bio'] ?? '',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Color(0xFF4B5563),
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  if (isViewingOwnProfile)
-                    Expanded(
-                      child: _stateManager.isEditing
-                          ? Row(
-                              children: [
-                                Expanded(
-                                  child: OutlinedButton(
-                                    onPressed: _handleCancelEdit,
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.red,
-                                      side: const BorderSide(color: Colors.red),
-                                      padding: const EdgeInsets.symmetric(vertical: 10),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                    child: const Text('Cancel'),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: ElevatedButton(
-                                    onPressed: _handleSaveProfile,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.green,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(vertical: 10),
-                                      elevation: 0,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                    child: const Text('Save'),
-                                  ),
-                                ),
-                              ],
-                            )
-                          : ElevatedButton.icon(
-                              onPressed: _showHowToEarnDialog,
-                              icon: const Icon(Icons.workspace_premium, size: 18),
-                              label: const Text('How to Earn'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF10B981),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 10),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                elevation: 0,
-                              ),
-                            ),
-                    ),
-                  if (isViewingOwnProfile && !_stateManager.isEditing) ...[
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: _handleReferFriends,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF3B82F6),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: const Text('Refer Friends'),
-                      ),
-                    ),
-                  ]
-                ],
-              ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
@@ -2487,12 +2478,14 @@ class _ProfileScreenState extends State<ProfileScreen>
       child: Column(
         children: [
           Builder(builder: (context) {
+             final value = valueBuilder(context);
+             final bool isLoadingText = value.contains('Loading');
              return Text(
-               valueBuilder(context),
+               value,
                style: TextStyle(
                  color: isHighlighted ? const Color(0xFF2563EB) : const Color(0xFF111827),
-                 fontSize: 18,
-                 fontWeight: FontWeight.w700,
+                 fontSize: isLoadingText ? 10 : 18,
+                 fontWeight: isLoadingText ? FontWeight.w600 : FontWeight.w700,
                ),
              );
           }),
@@ -2738,7 +2731,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       ProfileScreenLogger.logApiCall(
           endpoint: 'creator-payouts/profile', method: 'GET');
       final response = await httpClientService.get(
-        Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/profile'),
+        Uri.parse('${NetworkHelper.apiBaseUrl}/creator-payouts/profile'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -2851,7 +2844,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       AppLogger.log(
           '🔍 ProfileScreen: UPI ID not in local state, checking API...');
       final response = await httpClientService.get(
-        Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/profile'),
+        Uri.parse('${NetworkHelper.apiBaseUrl}/creator-payouts/profile'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -2919,16 +2912,36 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
 
       final dataSource = ProfileLocalDataSource();
-      final cachedProfile = await dataSource.getCachedUserData(targetUserId);
+      Map<String, dynamic>? cachedProfile =
+          await dataSource.getCachedUserData(targetUserId);
 
       if (cachedProfile != null) {
         ProfileScreenLogger.logDebugInfo(
             '⚡ Loading profile from Hive Cache (INSTANT - cache persists when user navigates back)');
         return cachedProfile;
-      } else {
-        ProfileScreenLogger.logDebugInfo(
-            'ℹ️ No profile cache found in Hive for $targetUserId - will fetch from server');
       }
+
+      // **NEW: Check SmartCacheManager (Memory Cache) if Hive is empty**
+      // This is crucial because ProfilePreloader caches to SmartCacheManager
+      final smartCache = SmartCacheManager();
+      await smartCache.initialize();
+      if (smartCache.isInitialized) {
+        final cacheKey = 'user_profile_$targetUserId';
+        final smartCachedProfile = await smartCache.peek<Map<String, dynamic>>(
+          cacheKey,
+          cacheType: 'user_profile',
+          allowStale: true,
+        );
+
+        if (smartCachedProfile != null) {
+          ProfileScreenLogger.logDebugInfo(
+              '⚡ Loading profile from SmartCache (INSTANT - preloaded or previously visited)');
+          return smartCachedProfile;
+        }
+      }
+
+      ProfileScreenLogger.logDebugInfo(
+          'ℹ️ No profile cache found for $targetUserId - will fetch from server');
     } catch (e) {
       ProfileScreenLogger.logWarning('Error loading cached profile data: $e');
     }

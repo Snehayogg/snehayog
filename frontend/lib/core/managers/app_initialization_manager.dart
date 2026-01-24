@@ -33,6 +33,8 @@ class AppInitializationManager {
   bool _isStage2Complete = false;
   bool _isStage3Complete = false;
 
+  bool get isStage2Complete => _isStage2Complete;
+
   // Track the vital first page of videos
   List<VideoModel>? initialVideos;
 
@@ -45,7 +47,8 @@ class AppInitializationManager {
       AppLogger.log('🚀 InitManager: Stage 1 (Config) Started');
       
       // 1. Determine Backend URL
-      AppConfig.clearCache();
+      // **OPTIMIZATION: Don't clear cache aggressively. Trust the "Race to Success"**
+      // AppConfig.clearCache(); 
       final workingUrl = await AppConfig.checkAndUpdateServerUrl();
       AppLogger.log('✅ InitManager: Backend URL confirmed: $workingUrl');
 
@@ -55,14 +58,10 @@ class AppInitializationManager {
       _isStage1Complete = true;
     } catch (e) {
       AppLogger.log('❌ InitManager: Stage 1 Failed: $e');
-      // Even if failed, mark complete so app continues
       _isStage1Complete = true;
     }
   }
 
-  // --- STAGE 2: VITAL CONTENT (While Splash Visible) ---
-  /// Called by SplashScreen. Fetches First Video & Profile.
-  /// Goal: Ensure VideoFeed has content READY when it mounts.
   // --- STAGE 2: VITAL CONTENT (While Splash Visible) ---
   /// Called by SplashScreen. Fetches First Video & Profile.
   /// Goal: Ensure VideoFeed has content READY when it mounts.
@@ -73,20 +72,27 @@ class AppInitializationManager {
       AppLogger.log('🚀 InitManager: Stage 2 (Vital Content) Started');
       final stopwatch = Stopwatch()..start();
 
+      // **PARALLELISM: Start Stage 1 if skipped/pending, but don't await strictly**
+      final stage1Future = initializeStage1();
+
       final videoService = VideoService();
       final authService = AuthService();
 
       await Future.wait([
-        // Task A: Video fetching moved to VideoFeedAdvanced for instant start
-        // UPDATE: Re-enabled for Splash Prefetch (Parallel)
+        // Task A: Video fetching (Critical)
+        // We chain this to Stage 1 to ensure URL is ready only if absolutely needed,
+        // but AppConfig has fallbacks so we can race it.
         _fetchAndPreloadFirstVideos(videoService),
         
-        // Task B: Fetch User Data (Non-blocking for video, but good to have)
+        // Task B: Fetch User Data (Non-blocking)
         authService.getUserData().then((data) {
            AppLogger.log('✅ InitManager: User Data loaded');
         }).catchError((e) {
            AppLogger.log('⚠️ InitManager: User Data fetch failed (non-critical): $e');
         }),
+
+        // Ensure Stage 1 is atleast triggered/checked
+        stage1Future, 
       ]);
 
       stopwatch.stop();
@@ -94,7 +100,7 @@ class AppInitializationManager {
       _isStage2Complete = true;
     } catch (e) {
       AppLogger.log('❌ InitManager: Stage 2 Failed: $e');
-      _isStage2Complete = true; // Proceed anyway
+      _isStage2Complete = true;
     }
   }
 

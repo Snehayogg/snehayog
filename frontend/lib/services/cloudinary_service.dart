@@ -99,7 +99,7 @@ class CloudinaryService {
 
       final request = http.MultipartRequest(
         'POST',
-        Uri.parse('${AppConfig.baseUrl}/api/upload/image'),
+        Uri.parse('${NetworkHelper.apiBaseUrl}/upload/image'),
       );
 
       // Add authorization header
@@ -446,7 +446,7 @@ class CloudinaryService {
 
       final response = await httpClientService.get(
         Uri.parse(
-            '${AppConfig.baseUrl}/api/upload/video-streaming-urls/$publicId?profile=$profile'),
+            '${NetworkHelper.apiBaseUrl}/upload/video-streaming-urls/$publicId?profile=$profile'),
         headers: {
           'Authorization': 'Bearer ${userData['token']}',
           'Content-Type': 'application/json',
@@ -475,7 +475,7 @@ class CloudinaryService {
   Future<bool> deleteMedia(String publicId, String resourceType) async {
     try {
       final response = await httpClientService.delete(
-        Uri.parse('${AppConfig.baseUrl}/api/upload/delete'),
+        Uri.parse('${NetworkHelper.apiBaseUrl}/upload/delete'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'public_id': publicId,
@@ -581,7 +581,7 @@ class CloudinaryService {
   Future<bool> isBackendUploadAvailable() async {
     try {
       final response = await httpClientService.get(
-        Uri.parse('${AppConfig.baseUrl}/api/upload/health'),
+        Uri.parse('${NetworkHelper.apiBaseUrl}/upload/health'),
         timeout: const Duration(seconds: 5),
       );
       return response.statusCode == 200;
