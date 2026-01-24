@@ -11,6 +11,7 @@ import 'package:vayu/model/video_model.dart';
 import 'package:vayu/services/logout_service.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/utils/app_text.dart';
+import 'package:vayu/features/profile/data/datasources/profile_local_datasource.dart'; // Added for cache fallback
 
 // Lightweight holder for per-video stats used in the breakdown list
 class _VideoStats {
@@ -108,6 +109,54 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         ]);
 
         if (mounted) {
+          // **FALLBACK LOGIC: If revenue is 0, try to get from video uploader stats**
+          // This matches ProfileStatsWidget logic to ensure consistency
+          final thisMonth = (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
+          
+          if (thisMonth == 0 && _userVideos.isNotEmpty) {
+            double fallbackEarnings = 0.0;
+            bool foundFallback = false;
+
+            // 1. Try uploader.earnings from first video (Backend Profile Summary)
+            final uploaderEarnings = _userVideos.first.uploader.earnings;
+            if (uploaderEarnings != null && uploaderEarnings > 0) {
+               fallbackEarnings = uploaderEarnings;
+               foundFallback = true;
+               AppLogger.log('💰 CreatorRevenueScreen: Using uploader.earnings fallback: $fallbackEarnings');
+            }
+
+            // 2. If still 0, Aggregate from individual video earnings (Client-side Sum)
+            if (!foundFallback) {
+              double aggregated = 0.0;
+              for (var video in _userVideos) {
+                aggregated += video.earnings;
+              }
+              if (aggregated > 0) {
+                fallbackEarnings = aggregated;
+                foundFallback = true;
+                AppLogger.log('💰 CreatorRevenueScreen: Aggregated earnings from video list: $fallbackEarnings');
+              }
+            }
+
+            if (foundFallback) {
+              AppLogger.log(
+                  '💰 CreatorRevenueScreen: Revenue API returned 0, using fallback earnings: $fallbackEarnings');
+              setState(() {
+                if (_revenueData == null) {
+                  _revenueData = {
+                    'thisMonth': fallbackEarnings,
+                    'lastMonth': 0.0,
+                  };
+                } else {
+                  // Create a new map to ensure state update triggers
+                  final newData = Map<String, dynamic>.from(_revenueData!);
+                  newData['thisMonth'] = fallbackEarnings;
+                  _revenueData = newData;
+                }
+              });
+            }
+          }
+
           setState(() {
             _isLoading = false;
           });
@@ -193,7 +242,28 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   ) async {
       try {
         AppLogger.log('🔍 CreatorRevenueScreen: Loading videos...');
-        final videos = await _videoService.getUserVideos(userId);
+        List<VideoModel> videos = [];
+        
+        try {
+          // Try network load first
+          videos = await _videoService.getUserVideos(userId);
+        } catch (e) {
+          AppLogger.log('⚠️ CreatorRevenueScreen: Network video load failed: $e');
+        }
+
+        // **FALLBACK: Try Hive Cache if network failed or returned empty**
+        if (videos.isEmpty) {
+           try {
+             AppLogger.log('🔍 CreatorRevenueScreen: Trying Hive cache for videos...');
+             final cachedVideos = await ProfileLocalDataSource().getCachedUserVideos(userId);
+             if (cachedVideos != null && cachedVideos.isNotEmpty) {
+               videos = cachedVideos;
+               AppLogger.log('✅ CreatorRevenueScreen: Loaded ${videos.length} videos from Hive cache');
+             }
+           } catch (e) {
+             AppLogger.log('⚠️ CreatorRevenueScreen: Hive cache load failed: $e');
+           }
+        }
         
         if (mounted) {
           setState(() {

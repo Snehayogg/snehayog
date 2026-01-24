@@ -179,6 +179,10 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   // Double tap animations
   final Map<int, ValueNotifier<bool>> _showHeartAnimation = {};
 
+  // **NEW: Granular Like State Notifiers (Keyed by Video ID)**
+  final Map<String, ValueNotifier<bool>> _isLikedVN = {};
+  final Map<String, ValueNotifier<int>> _likeCountVN = {};
+
   // Earnings cache
 
 

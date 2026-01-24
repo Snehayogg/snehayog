@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:vayu/main.dart'; // Access to AuthWrapper
 import 'package:vayu/core/managers/app_initialization_manager.dart';
 
-
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -10,86 +9,52 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
   late Animation<double> _opacityAnimation;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
-    // Increased duration for fade-in phase
       vsync: this,
-      duration: const Duration(milliseconds: 1200), 
+      duration: const Duration(seconds: 1), // Simple 1 second duration
     );
 
-    // Sequence:
-    // 0.0 -> 0.3: Fade In (Opacity 0->1)
-    // 0.3 -> 0.5: Breath In (Scale 1.0 -> 0.9)
-    // 0.5 -> 1.0: Zoom Out (Scale 0.9 -> 80)
-    
-    _opacityAnimation = TweenSequence<double>([
-      TweenSequenceItem(
-        tween: Tween<double>(begin: 0.0, end: 1.0)
-            .chain(CurveTween(curve: Curves.easeIn)),
-        weight: 30.0,
-      ),
-      TweenSequenceItem(
-        tween: ConstantTween<double>(1.0),
-        weight: 70.0,
-      ),
-    ]).animate(_controller);
+    // Simple Fade In
+    _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeIn),
+    );
 
-    _scaleAnimation = TweenSequence<double>([
-      TweenSequenceItem(
-        tween: ConstantTween<double>(1.0),
-        weight: 30.0, // Wait for fade in
-      ),
-      TweenSequenceItem(
-        tween: Tween<double>(begin: 1.0, end: 0.9)
-            .chain(CurveTween(curve: Curves.easeOut)),
-        weight: 20.0,
-      ),
-      TweenSequenceItem(
-        tween: Tween<double>(begin: 0.9, end: 100.0)
-            .chain(CurveTween(curve: Curves.easeInExpo)),
-        weight: 50.0,
-      ),
-    ]).animate(_controller);
-
-    // Start animation immediately
     // Start animation immediately
     _controller.forward().then((_) {
-       _checkAndNavigate();
+      _checkAndNavigate();
     });
 
-    // Fire initialization in background (don't await for navigation)
+    // Fire initialization in background
     _startBackgroundInitialization();
   }
 
   Future<void> _startBackgroundInitialization() async {
-     // Wait for Stage 1 (Config) - Critical
-     // UPDATED: Now stage 2 handles stage 1 parallelization efficiently
-     if (mounted) {
-       await AppInitializationManager.instance.initializeStage2(context);
-       // Init done - check if we can exit
-       _checkAndNavigate();
-     }
+    if (mounted) {
+      await AppInitializationManager.instance.initializeStage2(context);
+      _checkAndNavigate();
+    }
   }
 
   void _checkAndNavigate() {
     if (!mounted) return;
-    
+
     // Condition: Animation MUST be done AND Init MUST be done
-    if (_controller.isCompleted && AppInitializationManager.instance.isStage2Complete) {
-       _navigateToHome();
+    if (_controller.isCompleted &&
+        AppInitializationManager.instance.isStage2Complete) {
+      _navigateToHome();
     }
   }
 
   void _navigateToHome() {
     if (!mounted) return;
-
 
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
@@ -111,17 +76,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     return Scaffold(
       backgroundColor: Colors.black,
       body: Center(
-        child: AnimatedBuilder(
-          animation: _controller,
-          builder: (context, child) {
-            return Opacity(
-              opacity: _opacityAnimation.value,
-              child: Transform.scale(
-                scale: _scaleAnimation.value,
-                child: child,
-              ),
-            );
-          },
+        child: FadeTransition(
+          opacity: _opacityAnimation,
           child: const Text(
             'Vayu',
             style: TextStyle(

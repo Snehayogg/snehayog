@@ -550,6 +550,43 @@ class RedisService {
   }
 
   /**
+   * Check if multiple values exist in a set (Batch Check)
+   * Uses SMISMEMBER (Redis 6.2+) or Pipeline fallback
+   * @param {string} key - Set key
+   * @param {string[]} members - Members to check
+   * @returns {Promise<boolean[]>} - Array of booleans corresponding to input members
+   */
+  async smIsMember(key, members) {
+    if (!this.isConnected || !this.client || members.length === 0) {
+       return members.map(() => false);
+    }
+
+    try {
+      // Try native SMISMEMBER (available in modern Redis)
+      if (this.client.smIsMember) {
+         return await this.client.smIsMember(key, members);
+      }
+      
+      // Fallback: Pipeline
+      const pipeline = this.client.multi();
+      members.forEach(m => pipeline.sIsMember(key, m));
+      const results = await pipeline.exec();
+      return results; // [true, false, ...]
+    } catch (error) {
+      // Fallback 2: Pipeline if function doesn't exist on client object
+      try {
+         const pipeline = this.client.multi();
+         members.forEach(m => pipeline.sIsMember(key, m));
+         const results = await pipeline.exec();
+         return results;
+      } catch (e) {
+         console.error(`❌ Redis: Error in smIsMember ${key}:`, e.message);
+         return members.map(() => false); // Fail safe: assume not seen
+      }
+    }
+  }
+
+  /**
    * Set expiry for a key
    * @param {string} key - key
    * @param {number} seconds - expiry in seconds

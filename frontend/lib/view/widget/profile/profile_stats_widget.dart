@@ -4,9 +4,7 @@ import 'package:vayu/core/managers/profile_state_manager.dart';
 import 'package:vayu/core/providers/user_provider.dart';
 import 'package:vayu/core/services/profile_screen_logger.dart';
 
-import 'package:vayu/services/ad_service.dart';
-import 'package:vayu/services/authservices.dart';
-import 'package:vayu/utils/app_logger.dart';
+
 
 
 class ProfileStatsWidget extends StatefulWidget {
@@ -34,183 +32,6 @@ class ProfileStatsWidget extends StatefulWidget {
 }
 
 class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
-  final AdService _adService = AdService();
-  double _earnings = 0.0;
-  bool _isLoadingEarnings = true;
-  int _lastVideoCount = -1;
-  final AuthService _authService = AuthService();
-
-  // **NEW: Static cache for creator earnings (shared across all instances)**
-  static final Map<String, double> _creatorEarningsCache = {};
-  static final Map<String, DateTime> _creatorEarningsCacheTimestamp = {};
-
-  @override
-  void initState() {
-    super.initState();
-    _attachStateManagerListener();
-    _loadEarnings();
-  }
-
-  @override
-  void didUpdateWidget(ProfileStatsWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Rewire listener if stateManager instance changed
-    if (oldWidget.stateManager != widget.stateManager) {
-      oldWidget.stateManager.removeListener(_onStateManagerChanged);
-      _attachStateManagerListener();
-    }
-
-    // **NEW: Reload earnings if refresh key changed (profile was refreshed)**
-    if (widget.refreshKey != null &&
-        widget.refreshKey != oldWidget.refreshKey) {
-      AppLogger.log(
-          '🔄 ProfileStatsWidget: Refresh key changed, reloading earnings...');
-      _loadEarnings(forceRefresh: true);
-    }
-  }
-
-  void _attachStateManagerListener() {
-    _lastVideoCount = widget.stateManager.userVideos.length;
-    widget.stateManager.addListener(_onStateManagerChanged);
-  }
-
-  void _onStateManagerChanged() {
-    final currentCount = widget.stateManager.userVideos.length;
-    if (currentCount != _lastVideoCount) {
-      _lastVideoCount = currentCount;
-      // **FIXED: Only recalculate when videos finish loading (even if count is 0)**
-      if (!widget.stateManager.isVideosLoading) {
-        _loadEarnings();
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.stateManager.removeListener(_onStateManagerChanged);
-    super.dispose();
-  }
-
-
-
-  /// **FIXED: Load monthly earnings from backend API (not all-time)**
-  /// **ENHANCED: Uses backend API which calculates current month earnings correctly**
-  Future<void> _loadEarnings({bool forceRefresh = false}) async {
-    // **FIXED: Don't show 0 if videos are still loading**
-    if (widget.stateManager.isVideosLoading) {
-      // Keep loading state, don't set to 0 yet
-      if (mounted) {
-        setState(() {
-          _isLoadingEarnings = true;
-        });
-      }
-      return;
-    }
-
-      // **FIXED: Use backend API for ALL users (own profile AND other creators)**
-      // Backend now supports fetching revenue for any user ID
-      // If forceRefresh, we bypass cache
-      
-      // Determine target user ID
-      String targetUserId;
-      if (widget.userId != null) {
-        targetUserId = widget.userId!;
-      } else {
-        // Own profile
-        final userData = await _authService.getUserData();
-        if (userData == null) {
-           _finalEarningsUpdate(0.0);
-           return;
-        }
-        targetUserId = userData['googleId'] ?? userData['id'];
-      if (targetUserId.isEmpty) {
-           _finalEarningsUpdate(0.0);
-           return;
-      }
-      }
-
-      final cacheKey = 'creator_earnings_$targetUserId';
-      final now = DateTime.now();
-
-      // **STEP 1: Check cache first (unless force refresh)**
-      if (!forceRefresh) {
-        final cachedEarnings = _creatorEarningsCache[cacheKey];
-        final cacheTime = _creatorEarningsCacheTimestamp[cacheKey];
-
-        if (cachedEarnings != null && cacheTime != null) {
-          final cacheAge = now.difference(cacheTime);
-          if (cacheAge < const Duration(hours: 1)) {
-            if (mounted) {
-              setState(() {
-                _earnings = cachedEarnings;
-                _isLoadingEarnings = false;
-              });
-            }
-            // Fetch fresh in background
-            _loadProfileEarnings(targetUserId, forceRefresh: true);
-            return;
-          }
-        }
-      }
-
-      // **STEP 2: Fetch from BACKEND API**
-      await _loadProfileEarnings(targetUserId, forceRefresh: forceRefresh);
-  }
-
-  void _finalEarningsUpdate(double value) {
-    if (mounted) {
-      setState(() {
-        _earnings = value;
-        _isLoadingEarnings = false;
-      });
-    }
-  }
-
-
-
-
-  // **Refactored: Load earnings from backend API for ANY user ID**
-  Future<void> _loadProfileEarnings(String userId, {bool forceRefresh = false}) async {
-    try {
-      if (userId.isEmpty) {
-         _finalEarningsUpdate(0.0);
-         return;
-      }
-      
-      // Use AdService to fetch earnings (wraps API + Cache)
-      final response = await _adService.getCreatorRevenueSummary(
-        userId: userId, 
-        forceRefresh: forceRefresh
-      );
-
-      // Parse response
-      if (response.isNotEmpty && response.containsKey('thisMonth')) {
-        final thisMonthEarnings = (response['thisMonth'] as num?)?.toDouble() ?? 0.0;
-        
-        AppLogger.log(
-            '💰 ProfileStatsWidget: Loaded backend earnings for $userId: ₹$thisMonthEarnings');
-
-        if (mounted) {
-          setState(() {
-            _earnings = thisMonthEarnings;
-            _isLoadingEarnings = false;
-          });
-          
-          // Flash cache update
-          final cacheKey = 'creator_earnings_$userId';
-          _creatorEarningsCache[cacheKey] = thisMonthEarnings;
-          _creatorEarningsCacheTimestamp[cacheKey] = DateTime.now();
-        }
-      } else {
-        AppLogger.log('⚠️ ProfileStatsWidget: API returned empty or invalid data');
-        _finalEarningsUpdate(0.0);
-      }
-    } catch (e) {
-      AppLogger.log('❌ ProfileStatsWidget: Error loading earnings: $e');
-      _finalEarningsUpdate(0.0);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return RepaintBoundary(
@@ -230,7 +51,7 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
         ),
         child: Consumer<ProfileStateManager>(
           builder: (context, stateManager, child) {
-            // **FIXED: Also listen to UserProvider to get real-time follower count updates**
+             // **FIXED: Also listen to UserProvider to get real-time follower count updates**
             return Consumer<UserProvider>(
               builder: (context, userProvider, child) {
                 final videosLoading = stateManager.isVideosLoading;
@@ -239,6 +60,14 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
                     : (stateManager.totalVideoCount > 0
                         ? stateManager.totalVideoCount
                         : stateManager.userVideos.length);
+
+                // **FIX: Smart Loading State for Earnings**
+                // Show "Loading..." if:
+                // 1. Explicitly loading earnings
+                // 2. Videos are loading (since we need them for fallback) AND we don't have a cached value
+                // 3. Earnings are 0.0 AND we are in a loading state (avoids showing 0.00 confusingly)
+                final bool shouldShowLoading = stateManager.isEarningsLoading || 
+                                              (stateManager.isVideosLoading && stateManager.cachedEarnings == 0);
 
                 return Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -262,9 +91,10 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
                         width: 1, height: 40, color: const Color(0xFFE5E7EB)),
                     _buildStatColumn(
                       'Earnings',
-                      _isLoadingEarnings ? '...' : _earnings,
+                      shouldShowLoading ? 'Loading...' : stateManager.cachedEarnings,
                       isEarnings: true,
-                      isLoading: _isLoadingEarnings,
+                      isLoading: shouldShowLoading,
+                      loadingText: 'Loading...', // **Explicit loading text**
                       onTap: widget.onEarningsTap,
                     ),
                   ],
@@ -283,6 +113,7 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
     bool isEarnings = false,
     VoidCallback? onTap,
     bool isLoading = false,
+    String? loadingText, // **NEW: Allow custom loading text**
   }) {
     return RepaintBoundary(
       child: Builder(
@@ -296,7 +127,7 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
                     : SystemMouseCursors.basic,
                 child: Text(
                   isLoading
-                      ? '...'
+                      ? (loadingText ?? '...') // **Use custom text or default**
                       : (isEarnings
                           ? '₹${(value is double ? value : double.tryParse(value.toString()) ?? 0.0).toStringAsFixed(2)}'
                           : value.toString()),

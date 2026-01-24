@@ -104,6 +104,7 @@ export const VideoCacheKeys = {
   user: (userId) => `videos:user:${userId}`,
   single: (videoId) => `video:${videoId}`,
   all: () => 'videos:*',
+  seen: (userId) => `user:seen_all:${userId}`, // **NEW: Set of ALL seen video IDs**
 };
 
 /**

@@ -2270,7 +2270,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                               child: _buildCompactStatItem(
                                  label: 'Earnings',
                                  isHighlighted: true,
-                                 valueBuilder: (context) => stateManager.isEarningsLoading 
+                                 valueBuilder: (context) => (stateManager.isEarningsLoading || stateManager.isVideosLoading)
                                    ? 'Loading...' 
                                    : '₹${stateManager.cachedEarnings.toStringAsFixed(2)}',
                                  onTap: isViewingOwnProfile ? _handleEarningsTap : null,

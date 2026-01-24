@@ -1193,153 +1193,131 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       _showHeartAnimation[index]?.value = false;
     });
 
-    // If the video is already liked by the current user, only show animation.
-    // Double-tap should act as "like", not toggle like/unlike twice.
-    if (_currentUserId != null && video.likedBy.contains(_currentUserId)) {
+    // Check if valid user
+    if (_currentUserId == null) {
+      _triggerGoogleSignIn();
+      return;
+    }
+
+    // If the video is already liked by the current user, only show animation
+    // Check our specific notifier first for most up-to-date state
+    final isLikedNotifier = _isLikedVN.putIfAbsent(video.id, 
+        () => ValueNotifier<bool>(video.likedBy.contains(_currentUserId)));
+    
+    if (isLikedNotifier.value) {
       AppLogger.log(
         '🔴 DoubleTap Like: Video already liked by current user – showing animation only',
       );
       return;
     }
 
-    // Handle the like (will respect _likeInProgress guard below)
+    // Handle the like
     await _handleLike(video, index);
   }
 
-  /// **HANDLE LIKE: With API integration**
+  /// **HANDLE LIKE: With API integration (Optimized - No SetState)**
   Future<void> _handleLike(VideoModel video, int index) async {
-    AppLogger.log('🔴 ========== LIKE BUTTON CLICKED ==========');
-    AppLogger.log('🔴 Video ID: ${video.id}');
-    AppLogger.log('🔴 Video Name: ${video.videoName}');
-    AppLogger.log('🔴 Current User ID: $_currentUserId');
-    AppLogger.log('🔴 Current Likes: ${video.likes}');
-    AppLogger.log('🔴 Current LikedBy: ${video.likedBy.length} users');
+    // Helper to get or create notifiers ensuring they are synced with model initially
+    ValueNotifier<bool> getLikedNotifier() {
+       return _isLikedVN.putIfAbsent(video.id, 
+          () => ValueNotifier<bool>(video.likedBy.contains(_currentUserId)));
+    }
+    ValueNotifier<int> getCountNotifier() {
+       return _likeCountVN.putIfAbsent(video.id, 
+          () => ValueNotifier<int>(video.likes));
+    }
 
-    // Guard against multiple rapid taps / concurrent calls for the same video.
+    AppLogger.log('🔴 ========== LIKE BUTTON CLICKED (Optimized) ==========');
+    AppLogger.log('🔴 Video ID: ${video.id}');
+
+    // Guard against multiple rapid taps
     if (_likeInProgress[video.id] == true) {
-      AppLogger.log(
-        '⚠️ Like Handler: Like already in progress for video ${video.id}, ignoring duplicate tap',
-      );
       return;
     }
 
     if (_currentUserId == null) {
-      AppLogger.log('❌ Like Handler: User not logged in');
-      // **CHANGED: Show Google account picker popup immediately when user clicks like button**
       _triggerGoogleSignIn();
       return;
     }
 
-    // **OPTIMISTIC UPDATE: Update UI immediately for instant feedback (heart fills red instantly)**
-    final wasLiked = video.likedBy.contains(_currentUserId);
-    final originalLikes = video.likes;
-    final originalLikedBy = List<String>.from(video.likedBy);
+    // Get notifiers
+    final likedVN = getLikedNotifier();
+    final countVN = getCountNotifier();
+
+    // **OPTIMISTIC UPDATE: Update Notifiers immediately (No setState)**
+    final wasLiked = likedVN.value;
+    final originalLikes = countVN.value;
+    
+    // 1. Update Notifiers (Drives UI)
+    likedVN.value = !wasLiked;
+    countVN.value = wasLiked 
+        ? (originalLikes - 1).clamp(0, double.infinity).toInt()
+        : originalLikes + 1;
+
+    // 2. Update Model (Keeps data consistent if we scroll away)
+    if (wasLiked) {
+      video.likedBy.remove(_currentUserId);
+    } else {
+      video.likedBy.add(_currentUserId!);
+    }
+    video.likes = countVN.value;
 
     AppLogger.log(
-        '🔴 Like Handler: Current state - wasLiked: $wasLiked, originalLikes: $originalLikes');
-
-    // Update UI immediately (optimistic) - this makes heart fill red instantly
-    final videoIndex = _videos.indexWhere((v) => v.id == video.id);
-    if (videoIndex != -1) {
-      AppLogger.log(
-          '🔴 Like Handler: Updating UI optimistically (before API call)');
-      setState(() {
-        if (wasLiked) {
-          // User is currently liking, so unlike
-          video.likedBy.remove(_currentUserId);
-          video.likes = (video.likes - 1).clamp(0, double.infinity).toInt();
-          AppLogger.log(
-              '🔴 Like Handler: Optimistic UNLIKE - new count: ${video.likes}');
-        } else {
-          // User is not currently liking, so like
-          video.likedBy.add(_currentUserId!);
-          video.likes++;
-          AppLogger.log(
-              '🔴 Like Handler: Optimistic LIKE - new count: ${video.likes}');
-        }
-      });
-    } else {
-      AppLogger.log('⚠️ Like Handler: Video not found in _videos list!');
-    }
+        '🔴 Like Handler: Optimistic Update - Liked: ${likedVN.value}, Count: ${countVN.value}');
 
     try {
       _likeInProgress[video.id] = true;
-      AppLogger.log('🔴 Like Handler: Calling API to sync with backend...');
-      AppLogger.log('🔴 Like Handler: API call starting at ${DateTime.now()}');
 
-      // **SYNC WITH BACKEND: Get actual data from backend (ensures persistence)**
+      // **SYNC WITH BACKEND**
       VideoModel updatedVideo = await _videoService.toggleLike(video.id);
 
-      AppLogger.log('🔴 Like Handler: API call completed at ${DateTime.now()}');
       AppLogger.log('✅ Successfully toggled like for video ${video.id}');
-      AppLogger.log(
-          '🔴 Like Handler: Backend response - likes: ${updatedVideo.likes}, likedBy: ${updatedVideo.likedBy.length}');
 
-      // **CRITICAL: Replace with backend response to ensure persistence (trust backend counts)**
-      if (videoIndex != -1) {
-        AppLogger.log(
-            '🔴 Like Handler: Updating video in list with backend response');
-        setState(() {
-          _videos[videoIndex] = updatedVideo;
-        });
-        AppLogger.log(
-            '✅ VideoFeedAdvanced: Synced with backend - likes: ${updatedVideo.likes}, likedBy: ${updatedVideo.likedBy.length}');
-        AppLogger.log('🔴 Like Handler: UI updated with backend data');
-      } else {
-        AppLogger.log('⚠️ VideoFeedAdvanced: Video not found in list for sync');
-      }
+      // **CRITICAL: Sync Notifiers & Model with Backend Response**
+      // We don't replace the object in the list (which requires setState or complex listeners),
+      // we just update its properties and the notifiers.
+      
+      // Update Model properties
+      video.likes = updatedVideo.likes;
+      // video.likedBy is final, so we mutate the list
+      video.likedBy.clear();
+      video.likedBy.addAll(updatedVideo.likedBy);
+      
+      // Update Notifiers with authoritative backend values
+      countVN.value = updatedVideo.likes;
+      likedVN.value = updatedVideo.likedBy.contains(_currentUserId);
 
-      AppLogger.log('🔴 ========== LIKE SUCCESSFUL ==========');
     } catch (e) {
-      AppLogger.log('🔴 ========== LIKE ERROR ==========');
       AppLogger.log('❌ Error handling like: $e');
-      AppLogger.log('❌ Error type: ${e.runtimeType}');
-      AppLogger.log('❌ Error details: ${e.toString()}');
 
       // **REVERT: If backend fails, revert optimistic update**
-      AppLogger.log(
-          '🔴 Like Handler: Reverting optimistic update due to error');
-      if (videoIndex != -1) {
-        setState(() {
-          video.likedBy.clear();
-          video.likedBy.addAll(originalLikedBy);
-          video.likes = originalLikes;
-        });
-        AppLogger.log(
-            '🔴 Like Handler: Reverted to original state - likes: ${video.likes}');
-      }
+      AppLogger.log('🔴 Like Handler: Reverting optimistic update due to error');
+      
+      // Revert Notifiers
+      likedVN.value = wasLiked;
+      countVN.value = originalLikes;
 
-      // **FIX: Show actual error message from backend**
+      // Revert Model
+      if (wasLiked) {
+         if (!video.likedBy.contains(_currentUserId)) video.likedBy.add(_currentUserId!);
+      } else {
+         video.likedBy.remove(_currentUserId);
+      }
+      video.likes = originalLikes;
+
+      // Show error
       String errorMessage = 'Failed to like video';
       final errorString = e.toString();
-
-      if (errorString.contains('sign in') ||
-          errorString.contains('authenticated')) {
+      if (errorString.contains('sign in') || errorString.contains('authenticated')) {
         errorMessage = 'Please sign in again to like videos';
-        // **CHANGED: Show Google account picker popup immediately when authentication error occurs**
         Future.delayed(const Duration(milliseconds: 500), () {
           _triggerGoogleSignIn();
         });
-      } else if (errorString.contains('User not found')) {
-        errorMessage =
-            'Please sign in again. Your account may not be registered.';
-      } else if (errorString.contains('Video not found')) {
-        errorMessage = 'Video not found';
-      } else if (errorString.length > 100) {
-        // Extract meaningful part of error
-        errorMessage = errorString.substring(0, 100);
-      } else {
-        errorMessage = errorString.replaceAll('Exception: ', '');
       }
-
       _showSnackBar(errorMessage, isError: true);
-      AppLogger.log('🔴 ========== LIKE FAILED ==========');
+
     } finally {
-      // Always clear in-progress flag so future likes work.
       _likeInProgress[video.id] = false;
-      AppLogger.log(
-        '🔄 Like Handler: Cleared in-progress flag for video ${video.id}',
-      );
     }
   }
 
@@ -1570,11 +1548,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     return _followingUsers.contains(userId);
   }
 
-  /// **CHECK IF VIDEO IS LIKED**
-  /// **SIMPLIFIED: Just check if currentUserId is in likedBy array**
-  bool _isLiked(VideoModel video) {
-    return _currentUserId != null && video.likedBy.contains(_currentUserId);
-  }
+
 
   /// **NAVIGATE TO CREATOR PROFILE: Navigate to user profile screen**
   void _navigateToCreatorProfile(VideoModel video) {

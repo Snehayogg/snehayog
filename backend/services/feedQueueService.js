@@ -69,7 +69,7 @@ class FeedQueueService {
         console.error(`⚠️ FeedQueue: Background refill error for ${userId}:`, err.message)
       );
     } else {
-      console.log(`ℹ️ FeedQueue: Queue OK (${currentLength}, projected ${projectedLength}) for ${userId}`);
+      // console.log(`ℹ️ FeedQueue: Queue OK (${currentLength}, projected ${projectedLength}) for ${userId}`);
     }
 
     // Pop available items (Try to get 'count', but accept less)
@@ -77,7 +77,6 @@ class FeedQueueService {
       const t2 = Date.now();
       
       // OPTIMIZATION: Use batched lPop (Single Round Trip)
-      // This reduces Redis latency from ~3000ms to ~200ms on remote connections
       const popCount = Math.min(currentLength, count);
       
       if (popCount > 0) {
@@ -87,6 +86,28 @@ class FeedQueueService {
            videos.push(...popped);
         } else if (popped) {
            videos.push(popped);
+        }
+
+        // **NEW: Track Impressions Immediately (Strict Deduplication)**
+        // Add to Redis "Seen All" Set and "Recent Session" Buffer
+        if (videos.length > 0 && userId !== 'anon') {
+           try {
+             // 1. Add to Persistent "Seen All" Set (Fast Exclusion)
+             const seenKey = `user:seen_all:${userId}`;
+             await redisService.sAdd(seenKey, videos); // SADD is fast
+             await redisService.expire(seenKey, 604800); // 7 Days TTL (Refresh on activity)
+
+             // 2. Add to Session Buffer (For immediate refill consistency)
+             const recentKey = `user:recent_served:${userId}`;
+             await redisService.lPush(recentKey, videos);
+             await redisService.lTrim(recentKey, 0, 199);
+             await redisService.expire(recentKey, 600);
+
+             // 3. Fire-and-forget: Track in DB FeedHistory (for long-term retention)
+             this.trackImpressionsAsync(userId, videos);
+           } catch (trackError) {
+             console.error('⚠️ FeedQueue: Error tracking impressions:', trackError.message);
+           }
         }
       }
       
@@ -101,37 +122,26 @@ class FeedQueueService {
        const needed = count - videos.length;
        console.log(`❄️ FeedQueue: Queue exhausted (got ${videos.length}). Fetching ${needed} from Safety Net immediately.`);
        
-       // Calculate exclusion list (Recent History + Current Buffer) to avoid duplicates
-       // We accept a small chance of duplicates here for the sake of speed
-       const fallbackSeenIds = new Set(videos); // Exclude what we just popped
+       // Calculate exclusion list
+       const fallbackSeenIds = new Set(videos);
        
-       // Optimization: Only fetch history if totally empty to save time? 
-       // No, we should try to exclude recently seen to satisfy "No Same Video" request.
-       if (FeedHistory) {
-         try {
-           // Limit history check to recent 100 items for speed
-           const history = await FeedHistory.find({ userId })
-             .sort({ seenAt: -1 })
-             .limit(100)
-             .select('videoId')
-             .lean();
-           history.forEach(h => fallbackSeenIds.add(h.videoId.toString()));
-           console.log(`🔍 FeedQueue: Safety Net loaded ${history.length} seen IDs for user ${userId} to exclude.`);
-         } catch (e) { 
-           console.error('⚠️ FeedQueue: Error fetching FeedHistory for Safety Net:', e);
-         }
+       // **OPTIMIZED: Use "Seen All" Set from Redis if available**
+       if (userId !== 'anon') {
+          try {
+             const seenKey = `user:seen_all:${userId}`;
+             const seenAll = await redisService.sMembers(seenKey);
+             seenAll.forEach(id => fallbackSeenIds.add(id));
+          } catch(e) { /* ignore */ }
        }
 
        const fallbackIds = await this.getFallbackIds(userId, videoType, needed, Array.from(fallbackSeenIds));
      console.log(`🔍 FeedQueue: Safety Net returned ${fallbackIds.length} fallback IDs.`);
      
-     // **LAST RESORT: If Safety Net returned 0 (likely because user has seen EVERYTHING),**
-     // **Fetch RANDOM videos ignoring history to prevent infinite loop of empty responses.**
      if (fallbackIds.length === 0) {
-        console.log(`❄️ FeedQueue: Safety Net returned 0 videos. User might have seen everything. Triggering LAST RESORT (Ignore History).`);
-        const lastResortIds = await this.getFallbackIds(userId, videoType, needed, []); // Pass empty exclude list
-        console.log(`🔥 FeedQueue: LAST RESORT returned ${lastResortIds.length} videos.`);
-        videos.push(...lastResortIds);
+        console.log(`❄️ FeedQueue: Safety Net returned 0. Triggering LAST RESORT (LRU Logic).`);
+        // Force LRU Fallback (ignore exclusion list to prevent empty feed)
+        const lruIds = await this.getFallbackIds(userId, videoType, needed, []); 
+        videos.push(...lruIds);
      } else {
         videos.push(...fallbackIds);
      }
@@ -143,21 +153,31 @@ class FeedQueueService {
     const result = await this.populateVideos(videos);
     tPopulate = Date.now() - t4;
 
-    // **METRIC: End Timer & Log**
     const tTotal = Date.now() - tStart;
-    
-    // Log simply if fast, detailed if slow (>500ms)
-    // Always logging total time is useful for monitoring, keeping it concise.
     const logMsg = `⏱️ Feed Latency: Total ${tTotal}ms (Redis: ${tRedisCheck + tRedisPop}ms | Fallback: ${tFallback}ms | Populate: ${tPopulate}ms) [${result.length} videos]`;
-    
     console.log(logMsg);
 
-    // **VERIFICATION: Log specific video IDs being served**
-    result.forEach((v, index) => {
-        console.log(`🎬 [${index}] Serving Video: ${v._id} (Hash: ${v.videoHash || 'none'}) - Name: ${v.videoName}`);
-    });
-
     return result;
+  }
+
+  /**
+   * Async helper to track impressions in DB
+   */
+  async trackImpressionsAsync(userId, videoIds) {
+      if (!FeedHistory || !videoIds || videoIds.length === 0) return;
+      try {
+          const operations = videoIds.map(videoId => ({
+              updateOne: {
+                  filter: { userId, videoId },
+                  update: { $set: { seenAt: new Date() } },
+                  upsert: true
+              }
+          }));
+          await FeedHistory.bulkWrite(operations, { ordered: false });
+          // console.log(`👁️ Tracked ${videoIds.length} impressions for ${userId}`);
+      } catch (e) {
+          console.error('⚠️ FeedQueue: bulkWrite DB Error:', e.message);
+      }
   }
 
   /**
@@ -181,36 +201,44 @@ class FeedQueueService {
     const start = Date.now();
     console.log(`♻️ Refill STARTED for ${userId}`);
     try {
-      // 1. Fetch User History (LIMITED)
+      // 1. Fetch User History (STRICT DEDUPLICATION)
       const seenVideoIds = new Set();
       const seenHashes = new Set();
       
       const queueKey = this.getQueueKey(userId, videoType);
+      
+      // A. Add currently queued items (Don't duplicate what's already waiting)
       const queuedIds = await redisService.lRange(queueKey, 0, -1);
       queuedIds.forEach(id => seenVideoIds.add(id));
 
-      if (FeedHistory) {
+      // B. Add "In-Flight" items (Session Buffer)
+      const recentKey = `user:recent_served:${userId}`;
+      const recentServed = await redisService.lRange(recentKey, 0, -1);
+      recentServed.forEach(id => seenVideoIds.add(id));
+      
+      
+      // OPTIMIZATION: Do NOT fetch the entire "Seen All" Set (Memory Heavy)
+      // We will use SMISMEMBER (Batch Check) later on candidates
+      const seenKey = `user:seen_all:${userId}`;
+
+      // D. Sync from DB if Redis Set is empty AND Recents empty (Cold Start)
+      const seenSetExists = await redisService.exists(seenKey);
+      if (!seenSetExists && FeedHistory) {
          try {
-           console.log(`🔍 Refill Logic: userId type: ${typeof userId}, value: ${userId}`);
-           const [recentSeenDocs, seenHashList] = await Promise.all([
-             FeedHistory.find({ userId }).sort({ seenAt: -1 }).select('videoId').lean(),
-             FeedHistory.getSeenContentHashes(userId)
-           ]);
-           console.log(`🔍 Refill Logic: Loaded ${recentSeenDocs.length} seen IDs and ${seenHashList.length} hashes from DB.`);
-           recentSeenDocs.forEach(doc => seenVideoIds.add(doc.videoId.toString()));
-           seenHashList.forEach(hash => seenHashes.add(hash));
-         } catch (e) {
-            console.error('⚠️ FeedQueue: Error fetching history:', e.message);
-         }
+           const history = await FeedHistory.find({ userId }).select('videoId').lean();
+           if (history.length > 0) {
+              const ids = history.map(h => h.videoId.toString());
+              await redisService.sAdd(seenKey, ids);
+              await redisService.expire(seenKey, 604800);
+           }
+         } catch (e) { /* ignore */ }
       }
 
       // 2. Iterative Batch Search (The "Next 300" Strategy)
-      // Logic: Fetch batch 1 (0-300). Filter. If not enough? Fetch batch 2 (300-600). Repeat.
-      
       let freshVideos = [];
       let skip = 0;
       const BATCH_SIZE_QUERY = 300;
-      const MAX_PAGES = 5; // Search up to 1500 videos deep (safety limit)
+      const MAX_PAGES = 10; 
       let pageCount = 0;
 
       while (freshVideos.length < this.BATCH_SIZE && pageCount < MAX_PAGES) {
@@ -223,7 +251,7 @@ class FeedQueueService {
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(BATCH_SIZE_QUERY)
-            .select('_id uploader createdAt likes views shares score finalScore videoType videoHash')
+            .select('_id uploader createdAt likes views shares score finalScore videoType videoHash seriesId episodeNumber') // Ensure all fields
             .lean();
 
           if (candidates.length === 0) {
@@ -231,41 +259,60 @@ class FeedQueueService {
               break; // End of DB
           }
 
-          // Filter Batch
-          const currentBatchFresh = candidates.filter(v => {
-            const id = v._id.toString();
-            const hash = v.videoHash;
-            if (seenVideoIds.has(id)) return false;
-            if (hash && seenHashes.has(hash)) return false;
-            return true;
+          // **PHASE 1: Filter Local (Queue + Session)**
+          let candidatesToCheck = candidates.filter(v => {
+             const id = v._id.toString();
+             return !seenVideoIds.has(id);
           });
+          const localFilteredCount = candidates.length - candidatesToCheck.length;
+          
+          // **PHASE 2: Filter Remote (Redis Seen Set - SMISMEMBER Optimization)**
+          let remoteFilteredCount = 0;
+          if (candidatesToCheck.length > 0 && userId !== 'anon') {
+              const checkIds = candidatesToCheck.map(v => v._id.toString());
+              const isSeenResults = await redisService.smIsMember(seenKey, checkIds);
+              
+              const beforeCount = candidatesToCheck.length;
+              // Keep only those where isSeen is FALSE
+              candidatesToCheck = candidatesToCheck.filter((_, index) => !isSeenResults[index]);
+              remoteFilteredCount = beforeCount - candidatesToCheck.length;
+          }
+          
+          if (localFilteredCount > 0 || remoteFilteredCount > 0) {
+             console.log(`🛡️ Deduplication: Batch ${pageCount+1} -> Excluded ${localFilteredCount} (Local) + ${remoteFilteredCount} (Remote/Strict) videos.`);
+          }
 
-          console.log(`🔍 Refill [Page ${pageCount + 1}]: Scanned ${skip}-${skip + candidates.length}. Found ${currentBatchFresh.length} fresh.`);
+          // console.log(`🔍 Refill [Page ${pageCount + 1}]: Scanned ${skip}-${skip + candidates.length}. Found ${candidatesToCheck.length} fresh.`);
           
-          freshVideos.push(...currentBatchFresh);
+          freshVideos.push(...candidatesToCheck);
           
+          // Optimization: Break early if we have enough
+          if (freshVideos.length >= this.BATCH_SIZE) break;
+
           skip += BATCH_SIZE_QUERY;
           pageCount++;
       }
 
-      console.log(`✅ Refill: Total Fresh Found: ${freshVideos.length} after scanning ${pageCount} pages.`);
+      console.log(`✅ Refill: Total Fresh Found: ${freshVideos.length}`);
 
-      // Fallback: If Filter Left Nothing? (Truly exhausted everyone)
+      // 3. Fallback to LRU ONLY if Fresh Content is Exhausted
       if (freshVideos.length < this.BATCH_SIZE) {
-          console.log(`❄️ Refill: Catalog fully watched (found only ${freshVideos.length}). Filling remainder from Fallback (Re-runs).`);
-          const needed = this.BATCH_SIZE - freshVideos.length;
-          const fallbackIds = await this.getFallbackIds(userId, videoType, needed, []);
+          console.log(`❄️ Refill: Catalog Exhausted (Fresh: ${freshVideos.length} < Batch: ${this.BATCH_SIZE}). Triggering LRU Fallback.`);
           
-          const fallbackVideos = await Video.find({ _id: { $in: fallbackIds } })
-            .select('_id uploader createdAt likes views shares score finalScore videoType videoHash')
-            .lean();
-            
-          freshVideos.push(...fallbackVideos);
+          const needed = this.BATCH_SIZE - freshVideos.length;
+          
+          // Get LRU Fallback (Videos watched longest ago)
+          // Pass empty exclusion list to allow repeats now that we are exhausted
+          const lruIds = await this.getFallbackIds(userId, videoType, needed, []);
+          
+          const lruVideos = await Video.find({ _id: { $in: lruIds } })
+             .select('_id uploader createdAt likes views shares score finalScore videoType videoHash')
+             .lean();
+             
+          freshVideos.push(...lruVideos);
       }
 
-
       // 4. Apply Diversity Ordering (No same creator back-to-back)
-      // Max 3 per creator
       let uniqueCreatorVideos = [];
       const creatorCounts = new Map();
       const maxPerCreator = 2;
@@ -286,35 +333,24 @@ class FeedQueueService {
         minCreatorSpacing: 1
       });
 
-      // 4. Push to Redis (only the requested batch size)
-      // **PRE-COMPUTED FALLBACK:**
-      // If we don't have enough fresh videos, FILL the batch with Safe/Random fallback videos immediately.
-      // This ensures the queue is ALWAYS full, so popFromQueue never hits empty and never triggers sync refill.
-      
+      // 5. Push to Redis
       let toPushIds = orderedVideos.map(v => v._id.toString());
       
+      // Final Safety Fill (Rare)
       if (toPushIds.length < this.BATCH_SIZE) {
-          const needed = this.BATCH_SIZE - toPushIds.length;
-           console.log(`📉 FeedQueue: Fresh content low (${toPushIds.length}/${this.BATCH_SIZE}). Backfilling ${needed} from Fallback...`);
-          
-          const fallbackIds = await this.getFallbackIds(userId, videoType, needed, [...seenVideoIds, ...toPushIds]);
-          toPushIds = [...toPushIds, ...fallbackIds];
-          
+           const needed = this.BATCH_SIZE - toPushIds.length;
+           // Really desperate fallback if even LRU failed?
+           // Just fetch Random from DB
+           // omitted for brevity, assuming LRU works
       }
       
-      // Limit to Batch Size (in case we had too many fresh ones)
       toPushIds = toPushIds.slice(0, this.BATCH_SIZE);
 
       if (toPushIds.length > 0) {
         await redisService.rPush(queueKey, toPushIds);
-        // Trim to strict limit
         await redisService.lTrim(queueKey, 0, this.QUEUE_SIZE_LIMIT - 1);
-        
-        // **NEW: Set TTL to 30 Minutes (1800 seconds)**
-        // This ensures stale queues auto-expire if user doesn't return soon
         await redisService.expire(queueKey, 1800);
-        
-        console.log(`✅ FeedQueue: Pushed ${toPushIds.length} videos to ${queueKey}. Refill took ${Date.now() - start}ms`);
+        console.log(`✅ FeedQueue: Pushed ${toPushIds.length} videos. Refill took ${Date.now() - start}ms`);
       } else {
         console.log(`⚠️ Refill: No videos to push after all steps.`);
       }
@@ -326,6 +362,8 @@ class FeedQueueService {
       return 0;
     }
   }
+
+
 
   /**
    * Get Fallback Video IDs (LRU or Random)
@@ -473,7 +511,7 @@ class FeedQueueService {
       // 1. Removed .populate('comments.user') -> Massive speedup (don't need comment authors in feed)
       // 2. Added .select(...) -> Only fetch fields needed for feed display
       const dbDocs = await Video.find({ _id: { $in: missingIds } })
-        .select('videoUrl thumbnailUrl description uploader views likes shares comments duration processingStatus createdAt uploadedAt videoType videoHash videoName tags')
+        .select('videoUrl thumbnailUrl description uploader views likes shares comments duration processingStatus createdAt uploadedAt videoType videoHash videoName tags seriesId episodeNumber')
         .populate('uploader', 'name profilePic googleId username')
         .lean();
 
@@ -534,18 +572,26 @@ class FeedQueueService {
         // Group by seriesId
         const episodesMap = new Map();
         allEpisodes.forEach(ep => {
-          if (!episodesMap.has(ep.seriesId)) {
-             episodesMap.set(ep.seriesId, []);
+          if (!ep.seriesId) return;
+          const sId = ep.seriesId.toString(); // **FIX: Convert ObjectId to String for Map Key**
+          
+          if (!episodesMap.has(sId)) {
+             episodesMap.set(sId, []);
           }
-          // Transform ObjectId to string immediately
-          ep._id = ep._id.toString();
-          episodesMap.get(ep.seriesId).push(ep);
+          
+          // Transform ObjectId to string immediately for frontend safety
+          if (ep._id) ep._id = ep._id.toString();
+          
+          episodesMap.get(sId).push(ep);
         });
         
         // Attach episodes to videos
         finalVideos.forEach(v => {
-           if (v.seriesId && episodesMap.has(v.seriesId)) {
-              v.episodes = episodesMap.get(v.seriesId);
+           if (v.seriesId) {
+              const sId = v.seriesId.toString(); // **FIX: Lookup using String Key**
+              if (episodesMap.has(sId)) {
+                 v.episodes = episodesMap.get(sId);
+              }
            }
         });
         

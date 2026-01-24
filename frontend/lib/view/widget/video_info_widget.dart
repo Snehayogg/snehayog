@@ -77,18 +77,6 @@ class _VideoInfoWidgetState extends State<VideoInfoWidget> {
           // **REDUCED spacing from 4 to 2**
           const SizedBox(height: 2),
 
-          // Video description (limited to 2 lines) - **REDUCED from 13 to 11**
-          if (widget.video.description != null &&
-              widget.video.description!.isNotEmpty)
-            Text(
-              widget.video.description!,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 11,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
           // **REDUCED spacing from 8 to 4**
           const SizedBox(height: 2),
 

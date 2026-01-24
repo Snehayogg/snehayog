@@ -1091,14 +1091,8 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                           const SizedBox(height: 10),
                         ],
                       ),
-                    _buildVerticalActionButton(
-                      icon: _isLiked(video)
-                          ? Icons.favorite
-                          : Icons.favorite_border,
-                      color: _isLiked(video) ? Colors.red : Colors.white,
-                      count: video.likes,
-                      onTap: () => _handleLike(video, index),
-                    ),
+                  _buildLikeButton(video, index),
+                  const SizedBox(height: 10),
                     const SizedBox(height: 10),
                     _buildVerticalActionButton(
                       icon: Icons.chat_bubble_outline,
@@ -1147,6 +1141,60 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         );
       },
     );
+  }
+
+  Widget _buildLikeButton(VideoModel video, int index) {
+      // Ensure notifiers exist
+      final likedVN = _isLikedVN.putIfAbsent(video.id, 
+          () => ValueNotifier<bool>((_currentUserId != null && video.likedBy.contains(_currentUserId))));
+      final countVN = _likeCountVN.putIfAbsent(video.id, 
+          () => ValueNotifier<int>(video.likes));
+
+      return GestureDetector(
+        onTap: () => _handleLike(video, index),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.5),
+                shape: BoxShape.circle,
+              ),
+              child: ValueListenableBuilder<bool>(
+                valueListenable: likedVN,
+                builder: (context, isLiked, child) {
+                  return Icon(
+                    isLiked ? Icons.favorite : Icons.favorite_border,
+                    color: isLiked ? Colors.red : Colors.white,
+                    size: 18,
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 4),
+            ValueListenableBuilder<int>(
+              valueListenable: countVN,
+              builder: (context, count, child) {
+                return Text(
+                  _formatCount(count),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    shadows: [
+                      Shadow(
+                        offset: Offset(0, 1),
+                        blurRadius: 2,
+                        color: Colors.black54,
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      );
   }
 
   Widget _buildVerticalActionButton({

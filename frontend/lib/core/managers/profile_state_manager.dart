@@ -68,7 +68,7 @@ class ProfileStateManager extends ChangeNotifier {
   int _currentPage = 1;
   bool _isFetchingMore = false;
   bool _hasMoreVideos = true;
-  static const int _pageSize = 9;
+  static const int _pageSize = 1000;
 
   Future<void> _ensureSmartCacheInitialized() async {
     if (_smartCacheInitialized) return;
@@ -683,13 +683,9 @@ class ProfileStateManager extends ChangeNotifier {
          page: page, // Pass page
       );
     } finally {
-      _isFetchingMore = false;
-      if (_isVideosLoading) {
-        _isVideosLoading = false;
-        notifyListeners();
-      }
-      
-      // Load earnings after videos are loaded
+      // Load earnings and update counts BEFORE turning off video loading
+      // This ensures _isEarningsLoading becomes true before _isVideosLoading becomes false
+      // preventing the UI from briefly showing "0" (Loading Gap)
       if (_userVideos.isNotEmpty) {
         // **FIX: Robust Total Video Count Logic**
         int? count;
@@ -716,6 +712,8 @@ class ProfileStateManager extends ChangeNotifier {
         AppLogger.log(
               '📊 ProfileStateManager: Final Total Video Count: $_totalVideoCount (Source: ${count != null ? "Backend/User" : "List Length"})');
 
+        // Ignore unawaited futures to allow UI to update while earnings load in background
+        // ignore: unawaited_futures
         _loadEarnings();
       } else {
         // Even if videos are empty, check if userData has a count (e.g. all deleted but count not updated?)
@@ -732,6 +730,12 @@ class ProfileStateManager extends ChangeNotifier {
         } else {
           _totalVideoCount = 0;
         }
+      }
+
+      _isFetchingMore = false;
+      if (_isVideosLoading) {
+        _isVideosLoading = false;
+        notifyListeners();
       }
     }
   }
@@ -926,22 +930,27 @@ class ProfileStateManager extends ChangeNotifier {
                 videoMap[freshVideo.id] = freshVideo;
               }
 
-              // Update view counts in cached videos
+              // Update cached videos with fresh data (Views, Earnings, Likes, etc.)
               for (int i = 0; i < _userVideos.length; i++) {
                 final cachedVideo = _userVideos[i];
                 final freshVideo = videoMap[cachedVideo.id];
                 if (freshVideo != null) {
-                  _userVideos[i] =
-                      cachedVideo.copyWith(views: freshVideo.views);
+                  // **FIX: Replace entire video object to ensure Earnings, Likes, and other stats are fresh**
+                  // Previously only views were updated, causing stale earnings (0.00) to persist
+                  _userVideos[i] = freshVideo;
                 }
               }
+              
+              // **FIX: Recalculate earnings based on fresh video data**
+              await _loadEarnings();
+              
               notifyListeners();
               AppLogger.log(
-                  '✅ ProfileStateManager: View counts refreshed from server');
+                  '✅ ProfileStateManager: Refreshed videos and earnings from server (background)');
             } catch (e) {
               AppLogger.log(
-                  '⚠️ ProfileStateManager: Error refreshing view counts: $e');
-              // Continue with cached views if refresh fails
+                  '⚠️ ProfileStateManager: Error refreshing view counts/earnings: $e');
+              // Continue with cached data if refresh fails
             }
           });
 
@@ -952,20 +961,51 @@ class ProfileStateManager extends ChangeNotifier {
 
       AppLogger.log(
           '📡 ProfileStateManager: Fetching fresh videos for $targetUserId (Page $page)');
-      final videos = await _fetchVideosFromServer(
-        targetUserId,
-        isMyProfile: isMyProfile,
-        forceRefresh: forceRefresh,
-        page: page,
-      );
+      List<VideoModel> videos = [];
 
-      if (page == 1) {
-        _userVideos = videos;
+      // **PROGRESSIVE LOADING STRATEGY (Staggered Fetch)**
+      // For the first page, we split the fetch into two chunks:
+      // 1. Fetch first 3 videos (very fast response, shows UI immediately)
+      // 2. Fetch next 6 videos (completes the page of 9)
+      // This satisfies the user's request to "show videos as they load"
+      if (page == 1 && !silent) {
+        AppLogger.log('🚀 ProfileStateManager: Fetching ALL Videos (Limit: $_pageSize)...');
+        // Fetch ALL videos at once (limit set to 1000)
+        videos = await _videoService.getUserVideos(targetUserId,
+            page: 1, limit: _pageSize);
+        
+        if (videos.isNotEmpty) {
+           _userVideos = videos;
+           // If we fetched everything, no need for more
+           _hasMoreVideos = false; 
+           notifyListeners();
+        }
       } else {
-        _getAllVideosUnique(videos);
+        // Standard Paged Load (Page 2+ or silent refresh - likely unused if page 1 covers all)
+        videos = await _videoService.getUserVideos(targetUserId,
+            page: page, limit: _pageSize);
+        
+        if (page == 1) {
+          _userVideos = videos;
+        } else {
+          // Deduplicate based on _id
+           final existingIds = _userVideos.map((v) => v.id).toSet();
+           final newUnique = videos.where((v) => !existingIds.contains(v.id)).toList();
+           _userVideos.addAll(newUnique);
+        }
+           
+        _hasMoreVideos = videos.length >= _pageSize;
+        notifyListeners();
       }
-      
-      notifyListeners();
+
+      // **OPTIMIZATION: DISABLED Aggressive Background Loading since we loaded all**
+      /*
+      if (page == 1 && _hasMoreVideos) {
+        AppLogger.log('🚀 ProfileStateManager: loaded page 1, triggering aggressive background load for rest...');
+        // ignore: unawaited_futures
+        loadAllVideosInBackground(targetUserId);
+      }
+      */
     } catch (e) {
       AppLogger.log('❌ ProfileStateManager: Error in cached video loading: $e');
       // **FIX: On error, try direct loading ONLY if it's not a network error**

@@ -876,7 +876,15 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
     // **PAGINATION SUPPORT**
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 9; // Default to 9 as requested
-    const skip = (page - 1) * limit;
+    
+    // Allow explicit 'skip' parameter to override page-based calculation
+    // This supports staggered loading (e.g. load 3, then load 6) without rigid page boundaries
+    let skip = 0;
+    if (req.query.skip !== undefined && req.query.skip !== null) {
+      skip = parseInt(req.query.skip);
+    } else {
+      skip = (page - 1) * limit;
+    }
 
     console.log(`🎬 Fetching user videos: Page ${page}, Limit ${limit}, Skip ${skip}`);
 
@@ -890,7 +898,7 @@ router.get('/user/:googleId', verifyToken, async (req, res) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .select('-comments') // **OPTIMIZATION: Exclude heavy comments array**
+      .select('-comments -likedBy -description -shares') // **OPTIMIZATION: Exclude heavy fields (comments, likedBy, description, shares)**
       .lean(); // **OPTIMIZATION: Plain JS objects for speed**
 
     // **NEW: Filter out videos with invalid uploader references**
@@ -3396,7 +3404,7 @@ router.get('/cloudinary-config', verifyToken, async (req, res) => {
 router.get('/user/:userId', verifyToken, async (req, res) => {
   try {
     const { userId } = req.params;
-    console.log('🔍 Getting videos for user:', userId);
+    // console.log('🔍 Getting videos for user:', userId);
 
     // Find user by Google ID first, then by MongoDB ObjectId
     let user = await User.findOne({ googleId: userId });
@@ -3413,7 +3421,7 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    console.log('✅ User found:', user.name);
+    // console.log('✅ User found:', user.name);
 
     // Get user's videos with population
     const videos = await Video.find({
@@ -3435,8 +3443,8 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
         video.uploader.name.trim() !== '';
     });
 
-    console.log('🎬 Found videos count:', videos.length);
-    console.log(`🎬 Valid videos count: ${validVideos.length}`);
+    // console.log('🎬 Found videos count:', videos.length);
+    // console.log(`🎬 Valid videos count: ${validVideos.length}`);
 
     // **NEW: Sync user.videos array with actual valid videos**
     if (validVideos.length !== videos.length) {
@@ -3471,12 +3479,15 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
         .lean();
 
         allEpisodes.forEach(ep => {
-          if (!episodesMap.has(ep.seriesId)) {
-            episodesMap.set(ep.seriesId, []);
+          if (!ep.seriesId) return;
+          const sId = ep.seriesId.toString(); // **FIX: Convert ObjectId to String for Map Key**
+          
+          if (!episodesMap.has(sId)) {
+            episodesMap.set(sId, []);
           }
            // Transform ObjectId to string immediately
            const epObj = { ...ep, _id: ep._id.toString() };
-           episodesMap.get(ep.seriesId).push(epObj);
+           episodesMap.get(sId).push(epObj);
         });
       } catch (err) {
         console.error('⚠️ Error fetching batch episodes for user videos:', err);
@@ -3493,8 +3504,11 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
 
       // Get episodes if part of series
       let episodes = [];
-      if (videoObj.seriesId && episodesMap.has(videoObj.seriesId)) {
-        episodes = episodesMap.get(videoObj.seriesId);
+      if (videoObj.seriesId) {
+        const sId = videoObj.seriesId.toString(); // **FIX: Lookup using String Key**
+        if (episodesMap.has(sId)) {
+           episodes = episodesMap.get(sId);
+        }
       }
 
       const result = {
