@@ -100,7 +100,7 @@ class CloudflareR2Service {
 
       final request = http.MultipartRequest(
         'POST',
-        Uri.parse('${AppConfig.baseUrl}/api/upload/image'),
+        Uri.parse('${NetworkHelper.apiBaseUrl}/upload/image'),
       );
       request.headers['Authorization'] = 'Bearer ${userData['token']}';
       request.headers['Content-Type'] = 'multipart/form-data';
@@ -186,7 +186,7 @@ class CloudflareR2Service {
       const endpoint = '/videos/upload';
       final request = http.MultipartRequest(
         'POST',
-        Uri.parse('${AppConfig.baseUrl}/api$endpoint'),
+        Uri.parse('${NetworkHelper.apiBaseUrl}$endpoint'),
       );
       request.headers['Authorization'] = 'Bearer ${userData['token']}';
 
@@ -250,7 +250,7 @@ class CloudflareR2Service {
 
       final request = http.MultipartRequest(
         'POST',
-        Uri.parse('${AppConfig.baseUrl}/api/upload/video'),
+        Uri.parse('${NetworkHelper.apiBaseUrl}/upload/video'),
       );
       request.headers['Authorization'] = 'Bearer ${userData['token']}';
 

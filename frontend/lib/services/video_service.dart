@@ -140,10 +140,9 @@ class VideoService {
   }) async {
     try {
       // Get base URL with Railway first, local fallback
-      final baseUrl = await getBaseUrlWithFallback();
-      // AppLogger.log('🔍 VideoService: Using base URL: $baseUrl');
+      // AppLogger.log('🔍 VideoService: Using base URL: ${NetworkHelper.apiBaseUrl}');
 
-      String url = '$baseUrl/api/videos?page=$page&limit=$limit';
+      String url = '${NetworkHelper.apiBaseUrl}/videos?page=$page&limit=$limit';
       final normalizedType = videoType?.toLowerCase();
       // **FIXED: Use 'yog' consistently in both frontend and backend**
       String? apiVideoType = normalizedType;
@@ -246,7 +245,7 @@ class VideoService {
               if (hlsUrl.startsWith('/')) {
                 hlsUrl = hlsUrl.substring(1);
               }
-              json['videoUrl'] = '$baseUrl/$hlsUrl';
+              json['videoUrl'] = '${NetworkHelper.apiBaseUrl}/$hlsUrl';
             } else {
               json['videoUrl'] = hlsUrl;
             }
@@ -258,7 +257,7 @@ class VideoService {
               if (masterUrl.startsWith('/')) {
                 masterUrl = masterUrl.substring(1);
               }
-              json['videoUrl'] = '$baseUrl/$masterUrl';
+              json['videoUrl'] = '${NetworkHelper.apiBaseUrl}/$masterUrl';
             } else {
               json['videoUrl'] = masterUrl;
             }
@@ -272,7 +271,7 @@ class VideoService {
               if (videoUrl.startsWith('/')) {
                 videoUrl = videoUrl.substring(1);
               }
-              json['videoUrl'] = '$baseUrl/$videoUrl';
+              json['videoUrl'] = '${NetworkHelper.apiBaseUrl}/$videoUrl';
             }
             /* AppLogger.log(
               '🔗 VideoService: Using original video URL: ${json['videoUrl']}',
@@ -396,9 +395,8 @@ class VideoService {
         throw Exception('Video ID cannot be empty');
       }
 
-      final resolvedBaseUrl = await getBaseUrlWithFallback();
       final videoId = id.trim();
-      final url = '$resolvedBaseUrl/api/videos/$videoId';
+      final url = '${NetworkHelper.apiBaseUrl}/videos/$videoId';
 
       // AppLogger.log('📡 VideoService: Fetching video by ID: $videoId');
 
@@ -529,11 +527,11 @@ class VideoService {
 
       final resolvedBaseUrl = await getBaseUrlWithFallback();
       AppLogger.log(
-          '🔍 VideoService: Like request URL: $resolvedBaseUrl/api/videos/$videoId/like');
+          '🔍 VideoService: Like request URL: ${NetworkHelper.apiBaseUrl}/videos/$videoId/like');
 
       final res = await http
           .post(
-            Uri.parse('$resolvedBaseUrl/api/videos/$videoId/like'),
+            Uri.parse('${NetworkHelper.apiBaseUrl}/videos/$videoId/like'),
             headers: headers,
             body: json.encode({}),
           )
@@ -679,12 +677,12 @@ class VideoService {
 
       // **FIX: Log request details**
       AppLogger.log(
-          '💬 VideoService: Comment request URL: $resolvedBaseUrl/api/videos/$videoId/comments');
+          '💬 VideoService: Comment request URL: ${NetworkHelper.apiBaseUrl}/videos/$videoId/comments');
       AppLogger.log(
           '💬 VideoService: Comment request - Auth header present: ${headers.containsKey('Authorization')}');
       final res = await http
           .post(
-            Uri.parse('$resolvedBaseUrl/api/videos/$videoId/comments'),
+            Uri.parse('${NetworkHelper.apiBaseUrl}/videos/$videoId/comments'),
             headers: headers,
             body: json.encode({'userId': finalUserId, 'text': text.trim()}),
           )
@@ -778,7 +776,7 @@ class VideoService {
       final res = await http
           .get(
             Uri.parse(
-                '$resolvedBaseUrl/api/videos/$videoId/comments?page=$page&limit=$limit'),
+                '${NetworkHelper.apiBaseUrl}/videos/$videoId/comments?page=$page&limit=$limit'),
             headers: headers,
           )
           .timeout(const Duration(seconds: 10));
@@ -815,7 +813,7 @@ class VideoService {
       final res = await http
           .delete(
             Uri.parse(
-                '$resolvedBaseUrl/api/videos/$videoId/comments/$commentId'),
+                '${NetworkHelper.apiBaseUrl}/videos/$videoId/comments/$commentId'),
             headers: headers,
             body: json.encode({'userId': userData['googleId']}),
           )

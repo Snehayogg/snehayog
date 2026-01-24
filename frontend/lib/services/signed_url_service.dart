@@ -79,7 +79,7 @@ class SignedUrlService {
           '🌐 SignedUrlService: Making request to ${AppConfig.baseUrl}/api/videos/generate-signed-url');
 
       final response = await httpClientService.post(
-        Uri.parse('${AppConfig.baseUrl}/api/videos/generate-signed-url'),
+        Uri.parse('${NetworkHelper.apiBaseUrl}/videos/generate-signed-url'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ${userData['token']}',

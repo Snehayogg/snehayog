@@ -63,7 +63,7 @@ class PaymentSetupService {
       if (token == null) return false;
 
       final response = await httpClientService.get(
-        Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/profile'),
+        Uri.parse('${NetworkHelper.apiBaseUrl}/creator-payouts/profile'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -215,7 +215,7 @@ class PaymentSetupService {
       if (token == null) return null;
 
       final response = await httpClientService.get(
-        Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/profile'),
+        Uri.parse('${NetworkHelper.apiBaseUrl}/creator-payouts/profile'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -262,7 +262,7 @@ class PaymentSetupService {
     };
 
     final response = await httpClientService.put(
-      Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/payment-method'),
+      Uri.parse('${NetworkHelper.apiBaseUrl}/creator-payouts/payment-method'),
       headers: {
         'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',

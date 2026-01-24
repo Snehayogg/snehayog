@@ -34,7 +34,7 @@ class _FeedbackDialogWidgetState extends State<FeedbackDialogWidget> {
 
       // Submit feedback to backend
       final response = await httpClientService.post(
-        Uri.parse('${AppConfig.baseUrl}/api/feedback/submit'),
+        Uri.parse('${NetworkHelper.apiBaseUrl}/feedback/submit'),
         headers: {
           'Content-Type': 'application/json',
         },

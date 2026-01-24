@@ -24,6 +24,14 @@ class AuthService {
 
   // Global navigator key for accessing context
   static GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+  
+  // **OPTIMIZATION: Deduplicate Profile Requests**
+  static Future<Map<String, dynamic>?>? _pendingProfileRequest;
+  
+  // **OPTIMIZATION: Short-term (30s) In-memory Cache**
+  static Map<String, dynamic>? _cachedProfile;
+  static DateTime? _lastProfileFetch;
+  static const Duration _cacheTtl = Duration(seconds: 30);
 
   Future<Map<String, dynamic>?> signInWithGoogle(
       {bool forceAccountPicker = true}) async {
@@ -132,7 +140,7 @@ class AuthService {
         // **OPTIMIZED: Reduced timeout from 8s to 5s for faster sign-in**
         final authResponse = await http
             .post(
-              Uri.parse('${AppConfig.baseUrl}/api/auth'),
+              Uri.parse(NetworkHelper.authEndpoint),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
                 'idToken': idToken,
@@ -174,7 +182,7 @@ class AuthService {
             try {
               final platformId = await PlatformIdService().getPlatformId();
               final syncResponse = await httpClientService.post(
-                Uri.parse('${AppConfig.baseUrl}/api/videos/sync-watch-history'),
+                Uri.parse('${NetworkHelper.apiBaseUrl}/videos/sync-watch-history'),
                 headers: {
                   'Content-Type': 'application/json',
                   'Authorization': 'Bearer ${authData['token']}',
@@ -304,7 +312,7 @@ class AuthService {
             // Retry the authentication with new URL
             final authResponse = await http
                 .post(
-                  Uri.parse('${AppConfig.baseUrl}/api/auth'),
+                  Uri.parse(NetworkHelper.authEndpoint),
                   headers: {'Content-Type': 'application/json'},
                   body: jsonEncode({
                     'idToken': idToken,
@@ -328,7 +336,7 @@ class AuthService {
               };
 
               await httpClientService.post(
-                Uri.parse('${AppConfig.baseUrl}/api/users/register'),
+                Uri.parse('${NetworkHelper.usersEndpoint}/register'),
                 headers: {'Content-Type': 'application/json'},
                 body: jsonEncode(userData),
               );
@@ -523,7 +531,7 @@ class AuthService {
 
     try {
       final response = await httpClientService.get(
-        Uri.parse('${AppConfig.baseUrl}/api/users/profile'),
+        Uri.parse('${NetworkHelper.usersEndpoint}/profile'),
         headers: {'Authorization': 'Bearer $token'},
         timeout: const Duration(seconds: 3),
       );
@@ -641,10 +649,26 @@ class AuthService {
     try {
       AppLogger.log('🔍 AuthService: Getting user data...');
 
-      // **OPTIMIZED: Reduced timeout from 12s to 5s for faster startup**
-      // Wait for internal retrieval with a sensible timeout; on timeout, fallback to cached user
-      return await _getUserDataInternal(skipTokenRefresh: skipTokenRefresh)
-          .timeout(const Duration(seconds: 5), onTimeout: () async {
+      // **OPTIMIZATION: Return cached data if valid (30s TTL)**
+      if (_cachedProfile != null && _lastProfileFetch != null) {
+        final age = DateTime.now().difference(_lastProfileFetch!);
+        if (age < _cacheTtl) {
+          AppLogger.log(
+              '♻️ AuthService: Returning cached profile data (${age.inSeconds}s old)');
+          return _cachedProfile;
+        }
+      }
+
+      // **OPTIMIZATION: Deduplicate simultaneous requests**
+      if (_pendingProfileRequest != null) {
+        AppLogger.log('♻️ AuthService: Reusing in-flight profile request...');
+        return await _pendingProfileRequest;
+      }
+
+      // **OPTIMIZED: Execute the actual fetch and store the future**
+      _pendingProfileRequest =
+          _getUserDataInternal(skipTokenRefresh: skipTokenRefresh)
+              .timeout(const Duration(seconds: 5), onTimeout: () async {
         try {
           final prefs = await SharedPreferences.getInstance();
           final token = prefs.getString('jwt_token');
@@ -664,6 +688,21 @@ class AuthService {
         } catch (_) {}
         return null;
       });
+
+      try {
+        final result = await _pendingProfileRequest;
+
+        // **CACHE: Update cache if result is successful and not a fallback**
+        if (result != null && result['isFallback'] != true) {
+          _cachedProfile = result;
+          _lastProfileFetch = DateTime.now();
+        }
+
+        return result;
+      } finally {
+        // **CLEANUP: Clear the pending request regardless of outcome**
+        _pendingProfileRequest = null;
+      }
     } catch (e) {
       AppLogger.log('❌ AuthService: Error getting user data: $e');
       return null;
@@ -737,7 +776,7 @@ class AuthService {
         }
 
         final response = await httpClientService.get(
-          Uri.parse('${AppConfig.baseUrl}/api/users/profile'),
+          Uri.parse('${NetworkHelper.usersEndpoint}/profile'),
           headers: {'Authorization': 'Bearer $token'},
           timeout: const Duration(
               seconds: 3), // **OPTIMIZED: Reduced timeout for faster startup**
@@ -1179,7 +1218,7 @@ class AuthService {
       // Authenticate with backend to get new JWT
       final authResponse = await http
           .post(
-            Uri.parse('${AppConfig.baseUrl}/api/auth'),
+            Uri.parse('${NetworkHelper.apiBaseUrl}/auth'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({'idToken': idToken}),
           )
@@ -1354,7 +1393,7 @@ class AuthService {
 
       final trackResponse = await http
           .post(
-            Uri.parse('${AppConfig.baseUrl}/api/referrals/track'),
+            Uri.parse('${NetworkHelper.apiBaseUrl}/referrals/track'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
               'code': pendingRefCode,

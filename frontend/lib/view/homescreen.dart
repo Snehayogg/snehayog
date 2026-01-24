@@ -438,87 +438,89 @@ class _MainScreenState extends State<MainScreen>
                 ),
               ],
             ),
-            bottomNavigationBar: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: (mainController.currentIndex == 0 ||
-                          mainController.currentIndex == 1)
-                      ? [
-                          const Color(0xFF1A1A1A),
-                          const Color(0xFF0F0F0F),
-                        ]
-                      : [
-                          Colors.white,
-                          const Color(0xFFFAFAFA),
-                        ],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: (mainController.currentIndex == 0 ||
-                            mainController.currentIndex == 1)
-                        ? Colors.black.withOpacity(0.3)
-                        : Colors.black.withOpacity(0.1),
-                    blurRadius: 20,
-                    offset: const Offset(0, -4),
-                    spreadRadius: 0,
-                  ),
-                  BoxShadow(
-                    color: (mainController.currentIndex == 0 ||
-                            mainController.currentIndex == 1)
-                        ? Colors.black.withOpacity(0.2)
-                        : Colors.black.withOpacity(0.05),
-                    blurRadius: 8,
-                    offset: const Offset(0, -2),
-                    spreadRadius: 0,
-                  ),
-                ],
-              ),
+            bottomNavigationBar: RepaintBoundary(
               child: Container(
-                height: 60 + MediaQuery.of(context).padding.bottom,
-                padding: EdgeInsets.only(
-                  left: 4,
-                  right: 4,
-                  top: 2,
-                  bottom: math.max(2.0, MediaQuery.of(context).padding.bottom),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildNavItem(
-                      index: 0,
-                      currentIndex: mainController.currentIndex,
-                      icon: Icons.play_circle_filled,
-                      label: 'Yug',
-                      onTap: () => _handleNavTap(0, mainController),
-                      mainController: mainController,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: (mainController.currentIndex == 0 ||
+                            mainController.currentIndex == 1)
+                        ? [
+                            const Color(0xFF1A1A1A),
+                            const Color(0xFF0F0F0F),
+                          ]
+                        : [
+                            Colors.white,
+                            const Color(0xFFFAFAFA),
+                          ],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (mainController.currentIndex == 0 ||
+                              mainController.currentIndex == 1)
+                          ? Colors.black.withOpacity(0.3)
+                          : Colors.black.withOpacity(0.1),
+                      blurRadius: 20,
+                      offset: const Offset(0, -4),
+                      spreadRadius: 0,
                     ),
-                    _buildNavItem(
-                      index: 1,
-                      currentIndex: mainController.currentIndex,
-                      icon: Icons.video_camera_front_rounded,
-                      label: 'Vayu',
-                      onTap: () => _handleNavTap(1, mainController),
-                      mainController: mainController,
-                    ),
-                    _buildNavItem(
-                      index: 2,
-                      currentIndex: mainController.currentIndex,
-                      icon: Icons.add,
-                      label: 'Upload',
-                      onTap: () => _handleNavTap(2, mainController),
-                      mainController: mainController,
-                    ),
-                    _buildNavItem(
-                      index: 3,
-                      currentIndex: mainController.currentIndex,
-                      icon: Icons.person_outline_rounded,
-                      label: 'Profile',
-                      onTap: () => _handleNavTap(3, mainController),
-                      mainController: mainController,
+                    BoxShadow(
+                      color: (mainController.currentIndex == 0 ||
+                              mainController.currentIndex == 1)
+                          ? Colors.black.withOpacity(0.2)
+                          : Colors.black.withOpacity(0.05),
+                      blurRadius: 8,
+                      offset: const Offset(0, -2),
+                      spreadRadius: 0,
                     ),
                   ],
+                ),
+                child: Container(
+                  height: 60 + MediaQuery.of(context).padding.bottom,
+                  padding: EdgeInsets.only(
+                    left: 4,
+                    right: 4,
+                    top: 2,
+                    bottom: math.max(2.0, MediaQuery.of(context).padding.bottom),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildNavItem(
+                        index: 0,
+                        currentIndex: mainController.currentIndex,
+                        icon: Icons.play_circle_filled,
+                        label: 'Yug',
+                        onTap: () => _handleNavTap(0, mainController),
+                        mainController: mainController,
+                      ),
+                      _buildNavItem(
+                        index: 1,
+                        currentIndex: mainController.currentIndex,
+                        icon: Icons.video_camera_front_rounded,
+                        label: 'Vayu',
+                        onTap: () => _handleNavTap(1, mainController),
+                        mainController: mainController,
+                      ),
+                      _buildNavItem(
+                        index: 2,
+                        currentIndex: mainController.currentIndex,
+                        icon: Icons.add,
+                        label: 'Upload',
+                        onTap: () => _handleNavTap(2, mainController),
+                        mainController: mainController,
+                      ),
+                      _buildNavItem(
+                        index: 3,
+                        currentIndex: mainController.currentIndex,
+                        icon: Icons.person_outline_rounded,
+                        label: 'Profile',
+                        onTap: () => _handleNavTap(3, mainController),
+                        mainController: mainController,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

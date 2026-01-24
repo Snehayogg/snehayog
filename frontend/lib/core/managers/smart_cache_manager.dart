@@ -129,7 +129,7 @@ class SmartCacheManager {
   };
 
   // Background refresh queue for stale-while-revalidate
-  final Queue<String> _refreshQueue = Queue<String>();
+  final Queue<_RefreshTask> _refreshQueue = Queue<_RefreshTask>();
   bool _isRefreshing = false;
 
   // ===== PRELOADING & PREDICTION =====
@@ -646,9 +646,17 @@ class SmartCacheManager {
     String cacheType,
     String? currentEtag,
   ) {
-    if (_refreshQueue.contains(key)) return;
+    // Check if a refresh for this key is already in the queue
+    for (final task in _refreshQueue) {
+      if (task.key == key) return;
+    }
 
-    _refreshQueue.add(key);
+    _refreshQueue.add(_RefreshTask(
+      key: key,
+      fetchFn: fetchFn,
+      cacheType: cacheType,
+      etag: currentEtag,
+    ));
     AppLogger.log(
         '🔄 SmartCacheManager: Scheduled background refresh for $key');
 
@@ -665,9 +673,10 @@ class SmartCacheManager {
 
     try {
       while (_refreshQueue.isNotEmpty) {
-        final key = _refreshQueue.removeFirst();
-        await _refreshCacheEntry(key);
-        await Future.delayed(const Duration(milliseconds: 100));
+        final task = _refreshQueue.removeFirst();
+        await _refreshCacheEntry(task);
+        // Small delay between refreshes to avoid hammering
+        await Future.delayed(const Duration(milliseconds: 200));
       }
     } catch (e) {
       AppLogger.log('❌ SmartCacheManager: Error processing refresh queue: $e');
@@ -676,21 +685,39 @@ class SmartCacheManager {
     }
   }
 
-  /// Refresh a specific cache entry
-  Future<void> _refreshCacheEntry(String key) async {
+  /// Refresh a specific cache entry by fetching fresh data
+  Future<void> _refreshCacheEntry(_RefreshTask task) async {
     try {
-      AppLogger.log('🔄 SmartCacheManager: Refreshing cache entry for $key');
+      AppLogger.log('🔄 SmartCacheManager: Background refreshing cache entry for ${task.key}');
 
-      final entry = _memoryCache[key];
-      if (entry != null) {
-        _memoryCache[key] = entry.copyWith(cachedAt: DateTime.now());
+      // Fetch fresh data using the stored fetch function
+      final freshData = await task.fetchFn();
+
+      if (freshData != null) {
+        // Check if this is a video list that's empty
+        if (task.cacheType == 'videos' && freshData is Map) {
+          final videos = freshData['videos'];
+          if (videos is List && videos.isEmpty) {
+             AppLogger.log('⚠️ SmartCacheManager: Background refresh returned empty videos, skipping update');
+             return;
+          }
+        }
+
+        // Update the cache with fresh data
+        await _cacheData(
+          task.key,
+          freshData,
+          task.cacheType,
+          null, // Use default maxAge
+          task.etag,
+        );
+        
+        _backgroundRefreshes++;
+        AppLogger.log('✅ SmartCacheManager: Cache entry background refreshed for ${task.key}');
       }
-
-      _backgroundRefreshes++;
-      AppLogger.log('✅ SmartCacheManager: Cache entry refreshed for $key');
     } catch (e) {
       AppLogger.log(
-          '❌ SmartCacheManager: Error refreshing cache entry for $key: $e');
+          '❌ SmartCacheManager: Error background refreshing cache entry for ${task.key}: $e');
     }
   }
 
@@ -773,4 +800,19 @@ class SmartCacheManager {
     // Placeholder for actual data preloading logic
     // This would fetch data relevant to the screen and cache it
   }
+}
+
+/// **INTERNAL: Task for background cache refresh**
+class _RefreshTask {
+  final String key;
+  final Future<dynamic> Function() fetchFn;
+  final String cacheType;
+  final String? etag;
+
+  _RefreshTask({
+    required this.key,
+    required this.fetchFn,
+    required this.cacheType,
+    this.etag,
+  });
 }

@@ -147,8 +147,10 @@ router.get('/profile', verifyToken, async (req, res) => {
       }
     }
 
-    // Find current user
-    const currentUser = await User.findOne({ googleId: currentUserId });
+    // Find current user with selective fields and lean query for performance
+    const currentUser = await User.findOne({ googleId: currentUserId })
+      .select('_id googleId name email profilePic videos following followers preferredCurrency preferredPaymentMethod country')
+      .lean();
     
     if (!currentUser) {
       console.log('❌ Profile API: User not found with googleId:', currentUserId);
@@ -157,8 +159,9 @@ router.get('/profile', verifyToken, async (req, res) => {
       });
     }
     
+    // currentUser is already a plain object due to .lean()
     const payload = {
-      _id: currentUser._id, // MongoDB ObjectID
+      _id: currentUser._id,
       id: currentUser.googleId,
       googleId: currentUser.googleId,
       name: currentUser.name,
@@ -175,7 +178,8 @@ router.get('/profile', verifyToken, async (req, res) => {
     res.json(payload);
 
     if (profileCacheKey) {
-      await cacheResponse(profileCacheKey, payload, PROFILE_CACHE_TTL);
+      // Cache with slightly longer TTL for better hit rates (was 60s)
+      await cacheResponse(profileCacheKey, payload, 120); 
     }
   } catch (err) {
     console.error('Get profile error:', err);

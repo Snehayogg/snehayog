@@ -48,6 +48,7 @@ class ProfileStateManager extends ChangeNotifier {
   
   // Earnings state
   double _cachedEarnings = 0.0;
+  bool _isEarningsLoading = false;
 
 
   // Controllers
@@ -99,6 +100,7 @@ class ProfileStateManager extends ChangeNotifier {
   bool get hasSelectedVideos => _selectedVideoIds.isNotEmpty;
   bool get isVideosLoading => _isVideosLoading;
   double get cachedEarnings => _cachedEarnings;
+  bool get isEarningsLoading => _isEarningsLoading;
   int get totalVideoCount => _totalVideoCount;
   bool get isFetchingMore => _isFetchingMore;
   bool get hasMoreVideos => _hasMoreVideos;
@@ -162,8 +164,15 @@ class ProfileStateManager extends ChangeNotifier {
             if (cachedData != null) {
               AppLogger.log(
                   '✅ ProfileStateManager: Instant load from Hive for $targetUserId');
-              _userData = Map<String, dynamic>.from(cachedData);
+              _userData = _normalizeUserData(Map<String, dynamic>.from(cachedData), targetUserId);
               nameController.text = _userData?['name']?.toString() ?? '';
+              
+              // **FIX: Update video count if present in cache**
+              final videos = _userData?['videos'] as List?;
+              if (videos != null && videos.isNotEmpty) {
+                _totalVideoCount = videos.length;
+              }
+              
               _isLoading = false; // Show content immediately
               notifyListeners();
             }
@@ -245,16 +254,23 @@ class ProfileStateManager extends ChangeNotifier {
         return;
       }
 
-      _userData = Map<String, dynamic>.from(userData);
+      // **FIXED: Always normalize user data (even from cache)**
+      // This ensures that preloaded data (cached by ProfilePreloader) has all required fields like googleId
+      final normalizedData = _normalizeUserData(userData, userId ?? userData['googleId'] ?? userData['id']);
+      _userData = Map<String, dynamic>.from(normalizedData);
       nameController.text = _userData?['name']?.toString() ?? '';
 
-      AppLogger.log('🔄 ProfileStateManager: Stored user data: $_userData');
-      AppLogger.log(
-          '🔄 ProfileStateManager: Stored user googleId: ${_userData?['googleId']}');
-      AppLogger.log(
-          '🔄 ProfileStateManager: Stored user id: ${_userData?['id']}');
-      AppLogger.log(
-          '🔄 ProfileStateManager: User data keys: ${_userData?.keys.toList()}');
+      // **FIX: Update total video count from cached user data if found**
+      // This ensures stats (Videos: X) update immediately even when loading from cache
+      final List? cachedVideos = _userData?['videos'] as List?;
+      if (cachedVideos != null && cachedVideos.isNotEmpty) {
+        _totalVideoCount = cachedVideos.length;
+        AppLogger.log('📊 ProfileStateManager: Set total video count from cache: $_totalVideoCount');
+      }
+
+      _isLoading = false;
+      _error = null;
+      notifyListeners();
       AppLogger.log(
           '🔄 ProfileStateManager: User data values: ${_userData?.values.toList()}');
 
@@ -412,51 +428,44 @@ class ProfileStateManager extends ChangeNotifier {
         AppLogger.log(
             '🔄 ProfileStateManager: Fetching other user profile for ID: $requestedUserId');
         final otherUser = await _userService.getUserById(requestedUserId);
-        // **FIXED: getUserById returns Map, ensure all fields are present**
         userData = Map<String, dynamic>.from(otherUser);
-
-        // **FIXED: Backend returns id: user.googleId (not a googleId field)**
-        // The backend /api/users/:id endpoint returns:
-        // - _id: MongoDB ObjectID
-        // - id: user.googleId (this is the actual googleId value)
-        // So we need to set googleId from the 'id' field
-        final actualGoogleId = userData['googleId'] ??
-            userData['id'] ?? // Backend returns id: user.googleId
-            requestedUserId;
-
-        // Set googleId field (required by video endpoint)
-        userData['googleId'] = actualGoogleId;
-
-        // Preserve other fields
-        if (!userData.containsKey('id')) {
-          userData['id'] = actualGoogleId;
-        }
-
+        
         AppLogger.log(
-            '🔄 ProfileStateManager: Normalized user IDs - googleId: $actualGoogleId, _id: ${userData['_id']}');
-
-        // **FIXED: Ensure followersCount is properly set (use both field names)**
-        final followersCount =
-            userData['followersCount'] ?? userData['followers'] ?? 0;
-        userData['followersCount'] = followersCount;
-        userData['followers'] = followersCount;
-
-        final followingCount =
-            userData['followingCount'] ?? userData['following'] ?? 0;
-        userData['followingCount'] = followingCount;
-        userData['following'] = followingCount;
-
-        AppLogger.log(
-            '🔄 ProfileStateManager: Other user profile loaded: ${userData['name']}, followers: ${userData['followersCount']}');
+            '🔄 ProfileStateManager: Other user profile loaded: ${userData['name']}');
       } catch (e) {
         AppLogger.log(
             '⚠️ ProfileStateManager: Failed to fetch other user profile: $e');
-        // **FIXED: Re-throw error so it can be handled by retry mechanism**
         rethrow;
       }
     }
 
     return userData;
+  }
+
+  /// **NEW: Normalize user data fields for consistency**
+  Map<String, dynamic> _normalizeUserData(Map<String, dynamic> data, String? requestedUserId) {
+    final Map<String, dynamic> normalized = Map<String, dynamic>.from(data);
+
+    // 1. Normalize Google ID (Backend returns it as 'id')
+    final actualGoogleId = normalized['googleId'] ??
+        normalized['id'] ??
+        requestedUserId;
+    normalized['googleId'] = actualGoogleId;
+
+    if (!normalized.containsKey('id')) {
+      normalized['id'] = actualGoogleId;
+    }
+
+    // 2. Normalize Follower Counts
+    final followersCount = normalized['followersCount'] ?? normalized['followers'] ?? 0;
+    normalized['followersCount'] = followersCount;
+    normalized['followers'] = followersCount;
+
+    final followingCount = normalized['followingCount'] ?? normalized['following'] ?? 0;
+    normalized['followingCount'] = followingCount;
+    normalized['following'] = followingCount;
+
+    return normalized;
   }
 
   String _resolveVideoCacheKey(String userId) => 'video_profile_$userId';
@@ -533,6 +542,30 @@ class ProfileStateManager extends ChangeNotifier {
     
     await loadUserVideos(userId, page: _currentPage + 1);
   }
+
+  /// **NEW: Load all remaining videos in background**
+  Future<void> loadAllVideosInBackground(String userId) async {
+    if (!_hasMoreVideos || _isFetchingMore) return;
+    
+    AppLogger.log('🚀 ProfileStateManager: Starting recursive background load...');
+    
+    // We'll load in batches until exhausted
+    while (_hasMoreVideos && !isDisposed) {
+      try {
+        await loadUserVideos(userId, page: _currentPage + 1, silent: true);
+        // Small delay to prevent hammering the server
+        await Future.delayed(const Duration(milliseconds: 300));
+      } catch (e) {
+        AppLogger.log('⚠️ ProfileStateManager: Background load error: $e');
+        break;
+      }
+    }
+    AppLogger.log('✅ ProfileStateManager: Background load finished. Total videos: ${_userVideos.length}');
+  }
+
+  // Track disposal for background tasks
+  bool _isDisposed = false;
+  bool get isDisposed => _isDisposed;
 
   Future<void> loadUserVideos(String? userId,
       {bool forceRefresh = false, bool silent = false, int page = 1}) async {
@@ -707,8 +740,12 @@ class ProfileStateManager extends ChangeNotifier {
   /// **UPDATED: Aligns with Admin Dashboard & Revenue Screen (Current Month Earnings)**
   Future<void> _loadEarnings() async {
     try {
+      _isEarningsLoading = true;
+      notifyListeners();
+
       if (_userVideos.isEmpty) {
         _cachedEarnings = 0.0;
+        _isEarningsLoading = false;
         notifyListeners();
         return;
       }
@@ -770,9 +807,12 @@ class ProfileStateManager extends ChangeNotifier {
       }
 
       _cachedEarnings = earnings;
+      _isEarningsLoading = false;
       notifyListeners();
     } catch (e) {
       AppLogger.log('⚠️ ProfileStateManager: Failed to calculate earnings: $e');
+      _isEarningsLoading = false;
+      notifyListeners();
     }
   }
 
@@ -1773,6 +1813,7 @@ class ProfileStateManager extends ChangeNotifier {
   // Cleanup
   @override
   void dispose() {
+    _isDisposed = true; // Mark as disposed for background tasks
     nameController.dispose();
     super.dispose();
   }

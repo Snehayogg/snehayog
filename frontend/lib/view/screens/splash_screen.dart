@@ -21,7 +21,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     _controller = AnimationController(
     // Increased duration for fade-in phase
       vsync: this,
-      duration: const Duration(milliseconds: 2300), 
+      duration: const Duration(milliseconds: 1200), 
     );
 
     // Sequence:
@@ -61,7 +61,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     // Start animation immediately
     // Start animation immediately
     _controller.forward().then((_) {
-       _navigateToHome();
+       _checkAndNavigate();
     });
 
     // Fire initialization in background (don't await for navigation)
@@ -70,18 +70,26 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
   Future<void> _startBackgroundInitialization() async {
      // Wait for Stage 1 (Config) - Critical
-     await AppInitializationManager.instance.initializeStage1();
-     
+     // UPDATED: Now stage 2 handles stage 1 parallelization efficiently
      if (mounted) {
-       // Fire Stage 2 (Content) - Critical for Video Loading
-       // We do NOT wait for this to finish before navigation trigger
-       // It runs in parallel with animation.
-       AppInitializationManager.instance.initializeStage2(context);
+       await AppInitializationManager.instance.initializeStage2(context);
+       // Init done - check if we can exit
+       _checkAndNavigate();
      }
+  }
+
+  void _checkAndNavigate() {
+    if (!mounted) return;
+    
+    // Condition: Animation MUST be done AND Init MUST be done
+    if (_controller.isCompleted && AppInitializationManager.instance.isStage2Complete) {
+       _navigateToHome();
+    }
   }
 
   void _navigateToHome() {
     if (!mounted) return;
+
 
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(

@@ -68,7 +68,10 @@ class AppConfig {
 
     // Production mode: use cache if available
     if (_cachedBaseUrl != null) {
-      print('🔍 AppConfig: Using cached URL: $_cachedBaseUrl');
+      // **FIX: Ensure cached URL doesn't have redundant /api suffix**
+      if (_cachedBaseUrl!.endsWith('/api')) {
+        _cachedBaseUrl = _cachedBaseUrl!.substring(0, _cachedBaseUrl!.length - 4);
+      }
       return _cachedBaseUrl!;
     }
 
@@ -83,7 +86,7 @@ class AppConfig {
       final response = await httpClientService.get(
         Uri.parse('$url/api/health'),
         headers: {'Content-Type': 'application/json'},
-        timeout: const Duration(seconds: 8),
+        timeout: const Duration(seconds: 2),
       );
 
       if (response.statusCode == 200) {
@@ -498,12 +501,18 @@ class NetworkHelper {
       AppConfig.getBaseUrlWithFallback();
 
   /// API endpoints
-  static String get apiBaseUrl => '${AppConfig.baseUrl}/api';
-  static String get healthEndpoint =>
-      '${AppConfig.baseUrl}/api/health'; // Consistent API health endpoint
+  static String get apiBaseUrl {
+    // **FIX: Robustly handle redundant /api prefixes using regex**
+    // This strips all occurrences of /api and appends it once
+    final base = AppConfig.baseUrl.replaceAll(RegExp(r'(/+api)+$'), '');
+    return '$base/api';
+  }
+
+  static String get healthEndpoint => '$apiBaseUrl/health';
   static String get videosEndpoint => '$apiBaseUrl/videos';
   static String get authEndpoint => '$apiBaseUrl/auth';
   static String get usersEndpoint => '$apiBaseUrl/users';
+  static String get adsEndpoint => '$apiBaseUrl/ads';
 
   /// Network timeout configurations - Increased for better remote connectivity
   static const Duration defaultTimeout = Duration(seconds: 30);

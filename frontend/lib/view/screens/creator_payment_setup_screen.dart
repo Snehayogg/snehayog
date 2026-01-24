@@ -199,7 +199,7 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
 
       AppLogger.log('🔄 Fetching fresh profile data from server...');
       final response = await httpClientService.get(
-        Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/profile'),
+        Uri.parse('${NetworkHelper.apiBaseUrl}/creator-payouts/profile'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -362,7 +362,7 @@ class _CreatorPaymentSetupScreenState extends State<CreatorPaymentSetupScreen> {
           '🔍 Headers: Authorization: Bearer ${token.substring(0, 20)}...');
 
       final response = await httpClientService.put(
-        Uri.parse('${AppConfig.baseUrl}/api/creator-payouts/payment-method'),
+        Uri.parse('${NetworkHelper.apiBaseUrl}/creator-payouts/payment-method'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',

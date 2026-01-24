@@ -240,17 +240,47 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         width: double.infinity,
         height: double.infinity,
         color: Colors.black, // Black background
-        child: const Center(
+        child: Center(
           child: Column(
              mainAxisAlignment: MainAxisAlignment.center,
              children: [
-                SizedBox(
-                   width: 30,
-                   height: 30,
-                   child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white24)
-                ),
-                SizedBox(height: 16),
-                Text("Loading more videos...", style: TextStyle(color: Colors.white24, fontSize: 12)),
+                if (_errorMessage != null && _errorMessage!.isNotEmpty) ...[
+                  const Icon(Icons.cloud_off, size: 48, color: Colors.white24),
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 40),
+                    child: Text(
+                      _getUserFriendlyErrorMessage(_errorMessage!),
+                      style: const TextStyle(color: Colors.white54, fontSize: 13),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      safeSetState(() {
+                        _errorMessage = null;
+                        _loadMoreVideos();
+                      });
+                    },
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text("Retry Loading"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white12,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    ),
+                  ),
+                ] else ...[
+                  const SizedBox(
+                     width: 30,
+                     height: 30,
+                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white24)
+                  ),
+                  const SizedBox(height: 16),
+                  const Text("Loading more videos...", style: TextStyle(color: Colors.white24, fontSize: 13)),
+                ],
              ]
           ),
         ),
@@ -297,7 +327,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             },
           ),
           if (_loadingVideos.contains(index))
-            Center(child: _buildGreenSpinner(size: 28)),
+            RepaintBoundary(child: Center(child: _buildGreenSpinner(size: 28))),
         ],
       ),
     );
@@ -519,7 +549,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     if (notifier == null) {
       return const SizedBox.shrink();
     }
-    return HeartAnimation(showNotifier: notifier);
+    return RepaintBoundary(child: HeartAnimation(showNotifier: notifier));
   }
 
   Widget _buildReportIndicator(int index) {

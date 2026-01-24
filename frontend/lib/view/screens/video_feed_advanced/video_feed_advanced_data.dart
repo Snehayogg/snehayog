@@ -1357,14 +1357,15 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       
       // **RECURSIVE FETCH FIX: If we loaded a page but it resulted in 0 NEW videos (due to deduplication),**
       // **we must IMMEDIATELY try the next page, otherwise the user sees a loading spinner that never finishes.**
-      if (mounted && _videos.length == videosCountBefore && _hasMore) {
+      if (mounted && _videos.length == videosCountBefore && _hasMore && _errorMessage == null) {
          AppLogger.log('⚠️ Page ${_currentPage} resulted in 0 new videos (all duplicates). Recursively fetching next page...');
-         // Recursive call to keep digging until we find content or hit end
+         _isLoadingMore = false; // Reset before recursive call
          await _loadMoreVideos(); 
          return; // Return early after recursion
       }
 
       AppLogger.log('✅ Loaded more videos successfully');
+      _errorMessage = null; // Clear error on success
 
       // **CRITICAL: Immediately preload newly loaded videos for seamless playback**
       if (mounted && _videos.length > videosCountBefore) {
@@ -1373,11 +1374,10 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         final newVideosCount = newVideosEndIndex - newVideosStartIndex;
 
         AppLogger.log(
-          '🚀 Preloading $newVideosCount newly loaded videos (indices $newVideosStartIndex to ${newVideosEndIndex - 1})...',
+          '🚀 ${_videosPerPage} videos requested, $newVideosCount videos added to feed.',
         );
 
-        // **FIXED: Preload ALL new videos immediately (not just 10)**
-        // This ensures seamless playback when user scrolls quickly to the end
+        // ... rest of preloading logic ...
         for (int i = newVideosStartIndex; i < newVideosEndIndex; i++) {
           if (i >= 0 &&
               !_preloadedVideos.contains(i) &&
@@ -1385,23 +1385,17 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
             _preloadVideo(i);
           }
         }
-
-        AppLogger.log(
-          '✅ Preloaded all $newVideosCount new videos (indices $newVideosStartIndex to ${newVideosEndIndex - 1}) for seamless playback',
-        );
-
-        // **NEW: Also trigger preload nearby to ensure smooth transition**
         _preloadNearbyVideos();
       }
     } catch (e) {
       AppLogger.log('❌ Error loading more videos: $e');
       if (mounted) {
-        // **OPTIMIZED: Use ValueNotifier for granular update**
-        _hasMore = false;
+        safeSetState(() {
+          _errorMessage = e.toString();
+        });
       }
     } finally {
-      // **OPTIMIZED: Don't use setState - just update flag silently**
-      _isLoadingMore = false; // No setState, no UI rebuild
+      _isLoadingMore = false; 
     }
   }
 }
