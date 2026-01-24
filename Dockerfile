@@ -5,19 +5,19 @@ RUN apk add --no-cache ffmpeg ffmpeg-dev
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy package files from backend directory
+COPY backend/package*.json ./
 
 # Install dependencies (production only)
 RUN npm ci --only=production
 
-# Copy application code
-COPY . .
+# Copy application code from backend directory
+COPY backend/ .
 
 # Create necessary directories
 RUN mkdir -p logs temp uploads
 
-# Expose port (DigitalOcean App Platform uses 8080 by default)
+# Expose port
 EXPOSE 8080
 
 # Start the application
