@@ -138,6 +138,7 @@ app.use(cors({
 
     const allowedOrigins = [
       'https://snehayog.site', // Production web app
+      'https://vayug.fly.dev', // Fly.io Production
       'https://cerulean-kashata-b8a907.netlify.app', // Netlify deployment
       /^https:\/\/.*\.netlify\.app$/, // All Netlify subdomains
       'http://localhost', // Local development (any port)

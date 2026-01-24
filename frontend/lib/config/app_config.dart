@@ -21,6 +21,7 @@ class AppConfig {
 
   // Primary production endpoints
   static const String _customDomainUrl = 'https://api.snehayog.site';
+  static const String _flyUrl = 'https://vayug.fly.dev';
   static const String _railwayUrl =
       'https://snehayog-production.up.railway.app';
 
@@ -51,8 +52,8 @@ class AppConfig {
       if (_cachedBaseUrl != null) {
         return _cachedBaseUrl!;
       }
-      _cachedBaseUrl = _customDomainUrl;
-      return _customDomainUrl;
+      // Prefer Fly.io for production
+      return _flyUrl;
     }
 
     // **FIXED: In development mode, ALWAYS use local server and ignore cache**
@@ -120,7 +121,7 @@ class AppConfig {
         return _localWebBaseUrl;
       }
       if (_cachedBaseUrl != null) return _cachedBaseUrl!;
-      return _customDomainUrl;
+      return _flyUrl;
     }
 
     // In explicit development mode, always use local server
@@ -145,6 +146,7 @@ class AppConfig {
     
     // Define the candidate servers
     final candidates = [
+      _flyUrl,
       _customDomainUrl,
       _railwayUrl,
       localServerUrl,
@@ -165,7 +167,7 @@ class AppConfig {
         // If all checks finished and none succeeded, use fallback
         if (completedCount == candidates.length && !completer.isCompleted) {
           print('⚠️ AppConfig: All servers unreachable, using default fallback');
-          completer.complete(_customDomainUrl);
+          completer.complete(_flyUrl);
         }
       });
     }
@@ -184,6 +186,7 @@ class AppConfig {
 
   // **NEW: Fallback URLs - custom domain first for production**
   static const List<String> fallbackUrls = [
+    _flyUrl,
     _customDomainUrl,
     _railwayUrl,
   ];
