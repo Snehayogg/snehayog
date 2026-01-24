@@ -1,6 +1,9 @@
 app = "vayug"
 primary_region = "blr"
 
+[env]
+  PORT = "8080"
+
 [build]
 
 [http_service]
