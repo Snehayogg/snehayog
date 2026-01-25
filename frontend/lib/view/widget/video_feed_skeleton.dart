@@ -23,10 +23,6 @@ class VideoFeedSkeleton extends StatelessWidget {
                 const SizedBox(height: 8),
                 _buildShimmerText(30, 10), // Like Count
                 const SizedBox(height: 24),
-                _buildShimmerCircle(40), // Comment
-                const SizedBox(height: 8),
-                _buildShimmerText(30, 10), // Comment Count
-                const SizedBox(height: 24),
                 _buildShimmerCircle(40), // Share
                 const SizedBox(height: 8),
                 _buildShimmerText(30, 10), // Share label

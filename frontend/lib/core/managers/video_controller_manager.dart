@@ -245,7 +245,6 @@ class VideoControllerManager {
       videoType: 'reel',
       aspectRatio: 9 / 16,
       duration: const Duration(seconds: 0),
-      comments: [],
     );
 
     return getController(index, video);
@@ -286,7 +285,6 @@ class VideoControllerManager {
       videoType: 'yog',
       aspectRatio: 9 / 16,
       duration: const Duration(seconds: 0),
-      comments: [],
     );
 
     await preloadController(index, video);

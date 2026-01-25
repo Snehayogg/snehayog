@@ -1,145 +1,334 @@
 import { verifyGoogleToken, generateJWT } from '../utils/verifytoken.js';
 import User from '../models/User.js';
+import RefreshToken from '../models/RefreshToken.js';
 
+/**
+ * Google Sign-In (First Time / Re-authentication)
+ * Verifies Google ID Token, creates/finds user, issues device-bound tokens
+ */
 export const googleSignIn = async (req, res) => {
-  const { idToken, platformId } = req.body; // **NEW: Accept platformId from request
+  const { idToken, deviceId, deviceName, platform } = req.body;
 
   try {
-    const userData = await verifyGoogleToken(idToken);
-    
-    console.log('🔍 Google Token Verification Debug:');
-    console.log('🔍 userData received:', JSON.stringify(userData, null, 2));
-    console.log('🔍 userData.sub:', userData.sub);
-    console.log('🔍 userData.sub type:', typeof userData.sub);
-    console.log('🔍 userData.sub length:', userData.sub ? userData.sub.length : 'null');
-    console.log('🔍 Platform ID from request:', platformId);
+    if (!idToken) {
+      return res.status(400).json({ error: 'Google ID Token is required' });
+    }
 
-    // **OPTIMIZED: Select only needed fields for faster query**
+    if (!deviceId || deviceId.trim() === '') {
+      return res.status(400).json({ error: 'Device ID is required' });
+    }
+
+    // Verify Google ID Token
+    const userData = await verifyGoogleToken(idToken);
+    console.log('🔐 Google Sign-In: Verified user:', userData.email);
+
+    // Find or create user
     let user = await User.findOne({ googleId: userData.sub })
-      .select('googleId name email profilePic deviceIds videos');
-    console.log('🔍 Auth Controller: Database lookup result:', user);
+      .select('googleId name email profilePic videos');
     
-    let isNewUser = false; // **NEW: Track if user is new**
+    let isNewUser = false;
 
     if (!user) {
-      // Create new user
-      console.log('🔍 Auth Controller: Creating new user...');
-      isNewUser = true; // **NEW: Set flag**
+      isNewUser = true;
       user = new User({
-        googleId: userData.sub, // Add missing googleId field
+        googleId: userData.sub,
         name: userData.name,
         email: userData.email,
         profilePic: userData.picture,
-        videos: [], // Include videos field
-        deviceIds: platformId ? [platformId] : [], // **NEW: Store platform ID (kept as deviceIds for backward compatibility)
+        videos: [],
       });
       await user.save();
-      console.log('✅ Created new user with profile picture:', userData.picture);
-      if (platformId) {
-        console.log('✅ Stored platform ID for new user:', platformId.substring(0, 8) + '...');
-      }
-      console.log('🔍 Auth Controller: New user saved:', JSON.stringify(user, null, 2));
+      console.log('✅ Created new user:', user.email);
     } else {
-      // Update existing user's profile picture if they don't have one
-      console.log('🔍 Auth Controller: Found existing user:', JSON.stringify(user, null, 2));
-      let needsSave = false;
-      
+      // Update profile pic if missing
       if (!user.profilePic || user.profilePic.trim() === '') {
         user.profilePic = userData.picture;
-        needsSave = true;
-        console.log('✅ Updated existing user profile picture:', userData.picture);
-      }
-      
-      // **NEW: Add platform ID to user's deviceIds array if not already present (kept as deviceIds for backward compatibility)**
-      if (platformId && platformId.trim() !== '') {
-        if (!user.deviceIds) {
-          user.deviceIds = [];
-        }
-        if (!user.deviceIds.includes(platformId)) {
-          user.deviceIds.push(platformId);
-          needsSave = true;
-          console.log('✅ Added platform ID to user:', platformId.substring(0, 8) + '...');
-        } else {
-          console.log('ℹ️ Platform ID already registered for this user');
-        }
-      }
-      
-      if (needsSave) {
         await user.save();
       }
+      console.log('✅ Found existing user:', user.email);
     }
 
-    // **FIXED: Generate JWT with Google ID instead of MongoDB ObjectId**
-    console.log('🔍 Auth Controller Debug:');
-    console.log('🔍 User object:', JSON.stringify(user, null, 2));
-    console.log('🔍 user.googleId:', user.googleId);
-    console.log('🔍 user.googleId type:', typeof user.googleId);
-    console.log('🔍 user.googleId length:', user.googleId ? user.googleId.length : 'null');
-    
-    const token = generateJWT(user.googleId);
-    
-    console.log('🔍 Generated token (first 50 chars):', token.substring(0, 50) + '...');
+    // Generate Access Token (JWT, 1 hour)
+    const accessToken = generateJWT(user.googleId, '1h');
+
+    // Generate Device-Bound Refresh Token (stored in MongoDB)
+    const refreshToken = await RefreshToken.createForDevice(
+      user._id,
+      deviceId,
+      deviceName || 'Unknown Device',
+      platform || 'unknown'
+    );
+
+    console.log('🔐 Issued tokens for device:', deviceId.substring(0, 8) + '...');
 
     res.json({
-      token,
+      accessToken,
+      refreshToken,
       user: {
-        id: user.googleId, // **FIXED: Return Google ID as the main ID**
-        _id: user._id, // **NEW: Include MongoDB ObjectId for reference**
+        id: user.googleId,
+        _id: user._id,
         googleId: user.googleId,
         name: user.name,
         email: user.email,
         profilePic: user.profilePic,
         videos: user.videos,
-        isNewUser: isNewUser // **NEW: Return isNewUser flag**
-      },
+        isNewUser
+      }
     });
+
   } catch (error) {
-    console.error('Google Sign-In error:', error);
-    res.status(400).json({ error: 'Google SignIn failed', details: error.message });
+    console.error('❌ Google Sign-In error:', error);
+    res.status(400).json({ error: 'Google Sign-In failed', details: error.message });
   }
 };
 
-// **NEW: Check if platform ID has logged in before (for skipping login after reinstall)**
+/**
+ * Device Login (Auto-login after app reinstall)
+ * Uses device ID to find existing session and issue new tokens
+ */
+export const deviceLogin = async (req, res) => {
+  const { deviceId } = req.body;
+
+  try {
+    if (!deviceId || deviceId.trim() === '') {
+      return res.status(400).json({ error: 'Device ID is required' });
+    }
+
+    console.log('🔐 Device Login: Checking device:', deviceId.substring(0, 8) + '...');
+
+    // Find valid session for this device
+    const session = await RefreshToken.findValidSessionByDevice(deviceId);
+
+    if (!session || !session.userId) {
+      console.log('❌ No valid session found for device');
+      return res.status(401).json({ 
+        error: 'No active session for this device',
+        requiresLogin: true 
+      });
+    }
+
+    const user = session.userId; // Populated from findValidSessionByDevice
+
+    // Update last used timestamp
+    session.lastUsedAt = new Date();
+    await session.save();
+
+    // Generate new Access Token
+    const accessToken = generateJWT(user.googleId, '1h');
+
+    // Rotate Refresh Token for security
+    const newRefreshToken = await RefreshToken.createForDevice(
+      user._id,
+      deviceId,
+      session.deviceName,
+      session.platform
+    );
+
+    console.log('✅ Device Login successful for:', user.email);
+
+    res.json({
+      accessToken,
+      refreshToken: newRefreshToken,
+      user: {
+        id: user.googleId,
+        _id: user._id,
+        googleId: user.googleId,
+        name: user.name,
+        email: user.email,
+        profilePic: user.profilePic
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Device Login error:', error);
+    res.status(500).json({ error: 'Device login failed', details: error.message });
+  }
+};
+
+/**
+ * Refresh Access Token
+ * Uses refresh token + device ID to issue new tokens
+ */
+export const refreshAccessToken = async (req, res) => {
+  const { refreshToken, deviceId } = req.body;
+
+  try {
+    if (!refreshToken) {
+      return res.status(401).json({ error: 'Refresh token required' });
+    }
+
+    if (!deviceId) {
+      return res.status(400).json({ error: 'Device ID required' });
+    }
+
+    // Verify and rotate refresh token
+    const result = await RefreshToken.verifyAndRotate(refreshToken, deviceId);
+
+    if (!result) {
+      console.log('❌ Invalid or expired refresh token');
+      return res.status(403).json({ 
+        error: 'Invalid or expired refresh token',
+        requiresLogin: true 
+      });
+    }
+
+    const { newToken: newRefreshToken, user } = result;
+
+    // Generate new Access Token
+    const accessToken = generateJWT(user.googleId, '1h');
+
+    console.log('✅ Token refreshed for:', user.email);
+
+    res.json({
+      accessToken,
+      refreshToken: newRefreshToken
+    });
+
+  } catch (error) {
+    console.error('❌ Refresh token error:', error);
+    res.status(500).json({ error: 'Failed to refresh token' });
+  }
+};
+
+/**
+ * Logout (Current Device)
+ * Revokes refresh token for the current device
+ */
+export const logout = async (req, res) => {
+  const { deviceId } = req.body;
+  const googleId = req.user?.googleId;
+
+  try {
+    if (!googleId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const user = await User.findOne({ googleId }).select('_id');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (deviceId) {
+      const count = await RefreshToken.revokeForDevice(user._id, deviceId);
+      console.log(`✅ Revoked ${count} token(s) for device`);
+    }
+
+    res.json({ success: true, message: 'Logged out successfully' });
+
+  } catch (error) {
+    console.error('❌ Logout error:', error);
+    res.status(500).json({ error: 'Logout failed' });
+  }
+};
+
+/**
+ * Logout All Devices
+ * Revokes all refresh tokens for the user
+ */
+export const logoutAllDevices = async (req, res) => {
+  const googleId = req.user?.googleId;
+
+  try {
+    if (!googleId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const user = await User.findOne({ googleId }).select('_id');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const count = await RefreshToken.revokeAllForUser(user._id);
+    console.log(`✅ Revoked ${count} token(s) for user ${googleId}`);
+
+    res.json({ success: true, message: `Logged out from ${count} device(s)` });
+
+  } catch (error) {
+    console.error('❌ Logout all error:', error);
+    res.status(500).json({ error: 'Logout failed' });
+  }
+};
+
+/**
+ * Get Active Sessions
+ * Returns list of devices with active sessions
+ */
+export const getActiveSessions = async (req, res) => {
+  const googleId = req.user?.googleId;
+
+  try {
+    if (!googleId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const user = await User.findOne({ googleId }).select('_id');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const sessions = await RefreshToken.getActiveSessions(user._id);
+
+    res.json({
+      sessions: sessions.map(s => ({
+        deviceId: s.deviceId,
+        deviceName: s.deviceName,
+        platform: s.platform,
+        createdAt: s.createdAt,
+        lastUsedAt: s.lastUsedAt
+      }))
+    });
+
+  } catch (error) {
+    console.error('❌ Get sessions error:', error);
+    res.status(500).json({ error: 'Failed to get sessions' });
+  }
+};
+
+// Legacy endpoint - kept for backward compatibility during migration
 export const checkDeviceId = async (req, res) => {
-  // Support both platformId (new) and deviceId (legacy) for backward compatibility
   const { platformId, deviceId } = req.body;
   const identifier = platformId || deviceId;
 
   try {
     if (!identifier || identifier.trim() === '') {
       return res.status(400).json({ 
-        error: 'Platform ID is required',
+        error: 'Device ID is required',
         hasLoggedIn: false 
       });
     }
 
-    console.log('🔍 Check Platform ID: Checking platform:', identifier.substring(0, 8) + '...');
-
-    // Find if any user has this platform ID in their deviceIds array (kept as deviceIds for backward compatibility)
-    const user = await User.findOne({ deviceIds: identifier })
-      .select('googleId name email profilePic deviceIds');
-
-    if (user) {
-      console.log('✅ Platform ID found - user has logged in before:', user.googleId);
+    // Check RefreshToken collection first (new system)
+    const session = await RefreshToken.findValidSessionByDevice(identifier);
+    
+    if (session && session.userId) {
+      const user = session.userId;
       return res.json({
         hasLoggedIn: true,
         userId: user.googleId,
         userName: user.name,
-        userEmail: user.email, // **NEW: Return email for seamless auto-login**
-        profilePic: user.profilePic // **NEW: Return profile pic**
-      });
-    } else {
-      console.log('ℹ️ Platform ID not found - user has not logged in before');
-      return res.json({
-        hasLoggedIn: false
+        userEmail: user.email,
+        profilePic: user.profilePic
       });
     }
+
+    // Fallback: Check legacy deviceIds array in User model
+    const user = await User.findOne({ deviceIds: identifier })
+      .select('googleId name email profilePic');
+
+    if (user) {
+      return res.json({
+        hasLoggedIn: true,
+        userId: user.googleId,
+        userName: user.name,
+        userEmail: user.email,
+        profilePic: user.profilePic
+      });
+    }
+
+    return res.json({ hasLoggedIn: false });
+
   } catch (error) {
-    console.error('Check Platform ID error:', error);
-    res.status(500).json({ 
-      error: 'Failed to check platform ID', 
-      details: error.message,
-      hasLoggedIn: false 
-    });
+    console.error('Check Device ID error:', error);
+    res.status(500).json({ error: 'Check failed', hasLoggedIn: false });
   }
 };

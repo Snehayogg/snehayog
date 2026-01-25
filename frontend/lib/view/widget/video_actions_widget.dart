@@ -4,8 +4,6 @@ import 'package:vayu/model/video_model.dart';
 import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'package:vayu/core/constants/app_constants.dart';
 import 'package:vayu/services/video_service.dart';
-import 'package:vayu/services/comments/video_comments_data_source.dart';
-import 'package:vayu/view/widget/comments_sheet_widget.dart';
 import 'package:vayu/view/widget/custom_share_widget.dart';
 import 'package:vayu/utils/app_logger.dart';
 
@@ -31,10 +29,7 @@ class VideoActionsWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return RepaintBoundary(child: Consumer<GoogleSignInController>(
       builder: (context, controller, child) {
-        final userData = controller.userData;
-        // Use googleId for likedBy comparisons (backend returns likedBy as googleIds)
-        final userId = userData?['googleId'] ?? userData?['id'];
-        final isLiked = userId != null && video.likedBy.contains(userId);
+        final isLiked = video.isLiked;
 
         return Column(
           mainAxisSize: MainAxisSize.min,
@@ -48,20 +43,6 @@ class VideoActionsWidget extends StatelessWidget {
               ),
               onPressed: () => onLike(index),
               label: '${video.likes}',
-            ),
-
-            // **REDUCED spacing from 20 to 12 for more compact look**
-            const SizedBox(height: 12),
-
-            // Comment button
-            _ActionButton(
-              icon: const Icon(
-                Icons.comment,
-                color: Colors.white,
-                size: AppConstants.actionButtonSize,
-              ),
-              onPressed: () => _showComments(context),
-              label: '${video.comments.length}',
             ),
 
             // **REDUCED spacing from 20 to 12 for more compact look**
@@ -93,29 +74,6 @@ class VideoActionsWidget extends StatelessWidget {
   }
 
   // Move these methods back to VideoActionsWidget
-  void _showComments(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => CommentsSheetWidget(
-        video: video,
-        videoService: videoService,
-        dataSource: VideoCommentsDataSource(
-          videoId: video.id,
-          videoService: videoService,
-        ),
-        onCommentsUpdated: (List<Comment> updatedComments) {
-          // Update comments in the video model
-          video.comments = updatedComments;
-        },
-      ),
-    );
-  }
-
   void _showCustomShareSheet(BuildContext context) async {
     try {
       // Track share

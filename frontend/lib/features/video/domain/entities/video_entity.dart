@@ -1,4 +1,3 @@
-/// Domain entity for video - represents the core business logic
 class VideoEntity {
   final String id;
   final String title;
@@ -12,7 +11,6 @@ class VideoEntity {
   final int views;
   final int likes;
   final int shares;
-  final List<CommentEntity> comments;
   final String videoType;
   final String? link;
   final bool isLongVideo;
@@ -30,7 +28,6 @@ class VideoEntity {
     required this.views,
     required this.likes,
     required this.shares,
-    required this.comments,
     required this.videoType,
     this.link,
     required this.isLongVideo,
@@ -50,7 +47,6 @@ class VideoEntity {
     int? views,
     int? likes,
     int? shares,
-    List<CommentEntity>? comments,
     String? videoType,
     String? link,
     bool? isLongVideo,
@@ -68,7 +64,6 @@ class VideoEntity {
       views: views ?? this.views,
       likes: likes ?? this.likes,
       shares: shares ?? this.shares,
-      comments: comments ?? this.comments,
       videoType: videoType ?? this.videoType,
       link: link ?? this.link,
       isLongVideo: isLongVideo ?? this.isLongVideo,
@@ -126,6 +121,8 @@ class VideoEntity {
     return 'VideoEntity(id: $id, title: $title, uploader: $uploaderName)';
   }
 }
+
+// CommentEntity removed as per requirements to remove comment functionality
 
 /// Domain entity for video comments
 class CommentEntity {

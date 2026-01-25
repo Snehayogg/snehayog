@@ -62,6 +62,7 @@ dependencies:
   video_player_avfoundation: ^2.3.7
   # **NEW: Advanced video optimization package**
   video_thumbnail: ^0.5.3
+  like_button: ^2.0.5
   http_parser: ^4.0.2
   google_mobile_ads: ^5.3.1
   visibility_detector: ^0.4.0+2
@@ -88,6 +89,7 @@ dependencies:
   flutter_local_notifications: ^17.2.2
   shimmer: ^3.0.0
   firebase_performance: ^0.10.1+10
+  flutter_secure_storage: ^10.0.0
 
 
 dev_dependencies:

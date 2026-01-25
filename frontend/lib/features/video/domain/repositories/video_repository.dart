@@ -29,13 +29,6 @@ abstract class VideoRepository {
   /// Toggles the like status of a video for a user
   Future<VideoEntity> toggleLike(String videoId, String userId);
 
-  /// Adds a comment to a video
-  Future<List<CommentEntity>> addComment({
-    required String videoId,
-    required String text,
-    required String userId,
-  });
-
   /// Shares a video
   Future<VideoEntity> shareVideo({
     required String videoId,

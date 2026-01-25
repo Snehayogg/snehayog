@@ -7,9 +7,6 @@ import 'package:vayu/services/carousel_ad_service.dart';
 import 'package:vayu/services/ad_impression_service.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/video_service.dart';
-import 'package:vayu/view/widget/comments_sheet_widget.dart';
-import 'package:vayu/services/comments/ad_comments_data_source.dart';
-import 'package:vayu/services/ad_comment_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:vayu/view/widget/custom_share_widget.dart';
 import 'package:vayu/utils/app_logger.dart';
@@ -20,8 +17,7 @@ class CarouselAdWidget extends StatefulWidget {
   final CarouselAdModel carouselAd;
   final VoidCallback? onAdClosed;
   final bool autoPlay;
-  final String?
-      videoId; // **NEW: Track which video context this ad was shown in**
+  final String? videoId; // **NEW: Track which video context this ad was shown in**
 
   const CarouselAdWidget({
     Key? key,
@@ -572,12 +568,6 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
           ),
           const SizedBox(height: 20),
 
-          // Comment icon
-          _buildActionButton(
-            icon: Icons.chat_bubble_outline,
-            onTap: _onCommentTap,
-            count: widget.carouselAd.comments,
-          ),
           const SizedBox(height: 20),
 
           // Share icon
@@ -802,23 +792,6 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
       // If initially not liked and now liked, add one
       return _isLiked ? base + 1 : base;
     }
-  }
-
-  void _onCommentTap() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) => CommentsSheetWidget(
-        dataSource: AdCommentsDataSource(
-          adId: widget.carouselAd.id,
-          adCommentService: AdCommentService(),
-        ),
-      ),
-    );
   }
 
   void _onShareTap() {

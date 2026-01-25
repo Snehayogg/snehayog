@@ -5,7 +5,7 @@ import '../../domain/entities/video_entity.dart';
 import '../../../../model/video_model.dart';
 import '../datasources/video_local_datasource.dart';
 import '../../../../utils/app_logger.dart';
-// import '../models/comment_model.dart'; // Not needed - we only work with entities
+
 
 /// Implementation of the VideoRepository interface
 /// This class coordinates between different data sources
@@ -106,15 +106,6 @@ class VideoRepositoryImpl implements VideoRepository {
       views: model.views,
       likes: model.likes,
       shares: model.shares,
-      comments: model.comments
-          .map((c) => CommentEntity(
-                id: c.id,
-                text: c.text,
-                userId: c.userId,
-                userName: c.userName,
-                createdAt: c.createdAt,
-              ))
-          .toList(),
       videoType: model.videoType,
       link: model.link,
       isLongVideo:
@@ -139,15 +130,6 @@ class VideoRepositoryImpl implements VideoRepository {
         views: videoModel.views,
         likes: videoModel.likes,
         shares: videoModel.shares,
-        comments: videoModel.comments
-            .map((c) => CommentEntity(
-                  id: c.id,
-                  text: c.text,
-                  userId: c.userId,
-                  userName: c.userName,
-                  createdAt: c.createdAt,
-                ))
-            .toList(),
         videoType: videoModel.videoType,
         link: videoModel.link,
         isLongVideo: videoModel.videoType == 'yug',
@@ -175,15 +157,6 @@ class VideoRepositoryImpl implements VideoRepository {
                 views: model.views,
                 likes: model.likes,
                 shares: model.shares,
-                comments: model.comments
-                    .map((c) => CommentEntity(
-                          id: c.id,
-                          text: c.text,
-                          userId: c.userId,
-                          userName: c.userName,
-                          createdAt: c.createdAt,
-                        ))
-                    .toList(),
                 videoType: model.videoType,
                 link: model.link,
                 isLongVideo: model.videoType == 'yog',
@@ -232,37 +205,10 @@ class VideoRepositoryImpl implements VideoRepository {
         views: videoModel.views,
         likes: videoModel.likes,
         shares: videoModel.shares,
-        comments: videoModel.comments
-            .map((c) => CommentEntity(
-                  id: c.id,
-                  text: c.text,
-                  userId: c.userId,
-                  userName: c.userName,
-                  createdAt: c.createdAt,
-                ))
-            .toList(),
         videoType: videoModel.videoType,
         link: videoModel.link,
         isLongVideo: videoModel.videoType == 'yug',
       );
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  @override
-  Future<List<CommentEntity>> addComment({
-    required String videoId,
-    required String text,
-    required String userId,
-  }) async {
-    try {
-      final commentModels = await _remoteDataSource.addComment(
-        videoId: videoId,
-        text: text,
-        userId: userId,
-      );
-      return commentModels.map((model) => model.toEntity()).toList();
     } catch (e) {
       rethrow;
     }

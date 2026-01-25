@@ -45,11 +45,15 @@ FeedHistorySchema.index({ userId: 1, seenAt: 1 });
  * Uses bulkWrite for performance since we might mark batch of 10 videos at once
  */
 FeedHistorySchema.statics.markAsSeen = async function (userId, videos) {
-    if (!videos || videos.length === 0) return;
+    if (!videos) return;
+
+    // Normalize input to array
+    const videoArray = Array.isArray(videos) ? videos : [videos];
+    if (videoArray.length === 0) return;
 
     // Normalize input: can be array of IDs or array of Video objects
     // We prefer Video objects so we can extract videoHash
-    const ops = videos.map(v => {
+    const ops = videoArray.map(v => {
         const videoId = v._id || v;
         const videoHash = v.videoHash; // Might be undefined if passing just IDs
         

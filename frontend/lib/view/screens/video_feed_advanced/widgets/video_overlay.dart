@@ -9,7 +9,6 @@ class VideoOverlay extends StatelessWidget {
   final double? screenHeight;
   final bool Function(VideoModel) isLiked;
   final VoidCallback onLike;
-  final VoidCallback onComment;
   final VoidCallback onShare;
   final VoidCallback onOpenCarouselAd;
   final VoidCallback onOpenProfile;
@@ -22,7 +21,6 @@ class VideoOverlay extends StatelessWidget {
     required this.screenHeight,
     required this.isLiked,
     required this.onLike,
-    required this.onComment,
     required this.onShare,
     required this.onOpenCarouselAd,
     required this.onOpenProfile,
@@ -123,12 +121,6 @@ class VideoOverlay extends StatelessWidget {
                   color: isLiked(video) ? Colors.red : Colors.white,
                   count: video.likes,
                   onTap: onLike,
-                ),
-                const SizedBox(height: 10),
-                VerticalActionButton(
-                  icon: Icons.chat_bubble_outline,
-                  count: video.comments.length,
-                  onTap: onComment,
                 ),
                 const SizedBox(height: 10),
                 VerticalActionButton(

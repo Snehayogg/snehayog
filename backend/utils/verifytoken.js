@@ -19,12 +19,26 @@ export const verifyGoogleToken = async (idToken) => {
     return payload;
 };
 
-export const generateJWT = (userId) => {
+export const generateJWT = (userId, expiresIn = '1h') => {
     const JWT_SECRET = process.env.JWT_SECRET || config.auth.jwtSecret;
     const payload = { id: userId };
-    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn });
     
     return token;
+};
+
+// NOTE: Refresh tokens are now handled by the RefreshToken MongoDB model
+// with device-binding and secure hashing. See models/RefreshToken.js
+
+// Verify JWT access token (used internally)
+export const verifyJWT = (token) => {
+    try {
+        const JWT_SECRET = process.env.JWT_SECRET || config.auth.jwtSecret;
+        const decoded = jwt.verify(token, JWT_SECRET);
+        return decoded;
+    } catch (error) {
+        return null;
+    }
 };
 
 // Middleware to verify Google access token

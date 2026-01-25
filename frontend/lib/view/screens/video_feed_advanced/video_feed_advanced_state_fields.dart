@@ -8,6 +8,7 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   set _isLoading(bool value) => _isLoadingVN.value = value;
 
   String? _currentUserId;
+  String? _currentUserObjectId;
   int _previousIndex = 0;
   final ValueNotifier<int> _currentIndexVN = ValueNotifier<int>(0);
   int get _currentIndex => _currentIndexVN.value;
@@ -129,8 +130,6 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   final Map<int, ValueNotifier<bool>> _forceMountPlayer = {};
 
   // Retained controllers for refresh
-  final Map<String, VideoPlayerController> _retainedByVideoId = {};
-  final Set<int> _retainedIndices = {};
 
   // Infinite scrollingtrollers for refresh
 

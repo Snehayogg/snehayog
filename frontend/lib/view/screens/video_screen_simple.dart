@@ -219,14 +219,6 @@ class _VideoScreenSimpleState extends State<VideoScreenSimple> {
                           const TextStyle(color: Colors.white70, fontSize: 14),
                     ),
                     const SizedBox(width: 16),
-                    const Icon(Icons.comment_outlined,
-                        color: Colors.white70, size: 16),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${video.comments.length}',
-                      style:
-                          const TextStyle(color: Colors.white70, fontSize: 14),
-                    ),
                     const Spacer(),
                     // Like button
                     GestureDetector(
@@ -258,7 +250,7 @@ class _VideoScreenSimpleState extends State<VideoScreenSimple> {
 
   /// **SIMPLE LIKE HANDLING**
   bool _isLiked(VideoModel video) {
-    return _currentUserId != null && video.likedBy.contains(_currentUserId);
+    return video.isLiked;
   }
 
   /// **SIMPLE LIKE ACTION**
@@ -271,20 +263,19 @@ class _VideoScreenSimpleState extends State<VideoScreenSimple> {
     }
 
     // **OPTIMISTIC UPDATE: Update UI immediately for instant feedback (heart fills red instantly)**
-    final wasLiked = video.likedBy.contains(_currentUserId);
+    final wasLiked = video.isLiked;
     final originalLikes = video.likes;
-    final originalLikedBy = List<String>.from(video.likedBy);
 
     // Update UI immediately (optimistic) - this makes heart fill red instantly
     if (mounted) {
       setState(() {
         if (wasLiked) {
           // User is currently liking, so unlike
-          video.likedBy.remove(_currentUserId);
+          video.isLiked = false;
           video.likes = (video.likes - 1).clamp(0, double.infinity).toInt();
         } else {
           // User is not currently liking, so like
-          video.likedBy.add(_currentUserId!);
+          video.isLiked = true;
           video.likes++;
         }
       });
@@ -308,8 +299,7 @@ class _VideoScreenSimpleState extends State<VideoScreenSimple> {
       // **REVERT: If backend fails, revert optimistic update**
       if (mounted) {
         setState(() {
-          video.likedBy.clear();
-          video.likedBy.addAll(originalLikedBy);
+          video.isLiked = wasLiked;
           video.likes = originalLikes;
         });
       }

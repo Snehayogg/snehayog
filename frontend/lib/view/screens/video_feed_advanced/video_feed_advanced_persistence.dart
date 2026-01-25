@@ -47,34 +47,6 @@ extension _VideoFeedPersistence on _VideoFeedAdvancedState {
     }
   }
 
-  void _restoreRetainedControllersAfterRefresh() {
-    if (_retainedByVideoId.isEmpty) return;
-    AppLogger.log('🔁 Restoring retained controllers after refresh...');
-    final Map<String, int> idToIndex = {};
-    for (int i = 0; i < _videos.length; i++) {
-      idToIndex[_videos[i].id] = i;
-    }
-    _retainedByVideoId.forEach((videoId, controller) {
-      final newIndex = idToIndex[videoId];
-      if (newIndex != null) {
-        _controllerPool[newIndex] = controller;
-        _controllerStates[newIndex] = false;
-        _preloadedVideos.add(newIndex);
-        _firstFrameReady[newIndex] =
-            ValueNotifier<bool>(true); // already had a frame
-        AppLogger.log(
-            '✅ Restored controller for video $videoId at index $newIndex');
-      } else {
-        try {
-          controller.dispose();
-          AppLogger.log(
-              '🗑️ Disposed retained controller for old video $videoId');
-        } catch (_) {}
-      }
-    });
-    _retainedByVideoId.clear();
-    _retainedIndices.clear();
-  }
 
   Future<void> _restoreBackgroundStateIfAny() async {
     try {

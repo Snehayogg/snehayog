@@ -4,9 +4,7 @@ import 'package:vayu/widgets/actions/vertical_action_button.dart';
 class RightActionsColumn extends StatelessWidget {
   final bool isLiked;
   final int likes;
-  final int comments;
   final VoidCallback onLike;
-  final VoidCallback onComment;
   final VoidCallback onShare;
   final VoidCallback onSwipe;
 
@@ -14,9 +12,7 @@ class RightActionsColumn extends StatelessWidget {
     super.key,
     required this.isLiked,
     required this.likes,
-    required this.comments,
     required this.onLike,
-    required this.onComment,
     required this.onShare,
     required this.onSwipe,
   });
@@ -33,12 +29,6 @@ class RightActionsColumn extends StatelessWidget {
             color: isLiked ? Colors.red : Colors.white,
             count: likes,
             onTap: onLike,
-          ),
-          const SizedBox(height: 12),
-          VerticalActionButton(
-            icon: Icons.chat_bubble_outline,
-            count: comments,
-            onTap: onComment,
           ),
           const SizedBox(height: 12),
           VerticalActionButton(

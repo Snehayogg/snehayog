@@ -37,7 +37,8 @@ class AdImpressionService {
           'videoId': videoId,
           'adId': adId,
           'userId': userId,
-          'creatorId': userId, // Optimized: backend can avoid Video lookup if we pass uploader
+          // NOTE: creatorId is NOT sent - backend fetches it from Video document
+          // This avoids ID type confusion (googleId vs MongoDB ObjectId)
           'adType': 'banner',
           'timestamp': DateTime.now().toIso8601String(),
           'impressionType': 'view',

@@ -2257,7 +2257,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                             ),
                             Expanded(
                               child: _buildCompactStatItem(
-                                label: 'Videos',
+                                label: 'Content',
                                 valueBuilder: (context) => stateManager.totalVideoCount.toString(),
                               ),
                             ),

@@ -33,10 +33,12 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
+      margin: EdgeInsets.zero, // **FIX: Remove default margin to reduce horizontal spacing**
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8), // **FIX: Reduce header padding**
             leading: const Icon(Icons.tune, color: Colors.blue),
             title: const Text(
               'Advanced Options',
@@ -64,20 +66,19 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
               }
 
               return Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0), // Add slight internal padding for aesthetics
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
 
                     _buildTitleField(),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 10),
                     _buildCategorySelector(),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 10),
                     _buildLinkField(),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 10),
                     _buildTagInput(context),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 10),
                     _buildMakeEpisodeOption(context),
 
                   ],
@@ -91,19 +92,23 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
   }
 
 
-
   Widget _buildTitleField() {
     return TextField(
       controller: titleController,
+      minLines: 2,
+      maxLines: 2,
       decoration: InputDecoration(
-        labelText: 'Video Title',
+        labelText: '',
+        floatingLabelBehavior: FloatingLabelBehavior.always,
         labelStyle: const TextStyle(color: Colors.black87),
-        hintText: 'Update the auto-generated title',
+        hintText: 'Write a title',
         hintStyle: TextStyle(color: Colors.grey.withOpacity(0.4)),
         filled: false,
         fillColor: Colors.transparent,
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12), // **FIX: Reduced horizontal padding**
+        prefixIcon: const Icon(Icons.title, size: 20),
         border: const OutlineInputBorder(),
-        prefixIcon: const Icon(Icons.title),
       ),
     );
   }
@@ -127,9 +132,10 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
             filled: false,
             fillColor: Colors.transparent,
             border: OutlineInputBorder(),
-            prefixIcon: Icon(Icons.category),
             helperText: null,
-            labelStyle: const TextStyle(color: Colors.black87),
+            labelStyle: TextStyle(color: Colors.black87),
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10), // **FIX: Reduced horizontal padding**
           ),
           items: options
               .map(
@@ -150,6 +156,7 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
       controller: linkController,
       decoration: const InputDecoration(
         labelText: '',
+        floatingLabelBehavior: FloatingLabelBehavior.always,
         hintText: 'Add a website link',
         hintStyle:  TextStyle(color: Colors.grey, fontSize: 12),
         helperText: 'Promote your business',
@@ -157,7 +164,9 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
         filled: false,
         fillColor: Colors.transparent,
         border:  OutlineInputBorder(),
-        prefixIcon:  Icon(Icons.link),
+        prefixIcon:  Icon(Icons.link, size: 20),
+        isDense: true,
+        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 12), // **FIX: Reduced horizontal padding**
       ),
       keyboardType: TextInputType.url,
     );
@@ -167,11 +176,10 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
     return InkWell(
       onTap: () => _showAddTagsBottomSheet(context),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        padding: const EdgeInsets.symmetric(vertical: 2.0),
         child: Row(
           children: [
-            const Icon(Icons.tag, color: Colors.black),
-            const SizedBox(width: 16),
+            const SizedBox(width: 8), // **FIX: Reduced spacer**
             const Expanded(
               child: Text(
                 'Add Tags',
@@ -311,16 +319,16 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
         );
       },
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        padding: const EdgeInsets.symmetric(vertical: 2.0),
         child: Row(
           children: [
             const Icon(Icons.playlist_play, color: Colors.black),
-            const SizedBox(width: 16),
+            const SizedBox(width: 8), // **FIX: Reduced spacer**
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                   const Text(
                     'Make a Episode',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,

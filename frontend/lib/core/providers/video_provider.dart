@@ -212,23 +212,6 @@ class VideoProvider extends ChangeNotifier {
     }
   }
 
-  /// Add comment to a video
-  Future<void> addComment(String videoId, String comment, String userId) async {
-    try {
-      final updatedComments =
-          await _videoService.addComment(videoId, comment, userId);
-
-      // Update the video in the list
-      final index = _videos.indexWhere((v) => v.id == videoId);
-      if (index != -1) {
-        _videos[index].comments = updatedComments;
-        notifyListeners();
-      }
-    } catch (e) {
-      _errorMessage = e.toString();
-      notifyListeners();
-    }
-  }
 
   /// Get video by index
   VideoModel? getVideoByIndex(int index) {

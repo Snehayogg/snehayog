@@ -61,20 +61,17 @@ class VideoEngagementRanker {
   ) {
     final watchTimeValue = _estimateWatchTime(video);
     final likesValue = video.likes.clamp(0, 1000000000).toDouble();
-    final commentsValue = video.comments.length.clamp(0, 1000000000).toDouble();
     final sharesValue = video.shares.toDouble().clamp(0.0, double.infinity);
 
     final watchTimeScore = _normalize(watchTimeValue, stats.maxWatchTime);
     final likeScore = _normalize(likesValue, stats.maxLikes);
-    final commentScore = _normalize(commentsValue, stats.maxComments);
     final shareScore = _normalize(sharesValue, stats.maxShares);
 
     // **NEW WEIGHTS (requested):**
-    // 50% watch time, 20% shares, 20% likes, 10% comments
+    // 50% watch time, 20% shares, 30% likes
     return (0.50 * watchTimeScore) +
         (0.20 * shareScore) +
-        (0.20 * likeScore) +
-        (0.10 * commentScore);
+        (0.30 * likeScore);
   }
 
   static double _estimateWatchTime(VideoModel video) {
@@ -113,20 +110,17 @@ class VideoEngagementRanker {
 class _EngagementStats {
   final double maxWatchTime;
   final double maxLikes;
-  final double maxComments;
   final double maxShares;
 
   _EngagementStats({
     required this.maxWatchTime,
     required this.maxLikes,
-    required this.maxComments,
     required this.maxShares,
   });
 
   factory _EngagementStats.fromVideos(List<VideoModel> videos) {
     double maxWatch = 0;
     double maxLikes = 0;
-    double maxComments = 0;
     double maxShares = 0;
 
     for (final video in videos) {
@@ -134,8 +128,6 @@ class _EngagementStats {
           math.max(maxWatch, VideoEngagementRanker._estimateWatchTime(video));
       maxLikes =
           math.max(maxLikes, video.likes.clamp(0, 1000000000).toDouble());
-      maxComments = math.max(
-          maxComments, video.comments.length.clamp(0, 1000000000).toDouble());
       maxShares = math.max(
           maxShares, video.shares.toDouble().clamp(0.0, double.infinity));
     }
@@ -143,7 +135,6 @@ class _EngagementStats {
     return _EngagementStats(
       maxWatchTime: maxWatch,
       maxLikes: maxLikes,
-      maxComments: maxComments,
       maxShares: maxShares,
     );
   }

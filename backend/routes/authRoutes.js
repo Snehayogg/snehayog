@@ -1,22 +1,46 @@
 import express from 'express';
-import { googleSignIn, checkDeviceId } from '../controllers/authController.js';
+import { 
+  googleSignIn, 
+  deviceLogin, 
+  refreshAccessToken, 
+  logout, 
+  logoutAllDevices, 
+  getActiveSessions,
+  checkDeviceId 
+} from '../controllers/authController.js';
 import { authLimiter } from '../middleware/rateLimiter.js';
+import { verifyToken } from '../utils/verifytoken.js';
 
 const router = express.Router();
 
-// **FIXED: Main auth endpoint that Flutter app calls**
-// **NEW: Apply Strict Rate Limiting (Prevent Brute Force)**
-router.post('/', authLimiter, googleSignIn);
+/**
+ * Public Auth Routes (No auth required)
+ */
 
-// **KEEP: Specific Google endpoint for clarity**
+// Google Sign-In (first-time login / re-authentication)
+router.post('/', authLimiter, googleSignIn);
 router.post('/google', authLimiter, googleSignIn);
 
-// **NEW: Check if device ID has logged in before (for skipping login after reinstall)**
-router.post('/check-device', blockPublicAccess, checkDeviceId);
+// Device Auto-Login (after app reinstall)
+router.post('/device-login', authLimiter, deviceLogin);
 
-// Helper to block public access if needed, or we can just rely on authLimiter
-function blockPublicAccess(req, res, next) {
-    next();
-}
+// Refresh Access Token
+router.post('/refresh', authLimiter, refreshAccessToken);
+
+// Legacy: Check if device has logged in before
+router.post('/check-device', authLimiter, checkDeviceId);
+
+/**
+ * Protected Auth Routes (Auth required)
+ */
+
+// Logout current device
+router.post('/logout', verifyToken, logout);
+
+// Logout all devices
+router.post('/logout-all', verifyToken, logoutAllDevices);
+
+// Get active sessions
+router.get('/sessions', verifyToken, getActiveSessions);
 
 export default router;

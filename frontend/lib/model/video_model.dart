@@ -13,7 +13,6 @@ class VideoModel {
   final String videoType;
   final double aspectRatio;
   final Duration duration;
-  List<Comment> comments;
   final String? link;
   final double earnings;
   // **NEW: Original video resolution (width x height)**
@@ -25,6 +24,7 @@ class VideoModel {
   final String? hlsPlaylistUrl;
   final List<Map<String, dynamic>>? hlsVariants;
   final bool? isHLSEncoded;
+  bool isLiked;
 
   // **SIMPLIFIED: Since all videos are 480p, we only need one quality URL**
   // Keeping lowQualityUrl for backward compatibility (will contain 480p URL)
@@ -55,7 +55,6 @@ class VideoModel {
     required this.videoType,
     required this.aspectRatio,
     required this.duration,
-    required List<Comment> comments, // **FIXED: Explicit type annotation**
     this.link,
     this.earnings = 0.0, // **NEW: Default earnings to 0.0**
     this.hlsMasterPlaylistUrl,
@@ -72,7 +71,8 @@ class VideoModel {
     this.episodes, // **NEW: Related episodes**
     this.seriesId,
     this.episodeNumber,
-  }) : comments = comments; // **FIXED: Initialize the field**
+    this.isLiked = false,
+  });
 
   factory VideoModel.fromJson(Map<String, dynamic> json) {
     try {
@@ -187,16 +187,34 @@ class VideoModel {
               return <String>[];
             }
 
-            // **FIXED: More explicit type checking and conversion**
-            if (json['likedBy'] is List<dynamic>) {
-              final likedByList = json['likedBy'] as List<dynamic>;
-              if (likedByList.isEmpty) {
-                return <String>[];
-              }
-
+            if (json['likedBy'] is List) {
+              final likedByList = json['likedBy'] as List;
               final List<String> parsedLikedBy = <String>[];
+              
               for (final dynamic item in likedByList) {
-                parsedLikedBy.add(item.toString());
+                if (item == null) continue;
+                
+                String idStr = "";
+                if (item is String) {
+                  idStr = item;
+                } else if (item is Map && item.containsKey('\$oid')) {
+                  idStr = item['\$oid'].toString();
+                } else {
+                  idStr = item.toString();
+                }
+                
+                // **ROBUSTNESS: Strip MongoDB ObjectId(...) wrapper if present**
+                if (idStr.contains('ObjectId("')) {
+                  final start = idStr.indexOf('ObjectId("') + 10;
+                  final end = idStr.indexOf('")', start);
+                  if (end > start) {
+                    idStr = idStr.substring(start, end);
+                  }
+                }
+                
+                if (idStr.isNotEmpty) {
+                  parsedLikedBy.add(idStr);
+                }
               }
               return parsedLikedBy;
             }
@@ -216,66 +234,6 @@ class VideoModel {
             seconds: (json['duration'] is int)
                 ? json['duration']
                 : int.tryParse(json['duration']?.toString() ?? '0') ?? 0),
-        comments: () {
-          try {
-            print('🔍 VideoModel: Parsing comments field...');
-            print('🔍 VideoModel: json["comments"] = ${json['comments']}');
-            print(
-                '🔍 VideoModel: json["comments"] type = ${json['comments']?.runtimeType}');
-
-            if (json['comments'] == null) {
-              print('🔍 VideoModel: comments is null, returning empty list');
-              return <Comment>[];
-            }
-
-            // **FIXED: More explicit type checking and conversion**
-            if (json['comments'] is List<dynamic>) {
-              final commentsList = json['comments'] as List<dynamic>;
-              print(
-                  '🔍 VideoModel: comments is List<dynamic> with ${commentsList.length} items');
-
-              if (commentsList.isEmpty) {
-                print(
-                    '🔍 VideoModel: comments list is empty, returning empty list');
-                return <Comment>[];
-              }
-
-              final List<Comment> parsedComments = <Comment>[];
-
-              for (final dynamic comment in commentsList) {
-                print(
-                    '🔍 VideoModel: Processing comment: $comment (type: ${comment.runtimeType})');
-                if (comment is Map<String, dynamic>) {
-                  try {
-                    final parsedComment = Comment.fromJson(comment);
-                    print(
-                        '🔍 VideoModel: Successfully parsed comment: ${parsedComment.toJson()}');
-                    parsedComments.add(parsedComment);
-                  } catch (e) {
-                    print(
-                        '⚠️ VideoModel: Error parsing individual comment: $e');
-                    // Skip invalid comments
-                  }
-                } else {
-                  print(
-                      '⚠️ VideoModel: Skipping invalid comment (not Map): $comment');
-                }
-              }
-
-              print(
-                  '🔍 VideoModel: Successfully parsed ${parsedComments.length} comments');
-              return parsedComments;
-            }
-
-            print(
-                '🔍 VideoModel: comments is not a List<dynamic>, returning empty list');
-            return <Comment>[];
-          } catch (e) {
-            print('❌ VideoModel: Error parsing comments: $e');
-            print('❌ Stack trace: ${StackTrace.current}');
-            return <Comment>[];
-          }
-        }(),
         link: () {
           print(
               '🔗 VideoModel: Parsing link field for video: ${json['videoName']}');
@@ -386,6 +344,7 @@ class VideoModel {
         episodeNumber: (json['episodeNumber'] is int)
             ? json['episodeNumber']
             : int.tryParse(json['episodeNumber']?.toString() ?? '0') ?? 0,
+        isLiked: json['isLiked'] == true,
       );
     } catch (e, stackTrace) {
       print('❌ VideoModel.fromJson Error: $e');
@@ -418,7 +377,6 @@ class VideoModel {
       'videoType': videoType,
       'aspectRatio': aspectRatio,
       'duration': duration.inSeconds,
-      'comments': comments.map((comment) => comment.toJson()).toList(),
       'link': link,
       'earnings': earnings, // **NEW: Include earnings in JSON**
       'hlsMasterPlaylistUrl': hlsMasterPlaylistUrl,
@@ -430,6 +388,7 @@ class VideoModel {
       'episodes': episodes,
       'seriesId': seriesId,
       'episodeNumber': episodeNumber,
+      'isLiked': isLiked,
     };
   }
 
@@ -448,7 +407,6 @@ class VideoModel {
     String? videoType,
     double? aspectRatio,
     Duration? duration,
-    List<Comment>? comments,
     String? link,
     double? earnings, // **NEW: Add earnings to copyWith**
     // **CRITICAL FIX: Add HLS fields to copyWith**
@@ -461,6 +419,7 @@ class VideoModel {
     List<Map<String, dynamic>>? episodes,
     String? seriesId,
     int? episodeNumber,
+    bool? isLiked,
   }) {
     return VideoModel(
       id: id ?? this.id,
@@ -478,7 +437,6 @@ class VideoModel {
       videoType: videoType ?? this.videoType,
       aspectRatio: aspectRatio ?? this.aspectRatio,
       duration: duration ?? this.duration,
-      comments: comments ?? this.comments,
       link: link ?? this.link,
       earnings:
           earnings ?? this.earnings, // **NEW: Handle earnings in copyWith**
@@ -492,6 +450,7 @@ class VideoModel {
       episodes: episodes ?? this.episodes,
       seriesId: seriesId ?? this.seriesId,
       episodeNumber: episodeNumber ?? this.episodeNumber,
+      isLiked: isLiked ?? this.isLiked,
     );
   }
 
@@ -527,6 +486,7 @@ class Uploader {
   final String name;
   final String profilePic;
   final String? googleId;
+  final String? mongoId; // **NEW: Raw MongoDB ObjectId for API calls**
   final int? totalVideos; // **NEW: Total video count from backend**
   final double? earnings; // **NEW: Total earnings from backend**
 
@@ -535,6 +495,7 @@ class Uploader {
     required this.name,
     required this.profilePic,
     this.googleId,
+    this.mongoId,
     this.totalVideos,
     this.earnings,
   });
@@ -579,11 +540,15 @@ class Uploader {
         }
       }
 
+      // Extract raw MongoDB ObjectId
+      final mongoId = json['_id']?.toString();
+
       return Uploader(
         id: resolvedId,
         name: json['name']?.toString() ?? '',
         profilePic: json['profilePic']?.toString() ?? '',
         googleId: resolvedGoogleId,
+        mongoId: mongoId,
         totalVideos: json['totalVideos'] is int ? json['totalVideos'] : int.tryParse(json['totalVideos']?.toString() ?? ''),
         earnings: (json['earnings'] is num)
             ? json['earnings'].toDouble()
@@ -602,6 +567,7 @@ class Uploader {
     String? name,
     String? profilePic,
     String? googleId,
+    String? mongoId,
     int? totalVideos,
     double? earnings,
   }) {
@@ -610,6 +576,7 @@ class Uploader {
       name: name ?? this.name,
       profilePic: profilePic ?? this.profilePic,
       googleId: googleId ?? this.googleId,
+      mongoId: mongoId ?? this.mongoId,
       totalVideos: totalVideos ?? this.totalVideos,
       earnings: earnings ?? this.earnings,
     );
@@ -621,69 +588,11 @@ class Uploader {
       'name': name,
       'profilePic': profilePic,
       if (googleId != null) 'googleId': googleId,
+      if (mongoId != null) '_id': mongoId,
       if (totalVideos != null) 'totalVideos': totalVideos,
       if (earnings != null) 'earnings': earnings,
     };
   }
 }
 
-class Comment {
-  final String id;
-  final String userId;
-  final String userName;
-  final String userProfilePic;
-  final String text;
-  final DateTime createdAt;
 
-  Comment({
-    required this.id,
-    required this.userId,
-    required this.userName,
-    required this.userProfilePic,
-    required this.text,
-    required this.createdAt,
-  });
-
-  factory Comment.fromJson(Map<String, dynamic> json) {
-    try {
-      print('🔍 Comment.fromJson: Parsing comment data: $json');
-
-      return Comment(
-        id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
-        userId: json['userId']?.toString() ??
-            json['user']?['_id']?.toString() ??
-            json['user']?['googleId']?.toString() ??
-            '',
-        userName: json['userName']?.toString() ??
-            json['user']?['name']?.toString() ??
-            'User',
-        userProfilePic: json['userProfilePic']?.toString() ??
-            json['user']?['profilePic']?.toString() ??
-            '',
-        text: json['text']?.toString() ??
-            json['content']?.toString() ??
-            json['comment']?.toString() ??
-            '',
-        createdAt: json['createdAt'] != null
-            ? DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now()
-            : DateTime.now(),
-      );
-    } catch (e, stackTrace) {
-      print('❌ Comment.fromJson Error: $e');
-      print('❌ Stack trace: $stackTrace');
-      print('❌ Comment JSON data: $json');
-      rethrow;
-    }
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'userId': userId,
-      'userName': userName,
-      'userProfilePic': userProfilePic,
-      'text': text,
-      'createdAt': createdAt.toIso8601String(),
-    };
-  }
-}

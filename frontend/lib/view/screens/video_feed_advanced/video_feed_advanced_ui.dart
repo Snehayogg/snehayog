@@ -1011,7 +1011,25 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                               ),
                             ),
                             const SizedBox(width: 6),
-                            _buildFollowTextButton(video),
+                            // **NEW: Subscribe Button**
+                            GestureDetector(
+                              onTap: () => _handleFollow(video),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: _isFollowing(video.uploader.id) ? Colors.grey[700] : Colors.black,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  _isFollowing(video.uploader.id) ? 'Subscribed' : 'Subscribe',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -1084,27 +1102,26 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                     if (video.episodes != null && video.episodes!.isNotEmpty)
                       Column(
                         children: [
-                          _buildVerticalActionButton(
+                      _buildVerticalActionButton(
                             icon: Icons.playlist_play_rounded,
                             onTap: () => _showEpisodeList(context, video),
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 12),
                         ],
                       ),
                   _buildLikeButton(video, index),
-                  const SizedBox(height: 10),
-                    const SizedBox(height: 10),
+                  const SizedBox(height: 12),
+                    // **NEW: Info Button for Video Details**
                     _buildVerticalActionButton(
-                      icon: Icons.chat_bubble_outline,
-                      count: video.comments.length,
-                      onTap: () => _handleComment(video),
+                      icon: Icons.info_outline,
+                      onTap: () => _showVideoDetailsBottomSheet(context, video),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
                     _buildVerticalActionButton(
                       icon: Icons.share,
                       onTap: () => _handleShare(video),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
                     GestureDetector(
                       onTap: () => _navigateToCarouselAd(index),
                       child: Column(
@@ -1143,58 +1160,73 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     );
   }
 
-  Widget _buildLikeButton(VideoModel video, int index) {
-      // Ensure notifiers exist
-      final likedVN = _isLikedVN.putIfAbsent(video.id, 
-          () => ValueNotifier<bool>((_currentUserId != null && video.likedBy.contains(_currentUserId))));
-      final countVN = _likeCountVN.putIfAbsent(video.id, 
-          () => ValueNotifier<int>(video.likes));
+  ValueNotifier<bool> _getLikeNotifier(VideoModel video) {
+    if (!_isLikedVN.containsKey(video.id)) {
+      _isLikedVN[video.id] = ValueNotifier<bool>(video.isLiked);
+    }
+    return _isLikedVN[video.id]!;
+  }
 
-      return GestureDetector(
-        onTap: () => _handleLike(video, index),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.5),
-                shape: BoxShape.circle,
-              ),
-              child: ValueListenableBuilder<bool>(
-                valueListenable: likedVN,
-                builder: (context, isLiked, child) {
-                  return Icon(
-                    isLiked ? Icons.favorite : Icons.favorite_border,
-                    color: isLiked ? Colors.red : Colors.white,
-                    size: 18,
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 4),
-            ValueListenableBuilder<int>(
-              valueListenable: countVN,
-              builder: (context, count, child) {
-                return Text(
-                  _formatCount(count),
+  ValueNotifier<int> _getLikeCountNotifier(VideoModel video) {
+    if (!_likeCountVN.containsKey(video.id)) {
+      _likeCountVN[video.id] = ValueNotifier<int>(video.likes);
+    }
+    return _likeCountVN[video.id]!;
+  }
+
+  Widget _buildLikeButton(VideoModel video, int index) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: _getLikeNotifier(video),
+      builder: (context, isLiked, _) {
+        return ValueListenableBuilder<int>(
+          valueListenable: _getLikeCountNotifier(video),
+          builder: (context, likeCount, _) {
+            // **NEW: Using LikeButton for burst animation**
+            return Column(
+              children: [
+                LikeButton(
+                  size: 40,
+                  isLiked: isLiked,
+                  circleColor: const CircleColor(
+                    start: Color(0xff00ddff),
+                    end: Color(0xff0099cc),
+                  ),
+                  bubblesColor: const BubblesColor(
+                    dotPrimaryColor: Color(0xff33b5e5),
+                    dotSecondaryColor: Color(0xff0099cc),
+                  ),
+                  likeBuilder: (bool isLiked) {
+                    return Icon(
+                      isLiked ? Icons.favorite : Icons.favorite_border,
+                      color: isLiked ? Colors.red : Colors.white,
+                      size: 40,
+                    );
+                  },
+                  onTap: (bool isLiked) async {
+                    // Call existing logic (it handles strict optimistic updates internally)
+                    // We invert isLiked because the callback gives us the *current* state before toggle
+                    // and we want to perform the action.
+                    await _handleLike(video, index);
+
+                    // Return the new state (inverse of what it was)
+                    return !isLiked;
+                  },
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _formatCount(likeCount),
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 12,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    shadows: [
-                      Shadow(
-                        offset: Offset(0, 1),
-                        blurRadius: 2,
-                        color: Colors.black54,
-                      ),
-                    ],
                   ),
-                );
-              },
-            ),
-          ],
-        ),
-      );
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   Widget _buildVerticalActionButton({
@@ -1476,6 +1508,112 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           },
         );
       },
+    );
+  }
+
+  String _formatUploadDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+
+    if (difference.inDays > 365) {
+      return '${(difference.inDays / 365).floor()}y ago';
+    } else if (difference.inDays > 30) {
+      return '${(difference.inDays / 30).floor()}mo ago';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
+  }
+
+
+  /// **SHOW VIDEO DETAILS BOTTOM SHEET**
+  void _showVideoDetailsBottomSheet(BuildContext context, VideoModel video) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Video Details',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                const Icon(Icons.calendar_today, size: 20, color: Colors.grey),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Published on',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    Text(
+                      _formatUploadDate(video.uploadedAt),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const Icon(Icons.remove_red_eye_outlined, size: 20, color: Colors.grey),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Total Views',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    Text(
+                      '${_formatCount(video.views)} views',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 30),
+          ],
+        ),
+      ),
     );
   }
 }

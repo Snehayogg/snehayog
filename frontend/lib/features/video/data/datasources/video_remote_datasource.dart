@@ -7,7 +7,7 @@ import 'package:video_player/video_player.dart';
 import '../../../../config/app_config.dart';
 import '../../../../core/exceptions/app_exceptions.dart';
 import '../../../../model/video_model.dart';
-import '../models/comment_model.dart';
+
 import '../../../../services/authservices.dart';
 import '../../../../services/platform_id_service.dart';
 
@@ -275,41 +275,6 @@ class VideoRemoteDataSource {
         final error = json.decode(response.body);
         throw ServerException(
           error['error'] ?? 'Failed to like video',
-          code: response.statusCode.toString(),
-        );
-      }
-    } catch (e) {
-      _handleError(e);
-    }
-  }
-
-  /// Adds a comment to a video
-  Future<List<CommentModel>> addComment({
-    required String videoId,
-    required String text,
-    required String userId,
-  }) async {
-    try {
-      final response = await httpClientService.post(
-        Uri.parse('${NetworkHelper.videosEndpoint}/$videoId/comments'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'userId': userId,
-          'text': text,
-        }),
-        timeout: NetworkHelper.defaultTimeout,
-      );
-
-      if (response.statusCode == 200) {
-        final List<dynamic> commentsJson = json.decode(response.body);
-        return commentsJson.map((json) => CommentModel.fromJson(json)).toList();
-      } else if (response.statusCode == 401) {
-        throw const UnauthorizedException(
-            'Please sign in again to add comments');
-      } else {
-        final error = json.decode(response.body);
-        throw ServerException(
-          error['error'] ?? 'Failed to add comment',
           code: response.statusCode.toString(),
         );
       }

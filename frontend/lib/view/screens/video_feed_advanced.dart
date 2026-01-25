@@ -12,8 +12,8 @@ import 'package:vayu/services/video_service.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/user_service.dart';
 import 'package:vayu/core/managers/carousel_ad_manager.dart';
-import 'package:vayu/view/widget/comments_sheet_widget.dart';
-import 'package:vayu/services/comments/video_comments_data_source.dart';
+import 'package:like_button/like_button.dart';
+
 import 'package:vayu/services/active_ads_service.dart';
 import 'package:vayu/services/video_view_tracker.dart';
 import 'package:vayu/services/ad_refresh_notifier.dart';
@@ -246,32 +246,49 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       context,
       listen: false,
     );
-    if (authController.isSignedIn && authController.userData != null) {
-      // Use googleId as the single source of truth for likes (backend returns likedBy as googleIds)
-      final userId = authController.userData!['googleId'] ??
-          authController.userData!['id'];
-      if (userId != null && _currentUserId != userId) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            setState(() {
-              _currentUserId = userId;
-            });
-            /* AppLogger.log(
-              '✅ VideoFeedAdvanced: User ID updated from auth state: $userId',
-            ); */
-          }
-        });
-      }
-    } else if (!authController.isSignedIn && _currentUserId != null) {
+    if (!authController.isSignedIn && _currentUserId != null) {
       // User signed out - clear current user ID
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           setState(() {
             _currentUserId = null;
           });
+          // **FIX: Update all like notifiers when user signs out**
+          for (final video in _videos) {
+            if (_isLikedVN.containsKey(video.id)) {
+              _isLikedVN[video.id]!.value = false;
+            }
+          }
           AppLogger.log('✅ VideoFeedAdvanced: User ID cleared (signed out)');
         }
       });
+    }
+
+    if (authController.isSignedIn && authController.userData != null) {
+       final userId = authController.userData!['googleId'] ?? authController.userData!['id'];
+       final userObjectId = authController.userData!['_id'] ?? authController.userData!['id'];
+       
+       if (userId != null && (_currentUserId != userId || _currentUserObjectId != userObjectId)) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+             if (mounted) {
+                setState(() {
+                   _currentUserId = userId;
+                   _currentUserObjectId = userObjectId?.toString();
+                });
+                
+                AppLogger.log('👤 VideoFeedAdvanced: Current User IDs synchronized:');
+                AppLogger.log('   - Google ID: $_currentUserId');
+                AppLogger.log('   - Object ID: $_currentUserObjectId');
+
+                // **FIX: Update all like notifiers based on isLiked status**
+                for (final video in _videos) {
+                   if (_isLikedVN.containsKey(video.id)) {
+                      _isLikedVN[video.id]!.value = video.isLiked;
+                   }
+                }
+             }
+          });
+       }
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1202,7 +1219,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // If the video is already liked by the current user, only show animation
     // Check our specific notifier first for most up-to-date state
     final isLikedNotifier = _isLikedVN.putIfAbsent(video.id, 
-        () => ValueNotifier<bool>(video.likedBy.contains(_currentUserId)));
+        () => ValueNotifier<bool>(video.isLiked));
     
     if (isLikedNotifier.value) {
       AppLogger.log(
@@ -1220,7 +1237,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // Helper to get or create notifiers ensuring they are synced with model initially
     ValueNotifier<bool> getLikedNotifier() {
        return _isLikedVN.putIfAbsent(video.id, 
-          () => ValueNotifier<bool>(video.likedBy.contains(_currentUserId)));
+          () => ValueNotifier<bool>(video.isLiked));
     }
     ValueNotifier<int> getCountNotifier() {
        return _likeCountVN.putIfAbsent(video.id, 
@@ -1255,11 +1272,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         : originalLikes + 1;
 
     // 2. Update Model (Keeps data consistent if we scroll away)
-    if (wasLiked) {
-      video.likedBy.remove(_currentUserId);
-    } else {
-      video.likedBy.add(_currentUserId!);
-    }
+    // We update isLiked field instead of manual likedBy mutation
+    video.isLiked = !wasLiked;
     video.likes = countVN.value;
 
     AppLogger.log(
@@ -1279,13 +1293,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       
       // Update Model properties
       video.likes = updatedVideo.likes;
-      // video.likedBy is final, so we mutate the list
-      video.likedBy.clear();
-      video.likedBy.addAll(updatedVideo.likedBy);
+      // Use the injected isLiked from backend
+      video.isLiked = updatedVideo.isLiked;
       
       // Update Notifiers with authoritative backend values
       countVN.value = updatedVideo.likes;
-      likedVN.value = updatedVideo.likedBy.contains(_currentUserId);
+      likedVN.value = updatedVideo.isLiked;
 
     } catch (e) {
       AppLogger.log('❌ Error handling like: $e');
@@ -1298,11 +1311,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       countVN.value = originalLikes;
 
       // Revert Model
-      if (wasLiked) {
-         if (!video.likedBy.contains(_currentUserId)) video.likedBy.add(_currentUserId!);
-      } else {
-         video.likedBy.remove(_currentUserId);
-      }
+      video.isLiked = wasLiked;
       video.likes = originalLikes;
 
       // Show error
@@ -1367,41 +1376,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
   }
 
-  /// **HANDLE COMMENT: Open comment sheet**
-  void _handleComment(VideoModel video) {
-    // **FIX: Check if user is signed in before opening comment sheet**
-    if (_currentUserId == null) {
-      // **CHANGED: Show Google account picker popup immediately when user clicks comment button**
-      _showSnackBar('Please sign in to view and add comments', isError: true);
-      Future.delayed(const Duration(milliseconds: 500), () {
-        _triggerGoogleSignIn();
-      });
-      return;
-    }
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) => CommentsSheetWidget(
-        video: video,
-        videoService: _videoService,
-        dataSource: VideoCommentsDataSource(
-          videoId: video.id,
-          videoService: _videoService,
-        ),
-        onCommentsUpdated: (updatedComments) {
-          // Update video comments in the list
-          setState(() {
-            video.comments = updatedComments;
-          });
-        },
-      ),
-    );
-  }
 
   /// **HANDLE SHARE: Show custom share widget with only 4 options**
   Future<void> _handleShare(VideoModel video) async {
@@ -1461,39 +1436,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
   }
 
-  /// **BUILD FOLLOW TEXT BUTTON: Professional follow/unfollow button**
-  Widget _buildFollowTextButton(VideoModel video) {
-    // Don't show follow button for own videos
-    if (_currentUserId != null && video.uploader.id == _currentUserId) {
-      return const SizedBox.shrink();
-    }
 
-    final isFollowing = _isFollowing(video.uploader.id);
 
-    return GestureDetector(
-      onTap: () => _handleFollow(video),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: isFollowing ? Colors.grey[800] : Colors.blue[600],
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isFollowing ? Colors.grey[600]! : Colors.blue[600]!,
-            width: 1,
-          ),
-        ),
-        child: Text(
-          isFollowing ? 'Following' : 'Follow',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.3,
-          ),
-        ),
-      ),
-    );
-  }
 
   /// **HANDLE FOLLOW/UNFOLLOW: With API integration**
   Future<void> _handleFollow(VideoModel video) async {

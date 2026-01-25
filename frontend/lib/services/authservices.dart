@@ -18,9 +18,14 @@ import 'package:vayu/services/notification_service.dart';
 
 class AuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: GoogleSignInConfig.scopes,
     clientId: GoogleSignInConfig.platformClientId,
   );
+
+  AuthService() {
+    // **NEW: Initialize token refresh callback in HttpClientService**
+    httpClientService.onTokenExpired = refreshAccessToken;
+    AppLogger.log('🔐 AuthService: Token refresh callback initialized');
+  }
 
   // Global navigator key for accessing context
   static GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -132,8 +137,11 @@ class AuthService {
 
       AppLogger.log('🔑 Got ID token, attempting backend authentication...');
 
-      // **OPTIMIZED: Await the platform ID that was started earlier**
-      final platformId = await platformIdFuture;
+      // **OPTIMIZED: Await platform info that was started earlier**
+      final deviceId = await platformIdFuture;
+      final platformIdService = PlatformIdService();
+      final deviceName = await platformIdService.getDeviceName();
+      final platform = platformIdService.getPlatformType();
 
       // First, authenticate with backend to get JWT
       try {
@@ -144,7 +152,9 @@ class AuthService {
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
                 'idToken': idToken,
-                'platformId': platformId, // **NEW: Send platform ID to backend
+                'deviceId': deviceId,
+                'deviceName': deviceName,
+                'platform': platform,
               }),
             )
             .timeout(const Duration(seconds: 5));
@@ -156,12 +166,21 @@ class AuthService {
         if (authResponse.statusCode == 200) {
           final authData = jsonDecode(authResponse.body);
           AppLogger.log('✅ Backend authentication successful');
+          
+          // **FIXED: Use accessToken (new backend format)**
+          final token = authData['accessToken'] ?? authData['token'];
           AppLogger.log(
-              '🔑 JWT Token received: ${authData['token']?.substring(0, 20)}...');
+              '🔑 JWT Token received: ${token?.toString().substring(0, 20)}...');
 
           // Save JWT in shared preferences
           SharedPreferences prefs = await SharedPreferences.getInstance();
-          await prefs.setString('jwt_token', authData['token']);
+          await prefs.setString('jwt_token', token);
+          
+          // **NEW: Save Refresh Token**
+          if (authData['refreshToken'] != null) {
+            await prefs.setString('refresh_token', authData['refreshToken']);
+            AppLogger.log('🔑 Refresh Token received and saved');
+          }
 
           // **OPTIMIZED: Retry saving FCM token non-blocking (fire and forget)**
           unawaited(() async {
@@ -246,9 +265,9 @@ class AuthService {
           await prefs.setString('fallback_user', jsonEncode(fallbackData));
           AppLogger.log('✅ Saved fallback_user with Google account data');
 
-          // **OPTIMIZED: Store platform ID in parallel (non-blocking)**
-          // Platform ID storage is critical but doesn't need to block sign-in completion
-          unawaited(_ensurePlatformIdStored(platformId));
+          // **OPTIMIZED: Store device ID in parallel (non-blocking)**
+          // Device ID storage is critical but doesn't need to block sign-in completion
+          unawaited(_ensurePlatformIdStored(deviceId));
 
           // Return combined user data immediately (device ID storage happens in background)
           return {
@@ -257,7 +276,7 @@ class AuthService {
             'name': finalName,
             'email': googleUser.email,
             'profilePic': finalProfilePic,
-            'token': authData['token'],
+            'token': token,
           };
         } else {
           AppLogger.log(
@@ -316,8 +335,9 @@ class AuthService {
                   headers: {'Content-Type': 'application/json'},
                   body: jsonEncode({
                     'idToken': idToken,
-                    'platformId':
-                        platformId, // **NEW: Send platform ID on retry
+                    'deviceId': deviceId,
+                    'deviceName': deviceName,
+                    'platform': platform,
                   }),
                 )
                 .timeout(const Duration(seconds: 10));
@@ -341,8 +361,8 @@ class AuthService {
                 body: jsonEncode(userData),
               );
 
-              // **CRITICAL: ALWAYS store platform ID after successful retry authentication**
-              await _ensurePlatformIdStored(platformId);
+              // **CRITICAL: ALWAYS store device ID after successful retry authentication**
+              await _ensurePlatformIdStored(deviceId);
 
               return {
                 'id': googleUser.id,
@@ -541,12 +561,12 @@ class AuthService {
         AppLogger.log(
             '⚠️ Token verification failed - unauthorized (${response.statusCode})');
 
-        // **IMPROVED: Try to refresh token before removing it**
-        final refreshedToken = await refreshTokenIfNeeded();
-        if (refreshedToken != null && refreshedToken != token) {
-          AppLogger.log('✅ Token refreshed successfully in background');
-          return; // Token was refreshed, keep session
-        }
+      // **IMPROVED: Try to refresh token before removing it**
+      final refreshedToken = await refreshAccessToken();
+      if (refreshedToken != null && refreshedToken != token) {
+        AppLogger.log('✅ Token refreshed successfully in background');
+        return; // Token was refreshed, keep session
+      }
 
         // Only remove if token is actually expired AND refresh failed
         if (!isTokenValid(token)) {
@@ -600,6 +620,7 @@ class AuthService {
       // **FIXED: Clear ALL stored authentication data**
       SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.remove('jwt_token');
+      await prefs.remove('refresh_token'); // **NEW: Clear refresh token**
       await prefs.remove('fallback_user');
       await prefs.remove('auth_skip_login');
       await prefs.remove('user_profile');
@@ -725,7 +746,7 @@ class AuthService {
         AppLogger.log('⚠️ AuthService: JWT token appears invalid or expired');
 
         // Try to refresh the token first
-        final refreshedToken = await refreshTokenIfNeeded();
+        final refreshedToken = await refreshAccessToken(); // **CHANGED: Use specific refresh method**
         if (refreshedToken != null) {
           AppLogger.log('✅ AuthService: Token refreshed successfully');
           token = refreshedToken;
@@ -961,228 +982,134 @@ class AuthService {
     }
   }
 
-  /// **IMPROVED: Auto-login using platform ID (for persistent login after reinstall)**
-  /// Attempts to restore user session if platform ID indicates user logged in before
-  /// Automatically triggers Google Sign-In if platform ID is recognized but silent sign-in fails
+  /// **IMPROVED: Auto-login using device ID (for persistent login after reinstall)**
+  /// Uses the new /api/auth/device-login endpoint which doesn't require Google session
   Future<Map<String, dynamic>?> autoLoginWithPlatformId() async {
     try {
-      AppLogger.log('🔄 Attempting auto-login with platform ID...');
+      AppLogger.log('🔄 Attempting auto-login with device ID...');
 
       final platformIdService = PlatformIdService();
 
-      // Step 1: Get platform ID (works even after reinstall)
-      final platformId = await platformIdService.getPlatformId();
-      if (platformId.isEmpty || platformId.startsWith('fallback_')) {
-        AppLogger.log('❌ Invalid platform ID - cannot auto-login');
+      // Step 1: Get device ID (persists across reinstalls)
+      final deviceId = await platformIdService.getPlatformId();
+      if (deviceId.isEmpty || deviceId.startsWith('fallback_') || deviceId.startsWith('emergency_')) {
+        AppLogger.log('❌ Invalid device ID - cannot auto-login');
         return null;
       }
 
-      AppLogger.log(
-          '✅ Platform ID retrieved: ${platformId.substring(0, 8)}...');
+      AppLogger.log('✅ Device ID retrieved: ${deviceId.substring(0, 8)}...');
 
-      // Step 2: Check with backend if this platform has logged in before
-      // Platform ID is always available, so we check backend directly
-      String? userEmail;
-      try {
-        final resolvedBaseUrl = await AppConfig.getBaseUrlWithFallback();
-        final checkResponse = await httpClientService.post(
-          Uri.parse('$resolvedBaseUrl/api/auth/check-device'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'platformId': platformId}),
-          timeout: const Duration(seconds: 5),
-        );
-
-        if (checkResponse.statusCode != 200) {
-          AppLogger.log(
-              'ℹ️ Platform ID not found on backend - first time login required');
-          return null;
-        }
-
-        final checkData = jsonDecode(checkResponse.body);
-        final hasLoggedIn = checkData['hasLoggedIn'] ?? false;
-
-        if (!hasLoggedIn) {
-          AppLogger.log(
-              'ℹ️ Platform ID not found on backend - first time login required');
-          return null;
-        }
-
-        AppLogger.log(
-            '✅ Platform ID verified with backend - user has logged in before');
-
-        // Get user email from backend response for seamless auto-login
-        userEmail = checkData['userEmail'] as String?;
-        if (userEmail != null) {
-          AppLogger.log(
-              '✅ User email retrieved from backend: ${userEmail.substring(0, 5)}...');
-        }
-      } catch (e) {
-        AppLogger.log('⚠️ Error checking device with backend: $e');
-        // Continue with auto-login attempt anyway
-      }
-
-      AppLogger.log('🔄 Attempting to restore Google Sign-In session...');
-
-      // Step 3: Try multiple Google Sign-In methods (improved reliability)
-      GoogleSignInAccount? googleUser;
-
-      // Method 1: Try silent sign-in (works if Google session is cached)
-      // **IMPROVED: This will automatically use the previously linked Google account**
-      try {
-        googleUser = await _googleSignIn.signInSilently();
-        if (googleUser != null) {
-          // **VERIFY: Check if the signed-in account matches the platform ID's user**
-          if (userEmail != null &&
-              googleUser.email.toLowerCase() != userEmail.toLowerCase()) {
-            AppLogger.log(
-                '⚠️ Silent sign-in returned different account (${googleUser.email}) than platform account ($userEmail)');
-            // Still proceed - user might have switched accounts
-          } else {
-            AppLogger.log('✅ Silent sign-in successful with matching account');
-          }
-        }
-      } catch (e) {
-        AppLogger.log('⚠️ Silent sign-in failed: $e');
-      }
-
-      // Method 2: If silent fails, check current sign-in status
-      if (googleUser == null) {
-        try {
-          final isSignedIn = await _googleSignIn.isSignedIn();
-          if (isSignedIn) {
-            googleUser = await _googleSignIn.signInSilently();
-            if (googleUser != null) {
-              AppLogger.log('✅ Silent sign-in successful after status check');
-            }
-          }
-        } catch (e) {
-          AppLogger.log('⚠️ Check sign-in status failed: $e');
-        }
-      }
-
-      // Method 3: If still null, try getting current user
-      if (googleUser == null) {
-        try {
-          googleUser = _googleSignIn.currentUser;
-          if (googleUser != null) {
-            AppLogger.log('✅ Using current Google user');
-          }
-        } catch (e) {
-          AppLogger.log('⚠️ Get current user failed: $e');
-        }
-      }
-
-      // **CHANGED: Don't automatically trigger sign-in popup on app startup**
-      // Sign-in popup will only show when user explicitly interacts (like, comment)
-      // This prevents automatic account picker from showing when app opens
-      if (googleUser == null) {
-        AppLogger.log(
-            'ℹ️ Platform ID recognized but no Google session - user needs to sign in manually');
-        AppLogger.log(
-            'ℹ️ Sign-in popup will appear when user interacts (like button, comments, etc.)');
-        return null;
-      }
-
-      AppLogger.log('✅ Google user found: ${googleUser.email}');
-
-      // Step 4: Get ID token from Google (with fallback for web)
-      String? idToken;
-      try {
-        if (kIsWeb) {
-          // Try getTokens first (preferred method for web)
-          try {
-            final tokens = await GoogleSignInPlatform.instance
-                .getTokens(email: googleUser.email);
-            idToken = tokens.idToken;
-            AppLogger.log('✅ Got ID token using getTokens method');
-          } catch (getTokensError) {
-            AppLogger.log(
-                '⚠️ getTokens failed, trying authentication method: $getTokensError');
-            // Fallback: try authentication method
-            try {
-              final GoogleSignInAuthentication googleAuth =
-                  await googleUser.authentication;
-              idToken = googleAuth.idToken;
-              AppLogger.log('✅ Got ID token using authentication method');
-            } catch (authError) {
-              AppLogger.log('❌ authentication method also failed: $authError');
-              return null;
-            }
-          }
-        } else {
-          final GoogleSignInAuthentication googleAuth =
-              await googleUser.authentication;
-          idToken = googleAuth.idToken;
-        }
-      } catch (e) {
-        AppLogger.log('❌ Failed to get ID token: $e');
-        return null;
-      }
-
-      if (idToken == null || idToken.isEmpty) {
-        AppLogger.log('❌ ID token is null or empty');
-        return null;
-      }
-
-      // Step 5: Authenticate with backend to get JWT
+      // Step 2: Call device-login endpoint directly (no Google session required!)
       final resolvedBaseUrl = await AppConfig.getBaseUrlWithFallback();
-      final authResponse = await http
-          .post(
-            Uri.parse('$resolvedBaseUrl/api/auth'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'idToken': idToken,
-              'platformId': platformId,
-            }),
-          )
-          .timeout(const Duration(seconds: 10));
+      final response = await httpClientService.post(
+        Uri.parse('$resolvedBaseUrl/api/auth/device-login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'deviceId': deviceId}),
+        timeout: const Duration(seconds: 10),
+      );
 
-      if (authResponse.statusCode == 200) {
-        final authData = jsonDecode(authResponse.body);
-        final token = authData['token'];
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final accessToken = data['accessToken'];
+        final refreshToken = data['refreshToken'];
+        final user = data['user'];
 
-        if (token == null || token.toString().isEmpty) {
-          AppLogger.log('❌ JWT token is null or empty in response');
+        if (accessToken == null || user == null) {
+          AppLogger.log('❌ Invalid response from device-login');
           return null;
         }
 
-        // Save JWT token
+        // Save tokens
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('jwt_token', token);
+        await prefs.setString('jwt_token', accessToken);
+        if (refreshToken != null) {
+          await prefs.setString('refresh_token', refreshToken);
+        }
 
-        // Save fallback user data
+        // Save user data as fallback
         final fallbackData = {
-          'id': googleUser.id,
-          'googleId': googleUser.id,
-          'name': googleUser.displayName ?? 'User',
-          'email': googleUser.email,
-          'profilePic': googleUser.photoUrl,
+          'id': user['googleId'] ?? user['id'],
+          'googleId': user['googleId'],
+          'name': user['name'] ?? 'User',
+          'email': user['email'],
+          'profilePic': user['profilePic'],
         };
         await prefs.setString('fallback_user', jsonEncode(fallbackData));
 
-        // **CRITICAL: ALWAYS store platform ID after successful auto-login**
-        await _ensurePlatformIdStored(platformId);
-
-        AppLogger.log('✅ Auto-login successful! User: ${googleUser.email}');
-        AppLogger.log('✅ JWT token restored and platform ID stored');
+        AppLogger.log('✅ Auto-login successful! User: ${user['email']}');
 
         return {
-          'id': googleUser.id,
-          'googleId': googleUser.id,
-          'name': googleUser.displayName ?? 'User',
-          'email': googleUser.email,
-          'profilePic': googleUser.photoUrl,
-          'token': token,
+          'id': user['googleId'] ?? user['id'],
+          'googleId': user['googleId'],
+          'name': user['name'] ?? 'User',
+          'email': user['email'],
+          'profilePic': user['profilePic'],
+          'token': accessToken,
         };
+      } else if (response.statusCode == 401) {
+        // No valid session for this device - user needs to login with Google
+        AppLogger.log('ℹ️ No active session for this device - login required');
+        return null;
       } else {
-        AppLogger.log(
-            '❌ Backend authentication failed: ${authResponse.statusCode}');
-        AppLogger.log('❌ Response body: ${authResponse.body}');
+        AppLogger.log('❌ Device login failed: ${response.statusCode}');
         return null;
       }
     } catch (e) {
-      AppLogger.log('⚠️ Auto-login failed (non-critical): $e');
-      // Don't throw - auto-login failure is not critical
+      AppLogger.log('⚠️ Auto-login failed: $e');
+      return null;
+    }
+  }
+
+  /// **NEW: Refresh the access token using the refresh token**
+  Future<String?> refreshAccessToken() async {
+    try {
+      AppLogger.log('🔄 Attempting to refresh access token...');
+      final prefs = await SharedPreferences.getInstance();
+      final refreshToken = prefs.getString('refresh_token');
+
+      if (refreshToken == null || refreshToken.isEmpty) {
+        AppLogger.log('❌ No refresh token found, cannot refresh');
+        return null;
+      }
+
+      // Get device ID for token rotation
+      final platformIdService = PlatformIdService();
+      final deviceId = await platformIdService.getPlatformId();
+
+      final resolvedBaseUrl = await AppConfig.getBaseUrlWithFallback();
+      final response = await http.post(
+        Uri.parse('$resolvedBaseUrl/api/auth/refresh'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'refreshToken': refreshToken,
+          'deviceId': deviceId,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final newToken = data['token'];
+        final newRefreshToken = data['refreshToken'];
+
+        if (newToken != null) {
+          await prefs.setString('jwt_token', newToken);
+          if (newRefreshToken != null) {
+            await prefs.setString('refresh_token', newRefreshToken);
+          }
+          AppLogger.log('✅ Access token refreshed successfully');
+          return newToken;
+        }
+      } else {
+        AppLogger.log('❌ Token refresh failed: ${response.statusCode} - ${response.body}');
+        // If refresh token is invalid (403), we might want to clear it
+        if (response.statusCode == 403) {
+          await prefs.remove('refresh_token');
+          await prefs.remove('jwt_token');
+        }
+      }
+      return null;
+    } catch (e) {
+      AppLogger.log('❌ Error during token refresh: $e');
       return null;
     }
   }

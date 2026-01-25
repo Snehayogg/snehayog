@@ -17,6 +17,13 @@ class HttpClientService {
 
   late Dio _dio;
   bool _isInitialized = false;
+  
+  /// Callback to handle token refresh when 401 occurs
+  Future<String?> Function()? onTokenExpired;
+  
+  /// To prevent concurrent refresh calls
+  bool _isRefreshing = false;
+  Future<String?>? _refreshFuture;
 
   /// Initialize the Dio client with optimized settings
   void initialize() {
@@ -113,6 +120,53 @@ class HttpClientService {
             }
           } catch (e) {
             AppLogger.log('⚠️ Performance Interceptor Error Recovery: $e');
+          }
+          return handler.next(error);
+        },
+      ),
+    );
+
+    // **NEW: Auth Interceptor for handling 401 errors**
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onError: (error, handler) async {
+          // If 401 Unauthorized occurs and we have a refresh handler
+          if (error.response?.statusCode == 401 && onTokenExpired != null) {
+            AppLogger.log('🔐 HttpClientService: 401 detected, attempting token refresh...');
+            
+            try {
+              String? newToken;
+              
+              // Handle concurrent refresh attempts
+              if (_isRefreshing) {
+                AppLogger.log('🔐 HttpClientService: Refresh already in progress, waiting...');
+                newToken = await _refreshFuture;
+              } else {
+                _isRefreshing = true;
+                _refreshFuture = onTokenExpired!();
+                newToken = await _refreshFuture;
+                _isRefreshing = false;
+                _refreshFuture = null;
+              }
+
+              if (newToken != null) {
+                AppLogger.log('🔐 HttpClientService: Token refreshed, retrying original request...');
+                
+                // Update the original request's auth header
+                final options = error.requestOptions;
+                options.headers['Authorization'] = 'Bearer $newToken';
+                
+                // Retry the request
+                final response = await _dio.fetch(options);
+                return handler.resolve(response);
+              } else {
+                AppLogger.log('🔐 HttpClientService: Token refresh failed, proceeding with error');
+              }
+            } catch (e) {
+              _isRefreshing = false;
+              _refreshFuture = null;
+              AppLogger.log('🔐 HttpClientService: Error during automatic refresh: $e');
+            }
           }
           return handler.next(error);
         },
