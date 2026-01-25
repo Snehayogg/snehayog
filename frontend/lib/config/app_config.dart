@@ -77,7 +77,7 @@ class AppConfig {
     }
 
     print('🔍 AppConfig: No cached URL, defaulting to custom domain');
-    _cachedBaseUrl = _customDomainUrl;
+    _cachedBaseUrl = _flyUrl; // TEMPORARY: Using Fly.io until custom domain SSL is configured
     return _cachedBaseUrl!;
   }
 
