@@ -1686,71 +1686,50 @@ class _UploadScreenState extends State<UploadScreen> {
                                   );
                                 },
                               ),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      onPressed: () => _pickVideo(),
-                                      icon: const Icon(Icons.video_library),
-                                      label:
-                                          Text(AppText.get('btn_select_media')),
-                                      style: ElevatedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 16,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(8),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: ValueListenableBuilder<bool>(
-                                      valueListenable: _isUploading,
-                                      builder: (context, isUploading, _) {
-                                        return ElevatedButton.icon(
-                                          onPressed:
-                                              isUploading ? null : _uploadVideo,
+                              ValueListenableBuilder<bool>(
+                                valueListenable: _isUploading,
+                                builder: (context, isUploading, _) {
+                                  return ValueListenableBuilder<File?>(
+                                    valueListenable: _selectedVideo,
+                                    builder: (context, selectedVideo, _) {
+                                      final bool hasVideo = selectedVideo != null;
+                                      
+                                      return SizedBox(
+                                        width: double.infinity,
+                                        child: ElevatedButton.icon(
+                                          onPressed: isUploading 
+                                            ? null 
+                                            : (hasVideo ? _uploadVideo : _pickVideo),
                                           icon: isUploading
                                               ? const SizedBox(
                                                   width: 20,
                                                   height: 20,
-                                                  child:
-                                                      CircularProgressIndicator(
+                                                  child: CircularProgressIndicator(
                                                     strokeWidth: 2,
-                                                    valueColor:
-                                                        AlwaysStoppedAnimation<
-                                                            Color>(
-                                                      Colors.white,
-                                                    ),
+                                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                                   ),
                                                 )
-                                              : const Icon(Icons.cloud_upload),
+                                              : Icon(hasVideo ? Icons.cloud_upload : Icons.video_library),
                                           label: Text(
                                             isUploading
-                                                ? AppText.get(
-                                                    'upload_uploading')
-                                                : AppText.get(
-                                                    'btn_upload_media'),
+                                                ? AppText.get('upload_uploading')
+                                                : (hasVideo 
+                                                    ? AppText.get('btn_upload_media') 
+                                                    : AppText.get('btn_select_media')),
                                           ),
                                           style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.blue,
+                                            backgroundColor: Colors.black,
                                             foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 16,
-                                            ),
+                                            padding: const EdgeInsets.symmetric(vertical: 16),
                                             shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
+                                              borderRadius: BorderRadius.circular(8),
                                             ),
                                           ),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                ],
+                                        ),
+                                      );
+                                    },
+                                  );
+                                },
                               ),
                             ],
                           ),

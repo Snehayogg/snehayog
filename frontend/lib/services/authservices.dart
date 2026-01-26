@@ -8,7 +8,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:vayu/config/app_config.dart';
-// **NEW: Import JWT decoder**
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:vayu/config/google_sign_in_config.dart';
 import 'package:vayu/services/location_onboarding_service.dart';
@@ -21,7 +20,10 @@ class AuthService {
     clientId: GoogleSignInConfig.platformClientId,
   );
 
-  AuthService() {
+  static final AuthService _instance = AuthService._internal();
+  factory AuthService() => _instance;
+
+  AuthService._internal() {
     // **NEW: Initialize token refresh callback in HttpClientService**
     httpClientService.onTokenExpired = refreshAccessToken;
     AppLogger.log('🔐 AuthService: Token refresh callback initialized');
@@ -746,7 +748,7 @@ class AuthService {
         AppLogger.log('⚠️ AuthService: JWT token appears invalid or expired');
 
         // Try to refresh the token first
-        final refreshedToken = await refreshAccessToken(); // **CHANGED: Use specific refresh method**
+        final refreshedToken = await refreshAccessToken();
         if (refreshedToken != null) {
           AppLogger.log('✅ AuthService: Token refreshed successfully');
           token = refreshedToken;
@@ -757,8 +759,6 @@ class AuthService {
             AppLogger.log(
                 '❌ AuthService: Token is expired and refresh failed, clearing token');
             await prefs.remove('jwt_token');
-            // Don't set token to null yet - we might still use it for offline access if we have fallback data
-            // token = null; 
           } else {
             AppLogger.log(
                 'ℹ️ AuthService: Token validation failed but token appears valid, keeping it (may be network issue)');
@@ -799,8 +799,7 @@ class AuthService {
         final response = await httpClientService.get(
           Uri.parse('${NetworkHelper.usersEndpoint}/profile'),
           headers: {'Authorization': 'Bearer $token'},
-          timeout: const Duration(
-              seconds: 3), // **OPTIMIZED: Reduced timeout for faster startup**
+          timeout: const Duration(seconds: 3),
         );
 
         if (response.statusCode == 200) {
@@ -835,10 +834,6 @@ class AuthService {
       } catch (e) {
         AppLogger.log('⚠️ Error fetching user profile from backend: $e');
         
-        // **CRITICAL FIX: OFFLINE SUPPORT**
-        // If backend fetch fails (offline, timeout, server error, or invalid token),
-        // we MUST return fallback data if available so ProfileScreen knows WHO to load from cache.
-        
         if (fallbackDataMap != null) {
           final userData = fallbackDataMap;
           AppLogger.log(
@@ -851,11 +846,10 @@ class AuthService {
             'name': userData['name'],
             'email': userData['email'],
             'profilePic': userData['profilePic'],
-            'token': token, // Can be null or invalid, doesn't matter for local cache access
+            'token': token,
             'isFallback': true,
           };
         } else if (token != null && isTokenValid(token)) {
-          // **NEW: Even without fallback data, if token is valid, return minimal user info**
           AppLogger.log(
               'ℹ️ No fallback data but token is valid, returning minimal user info');
           return {
@@ -964,14 +958,14 @@ class AuthService {
       AppLogger.log('🔄 Token expired or invalid, attempting to refresh...');
       // Try to get a new token by re-authenticating with Google
       try {
-        final newToken = await _reauthenticateWithGoogle();
+        final newToken = await refreshAccessToken();
         if (newToken != null) {
           AppLogger.log(
-              '✅ Successfully obtained new token through re-authentication');
+              '✅ Successfully obtained new token');
           return newToken;
         }
       } catch (e) {
-        AppLogger.log('❌ Re-authentication failed: $e');
+        AppLogger.log('❌ Refresh failed: $e');
       }
 
       AppLogger.log('❌ Failed to refresh token, user needs to re-login');
@@ -1060,56 +1054,70 @@ class AuthService {
     }
   }
 
-  /// **NEW: Refresh the access token using the refresh token**
+  /// **NEW: Refresh the access token using the refresh token (with Google Silent Sign-In fallback)**
   Future<String?> refreshAccessToken() async {
     try {
       AppLogger.log('🔄 Attempting to refresh access token...');
       final prefs = await SharedPreferences.getInstance();
       final refreshToken = prefs.getString('refresh_token');
 
-      if (refreshToken == null || refreshToken.isEmpty) {
-        AppLogger.log('❌ No refresh token found, cannot refresh');
-        return null;
-      }
+      // 1. Try Refresh Token first (fast, server-side)
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        try {
+          // Get device ID for token rotation
+          final platformIdService = PlatformIdService();
+          final deviceId = await platformIdService.getPlatformId();
 
-      // Get device ID for token rotation
-      final platformIdService = PlatformIdService();
-      final deviceId = await platformIdService.getPlatformId();
+          final response = await http.post(
+            Uri.parse('${NetworkHelper.authEndpoint}/refresh'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'refreshToken': refreshToken,
+              'deviceId': deviceId,
+            }),
+          ).timeout(const Duration(seconds: 10));
 
-      final resolvedBaseUrl = await AppConfig.getBaseUrlWithFallback();
-      final response = await http.post(
-        Uri.parse('$resolvedBaseUrl/api/auth/refresh'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'refreshToken': refreshToken,
-          'deviceId': deviceId,
-        }),
-      ).timeout(const Duration(seconds: 10));
+          if (response.statusCode == 200) {
+            final data = jsonDecode(response.body);
+            // **FIX: Handle both 'accessToken' and 'token' formats**
+            final newToken = data['accessToken'] ?? data['token'];
+            final newRefreshToken = data['refreshToken'];
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final newToken = data['token'];
-        final newRefreshToken = data['refreshToken'];
-
-        if (newToken != null) {
-          await prefs.setString('jwt_token', newToken);
-          if (newRefreshToken != null) {
-            await prefs.setString('refresh_token', newRefreshToken);
+            if (newToken != null) {
+              await prefs.setString('jwt_token', newToken);
+              if (newRefreshToken != null) {
+                await prefs.setString('refresh_token', newRefreshToken);
+              }
+              AppLogger.log('✅ Access token refreshed successfully via refresh_token');
+              return newToken;
+            } else {
+              AppLogger.log('⚠️ Token refresh returned 200 but no token in body: $data');
+            }
+          } else {
+            AppLogger.log('⚠️ Token refresh endpoint failed with status: ${response.statusCode}');
+            AppLogger.log('⚠️ Response body: ${response.body}');
+            if (response.statusCode == 403) {
+              AppLogger.log('🔐 Refresh token is invalid or expired. Removing from local storage.');
+              await prefs.remove('refresh_token');
+            }
           }
-          AppLogger.log('✅ Access token refreshed successfully');
-          return newToken;
-        }
-      } else {
-        AppLogger.log('❌ Token refresh failed: ${response.statusCode} - ${response.body}');
-        // If refresh token is invalid (403), we might want to clear it
-        if (response.statusCode == 403) {
-          await prefs.remove('refresh_token');
-          await prefs.remove('jwt_token');
+        } catch (e) {
+          AppLogger.log('⚠️ Refresh token endpoint error: $e');
         }
       }
+
+      // 2. Fallback to Google Silent Sign-In (re-authenticates session)
+      AppLogger.log('🔄 Refresh token failed, falling back to Google Silent Sign-In...');
+      final googleToken = await _reauthenticateWithGoogle();
+      if (googleToken != null) {
+        AppLogger.log('✅ Access token refreshed via Google Silent Sign-In');
+        return googleToken;
+      }
+
+      AppLogger.log('❌ All automatic refresh methods failed');
       return null;
     } catch (e) {
-      AppLogger.log('❌ Error during token refresh: $e');
+      AppLogger.log('❌ Error during token refresh sequence: $e');
       return null;
     }
   }
@@ -1119,20 +1127,17 @@ class AuthService {
     try {
       AppLogger.log('🔄 Attempting to re-authenticate with Google...');
 
-      // Check if user is already signed in
-      if (!await _googleSignIn.isSignedIn()) {
-        AppLogger.log(
-            '❌ User not signed in with Google, cannot re-authenticate');
+      // **FIX: Use signInSilently() directly. isSignedIn() can be false if token is expired**
+      // suppressErrors: false allows us to see why it fails in the logs
+      final GoogleSignInAccount? googleUser =
+          await _googleSignIn.signInSilently(suppressErrors: false);
+      
+      if (googleUser == null) {
+        AppLogger.log('❌ Silent sign-in failed, user needs to re-authenticate manually');
         return null;
       }
 
-      // Get fresh authentication
-      final GoogleSignInAccount? googleUser =
-          await _googleSignIn.signInSilently();
-      if (googleUser == null) {
-        AppLogger.log('❌ Silent sign-in failed, user needs to re-authenticate');
-        return null;
-      }
+      AppLogger.log('🔑 Got fresh ID token, re-authenticating with backend...');
 
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
@@ -1142,28 +1147,44 @@ class AuthService {
         return null;
       }
 
+      // **FIXED: Include device identification in re-authentication**
+      final platformIdService = PlatformIdService();
+      final deviceId = await platformIdService.getPlatformId();
+      final deviceName = await platformIdService.getDeviceName();
+      final platform = platformIdService.getPlatformType();
+
       // Authenticate with backend to get new JWT
       final authResponse = await http
           .post(
-            Uri.parse('${NetworkHelper.apiBaseUrl}/auth'),
+            Uri.parse(NetworkHelper.authEndpoint), // Use authEndpoint constant
             headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'idToken': idToken}),
+            body: jsonEncode({
+              'idToken': idToken,
+              'deviceId': deviceId,
+              'deviceName': deviceName,
+              'platform': platform,
+            }),
           )
           .timeout(const Duration(seconds: 10));
 
       if (authResponse.statusCode == 200) {
         final authData = jsonDecode(authResponse.body);
-        final newToken = authData['token'];
+        // **FIXED: Use accessToken (new backend format)**
+        final newToken = authData['accessToken'] ?? authData['token'];
+        final newRefreshToken = authData['refreshToken'];
 
-        // Save new token
+        // Save new tokens
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('jwt_token', newToken);
+        if (newRefreshToken != null) {
+          await prefs.setString('refresh_token', newRefreshToken);
+        }
 
-        AppLogger.log('✅ Successfully obtained new JWT token');
+        AppLogger.log('✅ Successfully obtained new JWT token via re-authentication');
         return newToken;
       } else {
         AppLogger.log(
-            '❌ Backend authentication failed: ${authResponse.statusCode}');
+            '❌ Backend re-authentication failed: ${authResponse.statusCode} - ${authResponse.body}');
         return null;
       }
     } catch (e) {
@@ -1289,20 +1310,14 @@ class AuthService {
 
   /// **CRITICAL: Ensure device ID is ALWAYS stored after successful authentication**
   /// This method guarantees platformId storage even if backend calls fail
-  /// Platform ID is always available - no need to store
-  /// Backend will use platform ID for watch history tracking
   Future<void> _ensurePlatformIdStored(String platformId) async {
     try {
-      // Platform ID is always available from platform
-      // No need to store locally - it persists across app reinstalls
       AppLogger.log(
           '✅ Platform ID available: ${platformId.substring(0, 8)}...');
       AppLogger.log(
           'ℹ️ Backend will use this platform ID for watch history tracking');
     } catch (e) {
       AppLogger.log('❌ CRITICAL: Failed to store platform ID: $e');
-      // Don't throw - platformId storage failure shouldn't break sign-in
-      // But log it as critical since it affects auto-login
     }
   }
 
@@ -1339,7 +1354,6 @@ class AuthService {
       }
     } catch (trackError) {
       AppLogger.log('⚠️ Error tracking referral: $trackError');
-      // Don't block sign-in if referral tracking fails
     }
   }
 }

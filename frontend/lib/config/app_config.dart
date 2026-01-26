@@ -5,6 +5,9 @@ import '../core/services/http_client_service.dart';
 
 /// Optimized app configuration for better performonce andsmaller size
 class AppConfig {
+  // **NEW: API Version (Date-Based)**
+  static const String kApiVersion = '2025-11-01';
+
   // **MANUAL: Development mode control*
   static const bool _isDevelopment =
       false; // Set to true for local testing, false for production

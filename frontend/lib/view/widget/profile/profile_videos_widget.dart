@@ -227,6 +227,7 @@ class ProfileVideosWidget extends StatelessWidget {
                 builder: (context) => VideoScreen(
                   initialVideos: manager.userVideos,
                   initialVideoId: video.id,
+                  isFullScreen: true, // **NEW: Full-screen mode**
                 ),
               ),
             );
@@ -494,6 +495,7 @@ class ProfileVideosWidget extends StatelessWidget {
                                   builder: (context) => VideoScreen(
                                     initialVideos: stateManager.userVideos, // Context of profile videos
                                     initialVideoId: episodeId,
+                                    isFullScreen: true, // **NEW: Full-screen mode**
                                   ),
                                 ),
                               );

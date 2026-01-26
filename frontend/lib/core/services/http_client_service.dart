@@ -42,7 +42,9 @@ class HttpClientService {
         persistentConnection: true,
         // Better error handling
         validateStatus: (status) {
-          return status != null && status < 500; // Don't throw on client errors
+          // **FIX: Throw on 401 so the Auth Interceptor (onError) can handle it**
+          if (status == 401) return false;
+          return status != null && status < 500;
         },
       ),
     );
@@ -89,6 +91,9 @@ class HttpClientService {
       InterceptorsWrapper(
         onRequest: (options, handler) async {
           try {
+            // **NEW: Inject API Version Header**
+            options.headers['X-API-Version'] = AppConfig.kApiVersion;
+            
             final metric = FirebasePerformance.instance.newHttpMetric(
                 options.uri.toString(), _mapHttpMethod(options.method));
             options.extra['performance_metric'] = metric;
@@ -132,7 +137,13 @@ class HttpClientService {
         onError: (error, handler) async {
           // If 401 Unauthorized occurs and we have a refresh handler
           if (error.response?.statusCode == 401 && onTokenExpired != null) {
-            AppLogger.log('🔐 HttpClientService: 401 detected, attempting token refresh...');
+            // **FIX: Prevent infinite retry loops for the same request**
+            if (error.requestOptions.extra['is_retry'] == true) {
+              AppLogger.log('🔐 HttpClientService: 401 occurred for an already retried request. Aborting to prevent loop.');
+              return handler.next(error);
+            }
+
+            AppLogger.log('🔐 HttpClientService: 401 detected for ${error.requestOptions.path}, attempting token refresh...');
             
             try {
               String? newToken;
@@ -148,19 +159,25 @@ class HttpClientService {
                 _isRefreshing = false;
                 _refreshFuture = null;
               }
-
+ 
               if (newToken != null) {
-                AppLogger.log('🔐 HttpClientService: Token refreshed, retrying original request...');
+                AppLogger.log('🔐 HttpClientService: Token refreshed successfully. Retrying original request...');
                 
                 // Update the original request's auth header
                 final options = error.requestOptions;
                 options.headers['Authorization'] = 'Bearer $newToken';
                 
+                // Mark this request as a retry to prevent loops
+                options.extra['is_retry'] = true;
+                
+                // **CRITICAL: Also update headers in the underlying RequestOptions to be sure**
+                // (Sometimes headers are cached in multiple places in Dio)
+                
                 // Retry the request
                 final response = await _dio.fetch(options);
                 return handler.resolve(response);
               } else {
-                AppLogger.log('🔐 HttpClientService: Token refresh failed, proceeding with error');
+                AppLogger.log('🔐 HttpClientService: Token refresh returned null, user must re-authenticate');
               }
             } catch (e) {
               _isRefreshing = false;

@@ -13,6 +13,7 @@ import queueService from '../services/queueService.js';
 import { VideoCacheKeys, invalidateCache } from '../middleware/cacheMiddleware.js';
 import { AD_CONFIG } from '../constants/index.js';
 import { calculateVideoHash, convertLikedByToGoogleIds } from '../utils/videoUtils.js';
+import { serializeVideo, serializeVideos } from '../utils/serializers/videoSerializer.js';
 
 let hybridVideoService;
 
@@ -568,53 +569,16 @@ export const getUserVideos = async (req, res) => {
       if (rqUser) requestingUserObjectIdStr = rqUser._id.toString();
     }
 
-    const videosWithUrls = await Promise.all(validVideos.map(async (video) => {
-      const videoObj = video;
-      const normalizeUrl = (url) => url ? url.replace(/\\/g, '/') : url;
-      const isLiked = requestingUserObjectIdStr ? (videoObj.likedBy || []).some(id => id.toString() === requestingUserObjectIdStr) : false;
-      const likedByGoogleIds = (videoObj.likedBy || []).map(id => id.toString());
-
-      return {
-        _id: videoObj._id?.toString(),
-        videoName: (videoObj.videoName && videoObj.videoName.toString().trim()) || 'Untitled Video',
-        videoUrl: normalizeUrl(videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || ''),
-        thumbnailUrl: normalizeUrl(videoObj.thumbnailUrl || ''),
-        description: videoObj.description || '',
-        likes: parseInt(videoObj.likes) || 0,
-        views: parseInt(videoObj.views) || 0,
-        shares: parseInt(videoObj.shares) || 0,
-        duration: parseInt(videoObj.duration) || 0,
-        aspectRatio: parseFloat(videoObj.aspectRatio) || 9 / 16,
-        videoType: videoObj.videoType || 'reel',
-        mediaType: videoObj.mediaType || 'video',
-        link: videoObj.link || null,
-        uploadedAt: videoObj.uploadedAt?.toISOString?.() || new Date().toISOString(),
-        createdAt: videoObj.createdAt?.toISOString?.() || new Date().toISOString(),
-        updatedAt: videoObj.updatedAt?.toISOString?.() || new Date().toISOString(),
-        uploader: {
-          id: videoObj.uploader?.googleId?.toString() || videoObj.uploader?._id?.toString() || '',
-          _id: videoObj.uploader?._id?.toString() || '',
-          googleId: videoObj.uploader?.googleId?.toString() || '',
-          name: videoObj.uploader?.name || 'Unknown User',
-          profilePic: videoObj.uploader?.profilePic || '',
-          earnings: parseFloat(formattedEarnings),
-          totalVideos: totalValidVideos
-        },
-        hlsMasterPlaylistUrl: videoObj.hlsMasterPlaylistUrl || null,
-        hlsPlaylistUrl: videoObj.hlsPlaylistUrl || null,
-        isHLSEncoded: videoObj.isHLSEncoded || false,
-        episodes: videoObj.seriesId ? (episodesMap.get(videoObj.seriesId) || []) : [],
-        seriesId: videoObj.seriesId || null,
-        episodeNumber: videoObj.episodeNumber || 0,
-        isLiked: isLiked
-      };
-    }));
+    const videosWithUrls = serializeVideos(validVideos, req.apiVersion);
+    
+    // **METRIC: Track this fetch**
+    // console.log(`👤 UserVideos: Fetched ${videosWithUrls.length} videos for ${googleId}`);
 
     if (redisService.getConnectionStatus()) {
       await redisService.set(cacheKey, videosWithUrls, 600);
     }
 
-    res.json(videosWithUrls);
+    return res.json(videosWithUrls);
   } catch (error) {
     console.error('❌ Error fetching user videos:', error);
     res.status(500).json({ error: 'Error fetching videos', details: error.message });
@@ -670,26 +634,11 @@ export const getFeed = async (req, res) => {
       console.log('🔍 getFeed Debug: No userId extracted from token');
     }
 
-    finalVideos = finalVideos.map(video => {
-      const likedByStrings = (video.likedBy || []).map(id => id?.toString?.() || String(id));
-      const isLiked = rqUserObjectIdStr ? likedByStrings.includes(rqUserObjectIdStr) : false;
-      
-      // Debug log for first video only to avoid spam
-      if (finalVideos.indexOf(video) === 0) {
-        console.log('🔍 getFeed Debug: First video likedBy sample:', likedByStrings.slice(0, 3));
-        console.log('🔍 getFeed Debug: Checking against user ObjectId:', rqUserObjectIdStr);
-        console.log('🔍 getFeed Debug: isLiked result:', isLiked);
-      }
-      
-      return {
-        ...video,
-        isLiked
-      };
-    });
+    const serializedVideos = serializeVideos(finalVideos, req.apiVersion);
 
     res.json({
-      videos: finalVideos,
-      hasMore: finalVideos.length > 0,
+      videos: serializedVideos,
+      hasMore: serializedVideos.length > 0,
       total: 9999,
       currentPage: pageNum,
       totalPages: 9999,

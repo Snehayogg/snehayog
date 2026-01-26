@@ -12,12 +12,15 @@ class VideoScreen extends StatefulWidget {
   final String? initialVideoId;
   final String? videoType; // **NEW: Allow passing videoType**
 
+  final bool isFullScreen; // **NEW: Flag for full-screen mode**
+
   const VideoScreen({
     Key? key,
     this.initialIndex,
     this.initialVideos,
     this.initialVideoId,
     this.videoType,
+    this.isFullScreen = false, // Default to false
   }) : super(key: key);
 
   @override
@@ -116,6 +119,7 @@ class _VideoScreenState extends State<VideoScreen> {
           initialVideos: widget.initialVideos,
           initialVideoId: widget.initialVideoId,
           videoType: videoType,
+          isFullScreen: widget.isFullScreen, // **NEW: Pass flag down**
         ),
       ),
     );

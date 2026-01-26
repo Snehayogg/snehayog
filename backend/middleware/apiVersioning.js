@@ -16,26 +16,19 @@
  * Format: 'YYYY-MM-DD'
  */
 const SUPPORTED_VERSIONS = {
-  '2024-01-01': {
-    releaseDate: new Date('2024-01-01'),
+  '2025-11-01': {
+    releaseDate: new Date('2025-11-01'),
     deprecated: false,
     deprecatedDate: null,
     endOfLifeDate: null,
-    description: 'Initial API version'
-  },
-  '2024-10-01': {
-    releaseDate: new Date('2024-10-01'),
-    deprecated: false,
-    deprecatedDate: null,
-    endOfLifeDate: null,
-    description: 'Backend-driven config support'
+    description: 'App Launch Version (November 2025)'
   }
 };
 
 /**
  * Default API version if none specified
  */
-const DEFAULT_VERSION = '2024-10-01';
+const DEFAULT_VERSION = '2025-11-01';
 
 /**
  * Header name for API version

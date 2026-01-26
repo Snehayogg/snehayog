@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:vayu/utils/responsive_helper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -2198,6 +2199,57 @@ class _ProfileScreenState extends State<ProfileScreen>
             : widget.userId == null;
 
     final List<Widget> slivers = [];
+
+    // 0. Debug Token Refresh Test (Only in Debug Mode)
+    if (kDebugMode && isViewingOwnProfile) {
+      slivers.add(
+        SliverToBoxAdapter(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.orange.shade300),
+            ),
+            child: Column(
+              children: [
+                const Text(
+                  '🧪 Debug: Token Refresh Test',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+                ),
+                const SizedBox(height: 8),
+                ElevatedButton(
+                  onPressed: () async {
+                    final prefs = await SharedPreferences.getInstance();
+                    // 1. Manually corrupt the token
+                    await prefs.setString('jwt_token', 'invalid_test_corrupted_token');
+                    
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Token Corrupted! Triggering refresh call...'),
+                          backgroundColor: Colors.orange,
+                        ),
+                      );
+                    }
+                    
+                    // 2. Trigger a real API call (Manual Refresh)
+                    // This will hit 401, catch it in HttpClient, and run the new refresh logic
+                    await _refreshData();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Corrupt Token & Refresh'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     // 1. UPI ID Notice Banner (only for own profile without UPI ID)
     if (isViewingOwnProfile) {

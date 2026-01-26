@@ -7,9 +7,9 @@ class AdMobConfig {
   // **TEST Ad Unit IDs (for development)**
   // Replace these with your actual ad unit IDs from AdMob console
   static const String _testBannerAdUnitIdAndroid =
-      'ca-app-pub-2359959043864469/8166031130';
+      'ca-app-pub-3940256099942544/6300978111';
   static const String _testBannerAdUnitIdIOS =
-      'ca-app-pub-2359959043864469/8166031130';
+      'ca-app-pub-3940256099942544/2934735716';
 
   // **PRODUCTION Ad Unit IDs**
   // These should be set via environment variables or from backend
@@ -24,7 +24,7 @@ class AdMobConfig {
   static String? _admobAppId;
 
   // **Flag to force production ads even in debug mode**
-  static bool _forceProductionAds = true; // Default to true to use real ads
+  static bool _forceProductionAds = false; // **FIXED: Use test ads in debug mode**
 
   /// Force production ads even in debug mode (for testing real ads)
   static void setForceProductionAds(bool force) {

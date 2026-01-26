@@ -102,6 +102,7 @@ class VideoFeedAdvanced extends StatefulWidget {
   final List<VideoModel>? initialVideos;
   final String? initialVideoId;
   final String? videoType;
+  final bool isFullScreen; // **NEW: Flag for full-screen mode**
   // Removed forceAutoplay; we'll infer autoplay from initialVideos presence
 
   const VideoFeedAdvanced({
@@ -110,6 +111,7 @@ class VideoFeedAdvanced extends StatefulWidget {
     this.initialVideos,
     this.initialVideoId,
     this.videoType, // **NEW: Accept videoType parameter**
+    this.isFullScreen = false, // Default to false
   }) : super(key: key);
 
   @override

@@ -420,6 +420,27 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 return const SizedBox.shrink();
               },
             ),
+          // **NEW: Back Button for Profile/Vayu navigation**
+          if (widget.isFullScreen)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 10,
+              left: 16,
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.5),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.arrow_back,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+              ),
+            ),
           Positioned.fill(
             child: GestureDetector(
               behavior: HitTestBehavior.translucent,
@@ -904,9 +925,13 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     return Builder(
       builder: (context) {
         final mediaQuery = MediaQuery.of(context);
-        // Only account for SafeArea bottom padding (system navigation bar)
-        // No bottom navigation bar spacing - elements will be at absolute bottom
-        final bottomPadding = mediaQuery.padding.bottom;
+        // **ENHANCED: Unified bottom padding strategy**
+        // 1. Always account for system navigation bar (SafeArea padding)
+        // 2. Add extra 60px padding when opened as a full-screen route (e.g. from Profile/Vayu)
+        //    This matches the height of the BottomNavigationBar in the Yug tab
+        //    ensuring consistent content placement and preventing it from being 
+        //    too low or obscured by system UI or gestures.
+        final bottomPadding = mediaQuery.padding.bottom + (widget.isFullScreen ? 60 : 0);
 
         return RepaintBoundary(
           child: Stack(
@@ -1441,6 +1466,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                                   builder: (context) => VideoFeedAdvanced(
                                     initialVideoId: episode['id'] ?? episode['_id'],
                                     videoType: 'yog', // Episodes are typically 'yog' type
+                                    isFullScreen: true, // **NEW: Full-screen mode**
                                   ),
                                 ),
                               );

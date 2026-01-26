@@ -550,16 +550,27 @@ class ProfileStateManager extends ChangeNotifier {
     AppLogger.log('🚀 ProfileStateManager: Starting recursive background load...');
     
     // We'll load in batches until exhausted
-    while (_hasMoreVideos && !isDisposed) {
+    int maxSafetyPages = 50; // Safety guard to prevent infinite loops (50 * 1000 = 50k videos)
+    int pagesLoaded = 0;
+
+    while (_hasMoreVideos && !isDisposed && pagesLoaded < maxSafetyPages) {
       try {
         await loadUserVideos(userId, page: _currentPage + 1, silent: true);
+        pagesLoaded++;
         // Small delay to prevent hammering the server
         await Future.delayed(const Duration(milliseconds: 300));
       } catch (e) {
         AppLogger.log('⚠️ ProfileStateManager: Background load error: $e');
+        _hasMoreVideos = false; // Stop loop on error
         break;
       }
     }
+    
+    if (pagesLoaded >= maxSafetyPages) {
+       AppLogger.log('⚠️ ProfileStateManager: Hit safety guard limit (50 pages). Stopping.');
+       _hasMoreVideos = false;
+    }
+    
     AppLogger.log('✅ ProfileStateManager: Background load finished. Total videos: ${_userVideos.length}');
   }
 
@@ -671,17 +682,32 @@ class ProfileStateManager extends ChangeNotifier {
           '✅ ProfileStateManager: loadUserVideos completed with ${_userVideos.length} videos');
     } catch (e) {
       AppLogger.log('❌ ProfileStateManager: Error in loadUserVideos: $e');
-      final loggedInUser = await _authService.getUserData();
-      final bool isMyProfile = userId == null ||
-          userId == loggedInUser?['id'] ||
-          userId == loggedInUser?['googleId'];
-      // Fallback to direct loading
-      await _loadUserVideosDirect(
-        userId,
-        isMyProfile: isMyProfile,
-        silent: silent,
-         page: page, // Pass page
-      );
+      
+      // **FIX: Stop background loop on connection errors**
+      final errorStr = e.toString().toLowerCase();
+      final isNetworkError = errorStr.contains('socket') || 
+                            errorStr.contains('network') || 
+                            errorStr.contains('connection');
+      if (isNetworkError) {
+        _hasMoreVideos = false;
+        AppLogger.log('🛑 ProfileStateManager: Network error detected. Stopping pagination.');
+        if (_userVideos.isEmpty) {
+           _error = 'Network error. Please check your connection.';
+        }
+      } else {
+        // Fallback to direct loading only for non-network errors
+        final loggedInUser = await _authService.getUserData();
+        final bool isMyProfile = userId == null ||
+            userId == loggedInUser?['id'] ||
+            userId == loggedInUser?['googleId'];
+        
+        await _loadUserVideosDirect(
+          userId,
+          isMyProfile: isMyProfile,
+          silent: silent,
+          page: page,
+        );
+      }
     } finally {
       // Load earnings and update counts BEFORE turning off video loading
       // This ensures _isEarningsLoading becomes true before _isVideosLoading becomes false
@@ -1071,8 +1097,12 @@ class ProfileStateManager extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       AppLogger.log('❌ ProfileStateManager: Error in direct video loading: $e');
-      _userVideos = [];
-      _error = 'Failed to load videos directly.';
+      // **FIX: Stop background loop on failure**
+      _hasMoreVideos = false;
+      if (_userVideos.isEmpty) {
+        _userVideos = [];
+        _error = 'Failed to load videos directly.';
+      }
       notifyListeners();
     }
   }

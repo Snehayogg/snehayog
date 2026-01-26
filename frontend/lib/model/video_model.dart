@@ -346,11 +346,26 @@ class VideoModel {
             : int.tryParse(json['episodeNumber']?.toString() ?? '0') ?? 0,
         isLiked: json['isLiked'] == true,
       );
-    } catch (e, stackTrace) {
-      print('❌ VideoModel.fromJson Error: $e');
-      print('❌ Stack trace: $stackTrace');
+    } catch (e) {
+      print('❌ VideoModel.fromJson Error (Graceful): $e');
       print('❌ JSON data: $json');
-      rethrow;
+      
+      // Return a minimal valid VideoModel instead of crashing the whole feed
+      return VideoModel(
+        id: json['_id']?.toString() ?? json['id']?.toString() ?? 'error_${DateTime.now().millisecondsSinceEpoch}',
+        videoName: 'Content Unavailable',
+        videoUrl: '',
+        thumbnailUrl: '',
+        likes: 0,
+        views: 0,
+        shares: 0,
+        uploader: Uploader(id: 'system', name: 'Vayu', profilePic: ''),
+        uploadedAt: DateTime.now(),
+        likedBy: [],
+        videoType: 'yog',
+        aspectRatio: 9/16,
+        duration: Duration.zero,
+      );
     }
   }
 

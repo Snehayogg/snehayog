@@ -98,7 +98,7 @@ export const verifyToken = async (req, res, next) => {
                     email: payload.email,
                     name: payload.name
                 };
-                next();
+                return next();
             } catch (idTokenError) {
                 // All verification methods failed
                 console.error('❌ Token verification failed - all methods exhausted');
@@ -166,11 +166,11 @@ export const passiveVerifyToken = async (req, res, next) => {
         } catch (e) { /* Ignore */ }
 
         // If all fail, just proceed without req.user
-        next();
+        return next();
 
     } catch (error) {
         // Safety net - never block in passive mode
-        next();
+        return next();
     }
 };
 

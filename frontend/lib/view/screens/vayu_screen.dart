@@ -122,6 +122,7 @@ class _VayuScreenState extends State<VayuScreen> {
             initialVideos: _videos,
             initialIndex: index,
             videoType: 'vayu', // **FIX: Enforce Long Form videos in feed**
+            isFullScreen: true, // **NEW: Full-screen mode**
           ),
         ),
       );

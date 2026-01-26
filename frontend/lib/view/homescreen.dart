@@ -12,6 +12,8 @@ import 'package:vayu/view/screens/video_screen.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/background_profile_preloader.dart';
 import 'package:vayu/services/location_onboarding_service.dart';
+import 'package:vayu/utils/app_logger.dart';
+import 'package:vayu/core/managers/app_initialization_manager.dart';
 import 'package:in_app_update/in_app_update.dart';
 
 class MainScreen extends StatefulWidget {
@@ -253,6 +255,15 @@ class _MainScreenState extends State<MainScreen>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkForAppUpdates();
+    });
+
+    // **STAGE 3: BACKGROUND SDK INITIALIZATION (Firebase, AdMob, etc.)**
+    // Delay initialization to prevent stutter during initial screen mount
+    Future.delayed(const Duration(seconds: 5), () {
+      if (mounted) {
+        AppLogger.log('🚀 MainScreen: Triggering Stage 3 Initialization');
+        AppInitializationManager.instance.initializeStage3();
+      }
     });
   }
 
