@@ -68,8 +68,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     ErrorLoggingService.logAppLifecycle('started');
-
-    _initUniLinks();
   }
 
   @override
@@ -178,27 +176,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     } catch (e) {
       AppLogger.log('❌ MyApp: Error pausing videos globally: $e');
     }
-  }
-
-  Future<void> _initUniLinks() async {
-    final appLinks = AppLinks();
-
-    // Handle initial link if app launched from deep link
-    try {
-      final initial = await appLinks.getInitialLink();
-      if (initial != null) {
-        _handleIncomingUri(initial);
-      }
-    } catch (e) {
-
-    }
-
-    // Listen for links while app is running
-    _sub = appLinks.uriLinkStream.listen((Uri uri) {
-      _handleIncomingUri(uri);
-    }, onError: (err) {
-
-    });
   }
 
   Future<void> _handleIncomingUri(Uri uri) async {

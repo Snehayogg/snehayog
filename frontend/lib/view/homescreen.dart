@@ -438,6 +438,7 @@ class _MainScreenState extends State<MainScreen>
               children: [
                 VideoScreen(
                   key: _videoScreenKey,
+                  initialVideos: AppInitializationManager.instance.initialVideos,
                 ),
                 const VayuScreen(key: PageStorageKey('vayuScreen')),
                 UploadScreen(

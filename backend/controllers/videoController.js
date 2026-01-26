@@ -569,7 +569,7 @@ export const getUserVideos = async (req, res) => {
       if (rqUser) requestingUserObjectIdStr = rqUser._id.toString();
     }
 
-    const videosWithUrls = serializeVideos(validVideos, req.apiVersion);
+    const videosWithUrls = serializeVideos(validVideos, req.apiVersion, requestingUserObjectIdStr);
     
     // **METRIC: Track this fetch**
     // console.log(`👤 UserVideos: Fetched ${videosWithUrls.length} videos for ${googleId}`);
@@ -598,10 +598,10 @@ export const getFeed = async (req, res) => {
             userId = userInfo.id;
           } else {
             const jwt = (await import('jsonwebtoken')).default;
-            const JWT_SECRET = process.env.JWT_SECRET;
+            const JWT_SECRET = process.env.JWT_SECRET || config.auth.jwtSecret;
             if (JWT_SECRET) {
               const decoded = jwt.verify(token, JWT_SECRET);
-              userId = decoded.id || decoded.googleId;
+              userId = decoded.id;
             }
           }
         } catch (tokenError) { console.log('⚠️ Token verification failed, using regular feed'); }
@@ -634,7 +634,7 @@ export const getFeed = async (req, res) => {
       console.log('🔍 getFeed Debug: No userId extracted from token');
     }
 
-    const serializedVideos = serializeVideos(finalVideos, req.apiVersion);
+    const serializedVideos = serializeVideos(finalVideos, req.apiVersion, rqUserObjectIdStr);
 
     res.json({
       videos: serializedVideos,
@@ -818,10 +818,10 @@ export const trackWatch = async (req, res) => {
             isAuthenticated = true;
           } else {
             const jwt = (await import('jsonwebtoken')).default;
-            const JWT_SECRET = process.env.JWT_SECRET;
+            const JWT_SECRET = process.env.JWT_SECRET || config.auth.jwtSecret;
             if (JWT_SECRET) {
               const decoded = jwt.verify(token, JWT_SECRET);
-              userId = decoded.id || decoded.googleId;
+              userId = decoded.id;
               isAuthenticated = true;
             }
           }

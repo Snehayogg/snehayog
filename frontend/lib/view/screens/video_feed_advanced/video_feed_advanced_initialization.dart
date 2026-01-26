@@ -728,26 +728,15 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
       final allAds = await _activeAdsService.fetchActiveAds();
 
       if (mounted) {
-        // **OPTIMIZED: Use ValueNotifiers for granular updates**
-        _bannerAds = allAds['banner'] ?? [];
-        _adsLoaded = true;
+        // Use safeSetState to ensure the entire UI is aware of loaded ads
+        safeSetState(() {
+          _bannerAds = allAds['banner'] ?? [];
+          _adsLoaded = true;
+          _lockedBannerAdByVideoId.clear();
+        });
 
         AppLogger.log('✅ VideoFeedAdvanced: Fallback ads loaded:');
         AppLogger.log('   Banner ads: ${_bannerAds.length}');
-
-        for (int i = 0; i < _bannerAds.length; i++) {
-          final ad = _bannerAds[i];
-          AppLogger.log(
-            '   Banner Ad $i: ${ad['title']} (${ad['adType']}) - ID: ${ad['id']} - Active: ${ad['isActive']} - ImageUrl: ${ad['imageUrl']}',
-          );
-        }
-
-        if (mounted) {
-          // **OPTIMIZED: No setState needed - just clear the map**
-          _lockedBannerAdByVideoId.clear();
-          AppLogger.log(
-              '🧹 Cleared locked banner ads to allow rotation with ${_bannerAds.length} ads');
-        }
       }
 
       if (mounted && (_bannerAds.isEmpty)) {

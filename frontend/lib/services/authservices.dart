@@ -666,6 +666,69 @@ class AuthService {
     }
   }
 
+  /// **NEW: Ensure strict authentication for app startup**
+  /// This method guarantees that we have a validated session (or a guest session)
+  /// before proceeding. It handles auto-login and token refresh sequentially.
+  Future<Map<String, dynamic>?> ensureStrictAuth() async {
+    try {
+      AppLogger.log(
+          '🚀 AuthService: Starting strict authentication sequence...');
+      final prefs = await SharedPreferences.getInstance();
+      String? token = prefs.getString('jwt_token');
+
+      // 1. If we have a token, validate and refresh if necessary
+      if (token != null && token.isNotEmpty) {
+        AppLogger.log('🔍 AuthService: Validating existing token...');
+        if (!isTokenValid(token)) {
+          AppLogger.log(
+              '🔄 AuthService: Token invalid/expired, attempting refresh...');
+          final refreshedToken = await refreshAccessToken();
+          if (refreshedToken != null) {
+            token = refreshedToken;
+          } else {
+            AppLogger.log(
+                '⚠️ AuthService: Token refresh failed, clearing token');
+            await prefs.remove('jwt_token');
+            token = null;
+          }
+        } else {
+          AppLogger.log('✅ AuthService: Existing token is valid');
+        }
+      }
+
+      // 2. If no token (or refresh failed), try auto-login with Platform ID
+      if (token == null || token.isEmpty) {
+        AppLogger.log(
+            '🔍 AuthService: No valid token, attempting auto-login with device ID...');
+        final autoLoginResult = await autoLoginWithPlatformId();
+        if (autoLoginResult != null) {
+          AppLogger.log('✅ AuthService: Auto-login successful');
+          return autoLoginResult;
+        }
+      }
+
+      // 3. Finally, call getUserData to ensure we have the full profile
+      // We use a longer timeout here because this is the critical startup path
+      AppLogger.log(
+          '🔍 AuthService: Fetching final user profile to verify session...');
+      return await _getUserDataInternal(skipTokenRefresh: true).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () async {
+          AppLogger.log(
+              '⚠️ AuthService: Profile fetch timed out, using fallback');
+          final fallbackUser = prefs.getString('fallback_user');
+          if (fallbackUser != null) {
+            return jsonDecode(fallbackUser);
+          }
+          return null;
+        },
+      );
+    } catch (e) {
+      AppLogger.log('❌ AuthService: Error in strict auth sequence: $e');
+      return null;
+    }
+  }
+
   // Get user data from JWT token
   Future<Map<String, dynamic>?> getUserData(
       {bool skipTokenRefresh = false}) async {

@@ -3183,7 +3183,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       AppLogger.log('💰 ProfileScreen: Loading fresh earnings...');
       Future.microtask(() async {
         try {
-          final earningsData = await _adService.getCreatorRevenueSummary();
+          final earningsData = await _adService.getCreatorRevenueSummary(forceRefresh: forceRefresh);
           await _cacheEarningsData(earningsData);
           AppLogger.log('✅ ProfileScreen: Earnings loaded (fresh data)');
         } catch (e) {

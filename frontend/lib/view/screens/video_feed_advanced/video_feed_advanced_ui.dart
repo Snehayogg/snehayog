@@ -559,8 +559,37 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           _buildReportIndicator(index),
           if (_showHeartAnimation[index]?.value == true)
             _buildHeartAnimation(index),
-          _buildBannerAd(video, index),
+          _buildTopGradientOverlay(),
+          ValueListenableBuilder<bool>(
+            valueListenable: _adsLoadedVN,
+            builder: (context, adsLoaded, _) {
+              return _buildBannerAd(video, index);
+            },
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTopGradientOverlay() {
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 200, // Top 20-25% approximately
+      child: IgnorePointer(
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.black.withOpacity(0.4),
+                Colors.transparent,
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -612,6 +641,9 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
   }
 
   Widget _buildBannerAd(VideoModel video, int index) {
+    // **DEBUG: Track ad state**
+    // AppLogger.log('📺 UI: _buildBannerAd calling for video $index. AdsLoaded: $_adsLoaded, BannerAds: ${_bannerAds.length}');
+
     // **FIXED: Prepare custom ad data for fallback (even when AdMob is configured)**
     Map<String, dynamic>? adData;
 
@@ -928,14 +960,33 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         // **ENHANCED: Unified bottom padding strategy**
         // 1. Always account for system navigation bar (SafeArea padding)
         // 2. Add extra 60px padding when opened as a full-screen route (e.g. from Profile/Vayu)
-        //    This matches the height of the BottomNavigationBar in the Yug tab
-        //    ensuring consistent content placement and preventing it from being 
-        //    too low or obscured by system UI or gestures.
-        final bottomPadding = mediaQuery.padding.bottom + (widget.isFullScreen ? 60 : 0);
+        // 3. **NEW: Ensure min padding (e.g., 20) to clear the 40px seek bar touch zone**
+        final bottomPadding = (mediaQuery.padding.bottom > 20 ? mediaQuery.padding.bottom : 20.0) + (widget.isFullScreen ? 60 : 0);
 
         return RepaintBoundary(
           child: Stack(
             children: [
+              // **NEW: Bottom soft gradient for text readability**
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: 200, // Enough to cover caption and action buttons
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [
+                          Colors.black.withOpacity(0.55),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
               // **Video info at absolute bottom - Reels/Shorts style**
               Positioned(
                 bottom:
@@ -1028,8 +1079,8 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                                   video.uploader.name,
                                   style: const TextStyle(
                                     color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14, // Increased from 12
+                                    fontWeight: FontWeight.w600, // Bold
                                   ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -1063,8 +1114,8 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                         video.videoName,
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 12, // Slightly increased
+                          fontWeight: FontWeight.w400, // Lighter
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -1208,42 +1259,50 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           builder: (context, likeCount, _) {
             // **NEW: Using LikeButton for burst animation**
             return Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                LikeButton(
-                  size: 40,
-                  isLiked: isLiked,
-                  circleColor: const CircleColor(
-                    start: Color(0xff00ddff),
-                    end: Color(0xff0099cc),
+                Container(
+                  width: 48,
+                  height: 48,
+                  alignment: Alignment.center,
+                  child: LikeButton(
+                    size: 32, // Increased from current size feel
+                    isLiked: isLiked,
+                    circleColor: const CircleColor(
+                      start: Color(0xff00ddff),
+                      end: Color(0xff0099cc),
+                    ),
+                    bubblesColor: const BubblesColor(
+                      dotPrimaryColor: Color(0xff33b5e5),
+                      dotSecondaryColor: Color(0xff0099cc),
+                    ),
+                    likeBuilder: (bool isLiked) {
+                      return Icon(
+                        isLiked ? Icons.favorite : Icons.favorite_border,
+                        color: isLiked ? Colors.red : Colors.white,
+                        size: 32, // Match size
+                        shadows: const [
+                          Shadow(
+                            color: Colors.black26,
+                            blurRadius: 4,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      );
+                    },
+                    onTap: (bool isLiked) async {
+                      await _handleLike(video, index);
+                      return !isLiked;
+                    },
                   ),
-                  bubblesColor: const BubblesColor(
-                    dotPrimaryColor: Color(0xff33b5e5),
-                    dotSecondaryColor: Color(0xff0099cc),
-                  ),
-                  likeBuilder: (bool isLiked) {
-                    return Icon(
-                      isLiked ? Icons.favorite : Icons.favorite_border,
-                      color: isLiked ? Colors.red : Colors.white,
-                      size: 40,
-                    );
-                  },
-                  onTap: (bool isLiked) async {
-                    // Call existing logic (it handles strict optimistic updates internally)
-                    // We invert isLiked because the callback gives us the *current* state before toggle
-                    // and we want to perform the action.
-                    await _handleLike(video, index);
-
-                    // Return the new state (inverse of what it was)
-                    return !isLiked;
-                  },
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 2),
                 Text(
                   _formatCount(likeCount),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.9), // Subtle
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
@@ -1262,25 +1321,47 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
   }) {
     return GestureDetector(
       onTap: onTap,
+      behavior: HitTestBehavior.opaque,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            width: 48,
+            height: 48,
+            alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.5),
+              color: Colors.black.withOpacity(0.55),
               shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
-            child: Icon(icon, color: color, size: 18),
+            child: Icon(
+              icon,
+              color: color,
+              size: 28, // Requested size
+              shadows: const [
+                Shadow(
+                  color: Colors.black26,
+                  blurRadius: 2,
+                  offset: Offset(0, 1),
+                ),
+              ],
+            ),
           ),
           if (count != null) ...[
             const SizedBox(height: 4),
             Text(
               _formatCount(count),
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.9), // Subtle
                 fontSize: 12,
-                fontWeight: FontWeight.w600,
-                shadows: [
+                fontWeight: FontWeight.w500,
+                shadows: const [
                   Shadow(
                     offset: Offset(0, 1),
                     blurRadius: 2,

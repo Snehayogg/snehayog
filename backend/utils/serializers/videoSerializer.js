@@ -5,11 +5,18 @@
  * requested API version (X-API-Version header).
  */
 
-export const serializeVideo = (video, apiVersion) => {
+export const serializeVideo = (video, apiVersion, requestingUserObjectId) => {
   if (!video) return null;
 
   const videoObj = video.toObject ? video.toObject() : video;
   
+  // Calculate isLiked if user ID provided
+  let isLiked = videoObj.isLiked || false;
+  if (requestingUserObjectId && videoObj.likedBy) {
+    const userObjectIdStr = requestingUserObjectId.toString();
+    isLiked = videoObj.likedBy.some(id => id.toString() === userObjectIdStr);
+  }
+
   // Base transformation (common for all versions)
   const base = {
     _id: videoObj._id?.toString(),
@@ -26,7 +33,7 @@ export const serializeVideo = (video, apiVersion) => {
     mediaType: videoObj.mediaType || 'video',
     link: videoObj.link || null,
     uploadedAt: videoObj.uploadedAt?.toISOString ? videoObj.uploadedAt.toISOString() : videoObj.uploadedAt,
-    isLiked: videoObj.isLiked || false,
+    isLiked: isLiked,
   };
 
   /**
@@ -55,7 +62,7 @@ export const serializeVideo = (video, apiVersion) => {
   return base;
 };
 
-export const serializeVideos = (videos, apiVersion) => {
+export const serializeVideos = (videos, apiVersion, requestingUserObjectId) => {
   if (!Array.isArray(videos)) return [];
-  return videos.map(v => serializeVideo(v, apiVersion));
+  return videos.map(v => serializeVideo(v, apiVersion, requestingUserObjectId));
 };

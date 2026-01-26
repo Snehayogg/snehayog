@@ -19,6 +19,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         if (mounted) {
           safeSetState(() {
             _videos = preFetchedVideos;
+            _syncLikeStateWithModels(preFetchedVideos);
             _currentIndex = 0;
             _isLoading = false;
             _errorMessage = null;

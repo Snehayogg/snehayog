@@ -740,7 +740,7 @@ class ProfileStateManager extends ChangeNotifier {
 
         // Ignore unawaited futures to allow UI to update while earnings load in background
         // ignore: unawaited_futures
-        _loadEarnings();
+        _loadEarnings(forceRefresh: forceRefresh);
       } else {
         // Even if videos are empty, check if userData has a count (e.g. all deleted but count not updated?)
         // Or just set to 0
@@ -768,7 +768,7 @@ class ProfileStateManager extends ChangeNotifier {
 
   /// Load earnings for the current video set
   /// **UPDATED: Aligns with Admin Dashboard & Revenue Screen (Current Month Earnings)**
-  Future<void> _loadEarnings() async {
+  Future<void> _loadEarnings({bool forceRefresh = false}) async {
     try {
       _isEarningsLoading = true;
       notifyListeners();
@@ -798,7 +798,7 @@ class ProfileStateManager extends ChangeNotifier {
       if (isMyProfile) {
         try {
           final adService = AdService();
-          final summary = await adService.getCreatorRevenueSummary();
+          final summary = await adService.getCreatorRevenueSummary(forceRefresh: forceRefresh);
           // Summary returns { 'thisMonth': double, 'lastMonth': double, ... }
           if (summary.containsKey('thisMonth')) {
              final thisMonth = summary['thisMonth'];

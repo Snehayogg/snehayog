@@ -78,22 +78,21 @@ class AppInitializationManager {
       final videoService = VideoService();
       final authService = AuthService();
 
-      await Future.wait([
-        // Task A: Video fetching (Critical)
-        // We chain this to Stage 1 to ensure URL is ready only if absolutely needed,
-        // but AppConfig has fallbacks so we can race it.
-        _fetchAndPreloadFirstVideos(videoService),
-        
-        // Task B: Fetch User Data (Non-blocking)
-        authService.getUserData().then((data) {
-           AppLogger.log('✅ InitManager: User Data loaded');
-        }).catchError((e) {
-           AppLogger.log('⚠️ InitManager: User Data fetch failed (non-critical): $e');
-        }),
+      // Task B: Fetch User Data (Strict sequence ensures tokens are ready for videos)
+      try {
+        AppLogger.log('🔐 InitManager: Authenticating user...');
+        await authService.ensureStrictAuth();
+        AppLogger.log('✅ InitManager: User Data (Strict) loaded');
+      } catch (e) {
+        AppLogger.log('⚠️ InitManager: User Data fetch failed (non-critical): $e');
+      }
 
-        // Ensure Stage 1 is atleast triggered/checked
-        stage1Future, 
-      ]);
+      // Task A: Video fetching (Now has access to validated tokens/user ID)
+      // **FIX: We must await Auth BEFORE fetching videos to ensure isLiked/isFollowing are correct**
+      await _fetchAndPreloadFirstVideos(videoService);
+
+      // Ensure Stage 1 is atleast triggered/checked
+      await stage1Future;
 
       stopwatch.stop();
       AppLogger.log('✅ InitManager: Stage 2 Complete in ${stopwatch.elapsedMilliseconds}ms');

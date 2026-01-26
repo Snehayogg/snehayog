@@ -149,7 +149,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
             height: 50,
             margin: const EdgeInsets.only(top: 1, left: 16),
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.6),
+              color: Colors.transparent,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Material(
@@ -179,8 +179,9 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 3),
                         decoration: BoxDecoration(
-                          color: Colors.blue.shade600,
+                          color: Colors.blue.shade600.withOpacity(0.5),
                           borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.white24, width: 0.5),
                         ),
                         child: const Text(
                           'Learn More',
@@ -216,8 +217,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
             height: 50, // **REDUCED from 60 for more video space**
             margin: const EdgeInsets.only(top: 1, left: 16), // left margin
             decoration: BoxDecoration(
-              color:
-                  Colors.black.withOpacity(0.6), // semi-transparent background
+              color: Colors.transparent,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Material(
@@ -312,8 +312,9 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
                                         vertical: 3,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: Colors.blue.shade600,
+                                        color: Colors.blue.shade600.withOpacity(0.5),
                                         borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: Colors.white24, width: 0.5),
                                       ),
                                       child: Text(
                                         widget.adData['callToAction']
@@ -335,8 +336,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
                                       vertical: 2,
                                     ),
                                     decoration: BoxDecoration(
-                                      color:
-                                          Colors.black, // **FIX: Fully opaque**
+                                      color: Colors.black.withOpacity(0.3),
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: const Text(
