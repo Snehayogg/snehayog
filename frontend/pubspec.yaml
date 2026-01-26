@@ -77,7 +77,7 @@ dependencies:
   jwt_decoder: ^2.0.1
   flutter_cache_manager: ^3.3.1
   connectivity_plus: ^6.0.5
-  device_info_plus: ^12.3.0
+  device_info_plus: ^11.3.0  # Downgraded for Dart SDK 3.5.0 compatibility
   package_info_plus: ^8.0.2
   # **NEW: Hive for Instant Data Loading**
   hive: ^2.2.3

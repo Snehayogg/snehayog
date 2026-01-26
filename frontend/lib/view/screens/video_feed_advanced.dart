@@ -246,7 +246,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       context,
       listen: false,
     );
-    if (!authController.isSignedIn && _currentUserId != null) {
+    
+    // **FIX: Only clear ID if definitely signed out AND not loading**
+    // This prevents clearing the ID during the brief initialization phase
+    if (!authController.isSignedIn && !authController.isLoading && _currentUserId != null) {
       // User signed out - clear current user ID
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -259,7 +262,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
               _isLikedVN[video.id]!.value = false;
             }
           }
-          AppLogger.log('✅ VideoFeedAdvanced: User ID cleared (signed out)');
+          AppLogger.log('✅ VideoFeedAdvanced: User ID cleared (verified signed out)');
         }
       });
     }
@@ -1252,9 +1255,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       return;
     }
 
+    // **FIX: Proceed to VideoService even if local _currentUserId is null**
+    // If we have a token, VideoService will handle it. We only prompt sign-in 
+    // if we are sure there's no user session at all.
     if (_currentUserId == null) {
-      _triggerGoogleSignIn();
-      return;
+      AppLogger.log('🔍 _handleLike: Local _currentUserId is null, relying on service-level token check.');
     }
 
     // Get notifiers

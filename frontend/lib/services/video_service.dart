@@ -54,7 +54,6 @@ class VideoService {
   // **VIDEO TRACKING METHODS**
   void updateCurrentVideoIndex(int newIndex) {
     if (_currentVisibleVideoIndex != newIndex) {
-      final oldIndex = _currentVisibleVideoIndex;
       _currentVisibleVideoIndex = newIndex;
       /* AppLogger.log(
           '🎬 VideoService: Video index changed from $oldIndex to $newIndex'); */
@@ -525,7 +524,6 @@ class VideoService {
       AppLogger.log('🔍 VideoService: User data - id: ${userData['id']}');
       AppLogger.log('🔍 VideoService: User data - email: ${userData['email']}');
 
-      final resolvedBaseUrl = await getBaseUrlWithFallback();
       AppLogger.log(
           '🔍 VideoService: Like request URL: ${NetworkHelper.apiBaseUrl}/videos/$videoId/like');
 

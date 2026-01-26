@@ -40,6 +40,11 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
       _isLoading = true;
       _errorMessage = null; // Clear any previous error
 
+      // **CRITICAL FIX: Wait for User ID before loading videos**
+      // This ensures the first API request includes the Authorization header
+      // so backend can return correct isLiked status for each video.
+      await _loadCurrentUserId();
+
       // **NEW: Load persisted seen video keys so cache doesn't re-show watched videos**
       await _loadSeenVideoKeysFromStorage();
 
@@ -133,12 +138,7 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
           }
         }
 
-        // **OPTIMIZED: DEFER non-critical background data loading**
-        // We'll trigger these after the first video starts preloading/playing
-        // to give 100% bandwidth and CPU to the video feed first
-        _loadCurrentUserId().catchError((e) {
-          AppLogger.log('⚠️ Error loading user ID (non-blocking): $e');
-        });
+        // User ID loaded earlier at the start of _loadInitialData
         return;
       }
 
@@ -442,10 +442,7 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
         _verifyAndSetCorrectIndex();
       }
 
-      // **OPTIMIZED: DEFER non-critical background data loading**
-      _loadCurrentUserId().catchError((e) {
-        AppLogger.log('⚠️ Error loading user ID (non-blocking): $e');
-      });
+      // User ID already loaded at the start
 
       if (mounted) {
         // **FIX: Restore saved state (index/position) even on cold start**
@@ -695,24 +692,28 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
     try {
       final authController =
           Provider.of<GoogleSignInController>(context, listen: false);
+      
+      // 1. Try GoogleSignInController first
       if (authController.isSignedIn && authController.userData != null) {
-        final userId = authController.userData!['id'] ??
-            authController.userData!['googleId'];
+        final userId = authController.userData!['googleId'] ?? 
+                      authController.userData!['id'];
         if (userId != null) {
-          // **OPTIMIZED: No setState needed - _currentUserId doesn't trigger UI rebuilds**
-          _currentUserId = userId;
-          AppLogger.log(
-              '✅ Loaded current user ID from auth controller: $_currentUserId');
+          _currentUserId = userId.toString();
+          AppLogger.log('✅ Loaded current user ID from auth controller: $_currentUserId');
           return;
         }
       }
 
-      final userData = await _authService.getUserData();
-      if (userData != null && userData['id'] != null) {
-        // **OPTIMIZED: No setState needed - _currentUserId doesn't trigger UI rebuilds**
-        _currentUserId = userData['id'];
-        AppLogger.log(
-            '✅ Loaded current user ID from auth service: $_currentUserId');
+      // 2. Fallback to SharedPreferences (Instant lookup)
+      final prefs = await SharedPreferences.getInstance();
+      final fallbackUserStr = prefs.getString('fallback_user');
+      if (fallbackUserStr != null) {
+        final userDataList = json.decode(fallbackUserStr);
+        final userId = userDataList['googleId'] ?? userDataList['id'];
+        if (userId != null) {
+          _currentUserId = userId.toString();
+          AppLogger.log('✅ Loaded current user ID from storage: $_currentUserId');
+        }
       }
     } catch (e) {
       AppLogger.log('❌ Error loading current user ID: $e');

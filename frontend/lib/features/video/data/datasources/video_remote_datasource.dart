@@ -10,6 +10,8 @@ import '../../../../model/video_model.dart';
 
 import '../../../../services/authservices.dart';
 import '../../../../services/platform_id_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../../../utils/app_logger.dart';
 
 /// Remote data source for video operations
 /// Handles all HTTP requests to the video API
@@ -28,13 +30,23 @@ class VideoRemoteDataSource {
       // This ensures previously watched/shown videos are excluded
       final platformId = await PlatformIdService().getPlatformId();
 
-      // Get auth token if available
+      // **FAST FIX: Get token instantly from SharedPreferences**
+      // Don't wait for AuthService.getUserData() as it attempts to refresh profile from backend
       String? token;
       try {
-        final authData = await AuthService().getUserData();
-        token = authData?['token'];
-      } catch (_) {
-        // Ignore auth errors - proceed as anonymous
+        final prefs = await SharedPreferences.getInstance();
+        token = prefs.getString('jwt_token');
+        
+        // If token null, try fallback_user to see if we have an ID at least
+        if (token == null) {
+          final fallback = prefs.getString('fallback_user');
+          if (fallback != null) {
+            final data = json.decode(fallback);
+            token = data['token'];
+          }
+        }
+      } catch (e) {
+        AppLogger.log('⚠️ VideoRemoteDataSource: Error getting cached token: $e');
       }
 
       // Add platformId and videoType to query params

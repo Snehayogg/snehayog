@@ -658,7 +658,6 @@ class AdService {
       final pathSegments = uri.pathSegments;
 
       if (pathSegments.length >= 3 && pathSegments[1] == 'upload') {
-        final publicId = pathSegments.sublist(3).join('/');
         // NOTE: Media deletion now happens server-side for Cloudflare R2.
         // This method is kept for API compatibility but simply returns true.
         return true;

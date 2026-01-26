@@ -16,13 +16,6 @@ if (process.env.DISABLE_CONSOLE_LOG === 'true') {
   console.log = () => { };
 }
 
-// Memory Leak Monitor
-setInterval(() => {
-  // Log memory usage in MB
-  const used = process.memoryUsage().rss / 1024 / 1024;
-  console.log(`Memory Usage (RSS): ${Math.round(used * 100) / 100} MB`);
-}, 5000);
-
 // Import database manager
 import databaseManager from './config/database.js';
 import './models/index.js';
