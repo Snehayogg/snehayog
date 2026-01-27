@@ -1009,8 +1009,8 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                               behavior: HitTestBehavior.opaque,
                               onTap: () => _navigateToCreatorProfile(video),
                               child: Container(
-                                width: 24,
-                                height: 24,
+                                width: AppConstants.avatarRadius * 2,
+                                height: AppConstants.avatarRadius * 2,
                                 decoration: const BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: Colors.grey,
@@ -1203,15 +1203,17 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                       child: Column(
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(10),
+                            width: AppConstants.secondaryActionButtonContainerSize,
+                            height: AppConstants.secondaryActionButtonContainerSize,
+                            padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.5),
+                              color: Colors.black.withOpacity(0.55),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
                               Icons.arrow_forward_ios,
                               color: Colors.white,
-                              size: 18,
+                              size: AppConstants.secondaryActionButtonSize,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -1262,11 +1264,22 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 48,
-                  height: 48,
+                  width: AppConstants.primaryActionButtonContainerSize,
+                  height: AppConstants.primaryActionButtonContainerSize,
                   alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.55),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
                   child: LikeButton(
-                    size: 32, // Increased from current size feel
+                    size: AppConstants.primaryActionButtonSize,
                     isLiked: isLiked,
                     circleColor: const CircleColor(
                       start: Color(0xff00ddff),
@@ -1280,7 +1293,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                       return Icon(
                         isLiked ? Icons.favorite : Icons.favorite_border,
                         color: isLiked ? Colors.red : Colors.white,
-                        size: 32, // Match size
+                        size: AppConstants.primaryActionButtonSize, // Match size
                         shadows: const [
                           Shadow(
                             color: Colors.black26,
@@ -1326,8 +1339,8 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 48,
-            height: 48,
+            width: AppConstants.secondaryActionButtonContainerSize,
+            height: AppConstants.secondaryActionButtonContainerSize,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: Colors.black.withOpacity(0.55),
@@ -1343,12 +1356,12 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             child: Icon(
               icon,
               color: color,
-              size: 28, // Requested size
+              size: AppConstants.secondaryActionButtonSize,
               shadows: const [
                 Shadow(
-                  color: Colors.black26,
-                  blurRadius: 2,
-                  offset: Offset(0, 1),
+                  color: Colors.black45,
+                  blurRadius: 4,
+                  offset: Offset(0, 2),
                 ),
               ],
             ),

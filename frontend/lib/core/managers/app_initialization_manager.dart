@@ -36,7 +36,23 @@ class AppInitializationManager {
   bool get isStage2Complete => _isStage2Complete;
 
   // Track the vital first page of videos
-  List<VideoModel>? initialVideos;
+  List<VideoModel>? _initialVideos;
+  DateTime? _initialVideosTimestamp;
+  bool _hasInitialVideosMore = false;
+  
+  // Public Getters
+  List<VideoModel>? get initialVideos => _initialVideos;
+  set initialVideos(List<VideoModel>? videos) => _initialVideos = videos;
+  
+  bool get hasInitialVideosMore => _hasInitialVideosMore;
+  set hasInitialVideosMore(bool value) => _hasInitialVideosMore = value;
+
+  /// **NEW: Check if initialVideos are still fresh (within 3 minutes)**
+  bool get isInitialVideosFresh {
+    if (_initialVideos == null || _initialVideosTimestamp == null) return false;
+    final age = DateTime.now().difference(_initialVideosTimestamp!);
+    return age < const Duration(minutes: 3);
+  }
 
   // --- STAGE 1: AVAILABLE IMMEDIATELY (Before UI) ---
   /// Called before `runApp`. Setup basic config.
@@ -46,7 +62,15 @@ class AppInitializationManager {
     try {
       AppLogger.log('🚀 InitManager: Stage 1 (Config) Started');
       
-      // 1. Determine Backend URL
+      // 1. Firebase (Critical for Network Interceptors)
+      try {
+        await Firebase.initializeApp();
+        AppLogger.log('✅ InitManager: Firebase initialized');
+      } catch (e) {
+        AppLogger.log('⚠️ InitManager: Firebase Init Error: $e');
+      }
+
+      // 2. Determine Backend URL
       // **OPTIMIZATION: Don't clear cache aggressively. Trust the "Race to Success"**
       // AppConfig.clearCache(); 
       final workingUrl = await AppConfig.checkAndUpdateServerUrl();
@@ -66,10 +90,17 @@ class AppInitializationManager {
   /// Called by SplashScreen. Fetches First Video & Profile.
   /// Goal: Ensure VideoFeed has content READY when it mounts.
   Future<void> initializeStage2(BuildContext context) async {
-    if (_isStage2Complete) return;
+    if (_isStage2Complete) {
+      AppLogger.log('ℹ️ InitManager: Stage 2 already complete, skipping. Called from:');
+      AppLogger.log(StackTrace.current.toString().split('\n').take(5).join('\n'));
+      return;
+    }
 
     try {
       AppLogger.log('🚀 InitManager: Stage 2 (Vital Content) Started');
+      AppLogger.log('📍 Trace: Stage 2 called from:');
+      AppLogger.log(StackTrace.current.toString().split('\n').take(5).join('\n'));
+      
       final stopwatch = Stopwatch()..start();
 
       // **PARALLELISM: Start Stage 1 if skipped/pending, but don't await strictly**
@@ -111,7 +142,7 @@ class AppInitializationManager {
       // 1. Network Call
       final result = await videoService.getVideos(
         page: 1, 
-        limit: 10, 
+        limit: 15, 
         videoType: 'yog'
       );
       
@@ -119,7 +150,9 @@ class AppInitializationManager {
       final videos = rawList.cast<VideoModel>();
 
       if (videos.isNotEmpty) {
-        initialVideos = videos;
+        _initialVideos = videos;
+        _hasInitialVideosMore = result['hasMore'] ?? false;
+        _initialVideosTimestamp = DateTime.now();
         AppLogger.log('✅ InitManager: Fetched ${videos.length} videos.');
 
         // 2. Pre-initialize FIRST video only (The one user sees instantly)
@@ -162,14 +195,13 @@ class AppInitializationManager {
        
        AppLogger.log('🚀 InitManager: Stage 3 (Deferred) Started');
 
-       // 1. Firebase (Notifications)
+       // 1. Notifications (Firebase already initialized in Stage 1)
        try {
-         await Firebase.initializeApp();
          final notificationService = NotificationService();
          await notificationService.initialize();
-         AppLogger.log('✅ InitManager: Firebase initialized');
+         AppLogger.log('✅ InitManager: Notifications initialized');
        } catch (e) {
-         print('Firebase Init Error: $e');
+         print('Notification Init Error: $e');
        }
 
        // 2. Remote Config

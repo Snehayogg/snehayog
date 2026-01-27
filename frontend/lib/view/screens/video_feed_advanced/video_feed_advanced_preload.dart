@@ -195,7 +195,6 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
     // **CACHE STATUS CHECK ON PRELOAD**
 
-    _printCacheStatus();
 
 
     String? videoUrl;

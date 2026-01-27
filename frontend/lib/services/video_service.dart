@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:http/http.dart' as http;
@@ -16,7 +17,6 @@ import 'package:vayu/config/app_config.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/services/connectivity_service.dart';
 import 'package:vayu/core/services/http_client_service.dart';
-import 'package:vayu/features/video/data/datasources/video_local_datasource.dart';
 
 /// Eliminates code duplication and provides consistent API
 class VideoService {
@@ -138,58 +138,39 @@ class VideoService {
     bool clearSession = false,
   }) async {
     try {
-      // Get base URL with Railway first, local fallback
-      // AppLogger.log('🔍 VideoService: Using base URL: ${NetworkHelper.apiBaseUrl}');
-
       String url = '${NetworkHelper.apiBaseUrl}/videos?page=$page&limit=$limit';
       final normalizedType = videoType?.toLowerCase();
-      // **FIXED: Use 'yog' consistently in both frontend and backend**
       String? apiVideoType = normalizedType;
       if (normalizedType == 'yog' || normalizedType == 'vayu') {
         url += '&videoType=$apiVideoType';
-        // AppLogger.log('🔍 VideoService: Filtering by videoType: $apiVideoType');
       }
 
-      // **BACKEND-FIRST: Get platformId for anonymous users**
       final platformIdService = PlatformIdService();
       final platformId = await platformIdService.getPlatformId();
       if (platformId.isNotEmpty) {
         url += '&platformId=$platformId';
-        /* AppLogger.log(
-            '📱 VideoService: Using platformId for personalized feed'); */
       }
 
-      // **NEW: Add clearSession parameter to clear backend session state**
       if (clearSession) {
         url += '&clearSession=true';
-        AppLogger.log(
-            '🧹 VideoService: Clearing session state for fresh videos');
+        AppLogger.log('🧹 VideoService: Clearing session state for fresh videos');
       }
 
-      // **BACKEND-FIRST: Get auth token for authenticated users (optional - don't fail if missing)**
       Map<String, String> headers = {
         'Content-Type': 'application/json',
       };
       
       if (platformId.isNotEmpty) {
          headers['x-device-id'] = platformId;
-         // AppLogger.log('📱 VideoService: Added x-device-id header: $platformId'); 
-      } else {
-         AppLogger.log('⚠️ VideoService: Platform ID is empty! Header not added.');
       }
 
       try {
         final token = await AuthService.getToken();
         if (token != null && token.isNotEmpty) {
           headers['Authorization'] = 'Bearer $token';
-          /* AppLogger.log(
-              '✅ VideoService: Using authenticated request for personalized feed'); */
-        } else {
-          // AppLogger.log('ℹ️ VideoService: No auth token - using regular feed');
         }
       } catch (e) {
-        AppLogger.log(
-            '⚠️ VideoService: Error getting auth token, using regular feed: $e');
+        AppLogger.log('⚠️ VideoService: Error getting auth token: $e');
       }
 
       final response = await httpClientService.get(
@@ -199,121 +180,17 @@ class VideoService {
       );
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> responseData = json.decode(response.body);
-        final List<dynamic> videoList = responseData['videos'] ?? [];
-
-        // **ENHANCED: Detailed logging for empty video list debugging**
-        if (videoList.isEmpty) {
-          AppLogger.log(
-            '⚠️ VideoService: Empty video list received from API (page: $page, videoType: $videoType)',
-          );
-          AppLogger.log(
-              '⚠️ VideoService: Response data keys: ${responseData.keys.toList()}');
-          AppLogger.log(
-              '⚠️ VideoService: Full response: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
-          AppLogger.log(
-              '⚠️ VideoService: Has more: ${responseData['hasMore']}, Total: ${responseData['total']}, Current page: ${responseData['currentPage']}');
-
-          // **NEW: Check if backend has any videos at all**
-          if (responseData['total'] != null && responseData['total'] == 0) {
-            AppLogger.log(
-                '⚠️ VideoService: Backend reports 0 total videos in database!');
-          }
-        } else {
-          /* AppLogger.log(
-              '✅ VideoService: Received ${videoList.length} videos from API (page: $page, videoType: $videoType)'); */
-        }
-
-        final videos = videoList.map((json) {
-          // **DEBUG: Log all video data for debugging**
-          /* AppLogger.log(
-              '🔍 VideoService: Video data for ${json['videoName']}:');
-          AppLogger.log('  - videoUrl: ${json['videoUrl']}');
-          AppLogger.log('  - hlsPlaylistUrl: ${json['hlsPlaylistUrl']}');
-          AppLogger.log(
-              '  - hlsMasterPlaylistUrl: ${json['hlsMasterPlaylistUrl']}');
-          AppLogger.log('  - isHLSEncoded: ${json['isHLSEncoded']}');
-          AppLogger.log('  - hlsVariants: ${json['hlsVariants']?.length ?? 0}'); */
-
-          // **HLS URL Priority**: Use HLS for better streaming
-          if (json['hlsPlaylistUrl'] != null &&
-              json['hlsPlaylistUrl'].toString().isNotEmpty) {
-            String hlsUrl = json['hlsPlaylistUrl'].toString();
-            if (!hlsUrl.startsWith('http')) {
-              // Remove leading slash if present to avoid double slash
-              if (hlsUrl.startsWith('/')) {
-                hlsUrl = hlsUrl.substring(1);
-              }
-              json['videoUrl'] = '${NetworkHelper.apiBaseUrl}/$hlsUrl';
-            } else {
-              json['videoUrl'] = hlsUrl;
-            }
-            // AppLogger.log('🔗 VideoService: Using HLS Playlist URL: ${json['videoUrl']}');
-          } else if (json['hlsMasterPlaylistUrl'] != null &&
-              json['hlsMasterPlaylistUrl'].toString().isNotEmpty) {
-            String masterUrl = json['hlsMasterPlaylistUrl'].toString();
-            if (!masterUrl.startsWith('http')) {
-              if (masterUrl.startsWith('/')) {
-                masterUrl = masterUrl.substring(1);
-              }
-              json['videoUrl'] = '${NetworkHelper.apiBaseUrl}/$masterUrl';
-            } else {
-              json['videoUrl'] = masterUrl;
-            }
-            // AppLogger.log('🔗 VideoService: Using HLS Master URL: ${json['videoUrl']}');
-          } else {
-            // **Fallback**: Ensure relative URLs are complete
-            if (json['videoUrl'] != null &&
-                !json['videoUrl'].toString().startsWith('http')) {
-              String videoUrl = json['videoUrl'].toString();
-              // Remove leading slash if present to avoid double slash
-              if (videoUrl.startsWith('/')) {
-                videoUrl = videoUrl.substring(1);
-              }
-              json['videoUrl'] = '${NetworkHelper.apiBaseUrl}/$videoUrl';
-            }
-            /* AppLogger.log(
-              '🔗 VideoService: Using original video URL: ${json['videoUrl']}',
-            ); */
-          }
-
-          final video = VideoModel.fromJson(json);
-          
-          // **DEBUG: Check for empty IDs which cause PageView key collisions**
-          if (video.id.isEmpty) {
-            AppLogger.log('❌ VideoService: Critical Error - Parsed video with EMPTY ID! Name: ${video.videoName}');
-            // Fallback: Generate a random ID to prevent key collision crashes
-            // This is a band-aid; backend should fix the root cause.
-            return video.copyWith(id: 'temp_${DateTime.now().microsecondsSinceEpoch}');
-          }
-          
-          return video;
-        }).toList();
-
-        final result = {
-          'videos': List<VideoModel>.from(videos),
-          'hasMore': responseData['hasMore'] ?? false,
-          'total': responseData['total'] ?? videos.length,
-          'currentPage': responseData['currentPage'] ?? page,
-          'totalPages': responseData['totalPages'] ?? 1,
+        // **COMPUTE: Use background isolate for heavy JSON parsing and mapping**
+        final parseParams = {
+          'body': response.body,
+          'apiBaseUrl': NetworkHelper.apiBaseUrl,
+          'page': page,
         };
 
-        // **CACHE: Save fresh videos to Hive**
-        // We use unawaited to not block the UI return
-        // ignore: unawaited_futures
-        _cacheVideosIfApplicable(videos, videoType, page);
-
+        final result = await compute(_parseVideosCompute, parseParams);
         return result;
       } else {
-        // **ENHANCED: Better error handling for non-200 responses**
-        AppLogger.log(
-          '❌ VideoService: API returned status ${response.statusCode}',
-        );
-        AppLogger.log(
-          '❌ VideoService: Response body: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}',
-        );
-
-        // **NEW: Try to parse error message from backend**
+        AppLogger.log('❌ VideoService: API returned status ${response.statusCode}');
         String errorMessage = 'Failed to load videos: ${response.statusCode}';
         try {
           final errorData = json.decode(response.body);
@@ -322,67 +199,12 @@ class VideoService {
           } else if (errorData['message'] != null) {
             errorMessage = errorData['message'].toString();
           }
-        } catch (_) {
-          // Not JSON, use default message
-        }
-
+        } catch (_) {}
         throw Exception(errorMessage);
       }
     } catch (e) {
       AppLogger.log('❌ VideoService: Error in getVideos: $e');
-
-      // **OFFLINE FALLBACK: Try Hive Cache**
-      if (page == 1) {
-        try {
-          // Lazy load the data source to avoid circular dependency issues if any
-          // Ideally passed via constructor but using direct instantiation for service patch
-          // Imports are needed: import '../features/video/data/datasources/video_local_datasource.dart';
-
-          final _localDataSource = VideoLocalDataSource();
-          final videoTypeKey =
-              videoType ?? 'yog'; // default to yog for cache key if null
-
-          final cachedVideos =
-              await _localDataSource.getCachedVideoFeed(videoTypeKey);
-
-          if (cachedVideos != null && cachedVideos.isNotEmpty) {
-            AppLogger.log(
-                '✅ VideoService: Returning CACHED videos (Offline Mode)');
-            return {
-              'videos': cachedVideos,
-              'hasMore': false,
-              'total': cachedVideos.length,
-              'currentPage': 1,
-              'totalPages': 1,
-              'isOffline': true,
-            };
-          }
-        } catch (cacheError) {
-          AppLogger.log('⚠️ VideoService: Cache fallback failed: $cacheError');
-        }
-      }
-
-      // **FIX: Add device info for debugging**
-      AppLogger.log(
-        '❌ VideoService: Error details - page: $page, videoType: $videoType, limit: $limit',
-      );
       rethrow;
-    }
-  }
-
-  /// **Helper to cache videos (called after successful fetch)**
-  Future<void> _cacheVideosIfApplicable(
-      List<VideoModel> videos, String? videoType, int page) async {
-    if (page == 1 && videos.isNotEmpty) {
-      try {
-        final _localDataSource = VideoLocalDataSource();
-        final type = videoType ?? 'yog';
-        if (type == 'yog' || type == 'vayu') {
-          await _localDataSource.cacheVideoFeed(videos, type);
-        }
-      } catch (e) {
-        AppLogger.log('⚠️ VideoService: Failed to cache videos: $e');
-      }
     }
   }
 
@@ -1361,5 +1183,59 @@ class VideoService {
     _videoIndexChangeListeners.clear();
     _videoScreenStateListeners.clear();
     AppLogger.log('🗑️ VideoService: Disposed all listeners');
+  }
+  /// **Helper: Parse videos in background isolate**
+  static Map<String, dynamic> _parseVideosCompute(Map<String, dynamic> params) {
+    final String body = params['body'];
+    final String apiBaseUrl = params['apiBaseUrl'];
+    final int page = params['page'];
+
+    final Map<String, dynamic> responseData = json.decode(body);
+    final List<dynamic> videoList = responseData['videos'] ?? [];
+
+    final videos = videoList.map((json) {
+      // **HLS URL Priority**: Use HLS for better streaming
+      if (json['hlsPlaylistUrl'] != null &&
+          json['hlsPlaylistUrl'].toString().isNotEmpty) {
+        String hlsUrl = json['hlsPlaylistUrl'].toString();
+        if (!hlsUrl.startsWith('http')) {
+          if (hlsUrl.startsWith('/')) hlsUrl = hlsUrl.substring(1);
+          json['videoUrl'] = '$apiBaseUrl/$hlsUrl';
+        } else {
+          json['videoUrl'] = hlsUrl;
+        }
+      } else if (json['hlsMasterPlaylistUrl'] != null &&
+          json['hlsMasterPlaylistUrl'].toString().isNotEmpty) {
+        String masterUrl = json['hlsMasterPlaylistUrl'].toString();
+        if (!masterUrl.startsWith('http')) {
+          if (masterUrl.startsWith('/')) masterUrl = masterUrl.substring(1);
+          json['videoUrl'] = '$apiBaseUrl/$masterUrl';
+        } else {
+          json['videoUrl'] = masterUrl;
+        }
+      } else {
+        if (json['videoUrl'] != null &&
+            !json['videoUrl'].toString().startsWith('http')) {
+          String videoUrl = json['videoUrl'].toString();
+          if (videoUrl.startsWith('/')) videoUrl = videoUrl.substring(1);
+          json['videoUrl'] = '$apiBaseUrl/$videoUrl';
+        }
+      }
+
+      final video = VideoModel.fromJson(json);
+      if (video.id.isEmpty) {
+        return video.copyWith(
+            id: 'temp_${DateTime.now().microsecondsSinceEpoch}');
+      }
+      return video;
+    }).toList();
+
+    return {
+      'videos': List<VideoModel>.from(videos),
+      'hasMore': responseData['hasMore'] ?? false,
+      'total': responseData['total'] ?? videos.length,
+      'currentPage': responseData['currentPage'] ?? page,
+      'totalPages': responseData['totalPages'] ?? 1,
+    };
   }
 }

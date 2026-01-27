@@ -4,9 +4,7 @@ import 'package:vayu/model/video_model.dart';
 import 'package:vayu/services/video_service.dart';
 import 'package:vayu/core/enums/video_state.dart';
 import 'package:vayu/core/constants/app_constants.dart';
-import 'package:vayu/core/managers/smart_cache_manager.dart';
 import 'package:vayu/core/managers/video_controller_manager.dart';
-import 'package:vayu/services/platform_id_service.dart';
 
 // import 'package:hive_flutter/hive_flutter.dart';
 
@@ -62,87 +60,32 @@ class VideoProvider extends ChangeNotifier {
         isInitialLoad ? VideoLoadState.loading : VideoLoadState.loadingMore);
 
     try {
-      // 1) Try instant render from SmartCacheManager (cache-first on initial load)
-      final smartCache = SmartCacheManager();
-      if (!smartCache.isInitialized) {
-        await smartCache.initialize();
-      }
-
-      // **FIX: Include platformId in cache key for personalized feeds**
-      // This ensures each user gets their own cached personalized feed
-      final platformIdService = PlatformIdService();
-      final platformId = await platformIdService.getPlatformId();
-      final normalizedType = (videoType ?? 'all').toLowerCase();
-      final cacheKey =
-          'videos_page_${_currentPage}_${normalizedType}_$platformId';
-
-      bool cachedMarkedAsEnd = false;
-
-      // Note: SmartCacheManager is Memory-Only now, so it won't help on restart.
-      // We rely on the Hive block above for restart caching.
-      
-      if (isInitialLoad) {
-          // ... (Existing SmartCacheManager logic kept for in-session navigation) ...
-        try {
-          final cached = await smartCache.peek<Map<String, dynamic>>(
-            cacheKey,
-            cacheType: 'videos',
-          );
-
-          if (cached != null) {
-             // ... existing logic ...
-            final cachedVideos = _deserializeVideoList(cached['videos']);
-            if (cachedVideos.isNotEmpty) {
-              _videos = cachedVideos;
-              final cachedHasMore = cached['hasMore'] as bool? ?? true;
-              cachedMarkedAsEnd = !cachedHasMore;
-              _hasMore = cachedHasMore;
-              notifyListeners();
-             
-              try {
-                final firstVideo = _videos.first;
-                unawaited(
-                    VideoControllerManager().preloadController(0, firstVideo));
-                VideoControllerManager().pinIndices({0});
-              } catch (e) {}
-            }
-          }
-        } catch (e) {}
-      }
-
-      // 2) Network fetch for fresh data
-      final response = await smartCache.get<Map<String, dynamic>>(
-        cacheKey,
-        cacheType: 'videos',
-        maxAge: const Duration(minutes: 15),
-        forceRefresh: !isInitialLoad || cachedMarkedAsEnd, // Removed forceRefresh on initial if we want cache, but standard logic
-        fetchFn: () async {
-          final result = await _videoService.getVideos(
-            page: _currentPage,
-            videoType: videoType,
-          );
-
-          final videos = (result['videos'] as List<VideoModel>)
-              .map((video) => video.toJson())
-              .toList();
-
-          return {
-            ...result,
-            'videos': videos,
-          };
-        },
+      // **OPTIMIZED: Always fetch fresh data via network**
+      final result = await _videoService.getVideos(
+        page: _currentPage,
+        videoType: videoType,
       );
 
-      if (response == null) {
+      if (result == null) {
         throw Exception('Failed to load videos');
       }
 
-      final fetchedVideos = _deserializeVideoList(response['videos']);
-      final bool hasMore = response['hasMore'] as bool? ?? false;
+      final List<VideoModel> fetchedVideos = result['videos'] as List<VideoModel>;
+      final bool hasMore = result['hasMore'] as bool? ?? false;
 
       if (isInitialLoad) {
-        // Replace stale videos with fresh ones
+        // Clear old videos and set new ones
         _videos = fetchedVideos;
+        
+        // Pre-initialize first video
+        if (_videos.isNotEmpty) {
+          try {
+            final firstVideo = _videos.first;
+            unawaited(
+                VideoControllerManager().preloadController(0, firstVideo));
+            VideoControllerManager().pinIndices({0});
+          } catch (e) {}
+        }
       } else {
         _videos.addAll(fetchedVideos);
       }
@@ -182,15 +125,6 @@ class VideoProvider extends ChangeNotifier {
     _hasMore = true;
     _errorMessage = null;
     _loadState = VideoLoadState.initial;
-
-    // Invalidate cache to get fresh videos
-    try {
-      final cacheManager = SmartCacheManager();
-      await cacheManager.invalidateVideoCache(videoType: _currentVideoType);
-
-    } catch (e) {
-
-    }
 
     await loadVideos(isInitialLoad: true, videoType: _currentVideoType);
   }
@@ -303,14 +237,7 @@ class VideoProvider extends ChangeNotifier {
       if (allDeleted) {
 
 
-        // **NEW: Invalidate SmartCacheManager cache to prevent deleted videos from showing**
-        try {
-          final cacheManager = SmartCacheManager();
-          await cacheManager.invalidateVideoCache(videoType: _currentVideoType);
-
-        } catch (e) {
-
-        }
+        // Network cache is gone, no need to invalidate
       } else {
         throw Exception('Some videos failed to delete');
       }

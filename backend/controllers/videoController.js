@@ -546,6 +546,16 @@ export const getUserVideos = async (req, res) => {
     } catch (err) { console.error('⚠️ Error calculating monthly earnings:', err); }
 
     const formattedEarnings = currentMonthEarnings.toFixed(2);
+    
+    // Inject earnings into uploader object for each video
+    // This allows the frontend to see the current month earnings in the profile header
+    const videosWithEarnings = validVideos.map(v => {
+      if (v.uploader) {
+        v.uploader.earnings = parseFloat(formattedEarnings);
+      }
+      return v;
+    });
+
     const episodesMap = new Map();
     if (seriesIds.size > 0) {
       try {
@@ -560,7 +570,7 @@ export const getUserVideos = async (req, res) => {
       } catch (err) { console.error('⚠️ Error fetching series episodes:', err); }
     }
 
-    if (validVideos.length === 0) return res.json([]);
+    if (videosWithEarnings.length === 0) return res.json([]);
 
     const requestingGoogleId = req.user?.googleId;
     let requestingUserObjectIdStr = null;
@@ -569,16 +579,13 @@ export const getUserVideos = async (req, res) => {
       if (rqUser) requestingUserObjectIdStr = rqUser._id.toString();
     }
 
-    const videosWithUrls = serializeVideos(validVideos, req.apiVersion, requestingUserObjectIdStr);
+    const videosSerialized = serializeVideos(videosWithEarnings, req.apiVersion, requestingUserObjectIdStr);
     
-    // **METRIC: Track this fetch**
-    // console.log(`👤 UserVideos: Fetched ${videosWithUrls.length} videos for ${googleId}`);
-
     if (redisService.getConnectionStatus()) {
-      await redisService.set(cacheKey, videosWithUrls, 600);
+      await redisService.set(cacheKey, videosSerialized, 600);
     }
 
-    return res.json(videosWithUrls);
+    return res.json(videosSerialized);
   } catch (error) {
     console.error('❌ Error fetching user videos:', error);
     res.status(500).json({ error: 'Error fetching videos', details: error.message });
@@ -705,7 +712,8 @@ export const getVideoById = async (req, res) => {
         _id: videoObj.uploader?._id?.toString() || '',
         googleId: videoObj.uploader?.googleId?.toString() || '',
         name: videoObj.uploader?.name || 'Unknown User',
-        profilePic: videoObj.uploader?.profilePic || ''
+        profilePic: videoObj.uploader?.profilePic || '',
+        earnings: parseFloat(videoObj.uploader?.earnings) || 0.0
       },
       hlsMasterPlaylistUrl: videoObj.hlsMasterPlaylistUrl || null,
       hlsPlaylistUrl: videoObj.hlsPlaylistUrl || null,
@@ -714,7 +722,8 @@ export const getVideoById = async (req, res) => {
       episodeNumber: videoObj.episodeNumber || 0,
       episodes: episodes,
       likedBy: likedByGoogleIds,
-      isLiked: isLiked
+      isLiked: isLiked,
+      earnings: parseFloat(videoObj.earnings) || 0.0
     };
 
     res.json(transformedVideo);

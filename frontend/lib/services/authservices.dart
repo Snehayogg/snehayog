@@ -342,7 +342,7 @@ class AuthService {
                     'platform': platform,
                   }),
                 )
-                .timeout(const Duration(seconds: 10));
+                .timeout(const Duration(seconds: 5));
 
             if (authResponse.statusCode == 200) {
               final authData = jsonDecode(authResponse.body);
@@ -1138,7 +1138,7 @@ class AuthService {
               'refreshToken': refreshToken,
               'deviceId': deviceId,
             }),
-          ).timeout(const Duration(seconds: 10));
+          ).timeout(const Duration(seconds: 5));
 
           if (response.statusCode == 200) {
             final data = jsonDecode(response.body);
@@ -1193,7 +1193,11 @@ class AuthService {
       // **FIX: Use signInSilently() directly. isSignedIn() can be false if token is expired**
       // suppressErrors: false allows us to see why it fails in the logs
       final GoogleSignInAccount? googleUser =
-          await _googleSignIn.signInSilently(suppressErrors: false);
+          await _googleSignIn.signInSilently(suppressErrors: false)
+              .timeout(const Duration(seconds: 5), onTimeout: () {
+                AppLogger.log('⚠️ Google Silent Sign-In timed out');
+                return null;
+              });
       
       if (googleUser == null) {
         AppLogger.log('❌ Silent sign-in failed, user needs to re-authenticate manually');

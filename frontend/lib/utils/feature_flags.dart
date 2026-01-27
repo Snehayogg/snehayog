@@ -19,7 +19,7 @@ class FeatureFlags {
     // NEW: Fast Video Delivery System
     'fast_video_delivery': true, // Main feature flag
     'background_video_preloading': true, // Preload next videos
-    'smart_video_caching': true, // Smart caching strategy
+    'smart_video_caching': false, // Smart caching strategy
     'instant_video_playback': true, // Zero loading time
     'video_memory_optimization': true, // Memory management
 

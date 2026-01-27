@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/core/providers/video_provider.dart';
-import 'package:vayu/core/providers/user_provider.dart';
 import 'package:vayu/model/video_model.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/cloudflare_r2_service.dart';
@@ -14,11 +13,9 @@ import 'package:vayu/services/payment_setup_service.dart';
 import 'package:vayu/services/video_service.dart';
 import 'package:vayu/services/ad_service.dart';
 
-import 'package:vayu/utils/feature_flags.dart';
-
+import 'package:vayu/features/profile/data/datasources/profile_local_datasource.dart';
 import 'package:vayu/core/managers/smart_cache_manager.dart';
 import 'package:vayu/utils/app_logger.dart';
-import 'package:vayu/features/profile/data/datasources/profile_local_datasource.dart';
 
 // Import for unawaited
 
@@ -27,6 +24,9 @@ class ProfileStateManager extends ChangeNotifier {
   final AuthService _authService = AuthService();
   final UserService _userService = UserService();
   final PaymentSetupService _paymentSetupService = PaymentSetupService();
+  final ProfileLocalDataSource _localDataSource = ProfileLocalDataSource();
+  final SmartCacheManager _smartCacheManager = SmartCacheManager();
+  bool _smartCacheInitialized = false;
 
   // BuildContext to access VideoProvider
   BuildContext? _context;
@@ -54,8 +54,7 @@ class ProfileStateManager extends ChangeNotifier {
   // Controllers
   final TextEditingController nameController = TextEditingController();
 
-  final SmartCacheManager _smartCacheManager = SmartCacheManager();
-  bool _smartCacheInitialized = false;
+  // Cache configuration removed
 
   // Cache configuration
   static const Duration _userProfileCacheTime = Duration(hours: 24);
@@ -70,24 +69,6 @@ class ProfileStateManager extends ChangeNotifier {
   bool _hasMoreVideos = true;
   static const int _pageSize = 1000;
 
-  Future<void> _ensureSmartCacheInitialized() async {
-    if (_smartCacheInitialized) return;
-    try {
-      await _smartCacheManager.initialize();
-      _smartCacheInitialized = _smartCacheManager.isInitialized;
-      if (_smartCacheInitialized) {
-        AppLogger.log(
-            '✅ ProfileStateManager: SmartCacheManager ready for profile caching');
-      } else {
-        AppLogger.log(
-            '⚠️ ProfileStateManager: SmartCacheManager initialization skipped or disabled');
-      }
-    } catch (e) {
-      AppLogger.log(
-          '⚠️ ProfileStateManager: SmartCacheManager init failed: $e');
-      _smartCacheInitialized = false;
-    }
-  }
 
   // Getters
   List<VideoModel> get userVideos => _userVideos;
@@ -151,34 +132,19 @@ class ProfileStateManager extends ChangeNotifier {
         }
       }
 
-      // **INSTANT LOAD: Try Hive Cache First**
-      final profileLocalDataSource = ProfileLocalDataSource();
+      // **HIVE CACHE: Check for persistent data first**
       if (!forceRefresh) {
-        try {
-          // Use userId if provided, otherwise deduce from loggedInUser
-          final targetUserId =
-              userId ?? loggedInUser?['id'] ?? loggedInUser?['googleId'];
-          if (targetUserId != null) {
-            final cachedData =
-                await profileLocalDataSource.getCachedUserData(targetUserId);
-            if (cachedData != null) {
-              AppLogger.log(
-                  '✅ ProfileStateManager: Instant load from Hive for $targetUserId');
-              _userData = _normalizeUserData(Map<String, dynamic>.from(cachedData), targetUserId);
-              nameController.text = _userData?['name']?.toString() ?? '';
-              
-              // **FIX: Update video count if present in cache**
-              final videos = _userData?['videos'] as List?;
-              if (videos != null && videos.isNotEmpty) {
-                _totalVideoCount = videos.length;
-              }
-              
-              _isLoading = false; // Show content immediately
-              notifyListeners();
-            }
-          }
-        } catch (e) {
-          AppLogger.log('⚠️ ProfileStateManager: Hive cache read failed: $e');
+        final cachedData = await _localDataSource.getCachedUserData(userId ?? loggedInUser?['id'] ?? loggedInUser?['googleId'] ?? 'self');
+        if (cachedData != null) {
+          AppLogger.log('📦 ProfileStateManager: Found Hive cache for profile');
+          _userData = _normalizeUserData(cachedData, userId);
+          _totalVideoCount = _userData?['totalVideos'] ?? _userData?['videosCount'] ?? 0;
+          nameController.text = _userData?['name']?.toString() ?? '';
+          _isLoading = false;
+          notifyListeners();
+          
+          // If cache is fresh enough, skip network fetch (silent refresh still happens below)
+          // Profile caching is long-term, so we usually silent refresh.
         }
       }
 
@@ -205,52 +171,31 @@ class ProfileStateManager extends ChangeNotifier {
 
       Map<String, dynamic>? userData;
 
+      // **SMART CACHE (Memory)**
       if (_smartCacheInitialized && !forceRefresh) {
-        AppLogger.log(
-            '🧠 ProfileStateManager: Attempting smart cache fetch for $cacheKey (isMyProfile: $isMyProfile)');
-
-        // **ENHANCED: Use longer cache time for other users' profiles (7 days vs 24 hours)**
-        final cacheTime = isMyProfile
-            ? _userProfileCacheTime // 24 hours for own profile
-            : const Duration(days: 7); // 7 days for other users' profiles
-
         userData = await _smartCacheManager.get<Map<String, dynamic>>(
           cacheKey,
           cacheType: 'user_profile',
-          maxAge: cacheTime,
+          maxAge: _userProfileCacheTime,
           fetchFn: () async {
-            // **FIXED: Pass empty map if no logged in user for creator profiles**
             final userForFetch = loggedInUser ?? <String, dynamic>{};
-            final fetched =
-                await _fetchProfileData(userId, userForFetch, cacheKey);
-            if (fetched == null) {
-              throw Exception('Profile not found for $cacheKey');
-            }
-            return fetched;
+            final data = await _fetchProfileData(userId, userForFetch, cacheKey);
+            return data ?? <String, dynamic>{};
           },
         );
       } else {
-        if (forceRefresh) {
-          AppLogger.log(
-              '🔄 ProfileStateManager: forceRefresh=true, bypassing SmartCache for $cacheKey');
-          // **FIX: Clear SmartCache for profile data when forceRefresh is true**
-          if (_smartCacheInitialized) {
-            AppLogger.log(
-                '🧹 ProfileStateManager: Clearing SmartCache profile cache: $cacheKey');
-            await _smartCacheManager.clearCacheByPattern(cacheKey);
-          }
-        }
-        // **FIXED: Pass empty map if no logged in user for creator profiles**
         final userForFetch = loggedInUser ?? <String, dynamic>{};
         userData = await _fetchProfileData(userId, userForFetch, cacheKey);
       }
 
-      if (userData == null) {
+      if (userData == null || userData.isEmpty) {
         AppLogger.log(
             '❌ ProfileStateManager: Profile data not found for cacheKey: $cacheKey');
-        _error = 'Unable to load profile data.';
-        _isLoading = false;
-        notifyListeners();
+        if (_userData == null) {
+          _error = 'Unable to load profile data.';
+          _isLoading = false;
+          notifyListeners();
+        }
         return;
       }
 
@@ -260,80 +205,8 @@ class ProfileStateManager extends ChangeNotifier {
       _userData = Map<String, dynamic>.from(normalizedData);
       nameController.text = _userData?['name']?.toString() ?? '';
 
-      // **FIX: Update total video count from cached user data if found**
-      // This ensures stats (Videos: X) update immediately even when loading from cache
-      final List? cachedVideos = _userData?['videos'] as List?;
-      if (cachedVideos != null && cachedVideos.isNotEmpty) {
-        _totalVideoCount = cachedVideos.length;
-        AppLogger.log('📊 ProfileStateManager: Set total video count from cache: $_totalVideoCount');
-      }
-
-      _isLoading = false;
-      _error = null;
-      notifyListeners();
-      AppLogger.log(
-          '🔄 ProfileStateManager: User data values: ${_userData?.values.toList()}');
-
-      // **OPTIMIZATION: Video loading was already started in parallel at the top of this method**
-      // We don't need to trigger it again here.
-
-
-      // **NEW: Populate UserProvider cache when loading another creator's profile**
-      // This ensures follower count is available in UserProvider for ProfileStatsWidget
-      if (userId != null && _context != null) {
-        try {
-          final userProvider =
-              Provider.of<UserProvider>(_context!, listen: false);
-          final profileUserId = userId.trim();
-
-          // Check if this is another user's profile (not own profile)
-          final loggedInUser = await _authService.getUserData();
-          final loggedInUserId =
-              loggedInUser?['googleId'] ?? loggedInUser?['id'];
-          final isOtherUser =
-              profileUserId != loggedInUserId?.toString().trim();
-
-          if (isOtherUser) {
-            AppLogger.log(
-                '🔄 ProfileStateManager: Populating UserProvider cache for other user: $profileUserId');
-
-            // Populate UserProvider cache with the loaded user data
-            // Use getUserDataWithFollowers which fetches UserModel and caches it
-            try {
-              userProvider
-                  .getUserDataWithFollowers(profileUserId)
-                  .catchError((e) {
-                AppLogger.log(
-                    '⚠️ ProfileStateManager: Error populating UserProvider: $e');
-                return null; // Return null on error
-              });
-            } catch (e) {
-              AppLogger.log(
-                  '⚠️ ProfileStateManager: Error populating UserProvider cache: $e');
-            }
-          }
-        } catch (e) {
-          AppLogger.log(
-              '⚠️ ProfileStateManager: Could not access UserProvider: $e');
-        }
-      }
-
-      await _hydratePaymentDetailsIfNeeded();
-
-      _isLoading = false;
-      notifyListeners();
-      AppLogger.log(
-          '🔄 ProfileStateManager: User data loaded successfully, videos will be loaded separately');
-
-      // **CACHE: Save to Hive**
-      if (_userData != null) {
-        final targetUserId =
-            userId ?? _userData?['googleId'] ?? _userData?['id'];
-        if (targetUserId != null) {
-          // ignore: unawaited_futures
-          ProfileLocalDataSource().cacheUserData(targetUserId, _userData!);
-        }
-      }
+      // **HIVE SAVE: Persist profile for cold start**
+      unawaited(_localDataSource.cacheUserData(userId ?? _userData!['googleId'] ?? _userData!['id'] ?? 'self', _userData!));
     } catch (e) {
       AppLogger.log('❌ ProfileStateManager: Error loading user data: $e');
       _error = 'Error loading user data: ${e.toString()}';
@@ -600,83 +473,16 @@ class ProfileStateManager extends ChangeNotifier {
           userId == loggedInUser?['id'] ||
           userId == loggedInUser?['googleId'];
 
-      // **INSTANT LOAD: Try Hive Cache First**
-      // Calculate targetId early to check cache
-      String? targetId = userId;
-      if (targetId == null && loggedInUser != null) {
-        targetId = loggedInUser['googleId'] ?? loggedInUser['id'];
-      }
+      // **Always load videos fresh from API**
+      await _loadUserVideosDirect(
+        userId,
+        isMyProfile: isMyProfile,
+        silent: silent,
+        page: page,
+      );
 
-      if (!forceRefresh && targetId != null) {
-        try {
-          final cachedVideos =
-              await ProfileLocalDataSource().getCachedUserVideos(targetId);
-          if (cachedVideos != null && cachedVideos.isNotEmpty) {
-            AppLogger.log(
-                '✅ ProfileStateManager: Instant video load from Hive for $targetId');
-            _userVideos = cachedVideos;
-            
-            // Assume has more if we loaded from cache initially, to allow scrolling
-            _hasMoreVideos = true; 
-            _currentPage = 1;
-            
-            _isVideosLoading = false; // Stop spinner immediately if cache found
-            notifyListeners();
-          }
-        } catch (e) {
-          AppLogger.log('⚠️ ProfileStateManager: Hive video read failed: $e');
-        }
-      }
-
-      // **FIX: Clear SmartCache if forceRefresh is true**
-      if (forceRefresh) {
-        await _ensureSmartCacheInitialized();
-        if (_smartCacheInitialized) {
-          String? resolvedId;
-          if (isMyProfile) {
-            resolvedId = loggedInUser?['googleId']?.toString() ??
-                loggedInUser?['id']?.toString();
-          } else {
-            resolvedId = userId;
-          }
-          if (resolvedId != null && resolvedId.trim().isNotEmpty) {
-            final smartCacheKey = _resolveVideoCacheKey(resolvedId.trim());
-            AppLogger.log(
-                '🧹 ProfileStateManager: Clearing SmartCache for forceRefresh: $smartCacheKey');
-            await _smartCacheManager.clearCacheByPattern(smartCacheKey);
-          }
-        }
-      }
-
-      // **FIXED: Properly check feature flag using FeatureFlags.instance**
-      if (FeatureFlags.instance.isEnabled(Features.smartVideoCaching)) {
-        await _loadUserVideosWithCaching(
-          userId,
-          isMyProfile: isMyProfile,
-          forceRefresh: forceRefresh,
-          silent: silent,
-          page: page,
-        );
-      } else {
-        await _loadUserVideosDirect(
-          userId,
-          isMyProfile: isMyProfile,
-          silent: silent,
-          page: page,
-        );
-      }
-
-      // **CACHE: Save videos to Hive**
-      // Note: _loadUserVideosWithCaching/Direct populate _userVideos
-      if (_userVideos.isNotEmpty && targetId != null) {
-        try {
-          // ignore: unawaited_futures
-          ProfileLocalDataSource().cacheUserVideos(targetId, _userVideos);
-        } catch (e) {
-          AppLogger.log(
-              '⚠️ ProfileStateManager: Failed to cache videos to Hive: $e');
-        }
-      }
+      AppLogger.log(
+          '✅ ProfileStateManager: loadUserVideos completed with ${_userVideos.length} videos');
 
       AppLogger.log(
           '✅ ProfileStateManager: loadUserVideos completed with ${_userVideos.length} videos');
@@ -846,6 +652,17 @@ class ProfileStateManager extends ChangeNotifier {
     }
   }
 
+  Future<void> _ensureSmartCacheInitialized() async {
+    if (_smartCacheInitialized) return;
+    try {
+      await _smartCacheManager.initialize();
+      _smartCacheInitialized = _smartCacheManager.isInitialized;
+    } catch (e) {
+      AppLogger.log('⚠️ ProfileStateManager: SmartCache init failed: $e');
+      _smartCacheInitialized = false;
+    }
+  }
+
 
   Future<void> _loadUserVideosWithCaching(
     String? userId, {
@@ -925,7 +742,17 @@ class ProfileStateManager extends ChangeNotifier {
             // **NOTE: Keep views in cache for initial display, but refresh them after loading**
             return {
               'videos':
-                  videos.map((video) => video.toJson()).toList(growable: false),
+                  videos.map((video) {
+                    final json = video.toJson();
+                    // Sanitization: Remove earnings from memory cache too
+                    json['earnings'] = 0.0;
+                    if (json['uploader'] is Map) {
+                       final uploader = Map<String, dynamic>.from(json['uploader'] as Map);
+                       uploader['earnings'] = 0.0;
+                       json['uploader'] = uploader;
+                    }
+                    return json;
+                  }).toList(growable: false),
               'fetchedAt': DateTime.now().toIso8601String(),
             };
           },

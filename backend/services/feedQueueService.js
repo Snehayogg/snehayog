@@ -379,8 +379,8 @@ class FeedQueueService {
     if (userId && userId !== 'anon' && userId !== 'undefined') {
        try {
           // Fetch from DB
-          // We look back reasonably far (e.g., 50 videos)
-          const lruIds = await WatchHistory.getLeastRecentlyWatchedVideoIds(userId, 50);
+          // We look back reasonably far (e.g., 500 videos) to ensure variety
+          const lruIds = await WatchHistory.getLeastRecentlyWatchedVideoIds(userId, 500);
           
           if (lruIds.length > 0) {
              const rawVideos = await Video.find({
@@ -397,8 +397,8 @@ class FeedQueueService {
              }).map(v => v._id.toString());
              
              if (validLruIds.length > 0) {
-                 // console.log(`↺ FeedQueue: Found ${validLruIds.length} LRU videos`);
-                 // Shuffle
+                 // console.log(`↺ FeedQueue: Found ${validLruIds.length} LRU videos from a pool of 500`);
+                 // Shuffle the entire pool of candidate LRU videos to prevent fixed loops
                  const shuffled = validLruIds.sort(() => 0.5 - Math.random());
                  finalIds.push(...shuffled.slice(0, count));
              }

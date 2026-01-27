@@ -102,10 +102,7 @@ class _VideoScreenState extends State<VideoScreen> {
   @override
   Widget build(BuildContext context) {
     // **FIXED: Respect passed videoType (e.g. 'vayu') even if initialVideos are present**
-    final String? videoType = widget.videoType ??
-        (widget.initialVideos == null || widget.initialVideos!.isEmpty
-            ? 'yog'
-            : null);
+    final String? videoType = widget.videoType ?? 'yog';
 
     // Wrap in Scaffold + SafeArea so UI matches Yug tab full-screen layout
     return Scaffold(

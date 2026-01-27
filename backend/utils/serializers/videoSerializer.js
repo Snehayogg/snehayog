@@ -34,6 +34,7 @@ export const serializeVideo = (video, apiVersion, requestingUserObjectId) => {
     link: videoObj.link || null,
     uploadedAt: videoObj.uploadedAt?.toISOString ? videoObj.uploadedAt.toISOString() : videoObj.uploadedAt,
     isLiked: isLiked,
+    earnings: parseFloat(videoObj.earnings) || 0.0,
   };
 
   /**
@@ -47,7 +48,8 @@ export const serializeVideo = (video, apiVersion, requestingUserObjectId) => {
       _id: videoObj.uploader?._id?.toString() || '',
       googleId: videoObj.uploader?.googleId?.toString() || '',
       name: videoObj.uploader?.name || 'Unknown User',
-      profilePic: videoObj.uploader?.profilePic || ''
+      profilePic: videoObj.uploader?.profilePic || '',
+      earnings: parseFloat(videoObj.uploader?.earnings) || 0.0
     };
     
     base.hlsMasterPlaylistUrl = videoObj.hlsMasterPlaylistUrl || null;

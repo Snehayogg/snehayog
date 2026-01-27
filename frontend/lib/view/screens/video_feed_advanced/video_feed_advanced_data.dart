@@ -6,12 +6,13 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       {int page = 1,
       bool append = false,
       bool useCache = true,
-      bool clearSession = true}) async {
+      bool clearSession = true,
+      bool forceResetIndex = false}) async {
     try {
       AppLogger.log(
           '🔄 Loading videos - Page: $page, Append: $append, UseCache: $useCache');
 
-    if (page == 1 && !append && AppInitializationManager.instance.initialVideos != null) {
+    if (page == 1 && !append && AppInitializationManager.instance.isInitialVideosFresh) {
       final preFetchedVideos = AppInitializationManager.instance.initialVideos!;
       if (preFetchedVideos.isNotEmpty) {
         AppLogger.log('🚀 VideoFeedAdvanced: Using Stage 2 Pre-fetched videos (${preFetchedVideos.length})');
@@ -21,6 +22,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
             _videos = preFetchedVideos;
             _syncLikeStateWithModels(preFetchedVideos);
             _currentIndex = 0;
+            _hasMore = AppInitializationManager.instance.hasInitialVideosMore;
             _isLoading = false;
             _errorMessage = null;
           });
@@ -39,18 +41,11 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       }
     }
 
-    if (_videos.isNotEmpty && page == 1 && !append) {
-      AppLogger.log('⏳ Aggressive Caching: Delaying API fetch by 2s to prioritize UI/Player...');
-      Future.delayed(const Duration(seconds: 2), () async {
-        if (mounted) {
-          await _loadVideosFromAPI(
-              page: page, append: append, clearSession: clearSession);
-        }
-      });
-    } else {
-       await _loadVideosFromAPI(
-          page: page, append: append, clearSession: clearSession);
-    }
+    await _loadVideosFromAPI(
+        page: page, 
+        append: append, 
+        clearSession: clearSession,
+        forceResetIndex: forceResetIndex);
 
     } catch (e) {
       AppLogger.log('❌ Error loading videos: $e');
@@ -64,7 +59,9 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
   Future<void> _loadVideosFromAPI(
       {int page = 1,
       bool append = false,
-      bool clearSession = false}) async {
+      bool clearSession = false,
+      bool forceResetIndex = false}) async {
+    if (append && _isLoadingMore && page > 2) return; // Allow page 2 microtask but guard others
     
     try {
       final hasNetwork = await ConnectivityService.hasNetworkConnectivity();
@@ -112,8 +109,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       if (newVideos.isEmpty && page == 1) {
         AppLogger.log('⚠️ VideoFeedAdvanced: Empty videos received. Retrying...');
         try {
-          await _cacheManager.initialize();
-          await _cacheManager.invalidateVideoCache(videoType: widget.videoType);
+          // No cache invalidation needed as cache is removed
 
           final retryResponse = await _videoService.getVideos(
             page: page,
@@ -149,6 +145,20 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
 
       if (!mounted) return;
 
+      if (newVideos.isEmpty && page > 1) {
+        _consecutiveEmptyBatches++;
+        if (_consecutiveEmptyBatches >= 3) {
+          AppLogger.log('🛑 VideoFeedAdvanced: 3 consecutive empty batches. Stopping pagination.');
+          safeSetState(() {
+             _hasMore = false;
+             _isLoadingMore = false;
+          });
+          return;
+        }
+      } else if (newVideos.isNotEmpty) {
+        _consecutiveEmptyBatches = 0;
+      }
+
       if (append) {
         safeSetState(() {
           if (newVideos.isNotEmpty) {
@@ -163,32 +173,39 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         });
       } else {
         safeSetState(() {
-          final hasCachedVideos = _videos.isNotEmpty;
-          if (hasCachedVideos) {
-             if (newVideos.isNotEmpty) {
-                _videos.addAll(newVideos);  
-                _syncLikeStateWithModels(newVideos);  
-             }
-             _errorMessage = null;
-             _currentPage = currentPage; 
-             _hasMore = hasMore || newVideos.isNotEmpty; 
-          } else {
-             _videos = newVideos;
-             _syncLikeStateWithModels(newVideos);
-             _currentIndex = 0;
-             _currentPage = currentPage;
-             _hasMore = hasMore;
-             if (_pageController.hasClients) {
-                _pageController.jumpToPage(0);
-             }
+          // Identify if we should reset the index
+          final bool shouldResetIndex = forceResetIndex || _videos.isEmpty;
+
+          // **CRITICAL FIX: Only clear existing videos if we are resetting the index**
+          if (shouldResetIndex) {
+            _videos.clear();
+            _controllerPool.clear(); // Also clear controllers to force fresh start
+            _currentIndex = 0;
+            if (_pageController.hasClients) {
+              _pageController.jumpToPage(0);
+            }
           }
+          
+          _videos = newVideos;
+          _syncLikeStateWithModels(newVideos);
+          
+          // If not resetting, ensure current index is still valid
+          if (!shouldResetIndex) {
+            if (_currentIndex >= _videos.length) {
+              _currentIndex = _videos.length > 0 ? _videos.length - 1 : 0;
+            }
+          }
+
+          _currentPage = currentPage;
+          _hasMore = hasMore;
           _errorMessage = null;
           _markCurrentVideoAsSeen();
         });
         
         if (page == 1 && newVideos.isNotEmpty) {
-           Future.microtask(() {
-              if (mounted && _hasMore) {
+          Future.microtask(() {
+              if (mounted && _hasMore && !_isLoadingMore) {
+                 _isLoadingMore = true;
                  _loadVideosFromAPI(page: 2, append: true, clearSession: false);
               }
            });
@@ -215,6 +232,10 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
           _errorMessage = _getUserFriendlyErrorMessage(e);
           _hasMore = false;
           _isLoading = false;
+      }
+    } finally {
+      if (mounted) {
+        _isLoadingMore = false;
       }
     }
   }
@@ -329,10 +350,8 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         _isLoading = true;
         _errorMessage = null;
       }
-      await _cacheManager.initialize();
-      await _cacheManager.invalidateVideoCache(videoType: widget.videoType);
       _currentPage = 1;
-      await _loadVideos(page: 1, append: false, clearSession: false);
+      await _loadVideos(page: 1, append: false, clearSession: false, forceResetIndex: true);
       if (mounted) {
         _isLoading = false;
         _errorMessage = null;
@@ -347,16 +366,6 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     }
   }
 
-  Future<void> startOver() async {
-    await _stopAllVideosAndClearControllers();
-    _videos.clear();
-    _currentIndex = 0;
-    _currentPage = 1;
-    _hasMore = true;
-    _errorMessage = null;
-    _isLoading = true;
-    await _loadVideos(page: 1, append: false, clearSession: true);
-  }
 
   Future<void> _stopAllVideosAndClearControllers() async {
      for (final controller in _controllerPool.values) {

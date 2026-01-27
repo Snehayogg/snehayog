@@ -101,7 +101,7 @@ WatchHistorySchema.statics.getUserWatchedVideoIds = async function(userId, days 
  */
 WatchHistorySchema.statics.getLeastRecentlyWatchedVideoIds = async function(
   userId,
-  limit = 50,
+  limit = 500,
   skip = 0
 ) {
   try {

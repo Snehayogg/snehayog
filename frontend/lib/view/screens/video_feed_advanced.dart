@@ -13,6 +13,7 @@ import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/user_service.dart';
 import 'package:vayu/core/managers/carousel_ad_manager.dart';
 import 'package:like_button/like_button.dart';
+import 'package:vayu/core/constants/app_constants.dart';
 
 import 'package:vayu/services/active_ads_service.dart';
 import 'package:vayu/services/video_view_tracker.dart';
@@ -34,7 +35,6 @@ import 'package:vayu/controller/main_controller.dart';
 import 'package:vayu/core/managers/video_controller_manager.dart';
 import 'package:vayu/core/managers/shared_video_controller_pool.dart';
 import 'package:vayu/view/widget/report/report_dialog_widget.dart';
-import 'package:vayu/core/managers/smart_cache_manager.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:vayu/view/widget/custom_share_widget.dart';
 import 'package:vayu/utils/app_logger.dart';
@@ -47,7 +47,6 @@ import 'package:vayu/config/admob_config.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:vayu/view/widget/video_feed_skeleton.dart';
 
-import 'package:vayu/features/video/data/datasources/feed_local_datasource.dart';
 import 'package:vayu/services/video_cache_proxy_service.dart';
 
 part 'video_feed_advanced/video_feed_advanced_state_fields.dart';
@@ -1895,17 +1894,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     super.dispose();
   }
 
-  /// **PRINT CACHE STATUS: Real-time cache information**
-  void _printCacheStatus() {
-    if (_totalRequests > 0) {
-      final hitRate = (_cacheHits / _totalRequests * 100).toStringAsFixed(2);
-      AppLogger.log('   Hit Rate: $hitRate%');
-    }
-  }
 
   /// **GET DETAILED CACHE INFO: Comprehensive cache information**
   Map<String, dynamic> _getDetailedCacheInfo() {
-    final cacheStats = _cacheManager.getStats();
+    final cacheStats = {};
 
     return {
       'videoControllerPool': {

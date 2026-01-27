@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
-import 'dart:convert';
+
 import 'package:vayu/config/app_config.dart';
 import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'package:vayu/services/ad_service.dart';
@@ -68,42 +68,15 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         }
 
         AppLogger.log(
-            '🔍 CreatorRevenueScreen: Loading data for userId: $userId');
-
-        // **MONTH RESET: Check if cache is from different month - always force refresh**
-        final now = DateTime.now();
-        final prefs = await SharedPreferences.getInstance();
-        final timestampKey = 'earnings_cache_timestamp_$userId';
-        final cachedTimestamp = prefs.getInt(timestampKey);
-
-        bool effectiveForceRefresh = forceRefresh;
-
-        if (cachedTimestamp != null) {
-          final cacheTime =
-              DateTime.fromMillisecondsSinceEpoch(cachedTimestamp);
-          // **MONTH RESET: Check if month changed**
-          if (cacheTime.month != now.month || cacheTime.year != now.year) {
-            AppLogger.log(
-                '🔄 CreatorRevenueScreen: Month changed - forcing fresh earnings calculation');
-            effectiveForceRefresh = true;
-            await prefs.remove('earnings_cache_$userId');
-            await prefs.remove(timestampKey);
-          }
-        }
-
-        if (now.day == 1) {
-          AppLogger.log(
-              '🔄 CreatorRevenueScreen: Month start detected - forcing fresh earnings calculation');
-          effectiveForceRefresh = true;
-        }
+            '🔍 CreatorRevenueScreen: Loading fresh data for userId: $userId');
 
         // **PARALLEL EXECUTION: Load Revenue and Videos independently**
         // This ensures video load failure doesn't block revenue display
         await Future.wait([
-          _fetchRevenueData(userId, effectiveForceRefresh).catchError((e) {
+          _fetchRevenueData(userId, true).catchError((e) {
              AppLogger.log('⚠️ CreatorRevenueScreen: Revenue load failed: $e');
           }),
-          _fetchVideosAndCalculateStats(userId, userMap, effectiveForceRefresh).catchError((e) {
+          _fetchVideosAndCalculateStats(userId, userMap, true).catchError((e) {
              AppLogger.log('⚠️ CreatorRevenueScreen: Video load failed: $e');
           }),
         ]);
@@ -175,62 +148,32 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   Future<void> _fetchRevenueData(String userId, bool forceRefresh) async {
-      // **1. Try Cache First (only if NOT forced)**
-      Map<String, dynamic>? revenueData;
-      if (!forceRefresh) {
-        revenueData = await _loadCachedEarningsData(userId);
-          if (revenueData != null) {
-          AppLogger.log('⚡ CreatorRevenueScreen: Using cached earnings data');
-          final thisMonth = (revenueData['thisMonth'] as num?)?.toDouble() ?? 0.0;
-          AppLogger.log('💰 Revenue Display: Month: ${DateTime.now().month} | Source: Frontend Cache | Amount: $thisMonth');
-          if (mounted) {
-            setState(() {
-              _revenueData = revenueData;
-            });
-          }
+      try {
+        AppLogger.log('🔄 CreatorRevenueScreen: Fetching fresh revenue from backend...');
+        
+        // **NO CACHE: Always request fresh data from server**
+        final freshRevenueData = await _adService.getCreatorRevenueSummary(forceRefresh: true);
+        
+        if (mounted) {
+          setState(() {
+            _revenueData = freshRevenueData;
+          });
         }
-      } else {
-        // **FORCE REFRESH: Clear cache to ensure fresh fetch**
-        AppLogger.log('🔄 CreatorRevenueScreen: Force refresh requested - Clearing cache');
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.remove('earnings_cache_$userId');
-        await prefs.remove('earnings_cache_timestamp_$userId');
-      }
-
-      // **2. Fetch from Backend if needed**
-      if (revenueData == null || forceRefresh) {
-        try {
-          AppLogger.log('🔄 CreatorRevenueScreen: Fetching fresh revenue from backend...');
-          
-          // **FIX: If local cache is missing/expired, we want FRESH data from server, not Stale Service Cache**
-          // So we force service refresh if we are here (meaning either forceRefresh=true OR revenueData=null)
-          final shouldForceService = forceRefresh || revenueData == null;
-          
-          final freshRevenueData = await _adService.getCreatorRevenueSummary(forceRefresh: shouldForceService);
-          
-          await _cacheEarningsData(freshRevenueData, userId);
-          
-          if (mounted) {
-            setState(() {
-              _revenueData = freshRevenueData;
-            });
-          }
-          final thisMonth = (freshRevenueData['thisMonth'] as num?)?.toDouble() ?? 0.0;
-          AppLogger.log('💰 Revenue Display: Month: ${DateTime.now().month} | Source: Backend API | Amount: $thisMonth');
-          AppLogger.log('✅ CreatorRevenueScreen: Revenue updated from backend');
-        } catch (e) {
-           AppLogger.log('⚠️ CreatorRevenueScreen: Backend revenue fetch failed: $e');
-           // Set default UI to avoid null errors, but don't overwrite if we have partial data
-           if (_revenueData == null && mounted) {
-             setState(() {
-               _revenueData = {
-                 'thisMonth': 0.0,
-                 'lastMonth': 0.0,
-               };
-             });
-           }
-           rethrow;
-        }
+        final thisMonth = (freshRevenueData['thisMonth'] as num?)?.toDouble() ?? 0.0;
+        AppLogger.log('💰 Revenue Display: Month: ${DateTime.now().month} | Source: Backend API | Amount: $thisMonth');
+        AppLogger.log('✅ CreatorRevenueScreen: Revenue updated from backend');
+      } catch (e) {
+         AppLogger.log('⚠️ CreatorRevenueScreen: Backend revenue fetch failed: $e');
+         // Set default UI to avoid null errors, but don't overwrite if we have partial data
+         if (_revenueData == null && mounted) {
+           setState(() {
+             _revenueData = {
+               'thisMonth': 0.0,
+               'lastMonth': 0.0,
+             };
+           });
+         }
+         rethrow;
       }
   }
 
@@ -333,76 +276,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
       }
   }
 
-  /// **OPTIMIZED: Load cached earnings with month validation - extended cache duration**
-  Future<Map<String, dynamic>?> _loadCachedEarningsData(String userId) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cacheKey = 'earnings_cache_$userId';
-      final timestampKey = 'earnings_cache_timestamp_$userId';
-      final oldMonthKey =
-          'earnings_cache_month_$userId'; // **OLD KEY - clean up if exists**
 
-      final cachedDataJson = prefs.getString(cacheKey);
-      final cachedTimestamp = prefs.getInt(timestampKey);
-
-      // **CLEANUP: Remove old month key if it exists (from previous code version)**
-      if (prefs.containsKey(oldMonthKey)) {
-        await prefs.remove(oldMonthKey);
-        AppLogger.log('🧹 CreatorRevenueScreen: Removed old month key');
-      }
-
-      if (cachedTimestamp != null && cachedDataJson != null) {
-        final cacheTime = DateTime.fromMillisecondsSinceEpoch(cachedTimestamp);
-        final now = DateTime.now();
-        final age = now.difference(cacheTime);
-
-        // **MONTH CHECK: If cache is from different month, invalidate it**
-        if (cacheTime.month != now.month || cacheTime.year != now.year) {
-          AppLogger.log(
-              '🔄 CreatorRevenueScreen: Earnings cache is from different month (${cacheTime.month}/${cacheTime.year} vs ${now.month}/${now.year}) - invalidating');
-          await prefs.remove(cacheKey);
-          await prefs.remove(timestampKey);
-          return null;
-        }
-
-        // **OPTIMIZED: Cache duration reduced to 3 min for fresher data**
-        // Manual refresh will bypass cache via forceRefresh flag
-        if (age < const Duration(minutes: 3)) {
-          // Cache is fresh and from current month - use it
-          AppLogger.log(
-              '⚡ CreatorRevenueScreen: Using cached earnings (${age.inMinutes}m old)');
-          return Map<String, dynamic>.from(json.decode(cachedDataJson));
-        } else {
-          // Cache is stale - clear it
-          AppLogger.log(
-              '🔄 CreatorRevenueScreen: Cache expired (${age.inHours}h old) - clearing');
-          await prefs.remove(cacheKey);
-          await prefs.remove(timestampKey);
-        }
-      }
-    } catch (e) {
-      AppLogger.log(
-          '❌ CreatorRevenueScreen: Error loading cached earnings: $e');
-    }
-    return null;
-  }
-
-  /// **SIMPLIFIED: Cache earnings - simple timestamp only**
-  Future<void> _cacheEarningsData(
-      Map<String, dynamic> earningsData, String userId) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cacheKey = 'earnings_cache_$userId';
-      final timestampKey = 'earnings_cache_timestamp_$userId';
-
-      await prefs.setString(cacheKey, json.encode(earningsData));
-      await prefs.setInt(timestampKey, DateTime.now().millisecondsSinceEpoch);
-
-      AppLogger.log('✅ CreatorRevenueScreen: Earnings cached');
-    } catch (e) {
-      AppLogger.log('❌ CreatorRevenueScreen: Error caching earnings: $e');
-    }
-  }
 
   Future<void> _calculateMonthlyViews(Map<String, dynamic> userData) async {
     final totalViews =

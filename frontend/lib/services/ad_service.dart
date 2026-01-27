@@ -731,51 +731,42 @@ class AdService {
         throw Exception('Target user ID not found');
       }
 
-      // **SMART CACHING: Use cache manager to reduce API calls**
-      final cacheKey = 'creator_revenue_summary_$targetUserId';
-      
-      return await _cacheManager.get(
-        cacheKey,
-        cacheType: 'user_profile', // Use user_profile cache config (24h or similar)
-        forceRefresh: forceRefresh,
-        fetchFn: () async {
-          AppLogger.log('🔍 AdService: Fetching revenue from API for user: $targetUserId');
-          
-          // **FIX: Use async base URL resolver for proper server detection**
-          final baseUrl = await AppConfig.getBaseUrlWithFallback();
-    
-          // **FIX: Add timeout to prevent hanging (8 seconds)**
-          final response = await httpClientService.get(
-            Uri.parse('$baseUrl/api/ads/creator/revenue/$targetUserId'),
-            headers: {'Authorization': 'Bearer $token'},
-            timeout: const Duration(seconds: 8),
-          );
-    
-          if (response.statusCode == 200) {
-            final data = json.decode(response.body) as Map<String, dynamic>;
-    
-            // **DEBUG: Log API response for troubleshooting**
-            AppLogger.log(
-                '🔍 AdService: Revenue API response keys: ${data.keys.toList()}');
-            AppLogger.log(
-                '🔍 AdService: thisMonth: ${data['thisMonth']}, lastMonth: ${data['lastMonth']}, totalRevenue: ${data['totalRevenue']}');
-    
-            // **DEBUG: Check if thisMonth is null or missing**
-            if (data['thisMonth'] == null) {
-              AppLogger.log('⚠️ AdService: thisMonth is NULL in API response!');
-            } else if (data['thisMonth'] == 0) {
-              AppLogger.log(
-                  '⚠️ AdService: thisMonth is 0 - no earnings this month or no ad impressions');
-            }
-    
-            return data;
-          } else {
-            AppLogger.log(
-                '❌ AdService: Revenue API failed with status ${response.statusCode}: ${response.body}');
-            throw Exception('Failed to fetch creator revenue: ${response.body}');
-          }
-        },
-      ) ?? {}; // Return empty map if cache/fetch fails (shouldn't happen due to rethrow in get)
+      // **NO CACHE: Always fetch fresh revenue data for earnings**
+      AppLogger.log('🔍 AdService: Fetching fresh revenue from API for user: $targetUserId');
+
+      // **FIX: Use async base URL resolver for proper server detection**
+      final baseUrl = await AppConfig.getBaseUrlWithFallback();
+
+      // **FIX: Add timeout to prevent hanging (8 seconds)**
+      final response = await httpClientService.get(
+        Uri.parse('$baseUrl/api/ads/creator/revenue/$targetUserId'),
+        headers: {'Authorization': 'Bearer $token'},
+        timeout: const Duration(seconds: 8),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body) as Map<String, dynamic>;
+
+        // **DEBUG: Log API response for troubleshooting**
+        AppLogger.log(
+            '🔍 AdService: Revenue API response keys: ${data.keys.toList()}');
+        AppLogger.log(
+            '🔍 AdService: thisMonth: ${data['thisMonth']}, lastMonth: ${data['lastMonth']}, totalRevenue: ${data['totalRevenue']}');
+
+        // **DEBUG: Check if thisMonth is null or missing**
+        if (data['thisMonth'] == null) {
+          AppLogger.log('⚠️ AdService: thisMonth is NULL in API response!');
+        } else if (data['thisMonth'] == 0) {
+          AppLogger.log(
+              '⚠️ AdService: thisMonth is 0 - no earnings this month or no ad impressions');
+        }
+
+        return data;
+      } else {
+        AppLogger.log(
+            '❌ AdService: Revenue API failed with status ${response.statusCode}: ${response.body}');
+        throw Exception('Failed to fetch creator revenue: ${response.body}');
+      }
     } catch (e) {
       throw Exception('Error fetching creator revenue: $e');
     }

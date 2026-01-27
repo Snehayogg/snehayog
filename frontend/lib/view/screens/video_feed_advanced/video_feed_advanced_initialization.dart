@@ -25,7 +25,6 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
     _authService = AuthService();
     _carouselAdManager = CarouselAdManager();
 
-    _cacheManager.initialize();
 
     _adRefreshSubscription = _adRefreshNotifier.refreshStream.listen((_) {
       refreshAds();
@@ -35,7 +34,16 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
   }
 
   Future<void> _loadInitialData() async {
+    if (_isInitialDataLoaded && _videos.isNotEmpty) {
+      AppLogger.log('ℹ️ VideoFeedAdvanced: Initial data already loaded, skipping redundant fetch.');
+      return;
+    }
+
     try {
+      AppLogger.log('📥 VideoFeedAdvanced: _loadInitialData() started');
+      AppLogger.log('📍 Trace: _loadInitialData called from:');
+      AppLogger.log(StackTrace.current.toString().split('\n').take(5).join('\n'));
+      
       // **OPTIMIZED: Use ValueNotifiers for granular updates**
       _isLoading = true;
       _errorMessage = null; // Clear any previous error
@@ -84,6 +92,10 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
         _videos = videosToUse;
 
         if (mounted) {
+          // **FIX: Synchronize pagination state from manager**
+          _hasMore = AppInitializationManager.instance.hasInitialVideosMore;
+          _currentPage = 1;
+
           // **FIX: Find correct index AFTER ranking (videos may have been reordered)**
           int correctIndex = 0;
           if (widget.initialVideoId != null && _videos.isNotEmpty) {
@@ -112,11 +124,15 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
           _errorMessage = null; // Ensure error is cleared
 
           AppLogger.log(
-            '🚀 VideoFeedAdvanced: Progressive render with provided videos: ${_videos.length}, currentIndex: $_currentIndex (videoId: ${widget.initialVideoId})',
+            '🚀 VideoFeedAdvanced: Progressive render with provided videos: ${_videos.length}, hasMore: $_hasMore, currentIndex: $_currentIndex',
           );
+
+          // **CLEAR MANAGER CACHE: We've consumed the initial videos**
+          AppInitializationManager.instance.initialVideos = null;
 
           if (_videos.isNotEmpty) {
             _markCurrentVideoAsSeen();
+            _syncLikeStateWithModels(_videos);
 
             // **OPTIMIZED: Immediately preload first video for instant playback**
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -179,21 +195,9 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
           );
 
           // Load regular videos from API
-          await _loadVideos(page: 1, clearSession: false);
+          await _loadVideos(page: 1, clearSession: false, forceResetIndex: true);
 
           if (mounted) {
-            // **FIX: For shared/deep link videos, ALWAYS put target video at index 0**
-            // This ensures the correct video plays regardless of where it appears in the feed
-            final normalizedTargetId = cleanTargetId.toLowerCase();
-
-            // Remove video from list if it exists (to avoid duplicates)
-            _videos.removeWhere((v) {
-              final normalizedVideoId = v.id.trim().toLowerCase();
-              return normalizedVideoId == normalizedTargetId ||
-                  v.id.trim() == cleanTargetId ||
-                  v.id == cleanTargetId;
-            });
-
             // **CRITICAL: Always insert shared video at index 0 BEFORE any ranking**
             _videos.insert(0, targetVideo);
 
@@ -403,7 +407,7 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
           }
 
           // **FALLBACK: Load regular videos and try to find the video in the feed**
-          await _loadVideos(page: 1, clearSession: false);
+          await _loadVideos(page: 1, clearSession: false, forceResetIndex: true);
           if (mounted) {
             // **OPTIMIZED: Use ValueNotifier for granular update**
             _errorMessage = null;
@@ -437,7 +441,7 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
       } else {
         // Regular video load (no deep link)
         // **FIX: Wait for videos to load before setting isLoading = false**
-        await _loadVideos(page: 1, clearSession: false);
+        await _loadVideos(page: 1, clearSession: false, forceResetIndex: true);
         if (!mounted) return;
         _verifyAndSetCorrectIndex();
       }
@@ -457,7 +461,7 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
           );
           // No error but no videos - might be network issue, retry immediately (no delay)
           try {
-            await _loadVideos(page: 1, useCache: false, clearSession: false);
+            await _loadVideos(page: 1, useCache: false, clearSession: false, forceResetIndex: true);
             if (!mounted) return;
             _verifyAndSetCorrectIndex();
           } catch (retryError) {
@@ -523,6 +527,8 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
           }
         }
       }
+      _isInitialDataLoaded = true;
+      AppLogger.log('✅ VideoFeedAdvanced: _loadInitialData() completed successfully');
     } catch (e) {
       AppLogger.log('❌ Error loading initial data: $e');
       if (mounted) {

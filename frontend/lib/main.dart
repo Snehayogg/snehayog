@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:provider/provider.dart';
 import 'package:vayu/view/homescreen.dart';
+import 'package:vayu/view/screens/splash_screen.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:vayu/controller/google_sign_in_controller.dart';
 import 'package:vayu/controller/main_controller.dart';
@@ -10,7 +11,6 @@ import 'package:vayu/core/providers/user_provider.dart';
 import 'package:vayu/view/screens/video_screen.dart';
 import 'package:vayu/core/managers/hot_ui_state_manager.dart';
 import 'package:vayu/core/theme/app_theme.dart';
-import 'package:app_links/app_links.dart';
 import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/background_profile_preloader.dart';
 import 'package:vayu/services/location_onboarding_service.dart';
@@ -20,8 +20,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/core/managers/shared_video_controller_pool.dart';
 import 'package:vayu/core/managers/video_controller_manager.dart';
 import 'package:vayu/utils/app_logger.dart';
-import 'package:vayu/view/screens/splash_screen.dart';
-// import 'package:vayu/core/managers/app_initialization_manager.dart';
 import 'package:vayu/core/services/error_logging_service.dart';
 
 void main() async {
@@ -319,6 +317,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       debugShowCheckedModeBanner: false,
       title: 'Vayug',
       theme: AppTheme.lightTheme,
+      navigatorObservers: [AppNavigatorObserver()],
       builder: (context, child) {
         return MediaQuery(
           data: MediaQuery.of(context)
@@ -530,5 +529,33 @@ class _MainScreenWithLocationCheckState
 
     // **INSTANT: Show MainScreen, location check happens in background**
     return const MainScreen();
+  }
+}
+
+class AppNavigatorObserver extends NavigatorObserver {
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPush(route, previousRoute);
+    AppLogger.log('🚀 NAV: Pushed ${route.settings.name} (Previous: ${previousRoute?.settings.name})');
+    if (route.settings.name == '/') {
+       AppLogger.log('⚠️ NAV ALERT: Pushed root (Splash?) route! StackTrace:');
+       AppLogger.log(StackTrace.current.toString().split('\n').take(10).join('\n'));
+    }
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+    AppLogger.log('🚀 NAV: Replaced ${oldRoute?.settings.name} with ${newRoute?.settings.name}');
+    if (newRoute?.settings.name == '/') {
+       AppLogger.log('⚠️ NAV ALERT: Replaced with root (Splash?) route! StackTrace:');
+       AppLogger.log(StackTrace.current.toString().split('\n').take(10).join('\n'));
+    }
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPop(route, previousRoute);
+    AppLogger.log('🚀 NAV: Popped ${route.settings.name} (Now on: ${previousRoute?.settings.name})');
   }
 }

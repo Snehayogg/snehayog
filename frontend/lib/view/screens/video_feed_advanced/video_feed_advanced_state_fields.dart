@@ -53,8 +53,7 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   final AdImpressionService _adImpressionService = AdImpressionService();
   StreamSubscription? _adRefreshSubscription;
 
-  // Cache manager
-  final SmartCacheManager _cacheManager = SmartCacheManager();
+  // Cache status tracking
 
   // Cache status tracking
   final int _cacheHits = 0;
@@ -142,6 +141,7 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   // **OPTIMIZED: Constant 15 videos per page to prevent offset/skipping bugs**
   // Variable page size (5 then 15) caused backend to skip videos 5-15.
   int get _videosPerPage => 15;
+  int _consecutiveEmptyBatches = 0;
 
   final ValueNotifier<bool> _hasMoreVN = ValueNotifier<bool>(true);
   bool get _hasMore => _hasMoreVN.value;
@@ -195,6 +195,7 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
 
   // Cold start tracking
   bool _isColdStart = true;
+  bool _isInitialDataLoaded = false;
 
   // Screen wake lock
   bool _wakelockEnabled = false;

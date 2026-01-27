@@ -76,7 +76,6 @@ class VideoModel {
 
   factory VideoModel.fromJson(Map<String, dynamic> json) {
     try {
-      print('Parsing video JSON: $json');
 
       return VideoModel(
         id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
@@ -99,21 +98,13 @@ class VideoModel {
         description: json['description']?.toString(), // Parse description field
 
         uploader: () {
-          print('🔍 VideoModel: Parsing uploader data...');
-          print('🔍 VideoModel: json["uploader"] = ${json['uploader']}');
-          print(
-              '🔍 VideoModel: json["uploader"] type = ${json['uploader']?.runtimeType}');
 
           Uploader uploader;
           if (json['uploader'] is Map<String, dynamic>) {
-            print('🔍 VideoModel: uploader is Map, calling Uploader.fromJson');
             final uploaderMap =
                 Map<String, dynamic>.from(json['uploader'] as Map);
             uploader = Uploader.fromJson(uploaderMap);
-            print('🔍 VideoModel: parsed uploader = ${uploader.toJson()}');
           } else {
-            print(
-                '🔍 VideoModel: uploader is not Map, creating default Uploader');
             uploader = Uploader(
               id: json['uploader']?.toString() ?? 'unknown',
               name: 'Unknown',
@@ -169,11 +160,7 @@ class VideoModel {
                   ? resolvedGoogleId
                   : uploader.googleId,
             );
-            print('🔍 VideoModel: Selected uploader ID: $resolvedId');
           } else {
-            print(
-              '⚠️ VideoModel: Unable to resolve uploader ID, defaulting to placeholder',
-            );
           }
 
           return uploader;
@@ -221,7 +208,6 @@ class VideoModel {
 
             return <String>[];
           } catch (e) {
-            print('⚠️ VideoModel: Error parsing likedBy: $e');
             return <String>[];
           }
         }(),
@@ -235,32 +221,21 @@ class VideoModel {
                 ? json['duration']
                 : int.tryParse(json['duration']?.toString() ?? '0') ?? 0),
         link: () {
-          print(
-              '🔗 VideoModel: Parsing link field for video: ${json['videoName']}');
-          print('🔗 VideoModel: Raw JSON data: $json');
 
           // Try multiple possible field names for the link
           final possibleFields = ['link', 'externalLink', 'websiteUrl', 'url'];
 
           for (final field in possibleFields) {
-            print('🔗 VideoModel: Checking field "$field": ${json[field]}');
             if (json.containsKey(field)) {
               final linkValue = json[field]?.toString().trim();
-              print('🔗 VideoModel: Field "$field" value: "$linkValue"');
               if (linkValue?.isNotEmpty == true) {
-                print(
-                    '✅ VideoModel: Found link in field "$field": "$linkValue"');
                 return linkValue;
               } else {
-                print('⚠️ VideoModel: Field "$field" is empty or null');
               }
             } else {
-              print('❌ VideoModel: Field "$field" not found');
             }
           }
 
-          print('❌ VideoModel: No link field found in video data');
-          print('🔗 VideoModel: Available fields: ${json.keys.toList()}');
           return null;
         }(),
         // **NEW: Parse earnings field**
@@ -289,7 +264,6 @@ class VideoModel {
                 if (variant is Map<String, dynamic>) {
                   parsedVariants.add(variant);
                 } else {
-                  print('⚠️ VideoModel: Skipping invalid hlsVariant: $variant');
                 }
               }
               return parsedVariants;
@@ -321,7 +295,6 @@ class VideoModel {
             }
             return null;
           } catch (e) {
-            print('⚠️ VideoModel: Error parsing originalResolution: $e');
             return null;
           }
         }(),
@@ -347,8 +320,6 @@ class VideoModel {
         isLiked: json['isLiked'] == true,
       );
     } catch (e) {
-      print('❌ VideoModel.fromJson Error (Graceful): $e');
-      print('❌ JSON data: $json');
       
       // Return a minimal valid VideoModel instead of crashing the whole feed
       return VideoModel(
@@ -569,10 +540,7 @@ class Uploader {
             ? json['earnings'].toDouble()
             : double.tryParse(json['earnings']?.toString() ?? '0.0') ?? 0.0,
       );
-    } catch (e, stackTrace) {
-      print('❌ Uploader.fromJson Error: $e');
-      print('❌ Stack trace: $stackTrace');
-      print('❌ Uploader JSON data: $json');
+    } catch (e) {
       rethrow;
     }
   }

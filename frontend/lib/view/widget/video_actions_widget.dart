@@ -39,8 +39,9 @@ class VideoActionsWidget extends StatelessWidget {
               icon: Icon(
                 isLiked ? Icons.favorite : Icons.favorite_border,
                 color: isLiked ? Colors.red : Colors.white,
-                size: AppConstants.actionButtonSize,
               ),
+              size: AppConstants.primaryActionButtonSize,
+              containerSize: AppConstants.primaryActionButtonContainerSize,
               onPressed: () => onLike(index),
               label: '${video.likes}',
             ),
@@ -53,8 +54,9 @@ class VideoActionsWidget extends StatelessWidget {
               icon: const Icon(
                 Icons.share,
                 color: Colors.white,
-                size: AppConstants.actionButtonSize,
               ),
+              size: AppConstants.secondaryActionButtonSize,
+              containerSize: AppConstants.secondaryActionButtonContainerSize,
               onPressed: () => _showCustomShareSheet(context),
               label: '${video.shares}',
             ),
@@ -97,29 +99,73 @@ class VideoActionsWidget extends StatelessWidget {
   }
 }
 
-// Simplified _ActionButton widget (no methods needed)
 class _ActionButton extends StatelessWidget {
   final Widget icon;
   final VoidCallback onPressed;
   final String label;
+  final double size;
+  final double containerSize;
 
   const _ActionButton({
     required this.icon,
     required this.onPressed,
     required this.label,
+    required this.size,
+    required this.containerSize,
   });
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        IconButton(
-          icon: icon,
-          onPressed: onPressed,
+        Container(
+          width: containerSize,
+          height: containerSize,
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.55),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: IconButton(
+            icon: IconTheme(
+              data: IconThemeData(
+                size: size,
+                shadows: const [
+                  Shadow(
+                    color: Colors.black45,
+                    blurRadius: 4.0,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: icon,
+            ),
+            onPressed: onPressed,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
         ),
+        const SizedBox(height: 4),
         Text(
           label,
-          style: const TextStyle(color: Colors.white),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            shadows: [
+              Shadow(
+                color: Colors.black45,
+                blurRadius: 2.0,
+                offset: Offset(0, 1),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -144,8 +190,9 @@ class _AdToggleButton extends StatelessWidget {
       icon: Icon(
         isOnAd ? Icons.arrow_back : Icons.arrow_forward,
         color: Colors.white,
-        size: AppConstants.actionButtonSize,
       ),
+      size: AppConstants.secondaryActionButtonSize,
+      containerSize: AppConstants.secondaryActionButtonContainerSize,
       onPressed: () {
         if (isOnAd) {
           // Return to video

@@ -3,6 +3,7 @@ import { asyncHandler } from '../../middleware/errorHandler.js';
 import { validatePaymentData } from '../../middleware/errorHandler.js';
 import adService from '../../services/adService.js';
 import User from '../../models/User.js';
+import Video from '../../models/Video.js';
 import { verifyToken } from '../../utils/verifytoken.js';
 
 const router = express.Router();
@@ -49,7 +50,9 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
     }
 
     // Get user's videos to calculate potential revenue
-    const userVideos = await user.getVideos();
+    // **FIXED: Query Video collection directly by uploader ID instead of relying on user.videos array**
+    // The user.videos array can be out of sync, causing 0 earnings to be shown incorrectly.
+    const userVideos = await Video.find({ uploader: user._id });
     console.log('🔍 Found videos for user:', userVideos.length);
 
     // Get video IDs for querying ad impressions
