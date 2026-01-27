@@ -218,8 +218,9 @@ class ProfileVideosWidget extends StatelessWidget {
 
           if (!manager.isSelecting) {
             final sharedPool = SharedVideoControllerPool();
-            sharedPool.clearAll();
-            sharedPool.pauseAllControllers();
+            // **FIX: Stop using clearAll() as it destroys controllers needed by Other tabs**
+            // sharedPool.clearAll();
+            sharedPool.pauseAllControllers(); 
 
             Navigator.push(
               context,

@@ -4,6 +4,7 @@ import 'package:vayu/core/managers/profile_state_manager.dart';
 import 'package:vayu/core/providers/user_provider.dart';
 import 'package:vayu/core/services/profile_screen_logger.dart';
 import 'package:vayu/view/widget/follow_button_widget.dart';
+import 'package:vayu/core/theme/app_theme.dart';
 import 'dart:io';
 
 class ProfileHeaderWidget extends StatelessWidget {
@@ -55,8 +56,8 @@ class ProfileHeaderWidget extends StatelessWidget {
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: const Color(0xFFE5E7EB),
-                                width: 3,
+                                color: AppTheme.borderPrimary,
+                                width: 2,
                               ),
                               boxShadow: [
                                 BoxShadow(
@@ -70,7 +71,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                               children: [
                                 CircleAvatar(
                                   radius: 45,
-                                  backgroundColor: const Color(0xFFF3F4F6),
+                                    backgroundColor: AppTheme.backgroundSecondary,
                                   backgroundImage: profileImage,
                                   onBackgroundImageError:
                                       (exception, stackTrace) {
@@ -81,7 +82,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                                       ? const Icon(
                                           Icons.person,
                                           size: 40,
-                                          color: Color(0xFF9CA3AF),
+                                          color: AppTheme.textTertiary,
                                         )
                                       : null,
                                 ),
@@ -107,7 +108,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                                 width: 32,
                                 height: 32,
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF3B82F6),
+                                  color: Theme.of(context).primaryColor,
                                   shape: BoxShape.circle,
                                   border: Border.all(
                                     color: Colors.white,
@@ -156,7 +157,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(10),
                                   border: Border.all(
-                                      color: const Color(0xFFE5E7EB)),
+                                      color: AppTheme.borderPrimary),
                                   boxShadow: [
                                     BoxShadow(
                                       color: Colors.black.withOpacity(0.04),
@@ -167,16 +168,14 @@ class ProfileHeaderWidget extends StatelessWidget {
                                 ),
                                 child: TextField(
                                   controller: stateManager.nameController,
-                                  style: const TextStyle(
-                                    fontSize: 18,
+                                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
                                     fontWeight: FontWeight.w600,
-                                    color: Color(0xFF1A1A1A),
                                   ),
                                   decoration: const InputDecoration(
                                     border: InputBorder.none,
                                     hintText: 'Enter your name',
                                     hintStyle: TextStyle(
-                                      color: Color(0xFF9CA3AF),
+                                      color: AppTheme.textTertiary,
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
@@ -187,9 +186,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                             return RepaintBoundary(
                               child: Text(
                                 _getUserName(context),
-                                style: const TextStyle(
-                                  color: Color(0xFF1A1A1A),
-                                  fontSize: 18,
+                                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: -0.4,
                                 ),
@@ -210,7 +207,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                                   const Icon(Icons.workspace_premium, size: 18),
                               label: const Text('How to earn'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF10B981),
+                                backgroundColor: AppTheme.success,
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 16,
@@ -259,8 +256,8 @@ class ProfileHeaderWidget extends StatelessWidget {
                           ElevatedButton(
                             onPressed: onCancelEdit,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFF3F4F6),
-                              foregroundColor: const Color(0xFF6B7280),
+                              backgroundColor: AppTheme.backgroundSecondary,
+                              foregroundColor: AppTheme.textSecondary,
                               elevation: 0,
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 20, vertical: 10),
@@ -281,7 +278,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                           ElevatedButton(
                             onPressed: onSaveProfile,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF3B82F6),
+                              backgroundColor: Theme.of(context).primaryColor,
                               foregroundColor: Colors.white,
                               elevation: 0,
                               padding: const EdgeInsets.symmetric(

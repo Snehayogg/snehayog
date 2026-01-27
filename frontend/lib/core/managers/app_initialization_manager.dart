@@ -119,14 +119,15 @@ class AppInitializationManager {
       }
 
       // Task A: Video fetching (Now has access to validated tokens/user ID)
-      // **FIX: We must await Auth BEFORE fetching videos to ensure isLiked/isFollowing are correct**
-      await _fetchAndPreloadFirstVideos(videoService);
+      // **FIX: Fire and forget video fetching to prevent Splash Screen hang**
+      // Authenticated tokens are already ensured by ensureStrictAuth() above
+      unawaited(_fetchAndPreloadFirstVideos(videoService));
 
       // Ensure Stage 1 is atleast triggered/checked
       await stage1Future;
 
       stopwatch.stop();
-      AppLogger.log('✅ InitManager: Stage 2 Complete in ${stopwatch.elapsedMilliseconds}ms');
+      AppLogger.log('✅ InitManager: Stage 2 Complete (Auth Verified) in ${stopwatch.elapsedMilliseconds}ms');
       _isStage2Complete = true;
     } catch (e) {
       AppLogger.log('❌ InitManager: Stage 2 Failed: $e');
@@ -137,7 +138,7 @@ class AppInitializationManager {
   /// Helper: Fetch videos and pre-initialize the first one
   Future<void> _fetchAndPreloadFirstVideos(VideoService videoService) async {
     try {
-      AppLogger.log('📥 InitManager: Fetching Page 1 Videos (Yug)...');
+      AppLogger.log('📥 InitManager: Fetching Page 1 Videos (Yug) in background...');
       
       // 1. Network Call
       final result = await videoService.getVideos(

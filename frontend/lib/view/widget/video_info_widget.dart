@@ -7,6 +7,7 @@ import 'package:vayu/services/profile_preloader.dart';
 import 'package:vayu/core/managers/shared_video_controller_pool.dart';
 import 'package:vayu/core/managers/video_controller_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:vayu/core/theme/app_theme.dart';
 
 class VideoInfoWidget extends StatefulWidget {
   final VideoModel video;
@@ -47,9 +48,8 @@ class _VideoInfoWidgetState extends State<VideoInfoWidget> {
               children: [
                 Text(
                   widget.video.videoName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppTheme.textInverse,
                     fontWeight: FontWeight.w600,
                   ),
                   maxLines: _isExpanded ? null : 1,
@@ -63,11 +63,11 @@ class _VideoInfoWidgetState extends State<VideoInfoWidget> {
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
                       _isExpanded ? 'view less' : 'view more',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
-                        fontSize: 10,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: AppTheme.textInverse.withOpacity(0.9),
                         fontWeight: FontWeight.w500,
                         decoration: TextDecoration.underline,
+                        decorationColor: AppTheme.textInverse.withOpacity(0.9),
                       ),
                     ),
                   ),
@@ -157,10 +157,9 @@ class _UploaderInfoSection extends StatelessWidget {
                 Expanded(
                   child: Text(
                     video.uploader.name,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppTheme.textInverse,
                       fontWeight: FontWeight.w500,
-                      fontSize: 11,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -207,7 +206,7 @@ class _UploaderAvatar extends StatelessWidget {
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) {
                   print('🖼️ _UploaderAvatar: Image.network error: $error');
-                  return _buildInitialsAvatar();
+                  return _buildInitialsAvatar(context);
                 },
                 loadingBuilder: (context, child, loadingProgress) {
                   if (loadingProgress == null) return child;
@@ -222,11 +221,11 @@ class _UploaderAvatar extends StatelessWidget {
                 },
               ),
             )
-          : _buildInitialsAvatar(),
+          : _buildInitialsAvatar(context),
     );
   }
 
-  Widget _buildInitialsAvatar() {
+  Widget _buildInitialsAvatar(BuildContext context) {
     // Get initials from the user's name
     final initials = uploader.name.isNotEmpty
         ? uploader.name
@@ -241,16 +240,14 @@ class _UploaderAvatar extends StatelessWidget {
       width: AppConstants.avatarRadius * 2,
       height: AppConstants.avatarRadius * 2,
       decoration: BoxDecoration(
-        color: Colors.blue[600],
+        color: Theme.of(context).primaryColor,
         shape: BoxShape.circle,
       ),
       child: Center(
         child: Text(
           initials,
-          style: const TextStyle(
-            color: Colors.white,
-            // **REDUCED from 12 to 10 to match smaller avatar**
-            fontSize: 10,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: AppTheme.textInverse,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -284,8 +281,7 @@ class _VisitNowButton extends StatelessWidget {
           }
         },
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(
-              0x99444444), // Grey color with 0.6 opacity (99 in hex = 153/255 ≈ 0.6)
+          backgroundColor: AppTheme.overlayMedium,
           foregroundColor: Colors.white,
           surfaceTintColor:
               Colors.transparent, // Remove Material 3 surface tint
@@ -299,7 +295,7 @@ class _VisitNowButton extends StatelessWidget {
           // **NEW: Ensure button takes full width of container**
           minimumSize: const Size(double.infinity, 0),
         ),
-        child: const Row(
+        child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           // **UPDATED: Use max to fill the button width**
           mainAxisSize: MainAxisSize.max,
@@ -310,10 +306,8 @@ class _VisitNowButton extends StatelessWidget {
             SizedBox(width: 6),
             Text(
               'Visit Now',
-              style: TextStyle(
-                color: Colors.white,
-                // **REDUCED from 13 to 11**
-                fontSize: 11,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppTheme.textInverse,
                 fontWeight: FontWeight.w600,
               ),
             ),

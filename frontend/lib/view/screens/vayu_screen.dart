@@ -5,6 +5,7 @@ import 'package:vayu/services/video_service.dart';
 import 'package:vayu/view/screens/video_screen.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/view/search/video_creator_search_delegate.dart';
+import 'package:vayu/core/theme/app_theme.dart';
 // Removed unused app_theme.dart
 // Removed timeago package dependency in favor of local helper
 
@@ -181,12 +182,11 @@ class _VayuScreenState extends State<VayuScreen> {
                   const Icon(Icons.play_circle_fill, color: Colors.red),
             ),
             const SizedBox(width: 8),
-            const Text(
+            Text(
               'Vayu',
-              style: TextStyle(
-                color: Colors.white,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: AppTheme.textInverse,
                 fontWeight: FontWeight.bold,
-                fontSize: 20,
                 letterSpacing: -0.5,
               ),
             ),
@@ -223,14 +223,16 @@ class _VayuScreenState extends State<VayuScreen> {
             const SizedBox(height: 16),
             Text(
               _errorMessage!,
-              style: const TextStyle(color: Colors.white70),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: AppTheme.textInverse.withOpacity(0.7),
+              ),
             ),
             const SizedBox(height: 24),
             OutlinedButton(
               onPressed: () => _loadVideos(refresh: true),
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                side: const BorderSide(color: Colors.white30),
+                foregroundColor: AppTheme.textInverse,
+                side: BorderSide(color: AppTheme.textInverse.withOpacity(0.3)),
               ),
               child: const Text('Try Again'),
             ),
@@ -247,23 +249,24 @@ class _VayuScreenState extends State<VayuScreen> {
             const Icon(Icons.video_library_outlined,
                 color: Colors.white24, size: 80),
             const SizedBox(height: 24),
-            const Text(
+            Text(
               'No long-form videos yet',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  color: AppTheme.textInverse,
                   fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Upload videos longer than 2 mins to see them here',
-              style: TextStyle(color: Colors.white54, fontSize: 14),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: AppTheme.textInverse.withOpacity(0.54),
+              ),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => _loadVideos(refresh: true),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
+                backgroundColor: AppTheme.textInverse,
                 foregroundColor: Colors.black,
               ),
               child: const Text('Refresh'),
@@ -337,9 +340,8 @@ class _VayuScreenState extends State<VayuScreen> {
                     ),
                     child: Text(
                       _formatDuration(video.duration),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: AppTheme.textInverse,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -362,7 +364,7 @@ class _VayuScreenState extends State<VayuScreen> {
                       ? CachedNetworkImageProvider(video.uploader.profilePic)
                       : null,
                   child: video.uploader.profilePic.isEmpty
-                      ? const Icon(Icons.person, size: 20, color: Colors.white)
+                      ? Icon(Icons.person, size: 20, color: AppTheme.textInverse)
                       : null,
                 ),
                 const SizedBox(width: 12),
@@ -376,9 +378,8 @@ class _VayuScreenState extends State<VayuScreen> {
                         video.videoName,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: AppTheme.textInverse,
                           fontWeight: FontWeight.w500,
                           height: 1.2,
                         ),
@@ -389,9 +390,8 @@ class _VayuScreenState extends State<VayuScreen> {
                         '${video.uploader.name} • ${_formatViews(video.views)} • ${_formatTimeAgo(video.uploadedAt)}',
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 12,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppTheme.textInverse.withOpacity(0.54),
                           height: 1.3,
                         ),
                       ),

@@ -9,6 +9,7 @@ import 'package:vayu/view/screens/creator_payout_dashboard.dart';
 import 'package:vayu/view/widget/feedback/feedback_dialog_widget.dart';
 import 'package:vayu/view/widget/report/report_dialog_widget.dart';
 import 'package:vayu/view/widget/profile/top_earners_bottom_sheet.dart';
+import 'package:vayu/core/theme/app_theme.dart';
 
 class ProfileDialogsWidget {
   static void showSettingsBottomSheet(
@@ -31,22 +32,21 @@ class ProfileDialogsWidget {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(20),
+                color: AppTheme.backgroundSecondary,
+                borderRadius: BorderRadius.vertical(
+                  top: Radius.circular(AppTheme.radiusLarge),
                 ),
               ),
               child: Row(
                 children: [
                   const Icon(Icons.settings, color: Colors.black87, size: 24),
                   const SizedBox(width: 12),
-                  const Text(
+                  Text(
                     'Settings',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
                   ),
                   const Spacer(),
                   IconButton(
@@ -79,6 +79,7 @@ class ProfileDialogsWidget {
                   return Column(
                     children: [
                       _buildSettingsTile(
+                        context: context,
                         icon: Icons.swap_vert_circle,
                         title: 'Auto Scroll',
                         subtitle: 'Auto-scroll to next video after finish',
@@ -101,6 +102,7 @@ class ProfileDialogsWidget {
                         iconColor: Colors.grey,
                       ),
                       _buildSettingsTile(
+                        context: context,
                         icon: Icons.edit,
                         title: 'Edit Profile',
                         subtitle: 'Update your profile information',
@@ -110,6 +112,7 @@ class ProfileDialogsWidget {
                         },
                       ),
                       _buildSettingsTile(
+                        context: context,
                         icon: Icons.video_library,
                         title: 'Manage Videos',
                         subtitle: 'View and manage your videos',
@@ -119,6 +122,7 @@ class ProfileDialogsWidget {
                         },
                       ),
                       _buildSettingsTile(
+                        context: context,
                         icon: Icons.dashboard,
                         title: 'Creator Dashboard',
                         subtitle: 'View earnings and analytics',
@@ -140,6 +144,7 @@ class ProfileDialogsWidget {
                         },
                       ),
                       _buildSettingsTile(
+                        context: context,
                         icon: Icons.payment,
                         title: 'Payment Setup',
                         subtitle: 'Configure payment details for earnings',
@@ -153,7 +158,7 @@ class ProfileDialogsWidget {
                                 content: Text(
                                   '✅ Payment setup already completed',
                                 ),
-                                backgroundColor: Colors.green,
+                                backgroundColor: AppTheme.success,
                               ),
                             );
                           } else {
@@ -169,6 +174,7 @@ class ProfileDialogsWidget {
                       ),
                       if (isViewingOwnProfile)
                         _buildSettingsTile(
+                          context: context,
                           icon: Icons.analytics,
                           title: 'Revenue Analytics',
                           subtitle: 'Track your earnings',
@@ -196,6 +202,7 @@ class ProfileDialogsWidget {
                           },
                         ),
                       _buildSettingsTile(
+                        context: context,
                         icon: Icons.help_outline,
                         title: 'Help & Support',
                         subtitle: 'Get help with your account',
@@ -205,6 +212,7 @@ class ProfileDialogsWidget {
                         },
                       ),
                       _buildSettingsTile(
+                        context: context,
                         icon: Icons.feedback_outlined,
                         title: 'Feedback',
                         subtitle: 'Share ideas or report a problem',
@@ -219,6 +227,7 @@ class ProfileDialogsWidget {
                   return Column(
                     children: [
                       _buildSettingsTile(
+                        context: context,
                         icon: Icons.login,
                         title: 'Sign In',
                         subtitle: 'Sign in to access your profile',
@@ -228,6 +237,7 @@ class ProfileDialogsWidget {
                         },
                       ),
                       _buildSettingsTile(
+                        context: context,
                         icon: Icons.help_outline,
                         title: 'Help & Support',
                         subtitle: 'Get help with your account',
@@ -249,6 +259,7 @@ class ProfileDialogsWidget {
   }
 
   static Widget _buildSettingsTile({
+    required BuildContext context,
     required IconData icon,
     required String title,
     required String subtitle,
@@ -259,22 +270,23 @@ class ProfileDialogsWidget {
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: (iconColor ?? Colors.grey).withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
+          color: (iconColor ?? AppTheme.textTertiary).withOpacity(0.1),
+          borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
         ),
-        child: Icon(icon, color: iconColor ?? Colors.grey, size: 20),
+        child: Icon(icon, color: iconColor ?? AppTheme.textTertiary, size: 20),
       ),
       title: Text(
         title,
-        style: const TextStyle(
-          color: Colors.black87,
-          fontSize: 16,
-          fontWeight: FontWeight.w500,
-        ),
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: AppTheme.textPrimary,
+              fontWeight: FontWeight.w500,
+            ),
       ),
       subtitle: Text(
         subtitle,
-        style: const TextStyle(color: Colors.black54, fontSize: 14),
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: AppTheme.textSecondary,
+            ),
       ),
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
@@ -285,12 +297,12 @@ class ProfileDialogsWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.white,
-        title: const Row(
+        backgroundColor: AppTheme.surfacePrimary,
+        title: Row(
           children: [
-            Icon(Icons.help_outline, color: Colors.black87),
-            SizedBox(width: 12),
-            Text('Help & Support', style: TextStyle(color: Colors.black87)),
+            Icon(Icons.help_outline, color: AppTheme.textPrimary),
+            const SizedBox(width: 12),
+            Text('Help & Support', style: Theme.of(context).textTheme.headlineSmall),
           ],
         ),
         content: const Column(
@@ -486,8 +498,8 @@ class ProfileDialogsWidget {
                   label: const Text('Got it, thanks!'),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: Colors.blue.shade600,
-                    foregroundColor: Colors.white,
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: AppTheme.textInverse,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),

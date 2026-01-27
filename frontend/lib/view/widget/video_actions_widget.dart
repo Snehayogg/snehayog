@@ -6,6 +6,7 @@ import 'package:vayu/core/constants/app_constants.dart';
 import 'package:vayu/services/video_service.dart';
 import 'package:vayu/view/widget/custom_share_widget.dart';
 import 'package:vayu/utils/app_logger.dart';
+import 'package:vayu/core/theme/app_theme.dart';
 
 class VideoActionsWidget extends StatelessWidget {
   final VideoModel video;
@@ -122,7 +123,7 @@ class _ActionButton extends StatelessWidget {
           width: containerSize,
           height: containerSize,
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.55),
+            color: AppTheme.overlayMedium,
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
@@ -132,34 +133,35 @@ class _ActionButton extends StatelessWidget {
               ),
             ],
           ),
-          child: IconButton(
-            icon: IconTheme(
-              data: IconThemeData(
-                size: size,
-                shadows: const [
-                  Shadow(
-                    color: Colors.black45,
-                    blurRadius: 4.0,
-                    offset: Offset(0, 2),
-                  ),
-                ],
+          child: Center(
+            child: IconButton(
+              icon: IconTheme(
+                data: IconThemeData(
+                  size: size,
+                  shadows: const [
+                    Shadow(
+                      color: Colors.black45,
+                      blurRadius: 4.0,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: icon,
               ),
-              child: icon,
+              onPressed: onPressed,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
             ),
-            onPressed: onPressed,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
           ),
         ),
         const SizedBox(height: 4),
         Text(
           label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: AppTheme.textInverse,
             fontWeight: FontWeight.w600,
             shadows: [
-              Shadow(
+              const Shadow(
                 color: Colors.black45,
                 blurRadius: 2.0,
                 offset: Offset(0, 1),

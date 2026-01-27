@@ -1279,6 +1279,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                     ],
                   ),
                   child: LikeButton(
+                    padding: EdgeInsets.zero,
                     size: AppConstants.primaryActionButtonSize,
                     isLiked: isLiked,
                     circleColor: const CircleColor(

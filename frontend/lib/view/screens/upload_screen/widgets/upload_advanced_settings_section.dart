@@ -32,17 +32,17 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero, // **FIX: Remove default margin to reduce horizontal spacing**
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
           ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 8), // **FIX: Reduce header padding**
-            leading: const Icon(Icons.tune, color: Colors.blue),
-            title: const Text(
+            leading: Icon(Icons.tune, color: Theme.of(context).primaryColor),
+            title: Text(
               'Advanced Options',
-              style: TextStyle(fontWeight: FontWeight.w600),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
             ),
 
             trailing: ValueListenableBuilder<bool>(
@@ -52,7 +52,7 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
                   expanded
                       ? Icons.keyboard_arrow_up
                       : Icons.keyboard_arrow_down,
-                  color: Colors.blue,
+                  color: Theme.of(context).primaryColor,
                 );
               },
             ),
@@ -71,14 +71,14 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
 
-                    _buildTitleField(),
-                    const SizedBox(height: 10),
+                    _buildTitleField(context),
+                    const SizedBox(height: 16),
                     _buildCategorySelector(),
-                    const SizedBox(height: 10),
-                    _buildLinkField(),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 16),
+                    _buildLinkField(context),
+                    const SizedBox(height: 16),
                     _buildTagInput(context),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 16),
                     _buildMakeEpisodeOption(context),
 
                   ],
@@ -87,12 +87,11 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
             },
           ),
         ],
-      ),
-    );
+      );
   }
 
 
-  Widget _buildTitleField() {
+  Widget _buildTitleField(BuildContext context) {
     return TextField(
       controller: titleController,
       minLines: 2,
@@ -100,13 +99,15 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
       decoration: InputDecoration(
         labelText: '',
         floatingLabelBehavior: FloatingLabelBehavior.always,
-        labelStyle: const TextStyle(color: Colors.black87),
+        labelStyle: Theme.of(context).textTheme.bodyMedium,
         hintText: 'Write a title',
-        hintStyle: TextStyle(color: Colors.grey.withOpacity(0.4)),
+        hintStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).hintColor.withOpacity(0.4),
+            ),
         filled: false,
         fillColor: Colors.transparent,
         isDense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12), // **FIX: Reduced horizontal padding**
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12), // Standardized padding
         prefixIcon: const Icon(Icons.title, size: 20),
         border: const OutlineInputBorder(),
       ),
@@ -135,7 +136,7 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
             helperText: null,
             labelStyle: TextStyle(color: Colors.black87),
             isDense: true,
-            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10), // **FIX: Reduced horizontal padding**
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10), // Standardized padding
           ),
           items: options
               .map(
@@ -151,22 +152,22 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
     );
   }
 
-  Widget _buildLinkField() {
+  Widget _buildLinkField(BuildContext context) {
     return TextField(
       controller: linkController,
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
         labelText: '',
         floatingLabelBehavior: FloatingLabelBehavior.always,
         hintText: 'Add a website link',
-        hintStyle:  TextStyle(color: Colors.grey, fontSize: 12),
+        hintStyle: Theme.of(context).textTheme.bodySmall,
         helperText: 'Promote your business',
-        labelStyle:  TextStyle(color: Colors.grey, fontSize: 12),
+        labelStyle: Theme.of(context).textTheme.bodySmall,
         filled: false,
         fillColor: Colors.transparent,
-        border:  OutlineInputBorder(),
-        prefixIcon:  Icon(Icons.link, size: 20),
+        border:  const OutlineInputBorder(),
+        prefixIcon:  const Icon(Icons.link, size: 20),
         isDense: true,
-        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 12), // **FIX: Reduced horizontal padding**
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12), // Standardized padding
       ),
       keyboardType: TextInputType.url,
     );
@@ -180,14 +181,12 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
         child: Row(
           children: [
             const SizedBox(width: 8), // **FIX: Reduced spacer**
-            const Expanded(
+            Expanded(
               child: Text(
                 'Add Tags',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.black87,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
               ),
             ),
             IconButton(
@@ -222,12 +221,11 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     'Add Tags',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close),
@@ -328,13 +326,11 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                   const Text(
+                    Text(
                     'Make a Episode',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Colors.black87,
-                    ),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                   ),
                   Text(
                     'Create a series by selecting multiple videos',

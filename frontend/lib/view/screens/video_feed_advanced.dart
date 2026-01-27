@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, compute;
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
@@ -617,36 +618,48 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     final sharedPool = SharedVideoControllerPool();
 
     // **PRIMARY: Check shared pool first (guaranteed instant playback)**
-    VideoPlayerController? controller = sharedPool.getControllerForInstantPlay(
-      video.id,
-    );
+    VideoPlayerController? controller;
+    
+    try {
+      controller = sharedPool.getControllerForInstantPlay(video.id);
 
-    if (controller != null && controller.value.isInitialized) {
-      // **CACHE HIT: Reuse from shared pool**
-      AppLogger.log(
-        '⚡ INSTANT: Reusing controller from shared pool for video ${video.id}',
-      );
+      if (controller != null && controller.value.isInitialized) {
+        // **CACHE HIT: Reuse from shared pool**
+        AppLogger.log(
+          '⚡ INSTANT: Reusing controller from shared pool for video ${video.id}',
+        );
 
-      // Add to local pool for UI tracking only
-      _controllerPool[index] = controller;
-      _controllerStates[index] = false;
-      _preloadedVideos.add(index);
-      _lastAccessedLocal[index] = DateTime.now();
+        // Add to local pool for UI tracking only
+        _controllerPool[index] = controller;
+        _controllerStates[index] = false;
+        _preloadedVideos.add(index);
+        _lastAccessedLocal[index] = DateTime.now();
 
-      // **FIX: Mark first frame as ready since controller is already initialized**
-      _firstFrameReady[index] = ValueNotifier<bool>(true);
+        // **FIX: Mark first frame as ready since controller is already initialized**
+        _firstFrameReady[index] = ValueNotifier<bool>(true);
 
-      return controller;
+        return controller;
+      }
+    } catch (e) {
+      AppLogger.log('⚠️ VideoFeedAdvanced: Disposed controller detected in shared pool for ${video.id}');
+      sharedPool.removeController(video.id);
+      controller = null; 
     }
 
     // **FALLBACK: Check local pool**
     if (_controllerPool.containsKey(index)) {
-      controller = _controllerPool[index];
-      if (controller != null && controller.value.isInitialized) {
-        _lastAccessedLocal[index] = DateTime.now();
-        // **FIX: Mark first frame as ready since controller is already initialized**
-        _firstFrameReady[index] = ValueNotifier<bool>(true);
-        return controller;
+      try {
+        controller = _controllerPool[index];
+        if (controller != null && controller.value.isInitialized) {
+          _lastAccessedLocal[index] = DateTime.now();
+          // **FIX: Mark first frame as ready since controller is already initialized**
+          _firstFrameReady[index] = ValueNotifier<bool>(true);
+          return controller;
+        }
+      } catch (e) {
+        AppLogger.log('⚠️ VideoFeedAdvanced: Disposed controller detected in local pool at index $index');
+        _controllerPool.remove(index);
+        controller = null;
       }
     }
 
@@ -2009,6 +2022,7 @@ class _ThrottledProgressBar extends StatefulWidget {
 
 class _ThrottledProgressBarState extends State<_ThrottledProgressBar> {
   double _progress = 0.0;
+  bool _isDragging = false; // **NEW: Track if user is currently seeking**
   Timer? _updateTimer;
   DateTime _lastUpdate = DateTime.now();
   static const Duration _updateInterval = Duration(milliseconds: 33); // ~30fps
@@ -2029,6 +2043,9 @@ class _ThrottledProgressBarState extends State<_ThrottledProgressBar> {
   }
 
   void _onControllerUpdate() {
+    // **NEW: Don't update progress from controller while dragging/seeking**
+    if (_isDragging) return;
+
     final now = DateTime.now();
     final timeSinceLastUpdate = now.difference(_lastUpdate);
 
@@ -2050,7 +2067,7 @@ class _ThrottledProgressBarState extends State<_ThrottledProgressBar> {
   }
 
   void _updateProgress() {
-    if (!mounted || !widget.controller.value.isInitialized) return;
+    if (!mounted || !widget.controller.value.isInitialized || _isDragging) return;
 
     final duration = widget.controller.value.duration;
     final position = widget.controller.value.position;
@@ -2066,45 +2083,104 @@ class _ThrottledProgressBarState extends State<_ThrottledProgressBar> {
     }
   }
 
+  void _handleSeekUpdate(dynamic details) {
+    // Calculate new progress based on touch/drag position
+    // We use globalPosition.dx but map it to the local RenderBox to ensure accuracy
+    final RenderBox renderBox = context.findRenderObject() as RenderBox;
+    final Offset localPosition = renderBox.globalToLocal(
+      details is DragUpdateDetails ? details.globalPosition : (details as TapDownDetails).globalPosition
+    );
+    
+    final newProgress = (localPosition.dx / widget.screenWidth).clamp(0.0, 1.0);
+    
+    setState(() {
+      _progress = newProgress;
+    });
+    
+    widget.onSeek(details);
+
+    // **HAPTIC: Vibrate when reaching start or end**
+    if (newProgress <= 0.0 || newProgress >= 1.0) {
+      HapticFeedback.lightImpact();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTapDown: widget.onSeek,
-      onPanUpdate: widget.onSeek,
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (details) {
+        setState(() => _isDragging = true);
+        HapticFeedback.selectionClick(); // **NEW: Initial touch feedback**
+        _handleSeekUpdate(details);
+      },
+      onTapUp: (_) => setState(() => _isDragging = false),
+      onTapCancel: () => setState(() => _isDragging = false),
+      onHorizontalDragStart: (details) {
+        setState(() => _isDragging = true);
+        HapticFeedback.selectionClick();
+      },
+      onHorizontalDragUpdate: (details) => _handleSeekUpdate(details),
+      onHorizontalDragEnd: (_) => setState(() => _isDragging = false),
+      onHorizontalDragCancel: () => setState(() => _isDragging = false),
       child: Container(
-        height: 4,
-        color: Colors.black.withValues(alpha: 0.2),
+        height: 40, // **ENLARGED hit target for even easier access**
+        color: Colors.transparent,
         child: Stack(
+          alignment: Alignment.center,
           children: [
-            Container(
-              height: 2,
-              margin: const EdgeInsets.only(top: 1),
-              color: Colors.grey.withValues(alpha: 0.2),
-            ),
-            // Progress bar filled portion
-            Positioned(
-              top: 1,
-              left: 0,
-              child: Container(
-                height: 2,
-                width: widget.screenWidth * _progress,
-                color: Colors.green[400],
+            // 1. Background track (Height animates, width is constant)
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              curve: Curves.easeOutCubic,
+              height: _isDragging ? 6 : 2,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: _isDragging ? 0.3 : 0.2),
+                borderRadius: BorderRadius.circular(3),
               ),
             ),
-            // Seek handle (thumb)
-            if (_progress > 0)
-              Positioned(
-                top: 0,
-                left: (widget.screenWidth * _progress) - 4,
-                child: Container(
-                  width: 8,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: Colors.green[400],
-                    borderRadius: BorderRadius.circular(4),
-                  ),
+            
+            // 2. Progress bar filled portion
+            // We use a regular Positioned width to avoid animation flicker during seek
+            Positioned(
+              left: 0,
+              width: widget.screenWidth * _progress,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                curve: Curves.easeOutCubic,
+                height: _isDragging ? 6 : 2, // Height animates on hold
+                decoration: BoxDecoration(
+                  color: Colors.green[400],
+                  borderRadius: BorderRadius.circular(3),
                 ),
               ),
+            ),
+            
+            // 3. Seek handle (thumb)
+            // Positioned updates instantly (no animation)
+            Positioned(
+              left: ((widget.screenWidth * _progress) - (_isDragging ? 7 : 4))
+                  .clamp(0.0, widget.screenWidth - (_isDragging ? 14 : 8)),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                curve: Curves.easeOutCubic,
+                width: _isDragging ? 14 : 8, // Size animates on hold
+                height: _isDragging ? 14 : 6,
+                decoration: BoxDecoration(
+                  color: Colors.green[400],
+                  shape: _isDragging ? BoxShape.circle : BoxShape.rectangle,
+                  borderRadius: _isDragging ? null : BorderRadius.circular(4),
+                  boxShadow: _isDragging ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    )
+                  ] : null,
+                ),
+              ),
+            ),
           ],
         ),
       ),

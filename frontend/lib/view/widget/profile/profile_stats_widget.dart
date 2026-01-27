@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:vayu/core/managers/profile_state_manager.dart';
 import 'package:vayu/core/providers/user_provider.dart';
 import 'package:vayu/core/services/profile_screen_logger.dart';
+import 'package:vayu/core/theme/app_theme.dart';
 
 
 
@@ -39,11 +40,11 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
         margin: const EdgeInsets.symmetric(horizontal: 24),
         padding: const EdgeInsets.symmetric(vertical: 20),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          color: AppTheme.backgroundPrimary,
+          borderRadius: BorderRadius.circular(AppTheme.radiusXLarge),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: AppTheme.shadowPrimary,
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -78,7 +79,7 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
                       isLoading: videosLoading,
                     ),
                     Container(
-                        width: 1, height: 40, color: const Color(0xFFE5E7EB)),
+                        width: 1, height: 40, color: AppTheme.borderPrimary),
                     _buildStatColumn(
                       'Followers',
                       widget.isFollowersLoaded
@@ -88,7 +89,7 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
                       onTap: widget.onFollowersTap,
                     ),
                     Container(
-                        width: 1, height: 40, color: const Color(0xFFE5E7EB)),
+                        width: 1, height: 40, color: AppTheme.borderPrimary),
                     _buildStatColumn(
                       'Earnings',
                       shouldShowLoading ? 'Loading...' : stateManager.cachedEarnings,
@@ -131,9 +132,7 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
                       : (isEarnings
                           ? '₹${(value is double ? value : double.tryParse(value.toString()) ?? 0.0).toStringAsFixed(2)}'
                           : value.toString()),
-                  style: const TextStyle(
-                    color: Color(0xFF1A1A1A),
-                    fontSize: 24,
+                  style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                     fontWeight: FontWeight.w700,
                     letterSpacing: -0.5,
                   ),
@@ -143,9 +142,8 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
             const SizedBox(height: 8),
             Text(
               label,
-              style: const TextStyle(
-                color: Color(0xFF6B7280),
-                fontSize: 12,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: AppTheme.textSecondary,
                 fontWeight: FontWeight.w500,
               ),
             ),

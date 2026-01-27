@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/services/payment_setup_service.dart';
+import 'package:vayu/core/theme/app_theme.dart';
 
 /// Widget to display payment setup status
 class PaymentStatusIndicator extends StatefulWidget {
@@ -62,8 +63,8 @@ class _PaymentStatusIndicatorState extends State<PaymentStatusIndicator> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(16),
+        color: AppTheme.backgroundSecondary,
+        borderRadius: BorderRadius.circular(AppTheme.radiusFull),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -73,17 +74,16 @@ class _PaymentStatusIndicatorState extends State<PaymentStatusIndicator> {
             height: 12,
             child: CircularProgressIndicator(
               strokeWidth: 2,
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.grey[600]!),
+              valueColor: AlwaysStoppedAnimation<Color>(AppTheme.textTertiary),
             ),
           ),
           const SizedBox(width: 8),
           Text(
             'Checking...',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w500,
-            ),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppTheme.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
           ),
         ],
       ),
@@ -96,10 +96,14 @@ class _PaymentStatusIndicatorState extends State<PaymentStatusIndicator> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: _hasPaymentSetup ? Colors.green[50] : Colors.orange[50],
-          borderRadius: BorderRadius.circular(12),
+          color: _hasPaymentSetup
+              ? AppTheme.success.withOpacity(0.1)
+              : AppTheme.warning.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
           border: Border.all(
-            color: _hasPaymentSetup ? Colors.green[200]! : Colors.orange[200]!,
+            color: _hasPaymentSetup
+                ? AppTheme.success.withOpacity(0.2)
+                : AppTheme.warning.withOpacity(0.2),
             width: 1,
           ),
         ),
@@ -108,14 +112,14 @@ class _PaymentStatusIndicatorState extends State<PaymentStatusIndicator> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color:
-                    _hasPaymentSetup ? Colors.green[100] : Colors.orange[100],
-                borderRadius: BorderRadius.circular(8),
+                color: _hasPaymentSetup
+                    ? AppTheme.success.withOpacity(0.1)
+                    : AppTheme.warning.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
               ),
               child: Icon(
                 _hasPaymentSetup ? Icons.check_circle : Icons.payment,
-                color:
-                    _hasPaymentSetup ? Colors.green[700] : Colors.orange[700],
+                color: _hasPaymentSetup ? AppTheme.success : AppTheme.warning,
                 size: 20,
               ),
             ),
@@ -128,25 +132,21 @@ class _PaymentStatusIndicatorState extends State<PaymentStatusIndicator> {
                     _hasPaymentSetup
                         ? 'Payment Setup Complete'
                         : 'Payment Setup Required',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: _hasPaymentSetup
-                          ? Colors.green[800]
-                          : Colors.orange[800],
-                    ),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: _hasPaymentSetup
+                              ? AppTheme.success
+                              : AppTheme.warning,
+                        ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     _hasPaymentSetup
                         ? 'You\'ll receive 80% of ad revenue automatically'
                         : 'Set up payment details to receive earnings',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: _hasPaymentSetup
-                          ? Colors.green[600]
-                          : Colors.orange[600],
-                    ),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
                   ),
                 ],
               ),
@@ -155,7 +155,7 @@ class _PaymentStatusIndicatorState extends State<PaymentStatusIndicator> {
               Icon(
                 Icons.arrow_forward_ios,
                 size: 16,
-                color: Colors.orange[600],
+                color: AppTheme.warning,
               ),
           ],
         ),
@@ -169,10 +169,14 @@ class _PaymentStatusIndicatorState extends State<PaymentStatusIndicator> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: _hasPaymentSetup ? Colors.green[100] : Colors.orange[100],
-          borderRadius: BorderRadius.circular(16),
+          color: _hasPaymentSetup
+              ? AppTheme.success.withOpacity(0.1)
+              : AppTheme.warning.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(AppTheme.radiusFull),
           border: Border.all(
-            color: _hasPaymentSetup ? Colors.green[300]! : Colors.orange[300]!,
+            color: _hasPaymentSetup
+                ? AppTheme.success.withOpacity(0.2)
+                : AppTheme.warning.withOpacity(0.2),
             width: 1,
           ),
         ),
@@ -182,17 +186,16 @@ class _PaymentStatusIndicatorState extends State<PaymentStatusIndicator> {
             Icon(
               _hasPaymentSetup ? Icons.check_circle : Icons.payment,
               size: 16,
-              color: _hasPaymentSetup ? Colors.green[700] : Colors.orange[700],
+              color: _hasPaymentSetup ? AppTheme.success : AppTheme.warning,
             ),
             const SizedBox(width: 6),
             Text(
               _hasPaymentSetup ? 'Payment Ready' : 'Setup Payment',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color:
-                    _hasPaymentSetup ? Colors.green[700] : Colors.orange[700],
-              ),
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color:
+                        _hasPaymentSetup ? AppTheme.success : AppTheme.warning,
+                  ),
             ),
           ],
         ),
@@ -219,8 +222,10 @@ class PaymentStatusBadge extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: hasPaymentSetup ? Colors.green[100] : Colors.orange[100],
-          borderRadius: BorderRadius.circular(12),
+          color: hasPaymentSetup
+              ? AppTheme.success.withOpacity(0.1)
+              : AppTheme.warning.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -228,16 +233,17 @@ class PaymentStatusBadge extends StatelessWidget {
             Icon(
               hasPaymentSetup ? Icons.check_circle : Icons.payment,
               size: 14,
-              color: hasPaymentSetup ? Colors.green[700] : Colors.orange[700],
+              color: hasPaymentSetup ? AppTheme.success : AppTheme.warning,
             ),
             const SizedBox(width: 4),
             Text(
               hasPaymentSetup ? 'Ready' : 'Setup',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: hasPaymentSetup ? Colors.green[700] : Colors.orange[700],
-              ),
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color:
+                        hasPaymentSetup ? AppTheme.success : AppTheme.warning,
+                  ),
             ),
           ],
         ),

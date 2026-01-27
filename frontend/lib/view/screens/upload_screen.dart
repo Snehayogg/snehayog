@@ -18,6 +18,8 @@ import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/config/app_config.dart';
 import 'package:video_player/video_player.dart';
 import 'package:vayu/utils/app_text.dart';
+import 'package:vayu/core/theme/app_theme.dart';
+
 
 
 class UploadScreen extends StatefulWidget {
@@ -221,18 +223,15 @@ class _UploadScreenState extends State<UploadScreen> {
                                     Text(
                                       _progressPhases[currentPhase]?['name'] ??
                                           'Processing',
-                                      style: const TextStyle(
-                                        fontSize: 18,
+                                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                                         fontWeight: FontWeight.bold,
-                                        color: Colors.black87,
                                       ),
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
                                       phaseDescription,
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.grey[600],
+                                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                        color: AppTheme.textSecondary,
                                       ),
                                     ),
                                   ],
@@ -898,10 +897,8 @@ class _UploadScreenState extends State<UploadScreen> {
                 // Success title
                 Text(
                   AppText.get('upload_success_title'),
-                  style: const TextStyle(
-                    fontSize: 24,
+                  style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: Colors.black87,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -910,10 +907,8 @@ class _UploadScreenState extends State<UploadScreen> {
                 // Success message
                 Text(
                   AppText.get('upload_success_message'),
-                  style: const TextStyle(
-                    fontSize: 16,
-                    color: Colors.black54,
-                    height: 1.4,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: AppTheme.textSecondary,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -1270,7 +1265,9 @@ class _UploadScreenState extends State<UploadScreen> {
                           Expanded(
                             child: Text(
                               AppText.get('upload_please_sign_in'),
-                              style: const TextStyle(color: Colors.orange),
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: AppTheme.warning.withOpacity(0.8),
+                              ),
                             ),
                           ),
                           TextButton(
@@ -1298,8 +1295,9 @@ class _UploadScreenState extends State<UploadScreen> {
                   // Main Options Section
                   Text(
                     AppText.get('upload_choose_what_create'),
-                    style: const TextStyle(
-                        fontSize: 24, fontWeight: FontWeight.bold),
+                    style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                     textAlign: TextAlign.center,
                   ),
 
@@ -1342,8 +1340,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                   const SizedBox(height: 16),
                                   Text(
                                     AppText.get('upload_video'),
-                                    style: const TextStyle(
-                                      fontSize: 20,
+                                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                                       fontWeight: FontWeight.bold,
                                     ),
                                     textAlign: TextAlign.center,
@@ -1351,9 +1348,8 @@ class _UploadScreenState extends State<UploadScreen> {
                                   const SizedBox(height: 8),
                                   Text(
                                     AppText.get('upload_video_desc'),
-                                    style: TextStyle(
-                                      color: Colors.grey.shade600,
-                                      fontSize: 14,
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: AppTheme.textSecondary,
                                     ),
                                     textAlign: TextAlign.center,
                                   ),
@@ -1404,8 +1400,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                   const SizedBox(height: 16),
                                   Text(
                                     AppText.get('upload_create_ad'),
-                                    style: const TextStyle(
-                                      fontSize: 20,
+                                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                                       fontWeight: FontWeight.bold,
                                     ),
                                     textAlign: TextAlign.center,
@@ -1413,9 +1408,8 @@ class _UploadScreenState extends State<UploadScreen> {
                                   const SizedBox(height: 8),
                                   Text(
                                     AppText.get('upload_create_ad_desc'),
-                                    style: TextStyle(
-                                      color: Colors.grey.shade600,
-                                      fontSize: 14,
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: AppTheme.textSecondary,
                                     ),
                                     textAlign: TextAlign.center,
                                   ),
@@ -1437,7 +1431,7 @@ class _UploadScreenState extends State<UploadScreen> {
                       if (!showUploadForm) return const SizedBox.shrink();
                       return Card(
                         child: Padding(
-                          padding: const EdgeInsets.all(8),
+                          padding: const EdgeInsets.all(16),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -1465,6 +1459,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                   ),
                                 ],
                               ),
+                              const SizedBox(height: 16),
                               Container(
                                 height: 200,
                                 decoration: BoxDecoration(
@@ -1548,7 +1543,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                   },
                                 ),
                               ),
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 16),
                               UploadAdvancedSettingsSection(
                                 isExpanded: _showAdvancedSettings,
                                 onToggle: _toggleAdvancedSettings,
@@ -1565,7 +1560,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                 onAddTag: _handleAddTag,
                                 onRemoveTag: _handleRemoveTag,
                               ),
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 16),
                               SizedBox(
                                 width: double.infinity,
                                 child: OutlinedButton.icon(

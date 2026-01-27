@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import 'package:vayu/core/providers/user_provider.dart';
 import 'package:vayu/model/usermodel.dart';
 import 'package:vayu/core/services/profile_screen_logger.dart';
+import 'package:vayu/core/theme/app_theme.dart';
 import 'dart:async';
 import 'package:share_plus/share_plus.dart';
 import 'package:vayu/features/profile/data/datasources/profile_local_datasource.dart';
@@ -998,7 +999,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(AppText.get('profile_updated_success')),
-            backgroundColor: Colors.green,
+            backgroundColor: AppTheme.success,
             duration: const Duration(seconds: 2),
           ),
         );
@@ -1010,7 +1011,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('${AppText.get('error_update_profile')}: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppTheme.error,
           ),
         );
       }
@@ -1087,8 +1088,8 @@ class _ProfileScreenState extends State<ProfileScreen>
           child: Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
+              color: AppTheme.surfacePrimary,
+              borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
             ),
             child: const CircularProgressIndicator(),
           ),
@@ -1107,11 +1108,11 @@ class _ProfileScreenState extends State<ProfileScreen>
               child: Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: Colors.black,
-                  borderRadius: BorderRadius.circular(16),
+                  color: AppTheme.backgroundPrimary,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
+                      color: AppTheme.shadowPrimary,
                       blurRadius: 20,
                       spreadRadius: 2,
                     ),
@@ -1125,16 +1126,16 @@ class _ProfileScreenState extends State<ProfileScreen>
                       width: 64,
                       height: 64,
                       decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.1),
+                        color: AppTheme.error.withOpacity(0.15),
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: Colors.red.withOpacity(0.3),
+                          color: AppTheme.error.withOpacity(0.3),
                           width: 2,
                         ),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.delete_forever,
-                        color: Colors.red,
+                        color: AppTheme.error,
                         size: 32,
                       ),
                     ),
@@ -1143,11 +1144,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                     // Title
                     Text(
                       AppText.get('profile_delete_videos_title'),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            color: AppTheme.textPrimary,
+                            fontWeight: FontWeight.bold,
+                          ),
                     ),
                     const SizedBox(height: 12),
 
@@ -1156,11 +1156,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                       AppText.get('profile_delete_videos_desc').replaceAll(
                           '{count}',
                           '${_stateManager.selectedVideoIds.length}'),
-                      style: const TextStyle(
-                        color: Colors.grey,
-                        fontSize: 16,
-                        height: 1.4,
-                      ),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: AppTheme.textSecondary,
+                            height: 1.4,
+                          ),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 24),
@@ -1182,11 +1181,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                             ),
                             child: Text(
                               AppText.get('btn_cancel'),
-                              style: const TextStyle(
-                                color: Colors.grey,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: AppTheme.textSecondary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                             ),
                           ),
                         ),
@@ -1205,10 +1203,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                             ),
                             child: Text(
                               AppText.get('btn_delete', fallback: 'Delete'),
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: AppTheme.textInverse,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                             ),
                           ),
                         ),
@@ -1348,14 +1346,13 @@ class _ProfileScreenState extends State<ProfileScreen>
               const Icon(
                 Icons.account_circle,
                 size: 100,
-                color: Color(0xFF757575),
+                color: AppTheme.textTertiary,
               ),
               const SizedBox(height: 20),
               Text(
                 AppText.get('profile_sign_in_title'),
-                style: const TextStyle(
-                  fontSize: 20,
-                  color: Color(0xFF424242),
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  color: AppTheme.textPrimary,
                   fontWeight: FontWeight.bold,
                 ),
                 textAlign: TextAlign.center,
@@ -1363,9 +1360,8 @@ class _ProfileScreenState extends State<ProfileScreen>
               const SizedBox(height: 12),
               Text(
                 AppText.get('profile_sign_in_desc'),
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF757575),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppTheme.textSecondary,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -1378,13 +1374,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                 ),
                 label: Text(AppText.get('profile_sign_in_button')),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey[700],
-                  foregroundColor: Colors.white,
+                  backgroundColor: AppTheme.textPrimary,
+                  foregroundColor: AppTheme.textInverse,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: BorderSide(color: Colors.grey[600]!),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
                   ),
                 ),
               ),
@@ -1406,7 +1401,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           if (authController.isLoading) {
             return Scaffold(
               key: _scaffoldKey,
-              backgroundColor: const Color(0xFFF8F9FA),
+              backgroundColor: AppTheme.backgroundSecondary,
               appBar: _buildAppBar(false),
               body: RepaintBoundary(
                 child: _buildSkeletonLoading(),
@@ -1479,7 +1474,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
           return Scaffold(
             key: _scaffoldKey,
-            backgroundColor: const Color(0xFFF8F9FA),
+            backgroundColor: AppTheme.backgroundSecondary,
             appBar: _buildAppBar(isViewingOwnProfile),
             drawer: isViewingOwnProfile
                 ? ProfileMenuWidget(
@@ -1627,9 +1622,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                         const SizedBox(height: 16),
                         Text(
                           AppText.get('error_load_profile'),
-                          style: TextStyle(
-                            color: Colors.red[700],
-                            fontSize: 18,
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            color: AppTheme.error,
                             fontWeight: FontWeight.bold,
                           ),
                           textAlign: TextAlign.center,
@@ -1637,9 +1631,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                         const SizedBox(height: 8),
                         Text(
                           error,
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 14,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: AppTheme.textSecondary,
                           ),
                           textAlign: TextAlign.center,
                         ),

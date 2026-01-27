@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// Professional theme system for Vayu app
 /// Implements a minimal but sharp design with teal accent guiding actions
@@ -110,7 +111,7 @@ class AppTheme {
   static const double fontSize5XL = 36.0;
 
   // Text styles with semantic naming
-  static const TextStyle displayLarge = TextStyle(
+  static TextStyle displayLarge = GoogleFonts.inter(
     fontSize: fontSize5XL,
     fontWeight: weightBold,
     color: textPrimary,
@@ -118,7 +119,7 @@ class AppTheme {
     letterSpacing: -0.5,
   );
 
-  static const TextStyle displayMedium = TextStyle(
+  static TextStyle displayMedium = GoogleFonts.inter(
     fontSize: fontSize4XL,
     fontWeight: weightBold,
     color: textPrimary,
@@ -126,91 +127,91 @@ class AppTheme {
     letterSpacing: -0.25,
   );
 
-  static const TextStyle displaySmall = TextStyle(
+  static TextStyle displaySmall = GoogleFonts.inter(
     fontSize: fontSize3XL,
     fontWeight: weightBold,
     color: textPrimary,
     height: 1.3,
   );
 
-  static const TextStyle headlineLarge = TextStyle(
+  static TextStyle headlineLarge = GoogleFonts.inter(
     fontSize: fontSize2XL,
     fontWeight: weightSemiBold,
     color: textPrimary,
     height: 1.4,
   );
 
-  static const TextStyle headlineMedium = TextStyle(
+  static TextStyle headlineMedium = GoogleFonts.inter(
     fontSize: fontSizeXL,
     fontWeight: weightSemiBold,
     color: textPrimary,
     height: 1.4,
   );
 
-  static const TextStyle headlineSmall = TextStyle(
+  static TextStyle headlineSmall = GoogleFonts.inter(
     fontSize: fontSizeLG,
     fontWeight: weightSemiBold,
     color: textPrimary,
     height: 1.5,
   );
 
-  static const TextStyle titleLarge = TextStyle(
+  static TextStyle titleLarge = GoogleFonts.inter(
     fontSize: fontSizeLG,
     fontWeight: weightMedium,
     color: textPrimary,
     height: 1.5,
   );
 
-  static const TextStyle titleMedium = TextStyle(
+  static TextStyle titleMedium = GoogleFonts.inter(
     fontSize: fontSizeBase,
     fontWeight: weightMedium,
     color: textPrimary,
     height: 1.5,
   );
 
-  static const TextStyle titleSmall = TextStyle(
+  static TextStyle titleSmall = GoogleFonts.inter(
     fontSize: fontSizeSM,
     fontWeight: weightMedium,
     color: textPrimary,
     height: 1.5,
   );
 
-  static const TextStyle bodyLarge = TextStyle(
+  static TextStyle bodyLarge = GoogleFonts.inter(
     fontSize: fontSizeLG,
     fontWeight: weightRegular,
     color: textPrimary,
     height: 1.6,
   );
 
-  static const TextStyle bodyMedium = TextStyle(
+  static TextStyle bodyMedium = GoogleFonts.inter(
     fontSize: fontSizeBase,
     fontWeight: weightRegular,
     color: textPrimary,
     height: 1.6,
   );
 
-  static const TextStyle bodySmall = TextStyle(
+  static TextStyle bodySmall = GoogleFonts.inter(
     fontSize: fontSizeSM,
     fontWeight: weightRegular,
     color: textSecondary,
     height: 1.6,
   );
 
-  static const TextStyle labelLarge = TextStyle(
+  static TextStyle labelLarge = GoogleFonts.inter(
     fontSize: fontSizeBase,
     fontWeight: weightMedium,
     color: textPrimary,
     height: 1.4,
   );
 
-  static const TextStyle labelMedium = TextStyle(
+  static TextStyle labelMedium = GoogleFonts.inter(
     fontSize: fontSizeSM,
     fontWeight: weightMedium,
     color: textPrimary,
     height: 1.4,
   );
 
-  static const TextStyle labelSmall = TextStyle(
+  static TextStyle labelSmall = GoogleFonts.inter(
     fontSize: fontSizeXS,
     fontWeight: weightMedium,
     color: textSecondary,
@@ -281,9 +282,13 @@ class AppTheme {
 
   /// Light theme for the app
   static ThemeData get lightTheme {
-    return ThemeData(
+    final baseTheme = ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
+      fontFamily: GoogleFonts.inter().fontFamily,
+    );
+
+    return baseTheme.copyWith(
 
       // Color scheme
       colorScheme: const ColorScheme.light(
@@ -300,7 +305,7 @@ class AppTheme {
       ),
 
       // App bar theme
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: surfacePrimary,
         foregroundColor: textPrimary,
         elevation: 0,
@@ -311,7 +316,7 @@ class AppTheme {
       ),
 
       // Bottom navigation bar theme
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: surfacePrimary,
         selectedItemColor: primary,
         unselectedItemColor: textTertiary,
@@ -433,7 +438,7 @@ class AppTheme {
       ),
 
       // Text theme
-      textTheme: const TextTheme(
+      textTheme: GoogleFonts.interTextTheme(baseTheme.textTheme).copyWith(
         displayLarge: displayLarge,
         displayMedium: displayMedium,
         displaySmall: displaySmall,
@@ -452,7 +457,7 @@ class AppTheme {
       ),
 
       // Primary text theme
-      primaryTextTheme: const TextTheme(
+      primaryTextTheme: GoogleFonts.interTextTheme(baseTheme.primaryTextTheme).copyWith(
         displayLarge: displayLarge,
         displayMedium: displayMedium,
         displaySmall: displaySmall,
@@ -485,7 +490,7 @@ class AppTheme {
       ),
 
       // Bottom sheet theme
-      bottomSheetTheme: const BottomSheetThemeData(
+      bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: surfacePrimary,
         elevation: 8,
         shape: RoundedRectangleBorder(
@@ -558,7 +563,7 @@ class AppTheme {
       ),
 
       // Tab bar theme
-      tabBarTheme: const TabBarThemeData(
+      tabBarTheme: TabBarThemeData(
         labelColor: primary,
         unselectedLabelColor: textSecondary,
         indicatorColor: primary,
@@ -578,7 +583,7 @@ class AppTheme {
       ),
 
       // List tile theme
-      listTileTheme: const ListTileThemeData(
+      listTileTheme: ListTileThemeData(
         contentPadding: EdgeInsets.symmetric(
           horizontal: spacing4,
           vertical: spacing2,

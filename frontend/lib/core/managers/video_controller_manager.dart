@@ -684,17 +684,17 @@ class VideoControllerManager {
 
     for (final index in _controllers.keys) {
       final controller = _controllers[index];
-      if (controller != null &&
-          controller.value.isInitialized &&
-          controller.value.isPlaying) {
+      if (controller != null) {
         try {
-          await controller.pause();
-          _intentionallyPaused.add(index);
-          AppLogger.log(
-              '⏸️ VideoControllerManager: Paused video at index $index');
+          if (controller.value.isInitialized && controller.value.isPlaying) {
+            await controller.pause();
+            _intentionallyPaused.add(index);
+            AppLogger.log(
+                '⏸️ VideoControllerManager: Paused video at index $index');
+          }
         } catch (e) {
           AppLogger.log(
-              '❌ VideoControllerManager: Error pausing video at index $index: $e');
+              '⚠️ VideoControllerManager: Error handling controller at index $index: $e');
         }
       }
     }
