@@ -117,6 +117,7 @@ if (assetLinksPackageName && assetLinksFingerprints.length > 0) {
 
 // Middleware
 app.use(compression()); // Enable gzip compression
+app.use(express.static(path.join(__dirname, 'public'))); // Serve static files from public
 app.use('/.well-known', express.static(path.join(__dirname, 'public/.well-known')))
 // Rate Limiter Imports
 import { globalLimiter, apiLimiter } from './middleware/rateLimiter.js';
@@ -144,6 +145,7 @@ app.use(cors({
       'http://127.0.0.1:8080', // Flutter web default port
       /^http:\/\/127\.0\.0\.1:\d+$/, // Any 127.0.0.1 port (for Flutter web)
       'http://192.168.0.184:5001', // Local development (LAN)
+      'http:/192.168.0.187:5001', // Local development (User Laptop)
       'http://192.168.0.198:5001', // Local development (LAN)
       /^http:\/\/192\.168\.\d+\.\d+:\d+$/, // Any LAN IP (for mobile devices)
       'http://10.0.2.2:5001', // Android emulator
@@ -252,6 +254,18 @@ app.get("/app-ads.txt", (req, res) => {
   res.sendFile(path.join(__dirname, "app-ads.txt"));
 });
 
+// Serve the production APK
+app.get('/download/vayu-latest.apk', (req, res) => {
+  const apkPath = path.join(__dirname, 'public/download/app-release.apk');
+  res.download(apkPath, 'vayu-latest.apk', (err) => {
+    if (err) {
+      if (!res.headersSent) {
+        res.status(404).send('APK not found. Please try again later.');
+      }
+    }
+  });
+});
+
 
 // API Routes
 // Note: /api/app-config is excluded from API versioning as it's needed for version detection
@@ -282,95 +296,10 @@ import { verifyToken, passiveVerifyToken } from './utils/verifytoken.js';
 // This ensures req.user is populated so we can limit by User ID instead of IP
 app.use('/api', apiVersioning, passiveVerifyToken, apiLimiter, apiRouter);
 
-// **FIX: Root route handler for referral links: https://snehayog.site/?ref=CODE
-// This handles referral links and tries to open the app
+// **FIX: Root route handler - serves the landing page for APK distribution
 app.get('/', (req, res) => {
-  console.log('🔗 Root route hit:', req.url, 'Query:', req.query);
-  const refCode = req.query.ref || '';
-  const appSchemeUrl = refCode
-    ? `snehayog://video/?ref=${refCode}`
-    : 'snehayog://';
-  const webUrl = refCode
-    ? `https://snehayog.site/?ref=${refCode}`
-    : 'https://snehayog.site';
-  const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.snehayog.app';
-
-  const html = `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Join Vayu - Create • Video • Earn</title>
-  <meta name="robots" content="noindex" />
-  <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; padding: 24px; background:#fff; color:#111; }
-    .card { max-width: 560px; margin: 0 auto; border:1px solid #eee; border-radius: 12px; padding: 20px; box-shadow: 0 8px 24px rgba(0,0,0,.06); text-align: center; }
-    h1 { font-size: 24px; margin: 0 0 8px; color: #2563eb; }
-    p { margin: 8px 0 16px; color:#444; font-size: 16px; }
-    .actions { display:flex; gap:12px; flex-wrap:wrap; justify-content: center; margin-top: 24px; }
-    .btn { padding: 14px 24px; border-radius: 10px; text-decoration:none; display:inline-block; font-weight:600; font-size: 16px; }
-    .primary { background:#2563eb; color:#fff; }
-    .primary:hover { background:#1d4ed8; }
-    .secondary { background:#f3f4f6; color:#111; }
-    .secondary:hover { background:#e5e7eb; }
-    .features { margin-top: 24px; text-align: left; }
-    .feature { padding: 12px 0; border-bottom: 1px solid #eee; }
-    .feature:last-child { border-bottom: none; }
-    .feature strong { color: #2563eb; }
-  </style>
-  <script>
-    // Try deep link first; after a short delay, fall back to Play Store
-    function openApp() {
-      const now = Date.now();
-      const timeout = setTimeout(function() {
-        // If the app didn't take focus within ~1s, go to Play Store
-        if (Date.now() - now < 1600) {
-          window.location.href = '${playStoreUrl}';
-        }
-      }, 1200);
-      window.location.href = '${appSchemeUrl}';
-    }
-    document.addEventListener('DOMContentLoaded', function() {
-      // Auto-attempt deep link on load for convenience
-      openApp();
-    });
-  </script>
-  <link rel="canonical" href="${webUrl}" />
-  <meta property="og:title" content="Join Vayu - Create • Video • Earn" />
-  <meta property="og:description" content="Upload your videos and start earning from day one! Only First 1000 early creators — grab 80% ad revenue" />
-  <meta property="og:type" content="website" />
-  <meta property="og:url" content="${webUrl}" />
-  <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="Join Vayu - Create • Video • Earn" />
-  <meta name="theme-color" content="#2563eb" />
-  <meta http-equiv="refresh" content="0; url=${appSchemeUrl}" />
-  ${refCode ? `<meta http-equiv="Refresh" content="0; url=intent://?ref=${refCode}#Intent;scheme=snehayog;package=com.snehayog.app;end">` : ''}
-</head>
-<body>
-  <div class="card">
-    <h1>🚀 Welcome to Vayu</h1>
-    <p>Create • Video • Earn</p>
-    ${refCode ? '<p style="color: #16a34a; font-weight: 600;">🎁 Referral link detected!</p>' : ''}
-    <p>Upload your videos and start earning from day one!</p>
-    <p><strong>Only First 1000 early creators — grab 80% ad revenue</strong></p>
-    <p style="font-size: 14px; color: #666;">No 1000 subs or long watch hours required</p>
-    <div class="features">
-      <div class="feature"><strong>✓</strong> Upload videos instantly</div>
-      <div class="feature"><strong>✓</strong> Earn from day one</div>
-      <div class="feature"><strong>✓</strong> 80% ad revenue share</div>
-      <div class="feature"><strong>✓</strong> No minimum requirements</div>
-    </div>
-    <div class="actions">
-      <a class="btn primary" href="${appSchemeUrl}" onclick="openApp(); return false;">Open in App</a>
-      <a class="btn secondary" href="${playStoreUrl}">Get the App</a>
-    </div>
-    ${refCode ? `<p class="hint" style="font-size: 12px; color:#666; margin-top:12px;">Referral Code: ${refCode}</p>` : ''}
-  </div>
-</body>
-</html>`;
-
-  console.log('✅ Root route: Sending HTML response');
-  res.status(200).send(html);
+  console.log('🔗 Root route hit - Serving Landing Page:', req.url);
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Lightweight web fallback for shared links: https://snehayog.site/video/:id
@@ -533,7 +462,6 @@ const startServer = async () => {
     console.log(`   PORT: ${PORT} (from ${process.env.PORT ? 'process.env.PORT' : 'fallback'})`);
     console.log(`   HOST: ${HOST}`);
     console.log(`   NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`   Railway: ${process.env.RAILWAY_ENVIRONMENT ? 'YES' : 'NO'}`);
 
     // **FIX: Start HTTP server FIRST so healthcheck works immediately**
     // Database connection will happen in background (non-blocking)
@@ -541,13 +469,6 @@ const startServer = async () => {
       const addr = server.address();
       console.log(`🚀 Server running on ${addr.address}:${addr.port}`);
       console.log('✅ Server is ready to accept connections');
-
-      // Log Railway-specific info
-      if (process.env.RAILWAY_ENVIRONMENT) {
-        console.log(`🚂 Railway environment detected`);
-        console.log(`🔌 Railway will forward traffic to: ${HOST}:${PORT}`);
-      }
-
       console.log('🔌 Database connecting in background...');
     });
 

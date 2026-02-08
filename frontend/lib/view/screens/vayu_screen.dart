@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:vayu/model/video_model.dart';
 import 'package:vayu/services/video_service.dart';
-import 'package:vayu/view/screens/video_screen.dart';
+import 'package:vayu/view/screens/vayu_long_form_player_screen.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/view/search/video_creator_search_delegate.dart';
 import 'package:vayu/core/theme/app_theme.dart';
@@ -119,11 +119,9 @@ class _VayuScreenState extends State<VayuScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => VideoScreen(
-            initialVideos: _videos,
-            initialIndex: index,
-            videoType: 'vayu', // **FIX: Enforce Long Form videos in feed**
-            isFullScreen: true, // **NEW: Full-screen mode**
+          builder: (context) => VayuLongFormPlayerScreen(
+            video: _videos[index],
+            relatedVideos: _videos,
           ),
         ),
       );
@@ -176,17 +174,17 @@ class _VayuScreenState extends State<VayuScreen> {
         title: Row(
           children: [
             Image.asset(
-              'assets/icons/app_icon.png', // Assuming app icon exists
+              'assets/icons/app_icon.png',
               height: 24,
               errorBuilder: (_, __, ___) =>
-                  const Icon(Icons.play_circle_fill, color: Colors.red),
+                  const Icon(Icons.play_circle_fill, color: AppTheme.primary),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppTheme.spacing2),
             Text(
               'Vayu',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              style: AppTheme.displaySmall.copyWith(
                 color: AppTheme.textInverse,
-                fontWeight: FontWeight.bold,
+                fontWeight: AppTheme.weightBold,
                 letterSpacing: -0.5,
               ),
             ),
@@ -194,7 +192,7 @@ class _VayuScreenState extends State<VayuScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.search, color: Colors.white),
+            icon: const Icon(Icons.search, color: AppTheme.textInverse),
             onPressed: () {
               showSearch(
                 context: context,
@@ -202,7 +200,7 @@ class _VayuScreenState extends State<VayuScreen> {
               );
             },
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppTheme.spacing2),
         ],
       ),
       body: _buildBody(),
@@ -211,7 +209,7 @@ class _VayuScreenState extends State<VayuScreen> {
 
   Widget _buildBody() {
     if (_isLoading && _videos.isEmpty) {
-      return _buildShimmerList(); // Changed to List shimmer
+      return _buildShimmerList();
     }
 
     if (_errorMessage != null && _videos.isEmpty) {
@@ -219,20 +217,21 @@ class _VayuScreenState extends State<VayuScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.wifi_off, color: Colors.white54, size: 60),
-            const SizedBox(height: 16),
+            Icon(Icons.wifi_off, color: AppTheme.textInverse.withOpacity(0.5), size: 60),
+            const SizedBox(height: AppTheme.spacing4),
             Text(
               _errorMessage!,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              style: AppTheme.bodyMedium.copyWith(
                 color: AppTheme.textInverse.withOpacity(0.7),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: AppTheme.spacing6),
             OutlinedButton(
               onPressed: () => _loadVideos(refresh: true),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppTheme.textInverse,
                 side: BorderSide(color: AppTheme.textInverse.withOpacity(0.3)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusMedium)),
               ),
               child: const Text('Try Again'),
             ),
@@ -246,28 +245,29 @@ class _VayuScreenState extends State<VayuScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.video_library_outlined,
-                color: Colors.white24, size: 80),
-            const SizedBox(height: 24),
+            Icon(Icons.video_library_outlined,
+                color: AppTheme.textInverse.withOpacity(0.1), size: 80),
+            const SizedBox(height: AppTheme.spacing6),
             Text(
               'No long-form videos yet',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              style: AppTheme.headlineLarge.copyWith(
                   color: AppTheme.textInverse,
-                  fontWeight: FontWeight.bold),
+                  fontWeight: AppTheme.weightBold),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppTheme.spacing2),
             Text(
               'Upload videos longer than 2 mins to see them here',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              style: AppTheme.bodyMedium.copyWith(
                 color: AppTheme.textInverse.withOpacity(0.54),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: AppTheme.spacing6),
             ElevatedButton(
               onPressed: () => _loadVideos(refresh: true),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.textInverse,
                 foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusXXLarge)),
               ),
               child: const Text('Refresh'),
             ),
@@ -278,8 +278,8 @@ class _VayuScreenState extends State<VayuScreen> {
 
     return RefreshIndicator(
       onRefresh: () => _loadVideos(refresh: true),
-      color: Colors.red,
-      backgroundColor: Colors.white,
+      color: Colors.white,
+      backgroundColor: AppTheme.primary,
       child: ListView.builder(
         controller: _scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
@@ -287,9 +287,9 @@ class _VayuScreenState extends State<VayuScreen> {
         itemBuilder: (context, index) {
           if (index >= _videos.length) {
             return const Padding(
-              padding: EdgeInsets.all(16.0),
+              padding: EdgeInsets.all(AppTheme.spacing4),
               child:
-                  Center(child: CircularProgressIndicator(color: Colors.red)),
+                  Center(child: CircularProgressIndicator(color: AppTheme.primary)),
             );
           }
           return _buildVideoCard(index);
@@ -300,9 +300,6 @@ class _VayuScreenState extends State<VayuScreen> {
 
   Widget _buildVideoCard(int index) {
     final video = _videos[index];
-
-    print(
-        'BuildVideoCard: ${video.videoName} Duration: ${video.duration.inSeconds}s');
 
     return InkWell(
       onTap: () => _navigateToVideo(index),
@@ -329,20 +326,21 @@ class _VayuScreenState extends State<VayuScreen> {
               // Duration Badge
               if (video.duration.inSeconds > 0)
                 Positioned(
-                  bottom: 8,
-                  right: 8,
+                  bottom: AppTheme.spacing2,
+                  right: AppTheme.spacing2,
                   child: Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                     decoration: BoxDecoration(
                       color: Colors.black.withOpacity(0.85),
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
                     ),
                     child: Text(
                       _formatDuration(video.duration),
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      style: AppTheme.labelSmall.copyWith(
                         color: AppTheme.textInverse,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: AppTheme.weightBold,
+                        fontSize: 10,
                       ),
                     ),
                   ),
@@ -352,22 +350,22 @@ class _VayuScreenState extends State<VayuScreen> {
 
           // 2. Info Section (Below Thumbnail)
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(AppTheme.spacing3),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Avatar
                 CircleAvatar(
                   radius: 18,
-                  backgroundColor: Colors.grey[800],
+                  backgroundColor: Colors.grey[900],
                   backgroundImage: video.uploader.profilePic.isNotEmpty
                       ? CachedNetworkImageProvider(video.uploader.profilePic)
                       : null,
                   child: video.uploader.profilePic.isEmpty
-                      ? Icon(Icons.person, size: 20, color: AppTheme.textInverse)
+                      ? const Icon(Icons.person, size: 20, color: AppTheme.textInverse)
                       : null,
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: AppTheme.spacing3),
                 // Text Info
                 Expanded(
                   child: Column(
@@ -378,19 +376,19 @@ class _VayuScreenState extends State<VayuScreen> {
                         video.videoName,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        style: AppTheme.bodyLarge.copyWith(
                           color: AppTheme.textInverse,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: AppTheme.weightSemiBold,
                           height: 1.2,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: AppTheme.spacing1),
                       // Meta: Channel • Views • Time
                       Text(
                         '${video.uploader.name} • ${_formatViews(video.views)} • ${_formatTimeAgo(video.uploadedAt)}',
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        style: AppTheme.bodySmall.copyWith(
                           color: AppTheme.textInverse.withOpacity(0.54),
                           height: 1.3,
                         ),
@@ -409,8 +407,7 @@ class _VayuScreenState extends State<VayuScreen> {
               ],
             ),
           ),
-          // Divider between videos (optional, or just spacing)
-          // const Divider(color: Colors.white10, height: 1),
+          const SizedBox(height: AppTheme.spacing1),
         ],
       ),
     );
@@ -431,11 +428,11 @@ class _VayuScreenState extends State<VayuScreen> {
           child: Container(color: Colors.grey[900]),
         ),
         Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(AppTheme.spacing3),
           child: Row(
             children: [
               const CircleAvatar(radius: 18, backgroundColor: Colors.white10),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppTheme.spacing3),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -444,7 +441,7 @@ class _VayuScreenState extends State<VayuScreen> {
                         height: 14,
                         width: double.infinity,
                         color: Colors.white10),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: AppTheme.spacing2),
                     Container(height: 12, width: 200, color: Colors.white10),
                   ],
                 ),

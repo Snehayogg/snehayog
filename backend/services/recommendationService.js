@@ -1,6 +1,11 @@
 import Video from '../models/Video.js';
+import User from '../models/User.js';
+import AdImpression from '../models/AdImpression.js';
 import WatchHistory from '../models/WatchHistory.js';
 import aiSemanticService from './aiSemanticService.js';
+import redisService from './redisService.js';
+import { AD_CONFIG } from '../constants/index.js';
+import mongoose from 'mongoose';
 
 /**
  * Balanced Recommendation System Service
@@ -80,47 +85,39 @@ class RecommendationService {
   }
 
   /**
-   * Calculate Recency Boost
-   * Balanced approach: Newer videos get a slight boost, but it doesn't dominate
-   * More balanced than before to ensure older quality content still gets shown
+   * Calculate Freshness Boost
+   * Gradually decays over 48 hours for a smooth professional experience.
    * 
    * @param {Date} uploadedAt - Video upload date
-   * @returns {Number} Recency boost multiplier (typically 0.7 to 1.0)
+   * @returns {Number} Freshness boost (adds to base score)
    */
-  static calculateRecencyBoost(uploadedAt) {
-    if (!uploadedAt) return 0.7; // Default reasonable boost for missing date
-
+  static calculateFreshnessBoost(uploadedAt) {
+    if (!uploadedAt) return 0;
+    
     const now = new Date();
     const uploadDate = new Date(uploadedAt);
-    const ageInDays = (now - uploadDate) / (1000 * 60 * 60 * 24);
+    const ageInHours = (now - uploadDate) / (1000 * 60 * 60);
 
-    // More balanced formula: 0.7 + 0.3 / (1 + ageInDays * 0.05)
-    // New content (0 days) → 1.0 boost (slight advantage)
-    // 10 days old → ~0.9 boost
-    // 30 days old → ~0.83 boost
-    // 90 days old → ~0.76 boost
-    // 180 days old → ~0.73 boost
-    // Very old content → ~0.7 boost (still competitive, not penalized too much)
-    // This ensures fresh content is discovered but doesn't completely hide older quality content
-    const recencyBoost = 0.7 + (0.3 / (1 + ageInDays * 0.05));
+    if (ageInHours < 0) return 3.0; // Future-proof
+    if (ageInHours > 48) return 0; // No freshness boost after 48h
 
-    return Math.max(recencyBoost, 0.7); // Minimum 0.7 boost (more balanced)
+    // Linear decay from 3.0 to 0 over 48 hours
+    return 3.0 * (1 - (ageInHours / 48));
   }
 
   /**
-   * Calculate Final Recommendation Score
-   * Combines all components with proper weights
-   * 
-   * @param {Object} videoData - Video data object
-   * @param {Number} videoData.totalWatchTime - Total watch time in seconds
-   * @param {Number} videoData.duration - Video duration in seconds
-   * @param {Number} videoData.likes - Total likes
-   * @param {Number} videoData.comments - Total comments (array length or count)
-   * @param {Number} videoData.shares - Total shares
-   * @param {Number} videoData.views - Total views
-   * @param {Date} videoData.uploadedAt - Upload date
-   * @returns {Number} Final score (higher is better)
+   * Calculate Recency Boost
+   * Long-term multiplier that keeps older quality content competitive.
    */
+  static calculateRecencyBoost(uploadedAt) {
+    if (!uploadedAt) return 0.7;
+    const now = new Date();
+    const uploadDate = new Date(uploadedAt);
+    const ageInDays = (now - uploadDate) / (1000 * 60 * 60 * 24);
+    const recencyBoost = 0.7 + (0.3 / (1 + ageInDays * 0.05));
+    return Math.max(recencyBoost, 0.7);
+  }
+
   static calculateFinalScore(videoData) {
     const {
       totalWatchTime = 0,
@@ -132,21 +129,55 @@ class RecommendationService {
       uploadedAt
     } = videoData;
 
-    // Get comment count (handle both array and number)
     const commentCount = Array.isArray(comments) ? comments.length : (comments || 0);
 
-    // Calculate component scores
     const watchScore = this.calculateWatchScore(totalWatchTime, duration);
     const engagementScore = this.calculateEngagementScore(likes, commentCount, views);
     const shareScore = this.calculateShareScore(shares, views);
     const recencyBoost = this.calculateRecencyBoost(uploadedAt);
 
-    // Final score formula:
-    // 60% watch score + 20% engagement + 20% shares, then multiply by recency boost
+    // Quality Base (0-1.0)
     const baseScore = 0.6 * watchScore + 0.2 * engagementScore + 0.2 * shareScore;
-    const finalScore = baseScore * recencyBoost;
+    
+    // Decaying Freshness Boost (max 3.0)
+    const freshnessBoost = this.calculateFreshnessBoost(uploadedAt);
 
-    return Math.max(finalScore, 0); // Ensure non-negative
+    const finalScore = (baseScore + freshnessBoost) * recencyBoost;
+
+    return Math.max(finalScore, 0.01); 
+  }
+
+  /**
+   * Weighted Shuffle (Roulette Selection)
+   * Prevents the same creator block by picking based on probability.
+   */
+  static weightedShuffle(videos, count) {
+    if (!videos || videos.length === 0) return [];
+    
+    let result = [];
+    let pool = [...videos];
+    const targetCount = Math.min(count, pool.length);
+
+    pool.forEach(v => {
+      v.weight = Math.pow(v.finalScore || 0.1, 1.5);
+    });
+
+    for (let i = 0; i < targetCount; i++) {
+        let totalWeight = pool.reduce((sum, v) => sum + v.weight, 0);
+        let random = Math.random() * totalWeight;
+        let runningSum = 0;
+
+        for (let j = 0; j < pool.length; j++) {
+            runningSum += pool[j].weight;
+            if (random <= runningSum) {
+                result.push(pool[j]);
+                pool.splice(j, 1);
+                break;
+            }
+        }
+    }
+
+    return result;
   }
 
   /**
@@ -232,112 +263,46 @@ class RecommendationService {
    * @param {Number} options.minCreatorSpacing - Minimum videos between same creator (default: 2)
    * @returns {Array} Ordered array of videos with creator diversity
    */
+  /**
+   * Calculate diversity-aware feed ordering
+   * Enforces strict spacing between same creator videos.
+   */
   static orderFeedWithDiversity(videos, options = {}) {
     const {
-      randomness = 0.15, // 15% controlled randomness
-      minCreatorSpacing = 2 // Minimum 2 videos between same creator
+      minCreatorSpacing = 3 
     } = options;
 
     if (!videos || videos.length === 0) return [];
 
-    // Create a copy to avoid mutating original
-    let remaining = videos.map((v, idx) => ({
-      ...v,
-      originalIndex: idx
-    }));
-
+    let remaining = [...videos];
     const ordered = [];
-    const creatorLastPositions = new Map(); // Track last position of each creator
+    const creatorLastPositions = new Map();
     let position = 0;
 
     while (remaining.length > 0) {
-      // Filter candidates that can be placed at current position
       const candidates = remaining.filter(video => {
-        const creatorId = video.uploader?._id?.toString() ||
-          video.uploader?.googleId?.toString() ||
-          video.uploader?.id?.toString() ||
-          'unknown';
-        const lastPosition = creatorLastPositions.get(creatorId);
-
-        // Check spacing requirement
-        if (lastPosition !== undefined) {
-          const spacing = position - lastPosition - 1;
-          if (spacing < minCreatorSpacing) {
-            return false;
-          }
-        }
-        return true;
+        const creatorId = video.uploader?._id?.toString() || video.uploader?.id?.toString() || video.uploader?.toString() || 'unknown';
+        const lastPos = creatorLastPositions.get(creatorId);
+        if (lastPos === undefined) return true;
+        return (position - lastPos - 1) >= minCreatorSpacing;
       });
 
       let selected;
-
-      if (candidates.length === 0) {
-        // No candidates meet spacing requirement, relax constraint and take best available
-        // This prevents infinite loops when same creator has many videos
-        const relaxedCandidates = remaining.filter(video => {
-          const creatorId = video.uploader?._id?.toString() ||
-            video.uploader?.googleId?.toString() ||
-            video.uploader?.id?.toString() ||
-            'unknown';
-          const lastPosition = creatorLastPositions.get(creatorId);
-          return lastPosition === undefined || (position - lastPosition - 1) >= 1;
-        });
-
-        if (relaxedCandidates.length > 0) {
-          candidates.push(...relaxedCandidates);
-        } else {
-          // Still none? Just take the first remaining video
-          selected = remaining[0];
-        }
-      }
-
-      if (!selected && candidates.length > 0) {
-        // Score-based selection with controlled randomness
-        candidates.forEach(candidate => {
-          const baseScore = candidate.finalScore || 0;
-          const randomAdjustment = (Math.random() - 0.5) * randomness;
-          candidate.adjustedScore = baseScore * (1 + randomAdjustment);
-        });
-
-        // Sort by adjusted score (descending)
-        candidates.sort((a, b) => {
-          const scoreDiff = b.adjustedScore - a.adjustedScore;
-          if (Math.abs(scoreDiff) > 0.001) {
-            return scoreDiff;
-          }
-          // Tiebreaker: add more randomness
-          return Math.random() - 0.5;
-        });
-
+      if (candidates.length > 0) {
         selected = candidates[0];
-      }
-
-      if (!selected) {
+      } else {
         selected = remaining[0];
       }
 
-      // Add selected video to ordered list
       ordered.push(selected);
-
-      // Update creator position tracking
-      const creatorId = selected.uploader?._id?.toString() ||
-        selected.uploader?.googleId?.toString() ||
-        selected.uploader?.id?.toString() ||
-        'unknown';
+      const creatorId = selected.uploader?._id?.toString() || selected.uploader?.id?.toString() || selected.uploader?.toString() || 'unknown';
       creatorLastPositions.set(creatorId, position);
-
-      // Remove from remaining
-      remaining = remaining.filter(v => {
-        const vId = v._id?.toString() || v._id;
-        const sId = selected._id?.toString() || selected._id;
-        return vId !== sId;
-      });
-
+      
+      remaining = remaining.filter(v => (v._id?.toString() || v._id) !== (selected._id?.toString() || selected._id));
       position++;
     }
 
-    // Remove temporary properties
-    return ordered.map(({ originalIndex, adjustedScore, ...video }) => video);
+    return ordered;
   }
 
   /**
@@ -781,7 +746,159 @@ class RecommendationService {
       .limit(limit)
       .lean();
   }
+
+  /**
+   * Calculate Global Creator Rank based on current month earnings
+   * @param {String} uploaderId - MongoDB ObjectId of the creator
+   * @returns {Promise<Number>} - Rank (1-based), or 0 if not found
+   */
+  static async getGlobalCreatorRank(uploaderId) {
+    if (!uploaderId) return 0;
+    
+    const cacheKey = 'global_creator_ranks';
+    
+    try {
+      // 1. Try Cache
+      const cachedRanks = await redisService.get(cacheKey);
+      if (cachedRanks && cachedRanks[uploaderId]) {
+        return cachedRanks[uploaderId];
+      }
+
+      // 2. Calculate Ranks
+      const now = new Date();
+      const startOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
+      
+      const stats = await AdImpression.aggregate([
+        { 
+          $match: { 
+            isViewed: true, 
+            timestamp: { $gte: startOfMonth } 
+          } 
+        },
+        {
+          $group: {
+            _id: { creator: '$creatorId', adType: '$adType' },
+            totalViews: { 
+              $sum: { $cond: [{ $gt: ['$viewCount', 0] }, '$viewCount', 1] } 
+            }
+          }
+        },
+        {
+          $group: {
+            _id: '$_id.creator',
+            bannerViews: {
+              $sum: { $cond: [{ $eq: ['$_id.adType', 'banner'] }, '$totalViews', 0] }
+            },
+            carouselViews: {
+              $sum: { $cond: [{ $eq: ['$_id.adType', 'carousel'] }, '$totalViews', 0] }
+            }
+          }
+        }
+      ]);
+
+      const bannerCpm = AD_CONFIG?.BANNER_CPM ?? 10;
+      const carouselCpm = AD_CONFIG?.DEFAULT_CPM ?? 30;
+      const creatorShare = AD_CONFIG?.CREATOR_REVENUE_SHARE ?? 0.8;
+
+      const rankedList = stats.map(s => {
+        const earnings = (
+          (s.bannerViews / 1000) * bannerCpm + 
+          (s.carouselViews / 1000) * carouselCpm
+        ) * creatorShare;
+        return { id: s._id.toString(), earnings };
+      }).sort((a, b) => b.earnings - a.earnings);
+
+      const rankMap = {};
+      rankedList.forEach((item, index) => {
+        rankMap[item.id] = index + 1;
+      });
+
+      // Cache for 1 hour
+      await redisService.set(cacheKey, rankMap, 3600);
+      
+      return rankMap[uploaderId.toString()] || 0;
+    } catch (error) {
+      console.error('❌ Error getting global creator rank:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Get Global Leaderboard of top creators
+   * @param {Number} limit - Number of creators to return (default: 20)
+   * @returns {Promise<Array>} - List of creators with rank and metadata
+   */
+  static async getGlobalLeaderboard(limit = 20) {
+    const cacheKey = 'global_leaderboard_list';
+    
+    try {
+      // 1. Try Cache
+      const cached = await redisService.get(cacheKey);
+      if (cached) return cached.slice(0, limit);
+
+      // 2. Calculate Ranks (Reusing logic)
+      const now = new Date();
+      const startOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
+      
+      const stats = await AdImpression.aggregate([
+        { $match: { isViewed: true, timestamp: { $gte: startOfMonth } } },
+        {
+          $group: {
+            _id: { creator: '$creatorId', adType: '$adType' },
+            totalViews: { $sum: { $cond: [{ $gt: ['$viewCount', 0] }, '$viewCount', 1] } }
+          }
+        },
+        {
+          $group: {
+            _id: '$_id.creator',
+            bannerViews: { $sum: { $cond: [{ $eq: ['$_id.adType', 'banner'] }, '$totalViews', 0] } },
+            carouselViews: { $sum: { $cond: [{ $eq: ['$_id.adType', 'carousel'] }, '$totalViews', 0] } }
+          }
+        }
+      ]);
+
+      const bannerCpm = AD_CONFIG?.BANNER_CPM ?? 10;
+      const carouselCpm = AD_CONFIG?.DEFAULT_CPM ?? 30;
+      const creatorShare = AD_CONFIG?.CREATOR_REVENUE_SHARE ?? 0.8;
+
+      const rankedList = stats.map(s => {
+        const earnings = ((s.bannerViews / 1000) * bannerCpm + (s.carouselViews / 1000) * carouselCpm) * creatorShare;
+        return { id: s._id.toString(), earnings };
+      }).sort((a, b) => b.earnings - a.earnings);
+
+      // 3. Fetch User Metadata for top creators
+      const topCreatorIds = rankedList.slice(0, 100).map(item => item.id);
+      const users = await User.find({ _id: { $in: topCreatorIds } })
+        .select('googleId name profilePic videos')
+        .lean();
+
+      const userMap = {};
+      users.forEach(u => { userMap[u._id.toString()] = u; });
+
+      const leaderboard = rankedList
+        .map((item, index) => {
+          const user = userMap[item.id];
+          if (!user) return null;
+          return {
+            rank: index + 1,
+            googleId: user.googleId,
+            name: user.name,
+            profilePic: user.profilePic,
+            videoCount: user.videos?.length || 0,
+            earnings: 0 // Masked for privacy
+          };
+        })
+        .filter(Boolean);
+
+      // Cache for 1 hour
+      await redisService.set(cacheKey, leaderboard, 3600);
+      
+      return leaderboard.slice(0, limit);
+    } catch (error) {
+      console.error('❌ Error getting global leaderboard:', error);
+      return [];
+    }
+  }
 }
 
 export default RecommendationService;
-

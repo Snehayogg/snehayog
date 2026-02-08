@@ -392,6 +392,12 @@
                 <div class="stat-number" id="dailyUploads">-</div>
                 <div class="stat-label">Daily Uploads</div>
             </div>
+
+            <div class="stat-card warning" onclick="document.getElementById('feedbackList').scrollIntoView({behavior: 'smooth'})" style="cursor: pointer;">
+                <div class="stat-icon">💬</div>
+                <div class="stat-number" id="unreadFeedback">-</div>
+                <div class="stat-label">Unread Feedback</div>
+            </div>
         </div>
 
         <div class="dashboard-section">
@@ -1528,6 +1534,10 @@
                 // Load recent payouts
                 await loadRecentPayouts();
 
+                // Load feedback automatically
+                await loadFeedback();
+                await loadFeedbackStats();
+
                 setLoading(false);
             } catch (error) {
                 console.error('Error refreshing data:', error);
@@ -1558,7 +1568,13 @@
                 if (platformStatsResponse && platformStatsResponse.ok) {
                     platformStats = await platformStatsResponse.json();
                     document.getElementById('totalVideos').textContent = formatNumber(platformStats.totalVideos || 0);
-                    document.getElementById('dailyUploads').textContent = formatNumber(platformStats.dailyUploadCount || 0);
+                    
+                    const dailyTotal = platformStats.dailyUploadCount || 0;
+                    const dailyVayu = platformStats.dailyVayuCount || 0;
+                    const dailyYog = platformStats.dailyYogCount || 0;
+                    
+                    document.getElementById('dailyUploads').textContent = 
+                        `${formatNumber(dailyTotal)} (Vayu: ${dailyVayu}, Yog: ${dailyYog})`;
                 }
 
                 // Revenue card: show *current month* creator earnings
@@ -1575,6 +1591,20 @@
                     formatCurrencyINR(currentMonthCreatorEarnings || 0);
             } catch (error) {
                 console.error('Error loading stats:', error);
+            }
+        }
+
+        async function loadFeedbackStats() {
+            try {
+                const response = await authorizedFetch(`${API_BASE}/admin/feedback/stats`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.stats) {
+                        document.getElementById('unreadFeedback').textContent = data.stats.unread || 0;
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading feedback stats:', error);
             }
         }
 

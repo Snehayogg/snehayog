@@ -80,34 +80,34 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   final Set<int> _autoAdvancedForIndex = {};
 
   // Controller pools
-  final Map<int, VideoPlayerController> _controllerPool = {};
-  final Map<int, bool> _controllerStates = {};
+  final Map<String, VideoPlayerController> _controllerPool = {};
+  final Map<String, bool> _controllerStates = {};
   final int _maxPoolSize = 7;
-  final Map<int, bool> _userPaused = {};
+  final Map<String, bool> _userPaused = {};
   // **OPTIMIZED: ValueNotifier for user paused state to avoid full rebuilds**
-  final Map<int, ValueNotifier<bool>> _userPausedVN = {};
+  final Map<String, ValueNotifier<bool>> _userPausedVN = {};
   
-  final Map<int, bool> _isBuffering = {};
-  final Set<int> _togglingVideos = {};
-  final Map<int, ValueNotifier<bool>> _isBufferingVN = {};
-  final Map<int, ValueNotifier<bool>> _isSlowConnectionVN = {};
-  final Map<int, Timer> _bufferingTimers = {};
+  final Map<String, bool> _isBuffering = {};
+  final Set<String> _togglingVideos = {};
+  final Map<String, ValueNotifier<bool>> _isBufferingVN = {};
+  final Map<String, ValueNotifier<bool>> _isSlowConnectionVN = {};
+  final Map<String, Timer> _bufferingTimers = {};
 
   // LRU tracking
-  final Map<int, DateTime> _lastAccessedLocal = {};
-  final Map<int, VoidCallback> _bufferingListeners = {};
-  final Map<int, VoidCallback> _videoEndListeners = {};
+  final Map<String, DateTime> _lastAccessedLocal = {};
+  final Map<String, VoidCallback> _bufferingListeners = {};
+  final Map<String, VoidCallback> _videoEndListeners = {};
   // **NEW: Track Error Listeners explicitly for cleanup**
-  final Map<int, VoidCallback> _errorListeners = {};
+  final Map<String, VoidCallback> _errorListeners = {};
 
 
   // Resume tracking
-  final Map<int, bool> _wasPlayingBeforeNavigation = {};
+  final Map<String, bool> _wasPlayingBeforeNavigation = {};
 
   // Preloading state
-  final Set<int> _preloadedVideos = {};
-  final Set<int> _loadingVideos = {};
-  final Set<int> _initializingVideos = {};
+  final Set<String> _preloadedVideos = {};
+  final Set<String> _loadingVideos = {};
+  final Set<String> _initializingVideos = {};
   // **OPTIMIZED: Reduced to 1 for maximum performance**
   // Focus all resources on current video for smoothest playback
   int get _maxConcurrentInitializations => 1;
@@ -117,16 +117,16 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   int _consecutiveSmoothPlays = 0;
   
   
-  final Map<int, int> _preloadRetryCount = {};
+  final Map<String, int> _preloadRetryCount = {};
   Timer? _preloadTimer;
   Timer? _pageChangeTimer;
   Timer? _preloadDebounceTimer;
-  // **NEW: Individual debounce timers for each video index**
-  final Map<int, Timer> _preloadDebounceTimers = {};
+  // **NEW: Individual debounce timers for each video ID**
+  final Map<String, Timer> _preloadDebounceTimers = {};
 
   // First-frame tracking
-  final Map<int, ValueNotifier<bool>> _firstFrameReady = {};
-  final Map<int, ValueNotifier<bool>> _forceMountPlayer = {};
+  final Map<String, ValueNotifier<bool>> _firstFrameReady = {};
+  final Map<String, ValueNotifier<bool>> _forceMountPlayer = {};
 
   // Retained controllers for refresh
 
@@ -150,7 +150,7 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
 
   // **NEW: Video Error Tracking**
   // Stores error messages for videos that failed to load or play
-  final Map<int, String> _videoErrors = {};
+  final Map<String, String> _videoErrors = {};
 
   // Playback StateMANAGEMENT: Limit videos in memory to prevent memory issues**
   // Keep max 300 videos (15 pages) - removes old videos automatically
@@ -168,7 +168,7 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   List<CarouselAdModel> get _carouselAds => _carouselAdsVN.value;
   set _carouselAds(List<CarouselAdModel> value) => _carouselAdsVN.value = value;
 
-  final Map<int, ValueNotifier<int>> _currentHorizontalPage = {};
+  final Map<String, ValueNotifier<int>> _currentHorizontalPage = {};
 
   // Screen visibility
   bool _isScreenVisible =
@@ -176,7 +176,7 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   bool _lifecyclePaused = false;
 
   // Double tap animations
-  final Map<int, ValueNotifier<bool>> _showHeartAnimation = {};
+  final Map<String, ValueNotifier<bool>> _showHeartAnimation = {};
 
   // **NEW: Granular Like State Notifiers (Keyed by Video ID)**
   final Map<String, ValueNotifier<bool>> _isLikedVN = {};

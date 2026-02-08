@@ -12,9 +12,9 @@ import mongoose from 'mongoose';
  */
 class FeedQueueService {
   constructor() {
-    this.QUEUE_SIZE_LIMIT = 100; // Max items in Redis list per user (Reduced from 100 for freshness)
-    this.REFILL_THRESHOLD = 40;  // Refill when below this (Buffered for speed)
-    this.BATCH_SIZE = 50;      // Generate this many videos at once
+    this.QUEUE_SIZE_LIMIT = 60;  // Max items in Redis list per user (Reduced for extreme freshness)
+    this.REFILL_THRESHOLD = 40;  // Refill when below this (Buffered for safety)
+    this.BATCH_SIZE = 50;        // Generate this many videos at once
   }
 
 
@@ -23,6 +23,23 @@ class FeedQueueService {
    */
   getQueueKey(userId, videoType = 'yog') {
     return `user:feed:${userId}:${videoType}`;
+  }
+
+  /**
+   * Clear the user's feed queue (for refresh)
+   */
+  async clearQueue(userId, videoType = 'yog') {
+    const queueKey = this.getQueueKey(userId, videoType);
+    if (!redisService.getConnectionStatus()) return false;
+    
+    try {
+      await redisService.del(queueKey);
+      console.log(`🧹 FeedQueue: Cleared queue for ${userId} (${videoType})`);
+      return true;
+    } catch (e) {
+      console.error(`⚠️ FeedQueue: Clear queue failed for ${userId}:`, e.message);
+      return false;
+    }
   }
 
   /**
@@ -237,8 +254,8 @@ class FeedQueueService {
       // 2. Iterative Batch Search (The "Next 300" Strategy)
       let freshVideos = [];
       let skip = 0;
-      const BATCH_SIZE_QUERY = 300;
-      const MAX_PAGES = 10; 
+      const BATCH_SIZE_QUERY = 500; // Increased from 300 to find fresh content faster
+      const MAX_PAGES = 15;        // Increased from 10
       let pageCount = 0;
 
       while (freshVideos.length < this.BATCH_SIZE && pageCount < MAX_PAGES) {
@@ -248,7 +265,7 @@ class FeedQueueService {
 
           // Fetch Batch
           const candidates = await Video.find(candidateQuery)
-            .sort({ createdAt: -1 })
+            .sort({ finalScore: -1, createdAt: -1 })
             .skip(skip)
             .limit(BATCH_SIZE_QUERY)
             .select('_id uploader createdAt likes views shares score finalScore videoType videoHash seriesId episodeNumber') // Ensure all fields
@@ -298,39 +315,29 @@ class FeedQueueService {
       // 3. Fallback to LRU ONLY if Fresh Content is Exhausted
       if (freshVideos.length < this.BATCH_SIZE) {
           console.log(`❄️ Refill: Catalog Exhausted (Fresh: ${freshVideos.length} < Batch: ${this.BATCH_SIZE}). Triggering LRU Fallback.`);
-          
           const needed = this.BATCH_SIZE - freshVideos.length;
-          
-          // Get LRU Fallback (Videos watched longest ago)
-          // Pass empty exclusion list to allow repeats now that we are exhausted
           const lruIds = await this.getFallbackIds(userId, videoType, needed, []);
-          
           const lruVideos = await Video.find({ _id: { $in: lruIds } })
              .select('_id uploader createdAt likes views shares score finalScore videoType videoHash')
              .lean();
-             
           freshVideos.push(...lruVideos);
       }
 
-      // 4. Apply Diversity Ordering (No same creator back-to-back)
-      let uniqueCreatorVideos = [];
-      const creatorCounts = new Map();
-      const maxPerCreator = 2;
+      // 4. BATCH OPTIMIZATION: Reserve some slots for brand new videos (Discovery)
+      // Get all completed videos from last 24h as discovery candidates
+      const discoveryLimit = Math.floor(this.BATCH_SIZE * 0.2); // 20% discovery
+      const discoveryCandidates = freshVideos.filter(v => {
+        const ageInHours = (new Date() - new Date(v.createdAt)) / (1000 * 60 * 60);
+        return ageInHours < 24;
+      });
 
-      for (const video of freshVideos) {
-        if (!video || !video._id) continue;
-        const creatorId = video.uploader?.toString() || 'unknown';
-        const currentCount = creatorCounts.get(creatorId) || 0;
+      // 5. Professional Weighted Selection
+      // Shuffle the results based on their scores to break the recency block
+      const randomizedPool = RecommendationService.weightedShuffle(freshVideos, this.BATCH_SIZE);
 
-        if (currentCount < maxPerCreator) {
-          uniqueCreatorVideos.push(video);
-          creatorCounts.set(creatorId, currentCount + 1);
-        }
-      }
-
-      // Interleave
-      const orderedVideos = RecommendationService.orderFeedWithDiversity(uniqueCreatorVideos, {
-        minCreatorSpacing: 1
+      // 6. Apply Diversity Ordering (No same creator back-to-back)
+      const orderedVideos = RecommendationService.orderFeedWithDiversity(randomizedPool, {
+        minCreatorSpacing: 3 // Higher spacing for professional variety
       });
 
       // 5. Push to Redis
@@ -349,7 +356,7 @@ class FeedQueueService {
       if (toPushIds.length > 0) {
         await redisService.rPush(queueKey, toPushIds);
         await redisService.lTrim(queueKey, 0, this.QUEUE_SIZE_LIMIT - 1);
-        await redisService.expire(queueKey, 1800);
+        await redisService.expire(queueKey, 3600); // 1 Hour TTL
         console.log(`✅ FeedQueue: Pushed ${toPushIds.length} videos. Refill took ${Date.now() - start}ms`);
       } else {
         console.log(`⚠️ Refill: No videos to push after all steps.`);
@@ -374,12 +381,41 @@ class FeedQueueService {
     const excludeSet = new Set(excludedIds.map(id => id.toString()));
     const finalIds = [];
 
-    // **STRATEGY 1: LRU (Least Recently Watched)**
-    // If user is known, try to show their old favorites
-    if (userId && userId !== 'anon' && userId !== 'undefined') {
+    // **STRATEGY 1: Fresh/Top Discovery (Recent & High Score)**
+    // Instead of purely random, prioritize content the user hasn't seen
+    // but is either very NEW or has a high DISCOVERY SCORE.
+    let need = count - finalIds.length;
+    if (need > 0) {
+      try {
+        const matchStage = { 
+          processingStatus: 'completed',
+          _id: { $nin: [...Array.from(excludeSet), ...finalIds].map(id => {
+              try { return new mongoose.Types.ObjectId(id); } catch(e) { return null; }
+          }).filter(Boolean) }
+        };
+
+        if (videoType === 'vayu') matchStage.duration = { $gt: 120 };
+        else matchStage.duration = { $lte: 120 };
+
+        const discoveryVideos = await Video.find(matchStage)
+          .sort({ finalScore: -1, createdAt: -1 }) // Prioritize High Score (which includes Discovery Bonus) + Newest
+          .limit(need)
+          .select('_id')
+          .lean();
+        
+        if (discoveryVideos.length > 0) {
+           finalIds.push(...discoveryVideos.map(v => v._id.toString()));
+        }
+      } catch (err) {
+         console.error('❌ FeedQueue: Discovery Fallback Error:', err.message);
+      }
+    }
+
+    // **STRATEGY 2: LRU (Least Recently Watched)**
+    // If user is known, try to show their old favorites after fresh content is exhausted
+    need = count - finalIds.length;
+    if (need > 0 && userId && userId !== 'anon' && userId !== 'undefined') {
        try {
-          // Fetch from DB
-          // We look back reasonably far (e.g., 500 videos) to ensure variety
           const lruIds = await WatchHistory.getLeastRecentlyWatchedVideoIds(userId, 500);
           
           if (lruIds.length > 0) {
@@ -387,59 +423,49 @@ class FeedQueueService {
                 _id: { $in: lruIds }
              }).select('_id duration processingStatus').lean();
              
-             // Filter valid, matching type, AND NOT SEEN RECENTLY
              const validLruIds = rawVideos.filter(v => {
                 const isVayu = v.duration > 120;
                 const isYog = v.duration <= 120;
                 const typeMatch = (videoType === 'vayu' && isVayu) || (videoType !== 'vayu' && isYog);
-                const notExcluded = !excludeSet.has(v._id.toString());
+                const notExcluded = !excludeSet.has(v._id.toString()) && !finalIds.includes(v._id.toString());
                 return v.processingStatus === 'completed' && typeMatch && notExcluded;
              }).map(v => v._id.toString());
              
              if (validLruIds.length > 0) {
-                 // console.log(`↺ FeedQueue: Found ${validLruIds.length} LRU videos from a pool of 500`);
-                 // Shuffle the entire pool of candidate LRU videos to prevent fixed loops
                  const shuffled = validLruIds.sort(() => 0.5 - Math.random());
-                 finalIds.push(...shuffled.slice(0, count));
+                 finalIds.push(...shuffled.slice(0, need));
              }
           }
        } catch (err) {
           console.error('❌ FeedQueue: LRU Fallback Error:', err.message);
        }
     }
-    
-    // If we have enough LRU ids, return them
-    if (finalIds.length >= count) {
-      return finalIds.slice(0, count);
-    }
 
-    // **STRATEGY 2: Random Discovery (Safety Net)**
-    // Fill the remaining spots
-    const need = count - finalIds.length;
-    // console.log(`❄️ FeedQueue: Need ${need} more videos from Random Discovery`);
-    
-    try {
-      const matchStage = { 
-        processingStatus: 'completed',
-        _id: { $nin: [...Array.from(excludeSet), ...finalIds].map(id => {
-            try { return new mongoose.Types.ObjectId(id); } catch(e) { return null; }
-        }).filter(Boolean) }
-      };
+    // **STRATEGY 3: Random Discovery (Absolute Last Resort)**
+    need = count - finalIds.length;
+    if (need > 0) {
+      try {
+        const matchStage = { 
+            processingStatus: 'completed',
+            _id: { $nin: [...Array.from(excludeSet), ...finalIds].map(id => {
+                try { return new mongoose.Types.ObjectId(id); } catch(e) { return null; }
+            }).filter(Boolean) }
+        };
 
-      if (videoType === 'vayu') matchStage.duration = { $gt: 120 };
-      else matchStage.duration = { $lte: 120 };
+        if (videoType === 'vayu') matchStage.duration = { $gt: 120 };
+        else matchStage.duration = { $lte: 120 };
 
-      // Use Aggregation with $sample for random selection
-      const randomVideos = await Video.aggregate([
-        { $match: matchStage },
-        { $sample: { size: need } }
-      ]);
-      
-      if (randomVideos.length > 0) {
-         finalIds.push(...randomVideos.map(v => v._id.toString()));
+        const randomVideos = await Video.aggregate([
+          { $match: matchStage },
+          { $sample: { size: need } }
+        ]);
+        
+        if (randomVideos.length > 0) {
+           finalIds.push(...randomVideos.map(v => v._id.toString()));
+        }
+      } catch (err) {
+         console.error('❌ FeedQueue: Random Fallback Error:', err.message);
       }
-    } catch (err) {
-       console.error('❌ FeedQueue: Random Fallback Error:', err.message);
     }
     
     return finalIds;
@@ -511,7 +537,7 @@ class FeedQueueService {
       // 1. Removed .populate('comments.user') -> Massive speedup (don't need comment authors in feed)
       // 2. Added .select(...) -> Only fetch fields needed for feed display
       const dbDocs = await Video.find({ _id: { $in: missingIds } })
-        .select('videoUrl thumbnailUrl description uploader views likes shares comments likedBy duration processingStatus createdAt uploadedAt videoType videoHash videoName tags seriesId episodeNumber')
+        .select('videoUrl thumbnailUrl description uploader views likes shares comments likedBy duration processingStatus createdAt uploadedAt videoType videoHash videoName tags seriesId episodeNumber hlsMasterPlaylistUrl hlsPlaylistUrl isHLSEncoded lowQualityUrl mediumQualityUrl highQualityUrl preloadQualityUrl')
         .populate('uploader', 'name profilePic googleId username')
         .lean();
 
@@ -560,35 +586,42 @@ class FeedQueueService {
 
     if (seriesIds.size > 0) {
       try {
+        const sIds = Array.from(seriesIds);
+        
+        // **SPEEDUP: Use MGET from Redis for series episodes if available**
+        // (Optional: Implement series caching if latency persists)
+
         // Fetch all episodes for these series
         const allEpisodes = await Video.find({ 
-          seriesId: { $in: Array.from(seriesIds) },
+          seriesId: { $in: sIds },
           processingStatus: 'completed'
         })
         .select('_id videoName thumbnailUrl episodeNumber seriesId duration')
-        .sort({ episodeNumber: 1 })
+        .sort({ seriesId: 1, episodeNumber: 1 }) // Grouped by series for faster mapping
+        .limit(200) // Safety limit to prevent massive payload hangs
         .lean();
         
         // Group by seriesId
         const episodesMap = new Map();
         allEpisodes.forEach(ep => {
           if (!ep.seriesId) return;
-          const sId = ep.seriesId.toString(); // **FIX: Convert ObjectId to String for Map Key**
+          const sId = ep.seriesId.toString();
           
           if (!episodesMap.has(sId)) {
              episodesMap.set(sId, []);
           }
           
-          // Transform ObjectId to string immediately for frontend safety
-          if (ep._id) ep._id = ep._id.toString();
-          
-          episodesMap.get(sId).push(ep);
+          // Limit episodes per series for feed display (e.g. max 20)
+          if (episodesMap.get(sId).length < 20) {
+              if (ep._id) ep._id = ep._id.toString();
+              episodesMap.get(sId).push(ep);
+          }
         });
         
         // Attach episodes to videos
         finalVideos.forEach(v => {
            if (v.seriesId) {
-              const sId = v.seriesId.toString(); // **FIX: Lookup using String Key**
+              const sId = v.seriesId.toString();
               if (episodesMap.has(sId)) {
                  v.episodes = episodesMap.get(sId);
               }

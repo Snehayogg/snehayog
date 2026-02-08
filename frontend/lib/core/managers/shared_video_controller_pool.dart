@@ -26,13 +26,13 @@ class SharedVideoControllerPool {
   // **DYNAMIC CONFIG: Hard limit to prevent NO_MEMORY**
   // Android usually supports ~16 hardware decoders, but other apps/services might use them.
   // We stay well below this limit.
-  int _maxPoolSize = 5; 
+  int _maxPoolSize = 4; // **REDUCED: From 5 to 4 to provide more headroom for Android MediaCodec**
 
   /// **Configure pool based on device capabilities**
   void configurePool({required bool isLowEndDevice}) {
-    // High-end: 5 controllers (Current + Next 2 + Prev 2) - Balanced for smooth scroll
+    // High-end: 4 controllers (Current + Next + Prev + 1 extra) - Balanced for smooth scroll
     // Low-end: 3 controllers (Current + Next + Prev) - Minimal safety
-    _maxPoolSize = isLowEndDevice ? 3 : 5;
+    _maxPoolSize = isLowEndDevice ? 3 : 4;
     
     AppLogger.log(
       '📱 SharedPool Configured: Max $_maxPoolSize active controllers '
@@ -48,10 +48,12 @@ class SharedVideoControllerPool {
   /// **PROACTIVE CLEANUP: Ensure space exits BEFORE creating a new controller**
   /// Call this before `VideoPlayerController.networkUrl()` to prevent OOM.
   Future<void> makeRoomForNewController() async {
-     if (_controllerPool.length >= _maxPoolSize) {
-        // Evict oldest to make room for 1 new one
-        _evictLRUIfNeeded();
-     }
+    if (_controllerPool.length >= _maxPoolSize) {
+      // **PREEMPTIVE DISPOSAL: Be ruthless during fast scroll**
+      // Don't just evict one, evict until we are at least 1 below the limit
+      // to avoid fighting for decoders on every single swipe.
+      _evictLRUIfNeeded(forceRelease: true);
+    }
   }
 
   // **CACHE STATISTICS**
@@ -211,7 +213,7 @@ class SharedVideoControllerPool {
   }
 
   /// **LRU Eviction: Remove least recently used controllers**
-  void _evictLRUIfNeeded({String? excluding}) {
+  void _evictLRUIfNeeded({String? excluding, bool forceRelease = false}) {
     if (_controllerPool.length < _maxPoolSize) return;
 
     // Sort by last accessed time (oldest first)
@@ -219,9 +221,9 @@ class SharedVideoControllerPool {
       ..sort((a, b) => a.value.compareTo(b.value));
 
     // Calculate how many to remove
-    final toRemove = _controllerPool.length -
-        _maxPoolSize +
-        1; // +1 for new controller
+    // If forceRelease is true, we remove 2 to create a healthy "buffer"
+    final int targetCapacity = forceRelease ? _maxPoolSize - 2 : _maxPoolSize - 1;
+    final toRemove = (_controllerPool.length - targetCapacity).clamp(1, _controllerPool.length);
 
     int removed = 0;
     for (final entry in sortedEntries) {
@@ -235,7 +237,7 @@ class SharedVideoControllerPool {
     }
 
     if (removed > 0) {
-      AppLogger.log('🧹 SharedPool: LRU evicted $removed old controllers');
+      AppLogger.log('🧹 SharedPool: LRU evicted $removed old controllers (Reason: ${forceRelease ? "Ruthless/FastScroll" : "Pool Full"})');
     }
   }
 

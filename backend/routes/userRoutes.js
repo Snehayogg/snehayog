@@ -3,6 +3,8 @@ import User from '../models/User.js';
 import { verifyToken } from '../utils/verifytoken.js';
 import jwt from 'jsonwebtoken'; // Added for token info endpoint
 import redisService from '../services/redisService.js';
+import { getGlobalLeaderboard } from '../controllers/videoController.js';
+
 const router = express.Router();
 
 const PROFILE_CACHE_TTL = 60; // seconds
@@ -196,8 +198,11 @@ router.get('/top-earners-test', (req, res) => {
   res.json({ message: 'Top Earners route is working!', timestamp: new Date().toISOString() });
 });
 
+// ✅ Route to get global leaderboard (public)
+// Reuses the bulk ranking logic from RecommendationService but masks earnings.
+router.get('/leaderboard/global', getGlobalLeaderboard);
+
 // ✅ Route to get top earners from user's following list
-// **IMPORTANT: Must come BEFORE /:id route to avoid route conflicts**
 router.get('/top-earners-from-following', verifyToken, async (req, res) => {
   try {
     console.log('========================================');
@@ -353,8 +358,15 @@ router.get('/top-earners-from-following', verifyToken, async (req, res) => {
       .filter(result => result !== null && result.totalEarnings > 0)
       .sort((a, b) => b.totalEarnings - a.totalEarnings)
       .map((earner, index) => ({
-        ...earner,
-        rank: index + 1
+        userId: earner.userId,
+        name: earner.name,
+        profilePic: earner.profilePic,
+        rank: index + 1,
+        // Hide actual money and impressions for privacy
+        totalEarnings: 0, 
+        bannerImpressions: 0,
+        carouselImpressions: 0,
+        videoCount: earner.videoCount
       }));
 
     console.log(`✅ Top Earners API: Found ${topEarners.length} top earners`);

@@ -508,6 +508,25 @@ router.get('/stats', requireAdminDashboardKey, async (req, res) => {
       processingStatus: 'completed'
     });
 
+    // **NEW: Daily breakdown by type**
+    const dailyVayuCount = await Video.countDocuments({
+      createdAt: {
+        $gte: today,
+        $lt: tomorrow
+      },
+      videoType: 'vayu',
+      processingStatus: 'completed'
+    });
+
+    const dailyYogCount = await Video.countDocuments({
+      createdAt: {
+        $gte: today,
+        $lt: tomorrow
+      },
+      videoType: 'yog',
+      processingStatus: 'completed'
+    });
+
     // Calculate total earnings across all creators
     // Get all creators and their earnings
     const creators = await User.find({}).select('_id').lean();
@@ -543,7 +562,9 @@ router.get('/stats', requireAdminDashboardKey, async (req, res) => {
     res.json({
       success: true,
       totalVideos,
-      dailyUploadCount, // **NEW: Daily upload count**
+      dailyUploadCount,
+      dailyVayuCount, // **NEW**
+      dailyYogCount,  // **NEW**
       totalCreatorEarningsINR: Math.round(totalCreatorEarningsINR * 100) / 100,
       totalGrossRevenueINR: Math.round(totalGrossRevenueINR * 100) / 100,
       bannerImpressions,

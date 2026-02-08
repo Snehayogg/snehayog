@@ -151,6 +151,25 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
   }
 
+  /// **Helper to get or create a ValueNotifier in a map without replacing the object**
+  ValueNotifier<T> _getOrCreateNotifier<T>(
+    Map<String, ValueNotifier<T>> map,
+    String key,
+    T initialValue,
+  ) {
+    if (map.containsKey(key)) {
+      final notifier = map[key]!;
+      if (notifier.value != initialValue) {
+        notifier.value = initialValue;
+      }
+      return notifier;
+    } else {
+      final notifier = ValueNotifier<T>(initialValue);
+      map[key] = notifier;
+      return notifier;
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
@@ -341,60 +360,62 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     });
   }
 
-  /// **TRY AUTOPLAY CURRENT: Ensure current video starts playing**
   void _tryAutoplayCurrent() {
     if (_videos.isEmpty || _isLoading) return;
     if (!_shouldAutoplayForContext('tryAutoplayCurrent')) return;
     _autoAdvancedForIndex.remove(_currentIndex);
 
     // Check if current video is preloaded
-    if (_controllerPool.containsKey(_currentIndex)) {
-      final controller = _controllerPool[_currentIndex];
-      if (controller != null &&
-          controller.value.isInitialized &&
-          !controller.value.isPlaying) {
-        if (_userPaused[_currentIndex] == true) {
-          /* AppLogger.log(
-            '⏸️ Autoplay suppressed: user has manually paused video at index $_currentIndex',
-          ); */
-          return;
-        }
+    final video = _videos[_currentIndex];
+    final controller = _controllerPool[video.id];
 
-        try {
-          controller.setVolume(1.0);
-        } catch (_) {}
-        if (!_shouldAutoplayForContext('autoplay current immediate')) return;
-        _pauseAllOtherVideos(_currentIndex);
-        controller.play();
-        _ensureWakelockForVisibility();
-        _controllerStates[_currentIndex] = true;
-        _userPaused[_currentIndex] = false;
-        _pendingAutoplayAfterLogin = false;
-        
-        // **NEW: Start view tracking with videoHash**
-        if (_currentIndex < _videos.length) {
-          final video = _videos[_currentIndex];
-          _viewTracker.startViewTracking(
-            video.id, 
-            videoUploaderId: video.uploader.id,
-            videoHash: video.videoHash,
-          );
-        }
-        
-        // AppLogger.log('✅ VideoFeedAdvanced: Current video autoplay started');
+    if (controller != null && controller.value.isInitialized) {
+      if (controller.value.isPlaying) {
+        return;
       }
+
+      if (_userPaused[video.id] == true) {
+        /* AppLogger.log(
+          '⏸️ Autoplay suppressed: user has manually paused video at index $_currentIndex',
+        ); */
+        return;
+      }
+
+      try {
+        controller.setVolume(1.0);
+      } catch (_) {}
+      if (!_shouldAutoplayForContext('autoplay current immediate')) return;
+      _pauseAllOtherVideos(_videos[_currentIndex].id);
+      controller.play();
+      _ensureWakelockForVisibility();
+      _controllerStates[video.id] = true;
+      _userPaused[video.id] = false;
+      _pendingAutoplayAfterLogin = false;
+
+      // **NEW: Start view tracking with videoHash**
+      if (_currentIndex < _videos.length) {
+        final currentVideo = _videos[_currentIndex];
+        _viewTracker.startViewTracking(
+          currentVideo.id,
+          videoUploaderId: currentVideo.uploader.id,
+          videoHash: currentVideo.videoHash,
+        );
+      }
+
+      // AppLogger.log('✅ VideoFeedAdvanced: Current video autoplay started');
     } else {
       // Video not preloaded, preload it and play when ready
       /* AppLogger.log(
         '🔄 VideoFeedAdvanced: Current video not preloaded, preloading...',
       ); */
       final indexToPlay = _currentIndex;
+      final videoToPlay = _videos[indexToPlay];
       _preloadVideo(indexToPlay).then((_) {
-        if (mounted && _currentIndex == indexToPlay && _controllerPool.containsKey(indexToPlay)) {
-          final controller = _controllerPool[indexToPlay];
-          if (controller != null && controller.value.isInitialized) {
+        if (mounted && _currentIndex == indexToPlay && _controllerPool.containsKey(videoToPlay.id)) {
+          final pController = _controllerPool[videoToPlay.id];
+          if (pController != null && pController.value.isInitialized) {
             // **FIX: Don't autoplay if user has manually paused the video**
-            if (_userPaused[indexToPlay] == true) {
+            if (_userPaused[videoToPlay.id] == true) {
               AppLogger.log(
                 '⏸️ Autoplay suppressed after preload: user has manually paused video at index $indexToPlay',
               );
@@ -405,25 +426,25 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
             }
 
             try {
-              controller.setVolume(1.0);
+              pController.setVolume(1.0);
             } catch (_) {}
-            _pauseAllOtherVideos(indexToPlay);
-            controller.play();
+            _pauseAllOtherVideos(_videos[indexToPlay].id);
+            pController.play();
             _ensureWakelockForVisibility();
-            _controllerStates[indexToPlay] = true;
-            _userPaused[indexToPlay] = false;
+            _controllerStates[videoToPlay.id] = true;
+            _userPaused[videoToPlay.id] = false;
             _pendingAutoplayAfterLogin = false;
-            
+
             // **NEW: Start view tracking with videoHash**
             if (indexToPlay < _videos.length) {
-              final video = _videos[indexToPlay];
+              final currentVideo = _videos[indexToPlay];
               _viewTracker.startViewTracking(
-                video.id, 
-                videoUploaderId: video.uploader.id,
-                videoHash: video.videoHash,
+                currentVideo.id,
+                videoUploaderId: currentVideo.uploader.id,
+                videoHash: currentVideo.videoHash,
               );
             }
-            
+
             /* AppLogger.log(
               '✅ VideoFeedAdvanced: Current video autoplay started after preloading',
             ); */
@@ -444,9 +465,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         // Returning to Yug tab - ensure current video autoplays (no audio overlap)
         // 1) Mark first frame ready if controller already initialized
         if (_currentIndex < _videos.length) {
-          final controller = _controllerPool[_currentIndex];
+          final video = _videos[_currentIndex];
+          final controller = _controllerPool[video.id];
           if (controller != null && controller.value.isInitialized) {
-            _firstFrameReady[_currentIndex]?.value = true;
+            _firstFrameReady[video.id]?.value = true;
           }
         }
 
@@ -582,9 +604,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       // **CRITICAL FIX: Explicitly mark as user paused to prevent race condition autoplay**
       // If video is still loading, this flag ensures it won't autoplay when ready.
       // **OPTIMIZED: Use ValueNotifier for granular updates - NO setState**
-       _userPaused[_currentIndex] = true;
-       _userPausedVN[_currentIndex]?.value = true;
-       _controllerStates[_currentIndex] = false;
+       final video = _videos[_currentIndex];
+       _userPaused[video.id] = true;
+       _userPausedVN[video.id]?.value = true;
+       _controllerStates[video.id] = false;
       
       _pauseCurrentVideo();
     } catch (e) {
@@ -630,13 +653,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         );
 
         // Add to local pool for UI tracking only
-        _controllerPool[index] = controller;
-        _controllerStates[index] = false;
-        _preloadedVideos.add(index);
-        _lastAccessedLocal[index] = DateTime.now();
+        _controllerPool[video.id] = controller;
+        _controllerStates[video.id] = false;
+        _preloadedVideos.add(video.id);
+        _lastAccessedLocal[video.id] = DateTime.now();
 
-        // **FIX: Mark first frame as ready since controller is already initialized**
-        _firstFrameReady[index] = ValueNotifier<bool>(true);
+        // **FIX: Use helper to avoid replacing notifier object**
+        _getOrCreateNotifier<bool>(_firstFrameReady, video.id, true);
 
         return controller;
       }
@@ -647,18 +670,19 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
 
     // **FALLBACK: Check local pool**
-    if (_controllerPool.containsKey(index)) {
+    if (_controllerPool.containsKey(video.id)) {
       try {
-        controller = _controllerPool[index];
+        controller = _controllerPool[video.id];
         if (controller != null && controller.value.isInitialized) {
-          _lastAccessedLocal[index] = DateTime.now();
-          // **FIX: Mark first frame as ready since controller is already initialized**
-          _firstFrameReady[index] = ValueNotifier<bool>(true);
+          _lastAccessedLocal[video.id] = DateTime.now();
+          // **FIX: Use helper to avoid replacing notifier object**
+          _getOrCreateNotifier<bool>(_firstFrameReady, video.id, true);
           return controller;
         }
       } catch (e) {
         AppLogger.log('⚠️ VideoFeedAdvanced: Disposed controller detected in local pool at index $index');
-        _controllerPool.remove(index);
+        _controllerPool.remove(video.id);
+        _controllerStates.remove(video.id); // Also remove from _controllerStates
         controller = null;
       }
     }
@@ -699,6 +723,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       // 2. Next Video (if valid)
       if (index + 1 < _videos.length) addSafeVideo(_videos[index + 1]);
       
+      // **IMMEDIATE PRIORITY SHIFT: YouTube Shorts Style**
+    // The moment the finger swipes, we must signal an Instant Cancellation 
+    // of all pending loads and stop any video that is not the one currently visible.
+    _cancelIrrelevantPreloads(index);
+    
+    // Pause previous video immediately (Instant Audio Cut)
       // 3. Previous Video (if valid)
       if (index - 1 >= 0) addSafeVideo(_videos[index - 1]);
       
@@ -710,13 +740,16 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     // 1. Pause current local controller if active
     if (_currentIndex < _videos.length) {
-      if (_controllerPool.containsKey(_currentIndex)) {
-        final currentController = _controllerPool[_currentIndex];
-        if (currentController != null && 
-            currentController.value.isInitialized && 
-            currentController.value.isPlaying) {
-          currentController.pause();
-          _controllerStates[_currentIndex] = false;
+      final currentVideoId = _videos[_currentIndex].id;
+      for (final id in _controllerPool.keys.toList()) {
+        if (id != currentVideoId) {
+          final controller = _controllerPool[id];
+          if (controller != null &&
+              controller.value.isInitialized &&
+              controller.value.isPlaying) {
+            controller.pause();
+            _controllerStates[id] = false;
+          }
         }
       }
       
@@ -745,12 +778,48 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       }
     });
 
-    // **IMMEDIATE VISUAL FEEDBACK:**
-    // Even while debouncing, we update the index locally so UI (like page number) can update
     // But we DO NOT trigger heavy video loading yet.
     if (_currentIndex != index) {
-      _currentIndex = index;
+      safeSetState(() {
+        _currentIndex = index;
+      });
     }
+  }
+
+  /// **CANCELLATION HELPER: Discard work for videos the user skipped**
+  void _cancelIrrelevantPreloads(int currentIndex) {
+    // 1. Cancel all debounce timers except for the one we might be about to start
+    _preloadDebounceTimers.forEach((videoId, timer) {
+      // If videoId doesn't belong to index or index±1, kill it
+      bool isRelevant = false;
+      for (int i = currentIndex - 1; i <= currentIndex + 1; i++) {
+        if (i >= 0 && i < _videos.length && _videos[i].id == videoId) {
+          isRelevant = true;
+          break;
+        }
+      }
+      if (!isRelevant) {
+        timer.cancel();
+      }
+    });
+
+    // 2. Clear loading/initializing flags for far-away videos
+    // This allows Relevancy Checkpoints in _preloadVideo to trigger correctly
+    _loadingVideos.removeWhere((videoId) {
+      bool isRelevant = false;
+      for (int i = currentIndex - 1; i <= currentIndex + 1; i++) {
+        if (i >= 0 && i < _videos.length && _videos[i].id == videoId) {
+          isRelevant = true;
+          break;
+        }
+      }
+      return !isRelevant;
+    });
+
+    // 3. Ruthless Disposal: Kill controllers that are definitely not needed
+    // This frees hardware decoders instantly during fast scroll
+    final sharedPool = SharedVideoControllerPool();
+    sharedPool.cleanupDistantControllers(currentIndex, keepRange: 1);
   }
 
   /// **PAGE CHANGE HANDLER**
@@ -758,7 +827,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     if (!mounted) return;
 
     // **LRU: Track access time for previous index**
-    _lastAccessedLocal[_currentIndex] = DateTime.now();
+    if (_currentIndex < _videos.length) {
+      final video = _videos[_currentIndex];
+      _lastAccessedLocal[video.id] = DateTime.now();
+    }
 
     // **NEW: Stop view tracking for previous video**
     if (_currentIndex < _videos.length) {
@@ -769,13 +841,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       );
 
       // **NEW: Clear userPaused flag so returning to this video autoplays**
-      _userPaused[_currentIndex] = false;
-      _userPausedVN[_currentIndex]?.value = false; // **Reset VN**
+      _userPaused[previousVideo.id] = false;
+      _userPausedVN[previousVideo.id]?.value = false; // **Reset VN**
     }
 
     // **OPTIMIZATION: Single Pass Pause**
     // Use the optimized pause method instead of manually iterating multiple pools.
-    _pauseAllOtherVideos(index); // This pauses local pool, shared pool, and manager videos
+    _pauseAllOtherVideos(_videos[index].id); // This pauses local pool, shared pool, and manager videos
 
 
     // **IMMEDIATE SYNC: Update internal index (moved from _onPageChanged)**
@@ -783,8 +855,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     _autoAdvancedForIndex.remove(index);
 
     // **FIXED: Reset user paused state for the NEW video so it can autoplay**
-    _userPaused[index] = false;
-    _userPausedVN[index]?.value = false; // **Reset VN**
+    if (_currentIndex < _videos.length) {
+      final video = _videos[_currentIndex];
+      _userPaused[video.id] = false;
+      _userPausedVN[video.id]?.value = false; // **Reset VN**
+    }
 
     // **RESUME FEATURE: Save state immediately when user settles on a page**
     // This ensures we can resume even if app crashes or is killed ungracefully
@@ -808,21 +883,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
        _preloadNearbyVideos();
     }
 
-    // **NEW: Pre-fetching trigger**
-    // Trigger loading next page when user reaches the 3rd video from the end (pro-active)
-    if (mounted &&
-        !_isRefreshing &&
-        _hasMore &&
-        !_isLoadingMore &&
-        index >= _videos.length - 3) {
-      AppLogger.log(
-        '📡 UI: Pre-fetching triggered at index $index (${_videos.length - index} videos before end)',
-      );
-      _loadMoreVideos();
-    }
 
     // Safety: ensure newly active video's audio is unmuted
-    final activeController = _controllerPool[_currentIndex];
+    final activeController = _controllerPool[_videos[index].id];
     if (activeController != null && activeController.value.isInitialized) {
       try {
         activeController.setVolume(1.0);
@@ -846,13 +909,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         );
 
         // Add to local pool for tracking only
-        _controllerPool[index] = controllerToUse;
-        _controllerStates[index] = false;
-        _preloadedVideos.add(index);
-        _lastAccessedLocal[index] = DateTime.now();
+        _controllerPool[video.id] = controllerToUse;
+        _controllerStates[video.id] = false;
+        _preloadedVideos.add(video.id);
+        _lastAccessedLocal[video.id] = DateTime.now();
 
-        // **FIX: Mark first frame as ready since controller is already initialized**
-        _firstFrameReady[index] = ValueNotifier<bool>(true);
+        // **FIX: Use helper to avoid replacing notifier object**
+        _getOrCreateNotifier<bool>(_firstFrameReady, video.id, true);
 
         // **MEMORY MANAGEMENT: Cleanup distant controllers**
         sharedPool.cleanupDistantControllers(index, keepRange: 3);
@@ -860,19 +923,19 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         // Fallback: Get any available controller
         controllerToUse = sharedPool.getController(video.id);
         if (controllerToUse != null && controllerToUse.value.isInitialized) {
-          _controllerPool[index] = controllerToUse;
-          _controllerStates[index] = false;
-          _preloadedVideos.add(index);
-          _lastAccessedLocal[index] = DateTime.now();
-          // **FIX: Mark first frame as ready since controller is already initialized**
-          _firstFrameReady[index] = ValueNotifier<bool>(true);
+          _controllerPool[video.id] = controllerToUse;
+          _controllerStates[video.id] = false;
+          _preloadedVideos.add(video.id);
+          _lastAccessedLocal[video.id] = DateTime.now();
+          // **FIX: Use helper to avoid replacing notifier object**
+          _getOrCreateNotifier<bool>(_firstFrameReady, video.id, true);
         }
       }
     }
 
     // **FALLBACK: Check local pool only if shared pool doesn't have it**
-    if (controllerToUse == null && _controllerPool.containsKey(index)) {
-      controllerToUse = _controllerPool[index];
+    if (controllerToUse == null && _controllerPool.containsKey(_videos[index].id)) {
+      controllerToUse = _controllerPool[_videos[index].id];
       if (controllerToUse != null && !controllerToUse.value.isInitialized) {
         // **AUTO-CLEANUP: Remove invalid controllers**
         AppLogger.log('⚠️ Controller exists but not initialized, disposing...');
@@ -881,16 +944,16 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         } catch (e) {
           AppLogger.log('Error disposing controller: $e');
         }
-        _controllerPool.remove(index);
-        _controllerStates.remove(index);
-        _preloadedVideos.remove(index);
-        _lastAccessedLocal.remove(index);
+        _controllerPool.remove(_videos[index].id);
+        _controllerStates.remove(_videos[index].id);
+        _preloadedVideos.remove(_videos[index].id);
+        _lastAccessedLocal.remove(_videos[index].id);
         controllerToUse = null;
       } else if (controllerToUse != null &&
           controllerToUse.value.isInitialized) {
-        _lastAccessedLocal[index] = DateTime.now();
-        // **FIX: Mark first frame as ready since controller is already initialized**
-        _firstFrameReady[index] = ValueNotifier<bool>(true);
+        _lastAccessedLocal[_videos[index].id] = DateTime.now();
+        // **FIX: Use helper to avoid replacing notifier object**
+        _getOrCreateNotifier<bool>(_firstFrameReady, _videos[index].id, true);
       }
     }
 
@@ -904,7 +967,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       // (Check removed to force autoplay on scroll)
 
       // **CRITICAL: Pause ALL other videos before playing current video**
-      _pauseAllOtherVideos(index);
+      _pauseAllOtherVideos(_videos[index].id);
 
       // **FIX: Reset position to start when switching to this video**
       // This ensures previous session or background play doesn't affect new view
@@ -912,8 +975,8 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
       controllerToUse.setVolume(1.0);
       controllerToUse.play();
-      _controllerStates[index] = true;
-      _userPaused[index] = false;
+      _controllerStates[_videos[index].id] = true;
+      _userPaused[_videos[index].id] = false;
       _applyLoopingBehavior(controllerToUse);
       _attachEndListenerIfNeeded(controllerToUse, index);
       _attachBufferingListenerIfNeeded(controllerToUse, index);
@@ -937,12 +1000,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
 
     // **FIX: If still no controller, preload and mark as loading immediately**
-    if (!_controllerPool.containsKey(index)) {
+    if (!_controllerPool.containsKey(_videos[index].id)) {
       AppLogger.log(
         '🔄 Video not preloaded, preloading and will autoplay when ready',
       );
       _preloadVideo(index).then((_) {
-        if (mounted && index == _currentIndex) {
+        if (mounted && _currentIndex == index) {
           forcePlayCurrent();
         }
       });
@@ -986,16 +1049,18 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   // Quality indicator methods removed per requirement
 
   void _togglePlayPause(int index) {
+    if (index >= _videos.length) return;
+    final video = _videos[index];
+    final String videoId = video.id;
+
     // **FIX: Prevent multiple simultaneous toggles on the same video (race condition fix)**
-    if (_togglingVideos.contains(index)) {
+    if (_togglingVideos.contains(videoId)) {
       AppLogger.log(
-        '⚠️ _togglePlayPause: Already toggling video at index $index, ignoring duplicate tap',
+        '⚠️ _togglePlayPause: Already toggling video $videoId, ignoring duplicate tap',
       );
       return;
     }
-
-    // **FIX: If controller not initialized, preload it first then play**
-    final controller = _controllerPool[index];
+    final controller = _controllerPool[video.id];
     if (controller == null || !controller.value.isInitialized) {
       AppLogger.log(
         '⚠️ _togglePlayPause: Controller not available or not initialized for index $index, preloading...',
@@ -1004,16 +1069,16 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       // Preload video and then play it
       _preloadVideo(index).then((_) {
         if (!mounted) return;
-        final c = _controllerPool[index];
+        final c = _controllerPool[videoId];
         if (c != null && c.value.isInitialized) {
           try {
-            _pauseAllOtherVideos(index);
+            _pauseAllOtherVideos(videoId);
             _autoAdvancedForIndex.remove(index);
             c.play();
             // **OPTIMIZED: Use ValueNotifier - NO setState**
-             _controllerStates[index] = true;
-             _userPaused[index] = false;
-             _userPausedVN[index]?.value = false;
+             _controllerStates[videoId] = true;
+             _userPaused[videoId] = false;
+             _userPausedVN[videoId]?.value = false;
 
             AppLogger.log(
               '▶️ Successfully played video at index $index after preload',
@@ -1021,13 +1086,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
             // Start view tracking
             if (index < _videos.length) {
-              final video = _videos[index];
+              final currentVideo = _videos[index];
               _viewTracker.startViewTracking(
-                video.id,
-                videoUploaderId: video.uploader.id,
+                currentVideo.id,
+                videoUploaderId: currentVideo.uploader.id,
               );
               AppLogger.log(
-                '▶️ User played video: ${video.id}, started view tracking',
+                '▶️ User played video: ${currentVideo.id}, started view tracking',
               );
             }
           } catch (e) {
@@ -1045,7 +1110,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
 
     // **FIX: Add lock to prevent concurrent toggles**
-    _togglingVideos.add(index);
+    _togglingVideos.add(videoId);
 
     // **FIX: Check actual controller state instead of relying on _controllerStates map**
     // This ensures we always have the correct state, even if map is out of sync
@@ -1060,9 +1125,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       try {
         // **CRITICAL: Update state FIRST, then pause - this ensures UI responds immediately**
         // **OPTIMIZED: Use ValueNotifier for granular updates - NO setState**
-        _controllerStates[index] = false;
-        _userPaused[index] = true;
-        _userPausedVN[index]?.value = true;
+        _controllerStates[videoId] = false;
+        _userPaused[videoId] = true;
+        _userPausedVN[videoId]?.value = true;
 
         // Now pause the controller
         controller.pause();
@@ -1072,28 +1137,28 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
         // **NEW: Stop view tracking when user pauses**
         if (index < _videos.length) {
-          final video = _videos[index];
-          _viewTracker.stopViewTracking(video.id);
+          final currentVideo = _videos[index];
+          _viewTracker.stopViewTracking(currentVideo.id);
           AppLogger.log(
-            '⏸️ User paused video: ${video.id}, stopped view tracking',
+            '⏸️ User paused video: ${currentVideo.id}, stopped view tracking',
           );
         }
       } catch (e) {
         AppLogger.log('❌ Error pausing video at index $index: $e');
         // **FIX: Remove lock on error**
-        _togglingVideos.remove(index);
+        _togglingVideos.remove(videoId);
         return;
       }
     } else {
       // **FIX: Video is paused, so play it - update state immediately before play**
       try {
-        _pauseAllOtherVideos(index);
+        _pauseAllOtherVideos(videoId);
 
         // **CRITICAL: Update state FIRST, then play - this ensures UI responds immediately**
         // **OPTIMIZED: Use ValueNotifier for granular updates - NO setState**
-        _controllerStates[index] = true;
-        _userPaused[index] = false; // hide when playing
-        _userPausedVN[index]?.value = false;
+        _controllerStates[videoId] = true;
+        _userPaused[videoId] = false; // hide when playing
+        _userPausedVN[videoId]?.value = false;
         
         _lifecyclePaused = false;
 
@@ -1106,19 +1171,19 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
         // **NEW: Start view tracking when user plays**
         if (index < _videos.length) {
-          final video = _videos[index];
+          final currentVideo = _videos[index];
           _viewTracker.startViewTracking(
-            video.id,
-            videoUploaderId: video.uploader.id,
+            currentVideo.id,
+            videoUploaderId: currentVideo.uploader.id,
           );
           AppLogger.log(
-            '▶️ User played video: ${video.id}, started view tracking',
+            '▶️ User played video: ${currentVideo.id}, started view tracking',
           );
         }
       } catch (e) {
         AppLogger.log('❌ Error playing video at index $index: $e');
         // **FIX: Remove lock on error**
-        _togglingVideos.remove(index);
+        _togglingVideos.remove(videoId);
         return;
       }
     }
@@ -1126,13 +1191,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // **FIX: Remove lock after a short delay to allow state to settle**
     // This prevents rapid taps from causing race conditions
     Future.delayed(const Duration(milliseconds: 200), () {
-      _togglingVideos.remove(index);
+      _togglingVideos.remove(videoId);
     });
   }
 
   /// **BUILD CAROUSEL AD PAGE: Full-screen carousel ad within horizontal PageView**
   void _attachEndListenerIfNeeded(VideoPlayerController controller, int index) {
-    controller.removeListener(_videoEndListeners[index] ?? () {});
+    final videoId = _videos[index].id;
+    controller.removeListener(_videoEndListeners[videoId] ?? () {});
     void listener() {
       if (!_autoScrollEnabled) return;
       final position = controller.value.position;
@@ -1158,29 +1224,30 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
 
     controller.addListener(listener);
-    _videoEndListeners[index] = listener;
+    _videoEndListeners[videoId] = listener;
   }
 
   void _attachBufferingListenerIfNeeded(
     VideoPlayerController controller,
     int index,
   ) {
-    controller.removeListener(_bufferingListeners[index] ?? () {});
+    final videoId = _videos[index].id;
+    controller.removeListener(_bufferingListeners[videoId] ?? () {});
     void listener() {
       if (!mounted) return;
       final bool next =
           controller.value.isInitialized && controller.value.isBuffering;
-      final bool current = _isBuffering[index] ?? false;
+      final bool current = _isBuffering[videoId] ?? false;
       if (current != next) {
         // Update map (for any legacy reads)
-        _isBuffering[index] = next;
+        _isBuffering[videoId] = next;
         // Update ValueNotifier to avoid rebuilding the whole Stack
-        (_isBufferingVN[index] ??= ValueNotifier<bool>(false)).value = next;
+        (_isBufferingVN[videoId] ??= ValueNotifier<bool>(false)).value = next;
       }
     }
 
     controller.addListener(listener);
-    _bufferingListeners[index] = listener;
+    _bufferingListeners[videoId] = listener;
 
     // (Removed first-frame tracking listener per revert)
   }
@@ -1217,14 +1284,14 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   }
 
   /// **HANDLE DOUBLE TAP LIKE: Show animation and like**
-  Future<void> _handleDoubleTapLike(VideoModel video, int index) async {
+  Future<void> _handleDoubleTapLike(VideoModel video) async {
     // Show heart animation
-    _showHeartAnimation[index] ??= ValueNotifier<bool>(false);
-    _showHeartAnimation[index]!.value = true;
+    _showHeartAnimation[video.id] ??= ValueNotifier<bool>(false);
+    _showHeartAnimation[video.id]!.value = true;
 
     // Hide animation after 1 second
     Future.delayed(const Duration(milliseconds: 1000), () {
-      _showHeartAnimation[index]?.value = false;
+      _showHeartAnimation[video.id]?.value = false;
     });
 
     // Check if valid user
@@ -1246,11 +1313,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
 
     // Handle the like
-    await _handleLike(video, index);
+    await _handleLike(video);
   }
 
   /// **HANDLE LIKE: With API integration (Optimized - No SetState)**
-  Future<void> _handleLike(VideoModel video, int index) async {
+  Future<void> _handleLike(VideoModel video) async {
     // Helper to get or create notifiers ensuring they are synced with model initially
     ValueNotifier<bool> getLikedNotifier() {
        return _isLikedVN.putIfAbsent(video.id, 
@@ -1448,10 +1515,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   /// **NAVIGATE TO CAROUSEL AD: Switch to carousel ad page (no rebuild)**
   void _navigateToCarouselAd(int index) {
-    if (_carouselAds.isNotEmpty && _currentHorizontalPage.containsKey(index)) {
-      _currentHorizontalPage[index]!.value =
+    if (index >= _videos.length) return;
+    final videoId = _videos[index].id;
+    if (_carouselAds.isNotEmpty && _currentHorizontalPage.containsKey(videoId)) {
+      _currentHorizontalPage[videoId]!.value =
           1; // Switch to carousel ad page - no setState needed!
-      AppLogger.log('🎯 Navigated to carousel ad for video $index');
+      AppLogger.log('🎯 Navigated to carousel ad for video $videoId');
     }
   }
 
@@ -1764,77 +1833,63 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     // **FIX: Create a copy of the pool to avoid modification during iteration**
     final controllersToDispose =
-        Map<int, VideoPlayerController>.from(_controllerPool);
+        Map<String, VideoPlayerController>.from(_controllerPool);
 
-    controllersToDispose.forEach((index, controller) {
-      if (index < _videos.length) {
-        final video = _videos[index];
-        try {
-          // **FIX: Remove listeners to avoid memory leaks (once, before branching)**
-          controller.removeListener(_bufferingListeners[index] ?? () {});
-          controller.removeListener(_videoEndListeners[index] ?? () {});
+    controllersToDispose.forEach((videoId, controller) {
+      try {
+        // **FIX: Remove listeners to avoid memory leaks**
+        controller.removeListener(_bufferingListeners[videoId] ?? () {});
+        controller.removeListener(_videoEndListeners[videoId] ?? () {});
 
-          if (openedFromProfile) {
-            // **PROFILE FLOW: Fully dispose controllers to free decoder resources**
-            try {
-              if (controller.value.isInitialized) {
-                if (controller.value.isPlaying) {
-                  controller.pause();
-                }
-                controller.setVolume(0.0);
+        if (openedFromProfile) {
+          // **PROFILE FLOW: Fully dispose controllers to free decoder resources**
+          try {
+            if (controller.value.isInitialized) {
+              if (controller.value.isPlaying) {
+                controller.pause();
               }
-            } catch (e) {
-              AppLogger.log(
-                '⚠️ VideoFeedAdvanced: Error pausing controller before disposal: $e',
-              );
+              controller.setVolume(0.0);
             }
-
-            // **FIX: Remove from shared pool first, then dispose**
-            try {
-              sharedPool.removeController(video.id);
-              controller.dispose();
-              AppLogger.log(
-                '🗑️ VideoFeedAdvanced: Disposed controller for video ${video.id} (profile flow)',
-              );
-            } catch (e) {
-              AppLogger.log(
-                '⚠️ VideoFeedAdvanced: Error disposing controller: $e',
-              );
-            }
-          } else {
-            // **TAB FLOW: Preserve controller in shared pool for quick resume**
-            final wasPlaying = _controllerStates[index] == true &&
-                !(_userPaused[index] ?? false);
-            _wasPlayingBeforeNavigation[index] = wasPlaying;
+          } catch (e) {
             AppLogger.log(
-              '💾 VideoFeedAdvanced: Video ${video.id} was ${wasPlaying ? "playing" : "paused"} before navigation',
-            );
-
-            if (wasPlaying &&
-                controller.value.isInitialized &&
-                controller.value.isPlaying) {
-              controller.pause();
-              _controllerStates[index] = false;
-              AppLogger.log(
-                '⏸️ VideoFeedAdvanced: Paused video ${video.id} before saving to shared pool',
-              );
-            }
-
-            sharedPool.addController(video.id, controller,
-                skipDisposeOld: true);
-            savedControllers++;
-            AppLogger.log(
-              '💾 VideoFeedAdvanced: Saved controller for video ${video.id} to shared pool',
+              '⚠️ VideoFeedAdvanced: Error pausing controller before disposal: $e',
             );
           }
-        } catch (e) {
-          AppLogger.log('⚠️ Error saving controller for video ${video.id}: $e');
+
+          // **FIX: Remove from shared pool first, then dispose**
           try {
+            sharedPool.removeController(videoId);
             controller.dispose();
-          } catch (_) {}
+            AppLogger.log(
+              '🗑️ VideoFeedAdvanced: Disposed controller for video $videoId (profile flow)',
+            );
+          } catch (e) {
+            AppLogger.log(
+              '⚠️ VideoFeedAdvanced: Error disposing controller: $e',
+            );
+          }
+        } else {
+          // **TAB FLOW: Preserve controller in shared pool for quick resume**
+          // Check if it was playing (requires finding the index for _wasPlayingBeforeNavigation)
+          // Actually, we can use videoId for _wasPlayingBeforeNavigation too if we wanted, 
+          // but for now let's just save it.
+          
+          if (controller.value.isInitialized && controller.value.isPlaying) {
+            controller.pause();
+            _controllerStates[videoId] = false;
+            AppLogger.log(
+              '⏸️ VideoFeedAdvanced: Paused video $videoId before saving to shared pool',
+            );
+          }
+
+          sharedPool.addController(videoId, controller, skipDisposeOld: true);
+          savedControllers++;
+          AppLogger.log(
+            '💾 VideoFeedAdvanced: Saved controller for video $videoId (ID) to shared pool',
+          );
         }
-      } else {
-        // Dispose orphaned controllers (no corresponding video)
+      } catch (e) {
+        AppLogger.log('⚠️ Error saving controller for video $videoId: $e');
         try {
           controller.dispose();
         } catch (_) {}

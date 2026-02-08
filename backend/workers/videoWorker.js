@@ -10,6 +10,7 @@ import { redisOptions } from '../services/queueService.js';
 import User from '../models/User.js';
 import redisService from '../services/redisService.js';
 import { invalidateCache, VideoCacheKeys } from '../middleware/cacheMiddleware.js';
+import RecommendationService from '../services/recommendationService.js';
 
 dotenv.config();
 
@@ -91,6 +92,24 @@ const videoWorker = new Worker('video-processing', async (job) => {
         if (hlsResult.aspectRatio) video.aspectRatio = hlsResult.aspectRatio;
         if (hlsResult.width) video.originalResolution = { width: hlsResult.width, height: hlsResult.height };
         
+        // **NEW: Update duration and videoType based on real data**
+        if (hlsResult.duration) {
+            video.duration = hlsResult.duration;
+            // Harmonize type: Yug < 120s, Vayu >= 120s
+            video.videoType = hlsResult.duration > 120 ? 'vayu' : 'yog';
+        }
+
+        // **NEW: Initialize Recommendation Score (with Discovery Bonus)**
+        video.finalScore = RecommendationService.calculateFinalScore({
+            totalWatchTime: 0,
+            duration: video.duration,
+            likes: 0,
+            comments: 0,
+            shares: 0,
+            views: 0,
+            uploadedAt: video.createdAt
+        });
+        
         await video.save();
 
         console.log('✅ Worker: Video record updated');
@@ -101,7 +120,8 @@ const videoWorker = new Worker('video-processing', async (job) => {
             if (user && user.googleId) {
                 if (redisService.getConnectionStatus()) {
                     await invalidateCache([
-                        VideoCacheKeys.feed('all'), // Clear feed
+                        'user:feed:*', // Clear all personalized feed queues
+                        VideoCacheKeys.feed('all'), // Clear general feed
                         VideoCacheKeys.user(user.googleId), // Clear user profile videos
                         VideoCacheKeys.all() // Clear all videos (safety)
                     ]);

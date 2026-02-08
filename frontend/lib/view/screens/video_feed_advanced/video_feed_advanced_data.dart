@@ -61,15 +61,17 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       bool append = false,
       bool clearSession = false,
       bool forceResetIndex = false}) async {
-    if (append && _isLoadingMore && page > 2) return; // Allow page 2 microtask but guard others
-    
     try {
       final hasNetwork = await ConnectivityService.hasNetworkConnectivity();
       if (!hasNetwork) {
         AppLogger.log('📡 VideoFeedAdvanced: No network connectivity detected');
         if (mounted) {
           _showSnackBar('No internet connection. Please check your network.', isError: true);
-          _isLoading = false;
+          safeSetState(() {
+            _isLoading = false;
+            _isLoadingMore = false;
+            _errorMessage = 'No internet connection';
+          });
         }
         return;
       }
@@ -266,79 +268,71 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     }
     final currentIndex = _currentIndex;
     final keepStart = (currentIndex - VideoFeedStateFieldsMixin._videosKeepRange).clamp(0, _videos.length);
-    final videosToRemove = _videos.length - VideoFeedStateFieldsMixin._maxVideosInMemory;
+    final videosToRemoveCount = _videos.length - VideoFeedStateFieldsMixin._maxVideosInMemory;
 
-    if (videosToRemove > 0) {
-      final removeCount = (keepStart > 0) ? keepStart.clamp(0, videosToRemove) : videosToRemove;
-      if (removeCount > 0) {
-        _videos.removeRange(0, removeCount);
-        _currentIndex = (_currentIndex - removeCount).clamp(0, _videos.length - 1);
-        _cleanupVideoStateMaps(removeCount);
+    if (videosToRemoveCount > 0) {
+      final actualRemoveCount = (keepStart > 0) ? keepStart.clamp(0, videosToRemoveCount) : videosToRemoveCount;
+      if (actualRemoveCount > 0) {
+        // Find IDs of videos being removed
+        final removedVideoIds = _videos.take(actualRemoveCount).map((v) => v.id).toList();
+        
+        _videos.removeRange(0, actualRemoveCount);
+        _currentIndex = (_currentIndex - actualRemoveCount).clamp(0, _videos.length - 1);
+        
+        _cleanupVideoStateMapsByIds(removedVideoIds);
       }
     }
   }
 
-  void _cleanupVideoStateMaps(int removedCount) {
-    final keysToUpdate = <int, dynamic>{};
-    final keysToRemove = <int>[];
-
-    for (final key in _controllerPool.keys.toList()) {
-      if (key < removedCount) {
-        try { _controllerPool[key]?.dispose(); } catch (_) {}
-        keysToRemove.add(key);
-      } else {
-        keysToUpdate[key - removedCount] = _controllerPool[key];
-        keysToRemove.add(key);
+  void _cleanupVideoStateMapsByIds(List<String> removedVideoIds) {
+    for (final videoId in removedVideoIds) {
+      // 1. Dispose controller if it exists locally (+ Safety check)
+      if (_controllerPool.containsKey(videoId)) {
+        try {
+          final controller = _controllerPool[videoId];
+          if (controller != null) {
+             controller.pause();
+             controller.dispose();
+          }
+        } catch (_) {}
       }
+      
+      // 2. Remove from all maps/sets
+      _controllerPool.remove(videoId);
+      _controllerStates.remove(videoId);
+      _userPaused.remove(videoId);
+      _isBuffering.remove(videoId);
+      _preloadedVideos.remove(videoId);
+      _loadingVideos.remove(videoId);
+      _initializingVideos.remove(videoId);
+      _preloadRetryCount.remove(videoId);
+      _videoErrors.remove(videoId);
+      _lastAccessedLocal.remove(videoId);
+      _wasPlayingBeforeNavigation.remove(videoId);
+      _showHeartAnimation.remove(videoId);
+      _currentHorizontalPage.remove(videoId);
+      
+      // Cleanup ValueNotifiers
+      _firstFrameReady[videoId]?.dispose();
+      _firstFrameReady.remove(videoId);
+      _forceMountPlayer[videoId]?.dispose();
+      _forceMountPlayer.remove(videoId);
+      _isBufferingVN[videoId]?.dispose();
+      _isBufferingVN.remove(videoId);
+      _isSlowConnectionVN[videoId]?.dispose();
+      _isSlowConnectionVN.remove(videoId);
+      _userPausedVN[videoId]?.dispose();
+      _userPausedVN.remove(videoId);
+      
+      // Cleanup listeners
+      _bufferingListeners.remove(videoId);
+      _videoEndListeners.remove(videoId);
+      _errorListeners.remove(videoId);
+      
+      // Cleanup timers
+      _bufferingTimers[videoId]?.cancel();
+      _bufferingTimers.remove(videoId);
     }
-
-    for (final key in keysToRemove) {
-      _controllerPool.remove(key);
-      _controllerStates.remove(key);
-      _userPaused.remove(key);
-      _isBuffering.remove(key);
-      _preloadedVideos.remove(key);
-      _loadingVideos.remove(key);
-      _firstFrameReady.remove(key);
-      _forceMountPlayer.remove(key);
-      _showHeartAnimation.remove(key);
-      _bufferingListeners.remove(key);
-      _videoEndListeners.remove(key);
-      _lastAccessedLocal.remove(key);
-      _initializingVideos.remove(key);
-      _preloadRetryCount.remove(key);
-      _wasPlayingBeforeNavigation.remove(key);
-    }
-
-    _controllerPool.addAll(keysToUpdate.map((k, v) => MapEntry(k, v as VideoPlayerController)));
-
-    for (final key in keysToRemove) {
-      _isBufferingVN[key]?.dispose();
-      _isBufferingVN.remove(key);
-      _firstFrameReady[key]?.dispose();
-      _forceMountPlayer[key]?.dispose();
-    }
-
-    final bufferingVNToUpdate = <int, ValueNotifier<bool>>{};
-    final firstFrameToUpdate = <int, ValueNotifier<bool>>{};
-    final forceMountToUpdate = <int, ValueNotifier<bool>>{};
-
-    for (final entry in _isBufferingVN.entries) {
-      if (entry.key >= removedCount) bufferingVNToUpdate[entry.key - removedCount] = entry.value;
-    }
-    for (final entry in _firstFrameReady.entries) {
-      if (entry.key >= removedCount) firstFrameToUpdate[entry.key - removedCount] = entry.value;
-    }
-    for (final entry in _forceMountPlayer.entries) {
-      if (entry.key >= removedCount) forceMountToUpdate[entry.key - removedCount] = entry.value;
-    }
-
-    _isBufferingVN.clear();
-    _isBufferingVN.addAll(bufferingVNToUpdate);
-    _firstFrameReady.clear();
-    _firstFrameReady.addAll(firstFrameToUpdate);
-    _forceMountPlayer.clear();
-    _forceMountPlayer.addAll(forceMountToUpdate);
   }
 
   Future<void> refreshVideos() async {
@@ -351,7 +345,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         _errorMessage = null;
       }
       _currentPage = 1;
-      await _loadVideos(page: 1, append: false, clearSession: false, forceResetIndex: true);
+      await _loadVideos(page: 1, append: false, clearSession: true, forceResetIndex: true);
       if (mounted) {
         _isLoading = false;
         _errorMessage = null;
@@ -407,12 +401,8 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
 
   void _syncLikeStateWithModels(List<VideoModel> videos) {
     for (final video in videos) {
-      if (_isLikedVN.containsKey(video.id)) {
-        _isLikedVN[video.id]!.value = video.isLiked;
-      }
-      if (_likeCountVN.containsKey(video.id)) {
-        _likeCountVN[video.id]!.value = video.likes;
-      }
+      _getOrCreateNotifier<bool>(_isLikedVN, video.id, video.isLiked);
+      _getOrCreateNotifier<int>(_likeCountVN, video.id, video.likes);
     }
   }
 }

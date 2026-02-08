@@ -18,7 +18,7 @@ const getStore = (prefix) => {
   }
 
   return new RedisStore({
-    sendCommand: (...args) => redisService.client.sendCommand(args),
+    sendCommand: (...args) => redisService.call(...args),
     prefix: `rate_limit:${prefix}:`,
   });
 };

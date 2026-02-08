@@ -75,6 +75,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
 
   // **NEW: Individual Video Error State widget**
   Widget _buildVideoErrorState(int index, String error) {
+    final String videoId = index < _videos.length ? _videos[index].id : '';
     return Container(
       color: Colors.black,
       child: Center(
@@ -103,10 +104,10 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
               onPressed: () {
                  // Retry logic: clear error and reload
                  safeSetState(() {
-                    _videoErrors.remove(index);
-                    _loadingVideos.add(index); // Show spinner
-                    _isBuffering[index] = false; // Reset buffering state
-                    _isBufferingVN[index]?.value = false;
+                    _videoErrors.remove(videoId);
+                    _loadingVideos.add(videoId); // Show spinner
+                    _isBuffering[videoId] = false; // Reset buffering state
+                    _isBufferingVN[videoId]?.value = false;
                  });
                  // Force reload
                  _preloadVideo(index).then((_) {
@@ -197,10 +198,10 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     final totalVideos = _videos.length;
     final videoIndex = index;
 
-    // **NEW: Pre-fetch Trigger (Buffer 6 videos - Aggressive for Fast Scroll)**
-    // Trigger load more when user is within 6 videos of the end (approx 50% through batch)
-    // This helps prevent hitting the "Loading more videos" screen even when scrolling fast
-    if (mounted && totalVideos > 0 && index >= totalVideos - 6 && !_isLoadingMore && !_isRefreshing && _hasMore) {
+    // **NEW: Pre-fetch Trigger (Buffer 12 videos - Ultra Aggressive for Fast Scroll)**
+    // Trigger load more when user is within 12 videos of the end (approx 80% through batch)
+    // This provides a much larger safety buffer for slow backend refills or fast scrolling.
+    if (mounted && totalVideos > 0 && index >= totalVideos - 12 && !_isLoadingMore && !_isRefreshing && _hasMore) {
        WidgetsBinding.instance.addPostFrameCallback((_) {
           _loadMoreVideos();
        });
@@ -280,6 +281,16 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                   ),
                   const SizedBox(height: 16),
                   const Text("Loading more videos...", style: TextStyle(color: Colors.white24, fontSize: 13)),
+                  // **NEW: Safety Trigger: If we land on this screen, force a reload if not already loading**
+                  if (mounted && !_isLoadingMore && !_isRefreshing && _hasMore) ...[
+                     const SizedBox(height: 8),
+                     Builder(builder: (_) {
+                        WidgetsBinding.instance.addPostFrameCallback((__) {
+                           if (!_isLoadingMore) _loadMoreVideos();
+                        });
+                        return const SizedBox.shrink();
+                     }),
+                  ],
                 ],
              ]
           ),
@@ -300,9 +311,8 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     bool isActive,
     int index,
   ) {
-    if (!_currentHorizontalPage.containsKey(index)) {
-      _currentHorizontalPage[index] = ValueNotifier<int>(0);
-    }
+    final String videoId = video.id;
+    _getOrCreateNotifier<int>(_currentHorizontalPage, videoId, 0);
 
     return Container(
       key: ValueKey('video_${video.id}'), // **FIX: Stable key to prevent player recreation on feed update**
@@ -312,7 +322,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
       child: Stack(
         children: [
           ValueListenableBuilder<int>(
-            valueListenable: _currentHorizontalPage[index]!,
+            valueListenable: _currentHorizontalPage[videoId]!,
             builder: (context, currentPage, child) {
               return IndexedStack(
                 index: currentPage,
@@ -326,7 +336,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
               );
             },
           ),
-          if (_loadingVideos.contains(index))
+          if (_loadingVideos.contains(videoId))
             RepaintBoundary(child: Center(child: _buildGreenSpinner(size: 28))),
         ],
       ),
@@ -339,9 +349,10 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     bool isActive,
     int index,
   ) {
+    final String videoId = video.id;
     // **NEW: Check for error state**
     // **ZOMBIE AUDIO FIX: Check if error is real or if controller recovered**
-    bool showError = _videoErrors.containsKey(index);
+    bool showError = _videoErrors.containsKey(videoId);
     if (showError && controller != null && controller.value.isInitialized && !controller.value.hasError) {
        // If controller is playing or has buffered content, it's likely a stale error
        // (e.g. transient network error during load, but retry succeeded)
@@ -349,13 +360,13 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           // It's working! Ignore the error and schedule cleanup
           showError = false;
           WidgetsBinding.instance.addPostFrameCallback((_) {
-             if (mounted && _videoErrors.containsKey(index)) {
-                // AppLogger.log('✅ UI: Auto-recovered from stale error for video $index (Controller is healthy)');
+             if (mounted && _videoErrors.containsKey(videoId)) {
+                // AppLogger.log('✅ UI: Auto-recovered from stale error for video $videoId (Controller is healthy)');
                 safeSetState(() {
-                   _videoErrors.remove(index);
+                   _videoErrors.remove(videoId);
                    // Reset buffering state to be safe
-                   _isBuffering[index] = false;
-                   _isBufferingVN[index]?.value = false;
+                   _isBuffering[videoId] = false;
+                   _isBufferingVN[videoId]?.value = false;
                 });
              }
           });
@@ -379,13 +390,13 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           // **WEB FIX: Hide thumbnail when video is ready on web**
           ValueListenableBuilder<bool>(
             valueListenable:
-                _firstFrameReady[index] ?? ValueNotifier<bool>(false),
+                _firstFrameReady[videoId] ?? ValueNotifier<bool>(false),
             builder: (context, firstFrameReady, _) {
               final bool shouldShowOnWeb = kIsWeb &&
                   controller != null &&
                   controller.value.isInitialized;
               final bool shouldHideThumbnail = firstFrameReady ||
-                  _forceMountPlayer[index]?.value == true ||
+                  _forceMountPlayer[videoId]?.value == true ||
                   shouldShowOnWeb;
 
               return Positioned.fill(
@@ -398,7 +409,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           if (controller != null && controller.value.isInitialized)
             ValueListenableBuilder<bool>(
               valueListenable:
-                  _firstFrameReady[index] ?? ValueNotifier<bool>(false),
+                  _firstFrameReady[videoId] ?? ValueNotifier<bool>(false),
               builder: (context, firstFrameReady, _) {
                 // **WEB FIX: On web, always show video if controller is initialized**
                 // Web video player doesn't always trigger firstFrameReady properly
@@ -408,7 +419,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                     kIsWeb && controller.value.isInitialized;
 
                 final shouldShowVideo = firstFrameReady ||
-                    _forceMountPlayer[index]?.value == true ||
+                    _forceMountPlayer[videoId]?.value == true ||
                     shouldShowOnWeb;
 
                 if (shouldShowVideo) {
@@ -445,7 +456,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             child: GestureDetector(
               behavior: HitTestBehavior.translucent,
               onTap: () => _togglePlayPause(index),
-              onDoubleTap: () => _handleDoubleTapLike(video, index),
+              onDoubleTap: () => _handleDoubleTapLike(video),
               child: const SizedBox.expand(),
             ),
           ),
@@ -453,7 +464,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             child: IgnorePointer(
               // **OPTIMIZED: Use ValueListenableBuilder for granular updates - avoid setState**
               child: ValueListenableBuilder<bool>(
-                valueListenable: _userPausedVN[index] ??= ValueNotifier<bool>(false),
+                valueListenable: _userPausedVN[videoId] ??= ValueNotifier<bool>(false),
                 builder: (context, isUserPaused, _) {
                   return Opacity(
                     opacity: isUserPaused ? 1.0 : 0.0,
@@ -480,12 +491,12 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           Positioned.fill(
             child: IgnorePointer(
               child: ValueListenableBuilder<bool>(
-                valueListenable: _isBufferingVN[index] ??=
+                valueListenable: _isBufferingVN[videoId] ??=
                     ValueNotifier<bool>(false),
                 builder: (context, isBuffering, _) {
                    // **OPTIMIZED: Listen to userPausedVN too for correct visibility**
                    return ValueListenableBuilder<bool>(
-                      valueListenable: _userPausedVN[index] ??= ValueNotifier<bool>(false),
+                      valueListenable: _userPausedVN[videoId] ??= ValueNotifier<bool>(false),
                       builder: (context, isUserPaused, _) {
                           final show = isBuffering && !isUserPaused;
                           return Opacity(
@@ -497,7 +508,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                                 ),
                                 // **NEW: Slow Internet message**
                                 ValueListenableBuilder<bool>(
-                                  valueListenable: _isSlowConnectionVN[index] ??=
+                                  valueListenable: _isSlowConnectionVN[videoId] ??=
                                       ValueNotifier<bool>(false),
                                   builder: (context, isSlow, _) {
                                     if (!isSlow) return const SizedBox.shrink();
@@ -557,7 +568,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             ),
           _buildVideoOverlay(video, index),
           _buildReportIndicator(index),
-          if (_showHeartAnimation[index]?.value == true)
+          if (_showHeartAnimation[videoId]?.value == true)
             _buildHeartAnimation(index),
           _buildTopGradientOverlay(),
           ValueListenableBuilder<bool>(
@@ -1239,17 +1250,11 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
   }
 
   ValueNotifier<bool> _getLikeNotifier(VideoModel video) {
-    if (!_isLikedVN.containsKey(video.id)) {
-      _isLikedVN[video.id] = ValueNotifier<bool>(video.isLiked);
-    }
-    return _isLikedVN[video.id]!;
+    return _getOrCreateNotifier<bool>(_isLikedVN, video.id, video.isLiked);
   }
 
   ValueNotifier<int> _getLikeCountNotifier(VideoModel video) {
-    if (!_likeCountVN.containsKey(video.id)) {
-      _likeCountVN[video.id] = ValueNotifier<int>(video.likes);
-    }
-    return _likeCountVN[video.id]!;
+    return _getOrCreateNotifier<int>(_likeCountVN, video.id, video.likes);
   }
 
   Widget _buildLikeButton(VideoModel video, int index) {
@@ -1305,7 +1310,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                       );
                     },
                     onTap: (bool isLiked) async {
-                      await _handleLike(video, index);
+                      await _handleLike(video);
                       return !isLiked;
                     },
                   ),
@@ -1426,8 +1431,8 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
       carouselAd: carouselAd,
       videoId: videoId,
       onAdClosed: () {
-        if (_currentHorizontalPage.containsKey(videoIndex)) {
-          _currentHorizontalPage[videoIndex]!.value = 0;
+        if (videoId != null && _currentHorizontalPage.containsKey(videoId)) {
+          _currentHorizontalPage[videoId]!.value = 0;
         }
       },
       autoPlay: true,

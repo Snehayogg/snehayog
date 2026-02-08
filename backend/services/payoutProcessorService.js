@@ -1,4 +1,3 @@
-import CreatorPayout from '../models/CreatorPayout.js';
 import User from '../models/User.js';
 
 // **NEW: Process individual payout**

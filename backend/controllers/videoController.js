@@ -9,6 +9,7 @@ import FeedHistory from '../models/FeedHistory.js';
 import AdImpression from '../models/AdImpression.js';
 import redisService from '../services/redisService.js';
 import FeedQueueService from '../services/feedQueueService.js';
+import RecommendationService from '../services/recommendationService.js';
 import queueService from '../services/queueService.js';
 import { VideoCacheKeys, invalidateCache } from '../middleware/cacheMiddleware.js';
 import { AD_CONFIG } from '../constants/index.js';
@@ -293,7 +294,7 @@ export const uploadVideo = async (req, res) => {
     }
 
     let finalVideoType = videoType || 'yog';
-    if (detectedDuration > 60) {
+    if (detectedDuration > 120) {
       finalVideoType = 'vayu';
     } else if (detectedDuration > 0) {
       finalVideoType = 'yog';
@@ -328,6 +329,7 @@ export const uploadVideo = async (req, res) => {
     if (redisService.getConnectionStatus()) {
       await invalidateCache([
         'videos:feed:*',
+        `user:feed:${user.googleId}:*`,
         `videos:user:${user.googleId}`,
         VideoCacheKeys.all()
       ]);
@@ -545,13 +547,23 @@ export const getUserVideos = async (req, res) => {
         currentMonthEarnings = ((bannerViews / 1000) * bannerCpm + (carouselViews / 1000) * carouselCpm) * creatorShare;
     } catch (err) { console.error('⚠️ Error calculating monthly earnings:', err); }
 
-    const formattedEarnings = currentMonthEarnings.toFixed(2);
-    
-    // Inject earnings into uploader object for each video
-    // This allows the frontend to see the current month earnings in the profile header
-    const videosWithEarnings = validVideos.map(v => {
+    const requestingGoogleId = req.user?.googleId || req.user?.id;
+    const isOwner = requestingGoogleId === googleId;
+
+    let rank = 0;
+    if (!isOwner) {
+      rank = await RecommendationService.getGlobalCreatorRank(user._id);
+    }
+
+    // Inject earnings/rank into uploader object
+    const videosWithMetadata = validVideos.map(v => {
       if (v.uploader) {
-        v.uploader.earnings = parseFloat(formattedEarnings);
+        if (isOwner) {
+          v.uploader.earnings = parseFloat(currentMonthEarnings.toFixed(2));
+        } else {
+          v.uploader.earnings = 0; // Hide actual earnings
+          v.uploader.rank = rank;
+        }
       }
       return v;
     });
@@ -570,16 +582,16 @@ export const getUserVideos = async (req, res) => {
       } catch (err) { console.error('⚠️ Error fetching series episodes:', err); }
     }
 
-    if (videosWithEarnings.length === 0) return res.json([]);
+    if (videosWithMetadata.length === 0) return res.json([]);
 
-    const requestingGoogleId = req.user?.googleId;
+    const requestingUserGoogleId = req.user?.googleId;
     let requestingUserObjectIdStr = null;
-    if (requestingGoogleId) {
-      const rqUser = await User.findOne({ googleId: requestingGoogleId }).select('_id').lean();
+    if (requestingUserGoogleId) {
+      const rqUser = await User.findOne({ googleId: requestingUserGoogleId }).select('_id').lean();
       if (rqUser) requestingUserObjectIdStr = rqUser._id.toString();
     }
 
-    const videosSerialized = serializeVideos(videosWithEarnings, req.apiVersion, requestingUserObjectIdStr);
+    const videosSerialized = serializeVideos(videosWithMetadata, req.apiVersion, requestingUserObjectIdStr);
     
     if (redisService.getConnectionStatus()) {
       await redisService.set(cacheKey, videosSerialized, 600);
@@ -589,6 +601,24 @@ export const getUserVideos = async (req, res) => {
   } catch (error) {
     console.error('❌ Error fetching user videos:', error);
     res.status(500).json({ error: 'Error fetching videos', details: error.message });
+  }
+};
+
+/**
+ * Get Global Leaderboard
+ */
+export const getGlobalLeaderboard = async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 20;
+    const leaderboard = await RecommendationService.getGlobalLeaderboard(limit);
+    
+    // Set caching header for the API response
+    res.set('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour on client/CDN
+    
+    return res.json(leaderboard);
+  } catch (error) {
+    console.error('❌ Error in getGlobalLeaderboard controller:', error);
+    res.status(500).json({ error: 'Failed to fetch global leaderboard' });
   }
 };
 
@@ -615,7 +645,7 @@ export const getFeed = async (req, res) => {
       }
     } catch (error) { console.log('⚠️ Error checking token, using regular feed'); }
 
-    const { videoType: queryVideoType, type: queryType, limit = 10, page = 1 } = req.query;
+    const { videoType: queryVideoType, type: queryType, limit = 10, page = 1, clearSession } = req.query;
     const videoType = queryVideoType || queryType;
     const limitNum = parseInt(limit) || 5;
     const pageNum = parseInt(page) || 1;
@@ -624,6 +654,11 @@ export const getFeed = async (req, res) => {
     
     const requestedType = (videoType || 'yog').toLowerCase();
     const type = requestedType === 'vayug' ? 'vayu' : requestedType;
+    
+    // Clear queue if requested (pull-to-refresh)
+    if (clearSession === 'true') {
+      await FeedQueueService.clearQueue(userIdentifier, type);
+    }
     
     let finalVideos = await FeedQueueService.popFromQueue(userIdentifier, type, limitNum);
     
@@ -713,7 +748,12 @@ export const getVideoById = async (req, res) => {
         googleId: videoObj.uploader?.googleId?.toString() || '',
         name: videoObj.uploader?.name || 'Unknown User',
         profilePic: videoObj.uploader?.profilePic || '',
-        earnings: parseFloat(videoObj.uploader?.earnings) || 0.0
+        earnings: (req.user?.googleId === videoObj.uploader?.googleId?.toString()) 
+          ? (parseFloat(videoObj.uploader?.earnings) || 0.0)
+          : 0.0,
+        rank: (req.user?.googleId !== videoObj.uploader?.googleId?.toString())
+          ? await RecommendationService.getGlobalCreatorRank(videoObj.uploader?._id)
+          : 0
       },
       hlsMasterPlaylistUrl: videoObj.hlsMasterPlaylistUrl || null,
       hlsPlaylistUrl: videoObj.hlsPlaylistUrl || null,
@@ -723,7 +763,9 @@ export const getVideoById = async (req, res) => {
       episodes: episodes,
       likedBy: likedByGoogleIds,
       isLiked: isLiked,
-      earnings: parseFloat(videoObj.earnings) || 0.0
+      earnings: (req.user?.googleId === videoObj.uploader?.googleId?.toString())
+        ? (parseFloat(videoObj.earnings) || 0.0)
+        : 0.0
     };
 
     res.json(transformedVideo);

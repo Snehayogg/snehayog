@@ -32,24 +32,21 @@ class AppInitializationManager {
   bool _isStage1Complete = false;
   bool _isStage2Complete = false;
   bool _isStage3Complete = false;
+  
+  // Progress tracking
+  final ValueNotifier<double> initializationProgress = ValueNotifier(0.0);
+  final ValueNotifier<String> initializationStatus = ValueNotifier('Initializing...');
 
   bool get isStage2Complete => _isStage2Complete;
 
   // Track the vital first page of videos
-  List<VideoModel>? _initialVideos;
+  List<VideoModel>? initialVideos;
   DateTime? _initialVideosTimestamp;
-  bool _hasInitialVideosMore = false;
-  
-  // Public Getters
-  List<VideoModel>? get initialVideos => _initialVideos;
-  set initialVideos(List<VideoModel>? videos) => _initialVideos = videos;
-  
-  bool get hasInitialVideosMore => _hasInitialVideosMore;
-  set hasInitialVideosMore(bool value) => _hasInitialVideosMore = value;
+  bool hasInitialVideosMore = false;
 
   /// **NEW: Check if initialVideos are still fresh (within 3 minutes)**
   bool get isInitialVideosFresh {
-    if (_initialVideos == null || _initialVideosTimestamp == null) return false;
+    if (initialVideos == null || _initialVideosTimestamp == null) return false;
     final age = DateTime.now().difference(_initialVideosTimestamp!);
     return age < const Duration(minutes: 3);
   }
@@ -61,23 +58,28 @@ class AppInitializationManager {
 
     try {
       AppLogger.log('🚀 InitManager: Stage 1 (Config) Started');
+      initializationProgress.value = 0.05;
+      initializationStatus.value = 'Connecting to services...';
       
       // 1. Firebase (Critical for Network Interceptors)
       try {
         await Firebase.initializeApp();
+        initializationProgress.value = 0.15;
         AppLogger.log('✅ InitManager: Firebase initialized');
       } catch (e) {
         AppLogger.log('⚠️ InitManager: Firebase Init Error: $e');
       }
 
       // 2. Determine Backend URL
-      // **OPTIMIZATION: Don't clear cache aggressively. Trust the "Race to Success"**
-      // AppConfig.clearCache(); 
+      initializationStatus.value = 'Configuring backend...';
       final workingUrl = await AppConfig.checkAndUpdateServerUrl();
+      initializationProgress.value = 0.30;
       AppLogger.log('✅ InitManager: Backend URL confirmed: $workingUrl');
 
       // 2. Initialize Smart Cache (Memory Only, NO HIVE)
+      initializationStatus.value = 'Preparing cache...';
       await SmartCacheManager().initialize();
+      initializationProgress.value = 0.45;
 
       _isStage1Complete = true;
     } catch (e) {
@@ -98,6 +100,7 @@ class AppInitializationManager {
 
     try {
       AppLogger.log('🚀 InitManager: Stage 2 (Vital Content) Started');
+      initializationProgress.value = 0.0;
       AppLogger.log('📍 Trace: Stage 2 called from:');
       AppLogger.log(StackTrace.current.toString().split('\n').take(5).join('\n'));
       
@@ -112,15 +115,16 @@ class AppInitializationManager {
       // Task B: Fetch User Data (Strict sequence ensures tokens are ready for videos)
       try {
         AppLogger.log('🔐 InitManager: Authenticating user...');
+        initializationStatus.value = 'Authenticating...';
         await authService.ensureStrictAuth();
+        initializationProgress.value = 0.70;
         AppLogger.log('✅ InitManager: User Data (Strict) loaded');
       } catch (e) {
         AppLogger.log('⚠️ InitManager: User Data fetch failed (non-critical): $e');
       }
 
       // Task A: Video fetching (Now has access to validated tokens/user ID)
-      // **FIX: Fire and forget video fetching to prevent Splash Screen hang**
-      // Authenticated tokens are already ensured by ensureStrictAuth() above
+      initializationStatus.value = 'Loading content...';
       unawaited(_fetchAndPreloadFirstVideos(videoService));
 
       // Ensure Stage 1 is atleast triggered/checked
@@ -151,10 +155,11 @@ class AppInitializationManager {
       final videos = rawList.cast<VideoModel>();
 
       if (videos.isNotEmpty) {
-        _initialVideos = videos;
-        _hasInitialVideosMore = result['hasMore'] ?? false;
+        initialVideos = videos;
+        hasInitialVideosMore = result['hasMore'] ?? false;
         _initialVideosTimestamp = DateTime.now();
         AppLogger.log('✅ InitManager: Fetched ${videos.length} videos.');
+        initializationProgress.value = 0.90;
 
         // 2. Pre-initialize FIRST video only (The one user sees instantly)
         final firstVideo = videos.first;
@@ -162,13 +167,18 @@ class AppInitializationManager {
         
         // Use preloadController which handles SharedPool logic internally
         AppLogger.log('🎬 InitManager: Pre-initializing first video controller (Index 0)...');
+        initializationStatus.value = 'Preparing video...';
         await controllerManager.preloadController(0, firstVideo); 
+        
+        initializationProgress.value = 1.0;
+        initializationStatus.value = 'Ready!';
         
         // 3. Warm up HLS for next few (Network only, low priority)
         unawaited(_warmUpNextVideos(videos));
       }
     } catch (e) {
        AppLogger.log('❌ InitManager: Video Fetch Failed: $e');
+       initializationProgress.value = 1.0; // Fail gracefully
     }
   }
 
@@ -202,7 +212,7 @@ class AppInitializationManager {
          await notificationService.initialize();
          AppLogger.log('✅ InitManager: Notifications initialized');
        } catch (e) {
-         print('Notification Init Error: $e');
+         AppLogger.log('Notification Init Error: $e');
        }
 
        // 2. Remote Config

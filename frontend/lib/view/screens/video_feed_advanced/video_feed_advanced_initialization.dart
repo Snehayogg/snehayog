@@ -354,10 +354,11 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
                   // Only retry if first attempt didn't work
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     if (mounted && _currentIndex == 0 && _videos.isNotEmpty) {
+                      final String videoId = _videos[0].id;
                       // Check if video is already playing before retrying
-                      if (_controllerStates[0] != true ||
-                          (_controllerPool.containsKey(0) &&
-                              !_controllerPool[0]!.value.isPlaying)) {
+                      if (_controllerStates[videoId] != true ||
+                          (_controllerPool.containsKey(videoId) &&
+                              !_controllerPool[videoId]!.value.isPlaying)) {
                         AppLogger.log(
                           '🎬 VideoFeedAdvanced: Second autoplay attempt for deep link video',
                         );
@@ -366,20 +367,20 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
 
                       // **FORCE PLAY: If video still not playing, force it**
                       // Deep link video is always at index 0
-                      if (_controllerPool.containsKey(0)) {
-                        final controller = _controllerPool[0];
+                      if (_controllerPool.containsKey(videoId)) {
+                        final controller = _controllerPool[videoId];
                         if (controller != null &&
                             controller.value.isInitialized &&
                             !controller.value.isPlaying) {
                           AppLogger.log(
                             '🎬 VideoFeedAdvanced: Forcing play for deep link video at index 0 (controller ready but not playing)',
                           );
-                          _pauseAllOtherVideos(0);
+                          _pauseAllOtherVideos(videoId);
                           try {
                             controller.setVolume(1.0);
                             controller.play();
-                            _controllerStates[0] = true;
-                            _userPaused[0] = false;
+                            _controllerStates[videoId] = true;
+                            _userPaused[videoId] = false;
                             AppLogger.log(
                               '✅ VideoFeedAdvanced: Deep link video force play successful',
                             );
@@ -652,11 +653,12 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
           // Use another postFrameCallback instead of delay to check immediately
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && _currentIndex < _videos.length) {
-              final controller = _controllerPool[_currentIndex];
+              final String videoId = _videos[_currentIndex].id;
+              final controller = _controllerPool[videoId];
               if (controller != null &&
                   controller.value.isInitialized &&
                   !controller.value.isPlaying &&
-                  _userPaused[_currentIndex] != true) {
+                  _userPaused[videoId] != true) {
                 AppLogger.log(
                     '🔄 VideoFeedAdvanced: Fallback autoplay trigger after preload');
                 _tryAutoplayCurrent();

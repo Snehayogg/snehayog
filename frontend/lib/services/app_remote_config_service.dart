@@ -25,7 +25,7 @@ class AppRemoteConfigService {
   static const String _cacheKey = 'app_remote_config';
   static const String _cacheTimestampKey = 'app_remote_config_timestamp';
   static const String _apiVersionHeader = 'X-API-Version';
-  static const String _defaultApiVersion = '2024-10-01';
+  static const String _defaultApiVersion = '2026-02-08';
 
   AppRemoteConfig? _cachedConfig;
   bool _isInitialized = false;

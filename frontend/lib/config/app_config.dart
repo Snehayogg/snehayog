@@ -6,7 +6,7 @@ import '../core/services/http_client_service.dart';
 /// Optimized app configuration for better performonce andsmaller size
 class AppConfig {
   // **NEW: API Version (Date-Based)**
-  static const String kApiVersion = '2025-11-01';
+  static const String kApiVersion = '2026-02-08';
 
   // **MANUAL: Development mode control*
   static const bool _isDevelopment =
@@ -17,7 +17,7 @@ class AppConfig {
 
   // Find your IP: Windows: ipconfig | Linux/Mac: ifconfig or ip address
   // Make sure your phone/emulator is on the same Wi‑Fi network
-  static const String _localIpBaseUrl = 'http://192.168.0.196:5001';
+  static const String _localIpBaseUrl = 'http://192.168.0.187:5001';
 
   // Local development server (localhost) - for web
   static const String _localWebBaseUrl = 'http://localhost:5001';
@@ -25,8 +25,6 @@ class AppConfig {
   // Primary production endpoints
   static const String _customDomainUrl = 'https://api.snehayog.site';
   static const String _flyUrl = 'https://vayug.fly.dev';
-  static const String _railwayUrl =
-      'https://snehayog-production.up.railway.app';
 
   // **NEW: Clear cache method for development**
   static void clearCache() {
@@ -142,7 +140,7 @@ class AppConfig {
 
     print('🔍 AppConfig: Starting parallel "Race to Success" check...');
     
-    final localServerUrl = kIsWeb ? _localWebBaseUrl : _localIpBaseUrl;
+    const localServerUrl = kIsWeb ? _localWebBaseUrl : _localIpBaseUrl;
     
     // Create a completer to handle the "first success" logic
     final completer = Completer<String>();
@@ -151,7 +149,6 @@ class AppConfig {
     final candidates = [
       _flyUrl,
       _customDomainUrl,
-      _railwayUrl,
       localServerUrl,
     ];
     
@@ -191,7 +188,6 @@ class AppConfig {
   static const List<String> fallbackUrls = [
     _flyUrl,
     _customDomainUrl,
-    _railwayUrl,
   ];
 
   // **NEW: Network timeout configurations**
@@ -574,24 +570,6 @@ class NetworkHelper {
   static bool isFileSizeValid(int fileSize, {bool isVideo = true}) {
     final maxSize = isVideo ? maxVideoFileSize : maxImageFileSize;
     return fileSize <= maxSize;
-  }
-
-  /// **NEW: Check if Railway server is accessible**
-  static Future<bool> isRailwayAccessible() async {
-    try {
-      print('🔍 NetworkHelper: Checking Railway server accessibility...');
-      final response = await http.get(
-        Uri.parse('${AppConfig._railwayUrl}/api/health'),
-        headers: {'Content-Type': 'application/json'},
-      ).timeout(const Duration(seconds: 30));
-
-      final isAccessible = response.statusCode == 200;
-      print('🔍 NetworkHelper: Railway server accessible: $isAccessible');
-      return isAccessible;
-    } catch (e) {
-      print('❌ NetworkHelper: Railway server not accessible: $e');
-      return false;
-    }
   }
 
   /// **NEW: Check if custom domain is accessible**

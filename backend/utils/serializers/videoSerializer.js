@@ -35,14 +35,17 @@ export const serializeVideo = (video, apiVersion, requestingUserObjectId) => {
     uploadedAt: videoObj.uploadedAt?.toISOString ? videoObj.uploadedAt.toISOString() : videoObj.uploadedAt,
     isLiked: isLiked,
     earnings: parseFloat(videoObj.earnings) || 0.0,
+    hlsPlaylistUrl: videoObj.hlsPlaylistUrl || null,
+    lowQualityUrl: videoObj.lowQualityUrl || null,
   };
 
   /**
    * VERSION SPECIFIC LOGIC
    */
   
-  // Version: 2025-11-01 (App Launch baseline)
-  if (apiVersion === '2025-11-01' || !apiVersion) {
+  // Version: 2025-11-01 and 2026-02-08 (Stability Update)
+  // Using a comparison or list for baseline versions
+  if (apiVersion === '2025-11-01' || apiVersion === '2026-02-08' || !apiVersion) {
     base.uploader = {
       id: videoObj.uploader?.googleId?.toString() || videoObj.uploader?._id?.toString() || '',
       _id: videoObj.uploader?._id?.toString() || '',
@@ -53,7 +56,12 @@ export const serializeVideo = (video, apiVersion, requestingUserObjectId) => {
     };
     
     base.hlsMasterPlaylistUrl = videoObj.hlsMasterPlaylistUrl || null;
-    base.isHLSEncoded = videoObj.isHLSEncoded || false;
+    
+    // **ROBUST HLS CHECK**: If either URL contains .m3u8, it is HLS encoded
+    base.isHLSEncoded = videoObj.isHLSEncoded === true || 
+                       base.videoUrl.includes('.m3u8') || 
+                       (base.hlsPlaylistUrl && base.hlsPlaylistUrl.includes('.m3u8')) ||
+                       (base.hlsMasterPlaylistUrl && base.hlsMasterPlaylistUrl.includes('.m3u8'));
     
     return base;
   }

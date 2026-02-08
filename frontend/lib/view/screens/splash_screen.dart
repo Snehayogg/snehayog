@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/main.dart'; // Access to AuthWrapper
 import 'package:vayu/core/managers/app_initialization_manager.dart';
+import 'package:vayu/config/app_config.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -73,22 +74,100 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    final initManager = AppInitializationManager.instance;
+
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Center(
-        child: FadeTransition(
-          opacity: _opacityAnimation,
-          child: const Text(
-            'Vayu',
-            style: TextStyle(
-              fontSize: 48,
-              fontWeight: FontWeight.w900,
-              color: Colors.white,
-              letterSpacing: -1.5,
-              fontFamily: 'Roboto',
+      body: Stack(
+        children: [
+          // Center Content: Vayu Text
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FadeTransition(
+                  opacity: _opacityAnimation,
+                  child: const Text(
+                    'Vayu',
+                    style: TextStyle(
+                      fontSize: 48,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      letterSpacing: -1.5,
+                      fontFamily: 'Roboto',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                
+                // Progress Bar and Status
+                SizedBox(
+                  width: 200,
+                  child: Column(
+                    children: [
+                      // Status Text
+                      ValueListenableBuilder<String>(
+                        valueListenable: initManager.initializationStatus,
+                        builder: (context, status, _) {
+                          return Text(
+                            status,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.6),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: 0.5,
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      
+                      // Progress Indicator
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: ValueListenableBuilder<double>(
+                          valueListenable: initManager.initializationProgress,
+                          builder: (context, progress, _) {
+                            return TweenAnimationBuilder<double>(
+                              duration: const Duration(milliseconds: 600),
+                              curve: Curves.fastOutSlowIn,
+                              tween: Tween<double>(begin: 0, end: progress),
+                              builder: (context, value, _) {
+                                return LinearProgressIndicator(
+                                  value: value,
+                                  backgroundColor: Colors.white.withAlpha(30),
+                                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                  minHeight: 3,
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-        ),
+          
+          // Version info at bottom (optional but professional)
+          Positioned(
+            bottom: 30,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Text(
+                'v${AppConfig.kApiVersion}',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.3),
+                  fontSize: 10,
+                  letterSpacing: 1,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

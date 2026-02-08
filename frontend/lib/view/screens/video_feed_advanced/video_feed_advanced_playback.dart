@@ -10,12 +10,18 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
 
     if (_primedStartIndex == start) return;
 
-    _controllerPool.forEach((idx, controller) {
-      if (idx < start || idx > end) {
+    _controllerPool.forEach((videoId, controller) {
+      // Find index of this videoId
+      int? idx;
+      try {
+        idx = _videos.indexWhere((v) => v.id == videoId);
+      } catch (_) {}
+
+      if (idx == null || idx < start || idx > end) {
         if (controller.value.isInitialized && controller.value.isPlaying) {
           try {
             controller.pause();
-            _controllerStates[idx] = false;
+            _controllerStates[videoId] = false;
           } catch (_) {}
         }
       }
@@ -24,25 +30,19 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
     _primedStartIndex = start;
   }
 
-  void _pauseAllOtherVideos(int currentIndex) {
-    _controllerPool.forEach((idx, controller) {
-      if (idx != currentIndex &&
+  void _pauseAllOtherVideos(String? currentVideoId) {
+    _controllerPool.forEach((videoId, controller) {
+      if (videoId != currentVideoId &&
           controller.value.isInitialized &&
           controller.value.isPlaying) {
         try {
           controller.pause();
-          _controllerStates[idx] = false;
+          _controllerStates[videoId] = false;
         } catch (_) {}
       }
     });
 
     _videoControllerManager.pauseAllVideosOnTabChange();
-
-    // **FIX: Don't pause current video in shared pool**
-    String? currentVideoId;
-    if (currentIndex >= 0 && currentIndex < _videos.length) {
-      currentVideoId = _videos[currentIndex].id;
-    }
 
     final sharedPool = SharedVideoControllerPool();
     sharedPool.pauseAllControllers(exceptVideoId: currentVideoId);
@@ -56,30 +56,39 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
       return;
     }
 
-    final controller = _controllerPool[_currentIndex];
+    final video = _videos[_currentIndex];
+    final videoId = video.id;
+    final controller = _controllerPool[videoId];
+
     if (controller != null && controller.value.isInitialized) {
-      _pauseAllOtherVideos(_currentIndex);
+      _pauseAllOtherVideos(videoId);
       _lifecyclePaused = false;
       controller.play();
-      _controllerStates[_currentIndex] = true;
-      _userPaused[_currentIndex] = false; // **Ensure user paused is reset**
-      _userPausedVN[_currentIndex]?.value = false; // **Sync VN**
-      _ensureWakelockForVisibility();
+      
+      safeSetState(() {
+        _controllerStates[videoId] = true;
+        _userPaused[videoId] = false; // **Ensure user paused is reset**
+        _getOrCreateNotifier<bool>(_userPausedVN, videoId, false);
+      });
+      
       _ensureWakelockForVisibility();
       return;
     }
 
     _preloadVideo(_currentIndex).then((_) {
       if (!mounted) return;
-      final c = _controllerPool[_currentIndex];
+      final c = _controllerPool[videoId];
       if (c != null && c.value.isInitialized) {
-        _pauseAllOtherVideos(_currentIndex);
+        _pauseAllOtherVideos(videoId);
         _lifecyclePaused = false;
         c.play();
-        _controllerStates[_currentIndex] = true;
-        _userPaused[_currentIndex] = false;
-        _userPausedVN[_currentIndex]?.value = false; // **Sync VN**
-        _ensureWakelockForVisibility();
+        
+        safeSetState(() {
+          _controllerStates[videoId] = true;
+          _userPaused[videoId] = false;
+          _getOrCreateNotifier<bool>(_userPausedVN, videoId, false);
+        });
+        
         _ensureWakelockForVisibility();
       }
     });
@@ -88,17 +97,18 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
   void _pauseCurrentVideo() {
     if (_currentIndex < _videos.length) {
       final currentVideo = _videos[_currentIndex];
-      _viewTracker.stopViewTracking(currentVideo.id);
-    }
+      final videoId = currentVideo.id;
+      _viewTracker.stopViewTracking(videoId);
 
-    if (_controllerPool.containsKey(_currentIndex)) {
-      final controller = _controllerPool[_currentIndex];
+      if (_controllerPool.containsKey(videoId)) {
+        final controller = _controllerPool[videoId];
 
-      if (controller != null &&
-          controller.value.isInitialized &&
-          controller.value.isPlaying) {
-        controller.pause();
-        _controllerStates[_currentIndex] = false;
+        if (controller != null &&
+            controller.value.isInitialized &&
+            controller.value.isPlaying) {
+          controller.pause();
+          _controllerStates[videoId] = false;
+        }
       }
     }
 
@@ -106,10 +116,10 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
   }
 
   void _pauseAllVideosOnTabSwitch() {
-    _controllerPool.forEach((index, controller) {
+    _controllerPool.forEach((videoId, controller) {
       if (controller.value.isInitialized && controller.value.isPlaying) {
         controller.pause();
-        _controllerStates[index] = false;
+        _controllerStates[videoId] = false;
       }
     });
 
