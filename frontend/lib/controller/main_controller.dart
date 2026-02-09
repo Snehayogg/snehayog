@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class MainController extends ChangeNotifier {
   int _currentIndex = 0;
-  final List<String> _routes = ['/yug', '/vayu', '/upload', '/profile'];
+  final List<String> _routes = ['/yug', '/vayu', '/games', '/upload', '/profile'];
   bool _isAppInForeground = true;
   bool _isMediaPickerActive = false;
   DateTime? _lastPickerReturnAt;
@@ -80,7 +80,7 @@ class MainController extends ChangeNotifier {
   }
 
   void navigateToProfile() {
-    _currentIndex = 3; // Profile index
+    _currentIndex = 4; // Profile index
     notifyListeners();
   }
 

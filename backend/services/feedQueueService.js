@@ -258,6 +258,9 @@ class FeedQueueService {
       const MAX_PAGES = 15;        // Increased from 10
       let pageCount = 0;
 
+      const MAX_BATCH_PER_CREATOR = 3; // **DIVERSITY FIX: Strict Cap per refill**
+      const creatorCounts = new Map();
+
       while (freshVideos.length < this.BATCH_SIZE && pageCount < MAX_PAGES) {
           const candidateQuery = { processingStatus: 'completed' };
           if (videoType === 'vayu') candidateQuery.duration = { $gt: 120 };
@@ -299,9 +302,27 @@ class FeedQueueService {
              console.log(`🛡️ Deduplication: Batch ${pageCount+1} -> Excluded ${localFilteredCount} (Local) + ${remoteFilteredCount} (Remote/Strict) videos.`);
           }
 
-          // console.log(`🔍 Refill [Page ${pageCount + 1}]: Scanned ${skip}-${skip + candidates.length}. Found ${candidatesToCheck.length} fresh.`);
-          
-          freshVideos.push(...candidatesToCheck);
+          // **PHASE 3: DIVERSITY FILTER (Bucket & Cap)**
+          // iterate and pick only if creator has < MAX_BATCH_PER_CREATOR videos in this batch
+          let diversityExcludedCount = 0;
+          for (const video of candidatesToCheck) {
+             const uploaderId = video.uploader ? (video.uploader._id || video.uploader).toString() : 'unknown';
+             
+             const currentCount = creatorCounts.get(uploaderId) || 0;
+             if (currentCount < MAX_BATCH_PER_CREATOR) {
+                freshVideos.push(video);
+                creatorCounts.set(uploaderId, currentCount + 1);
+                
+                // Stop early if we have enough
+                if (freshVideos.length >= this.BATCH_SIZE) break;
+             } else {
+                diversityExcludedCount++;
+             }
+          }
+
+          if (diversityExcludedCount > 0) {
+             console.log(`🛡️ Diversity: Excluded ${diversityExcludedCount} videos due to creator cap (> ${MAX_BATCH_PER_CREATOR}).`);
+          }
           
           // Optimization: Break early if we have enough
           if (freshVideos.length >= this.BATCH_SIZE) break;

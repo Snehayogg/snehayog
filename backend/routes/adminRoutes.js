@@ -66,6 +66,22 @@ router.get('/feedback', requireAdminDashboardKey, async (req, res) => {
       .limit(normalizedLimit)
       .lean();
 
+    // **NEW: Populate User Names**
+    const emails = [...new Set(feedback.map(f => f.userEmail).filter(Boolean))];
+    const users = await User.find({ email: { $in: emails } }).select('email name').lean();
+    
+    const userMap = {};
+    users.forEach(u => {
+      userMap[u.email.toLowerCase()] = u.name;
+    });
+
+    // Attach names
+    feedback.forEach(f => {
+      if (f.userEmail) {
+        f.userName = userMap[f.userEmail.toLowerCase()] || 'Unknown User';
+      }
+    });
+
     res.json({
       success: true,
       count: feedback.length,

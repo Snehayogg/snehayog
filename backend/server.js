@@ -248,9 +248,9 @@ app.use('/hls', (req, res, next) => {
   }
 }));
 
-// Serve app-ads.txt from root
-app.get("/app-ads.txt", (req, res) => {
-  res.sendFile(path.join(__dirname, "app-ads.txt"));
+// Serve app-ads.txt and ads.txt from root
+app.get("/ads.txt", (req, res) => {
+  res.sendFile(path.join(__dirname, "ads.txt"));
 });
 
 // Serve the production APK

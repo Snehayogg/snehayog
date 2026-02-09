@@ -1187,7 +1187,6 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                   ),
                 ),
               ),
-              // **Action buttons at absolute bottom - Reels/Shorts style**
               Positioned(
                 right: 12,
                 bottom:

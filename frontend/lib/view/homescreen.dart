@@ -14,6 +14,7 @@ import 'package:vayu/services/background_profile_preloader.dart';
 import 'package:vayu/services/location_onboarding_service.dart';
 import 'package:vayu/utils/app_logger.dart';
 import 'package:vayu/core/managers/app_initialization_manager.dart';
+import 'package:vayu/view/screens/games/games_feed_screen.dart'; // Import GamesFeedScreen
 import 'package:in_app_update/in_app_update.dart';
 
 class MainScreen extends StatefulWidget {
@@ -398,7 +399,7 @@ class _MainScreenState extends State<MainScreen>
       }
 
       // If switching to profile tab, ensure profile data is loaded
-      if (index == 3) {
+      if (index == 4) { // Profile is now index 4
         print(
             '🔄 Homescreen: Switching to profile tab - ensuring profile data is loaded');
 
@@ -441,6 +442,7 @@ class _MainScreenState extends State<MainScreen>
                   initialVideos: AppInitializationManager.instance.initialVideos,
                 ),
                 const VayuScreen(key: PageStorageKey('vayuScreen')),
+                const GamesFeedScreen(key: PageStorageKey('gamesFeedScreen')), // Index 2: Games
                 UploadScreen(
                   key: const PageStorageKey('uploadScreen'),
                   onVideoUploaded: _refreshVideoList,
@@ -518,17 +520,25 @@ class _MainScreenState extends State<MainScreen>
                       _buildNavItem(
                         index: 2,
                         currentIndex: mainController.currentIndex,
-                        icon: Icons.add,
-                        label: 'Upload',
+                        icon: Icons.sports_esports, // Game Controller Icon
+                        label: 'Games',
                         onTap: () => _handleNavTap(2, mainController),
                         mainController: mainController,
                       ),
                       _buildNavItem(
                         index: 3,
                         currentIndex: mainController.currentIndex,
+                        icon: Icons.add,
+                        label: 'Upload',
+                        onTap: () => _handleNavTap(3, mainController),
+                        mainController: mainController,
+                      ),
+                      _buildNavItem(
+                        index: 4,
+                        currentIndex: mainController.currentIndex,
                         icon: Icons.person_outline_rounded,
                         label: 'Profile',
-                        onTap: () => _handleNavTap(3, mainController),
+                        onTap: () => _handleNavTap(4, mainController),
                         mainController: mainController,
                       ),
                     ],

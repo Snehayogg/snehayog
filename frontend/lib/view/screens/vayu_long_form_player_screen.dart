@@ -521,7 +521,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.9),
+          color: Colors.white.withValues(alpha:0.9),
           borderRadius: BorderRadius.circular(16),
            boxShadow: const [
             BoxShadow(color: Colors.black26, blurRadius: 10, spreadRadius: 2),
@@ -548,7 +548,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
             Text(
               _formatDuration(_scrubbingTargetTime),
               style: TextStyle(
-                color: Colors.black.withOpacity(0.7),
+                color: Colors.black.withValues(alpha:0.7),
                 fontSize: 18,
                 fontWeight: FontWeight.w500,
               ),
@@ -585,7 +585,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
         width: 140,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.9),
+          color: Colors.white.withValues(alpha:0.9),
           borderRadius: BorderRadius.circular(16),
           boxShadow: const [
             BoxShadow(color: Colors.black26, blurRadius: 10, spreadRadius: 2),
@@ -600,7 +600,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
                 value: value,
-                backgroundColor: Colors.black.withOpacity(0.1),
+                backgroundColor: Colors.black.withValues(alpha:0.1),
                 valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
                 minHeight: 6,
               ),
@@ -644,13 +644,13 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
           }
 
           if (orientation == Orientation.landscape) {
-            return WillPopScope(
-              onWillPop: () async {
+            return PopScope(
+              canPop: !_isFullScreen,
+              onPopInvokedWithResult: (didPop, result) async {
+                if (didPop) return;
                 if (_isFullScreen) {
                   _toggleFullScreen();
-                  return false;
                 }
-                return true;
               },
               child: _buildVideoSection(orientation),
             );
@@ -804,7 +804,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
         Text(
           '${_formatViews(_currentVideo.views)} • ${_formatTimeAgo(_currentVideo.uploadedAt)}',
           style: AppTheme.bodySmall.copyWith(
-            color: AppTheme.textInverse.withOpacity(0.6),
+            color: AppTheme.textInverse.withValues(alpha:0.6),
           ),
         ),
         const SizedBox(height: AppTheme.spacing5),
@@ -817,7 +817,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
           ],
         ),
         const SizedBox(height: AppTheme.spacing5),
-        Divider(color: AppTheme.textInverse.withOpacity(0.1)),
+        Divider(color: AppTheme.textInverse.withValues(alpha:0.1)),
         const SizedBox(height: AppTheme.spacing3),
 
         // Creator Section
@@ -848,7 +848,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
                   Text(
                     '${_currentVideo.uploader.totalVideos ?? 0} videos',
                     style: AppTheme.bodySmall.copyWith(
-                      color: AppTheme.textInverse.withOpacity(0.6),
+                      color: AppTheme.textInverse.withValues(alpha:0.6),
                     ),
                   ),
                 ],
@@ -870,7 +870,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
           ],
         ),
         const SizedBox(height: AppTheme.spacing3),
-        Divider(color: AppTheme.textInverse.withOpacity(0.1)),
+        Divider(color: AppTheme.textInverse.withValues(alpha:0.1)),
         const SizedBox(height: AppTheme.spacing5),
 
         // Recommendations Header
@@ -890,7 +890,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
           Center(
               child: Text('No recommendations found',
                   style: AppTheme.bodyMedium
-                      .copyWith(color: AppTheme.textInverse.withOpacity(0.5))))
+                      .copyWith(color: AppTheme.textInverse.withValues(alpha:0.5))))
         else
           ..._recommendations
               .map((video) => _buildRecommendationCard(video))
@@ -907,7 +907,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
         const SizedBox(height: AppTheme.spacing1),
         Text(
           label,
-          style: AppTheme.labelSmall.copyWith(color: AppTheme.textInverse.withOpacity(0.7)),
+          style: AppTheme.labelSmall.copyWith(color: AppTheme.textInverse.withValues(alpha:0.7)),
         ),
       ],
     );
@@ -928,7 +928,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Colors.black.withOpacity(0.7), Colors.transparent],
+                colors: [Colors.black.withValues(alpha:0.7), Colors.transparent],
               ),
             ),
             padding: EdgeInsets.symmetric(
@@ -1009,7 +1009,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
               gradient: LinearGradient(
                 begin: Alignment.bottomCenter,
                 end: Alignment.topCenter,
-                colors: [Colors.black.withOpacity(0.7), Colors.transparent],
+                colors: [Colors.black.withValues(alpha:0.7), Colors.transparent],
               ),
             ),
             padding: EdgeInsets.symmetric(
@@ -1059,8 +1059,8 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 8.0),
                       colors: VideoProgressColors(
                         playedColor: AppTheme.primary,
-                        bufferedColor: Colors.white.withOpacity(0.3),
-                        backgroundColor: Colors.white.withOpacity(0.1),
+                        bufferedColor: Colors.white.withValues(alpha:0.3),
+                        backgroundColor: Colors.white.withValues(alpha:0.1),
                       ),
                     );
                   },
@@ -1094,7 +1094,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
                       width: 160,
                       height: 90,
                       fit: BoxFit.cover,
-                      placeholder: (context, url) => Container(color: AppTheme.textInverse.withOpacity(0.1)),
+                      placeholder: (context, url) => Container(color: AppTheme.textInverse.withValues(alpha:0.1)),
                       errorWidget: (context, url, error) => Container(color: Colors.grey[900], child: const Icon(Icons.broken_image, color: Colors.white24)),
                     ),
                     Positioned(
@@ -1103,7 +1103,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.8),
+                          color: Colors.black.withValues(alpha:0.8),
                           borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
                         ),
                         child: Text(
@@ -1135,13 +1135,13 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
                   Text(
                     '${video.uploader.name} • ${_formatViews(video.views)}',
                     style: AppTheme.bodySmall.copyWith(
-                      color: AppTheme.textInverse.withOpacity(0.6),
+                      color: AppTheme.textInverse.withValues(alpha:0.6),
                     ),
                   ),
                   Text(
                     _formatTimeAgo(video.uploadedAt),
                     style: AppTheme.bodySmall.copyWith(
-                      color: AppTheme.textInverse.withOpacity(0.6),
+                      color: AppTheme.textInverse.withValues(alpha:0.6),
                     ),
                   ),
                 ],

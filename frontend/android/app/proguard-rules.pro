@@ -4,3 +4,13 @@
 # it's safe to silence the warning instead of bundling an extra dependency.
 -dontwarn javax.xml.stream.**
 
+# Keep Google Mobile Ads SDK
+-keep class com.google.android.gms.ads.** { *; }
+-keep class com.google.ads.** { *; }
+
+# Keep Flutter Google Mobile Ads Plugin
+-keep class io.flutter.plugins.googlemobileads.** { *; }
+
+# Suppress warnings for OkHttp (used by AdMob)
+-dontwarn com.squareup.okhttp.**
+-dontwarn okio.**

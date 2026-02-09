@@ -1011,7 +1011,11 @@
                         <td>${formatNumber(currentMonthTotalAdViews)}</td>
                         <td>${formatCurrencyINR(currentMonthEarnings)}</td>
                         <td>${formatCurrencyINR(currentMonthGrossRevenue)}</td>
-                        <td>${formatCurrencyINR(currentMonthPlatformRevenue)}</td>
+                        <td>
+    <button class="btn btn-primary btn-sm" onclick="sendPaymentNotification('${googleId}', '${name}')" title="Send Payment Notification" style="padding: 4px 8px; font-size: 0.75rem; border-radius: 5px; display: inline-flex; align-items: center; gap: 4px;">
+        🔔 Notify
+    </button>
+</td>
                         <td>${pendingCell}</td>
                         <td style="font-weight: bold; color: #28a745;">${formatCurrencyINR(currentMonthEarnings)}</td>
                         <td style="font-weight: bold; color: #ff9800;">${formatCurrencyINR(previousMonthEarnings)}</td>
@@ -1022,6 +1026,13 @@
                                     <button class="btn btn-success btn-sm" data-upi="${upiId}" onclick="copyToClipboard(this.dataset.upi)">Copy UPI</button>
                                 </div>
                             ` : '—'}
+                        </td>
+                        <td>
+                            ${upiId === '—' ? `
+                                <button class="btn btn-warning btn-sm" onclick="sendUpiRequestNotification('${googleId}', '${name}')" title="Request UPI ID" style="padding: 4px 8px; font-size: 0.75rem; border-radius: 5px;">
+                                    🔔 Request UPI
+                                </button>
+                            ` : '<span style="color:#28a745; font-size: 0.8rem;">✅ Added</span>'}
                         </td>
                     </tr>
                 `;
@@ -1051,11 +1062,12 @@
                                     <th>Ad Views (Current Month)</th>
                                     <th>Net Earnings (₹) (Current Month)</th>
                                     <th>Gross Revenue (₹) (Current Month)</th>
-                                    <th>Platform Share (₹) (Current Month)</th>
+                                    <th>Action</th>
                                     <th>Pending</th>
                                     <th>Current Month Earnings (₹)</th>
                                     <th>Previous Month Earnings (₹)</th>
                                     <th>UPI ID</th>
+                                    <th>Request UPI</th>
                                 </tr>
                         </thead>
                         <tbody>
@@ -1365,7 +1377,7 @@
                         </div>
                     </div>
                     <div class="feedback-content">
-                        <strong>User:</strong> ${feedback.userEmail || 'Anonymous'}<br>
+                        <strong>User:</strong> ${feedback.userName || feedback.userEmail || 'Anonymous'}<br>
                         <strong>Comments:</strong> ${feedback.comments || 'No additional comments'}
                     </div>
                     <div class="feedback-actions">
@@ -1968,6 +1980,87 @@
                 }
             } catch (error) {
                 console.error('Error sending notification:', error);
+                showError(`Error: ${error.message}`);
+            } finally {
+                setLoading(false);
+            }
+        }
+        async function sendPaymentNotification(googleId, creatorName) {
+            if (!googleId || googleId === '—') {
+                showError('Cannot send notification: Invalid Google ID');
+                return;
+            }
+
+            if (!confirm(`Send payment success notification to ${creatorName}?`)) {
+                return;
+            }
+
+            try {
+                const title = "Payment Sucessful";
+                const body = "Dear Creator, your payment has been successfully sent. Please check your bank account.";
+                
+                setLoading(true);
+                const response = await authorizedFetch(`${API_BASE}/notifications/send`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        googleId: googleId,
+                        title: title,
+                        body: body,
+                        data: { type: 'payment_update' }
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    showSuccess(`Notification sent to ${creatorName} ✅`);
+                } else {
+                    showError(`Failed: ${result.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                console.error('Error sending payment notification:', error);
+                showError(`Error: ${error.message}`);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function sendUpiRequestNotification(googleId, creatorName) {
+            if (!googleId || googleId === '—') {
+                showError('Cannot send notification: Invalid Google ID');
+                return;
+            }
+
+            if (!confirm(`Send UPI Request notification to ${creatorName}?`)) {
+                return;
+            }
+
+            try {
+                const title = "⚠️ URGENT: Earnings on Hold (Add UPI ID Now)";
+                const body = `Dear ${creatorName}, please add your UPI ID in the profile section to receive your earnings.`;
+                
+                setLoading(true);
+                const response = await authorizedFetch(`${API_BASE}/notifications/send`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        googleId: googleId,
+                        title: title,
+                        body: body,
+                        data: { type: 'profile_update' }
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    showSuccess(`UPI Request sent to ${creatorName} ✅`);
+                } else {
+                    showError(`Failed: ${result.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                console.error('Error sending UPI request:', error);
                 showError(`Error: ${error.message}`);
             } finally {
                 setLoading(false);

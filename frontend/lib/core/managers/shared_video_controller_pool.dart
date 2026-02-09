@@ -72,6 +72,18 @@ class SharedVideoControllerPool {
     return false;
   }
 
+  /// **Check if a controller is effectively disposed**
+  bool isControllerDisposed(VideoPlayerController? controller) {
+    if (controller == null) return true;
+    try {
+      // Accessing value throws if disposed
+      final _ = controller.value;
+      return false;
+    } catch (_) {
+      return true;
+    }
+  }
+
   /// **Get existing controller for a video (updates LRU)**
   VideoPlayerController? getController(String videoId) {
     if (_controllerPool.containsKey(videoId)) {

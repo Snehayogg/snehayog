@@ -555,19 +555,6 @@ export const getUserVideos = async (req, res) => {
       rank = await RecommendationService.getGlobalCreatorRank(user._id);
     }
 
-    // Inject earnings/rank into uploader object
-    const videosWithMetadata = validVideos.map(v => {
-      if (v.uploader) {
-        if (isOwner) {
-          v.uploader.earnings = parseFloat(currentMonthEarnings.toFixed(2));
-        } else {
-          v.uploader.earnings = 0; // Hide actual earnings
-          v.uploader.rank = rank;
-        }
-      }
-      return v;
-    });
-
     const episodesMap = new Map();
     if (seriesIds.size > 0) {
       try {
@@ -581,6 +568,23 @@ export const getUserVideos = async (req, res) => {
         });
       } catch (err) { console.error('⚠️ Error fetching series episodes:', err); }
     }
+
+    // Inject earnings/rank into uploader object
+    const videosWithMetadata = validVideos.map(v => {
+      if (v.uploader) {
+        if (isOwner) {
+          v.uploader.earnings = parseFloat(currentMonthEarnings.toFixed(2));
+        } else {
+          v.uploader.earnings = 0; // Hide actual earnings
+          v.uploader.rank = rank;
+        }
+      }
+      
+      if (v.seriesId && episodesMap.has(v.seriesId)) {
+        v.episodes = episodesMap.get(v.seriesId);
+      }
+      return v;
+    });
 
     if (videosWithMetadata.length === 0) return res.json([]);
 

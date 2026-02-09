@@ -20,7 +20,7 @@ exports.config = {
    * This setting controls the agent's log level.
    */
   logging: {
-    level: 'info'
+    level: 'trace'
   },
   /**
    * When true, all request headers except for those listed in attributes.exclude

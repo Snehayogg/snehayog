@@ -24,7 +24,7 @@ class AdMobConfig {
   static String? _admobAppId;
 
   // **Flag to force production ads even in debug mode**
-  static bool _forceProductionAds = false; // **FIXED: Use test ads in debug mode**
+  static bool _forceProductionAds = true; // **FIXED: Use production ads in debug mode for testing**
 
   /// Force production ads even in debug mode (for testing real ads)
   static void setForceProductionAds(bool force) {

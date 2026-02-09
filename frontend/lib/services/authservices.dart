@@ -1178,6 +1178,12 @@ class AuthService {
       }
 
       AppLogger.log('❌ All automatic refresh methods failed');
+      
+      // **FIX: Force logout and redirect to prevent loop**
+      AppLogger.log('🔒 Enforcing logout due to expired session...');
+      await signOut();
+      navigatorKey.currentState?.pushNamedAndRemoveUntil('/home', (route) => false);
+      
       return null;
     } catch (e) {
       AppLogger.log('❌ Error during token refresh sequence: $e');

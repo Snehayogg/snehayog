@@ -341,42 +341,7 @@ class VideoProvider extends ChangeNotifier {
     await loadVideos(isInitialLoad: true, videoType: null);
   }
 
-  List<VideoModel> _deserializeVideoList(dynamic rawVideos) {
-    if (rawVideos == null) {
-      return <VideoModel>[];
-    }
 
-    if (rawVideos is List<VideoModel>) {
-      return rawVideos;
-    }
-
-    if (rawVideos is List) {
-      final parsedVideos = <VideoModel>[];
-
-      for (final item in rawVideos) {
-        if (item is VideoModel) {
-          parsedVideos.add(item);
-        } else if (item is Map<String, dynamic>) {
-          try {
-            parsedVideos.add(VideoModel.fromJson(item));
-          } catch (e) {
-
-          }
-        } else if (item is Map) {
-          try {
-            parsedVideos
-                .add(VideoModel.fromJson(Map<String, dynamic>.from(item)));
-          } catch (e) {
-
-          }
-        }
-      }
-
-      return parsedVideos;
-    }
-
-    return <VideoModel>[];
-  }
 
   void _setLoadState(VideoLoadState state) {
     _loadState = state;

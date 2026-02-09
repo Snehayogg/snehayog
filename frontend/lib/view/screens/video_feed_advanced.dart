@@ -508,6 +508,67 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         _ensureWakelockForVisibility();
       }
     }
+    
+    // **NEW: RE-INITIALIZATION CHECK**
+    // When becoming visible, validate controllers to ensure they weren't disposed externally
+    if (isVisible) {
+      _validateAndRestoreControllers();
+    }
+  }
+
+  /// **NEW: Validate and restore disposed controllers**
+  void _validateAndRestoreControllers() {
+    if (_videos.isEmpty) return;
+    
+    final sharedPool = SharedVideoControllerPool();
+    final List<int> indicesToRestore = [];
+    
+    // Check current and adjacent videos (priority range)
+    final indicesToCheck = {
+      _currentIndex, 
+      if (_currentIndex + 1 < _videos.length) _currentIndex + 1,
+      if (_currentIndex - 1 >= 0) _currentIndex - 1
+    };
+    
+    for (final index in indicesToCheck) {
+      final video = _videos[index];
+      bool needsRestore = false;
+      
+      // Check local pool
+      if (_controllerPool.containsKey(video.id)) {
+        final controller = _controllerPool[video.id];
+        if (sharedPool.isControllerDisposed(controller)) {
+           AppLogger.log('⚠️ VideoFeedAdvanced: Controller for ${video.id} is DISPOSED (local). Marking for restore.');
+           _controllerPool.remove(video.id);
+           _controllerStates.remove(video.id);
+           needsRestore = true;
+        }
+      } else {
+        // Not in local pool - if it's the CURRENT video, we definitely need it
+        if (index == _currentIndex) {
+           needsRestore = true;
+        }
+      }
+      
+      if (needsRestore) {
+        indicesToRestore.add(index);
+      }
+    }
+    
+    // Restore identified videos
+    for (final index in indicesToRestore) {
+         // Only log if index matches current to avoid noise
+         if (index == _currentIndex) {
+           AppLogger.log('🔄 VideoFeedAdvanced: Restoring controller for index $index (Current Video)');
+         }
+         
+      _preloadVideo(index).then((_) {
+         if (mounted && index == _currentIndex && _isScreenVisible) {
+            // If we restored the current video and screen is visible, try playing
+            _tryAutoplayCurrent();
+         }
+      });
+    }
   }
 
   void _enableWakelock() {
@@ -1911,14 +1972,10 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     );
 
     // **MEMORY MANAGEMENT: Aggressively clean up when opened from ProfileScreen**
-    if (openedFromProfile) {
-      AppLogger.log(
-        '🧹 VideoFeedAdvanced: Cleaning up shared pool for profile flow (disposing all controllers)',
-      );
-      // **FIX: Dispose all controllers in shared pool when opened from ProfileScreen**
-      // This prevents accumulation of controllers when quickly switching between videos
-      sharedPool.clearAll();
-    } else if (savedControllers > 2) {
+    // FIX: Removed aggressive cleanup (sharedPool.clearAll()) to prevent disposed controller error
+    
+    // Manage memory for standard flow
+    if (savedControllers > 2) {
       AppLogger.log(
         '🧹 VideoFeedAdvanced: Triggering memory management (keeping only 2 controllers)',
       );

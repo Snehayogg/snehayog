@@ -72,19 +72,17 @@ class ProfileHeaderWidget extends StatelessWidget {
                                 CircleAvatar(
                                   radius: 45,
                                     backgroundColor: AppTheme.backgroundSecondary,
-                                  backgroundImage: profileImage,
-                                  onBackgroundImageError:
+                                  foregroundImage: profileImage,
+                                  onForegroundImageError:
                                       (exception, stackTrace) {
                                     ProfileScreenLogger.logError(
                                         'Error loading profile image: $exception');
                                   },
-                                  child: profileImage == null
-                                      ? const Icon(
+                                  child: const Icon(
                                           Icons.person,
                                           size: 40,
                                           color: AppTheme.textTertiary,
-                                        )
-                                      : null,
+                                        ),
                                 ),
                                 // Show loading indicator when image is being loaded
                                 if (hasProfilePic &&

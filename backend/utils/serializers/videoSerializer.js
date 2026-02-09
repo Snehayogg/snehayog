@@ -37,6 +37,9 @@ export const serializeVideo = (video, apiVersion, requestingUserObjectId) => {
     earnings: parseFloat(videoObj.earnings) || 0.0,
     hlsPlaylistUrl: videoObj.hlsPlaylistUrl || null,
     lowQualityUrl: videoObj.lowQualityUrl || null,
+    seriesId: videoObj.seriesId || null,
+    episodeNumber: videoObj.episodeNumber || 0,
+    episodes: videoObj.episodes || []
   };
 
   /**

@@ -58,7 +58,8 @@ class ProfileStateManager extends ChangeNotifier {
 
   // Cache configuration
   static const Duration _userProfileCacheTime = Duration(hours: 24);
-  static const Duration _userVideosCacheTime = Duration(minutes: 45);
+  static const Duration _userVideosCacheTime = Duration(minutes: 30);
+
 
   // Video Stats
   int _totalVideoCount = 0;
@@ -226,6 +227,15 @@ class ProfileStateManager extends ChangeNotifier {
     return 'user_profile_$resolvedId';
   }
 
+  /// **NEW: Resolve cache key for video list**
+  String _resolveVideoCacheKey(String? userId) {
+    final effectiveId = userId?.trim();
+    if (effectiveId == null || effectiveId.isEmpty) {
+      return 'user_videos_unknown';
+    }
+    return 'user_videos_$effectiveId';
+  }
+
   Future<Map<String, dynamic>?> _fetchProfileData(String? requestedUserId,
       Map<String, dynamic> loggedInUser, String cacheKey) async {
     // **FIXED: Handle empty loggedInUser for creator profiles**
@@ -345,19 +355,7 @@ class ProfileStateManager extends ChangeNotifier {
     return normalized;
   }
 
-  String _resolveVideoCacheKey(String userId) => 'video_profile_$userId';
 
-  List<VideoModel> _deserializeCachedVideos(Map<String, dynamic> payload) {
-    final rawVideos = payload['videos'];
-    if (rawVideos is List) {
-      return rawVideos
-          .whereType<Map<dynamic, dynamic>>()
-          .map((entry) => VideoModel.fromJson(
-              entry.map((key, value) => MapEntry(key.toString(), value))))
-          .toList();
-    }
-    return [];
-  }
 
   Future<List<VideoModel>> _fetchVideosFromServer(
     String userId, {
@@ -668,219 +666,7 @@ class ProfileStateManager extends ChangeNotifier {
   }
 
 
-  Future<void> _loadUserVideosWithCaching(
-    String? userId, {
-    required bool isMyProfile,
-    bool forceRefresh = false,
-    bool silent = false,
-    int page = 1,
-  }) async {
-    try {
-      AppLogger.log(
-          '🔄 ProfileStateManager: Loading videos with smart caching for userId: $userId, page: $page');
 
-      final loggedInUser = await _authService.getUserData();
-      String? resolvedId;
-      if (isMyProfile) {
-        resolvedId = loggedInUser?['googleId']?.toString();
-        if (resolvedId == null || resolvedId.trim().isEmpty) {
-          resolvedId = loggedInUser?['id']?.toString();
-        }
-      } else {
-        resolvedId = userId;
-      }
-      final String targetUserId = resolvedId?.trim() ?? '';
-
-      if (targetUserId.isEmpty) {
-        AppLogger.log(
-            '⚠️ ProfileStateManager: targetUserId is empty, cannot load videos');
-        _userVideos = [];
-        if (!silent) notifyListeners();
-        return;
-      }
-
-      await _ensureSmartCacheInitialized();
-
-      // **FIX: If forceRefresh is true, bypass cache and fetch directly**
-      if (forceRefresh) {
-        AppLogger.log(
-            '🔄 ProfileStateManager: forceRefresh=true, bypassing cache and fetching fresh videos');
-        final videos = await _fetchVideosFromServer(
-          targetUserId,
-          isMyProfile: isMyProfile,
-          forceRefresh: forceRefresh,
-          page: page,
-        );
-        
-        if (page == 1) {
-             _userVideos = videos;
-        } else {
-             // Append videos
-             _userVideos.addAll(videos);
-        }
-        
-        // Update pagination status
-        _hasMoreVideos = videos.length >= _pageSize;
-        
-        notifyListeners(); // Always notify when data changes
-        return;
-      }
-
-      // **SMART CACHING LOGIC (Only for Page 1)**
-      if (_smartCacheInitialized && page == 1) {
-        final smartCacheKey = _resolveVideoCacheKey(targetUserId);
-        AppLogger.log(
-            '🧠 ProfileStateManager: Fetching videos from smart cache: $smartCacheKey');
-
-        final payload = await _smartCacheManager.get<Map<String, dynamic>>(
-          smartCacheKey,
-          cacheType: 'videos',
-          maxAge: _userVideosCacheTime,
-          fetchFn: () async {
-            final videos = await _fetchVideosFromServer(
-              targetUserId,
-              isMyProfile: isMyProfile,
-              forceRefresh: forceRefresh,
-              page: 1, // Cache is always page 1
-            );
-            // **NOTE: Keep views in cache for initial display, but refresh them after loading**
-            return {
-              'videos':
-                  videos.map((video) {
-                    final json = video.toJson();
-                    // Sanitization: Remove earnings from memory cache too
-                    json['earnings'] = 0.0;
-                    if (json['uploader'] is Map) {
-                       final uploader = Map<String, dynamic>.from(json['uploader'] as Map);
-                       uploader['earnings'] = 0.0;
-                       json['uploader'] = uploader;
-                    }
-                    return json;
-                  }).toList(growable: false),
-              'fetchedAt': DateTime.now().toIso8601String(),
-            };
-          },
-        );
-
-        if (payload != null && page == 1) { // Only use cache for page 1
-          final hydratedVideos = _deserializeCachedVideos(payload);
-          _userVideos = hydratedVideos;
-          _hasMoreVideos = true; // Assume true if cached
-          _currentPage = 1;
-
-          AppLogger.log(
-              '⚡ ProfileStateManager: Smart cache served ${_userVideos.length} videos (refreshing view counts from server)');
-
-          // **FIX: Refresh view counts from server in background - views are not cached, always fetch fresh**
-          Future.microtask(() async {
-            try {
-              final freshVideos = await _fetchVideosFromServer(
-                targetUserId,
-                isMyProfile: isMyProfile,
-                forceRefresh: true, // Always force refresh when refreshing view counts
-                page: 1,
-              );
-
-              // Update view counts for cached videos with fresh data
-              final videoMap = <String, VideoModel>{};
-              for (final freshVideo in freshVideos) {
-                videoMap[freshVideo.id] = freshVideo;
-              }
-
-              // Update cached videos with fresh data (Views, Earnings, Likes, etc.)
-              for (int i = 0; i < _userVideos.length; i++) {
-                final cachedVideo = _userVideos[i];
-                final freshVideo = videoMap[cachedVideo.id];
-                if (freshVideo != null) {
-                  // **FIX: Replace entire video object to ensure Earnings, Likes, and other stats are fresh**
-                  // Previously only views were updated, causing stale earnings (0.00) to persist
-                  _userVideos[i] = freshVideo;
-                }
-              }
-              
-              // **FIX: Recalculate earnings based on fresh video data**
-              await _loadEarnings();
-              
-              notifyListeners();
-              AppLogger.log(
-                  '✅ ProfileStateManager: Refreshed videos and earnings from server (background)');
-            } catch (e) {
-              AppLogger.log(
-                  '⚠️ ProfileStateManager: Error refreshing view counts/earnings: $e');
-              // Continue with cached data if refresh fails
-            }
-          });
-
-          notifyListeners();
-          return;
-        }
-      }
-
-      AppLogger.log(
-          '📡 ProfileStateManager: Fetching fresh videos for $targetUserId (Page $page)');
-      List<VideoModel> videos = [];
-
-      // **PROGRESSIVE LOADING STRATEGY (Staggered Fetch)**
-      // For the first page, we split the fetch into two chunks:
-      // 1. Fetch first 3 videos (very fast response, shows UI immediately)
-      // 2. Fetch next 6 videos (completes the page of 9)
-      // This satisfies the user's request to "show videos as they load"
-      if (page == 1 && !silent) {
-        AppLogger.log('🚀 ProfileStateManager: Fetching ALL Videos (Limit: $_pageSize)...');
-        // Fetch ALL videos at once (limit set to 1000)
-        videos = await _videoService.getUserVideos(targetUserId,
-            page: 1, limit: _pageSize);
-        
-        if (videos.isNotEmpty) {
-           _userVideos = videos;
-           // If we fetched everything, no need for more
-           _hasMoreVideos = false; 
-           notifyListeners();
-        }
-      } else {
-        // Standard Paged Load (Page 2+ or silent refresh - likely unused if page 1 covers all)
-        videos = await _videoService.getUserVideos(targetUserId,
-            page: page, limit: _pageSize);
-        
-        if (page == 1) {
-          _userVideos = videos;
-        } else {
-          // Deduplicate based on _id
-           final existingIds = _userVideos.map((v) => v.id).toSet();
-           final newUnique = videos.where((v) => !existingIds.contains(v.id)).toList();
-           _userVideos.addAll(newUnique);
-        }
-           
-        _hasMoreVideos = videos.length >= _pageSize;
-        notifyListeners();
-      }
-
-      // **OPTIMIZATION: DISABLED Aggressive Background Loading since we loaded all**
-      /*
-      if (page == 1 && _hasMoreVideos) {
-        AppLogger.log('🚀 ProfileStateManager: loaded page 1, triggering aggressive background load for rest...');
-        // ignore: unawaited_futures
-        loadAllVideosInBackground(targetUserId);
-      }
-      */
-    } catch (e) {
-      AppLogger.log('❌ ProfileStateManager: Error in cached video loading: $e');
-      // **FIX: On error, try direct loading ONLY if it's not a network error**
-      // If it's a network error, we want to preserve whatever we have
-      if (!e.toString().toLowerCase().contains('socket') && 
-          !e.toString().toLowerCase().contains('network') &&
-          !e.toString().toLowerCase().contains('connection')) {
-         await _loadUserVideosDirect(
-          userId,
-          isMyProfile: isMyProfile,
-          silent: silent,
-        );
-      } else {
-        // Rethrow so loadUserVideos knows about the error
-        rethrow;
-      }
-    }
-  }
 
   /// Load user videos directly without caching (fallback)
   Future<void> _loadUserVideosDirect(
@@ -1605,6 +1391,20 @@ class ProfileStateManager extends ChangeNotifier {
       _isVideosLoading = false;
       notifyListeners();
     }
+  }
+
+  List<VideoModel> _deserializeCachedVideos(Map<String, dynamic> payload) {
+    try {
+      if (payload.containsKey('videos')) {
+        final videosList = payload['videos'] as List;
+        return videosList
+            .map((v) => VideoModel.fromJson(Map<String, dynamic>.from(v)))
+            .toList();
+      }
+    } catch (e) {
+      AppLogger.log('⚠️ ProfileStateManager: Error deserializing cached videos: $e');
+    }
+    return [];
   }
 
   /// Add a new video to the profile (called after successful upload)
