@@ -324,12 +324,14 @@ class FeedQueueService {
       }
 
       // 4. BATCH OPTIMIZATION: Reserve some slots for brand new videos (Discovery)
-      // Get all completed videos from last 24h as discovery candidates
-      const discoveryLimit = Math.floor(this.BATCH_SIZE * 0.2); // 20% discovery
+      // Get all completed videos from last 72h as discovery candidates
+      const discoveryLimit = Math.floor(this.BATCH_SIZE * 0.4); // Increased to 40% discovery
       const discoveryCandidates = freshVideos.filter(v => {
         const ageInHours = (new Date() - new Date(v.createdAt)) / (1000 * 60 * 60);
-        return ageInHours < 24;
+        return ageInHours < 72; // Increased to 72h (3 days)
       });
+      
+      console.log(`✨ Discovery: Found ${discoveryCandidates.length} new videos. Limit: ${discoveryLimit}`);
 
       // 5. Professional Weighted Selection
       // Shuffle the results based on their scores to break the recency block

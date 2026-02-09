@@ -15,6 +15,7 @@ import 'package:vayu/services/authservices.dart';
 import 'package:vayu/services/background_profile_preloader.dart';
 import 'package:vayu/services/location_onboarding_service.dart';
 import 'package:vayu/services/welcome_onboarding_service.dart';
+import 'package:vayu/services/gallery_permission_service.dart';
 import 'package:vayu/view/screens/welcome_onboarding_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/core/managers/shared_video_controller_pool.dart';
@@ -399,6 +400,7 @@ class MainScreenWithLocationCheck extends StatefulWidget {
 class _MainScreenWithLocationCheckState
     extends State<MainScreenWithLocationCheck> {
   bool _hasCheckedLocation = false;
+  bool _hasCheckedGallery = false;
   bool _hasCheckedWelcome = false;
   bool _shouldShowWelcome = false;
   bool _isLoading = true;
@@ -428,9 +430,10 @@ class _MainScreenWithLocationCheckState
           _isLoading = false;
         });
 
-        // If not showing welcome, check location in background
+        // If not showing welcome, check permissions in background
         if (!shouldShow) {
           _checkLocationInBackground();
+          _checkGalleryInBackground();
         }
       }
     } catch (e) {
@@ -450,8 +453,9 @@ class _MainScreenWithLocationCheckState
     setState(() {
       _shouldShowWelcome = false;
     });
-    // Check location in background after welcome screen
+    // Check permissions in background after welcome screen
     _checkLocationInBackground();
+    _checkGalleryInBackground();
   }
 
   /// **Check location permission in background without blocking UI**
@@ -479,6 +483,27 @@ class _MainScreenWithLocationCheckState
       }
     } catch (e) {
 
+    }
+  }
+
+  /// **Check gallery permission in background**
+  Future<void> _checkGalleryInBackground() async {
+    if (_hasCheckedGallery) return;
+    _hasCheckedGallery = true;
+
+    try {
+      final shouldShow = await GalleryPermissionService.shouldShowGalleryOnboarding();
+
+      if (shouldShow && mounted) {
+        // Wait 2 seconds (1s after location potentially starts)
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) {
+            GalleryPermissionService.requestGalleryPermission();
+          }
+        });
+      }
+    } catch (e) {
+      AppLogger.log('❌ Main: Error checking gallery permission: $e');
     }
   }
 

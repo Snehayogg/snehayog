@@ -1,4 +1,4 @@
-part of 'package:vayu/view/screens/video_feed_advanced.dart';
+part of '../video_feed_advanced.dart';
 
 extension _VideoFeedInitialization on _VideoFeedAdvancedState {
   void _initializeServices() {
@@ -30,7 +30,34 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
       refreshAds();
     });
 
+    _connectivitySubscription = ConnectivityService.connectivityStream.listen((results) {
+      _handleConnectivityChange(results);
+    });
+
     _loadInitialData();
+  }
+
+  /// **Handle connectivity changes for the offline banner**
+  void _handleConnectivityChange(List<ConnectivityResult> results) {
+    final isOffline = ConnectivityService.isOffline(results);
+    
+    if (isOffline) {
+      if (!_hasShownOfflineBanner) {
+        _hasShownOfflineBanner = true;
+        _showOfflineBannerVN.value = true;
+        
+        // Hide after 2 seconds
+        Timer(const Duration(seconds: 2), () {
+          if (mounted) {
+            _showOfflineBannerVN.value = false;
+          }
+        });
+      }
+    } else {
+      // Reset when back online so it can show again next time it goes offline
+      _hasShownOfflineBanner = false;
+      _showOfflineBannerVN.value = false;
+    }
   }
 
   Future<void> _loadInitialData() async {

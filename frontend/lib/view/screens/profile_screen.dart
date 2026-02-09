@@ -2313,12 +2313,19 @@ class _ProfileScreenState extends State<ProfileScreen>
                             ),
                             Expanded(
                               child: _buildCompactStatItem(
-                                 label: 'Earnings',
-                                 isHighlighted: true,
-                                 valueBuilder: (context) => (stateManager.isEarningsLoading || stateManager.isVideosLoading)
-                                   ? 'Loading...' 
-                                   : '₹${stateManager.cachedEarnings.toStringAsFixed(2)}',
-                                 onTap: isViewingOwnProfile ? _handleEarningsTap : null,
+                                label: isViewingOwnProfile ? 'Earnings' : 'Ranking',
+                                isHighlighted: true,
+                                valueBuilder: (context) {
+                                  if (isViewingOwnProfile) {
+                                    return (stateManager.isEarningsLoading || stateManager.isVideosLoading)
+                                        ? 'Loading...'
+                                        : '₹${stateManager.cachedEarnings.toStringAsFixed(2)}';
+                                  } else {
+                                    final rank = stateManager.userData?['rank'] ?? 0;
+                                    return rank > 0 ? '#$rank' : '—';
+                                  }
+                                },
+                                onTap: isViewingOwnProfile ? _handleEarningsTap : null,
                               ),
                             ),
                           ],

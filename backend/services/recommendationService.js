@@ -99,10 +99,14 @@ class RecommendationService {
     const ageInHours = (now - uploadDate) / (1000 * 60 * 60);
 
     if (ageInHours < 0) return 3.0; // Future-proof
-    if (ageInHours > 48) return 0; // No freshness boost after 48h
+    
+    // EXTENDED: Gradually decay over (120 hours) instead of 48h
+    const FRESHNESS_WINDOW_HOURS = 120; 
+    
+    if (ageInHours > FRESHNESS_WINDOW_HOURS) return 0;
 
-    // Linear decay from 3.0 to 0 over 48 hours
-    return 3.0 * (1 - (ageInHours / 48));
+    // Linear decay from 3.0 to 0 over 168 hours
+    return 3.0 * (1 - (ageInHours / FRESHNESS_WINDOW_HOURS));
   }
 
   /**
@@ -110,12 +114,15 @@ class RecommendationService {
    * Long-term multiplier that keeps older quality content competitive.
    */
   static calculateRecencyBoost(uploadedAt) {
-    if (!uploadedAt) return 0.7;
+    if (!uploadedAt) return 0.5;
     const now = new Date();
     const uploadDate = new Date(uploadedAt);
     const ageInDays = (now - uploadDate) / (1000 * 60 * 60 * 24);
-    const recencyBoost = 0.7 + (0.3 / (1 + ageInDays * 0.05));
-    return Math.max(recencyBoost, 0.7);
+    
+    // STEEPER DECAY: Lower floor (0.1 instead of 0.7) and slightly faster decay (0.1 instead of 0.05)
+    // This penalyzes very old content more heavily once the freshness boost expires.
+    const recencyBoost = 0.1 + (0.9 / (1 + ageInDays * 0.1));
+    return Math.max(recencyBoost, 0.1);
   }
 
   static calculateFinalScore(videoData) {

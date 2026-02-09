@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Allow: /download/vayu-latest.apk
+Disallow: /admin/
+Disallow: /api/
+
+Sitemap: https://snehayog.site/sitemap.xml

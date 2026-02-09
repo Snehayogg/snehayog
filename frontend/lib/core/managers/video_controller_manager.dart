@@ -25,28 +25,19 @@ class VideoControllerManager {
   final VideoPositionCacheManager _positionCache = VideoPositionCacheManager();
   final HotUIStateManager _hotUIManager = HotUIStateManager();
 
-  final int maxPoolSize = 1;
+  final int maxPoolSize = 3; // **INCREASED: From 1 to 3 for smoother scrolling in debug mode**
 
   /// Choose a playback URL preferring Cloudflare/R2 or backend HLS over Cloudinary
   String _selectPlaybackUrl(VideoModel video) {
-    AppLogger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    AppLogger.log('🎬 VIDEO URL SELECTION for: ${video.videoName}');
-    AppLogger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     // Prefer explicit HLS URLs if present (served by backend/CDN)
     if (video.hlsMasterPlaylistUrl != null &&
         video.hlsMasterPlaylistUrl!.isNotEmpty) {
       AppLogger.log('✅ SELECTED: HLS Master Playlist');
-      AppLogger.log('   URL: ${video.hlsMasterPlaylistUrl}');
-      AppLogger.log('   Source: ${_getUrlSource(video.hlsMasterPlaylistUrl!)}');
-      AppLogger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
       return video.hlsMasterPlaylistUrl!;
     }
     if (video.hlsPlaylistUrl != null && video.hlsPlaylistUrl!.isNotEmpty) {
       AppLogger.log('✅ SELECTED: HLS Playlist');
-      AppLogger.log('   URL: ${video.hlsPlaylistUrl}');
-      AppLogger.log('   Source: ${_getUrlSource(video.hlsPlaylistUrl!)}');
-      AppLogger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
       return video.hlsPlaylistUrl!;
     }
 
@@ -57,9 +48,6 @@ class VideoControllerManager {
           lower.contains('cdn.snehayog.com') ||
           lower.contains('r2.cloudflarestorage.com')) {
         AppLogger.log('✅ SELECTED: Low Quality URL (CDN/R2)');
-        AppLogger.log('   URL: ${video.lowQualityUrl}');
-        AppLogger.log('   Source: ${_getUrlSource(video.lowQualityUrl!)}');
-        AppLogger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
         return video.lowQualityUrl!;
       }
     }
@@ -72,25 +60,16 @@ class VideoControllerManager {
         origLower.contains('/hls/');
     if (isCdn) {
       AppLogger.log('✅ SELECTED: Original Video URL (CDN/R2/HLS)');
-      AppLogger.log('   URL: ${video.videoUrl}');
-      AppLogger.log('   Source: ${_getUrlSource(video.videoUrl)}');
-      AppLogger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
       return video.videoUrl;
     }
 
     // Fallback: use lowQualityUrl even if not CDN, else original
     if (video.lowQualityUrl != null && video.lowQualityUrl!.isNotEmpty) {
       AppLogger.log('⚠️ FALLBACK: Low Quality URL');
-      AppLogger.log('   URL: ${video.lowQualityUrl}');
-      AppLogger.log('   Source: ${_getUrlSource(video.lowQualityUrl!)}');
-      AppLogger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
       return video.lowQualityUrl!;
     }
 
     AppLogger.log('⚠️ FALLBACK: Original Video URL');
-    AppLogger.log('   URL: ${video.videoUrl}');
-    AppLogger.log('   Source: ${_getUrlSource(video.videoUrl)}');
-    AppLogger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
     return video.videoUrl;
   }
 
@@ -128,8 +107,7 @@ class VideoControllerManager {
       int index, VideoModel video) async {
     // Decide final URL without Cloudinary signing (prefer Cloudflare/CDN)
     String finalUrl = _selectPlaybackUrl(video);
-    AppLogger.log(
-        '🎯 VideoControllerManager: Selected playback URL: $finalUrl');
+    // AppLogger.log('🎯 VideoControllerManager: Selected playback URL: $finalUrl');
 
     // **OPTIMIZED: Reuse existing controller if available and valid**
     if (_controllers.containsKey(index)) {

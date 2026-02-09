@@ -1,4 +1,4 @@
-part of 'package:vayu/view/screens/video_feed_advanced.dart';
+part of '../video_feed_advanced.dart';
 
 extension _VideoFeedPreload on _VideoFeedAdvancedState {
   static bool _isLowEndDevice = false; // Default to false (assume high-end)
@@ -252,18 +252,29 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         // **PROACTIVE CLEANUP: Make room before allocating new decoder**
         await sharedPool.makeRoomForNewController();
 
-        final Map<String, String> headers = videoUrl.contains('.m3u8')
-            ? const {'Accept': 'application/vnd.apple.mpegurl,application/x-mpegURL'}
-            : const {};
+        if (video.videoType == 'local_gallery') {
+          // **NEW: Use File controller for local gallery videos**
+          controller = VideoPlayerController.file(
+            File(videoUrl),
+            videoPlayerOptions: VideoPlayerOptions(
+              mixWithOthers: true,
+              allowBackgroundPlayback: false,
+            ),
+          );
+        } else {
+          final Map<String, String> headers = videoUrl.contains('.m3u8')
+              ? const {'Accept': 'application/vnd.apple.mpegurl,application/x-mpegURL'}
+              : const {};
 
-        controller = VideoPlayerController.networkUrl(
-          Uri.parse(videoUrl),
-          videoPlayerOptions: VideoPlayerOptions(
-            mixWithOthers: true,
-            allowBackgroundPlayback: false,
-          ),
-          httpHeaders: headers,
-        );
+          controller = VideoPlayerController.networkUrl(
+            Uri.parse(videoUrl),
+            videoPlayerOptions: VideoPlayerOptions(
+              mixWithOthers: true,
+              allowBackgroundPlayback: false,
+            ),
+            httpHeaders: headers,
+          );
+        }
       }
 
       // **RELEVANCY CHECKPOINT #2: Before initialization**
@@ -426,6 +437,11 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       if (hlsUrl != null && hlsUrl.isNotEmpty) {
         // **SUCCESS: Play HLS**
         return _validateAndFixVideoUrl(hlsUrl);
+      }
+
+      // **NEW: Bypass URL fixing for local gallery videos**
+      if (video.videoType == 'local_gallery') {
+         return video.videoUrl;
       }
 
       // 2. **Fallback: MP4 (if HLS is missing)**
@@ -706,7 +722,12 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
                  // If still buffering after 5 seconds...
                  
                  // 1. Show Slow Internet UI
-                _getOrCreateNotifier<bool>(_isSlowConnectionVN, videoId, true);
+                 // **NEW: Throttle display frequency**
+                 if (_slowConnectionShownCount < _maxSlowConnectionShows) {
+                    _getOrCreateNotifier<bool>(_isSlowConnectionVN, videoId, true);
+                    _slowConnectionShownCount++;
+                    AppLogger.log('🐢 Slow Internet Banner shown: $_slowConnectionShownCount/$_maxSlowConnectionShows');
+                 }
                 _isLowBandwidthMode = true; // Now we confirm it's slow
                 
                 // 2. **KICKSTART LOGIC (Stale Connection Fix)**

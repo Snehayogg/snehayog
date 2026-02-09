@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/core/managers/shared_video_controller_pool.dart';
+import 'package:vayu/core/managers/video_controller_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // Removed: import 'package:vayu/core/managers/video_manager.dart';
 
@@ -63,24 +64,9 @@ class MainController extends ChangeNotifier {
       _pauseVideosCallback?.call();
 
 
-      // Multiple safety delays to ensure videos are paused
-      Future.delayed(const Duration(milliseconds: 50), () {
+      // SINGLE safety delay to ensure videos are paused after state transition
+      Future.delayed(const Duration(milliseconds: 150), () {
         if (_currentIndex != 0) {
-
-          _pauseVideosCallback?.call();
-        }
-      });
-
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (_currentIndex != 0) {
-
-          _pauseVideosCallback?.call();
-        }
-      });
-
-      Future.delayed(const Duration(milliseconds: 200), () {
-        if (_currentIndex != 0) {
-
           _pauseVideosCallback?.call();
         }
       });
@@ -159,14 +145,15 @@ class MainController extends ChangeNotifier {
 
   /// Force pause all videos (called from external sources)
   void forcePauseVideos() {
-
-
     // **IMPROVED: Pause controllers instead of disposing for better UX**
     try {
       final sharedPool = SharedVideoControllerPool();
       sharedPool.pauseAllControllers();
+      
+      // ALSO pause VideoControllerManager (used by legacy components or direct feed)
+      VideoControllerManager().forcePauseAllVideosSync();
     } catch (e) {
-
+      // Ignore errors during pause
     }
 
     // **SIMPLIFIED: Use callback since VideoManager was removed**

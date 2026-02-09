@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:video_player/video_player.dart';
 import 'package:vayu/model/video_model.dart';
@@ -104,6 +105,15 @@ class VideoControllerFactory {
     );
 
     try {
+      // **NEW: Support for local gallery videos**
+      if (video.videoType == 'local_gallery' && !kIsWeb) {
+        AppLogger.log('🎬 VideoControllerFactory: Creating File controller for: ${video.videoUrl}');
+        return VideoPlayerController.file(
+          File(video.videoUrl),
+          videoPlayerOptions: videoPlayerOptions,
+        );
+      }
+
       return VideoPlayerController.networkUrl(
         Uri.parse(proxiedUrl),
         videoPlayerOptions: videoPlayerOptions,

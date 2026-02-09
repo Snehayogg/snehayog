@@ -1,4 +1,4 @@
-part of 'package:vayu/view/screens/video_feed_advanced.dart';
+part of '../video_feed_advanced.dart';
 
 extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
 
@@ -65,8 +65,27 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       final hasNetwork = await ConnectivityService.hasNetworkConnectivity();
       if (!hasNetwork) {
         AppLogger.log('📡 VideoFeedAdvanced: No network connectivity detected');
+        
+        // **NEW: Offline Gallery Fallback**
+        if (page == 1 && !append) {
+          AppLogger.log('🎞️ VideoFeedAdvanced: Attempting gallery fallback...');
+          final galleryVideos = await localGalleryService.fetchGalleryVideos(limit: _videosPerPage);
+          
+          if (galleryVideos.isNotEmpty && mounted) {
+            safeSetState(() {
+              _videos = galleryVideos;
+              _currentIndex = 0;
+              _hasMore = galleryVideos.length >= _videosPerPage;
+              _isLoading = false;
+              _errorMessage = null;
+            });
+            _preloadVideo(0);
+            _tryAutoplayCurrent();
+            return;
+          }
+        }
+
         if (mounted) {
-          _showSnackBar('No internet connection. Please check your network.', isError: true);
           safeSetState(() {
             _isLoading = false;
             _isLoadingMore = false;

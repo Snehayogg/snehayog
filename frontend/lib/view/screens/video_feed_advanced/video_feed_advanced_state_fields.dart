@@ -1,4 +1,4 @@
-part of 'package:vayu/view/screens/video_feed_advanced.dart';
+part of '../video_feed_advanced.dart';
 
 mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   // Core state - **OPTIMIZED: Using ValueNotifiers for granular updates**
@@ -92,6 +92,15 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   final Map<String, ValueNotifier<bool>> _isBufferingVN = {};
   final Map<String, ValueNotifier<bool>> _isSlowConnectionVN = {};
   final Map<String, Timer> _bufferingTimers = {};
+  
+  // **NEW: Connectivity UI Throttling**
+  int _slowConnectionShownCount = 0;
+  final int _maxSlowConnectionShows = 2;
+  
+  // **NEW: Offline Banner Control**
+  final ValueNotifier<bool> _showOfflineBannerVN = ValueNotifier<bool>(false);
+  bool _hasShownOfflineBanner = false;
+  StreamSubscription? _connectivitySubscription;
 
   // LRU tracking
   final Map<String, DateTime> _lastAccessedLocal = {};

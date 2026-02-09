@@ -49,6 +49,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:vayu/view/widget/video_feed_skeleton.dart';
 
 import 'package:vayu/services/video_cache_proxy_service.dart';
+import 'package:vayu/core/services/local_gallery_service.dart';
 
 part 'video_feed_advanced/video_feed_advanced_state_fields.dart';
 part 'video_feed_advanced/video_feed_advanced_playback.dart';
@@ -62,6 +63,12 @@ part 'video_feed_advanced/video_feed_advanced_ui.dart';
 // Debug logging helper for instrumentation
 Future<void> _debugLog(String location, String message,
     Map<String, dynamic> data, String hypothesisId) async {
+  // **OPTIMIZATION: Disabled filesystem logging in debug mode to prevent UI hangs**
+  return;
+  
+  // **OPTIMIZATION: Disabled filesystem logging in debug mode to prevent UI hangs**
+  return;
+  
   try {
     final payload = {
       'id': 'log_${DateTime.now().millisecondsSinceEpoch}_$hypothesisId',
@@ -256,6 +263,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     // **PERFORMANCE: Cache MainController to avoid repeated Provider.of() calls**
     _mainController = Provider.of<MainController>(context, listen: false);
+    
+    // **NEW: Register pause callback with MainController**
+    _mainController?.registerVideoPauseCallback(_pauseCurrentVideo);
 
     // **PERFORMANCE: Cache MediaQuery data to avoid repeated lookups**
     final mediaQuery = MediaQuery.of(context);
@@ -1954,6 +1964,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     // **NEW: Cancel ad refresh subscription**
     _adRefreshSubscription?.cancel();
+    _connectivitySubscription?.cancel();
 
     // Remove observer
     WidgetsBinding.instance.removeObserver(this);

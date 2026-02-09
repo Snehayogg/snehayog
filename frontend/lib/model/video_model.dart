@@ -217,8 +217,8 @@ class VideoModel {
             : double.tryParse(json['aspectRatio']?.toString() ?? '0.5625') ??
                 9 / 16,
         duration: Duration(
-            seconds: (json['duration'] is int)
-                ? json['duration']
+            seconds: (json['duration'] is num)
+                ? (json['duration'] as num).toInt()
                 : int.tryParse(json['duration']?.toString() ?? '0') ?? 0),
         link: () {
 
