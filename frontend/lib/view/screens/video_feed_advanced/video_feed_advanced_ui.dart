@@ -1,4 +1,4 @@
-part of 'package:vayu/view/screens/video_feed_advanced.dart';
+part of '../video_feed_advanced.dart';
 
 extension _VideoFeedUI on _VideoFeedAdvancedState {
   Widget _buildVideoFeed() {
@@ -895,18 +895,27 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           valueListenable:
               _firstFrameReady[index] ?? ValueNotifier<bool>(false),
           builder: (context, ready, _) {
-            final child = video.thumbnailUrl.isNotEmpty
+            final child = video.videoType == 'local_gallery' && video.thumbnailUrl.isNotEmpty
                 ? AspectRatio(
                     aspectRatio: aspectRatio,
-                    child: CachedNetworkImage(
-                      imageUrl: video.thumbnailUrl,
+                    child: Image.file(
+                      File(video.thumbnailUrl),
                       fit: BoxFit.cover,
-                      placeholder: (context, url) => _buildFallbackThumbnail(),
-                      errorWidget: (context, url, error) =>
-                          _buildFallbackThumbnail(),
+                      errorBuilder: (context, error, stackTrace) => _buildFallbackThumbnail(),
                     ),
                   )
-                : _buildFallbackThumbnail();
+                : video.thumbnailUrl.isNotEmpty
+                    ? AspectRatio(
+                        aspectRatio: aspectRatio,
+                        child: CachedNetworkImage(
+                          imageUrl: video.thumbnailUrl,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => _buildFallbackThumbnail(),
+                          errorWidget: (context, url, error) =>
+                              _buildFallbackThumbnail(),
+                        ),
+                      )
+                    : _buildFallbackThumbnail();
 
             // **NEW: Premium pulsing effect during priming**
             if (!ready && index == _currentIndex) {
@@ -972,7 +981,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         // 1. Always account for system navigation bar (SafeArea padding)
         // 2. Add extra 60px padding when opened as a full-screen route (e.g. from Profile/Vayu)
         // 3. **NEW: Ensure min padding (e.g., 20) to clear the 40px seek bar touch zone**
-        final bottomPadding = (mediaQuery.padding.bottom > 20 ? mediaQuery.padding.bottom : 20.0) + (widget.isFullScreen ? 60 : 0);
+        final bottomPadding = (mediaQuery.padding.bottom > 20 ? mediaQuery.padding.bottom : 20.0);
 
         return RepaintBoundary(
           child: Stack(
@@ -1441,14 +1450,10 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
 
   /// **OFFLINE INDICATOR: Shows when device has no internet connection**
   Widget _buildOfflineIndicator() {
-    return StreamBuilder<List<ConnectivityResult>>(
-      stream: ConnectivityService.connectivityStream,
-      initialData: ConnectivityService.lastKnownResult,
-      builder: (context, snapshot) {
-        final connectivityResults = snapshot.data ?? [ConnectivityResult.none];
-        final isOffline = ConnectivityService.isOffline(connectivityResults);
-
-        if (!isOffline) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: _showOfflineBannerVN,
+      builder: (context, show, _) {
+        if (!show) {
           return const SizedBox.shrink();
         }
 

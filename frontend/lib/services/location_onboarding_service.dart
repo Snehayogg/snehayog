@@ -21,19 +21,12 @@ class LocationOnboardingService {
       // Check if user has location data in backend
       final hasLocationDataInBackend = await hasLocationInBackend();
 
-      print(
-          '🔍 LocationOnboarding: shouldShowOnboarding = ${!hasShownOnboarding || !hasPermission || !hasLocationDataInBackend}');
-      print('   - Has shown onboarding: $hasShownOnboarding');
-      print('   - Has permission: $hasPermission');
-      print('   - Has location in backend: $hasLocationDataInBackend');
-
       // Show onboarding if:
       // 1. Haven't shown onboarding yet, OR
       // 2. Don't have permission, OR
       // 3. Don't have location data in backend
       return !hasShownOnboarding || !hasPermission || !hasLocationDataInBackend;
     } catch (e) {
-      print('❌ LocationOnboarding: Error checking onboarding status: $e');
       return true; // Show onboarding on error
     }
   }

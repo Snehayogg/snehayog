@@ -79,6 +79,9 @@ class _VayuScreenState extends State<VayuScreen> {
       final List<VideoModel> longFormVideos =
           newVideos.where((v) => v.duration.inSeconds > 120).toList();
 
+      AppLogger.log(
+          '🎬 VayuScreen: Fetched ${newVideos.length} videos, ${longFormVideos.length} passed >120s filter');
+
       setState(() {
         if (refresh) {
           _videos = longFormVideos;

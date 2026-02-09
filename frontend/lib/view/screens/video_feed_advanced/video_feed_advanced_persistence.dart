@@ -1,4 +1,4 @@
-part of 'package:vayu/view/screens/video_feed_advanced.dart';
+part of '../video_feed_advanced.dart';
 
 extension _VideoFeedPersistence on _VideoFeedAdvancedState {
   Future<void> _saveBackgroundState() async {

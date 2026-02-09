@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:vayu/utils/app_logger.dart';
 
 /// Service for managing video player configuration and quality optimization
 class VideoPlayerConfigService {
@@ -27,7 +28,7 @@ class VideoPlayerConfigService {
     try {
       // Check if URL is already HLS
       if (originalUrl.contains('.m3u8') || originalUrl.contains('f_hls')) {
-        print('$_tag: URL is already HLS, no transformation needed');
+        // AppLogger.log('$_tag: URL is already HLS, no transformation needed');
         return originalUrl;
       }
 
@@ -35,15 +36,15 @@ class VideoPlayerConfigService {
       if (originalUrl.contains('cloudinary.com') &&
           originalUrl.contains('.mp4')) {
         final hlsUrl = _transformCloudinaryMp4ToHls(originalUrl, preset);
-        print('$_tag: Transformed Cloudinary MP4 to HLS: $hlsUrl');
+        // AppLogger.log('$_tag: Transformed Cloudinary MP4 to HLS: $hlsUrl');
         return hlsUrl;
       }
 
       // For other MP4 URLs, return as-is (consider implementing transformation)
-      print('$_tag: Non-Cloudinary MP4 detected, using original URL');
+      // AppLogger.log('$_tag: Non-Cloudinary MP4 detected, using original URL');
       return originalUrl;
     } catch (e) {
-      print('$_tag: Error optimizing video URL: $e');
+      AppLogger.log('$_tag: Error optimizing video URL: $e', isError: true);
       return originalUrl;
     }
   }

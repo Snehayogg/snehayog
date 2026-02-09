@@ -4,6 +4,7 @@ import { verifyToken } from '../utils/verifytoken.js';
 import jwt from 'jsonwebtoken'; // Added for token info endpoint
 import redisService from '../services/redisService.js';
 import { getGlobalLeaderboard } from '../controllers/videoController.js';
+import RecommendationService from '../services/recommendationService.js';
 
 const router = express.Router();
 
@@ -175,6 +176,7 @@ router.get('/profile', verifyToken, async (req, res) => {
       preferredCurrency: currentUser.preferredCurrency,
       preferredPaymentMethod: currentUser.preferredPaymentMethod,
       country: currentUser.country,
+      rank: await RecommendationService.getGlobalCreatorRank(currentUser._id), // **NEW: Include global rank**
     };
 
     res.json(payload);
@@ -432,6 +434,7 @@ router.get('/:id', async (req, res) => {
       videos: user.videos,
       following: user.following?.length || 0,
       followers: user.followers?.length || 0,
+      rank: await RecommendationService.getGlobalCreatorRank(user._id), // **NEW: Include global rank**
     };
 
     res.json(payload);

@@ -338,6 +338,10 @@ class ProfileStateManager extends ChangeNotifier {
     normalized['followingCount'] = followingCount;
     normalized['following'] = followingCount;
 
+    // 3. Normalize Rank
+    final rank = normalized['rank'] ?? 0;
+    normalized['rank'] = rank;
+
     return normalized;
   }
 
