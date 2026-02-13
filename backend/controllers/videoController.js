@@ -679,12 +679,50 @@ export const getFeed = async (req, res) => {
     const requestedType = (videoType || 'yog').toLowerCase();
     const type = requestedType === 'vayug' ? 'vayu' : requestedType;
     
-    // Clear queue if requested (pull-to-refresh)
-    if (clearSession === 'true') {
-      await FeedQueueService.clearQueue(userIdentifier, type);
+    let finalVideos = [];
+    let hasMore = false;
+    let total = 0;
+
+    if (type === 'vayu') {
+      // **PROGRESSIVE LOADING: Use standard pagination for Vayu (Long-form)**
+      // Bypass FeedQueueService to ensure the user can scroll through ALL videos
+      const skip = (pageNum - 1) * limitNum;
+      
+      const query = { 
+        videoType: 'vayu',
+        processingStatus: 'completed'
+      };
+
+      // Exclude own videos from feed if user is logged in
+      if (userId && userId !== 'anon' && userId !== 'undefined') {
+        const user = await User.findOne({ googleId: userId }).select('_id').lean();
+        if (user) {
+          query.uploader = { $ne: user._id };
+        }
+      }
+
+      [finalVideos, total] = await Promise.all([
+        Video.find(query)
+          .populate('uploader', 'name profilePic googleId')
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limitNum)
+          .lean(),
+        Video.countDocuments(query)
+      ]);
+
+      hasMore = skip + finalVideos.length < total;
+    } else {
+      // **DISCOVERY FEED: Use Queue-based system for Yog (Short-form)**
+      // Clear queue if requested (pull-to-refresh)
+      if (clearSession === 'true') {
+        await FeedQueueService.clearQueue(userIdentifier, type);
+      }
+      
+      finalVideos = await FeedQueueService.popFromQueue(userIdentifier, type, limitNum);
+      hasMore = finalVideos.length > 0;
+      total = 9999;
     }
-    
-    let finalVideos = await FeedQueueService.popFromQueue(userIdentifier, type, limitNum);
     
     let rqUserObjectIdStr = null;
     if (userId) {
@@ -704,10 +742,10 @@ export const getFeed = async (req, res) => {
 
     res.json({
       videos: serializedVideos,
-      hasMore: serializedVideos.length > 0,
-      total: 9999,
+      hasMore: hasMore,
+      total: total,
       currentPage: pageNum,
-      totalPages: 9999,
+      totalPages: Math.ceil(total / limitNum),
       isPersonalized: !!userIdentifier
     });
 

@@ -9,6 +9,13 @@ serviceAccountKey.json
 app-ads.txt
 firebaseServiceAccount.json
 
+# Dependencies
+node_modules/
+
+# Logs
+newrelic_agent.log
+*.log
+
 # Keep the example file for reference
 !env.example
 uploads/

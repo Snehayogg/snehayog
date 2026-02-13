@@ -577,7 +577,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             Positioned(
               left: 0,
               right: 0,
-              bottom: 0,
+              bottom: MediaQuery.of(context).padding.bottom > 0 ? 2 : 0, // Lift slightly if edge-to-edge nav bar present
               child: _buildVideoProgressBar(controller),
             ),
           _buildVideoOverlay(video, index),
@@ -1015,11 +1015,12 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     return Builder(
       builder: (context) {
         final mediaQuery = MediaQuery.of(context);
-        // **ENHANCED: Unified bottom padding strategy**
+        // **ENHANCED: Unified bottom padding strategy for Android 15 Edge-to-Edge**
         // 1. Always account for system navigation bar (SafeArea padding)
         // 2. Add extra 60px padding when opened as a full-screen route (e.g. from Profile/Vayu)
-        // 3. **NEW: Ensure min padding (e.g., 20) to clear the 40px seek bar touch zone**
-        final bottomPadding = (mediaQuery.padding.bottom > 20 ? mediaQuery.padding.bottom : 20.0);
+        // 3. Ensure min padding (at least 16px) to clear the gesture bar touch zone
+        final double systemBottomPadding = mediaQuery.padding.bottom;
+        final double bottomPadding = systemBottomPadding > 0 ? systemBottomPadding + 8 : 20.0;
 
         return RepaintBoundary(
           child: Stack(

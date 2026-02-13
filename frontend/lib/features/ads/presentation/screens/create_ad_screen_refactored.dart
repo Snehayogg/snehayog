@@ -19,6 +19,7 @@ import 'package:vayu/features/video/presentation/managers/main_controller.dart';
 import 'dart:io';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/shared/utils/app_text.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class CreateAdScreenRefactored extends StatefulWidget {
   const CreateAdScreenRefactored({super.key});
@@ -37,6 +38,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
   final _budgetController = TextEditingController();
   final _targetAudienceController = TextEditingController();
   final _keywordsController = TextEditingController();
+  bool _agreeToTerms = false;
 
   // Ad type and media
   String _selectedAdType = 'banner';
@@ -1066,6 +1068,10 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
               selectedAdType: _selectedAdType,
             ),
 
+            // **NEW: Legal Agreement Section**
+            const SizedBox(height: 16),
+            _buildLegalAgreement(),
+
             // Validation Summary
             _buildValidationSummary(),
 
@@ -1124,6 +1130,108 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
         ),
       ),
     );
+  }
+
+  /// **NEW: Build Legal Agreement Checkbox**
+  Widget _buildLegalAgreement() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CheckboxListTile(
+            value: _agreeToTerms,
+            onChanged: (value) {
+              setState(() {
+                _agreeToTerms = value ?? false;
+                if (_agreeToTerms) _errorMessage = null;
+              });
+            },
+            title: Wrap(
+              children: [
+                const Text(
+                  'I agree to the ',
+                  style: TextStyle(fontSize: 13),
+                ),
+                GestureDetector(
+                  onTap: () => _launchURL('https://snehayog.site/terms.html'),
+                  child: const Text(
+                    'Terms & Conditions',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.blue,
+                      fontWeight: FontWeight.bold,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+                const Text(
+                  ' and ',
+                  style: TextStyle(fontSize: 13),
+                ),
+                GestureDetector(
+                  onTap: () => _launchURL('https://snehayog.site/privacy.html'),
+                  child: const Text(
+                    'Privacy Policy',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.blue,
+                      fontWeight: FontWeight.bold,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+            activeColor: Colors.blue,
+          ),
+          // Additional links for Razorpay compliance
+          Padding(
+            padding: const EdgeInsets.only(left: 48, top: 0),
+            child: Row(
+              children: [
+                GestureDetector(
+                  onTap: () => _launchURL('https://snehayog.site/refund.html'),
+                  child: const Text(
+                    'Refund Policy',
+                    style: TextStyle(fontSize: 11, color: Colors.blue),
+                  ),
+                ),
+                const Text('  •  ', style: TextStyle(fontSize: 11)),
+                GestureDetector(
+                  onTap: () => _launchURL('https://snehayog.site/contact.html'),
+                  child: const Text(
+                    'Contact Us',
+                    style: TextStyle(fontSize: 11, color: Colors.blue),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Helper to launch URLs
+  Future<void> _launchURL(String url) async {
+    final uri = Uri.parse(url);
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        AppLogger.log('❌ Could not launch $url');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not open link')),
+          );
+        }
+      }
+    } catch (e) {
+      AppLogger.log('❌ Error launching URL: $e');
+    }
   }
 
   Widget _buildSuccessMessage() {
@@ -1526,6 +1634,11 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
         'isValid': _isMediaValid,
         'icon': _selectedAdType == 'banner' ? Icons.image : Icons.video_library,
       },
+      {
+        'label': 'Agree to Terms & Privacy Policy',
+        'isValid': _agreeToTerms,
+        'icon': Icons.gavel,
+      },
     ]);
 
     return Card(
@@ -1906,6 +2019,14 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
       setState(() {
         _isMediaValid = true;
         _mediaError = null;
+      });
+    }
+
+    // Check agreement to terms
+    if (!_agreeToTerms) {
+      setState(() {
+        _errorMessage = 'Please agree to the Terms & Conditions and Privacy Policy';
+        isValid = false;
       });
     }
 
