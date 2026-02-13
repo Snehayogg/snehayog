@@ -88,6 +88,19 @@ const UserSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  // **NEW: Track last active time for identifying inactive users**
+  lastActive: {
+    type: Date,
+    default: Date.now,
+    index: true
+  },
+  isAppUninstalled: {
+    type: Boolean,
+    default: false
+  },
+  lastInstallCheck: {
+    type: Date
+  },
   // **NEW: Location Data**
   location: {
     latitude: {

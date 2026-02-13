@@ -2,9 +2,9 @@ import 'dart:io';
 import '../datasources/video_remote_datasource.dart';
 import '../../domain/repositories/video_repository.dart';
 import '../../domain/entities/video_entity.dart';
-import '../../../../model/video_model.dart';
+import 'package:vayu/shared/models/video_model.dart';
 import '../datasources/video_local_datasource.dart';
-import '../../../../utils/app_logger.dart';
+import 'package:vayu/shared/utils/app_logger.dart';
 
 
 /// Implementation of the VideoRepository interface

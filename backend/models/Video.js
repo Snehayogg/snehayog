@@ -209,6 +209,7 @@ const videoSchema = new mongoose.Schema({
 // **NEW: Index for faster queries**
 videoSchema.index({ uploader: 1, uploadedAt: -1 });
 videoSchema.index({ uploader: 1, createdAt: -1 }); // **OPTIMIZATION: Match route sort order**
+videoSchema.index({ uploader: 1, processingStatus: 1, createdAt: -1 }); // **OPTIMIZATION: Multi-criteria filter for getUserVideos**
 videoSchema.index({ processingStatus: 1 });
 videoSchema.index({ 'qualitiesGenerated.quality': 1 });
 // **NEW: Compound index for faster duplicate queries**

@@ -166,11 +166,16 @@ class RecommendationService {
     const targetCount = Math.min(count, pool.length);
 
     pool.forEach(v => {
-      v.weight = Math.pow(v.finalScore || 0.1, 1.5);
+      // **OPTIMIZATION: Flatten weights to prevent "Popularity Crowding"**
+      // Using Math.sqrt gives popular videos a lead, but prevents them from completely 
+      // overshadowing fresh discovery content (Linear growth -> Sub-linear growth)
+      v.weight = Math.sqrt(v.finalScore || 0.1);
     });
 
     for (let i = 0; i < targetCount; i++) {
         let totalWeight = pool.reduce((sum, v) => sum + v.weight, 0);
+        if (totalWeight <= 0) break;
+
         let random = Math.random() * totalWeight;
         let runningSum = 0;
 
@@ -276,7 +281,7 @@ class RecommendationService {
    */
   static orderFeedWithDiversity(videos, options = {}) {
     const {
-      minCreatorSpacing = 3 
+      minCreatorSpacing = 3
     } = options;
 
     if (!videos || videos.length === 0) return [];
@@ -288,20 +293,23 @@ class RecommendationService {
 
     while (remaining.length > 0) {
       const candidates = remaining.filter(video => {
+        // Creator Spacing Check
         const creatorId = video.uploader?._id?.toString() || video.uploader?.id?.toString() || video.uploader?.toString() || 'unknown';
         const lastPos = creatorLastPositions.get(creatorId);
-        if (lastPos === undefined) return true;
-        return (position - lastPos - 1) >= minCreatorSpacing;
+        return lastPos === undefined || (position - lastPos - 1) >= minCreatorSpacing;
       });
 
       let selected;
       if (candidates.length > 0) {
         selected = candidates[0];
       } else {
+        // If no candidates meet strict rule, take the highest score
         selected = remaining[0];
       }
 
       ordered.push(selected);
+      
+      // Update tracking
       const creatorId = selected.uploader?._id?.toString() || selected.uploader?.id?.toString() || selected.uploader?.toString() || 'unknown';
       creatorLastPositions.set(creatorId, position);
       
@@ -759,19 +767,14 @@ class RecommendationService {
    * @param {String} uploaderId - MongoDB ObjectId of the creator
    * @returns {Promise<Number>} - Rank (1-based), or 0 if not found
    */
-  static async getGlobalCreatorRank(uploaderId) {
-    if (!uploaderId) return 0;
-    
+  /**
+   * Internal helper to calculate and cache all creator ranks for the month
+   * @private
+   */
+  static async _calculateAndCacheRanks() {
     const cacheKey = 'global_creator_ranks';
     
     try {
-      // 1. Try Cache
-      const cachedRanks = await redisService.get(cacheKey);
-      if (cachedRanks && cachedRanks[uploaderId]) {
-        return cachedRanks[uploaderId];
-      }
-
-      // 2. Calculate Ranks
       const now = new Date();
       const startOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
       
@@ -812,18 +815,45 @@ class RecommendationService {
           (s.bannerViews / 1000) * bannerCpm + 
           (s.carouselViews / 1000) * carouselCpm
         ) * creatorShare;
-        return { id: s._id.toString(), earnings };
-      }).sort((a, b) => b.earnings - a.earnings);
+        return { id: s._id?.toString(), earnings };
+      })
+      .filter(item => item.id)
+      .sort((a, b) => b.earnings - a.earnings);
 
       const rankMap = {};
       rankedList.forEach((item, index) => {
         rankMap[item.id] = index + 1;
       });
 
-      // Cache for 1 hour
-      await redisService.set(cacheKey, rankMap, 3600);
+      // Cache the full rank map for 1 hour
+      if (redisService.getConnectionStatus()) {
+        await redisService.set(cacheKey, rankMap, 3600);
+      }
       
-      return rankMap[uploaderId.toString()] || 0;
+      return { rankMap, rankedList };
+    } catch (error) {
+      console.error('❌ Error in _calculateAndCacheRanks:', error);
+      return { rankMap: {}, rankedList: [] };
+    }
+  }
+
+  static async getGlobalCreatorRank(uploaderId) {
+    if (!uploaderId) return 0;
+    const uploaderIdStr = uploaderId.toString();
+    const cacheKey = 'global_creator_ranks';
+    
+    try {
+      // 1. Try Cache
+      if (redisService.getConnectionStatus()) {
+        const cachedRanks = await redisService.get(cacheKey);
+        if (cachedRanks && cachedRanks[uploaderIdStr]) {
+          return cachedRanks[uploaderIdStr];
+        }
+      }
+
+      // 2. Calculate Ranks if cache miss
+      const { rankMap } = await this._calculateAndCacheRanks();
+      return rankMap[uploaderIdStr] || 0;
     } catch (error) {
       console.error('❌ Error getting global creator rank:', error);
       return 0;
@@ -840,41 +870,18 @@ class RecommendationService {
     
     try {
       // 1. Try Cache
-      const cached = await redisService.get(cacheKey);
-      if (cached) return cached.slice(0, limit);
+      if (redisService.getConnectionStatus()) {
+        const cached = await redisService.get(cacheKey);
+        if (cached) return cached.slice(0, limit);
+      }
 
-      // 2. Calculate Ranks (Reusing logic)
-      const now = new Date();
-      const startOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
+      // 2. Refresh Ranks
+      const { rankedList } = await this._calculateAndCacheRanks();
       
-      const stats = await AdImpression.aggregate([
-        { $match: { isViewed: true, timestamp: { $gte: startOfMonth } } },
-        {
-          $group: {
-            _id: { creator: '$creatorId', adType: '$adType' },
-            totalViews: { $sum: { $cond: [{ $gt: ['$viewCount', 0] }, '$viewCount', 1] } }
-          }
-        },
-        {
-          $group: {
-            _id: '$_id.creator',
-            bannerViews: { $sum: { $cond: [{ $eq: ['$_id.adType', 'banner'] }, '$totalViews', 0] } },
-            carouselViews: { $sum: { $cond: [{ $eq: ['$_id.adType', 'carousel'] }, '$totalViews', 0] } }
-          }
-        }
-      ]);
-
-      const bannerCpm = AD_CONFIG?.BANNER_CPM ?? 10;
-      const carouselCpm = AD_CONFIG?.DEFAULT_CPM ?? 30;
-      const creatorShare = AD_CONFIG?.CREATOR_REVENUE_SHARE ?? 0.8;
-
-      const rankedList = stats.map(s => {
-        const earnings = ((s.bannerViews / 1000) * bannerCpm + (s.carouselViews / 1000) * carouselCpm) * creatorShare;
-        return { id: s._id.toString(), earnings };
-      }).sort((a, b) => b.earnings - a.earnings);
-
       // 3. Fetch User Metadata for top creators
-      const topCreatorIds = rankedList.slice(0, 100).map(item => item.id);
+      const topCreators = rankedList.slice(0, 50); // Get top 50 for leaderboard metadata
+      const topCreatorIds = topCreators.map(item => item.id);
+      
       const users = await User.find({ _id: { $in: topCreatorIds } })
         .select('googleId name profilePic videos')
         .lean();
@@ -882,7 +889,7 @@ class RecommendationService {
       const userMap = {};
       users.forEach(u => { userMap[u._id.toString()] = u; });
 
-      const leaderboard = rankedList
+      const leaderboard = topCreators
         .map((item, index) => {
           const user = userMap[item.id];
           if (!user) return null;
@@ -897,8 +904,10 @@ class RecommendationService {
         })
         .filter(Boolean);
 
-      // Cache for 1 hour
-      await redisService.set(cacheKey, leaderboard, 3600);
+      // Cache full list for 1 hour
+      if (redisService.getConnectionStatus() && leaderboard.length > 0) {
+        await redisService.set(cacheKey, leaderboard, 3600);
+      }
       
       return leaderboard.slice(0, limit);
     } catch (error) {

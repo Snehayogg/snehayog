@@ -1,30 +1,36 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'dart:async';
 import 'package:provider/provider.dart';
-import 'package:vayu/view/homescreen.dart';
-import 'package:vayu/view/screens/splash_screen.dart';
+import 'package:vayu/features/video/presentation/screens/homescreen.dart';
+import 'package:vayu/features/onboarding/presentation/screens/splash_screen.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:vayu/controller/google_sign_in_controller.dart';
-import 'package:vayu/controller/main_controller.dart';
-import 'package:vayu/core/providers/video_provider.dart';
-import 'package:vayu/core/providers/user_provider.dart';
-import 'package:vayu/view/screens/video_screen.dart';
-import 'package:vayu/core/managers/hot_ui_state_manager.dart';
-import 'package:vayu/core/theme/app_theme.dart';
-import 'package:vayu/services/authservices.dart';
-import 'package:vayu/services/background_profile_preloader.dart';
-import 'package:vayu/services/location_onboarding_service.dart';
-import 'package:vayu/services/welcome_onboarding_service.dart';
-import 'package:vayu/services/gallery_permission_service.dart';
-import 'package:vayu/view/screens/welcome_onboarding_screen.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vayu/core/managers/shared_video_controller_pool.dart';
-import 'package:vayu/core/managers/video_controller_manager.dart';
-import 'package:vayu/utils/app_logger.dart';
-import 'package:vayu/core/services/error_logging_service.dart';
+import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
+import 'package:vayu/features/video/presentation/managers/main_controller.dart';
+import 'package:vayu/features/video/presentation/managers/video_provider.dart';
+import 'package:vayu/shared/providers/user_provider.dart';
+import 'package:vayu/features/video/presentation/screens/video_screen.dart';
+import 'package:vayu/shared/managers/hot_ui_state_manager.dart';
+import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/features/auth/data/services/authservices.dart';
+import 'package:vayu/features/profile/data/services/background_profile_preloader.dart';
+import 'package:vayu/features/onboarding/data/services/location_onboarding_service.dart';
+import 'package:vayu/features/onboarding/data/services/welcome_onboarding_service.dart';
+import 'package:vayu/features/onboarding/data/services/gallery_permission_service.dart';
+import 'package:vayu/features/onboarding/presentation/screens/welcome_onboarding_screen.dart';
+import 'package:vayu/features/ads/data/services/ad_impression_service.dart';
+
+import 'package:vayu/features/video/presentation/managers/shared_video_controller_pool.dart';
+import 'package:vayu/features/video/presentation/managers/video_controller_manager.dart';
+import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayu/shared/services/error_logging_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  debugRepaintRainbowEnabled = true;
+  
+  // **NEW: Initialize Ad Impression Service for offline syncing**
+  AdImpressionService().initialize();
 
   // **STAGE 1: BASIC CONFIG (Moved to Splash Screen for Parallelism)**
   // await AppInitializationManager.instance.initializeStage1();
@@ -177,139 +183,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _handleIncomingUri(Uri uri) async {
 
 
-    // **FIX: Handle referral code from query parameters**
-    final referralCode = uri.queryParameters['ref'];
-    if (referralCode != null && referralCode.isNotEmpty) {
 
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('pending_referral_code', referralCode);
-
-      } catch (e) {
-
-      }
-    }
-
-    // **OPTIMIZED: Razorpay payment callback disabled (not in use)**
-    // TODO: Uncomment when payment system is active
-    // if (uri.scheme == 'snehayog' && uri.host == 'payment-callback') {
-    //   final orderId = uri.queryParameters['razorpay_order_id'] ?? '';
-    //   final paymentId = uri.queryParameters['razorpay_payment_id'] ?? '';
-    //   final signature = uri.queryParameters['razorpay_signature'] ?? '';
-    //
-    //   if (orderId.isEmpty || paymentId.isEmpty || signature.isEmpty) {
-    //     if (mounted) {
-    //       ScaffoldMessenger.of(context).showSnackBar(
-    //         const SnackBar(
-    //           content: Text('Payment callback missing data'),
-    //           backgroundColor: Colors.red,
-    //         ),
-    //       );
-    //     }
-    //     return;
-    //   }
-    //
-    //   // Razorpay payment verification removed - service not available
-    //   if (mounted) {
-    //     ScaffoldMessenger.of(context).showSnackBar(
-    //       const SnackBar(
-    //         content: Text('Payment verification not available'),
-    //         backgroundColor: Colors.orange,
-    //       ),
-    //     );
-    //   }
-    // }
-
-    // Handle video deep links
-    else if ((uri.scheme == 'snehayog' && uri.host == 'video') ||
-        (uri.scheme == 'https' &&
-            uri.host == 'snehayog.site' &&
-            (uri.path.startsWith('/video') || uri.path == '/'))) {
-      // **ENHANCED: Robust video ID extraction from deep links**
-      String? videoId;
-
-      // **METHOD 1: Try query parameter first (e.g., ?id=abc123)**
-      if (uri.queryParameters.containsKey('id')) {
-        videoId = uri.queryParameters['id']?.trim();
-        if (videoId?.isNotEmpty == true) {
-  
-        }
-      }
-
-      // **METHOD 2: Try path segments (e.g., /video/abc123)**
-      if ((videoId == null || videoId.isEmpty) && uri.pathSegments.isNotEmpty) {
-        final segments = uri.pathSegments;
-
-        // Find 'video' segment and get the next segment as ID
-        final videoIndex =
-            segments.indexWhere((s) => s.toLowerCase() == 'video');
-        if (videoIndex != -1 && videoIndex < segments.length - 1) {
-          videoId = segments[videoIndex + 1].trim();
-
-        } else if (segments.isNotEmpty) {
-          // Fallback: use last segment if it's not 'video'
-          final lastSegment = segments.last;
-          if (lastSegment.isNotEmpty &&
-              lastSegment.toLowerCase() != 'video' &&
-              lastSegment != '/') {
-            videoId = lastSegment.trim();
-
-          }
-        }
-      }
-
-      // **METHOD 3: Extract from full path string (e.g., /video/abc123)**
-      if ((videoId == null || videoId.isEmpty) && uri.path.isNotEmpty) {
-        final pathParts =
-            uri.path.split('/').where((p) => p.isNotEmpty).toList();
-        if (pathParts.isNotEmpty) {
-          final videoIndex =
-              pathParts.indexWhere((p) => p.toLowerCase() == 'video');
-          if (videoIndex != -1 && videoIndex < pathParts.length - 1) {
-            videoId = pathParts[videoIndex + 1].trim();
-
-          } else if (pathParts.length == 1 &&
-              pathParts[0].toLowerCase() != 'video') {
-            // Single segment that's not 'video' might be the ID
-            videoId = pathParts[0].trim();
-
-          }
-        }
-      }
-
-      // **VALIDATION: Ensure video ID is valid**
-      if (videoId != null && videoId.isNotEmpty && videoId != '/') {
-
-        _navigateToVideo(videoId);
-      } else {
-        // If it's a referral root link without a specific video, just open home
-
-        if (mounted) Navigator.pushNamed(context, '/home');
-      }
-    }
-    // **FIX: Handle root URL with referral code**
-    else if (uri.scheme == 'https' &&
-        uri.host == 'snehayog.site' &&
-        (uri.path == '/' || uri.path.isEmpty) &&
-        referralCode != null) {
-
-      if (mounted) Navigator.pushNamed(context, '/home');
-    }
-  }
-
-  void _navigateToVideo(String videoId) {
-    if (!mounted) return;
-
-    // Navigate to video screen with the specific video ID
-    Navigator.pushNamed(
-      context,
-      '/video',
-      arguments: {'videoId': videoId},
-    );
-  }
 
   @override
   Widget build(BuildContext context) {

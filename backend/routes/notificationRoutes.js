@@ -206,5 +206,94 @@ router.post('/monthly/trigger', requireAdminDashboardKey, async (req, res) => {
   }
 });
 
+/**
+ * POST /api/notifications/verify-installation
+ * Check if a specific user still has the app installed
+ */
+router.post('/verify-installation', requireAdminDashboardKey, async (req, res) => {
+  try {
+    const { googleId } = req.body;
+    console.log(`📡 Route: /verify-installation hit for googleId: ${googleId}`);
+    
+    if (!googleId) {
+      return res.status(400).json({ error: 'googleId is required' });
+    }
+
+    const { verifyInstallationStatus } = await import('../services/notificationService.js');
+    const result = await verifyInstallationStatus(googleId);
+
+    res.json(result);
+  } catch (error) {
+    console.error('❌ Error verifying installation:', error);
+    res.status(500).json({ error: 'Failed to verify installation' });
+  }
+});
+
+/**
+ * POST /api/notifications/verify-all-installations
+ * Bulk check all users to see who has uninstalled the app
+ */
+router.post('/verify-all-installations', requireAdminDashboardKey, async (req, res) => {
+  try {
+    const { verifyInstallationStatus } = await import('../services/notificationService.js');
+    
+    // Get all users who have a token
+    // Find all users to ensure we sync those who already have null tokens
+    const users = await User.find({}).select('googleId fcmToken isAppUninstalled');
+    console.log(`🔍 Syncing & Verifying installation for ${users.length} users...`);
+
+    let installedCount = 0;
+    let uninstalledCount = 0;
+    let errorCount = 0;
+    
+    const usersToVerify = [];
+    
+    // First, mark users with null tokens as uninstalled if they aren't already
+    for (const user of users) {
+      if (!user.fcmToken) {
+        if (!user.isAppUninstalled) {
+          await User.updateOne({ _id: user._id }, { $set: { isAppUninstalled: true, lastInstallCheck: new Date() } });
+        }
+        uninstalledCount++;
+      } else {
+        usersToVerify.push(user);
+      }
+    }
+
+    console.log(`📡 Verifying ${usersToVerify.length} users with active tokens in batches...`);
+
+    // Process in chunks of 50 to avoid overwhelming Firebase/Network
+    const chunkSize = 50;
+    for (let i = 0; i < usersToVerify.length; i += chunkSize) {
+      const chunk = usersToVerify.slice(i, i + chunkSize);
+      console.log(`⏳ Processing batch ${i / chunkSize + 1}/${Math.ceil(usersToVerify.length / chunkSize)}...`);
+      
+      const results = await Promise.all(chunk.map(u => verifyInstallationStatus(u.googleId)));
+      
+      results.forEach(r => {
+        if (r.success) {
+          if (r.isInstalled) installedCount++;
+          else uninstalledCount++;
+        } else {
+          errorCount++;
+        }
+      });
+    }
+
+    console.log(`🏁 Bulk verification complete. Installed: ${installedCount}, Uninstalled: ${uninstalledCount}, Errors: ${errorCount}`);
+
+    res.json({
+      success: true,
+      processed: users.length,
+      installed: installedCount,
+      uninstalled: uninstalledCount,
+      errors: errorCount
+    });
+  } catch (error) {
+    console.error('❌ Error in bulk installation verify:', error);
+    res.status(500).json({ error: 'Failed to run bulk verification' });
+  }
+});
+
 export default router;
 

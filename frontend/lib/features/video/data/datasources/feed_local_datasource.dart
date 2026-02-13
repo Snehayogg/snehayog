@@ -1,4 +1,4 @@
-import 'package:vayu/model/video_model.dart';
+import 'package:vayu/shared/models/video_model.dart';
 
 class FeedLocalDataSource {
   // Hive Removed as per optimization plan

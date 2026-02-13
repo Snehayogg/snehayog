@@ -1,5 +1,5 @@
 import '../repositories/video_repository.dart';
-import '../../../../core/exceptions/app_exceptions.dart';
+import 'package:vayu/shared/exceptions/app_exceptions.dart';
 
 /// Use case for fetching videos with pagination
 /// This encapsulates the business logic for retrieving videos

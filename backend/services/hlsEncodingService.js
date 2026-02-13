@@ -15,51 +15,35 @@ let ffmpegPath = null;
 let ffprobePath = null;
 
 try {
-  // Check system FFmpeg
   const systemFfmpeg = spawnSync('which', ['ffmpeg']);
   if (systemFfmpeg.status === 0 && systemFfmpeg.stdout.toString().trim()) {
-      ffmpegPath = systemFfmpeg.stdout.toString().trim();
-      console.log('🔧 HLSEncodingService: Found system FFmpeg at:', ffmpegPath);
+    ffmpegPath = systemFfmpeg.stdout.toString().trim();
   }
-
-  // Check system FFprobe
   const systemFfprobe = spawnSync('which', ['ffprobe']);
   if (systemFfprobe.status === 0 && systemFfprobe.stdout.toString().trim()) {
-      ffprobePath = systemFfprobe.stdout.toString().trim();
-      console.log('🔧 HLSEncodingService: Found system FFprobe at:', ffprobePath);
+    ffprobePath = systemFfprobe.stdout.toString().trim();
   }
 } catch (e) {
-  console.log('⚠️ HLSEncodingService: Failed to check system paths:', e.message);
+  console.warn('[HLS] FFmpeg path check failed:', e.message);
 }
 
-// Fallback to static if system not found
 if (!ffmpegPath) {
   try {
-      const ffmpegStatic = (await import('ffmpeg-static')).default;
-      ffmpegPath = ffmpegStatic;
-      console.log('🔧 HLSEncodingService: Using static FFmpeg at:', ffmpegPath);
+    ffmpegPath = (await import('ffmpeg-static')).default;
   } catch (e) {
-      console.error('❌ HLSEncodingService: Failed to load ffmpeg-static:', e);
+    console.error('[HLS] FFmpeg not found. HLS encoding will fail.');
   }
 }
-
 if (!ffprobePath) {
   try {
-      const ffprobeStatic = (await import('ffprobe-static')).default;
-      ffprobePath = ffprobeStatic.path;
-      console.log('🔧 HLSEncodingService: Using static FFprobe at:', ffprobePath);
+    ffprobePath = (await import('ffprobe-static')).default.path;
   } catch (e) {
-       console.error('❌ HLSEncodingService: Failed to load ffprobe-static:', e);
+    console.error('[HLS] FFprobe not found.');
   }
 }
 
-// Set paths
 if (ffmpegPath) ffmpeg.setFfmpegPath(ffmpegPath);
 if (ffprobePath) ffmpeg.setFfprobePath(ffprobePath);
-
-console.log('🔧 HLSEncodingService: Final Configuration');
-console.log('   FFmpeg:', ffmpegPath || '❌ NOT FOUND');
-console.log('   FFprobe:', ffprobePath || '❌ NOT FOUND');
 
 
 class HLSEncodingService {
@@ -68,12 +52,8 @@ class HLSEncodingService {
     this.hlsOutputDir = path.join(__dirname, '../uploads/hls');
     this.ensureHLSDirectory();
     
-    // Check FFmpeg installation
     this.checkFFmpegInstallation().then(isInstalled => {
-      if (!isInstalled) {
-        console.warn('⚠️ FFmpeg not found. HLS encoding will not work.');
-        console.warn('   Please install FFmpeg: https://ffmpeg.org/download.html');
-      }
+      if (!isInstalled) console.warn('[HLS] FFmpeg not available. Encoding will fail.');
     });
   }
 
@@ -91,14 +71,28 @@ class HLSEncodingService {
    * @param {number} options.segmentDuration - Segment duration in seconds (default: 3)
    * @param {string} options.quality - Quality preset: low, medium, high (default: medium)
    * @param {string} options.resolution - Resolution (only 480p supported, default: 480p)
+   * @param {string} options.codec - Video codec: 'h264' or 'h265' (default: 'h264'). H.265 gives ~50% smaller files at same quality.
    * @returns {Promise<Object>} - HLS encoding result
    */
   async convertToHLS(inputPath, videoId, options = {}) {
     const {
       segmentDuration = 3, // Optimized segment duration: 3 seconds for fast startup
       quality = 'medium', // low, medium, high (medium = 480p optimal)
-      resolution = '480p' // Fixed to 480p for cost optimization (single quality only)
+      resolution = '480p', // Fixed to 480p for cost optimization (single quality only)
+      codec = 'h265' // 'h264' or 'h265' - H.265 for ~50% bandwidth savings
     } = options;
+
+    // Resolve actual codec (fallback to h264 if h265 requested but unavailable)
+    let actualCodec = codec;
+    if (codec === 'h265') {
+      const hasH265 = await this.checkLibx265Available();
+      if (!hasH265) {
+        console.warn(`[HLS] ${videoId} | WARNING | H.265 requested but libx265 not available. Falling back to H.264.`);
+        actualCodec = 'h264';
+      } else {
+        console.log(`[HLS] ${videoId} | INFO | H.265 (HEVC) encoding confirmed.`);
+      }
+    }
 
     return new Promise((resolve, reject) => {
       // **FIXED: Use proper video ID instead of temporary names**
@@ -114,7 +108,7 @@ class HLSEncodingService {
       // Quality presets optimized for HLS streaming (480p only)
       const qualityPresets = {
         low: { crf: 28, audioBitrate: '48k' },    // Lower quality, smaller file
-        medium: { crf: 26, audioBitrate: '64k' }, // Balanced for mobile data (approx 480p)
+        medium: { crf: 28, audioBitrate: '48k' }, // Updated to match new standard (was 64k)
         high: { crf: 23, audioBitrate: '128k' }   // Higher quality
       };
 
@@ -122,7 +116,7 @@ class HLSEncodingService {
       // Calculate bitrate based on original resolution for better quality
       const originalVideoInfo = options.originalVideoInfo;
       let selectedResolution;
-      let targetBitrate = '800k'; // Default bitrate
+      let targetBitrate = '400k'; // Default bitrate (Updated for 500kbps target)
       
       if (originalVideoInfo && originalVideoInfo.width && originalVideoInfo.height) {
         const originalWidth = originalVideoInfo.width;
@@ -130,13 +124,13 @@ class HLSEncodingService {
         
         // Calculate bitrate based on resolution (higher resolution = higher bitrate)
         if (originalHeight > 1080) {
-          targetBitrate = '3000k'; // 1080p+ (Reduced from 5000k)
+          targetBitrate = '2500k'; // 1080p+ (Reduced)
         } else if (originalHeight > 720) {
-          targetBitrate = '1500k'; // 720p-1080p (Reduced from 3000k)
+          targetBitrate = '1200k'; // 720p-1080p (Reduced)
         } else if (originalHeight > 480) {
-          targetBitrate = '900k'; // 480p-720p (Reduced from 1500k)
+          targetBitrate = '600k'; // 480p-720p (Reduced for efficiency)
         } else {
-          targetBitrate = '550k'; // Below 480p (Targeting ~3MB per minute)
+          targetBitrate = '400k'; // Below 480p (Targeting ~2MB per minute)
         }
         
         selectedResolution = {
@@ -146,57 +140,67 @@ class HLSEncodingService {
         };
       } else {
         // Fallback to 480p if original info not available
-        targetBitrate = '800k';
+        targetBitrate = '400k';
         selectedResolution = { width: 854, height: 480, bitrate: targetBitrate };
       }
       
       const selectedQuality = qualityPresets[quality] || qualityPresets.medium;
       
-      console.log('🎬 HLS Encoding Configuration:');
-      console.log(`   Quality: ${quality} (CRF: ${selectedQuality.crf})`);
-      console.log(`   Resolution: ${selectedResolution.width}x${selectedResolution.height} (original preserved)`);
-      console.log(`   Bitrate: ${selectedResolution.bitrate}`);
-      console.log(`   Segment Duration: ${segmentDuration}s`);
+      const codecName = actualCodec === 'h265' ? 'H.265 (HEVC)' : 'H.264 (AVC)';
+      console.log(`[HLS] ${videoId} | START | codec=${codecName} resolution=${selectedResolution.width}x${selectedResolution.height} bitrate=${targetBitrate} segments=${segmentDuration}s`);
+
+      // Build video codec options based on actual codec
+      const isH265 = actualCodec === 'h265';
+      const videoOptions = isH265
+        ? [
+            // H.265/HEVC - ~50% smaller files at same quality (ideal for 500kbps)
+            '-c:v', 'libx265',
+            '-tag:v', 'hvc1',          // hvc1 tag for Safari/Apple compatibility
+            '-preset', 'fast',         // fast = good balance of speed vs compression
+            '-crf', selectedQuality.crf.toString(),
+            '-maxrate', targetBitrate,
+            '-bufsize', `${parseInt(targetBitrate) * 2}k`,
+            // x265 GOP: keyframe every 2s for HLS segment alignment (60 frames @ 30fps)
+            '-x265-params', 'keyint=60:min-keyint=60:scenecut=0',
+            '-pix_fmt', 'yuv420p'     // 8-bit Main profile for broad device support
+          ]
+        : [
+            // H.264 - maximum compatibility
+            '-c:v', 'libx264',
+            '-preset', 'fast',
+            '-profile:v', 'high',
+            '-level', '3.1',
+            '-crf', selectedQuality.crf.toString(),
+            '-maxrate', targetBitrate,
+            '-bufsize', `${parseInt(targetBitrate) * 2}k`,
+            '-sc_threshold', '0',
+            '-g', '60',
+            '-keyint_min', '48',
+            '-force_key_frames', 'expr:gte(t,n_forced*2)',
+            '-pix_fmt', 'yuv420p'
+          ];
+
+      const commonOptions = [
+        // Audio codec settings (same for both)
+        '-c:a', 'aac',
+        '-b:a', selectedQuality.audioBitrate,
+        '-ac', '2',
+        '-ar', '44100',
+        '-af', 'acompressor=ratio=4:attack=200:release=1000:threshold=-12dB',
+        // HLS settings
+        '-f', 'hls',
+        '-hls_time', segmentDuration.toString(),
+        '-hls_list_size', '0',
+        '-hls_segment_filename', path.join(outputDir, 'segment_%03d.ts'),
+        '-hls_playlist_type', 'vod',
+        '-hls_flags', 'independent_segments+delete_segments',
+        '-hls_segment_type', 'mpegts',
+        '-movflags', '+faststart'
+      ];
 
       let command = ffmpeg(inputPath)
-        .inputOptions([
-          '-y', // Overwrite output files
-          '-hide_banner',
-          '-loglevel error'
-        ])
-        .outputOptions([
-          // Video codec settings - optimized for HLS
-          '-c:v', 'libx264',
-          '-preset', 'fast',           // Fast encoding for production
-          '-profile:v', 'baseline',    // Baseline profile for maximum compatibility
-          '-level', '3.1',             // H.264 level for broad device support
-          '-crf', selectedQuality.crf.toString(),
-          '-maxrate', targetBitrate, // Bitrate constraint based on resolution
-          '-bufsize', `${parseInt(targetBitrate) * 2}k`, // Buffer size (2x bitrate)
-          '-sc_threshold', '0',        // Disable scene change detection
-          '-g', '48',                  // GOP size for 3-second segments
-          '-keyint_min', '48',         // Minimum keyframe interval
-          '-force_key_frames', 'expr:gte(t,n_forced*3)', // Force keyframes every 3 seconds
-          
-          // Audio codec settings
-          '-c:a', 'aac',
-          '-b:a', selectedQuality.audioBitrate,
-          '-ac', '2',                  // Stereo audio
-          '-ar', '44100',              // 44.1kHz sample rate
-          
-          // HLS specific settings - optimized for fast startup
-          '-f', 'hls',
-          '-hls_time', segmentDuration.toString(),
-          '-hls_list_size', '0',       // Keep all segments
-          '-hls_segment_filename', path.join(outputDir, 'segment_%03d.ts'),
-          '-hls_playlist_type', 'vod', // Video on demand
-          '-hls_flags', 'independent_segments+delete_segments', // Better segment management
-          '-hls_segment_type', 'mpegts', // MPEG-TS segments for compatibility
-          
-          // Additional optimizations
-          '-movflags', '+faststart',   // Optimize for streaming
-          '-pix_fmt', 'yuv420p'       // Pixel format for maximum compatibility
-        ]);
+        .inputOptions(['-y', '-hide_banner', '-loglevel error'])
+        .outputOptions([...videoOptions, ...commonOptions]);
 
       // **FIX: Preserve original resolution - encode at original dimensions**
       // Only scale down if video is extremely large (optional optimization for very large files)
@@ -204,26 +208,10 @@ class HLSEncodingService {
       const originalVideoInfoForScaling = options.originalVideoInfo;
       
       if (originalVideoInfoForScaling && originalVideoInfoForScaling.width && originalVideoInfoForScaling.height) {
-        const originalWidth = originalVideoInfoForScaling.width;
-        const originalHeight = originalVideoInfoForScaling.height;
-        
-        console.log(`📐 Original video dimensions: ${originalWidth}x${originalHeight}`);
-        
-        // Only scale down if video is larger than 1080p (optional optimization)
-        // This preserves original resolution for most videos (1080x1920, 720x1280, etc.)
-        if (originalHeight > 1080) {
-          console.log(`📐 Video is larger than 1080p, scaling down to 1080p while preserving aspect ratio`);
-          command = command
-            .videoFilters(`scale=-2:1080:force_original_aspect_ratio=decrease`);
-        } else {
-          console.log(`📐 Preserving original resolution: ${originalWidth}x${originalHeight}`);
-          // No scaling - encode at original resolution
-          // FFmpeg will encode at original dimensions automatically
+        const { width: origW, height: origH } = originalVideoInfoForScaling;
+        if (origH > 1080) {
+          command = command.videoFilters(`scale=-2:1080:force_original_aspect_ratio=decrease`);
         }
-      } else {
-        // Fallback: If original info not available, use original video dimensions
-        console.log(`📐 Original video info not available, encoding at original resolution`);
-        // No scaling filter - FFmpeg will use original dimensions
       }
       
       // **REMOVED: .size() call that was forcing fixed dimensions**
@@ -232,30 +220,29 @@ class HLSEncodingService {
       // Add output
       command = command.output(playlistPath);
 
-      // Handle progress
+      let lastProgressLog = 0;
       command.on('progress', (progress) => {
-        console.log(`HLS Encoding Progress for ${videoId}: ${progress.percent}% done`);
+        const pct = Math.floor(parseFloat(progress.percent) || 0);
+        if (pct >= lastProgressLog + 25 || pct >= 99) {
+          lastProgressLog = pct;
+          console.log(`[HLS] ${videoId} | PROGRESS | ${pct}%`);
+        }
       });
 
-      // Handle completion
       command.on('end', () => {
-        console.log(`HLS encoding completed for ${videoId}`);
-        
-        // Read playlist content to verify and validate
         try {
           const playlistContent = fs.readFileSync(playlistPath, 'utf8');
           const segments = fs.readdirSync(outputDir).filter(file => file.endsWith('.ts'));
           
-          // Validate playlist content
           if (!playlistContent.includes('#EXTM3U')) {
             throw new Error('Invalid HLS playlist format - missing #EXTM3U header');
           }
-          
           if (segments.length === 0) {
             throw new Error('No video segments found in HLS output');
           }
           
-          console.log(`✅ HLS validation passed for ${videoId}: ${segments.length} segments, playlist size: ${playlistContent.length} bytes`);
+          const codecName = actualCodec === 'h265' ? 'H.265 (HEVC)' : 'H.264 (AVC)';
+          console.log(`[HLS] ${videoId} | DONE | codec=${codecName} segments=${segments.length} playlist=/uploads/hls/${cleanVideoId}/playlist.m3u8`);
           
           resolve({
             success: true,
@@ -265,16 +252,16 @@ class HLSEncodingService {
             outputDir,
             segmentDuration,
             quality,
-            resolution: selectedResolution || 'auto'
+            resolution: selectedResolution || 'auto',
+            codec: actualCodec
           });
         } catch (error) {
           reject(new Error(`Failed to read HLS output: ${error.message}`));
         }
       });
 
-      // Handle errors
       command.on('error', (error) => {
-        console.error(`HLS encoding error for ${videoId}:`, error);
+        console.error(`[HLS] ${videoId} | ERROR | ${error.message}`);
         reject(new Error(`HLS encoding failed: ${error.message}`));
       });
 
@@ -285,19 +272,36 @@ class HLSEncodingService {
 
   // Add this method to the HLSEncodingService class
 
-async checkFFmpegInstallation() {
-  return new Promise((resolve) => {
-    ffmpeg.getAvailableCodecs((err, codecs) => {
-      if (err) {
-        console.error('❌ FFmpeg not properly installed:', err.message);
-        resolve(false);
-      } else {
-        console.log('✅ FFmpeg is properly installed and working');
-        resolve(true);
-      }
+  async checkFFmpegInstallation() {
+    return new Promise((resolve) => {
+      ffmpeg.getAvailableCodecs((err) => {
+        if (err) {
+          console.error('[HLS] FFmpeg check failed:', err.message);
+          resolve(false);
+        } else resolve(true);
+      });
     });
-  });
-}
+  }
+
+  /**
+   * Check if libx265 (H.265/HEVC) encoder is available in FFmpeg
+   * @returns {Promise<boolean>}
+   */
+  async checkLibx265Available() {
+    return new Promise((resolve) => {
+      ffmpeg.getAvailableEncoders((err, encoders) => {
+        if (err) {
+          resolve(false);
+          return;
+        }
+        const hasLibx265 = encoders && encoders['libx265'];
+        if (!hasLibx265) {
+          console.warn('[HLS] H.265 (libx265) not available. Use codec: h264 or install FFmpeg with --enable-libx265');
+        }
+        resolve(!!hasLibx265);
+      });
+    });
+  }
 
 
 
@@ -305,9 +309,10 @@ async checkFFmpegInstallation() {
    * Generate multiple quality variants for adaptive streaming
    * @param {string} inputPath - Path to input video file
    * @param {string} videoId - Unique video identifier
+   * @param {Object} options - Options including codec: 'h264' | 'h265'
    * @returns {Promise<Object>} - Multi-quality HLS result
    */
-  async generateAdaptiveHLS(inputPath, videoId) {
+  async generateAdaptiveHLS(inputPath, videoId, options = {}) {
     // **FIXED: Use proper video ID instead of temporary names**
     const cleanVideoId = videoId.replace(/[^a-zA-Z0-9_-]/g, '_');
     const outputDir = path.join(this.hlsOutputDir, cleanVideoId);
@@ -360,6 +365,14 @@ async checkFFmpegInstallation() {
       }
     ];
 
+    let codec = options.codec || 'h264';
+    if (codec === 'h265') {
+      const hasH265 = await this.checkLibx265Available();
+      if (!hasH265) {
+        console.warn('[HLS] H.265 requested but libx265 not available. Falling back to H.264.');
+        codec = 'h264';
+      }
+    }
     const promises = [];
 
     // Generate each quality variant
@@ -369,16 +382,17 @@ async checkFFmpegInstallation() {
         fs.mkdirSync(variantDir, { recursive: true });
       }
 
-      const promise = this.encodeVariant(inputPath, variantDir, variant, variant.segmentDuration, videoId);
+      const promise = this.encodeVariant(inputPath, variantDir, variant, variant.segmentDuration, videoId, { codec });
       promises.push(promise);
     }
 
     try {
+      console.log(`[HLS] ${videoId} | adaptive START | codec=${codec} [720p,480p,360p,240p]`);
       const results = await Promise.all(promises);
-      
-      // Generate master playlist
-      const masterPlaylist = this.generateMasterPlaylist(results, variants[0].segmentDuration);
+      const masterPlaylist = this.generateMasterPlaylist(results, variants[0].segmentDuration, codec);
       fs.writeFileSync(masterPlaylistPath, masterPlaylist);
+      const totalSegments = results.reduce((sum, r) => sum + (r.segments || 0), 0);
+      console.log(`[HLS] ${videoId} | adaptive DONE | codec=${codec} variants=${results.length} segments=${totalSegments}`);
 
       return {
         success: true,
@@ -389,67 +403,58 @@ async checkFFmpegInstallation() {
         qualityRange: `${variants[0].name} to ${variants[variants.length - 1].name}`
       };
     } catch (error) {
+      console.error(`[HLS] ${videoId} | adaptive ERROR | ${error.message}`);
       throw new Error(`Adaptive HLS generation failed: ${error.message}`);
     }
   }
 
   /**
    * Encode a single quality variant
+   * @param {Object} variantOptions - Optional { codec: 'h264' | 'h265' }
    */
-  async encodeVariant(inputPath, outputDir, variant, segmentDuration, videoId) {
+  async encodeVariant(inputPath, outputDir, variant, segmentDuration, videoId, variantOptions = {}) {
     return new Promise((resolve, reject) => {
       const playlistPath = path.join(outputDir, 'playlist.m3u8');
-      // **FIXED: Use proper video ID instead of temporary names**
       const cleanVideoId = videoId.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const codec = variantOptions.codec || 'h264';
+      const isH265 = codec === 'h265';
       
-      console.log(`🎬 Encoding variant ${variant.name} for video ${videoId}`);
-      console.log(`📁 Input: ${inputPath}`);
-      console.log(`📁 Output: ${playlistPath}`);
-      console.log(`⚙️ Settings: ${variant.width}x${variant.height}, ${variant.targetBitrate}`);
+      console.log(`[HLS] ${videoId} | variant ${variant.name} | START | ${codec.toUpperCase()} ${variant.width}x${variant.height}`);
+      
+      let lastVariantProgress = 0;
+      const videoOpts = isH265
+        ? ['-c:v', 'libx265', '-tag:v', 'hvc1', '-preset', 'fast', '-crf', variant.crf.toString(),
+           '-maxrate', variant.targetBitrate, '-bufsize', `${parseInt(variant.targetBitrate) * 2}k`,
+           '-x265-params', 'keyint=60:min-keyint=60:scenecut=0', '-pix_fmt', 'yuv420p']
+        : ['-c:v', 'libx264', '-preset', 'fast', '-profile:v', 'baseline', '-level', '3.0',
+           '-crf', variant.crf.toString(), '-maxrate', variant.targetBitrate,
+           '-bufsize', `${parseInt(variant.targetBitrate) * 2}k`, '-pix_fmt', 'yuv420p'];
       
       ffmpeg(inputPath)
         .inputOptions(['-y', '-hide_banner', '-loglevel error'])
         .outputOptions([
-          // Video codec settings - simplified for reliability
-          '-c:v', 'libx264',
-          '-preset', 'fast',           // Fast preset for better compatibility
-          '-profile:v', 'baseline',    // Baseline profile for maximum compatibility
-          '-level', '3.0',             // H.264 level for broad device support
-          '-crf', variant.crf.toString(),
-          '-maxrate', variant.targetBitrate,
-          '-bufsize', `${parseInt(variant.targetBitrate) * 2}k`,
-          
-          // Audio codec settings
-          '-c:a', 'aac',
-          '-b:a', variant.audioBitrate,
-          '-ac', '2',
-          '-ar', '44100',
-          
-          '-f', 'hls',
-          '-hls_time', segmentDuration.toString(),
-          '-hls_list_size', '0',
+          ...videoOpts,
+          '-c:a', 'aac', '-b:a', variant.audioBitrate, '-ac', '2', '-ar', '44100',
+          '-f', 'hls', '-hls_time', segmentDuration.toString(), '-hls_list_size', '0',
           '-hls_segment_filename', path.join(outputDir, 'segment_%03d.ts'),
-          '-hls_playlist_type', 'vod',
-          '-hls_flags', 'independent_segments',
-          '-hls_segment_type', 'mpegts',
-          
-          // Basic optimizations
-          '-pix_fmt', 'yuv420p'
+          '-hls_playlist_type', 'vod', '-hls_flags', 'independent_segments',
+          '-hls_segment_type', 'mpegts'
         ])
         // Respect original aspect; pad if required to target dimensions
         .videoFilters(`scale='min(${variant.width},iw)':-2:force_original_aspect_ratio=decrease,pad=${variant.width}:${variant.height}:(ow-iw)/2:(oh-ih)/2:black`)
         .size(`${variant.width}x${variant.height}`)
         .output(playlistPath)
-        .on('start', (commandLine) => {
-          console.log(`🚀 FFmpeg command: ${commandLine}`);
-        })
         .on('progress', (progress) => {
-          console.log(`📊 ${variant.name} encoding progress: ${progress.percent}%`);
+          const pct = Math.floor(parseFloat(progress.percent) || 0);
+          if (pct >= lastVariantProgress + 50 || pct >= 99) {
+            lastVariantProgress = pct;
+            console.log(`[HLS] ${videoId} | variant ${variant.name} | ${pct}%`);
+          }
         })
         .on('end', () => {
-          console.log(`✅ ${variant.name} encoding completed`);
           try {
             const segments = fs.readdirSync(outputDir).filter(file => file.endsWith('.ts'));
+            console.log(`[HLS] ${videoId} | variant ${variant.name} | DONE | segments=${segments.length}`);
             resolve({
               name: variant.name,
               playlistPath,
@@ -464,7 +469,7 @@ async checkFFmpegInstallation() {
           }
         })
         .on('error', (error) => {
-          console.error(`❌ ${variant.name} encoding failed:`, error);
+          console.error(`[HLS] ${videoId} | variant ${variant.name} | ERROR | ${error.message}`);
           reject(new Error(`FFmpeg encoding failed: ${error.message}`));
         })
         .run();
@@ -473,21 +478,23 @@ async checkFFmpegInstallation() {
 
   /**
    * Generate master playlist for adaptive streaming
+   * @param {string} codec - 'h264' or 'h265' for CODECS attribute
    */
-  generateMasterPlaylist(variants, segmentDuration) {
+  generateMasterPlaylist(variants, segmentDuration, codec = 'h264') {
     let playlist = '#EXTM3U\n';
     playlist += '#EXT-X-VERSION:6\n';
     playlist += `#EXT-X-TARGETDURATION:${segmentDuration}\n\n`;
 
-    // Sort variants by bandwidth (lowest first for better compatibility)
     const sortedVariants = variants.sort((a, b) => this.estimateBandwidth(a) - this.estimateBandwidth(b));
+    // H.264: avc1.42e01e | H.265: hvc1.1.6.L93.B0 (Main profile, Level 3.1)
+    const codecsStr = codec === 'h265'
+      ? 'hvc1.1.6.L93.B0,mp4a.40.2'
+      : 'avc1.42e01e,mp4a.40.2';
 
     for (const variant of sortedVariants) {
       const bandwidth = this.estimateBandwidth(variant);
       const resolution = variant.resolution;
-      const codecs = 'avc1.42e01e,mp4a.40.2'; // H.264 Baseline + AAC
-      
-      playlist += `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth},RESOLUTION=${resolution},CODECS="${codecs}"\n`;
+      playlist += `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth},RESOLUTION=${resolution},CODECS="${codecsStr}"\n`;
       playlist += `${variant.name}/playlist.m3u8\n`;
     }
 
@@ -520,7 +527,7 @@ async checkFFmpegInstallation() {
       // In a production environment, you'd use ffprobe to get actual video dimensions
       return resolutionPresets['720p'] || resolutionPresets['480p'];
     } catch (error) {
-      console.warn('Could not determine optimal resolution, using 480p as fallback');
+      console.warn('[HLS] getOptimalResolution failed, using 480p');
       return resolutionPresets['480p'] || resolutionPresets['360p'];
     }
   }
@@ -543,20 +550,18 @@ async checkFFmpegInstallation() {
     try {
       const files = fs.readdirSync(this.hlsOutputDir);
       const tempDirs = files.filter(file => file.startsWith('temp_'));
-      
-      console.log(`🧹 Found ${tempDirs.length} temporary HLS directories to clean up`);
-      
+      let cleaned = 0;
       for (const tempDir of tempDirs) {
-        const tempPath = path.join(this.hlsOutputDir, tempDir);
         try {
-          fs.rmSync(tempPath, { recursive: true, force: true });
-          console.log(`✅ Cleaned up temporary directory: ${tempDir}`);
+          fs.rmSync(path.join(this.hlsOutputDir, tempDir), { recursive: true, force: true });
+          cleaned++;
         } catch (error) {
-          console.error(`❌ Failed to clean up ${tempDir}:`, error);
+          console.error(`[HLS] cleanup failed ${tempDir}:`, error.message);
         }
       }
+      if (cleaned > 0) console.log(`[HLS] cleanup | removed ${cleaned} temp dirs`);
     } catch (error) {
-      console.error('❌ Error cleaning up temporary HLS directories:', error);
+      console.error('[HLS] cleanup error:', error.message);
     }
   }
 
@@ -583,7 +588,7 @@ async checkFFmpegInstallation() {
         hasSinglePlaylist: files.includes('playlist.m3u8')
       };
     } catch (error) {
-      console.error(`Error getting HLS info for ${videoId}:`, error);
+      console.error(`[HLS] getInfo ${videoId}:`, error.message);
       return null;
     }
   }
@@ -600,12 +605,9 @@ async checkFFmpegInstallation() {
       const {
         targetBitrate = 'auto', // auto, low, medium, high
         maxQuality = '1080p',   // Maximum quality to generate
-        minQuality = '144p'     // Minimum quality to ensure
+        minQuality = '144p',    // Minimum quality to ensure
+        codec = 'h264'          // 'h264' or 'h265' for video codec
       } = options;
-
-      console.log(`🎬 Starting network-aware HLS generation for ${videoId}`);
-      console.log(`📁 Input path: ${inputPath}`);
-      console.log(`⚙️ Options:`, options);
 
       // Check if input file exists
       if (!fs.existsSync(inputPath)) {
@@ -639,11 +641,10 @@ async checkFFmpegInstallation() {
         throw new Error('No quality variants selected for encoding');
       }
 
-      console.log(`🎬 Generating network-aware HLS for ${videoId}: ${variants.map(v => v.name).join(', ')}`);
-
-      return await this.generateAdaptiveHLSWithVariants(inputPath, videoId, variants);
+      console.log(`[HLS] ${videoId} | adaptive START | codec=${codec} qualities=${variants.map(v => v.name).join(',')}`);
+      return await this.generateAdaptiveHLSWithVariants(inputPath, videoId, variants, { codec });
     } catch (error) {
-      console.error(`❌ Network-aware HLS generation failed for ${videoId}:`, error);
+      console.error(`[HLS] ${videoId} | adaptive ERROR | ${error.message}`);
       throw new Error(`HLS generation failed: ${error.message}`);
     }
   }
@@ -714,47 +715,47 @@ async checkFFmpegInstallation() {
    * @param {string} inputPath - Path to input video file
    * @param {string} videoId - Unique video identifier
    * @param {Array} variants - Array of quality variants
+   * @param {Object} options - Options including codec: 'h264' | 'h265'
    * @returns {Promise<Object>} - Adaptive HLS result
    */
-  async generateAdaptiveHLSWithVariants(inputPath, videoId, variants) {
+  async generateAdaptiveHLSWithVariants(inputPath, videoId, variants, options = {}) {
     try {
-      // **FIXED: Use proper video ID instead of temporary names**
       const cleanVideoId = videoId.replace(/[^a-zA-Z0-9_-]/g, '_');
       const outputDir = path.join(this.hlsOutputDir, cleanVideoId);
       const masterPlaylistPath = path.join(outputDir, 'master.m3u8');
+      let codec = options.codec || 'h264';
+      if (codec === 'h265') {
+        const hasH265 = await this.checkLibx265Available();
+        if (!hasH265) {
+          console.warn('[HLS] H.265 requested but libx265 not available. Falling back to H.264.');
+          codec = 'h264';
+        }
+      }
       
-      console.log(`🎬 Creating output directory: ${outputDir}`);
       if (!fs.existsSync(outputDir)) {
         fs.mkdirSync(outputDir, { recursive: true });
       }
 
       const segmentDuration = 6;
       const promises = [];
+      const variantNames = variants.map(v => v.name).join(',');
+      console.log(`[HLS] ${videoId} | adaptive variants START | codec=${codec.toUpperCase()} [${variantNames}]`);
 
-      console.log(`🎬 Starting encoding of ${variants.length} variants`);
-
-      // Generate each quality variant
       for (const variant of variants) {
         const variantDir = path.join(outputDir, variant.name);
         if (!fs.existsSync(variantDir)) {
           fs.mkdirSync(variantDir, { recursive: true });
         }
-
-        console.log(`🎬 Starting encoding for ${variant.name}`);
-        const promise = this.encodeVariant(inputPath, variantDir, variant, segmentDuration, videoId);
+        const promise = this.encodeVariant(inputPath, variantDir, variant, segmentDuration, videoId, { codec });
         promises.push(promise);
       }
 
-      console.log(`🎬 Waiting for all variants to complete...`);
       const results = await Promise.all(promises);
-      
-      console.log(`✅ All variants completed, generating master playlist`);
-      
-      // Generate master playlist
-      const masterPlaylist = this.generateMasterPlaylist(results, segmentDuration);
+      const masterPlaylist = this.generateMasterPlaylist(results, segmentDuration, codec);
       fs.writeFileSync(masterPlaylistPath, masterPlaylist);
 
-      console.log(`✅ Master playlist created: ${masterPlaylistPath}`);
+      const totalSegments = results.reduce((sum, r) => sum + (r.segments || 0), 0);
+      console.log(`[HLS] ${videoId} | adaptive DONE | codec=${codec.toUpperCase()} variants=${results.length} segments=${totalSegments} playlist=/uploads/hls/${cleanVideoId}/master.m3u8`);
 
       return {
         success: true,
@@ -765,7 +766,7 @@ async checkFFmpegInstallation() {
         qualityRange: `${variants[0].name} to ${variants[variants.length - 1].name}`
       };
     } catch (error) {
-      console.error(`❌ Adaptive HLS generation failed:`, error);
+      console.error(`[HLS] ${videoId} | adaptive variants ERROR | ${error.message}`);
       throw new Error(`Adaptive HLS generation failed: ${error.message}`);
     }
   }

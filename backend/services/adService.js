@@ -84,7 +84,7 @@ class AdService {
       dailyBudget: Math.max(budget, 100),
       totalBudget: Math.max(budget * 30, 1000), 
       bidType: 'CPM',
-      cpmINR: adType === 'banner' ? 10 : 30,
+      cpmINR: adType === 'banner' ? 20 : 30,
       target: {
         age: { 
           min: minAge || 18, 

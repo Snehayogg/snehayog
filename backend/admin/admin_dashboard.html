@@ -387,7 +387,7 @@
                 <div class="stat-label">Failed</div>
             </div>
 
-            <div class="stat-card primary">
+            <div class="stat-card primary" onclick="loadDailyUploads()" style="cursor: pointer;">
                 <div class="stat-icon">📅</div>
                 <div class="stat-number" id="dailyUploads">-</div>
                 <div class="stat-label">Daily Uploads</div>
@@ -469,7 +469,19 @@
                     <option value="marked">Marked Paid</option>
                     <option value="noEarnings">No Earnings Yet</option>
                 </select>
-                <button class="btn btn-primary btn-sm" onclick="resetCreatorFilters()">Reset</button>
+                <select id="activityFilter" onchange="filterCreators()">
+                    <option value="all">All Activity</option>
+                    <option value="7">Active (Last 7 Days)</option>
+                    <option value="30">Active (Last 30 Days)</option>
+                    <option value="90">Active (Last 90 Days)</option>
+                    <option value="inactive">Inactive (>90 Days)</option>
+                </select>
+                <div class="action-buttons" style="display: inline-flex; gap: 10px;">
+                    <button id="verifyAllBtn" class="btn btn-danger btn-sm" onclick="verifyAllInstallations()" title="Check if any creators have uninstalled the app">
+                        Verify All Uninstalls
+                    </button>
+                    <button class="btn btn-primary btn-sm" onclick="resetCreatorFilters()">Reset</button>
+                </div>
             </div>
             <div id="creatorsSummary" style="margin-bottom: 15px;">
                 <p>Loading creator metrics...</p>
@@ -788,6 +800,130 @@
 
         let showAllCreators = false; // State for Show More/Less
 
+        // **NEW: Helper function to format relative time**
+        function formatRelativeTime(dateString) {
+            if (!dateString) return '<span style="color: #dc3545;">Never</span>';
+            
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+            
+            if (diffDays === 0) return '<span style="color: #28a745; font-weight: bold;">Today</span>';
+            if (diffDays === 1) return '<span style="color: #28a745;">Yesterday</span>';
+            if (diffDays < 7) return `<span style="color: #28a745;">${diffDays} days ago</span>`;
+            if (diffDays < 30) {
+                const weeks = Math.floor(diffDays / 7);
+                return `<span style="color: #ffc107;">${weeks} week${weeks > 1 ? 's' : ''} ago</span>`;
+            }
+            if (diffDays < 90) {
+                const months = Math.floor(diffDays / 30);
+                return `<span style="color: #ff9800;">${months} month${months > 1 ? 's' : ''} ago</span>`;
+            }
+            const months = Math.floor(diffDays / 30);
+            return `<span style="color: #dc3545; font-weight: bold;">${months} months ago</span>`;
+        }
+
+        // **NEW: Get activity status color**
+        function getActivityColor(dateString) {
+            if (!dateString) return '#dc3545'; // Red for never
+            
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+            
+            if (diffDays < 7) return '#28a745'; // Green
+            if (diffDays < 30) return '#ffc107'; // Yellow
+            return '#dc3545'; // Red
+        }
+
+        // **NEW: Verify Uninstalls (Bulk)**
+        async function verifyAllInstallations() {
+            if (!confirm("This will check push notification tokens for ALL creators. It might take a moment. Continue?")) return;
+            
+            try {
+                showSuccess("Checking uninstall status for all creators...");
+                const btn = document.getElementById('verifyAllBtn');
+                if (btn) btn.disabled = true;
+
+                // Set a longer timeout for bulk operation (60 seconds)
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => {
+                    controller.abort();
+                    showError("Bulk operation taking too long. Check success count in dashboard later.");
+                    if (btn) btn.disabled = false;
+                }, 60000);
+
+                const response = await authorizedFetch(`${API_BASE}/notifications/verify-all-installations`, { 
+                    method: 'POST',
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                const data = await response.json();
+                
+                if (data.success) {
+                    showSuccess(`Check Complete! Installed: ${data.installed}, Uninstalled: ${data.uninstalled}`);
+                    refreshData(); // Refresh UI to show new status
+                } else {
+                    showError("Error: " + (data.error || "Failed to verify"));
+                }
+            } catch (error) {
+                console.error("Error verifying installations:", error);
+                if (error.name !== 'AbortError') {
+                    showError("Error verifying installations");
+                }
+            } finally {
+                const btn = document.getElementById('verifyAllBtn');
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        // **NEW: Verify Single Uninstall**
+        async function checkVerifyUninstall(googleId, btn) {
+            try {
+                btn.innerHTML = 'Checking...';
+                btn.disabled = true;
+                
+                // Set a timeout of 20 seconds
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => {
+                    controller.abort();
+                    showToast("Server taking too long. Please check backend logs.", "error");
+                }, 20000);
+
+                const response = await authorizedFetch(`${API_BASE}/notifications/verify-installation`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ googleId }),
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                const data = await response.json();
+                
+                if (data.success) {
+                    if (data.isInstalled) {
+                        showSuccess("App is installed ✅");
+                    } else {
+                        showError("App is uninstalled ❌");
+                    }
+                    refreshData();
+                } else {
+                    showError("Check Failed: " + (data.error || "Unknown error"));
+                    btn.innerHTML = 'Verify';
+                    btn.disabled = false;
+                }
+            } catch (error) {
+                console.error("Error checking status:", error);
+                if (error.name !== 'AbortError') {
+                    showError("Error checking status: " + error.message);
+                }
+                btn.innerHTML = 'Verify';
+                btn.disabled = false;
+            }
+        }
+
         function toggleShowAllCreators() {
             showAllCreators = !showAllCreators;
             filterCreators(); // Re-render with new state
@@ -824,12 +960,14 @@
                     Number(creator.totalAdViews || 0);
 
                 const pendingAmount = Number(creator.pendingEarningsINR || net || 0);
-
-                acc.totalViews += Number(creator.totalViews || 0);
+                const monthlyUploads = creator.monthlyUploads || 0;
+ 
+                acc.totalViews += backendRev ? (backendRev.totalViews || 0) : Number(creator.totalViews || 0);
                 acc.totalAdViews += totalAdViews;
                 acc.totalCreatorEarnings += net;
                 acc.totalGrossEarnings += gross;
                 acc.totalPlatformRevenue += platform > 0 ? platform : Math.max(gross - net, 0);
+                acc.totalMonthlyUploads += monthlyUploads;
 
                 if (!isMarked && pendingAmount > 0) {
                     acc.pendingEarnings += pendingAmount;
@@ -849,7 +987,8 @@
                 totalPlatformRevenue: 0,
                 pendingEarnings: 0,
                 pendingCount: 0,
-                markedCount: 0
+                markedCount: 0,
+                totalMonthlyUploads: 0
             });
 
             summaryContainer.innerHTML = `
@@ -857,7 +996,7 @@
                     <strong>✅ Backend Revenue Calculation Active</strong>
                     <p style="margin: 5px 0 0 0; font-size: 0.9rem; color: #555;">
                         Revenue values are fetched directly from the Server (consistent with App). 
-                        CPM: Banner ₹10, Carousel ₹30 | Creator Share: 80%
+                        CPM: Banner ₹20, Carousel ₹30 | Creator Share: 80%
                     </p>
                 </div>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px;">
@@ -887,11 +1026,15 @@
                     </div>
                     <div style="background: #f8f9fa; border-radius: 12px; padding: 16px; text-align: center;">
                         <h3 style="margin-bottom: 8px; color: #6f42c1;">${formatNumber(totals.totalViews)}</h3>
-                        <p style="margin: 0; color: #555;">Total Video Views</p>
+                        <p style="margin: 0; color: #555;">Total Video Views (Current Month)</p>
                     </div>
                     <div style="background: #f8f9fa; border-radius: 12px; padding: 16px; text-align: center;">
                         <h3 style="margin-bottom: 8px; color: #0dcaf0;">${formatNumber(totals.totalAdViews)}</h3>
-                        <p style="margin: 0; color: #555;">Total Ad Views</p>
+                        <p style="margin: 0; color: #555;">Total Ad Views (Current Month)</p>
+                    </div>
+                    <div style="background: #f8f9fa; border-radius: 12px; padding: 16px; text-align: center;">
+                        <h3 style="margin-bottom: 8px; color: #f06292;">${formatNumber(totals.totalMonthlyUploads)}</h3>
+                        <p style="margin: 0; color: #555;">Videos Uploaded (Current Month)</p>
                     </div>
                 </div>
             `;
@@ -1006,7 +1149,19 @@
                             <small>${email}</small><br>
                             <small>Google ID: ${googleId}</small>
                         </td>
-                        <td>${creator.totalVideos}</td>
+                        <td>
+                            ${formatRelativeTime(creator.lastActive)}
+                            <div style="margin-top: 5px;">
+                                ${creator.isAppUninstalled 
+                                    ? '<span class="status-badge status-rejected" style="font-size: 0.7em;">🔴 Uninstalled</span>' 
+                                    : '<span class="status-badge status-completed" style="font-size: 0.7em;">🟢 Installed</span>'}
+                                <button class="btn btn-sm" style="font-size: 0.6em; padding: 2px 5px; margin-left: 5px;" 
+                                    onclick="checkVerifyUninstall('${googleId}', this)">
+                                    Verify
+                                </button>
+                            </div>
+                        </td>
+                        <td>${creator.monthlyUploads || 0}</td>
                         <td>${formatNumber(currentMonthTotalViews)}</td>
                         <td>${formatNumber(currentMonthTotalAdViews)}</td>
                         <td>${formatCurrencyINR(currentMonthEarnings)}</td>
@@ -1057,7 +1212,8 @@
                         <thead>
                                 <tr>
                                     <th>Creator</th>
-                                    <th>Videos</th>
+                                    <th>Last Active</th>
+                                    <th>Videos (Current Month)</th>
                                     <th>Total Views (Current Month)</th>
                                     <th>Ad Views (Current Month)</th>
                                     <th>Net Earnings (₹) (Current Month)</th>
@@ -1119,6 +1275,33 @@
                 });
             }
 
+            // **NEW: Activity filter**
+            const activityFilter = document.getElementById('activityFilter')?.value || 'all';
+            if (activityFilter !== 'all') {
+                filtered = filtered.filter((creator) => {
+                    if (!creator.lastActive) {
+                        // No lastActive means inactive
+                        return activityFilter === 'inactive';
+                    }
+                    
+                    const lastActiveDate = new Date(creator.lastActive);
+                    const now = new Date();
+                    const diffDays = Math.floor((now - lastActiveDate) / (1000 * 60 * 60 * 24));
+                    
+                    if (activityFilter === '7') {
+                        return diffDays < 7;
+                    } else if (activityFilter === '30') {
+                        return diffDays < 30;
+                    } else if (activityFilter === '90') {
+                        return diffDays < 90;
+                    } else if (activityFilter === 'inactive') {
+                        return diffDays >= 90;
+                    }
+                    return true;
+                });
+            }
+
+
             filtered.sort((a, b) => {
                 const netA = Number(a.creatorRevenueINR ?? a.totalEarningsINR ?? 0);
                 const netB = Number(b.creatorRevenueINR ?? b.totalEarningsINR ?? 0);
@@ -1127,6 +1310,8 @@
                         return Number(b.totalViews || 0) - Number(a.totalViews || 0);
                     case 'adViews':
                         return Number(b.totalAdViews || 0) - Number(a.totalAdViews || 0);
+                    case 'uploads':
+                        return Number(b.monthlyUploads || 0) - Number(a.monthlyUploads || 0);
                     case 'name':
                         return a.name.localeCompare(b.name);
                     case 'pending':
@@ -1146,6 +1331,10 @@
             const statusSelect = document.getElementById('creatorStatusFilter');
             if (statusSelect) {
                     statusSelect.value = 'all';
+            }
+            const activitySelect = document.getElementById('activityFilter');
+            if (activitySelect) {
+                activitySelect.value = 'all';
             }
             renderCreators(creatorData);
         }
@@ -1273,8 +1462,10 @@
                             bannerRevenue: 0, // Backend aggregated these, didn't send breakdown separately in summary list
                             carouselRevenue: 0,
                             bannerViews: stats.currentMonthBannerViews || 0,
-                            carouselViews: stats.currentMonthCarouselViews || 0
+                            carouselViews: stats.currentMonthCarouselViews || 0,
+                            totalViews: stats.currentMonthTotalViews || 0
                         };
+                        creator.monthlyUploads = stats.videosUploaded || 0;
 
                         // Override main properties for sorting/display
                         creator.creatorRevenueINR = backendNet;
@@ -1296,7 +1487,8 @@
                             lastMonth: creator.lastMonth || 0,
                             currentMonthGrossRevenue: creator.currentMonthGrossRevenue || 0,
                             currentMonthTotalAdViews: (creator.currentMonthTotalAdViews || 0),
-                            currentMonthTotalViews: creator.currentMonthTotalViews || 0
+                            currentMonthTotalViews: creator.currentMonthTotalViews || 0,
+                            videosUploaded: creator.videosUploaded || 0
                         };
                     });
                 }
@@ -2065,8 +2257,91 @@
             } finally {
                 setLoading(false);
             }
+            }
+        
+        // **NEW: Daily Uploads Modal Logic**
+        async function loadDailyUploads() {
+            try {
+                setLoading(true);
+                const response = await authorizedFetch(`${API_BASE}/admin/videos/daily`);
+                if (response.ok) {
+                    const data = await response.json();
+                    showDailyUploadsModal(data.videos || []);
+                } else {
+                    showError('Failed to load daily uploads');
+                }
+            } catch (error) {
+                console.error('Error loading daily uploads:', error);
+                showError('Error loading daily uploads: ' + error.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function showDailyUploadsModal(videos) {
+            // Remove existing modal if any
+            const existingModal = document.getElementById('dailyUploadsModal');
+            if (existingModal) existingModal.remove();
+
+            const modalHtml = `
+                <div id="dailyUploadsModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000;">
+                    <div style="background: white; width: 90%; max-width: 800px; max-height: 90vh; border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 5px 15px rgba(0,0,0,0.3);">
+                        <div style="padding: 20px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
+                            <h2 style="margin: 0; font-size: 1.5rem;">📅 Daily Uploads (${videos.length})</h2>
+                            <button onclick="document.getElementById('dailyUploadsModal').remove()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+                        </div>
+                        <div style="padding: 20px; overflow-y: auto; flex: 1;">
+                            ${videos.length === 0 ? '<p style="text-align: center; color: #666;">No videos uploaded today.</p>' : 
+                                `<table class="payout-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Video</th>
+                                            <th>Uploader</th>
+                                            <th>Time</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${videos.map(video => `
+                                            <tr>
+                                                <td>
+                                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                                        ${video.thumbnailUrl ? `<img src="${video.thumbnailUrl}" style="width: 60px; height: 34px; object-fit: cover; border-radius: 4px;">` : ''}
+                                                        <div>
+                                                            <strong>${escapeHtml(video.videoName || 'Untitled')}</strong>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    ${escapeHtml(video.uploader?.name || 'Unknown')}<br>
+                                                    <small style="color: #666;">${escapeHtml(video.uploader?.email || '—')}</small>
+                                                </td>
+                                                <td>${new Date(video.createdAt).toLocaleTimeString()}</td>
+                                                <td>
+                                                     <button class="btn btn-primary btn-sm" onclick="window.open('${video.videoUrl}', '_blank')" style="padding: 4px 8px; font-size: 0.75rem;">
+                                                        ▶ Play
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>`
+                            }
+                        </div>
+                        <div style="padding: 20px; border-top: 1px solid #eee; text-align: right;">
+                             <button class="btn btn-primary" onclick="document.getElementById('dailyUploadsModal').remove()">Close</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            
+            // Close on click outside
+            document.getElementById('dailyUploadsModal').addEventListener('click', function(e) {
+                if (e.target === this) this.remove();
+            });
         }
     </script>
 </body>
-
 </html>

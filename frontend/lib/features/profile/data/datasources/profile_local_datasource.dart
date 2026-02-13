@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:hive_flutter/hive_flutter.dart';
-import '../../../../model/video_model.dart';
-import '../../../../utils/app_logger.dart';
+import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/shared/utils/app_logger.dart';
 
 class ProfileLocalDataSource {
   static const String _boxName = 'profile_cache';

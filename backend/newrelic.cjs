@@ -10,7 +10,7 @@ exports.config = {
   /**
    * Array of application names.
    */
-  app_name: ['Snehayog Backend'],
+  app_name: ['vayug'],
   /**
    * Your New Relic license key.
    * This is provided via environment variable.

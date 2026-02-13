@@ -6,6 +6,7 @@ import User from '../models/User.js';
 import Video from '../models/Video.js';
 import CreatorPayout from '../models/CreatorPayout.js';
 import AdImpression from '../models/AdImpression.js';
+import View from '../models/View.js';
 import { AD_CONFIG } from '../constants/index.js';
 import RecommendationService from '../services/recommendationService.js';
 
@@ -223,7 +224,7 @@ router.get('/feedback/export', requireAdminDashboardKey, async (req, res) => {
 router.get('/creators', requireAdminDashboardKey, async (req, res) => {
   try {
     const [creators, videoStats, adStats, payoutStats, earningsStats] = await Promise.all([
-      User.find({}, 'name email preferredPaymentMethod paymentDetails country payoutCount createdAt googleId').lean(),
+      User.find({}, 'name email preferredPaymentMethod paymentDetails country payoutCount createdAt googleId lastActive isAppUninstalled lastInstallCheck fcmToken').lean(),
       Video.aggregate([
         {
           $group: {
@@ -478,6 +479,9 @@ router.get('/creators', requireAdminDashboardKey, async (req, res) => {
         payoutCount: creator.payoutCount || 0,
         paymentDetails: paymentSummary,
         createdAt: creator.createdAt,
+        lastActive: creator.lastActive || null, // **NEW: Track last active time**
+        isAppUninstalled: creator.isAppUninstalled || false, // **NEW: Uninstall tracker**
+        lastInstallCheck: creator.lastInstallCheck || null,   // **NEW: Uninstall tracker**
         lastPayoutAt: payouts.lastPayoutAt,
         // **NEW: Include videos for frontend revenue calculation**
         videos: [] // Will be populated separately if needed (empty for now to save bandwidth)
@@ -501,6 +505,36 @@ router.get('/creators', requireAdminDashboardKey, async (req, res) => {
     res
       .status(500)
       .json({ success: false, error: 'Failed to load creator data' });
+  }
+});
+
+// **NEW: Route to get list of videos uploaded today**
+router.get('/videos/daily', requireAdminDashboardKey, async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const videos = await Video.find({
+      createdAt: {
+        $gte: today,
+        $lt: tomorrow
+      },
+      processingStatus: 'completed'
+    })
+    .populate('uploader', 'name email') // Populate uploader details
+    .sort({ createdAt: -1 })
+    .lean();
+
+    res.json({
+      success: true,
+      count: videos.length,
+      videos
+    });
+  } catch (error) {
+    console.error('❌ Error loading daily videos:', error);
+    res.status(500).json({ success: false, error: 'Failed to load daily videos' });
   }
 });
 
@@ -713,22 +747,12 @@ router.get('/creators/monthly-earnings', requireAdminDashboardKey, async (req, r
         const lastMonthGrossRevenue = lastMonthBannerRevenue + lastMonthCarouselRevenue;
         const lastMonthTotal = lastMonthGrossRevenue * creatorShare;
 
-        // Calculate current month video views from viewDetails using aggregation
-        const viewStats = await Video.aggregate([
+        // Calculate current month video views from View collection using aggregation
+        const viewStats = await View.aggregate([
           {
             $match: {
-              _id: { $in: videoObjectIds }
-            }
-          },
-          {
-            $unwind: {
-              path: '$viewDetails',
-              preserveNullAndEmptyArrays: true
-            }
-          },
-          {
-            $match: {
-              'viewDetails.lastViewedAt': {
+              video: { $in: videoObjectIds },
+              viewedAt: {
                 $gte: currentMonthStart,
                 $lt: currentMonthEnd
               }
@@ -737,15 +761,11 @@ router.get('/creators/monthly-earnings', requireAdminDashboardKey, async (req, r
           {
             $group: {
               _id: null,
-              totalViews: {
-                $sum: {
-                  $ifNull: ['$viewDetails.viewCount', 1]
-                }
-              }
+              totalViews: { $sum: 1 }
             }
           }
         ]);
-
+ 
         const currentMonthTotalViews = viewStats.length > 0 ? (viewStats[0].totalViews || 0) : 0;
 
         // **NEW: Count videos uploaded in the target month**

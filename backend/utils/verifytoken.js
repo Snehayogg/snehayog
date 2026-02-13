@@ -4,6 +4,7 @@ dotenv.config();
 import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import { config } from '../config.js';
+import User from '../models/User.js';
 
 // Ensure we're using the correct Google Client ID
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '406195883653-qp49f9nauq4t428ndscuu3nr9jb10g4h.apps.googleusercontent.com';
@@ -41,6 +42,32 @@ export const verifyJWT = (token) => {
     }
 };
 
+// **NEW: Helper to update lastActive timestamp**
+// Updates asynchronously without blocking the request
+// Only updates if more than 5 minutes have passed to reduce DB load
+const updateLastActive = async (googleId) => {
+    try {
+        if (!googleId) return;
+        
+        // Update only if lastActive is older than 5 minutes
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        
+        await User.updateOne(
+            { 
+                googleId,
+                $or: [
+                    { lastActive: { $lt: fiveMinutesAgo } },
+                    { lastActive: { $exists: false } }
+                ]
+            },
+            { $set: { lastActive: new Date() } }
+        );
+    } catch (error) {
+        // Silently fail - don't block request if lastActive update fails
+        console.error('⚠️ Failed to update lastActive:', error.message);
+    }
+};
+
 // Middleware to verify Google access token
 // **OPTIMIZED: Reduced logging - only log specific errors to prevent log spam**
 export const verifyToken = async (req, res, next) => {
@@ -61,6 +88,9 @@ export const verifyToken = async (req, res, next) => {
                 ...decoded,
                 googleId: decoded.id // Ensure googleId is set for JWT tokens
             };
+            
+            // **NEW: Track user activity**
+            updateLastActive(decoded.id).catch(() => {}); // Fire and forget
             
             return next(); // Fast-path: Skip Google API call
         } catch (jwtError) {
@@ -87,6 +117,10 @@ export const verifyToken = async (req, res, next) => {
                     email: userInfo.email,
                     name: userInfo.name
                 };
+                
+                // **NEW: Track user activity**
+                updateLastActive(userInfo.id).catch(() => {});
+                
                 return next();
             } else {
                 const errorData = await response.text();
@@ -110,6 +144,10 @@ export const verifyToken = async (req, res, next) => {
                 email: payload.email,
                 name: payload.name
             };
+            
+            // **NEW: Track user activity**
+            updateLastActive(payload.sub).catch(() => {});
+            
             return next();
         } catch (idTokenError) {
             // All verification methods failed

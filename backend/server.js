@@ -1,5 +1,5 @@
+import 'newrelic'
 import 'dotenv/config';
-import 'newrelic';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -34,6 +34,7 @@ import reportRoutes from './routes/reportRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import searchRoutes from './routes/searchRoutes.js';
 import appConfigRoutes from './routes/appConfigRoutes.js';
+import gameRoutes from './routes/gameRoutes.js'; // **NEW**
 
 // Import services
 import automatedPayoutService from './services/automatedPayoutService.js';
@@ -286,6 +287,7 @@ apiRouter.use('/referrals', referralRoutes);
 apiRouter.use('/report', reportRoutes);
 apiRouter.use('/notifications', notificationRoutes);
 apiRouter.use('/search', searchRoutes);
+apiRouter.use('/games', gameRoutes); // **NEW**
 
 // Apply versioning middleware to the API router
 import { verifyToken, passiveVerifyToken } from './utils/verifytoken.js';

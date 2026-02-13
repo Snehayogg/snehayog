@@ -8,27 +8,29 @@ class DatabaseManager {
   async connect() {
     try {
       console.log('🔌 Connecting to MongoDB...');
-      console.log('📍 MongoDB URI: [HIDDEN]');
       
+      // Register error listener BEFORE connecting to catch initial connection errors
+      mongoose.connection.on('error', (err) => {
+        console.error('❌ MongoDB connection error event:', err.message);
+        this.isConnected = false;
+      });
+
       await mongoose.connect(process.env.MONGO_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-        // **FIX: Increase timeout for Railway (network can be slower)**
-        serverSelectionTimeoutMS: 30000, // 30 seconds (was 5s)
+        serverSelectionTimeoutMS: 30000,
         socketTimeoutMS: 45000,
-        connectTimeoutMS: 30000, // 30 seconds connection timeout
+        connectTimeoutMS: 30000,
       });
       
       this.isConnected = true;
       console.log("✅ MongoDB connected successfully");
       
-      // Handle connection events
-      mongoose.connection.on('error', this.handleError.bind(this));
       mongoose.connection.on('disconnected', this.handleDisconnect.bind(this));
       
     } catch (error) {
-      console.error('❌ MongoDB connection failed:', error);
-      throw error;
+      console.error('❌ MongoDB connection failed:', error.message);
+      this.isConnected = false;
+      // Do not rethrow - let the server continue so healthcheck/other features work
+      // server.js already handles the non-blocking nature
     }
   }
 

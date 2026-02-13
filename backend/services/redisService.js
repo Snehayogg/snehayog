@@ -71,6 +71,21 @@ class RedisService {
   }
 
   /**
+   * Set key only if it doesn't exist (Locking Pattern)
+   */
+  async setLock(key, value, expirySeconds) {
+    if (!this.client) return false;
+    try {
+      // Upstash Redis 'set' returns 'OK' or null/nil if NX fails
+      const result = await this.client.set(key, value, { nx: true, ex: expirySeconds });
+      return result === 'OK';
+    } catch (error) {
+      console.error(`❌ Redis: Error acquiring lock ${key}:`, error.message);
+      return false;
+    }
+  }
+
+  /**
    * Delete a key from cache
    */
   async del(key) {

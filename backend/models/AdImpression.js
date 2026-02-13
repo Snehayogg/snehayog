@@ -90,8 +90,16 @@ AdImpressionSchema.index({ videoId: 1, adType: 1 });
 // Index for counting impressions per video
 AdImpressionSchema.index({ videoId: 1, adType: 1, impressionType: 1, timestamp: 1 });
 
-// **NEW: Index for counting views (isViewed = true) per video**
+// Index for counting views (isViewed = true) per video
 AdImpressionSchema.index({ videoId: 1, adType: 1, isViewed: 1 });
+
+// **OPTIMIZATION: Compound index for individual creator earnings calculation**
+// matches: { creatorId: 1, isViewed: true, timestamp: { $gte: startOfMonth, $lt: endOfMonth } }
+AdImpressionSchema.index({ creatorId: 1, isViewed: 1, timestamp: 1 });
+
+// **OPTIMIZATION: Compound index for global leaderboard aggregation**
+// matches: { isViewed: true, timestamp: { $gte: startOfMonth } }
+AdImpressionSchema.index({ isViewed: 1, timestamp: 1 });
 
 export default mongoose.models.AdImpression || mongoose.model('AdImpression', AdImpressionSchema);
 

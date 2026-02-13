@@ -122,9 +122,15 @@ export const sendNotificationToUser = async (googleId, notification) => {
         error.code === 'messaging/registration-token-not-registered') {
       await User.updateOne(
         { googleId },
-        { $set: { fcmToken: null } }
+        { 
+          $set: { 
+            fcmToken: null,
+            isAppUninstalled: true,
+            lastInstallCheck: new Date()
+          } 
+        }
       );
-      console.log('🗑️ Removed invalid FCM token for user:', googleId);
+      console.log('🗑️ Removed invalid FCM token and marked as uninstalled for user:', googleId);
     }
     
     return { success: false, error: error.message };
@@ -198,9 +204,15 @@ export const sendNotificationToUsers = async (googleIds, notification) => {
       if (invalidTokens.length > 0) {
         await User.updateMany(
           { fcmToken: { $in: invalidTokens } },
-          { $set: { fcmToken: null } }
+          { 
+            $set: { 
+              fcmToken: null,
+              isAppUninstalled: true,
+              lastInstallCheck: new Date()
+            } 
+          }
         );
-        console.log(`🗑️ Removed ${invalidTokens.length} invalid FCM tokens`);
+        console.log(`🗑️ Removed ${invalidTokens.length} invalid FCM tokens and marked as uninstalled`);
       }
     }
 
@@ -284,7 +296,13 @@ export const sendNotificationToAll = async (notification) => {
         if (invalidTokens.length > 0) {
           await User.updateMany(
             { fcmToken: { $in: invalidTokens } },
-            { $set: { fcmToken: null } }
+            { 
+              $set: { 
+                fcmToken: null,
+                isAppUninstalled: true,
+                lastInstallCheck: new Date()
+              } 
+            }
           );
         }
       }
@@ -302,4 +320,66 @@ export const sendNotificationToAll = async (notification) => {
     return { success: false, error: error.message };
   }
 };
+/**
+ * Verify if a user's app is still installed by checking their FCM token
+ * Uses dry-run mode to validate the token without sending a real notification
+ */
+export const verifyInstallationStatus = async (googleId) => {
+  if (!firebaseInitialized) {
+    return { success: false, error: 'Firebase not initialized' };
+  }
 
+  try {
+    const user = await User.findOne({ googleId });
+    if (!user || !user.fcmToken) {
+      console.log(`ℹ️ No FCM token found for user ${googleId}`);
+      return { success: false, error: 'No FCM token' };
+    }
+
+    const message = {
+      token: user.fcmToken,
+      data: { ping: 'check' } // Silent data-only message
+    };
+
+    console.log(`🔌 Verifying installation for ${user.name} (${googleId})...`);
+    const startTime = Date.now();
+    
+    // Use dryRun = true to only validate the token
+    await admin.messaging().send(message, true);
+    
+    console.log(`✅ Verification successful for ${user.name} (${Date.now() - startTime}ms)`);
+    
+    // If successful, update user as installed
+    await User.updateOne(
+      { googleId },
+      { 
+        $set: { 
+          isAppUninstalled: false,
+          lastInstallCheck: new Date()
+        } 
+      }
+    );
+
+    return { success: true, isInstalled: true };
+  } catch (error) {
+    // If token is invalid/unregistered, mark as uninstalled
+    if (error.code === 'messaging/invalid-registration-token' || 
+        error.code === 'messaging/registration-token-not-registered') {
+      
+      await User.updateOne(
+        { googleId },
+        { 
+          $set: { 
+            isAppUninstalled: true,
+            lastInstallCheck: new Date()
+          } 
+        }
+      );
+      
+      return { success: true, isInstalled: false };
+    }
+
+    console.error('❌ Error verifying install status:', error);
+    return { success: false, error: error.message };
+  }
+};

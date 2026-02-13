@@ -301,6 +301,16 @@ export const uploadVideo = async (req, res) => {
     }
 
     // 7. Create initial video record
+    const initialScore = RecommendationService.calculateFinalScore({
+      totalWatchTime: 0,
+      duration: detectedDuration || 0,
+      likes: 0,
+      comments: 0,
+      shares: 0,
+      views: 0,
+      uploadedAt: new Date()
+    });
+
     const video = new Video({
       videoName: videoName,
       description: description || '',
@@ -318,7 +328,8 @@ export const uploadVideo = async (req, res) => {
       likes: 0, views: 0, shares: 0, likedBy: [], comments: [],
       uploadedAt: new Date(),
       seriesId: req.body.seriesId || null,
-      episodeNumber: parseInt(req.body.episodeNumber) || 0
+      episodeNumber: parseInt(req.body.episodeNumber) || 0,
+      finalScore: initialScore
     });
 
     await video.save();
@@ -495,64 +506,73 @@ export const getUserVideos = async (req, res) => {
     const limit = parseInt(req.query.limit) || 9;
     let skip = req.query.skip !== undefined ? parseInt(req.query.skip) : (page - 1) * limit;
 
-    const videos = await Video.find({
+    const query = {
       uploader: user._id,
       videoUrl: { $exists: true, $ne: null, $ne: '' },
       processingStatus: { $nin: ['failed', 'error'] }
-    })
-      .populate('uploader', 'name profilePic googleId')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .select('-description -shares')
-      .lean();
+    };
+
+    const requestingGoogleId = req.user?.googleId || req.user?.id;
+    const isOwner = requestingGoogleId === googleId;
+
+    // **OPTIMIZATION: Parallelize independent DB queries and rank lookups**
+    const [videos, totalValidVideos, rank, cachedEarnings] = await Promise.all([
+      Video.find(query)
+        .populate('uploader', 'name profilePic googleId')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .select('-description -shares')
+        .lean(),
+      Video.countDocuments(query),
+      (!isOwner) ? RecommendationService.getGlobalCreatorRank(user._id) : Promise.resolve(0),
+      (isOwner && redisService.getConnectionStatus()) ? redisService.get(`creator:earnings:${user._id}`) : Promise.resolve(null)
+    ]);
 
     const validVideos = videos.filter(video => video.uploader && video.uploader.name);
 
     if (validVideos.length !== videos.length) {
       const validVideoIds = validVideos.map(v => v._id);
-      await User.findByIdAndUpdate(user._id, { $set: { videos: validVideoIds } });
+      // **OPTIMIZATION: Non-blocking data integrity fix**
+      User.findByIdAndUpdate(user._id, { $set: { videos: validVideoIds } }).catch(e => console.error('Data sync error:', e));
     }
-
-    const totalValidVideos = await Video.countDocuments({
-      uploader: user._id,
-      videoUrl: { $exists: true, $ne: null, $ne: '' },
-      processingStatus: { $nin: ['failed', 'error'] }
-    });
 
     const seriesIds = new Set();
     validVideos.forEach(v => { if (v.seriesId) seriesIds.add(v.seriesId); });
 
     let currentMonthEarnings = 0;
-    try {
-        const now = new Date();
-        const startOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
-        const endOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 1));
+    if (isOwner) {
+      if (cachedEarnings !== null) {
+        currentMonthEarnings = typeof cachedEarnings === 'object' ? cachedEarnings.amount : parseFloat(cachedEarnings);
+      } else {
+        try {
+            const now = new Date();
+            const startOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
+            const endOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 1));
 
-        const impressionStats = await AdImpression.aggregate([
-          { $match: { creatorId: user._id, isViewed: true, timestamp: { $gte: startOfMonth, $lt: endOfMonth } } },
-          { $group: { _id: '$adType', count: { $sum: 1 } } }
-        ]);
+            const impressionStats = await AdImpression.aggregate([
+              { $match: { creatorId: user._id, isViewed: true, timestamp: { $gte: startOfMonth, $lt: endOfMonth } } },
+              { $group: { _id: '$adType', count: { $sum: 1 } } }
+            ]);
 
-        const bannerCpm = AD_CONFIG?.BANNER_CPM ?? 10;
-        const carouselCpm = AD_CONFIG?.DEFAULT_CPM ?? 30;
-        const creatorShare = AD_CONFIG?.CREATOR_REVENUE_SHARE ?? 0.8;
+            const bannerCpm = AD_CONFIG?.BANNER_CPM ?? 10;
+            const carouselCpm = AD_CONFIG?.DEFAULT_CPM ?? 30;
+            const creatorShare = AD_CONFIG?.CREATOR_REVENUE_SHARE ?? 0.8;
 
-        let bannerViews = 0, carouselViews = 0;
-        impressionStats.forEach(stat => {
-          if (stat._id === 'banner') bannerViews = stat.count;
-          else carouselViews += stat.count;
-        });
+            let bannerViews = 0, carouselViews = 0;
+            impressionStats.forEach(stat => {
+              if (stat._id === 'banner') bannerViews = stat.count;
+              else carouselViews += stat.count;
+            });
 
-        currentMonthEarnings = ((bannerViews / 1000) * bannerCpm + (carouselViews / 1000) * carouselCpm) * creatorShare;
-    } catch (err) { console.error('⚠️ Error calculating monthly earnings:', err); }
-
-    const requestingGoogleId = req.user?.googleId || req.user?.id;
-    const isOwner = requestingGoogleId === googleId;
-
-    let rank = 0;
-    if (!isOwner) {
-      rank = await RecommendationService.getGlobalCreatorRank(user._id);
+            currentMonthEarnings = ((bannerViews / 1000) * bannerCpm + (carouselViews / 1000) * carouselCpm) * creatorShare;
+            
+            // **OPTIMIZATION: Cache earnings for 15 minutes to avoid heavy aggregations**
+            if (redisService.getConnectionStatus()) {
+              await redisService.set(`creator:earnings:${user._id}`, { amount: currentMonthEarnings, updatedAt: new Date() }, 900);
+            }
+        } catch (err) { console.error('⚠️ Error calculating monthly earnings:', err); }
+      }
     }
 
     const episodesMap = new Map();

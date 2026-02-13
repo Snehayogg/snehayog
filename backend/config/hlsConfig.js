@@ -1,19 +1,19 @@
 import path from 'path';
 
 export const hlsConfig = {
-  // HLS encoding settings - optimized for INSTANT startup and efficient streaming
+  // HLS encoding settings - optimized for 500kbps connections (High Efficiency)
   encoding: {
-    segmentDuration: 1, // 1 second per segment for INSTANT startup
-    maxBitrate: 800000, // 800k for 480p only
-    minBitrate: 800000, // Same as max since we only use 480p
+    segmentDuration: 1, // Keep 1s for instant startup
+    maxBitrate: 400000, // Cap at 400kbps
+    minBitrate: 300000, // Allow dropping lower if needed
     qualityPresets: {
-      '480p': { width: 854, height: 480, crf: 23, audioBitrate: '96k', targetBitrate: '800k' }
+      '480p': { width: 854, height: 480, crf: 28, audioBitrate: '48k', targetBitrate: '400k' }
     },
-    // H.264 encoding profile settings - optimized for fast startup
-    h264Profile: 'baseline', // Maximum compatibility across devices
-    h264Level: '3.1',        // Broad device support
-    gopSize: 30,             // Reduced GOP size for faster startup (was 48)
-    keyframeInterval: 1      // Force keyframes every 1 second for instant seeking (was 3)
+    // H.264 encoding profile settings - High Profile for max quality/bit
+    h264Profile: 'high',     // Better compression efficiency (~30-50% savings vs baseline)
+    h264Level: '3.1',        // Supported by 98% of devices
+    gopSize: 60,             // 2 seconds GOP to reduce header overhead
+    keyframeInterval: 2      // Keyframe every 2 seconds
   },
 
   // MIME types for HLS files

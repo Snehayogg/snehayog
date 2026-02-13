@@ -1,115 +1,194 @@
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:vayu/features/auth/domain/repositories/auth_repository.dart';
-import 'package:vayu/features/auth/domain/entities/user_entity.dart';
-import 'package:vayu/features/auth/data/repositories/auth_repository_impl.dart';
-import 'package:vayu/config/google_sign_in_config.dart';
+import 'package:vayu/features/auth/data/services/authservices.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
+import 'dart:convert';
 
 class GoogleSignInController extends ChangeNotifier {
-  final AuthRepository _authRepository;
-  final GoogleSignIn _googleSignIn;
-
+  final AuthService _authService = AuthService();
   bool _isLoading = false;
-  UserEntity? _currentUser;
-  String? _errorMessage;
+  String? _error;
+  Map<String, dynamic>? _userData;
 
-  GoogleSignInController({AuthRepository? authRepository})
-      : _authRepository = authRepository ?? AuthRepositoryImpl(),
-        _googleSignIn = GoogleSignIn(
-          scopes: GoogleSignInConfig.scopes,
-          clientId: GoogleSignInConfig.platformClientId,
-        );
-
-  // Getters
   bool get isLoading => _isLoading;
-  UserEntity? get currentUser => _currentUser;
-  String? get errorMessage => _errorMessage;
-  bool get isSignedIn => _currentUser != null;
+  String? get error => _error;
+  bool get isSignedIn => _userData != null;
+  Map<String, dynamic>? get userData => _userData;
 
-  // Sign in with Google
-  Future<void> signIn() async {
+  /// Manually check and refresh authentication status
+  Future<void> checkAuthStatus() async {
+    await _initInBackground();
+  }
+
+  GoogleSignInController() {
+    // **OPTIMIZED: Don't block UI during initialization**
+    _initInBackground();
+  }
+
+  Future<void> _initInBackground() async {
     try {
-      _setLoading(true);
-      _clearError();
+      // **OPTIMIZED: Use cached data immediately, verify in background**
+      // First, try to get cached user data instantly (no network call)
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final fallbackUser = prefs.getString('fallback_user');
+        if (fallbackUser != null) {
+          final cachedData = jsonDecode(fallbackUser);
+          _userData = {
+            'id': cachedData['id'],
+            'googleId': cachedData['googleId'] ?? cachedData['id'],
+            'name': cachedData['name'],
+            'email': cachedData['email'],
+            'profilePic': cachedData['profilePic'],
+            'token': prefs.getString('jwt_token'),
+            'isFallback': true,
+          };
+          _isLoading = false;
+          notifyListeners();
 
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) {
-        _setLoading(false);
-        return;
+
+          // Refresh from backend in background (non-blocking)
+          unawaited(_refreshUserDataInBackground());
+          return;
+        }
+      } catch (e) {
+
       }
 
-      // GoogleSignInAuthentication not needed for this implementation yet
-      // final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-
-      final user = UserEntity(
-        id: googleUser.id,
-        name: googleUser.displayName ?? '',
-        email: googleUser.email,
-        profilePic: googleUser.photoUrl ?? '',
-        googleId: googleUser.id,
-      );
-
-      // Save user to backend
-      final savedUser = await _authRepository.signInWithGoogle(user);
-      _currentUser = savedUser;
-
-      _setLoading(false);
+      _isLoading = true;
       notifyListeners();
-    } catch (error) {
-      _setError('Failed to sign in: ${error.toString()}');
-      _setLoading(false);
+
+      // Check if user is already logged in
+      final isLoggedIn = await _authService.isLoggedIn();
+      if (isLoggedIn) {
+
+        _userData = await _authService.getUserData();
+
+      } else {
+
+
+        // **NEW: Try auto-login with device ID (for persistent login after reinstall)**
+        try {
+          final autoLoginResult = await _authService.autoLoginWithPlatformId();
+          if (autoLoginResult != null) {
+
+            _userData = autoLoginResult;
+          } else {
+
+            _userData = null;
+          }
+        } catch (e) {
+
+          _userData = null;
+        }
+      }
+    } catch (e) {
+
+      _error = e.toString();
+      _userData = null; // Ensure userData is null on error
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
-  // Sign out
+  Future<Map<String, dynamic>?> signIn() async {
+    try {
+
+
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+
+      final userInfo = await _authService.signInWithGoogle();
+      if (userInfo != null) {
+        _userData = userInfo;
+        _error = null;
+
+      } else {
+        _error = 'Sign in failed';
+
+      }
+
+      _isLoading = false;
+      notifyListeners();
+      return userInfo;
+    } catch (e) {
+
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    }
+  }
+
   Future<void> signOut() async {
     try {
-      _setLoading(true);
 
-      await _googleSignIn.signOut();
-      await _authRepository.signOut();
 
-      _currentUser = null;
-      _setLoading(false);
+      await _authService.signOut();
+
+      // **FIXED: Clear ALL state and force refresh**
+      _userData = null;
+      _error = null;
+      _isLoading = false;
+
+
       notifyListeners();
-    } catch (error) {
-      _setError('Failed to sign out: ${error.toString()}');
-      _setLoading(false);
+    } catch (e) {
+
+      _error = e.toString();
+      notifyListeners();
     }
   }
 
-  // Check if user is already signed in
-  Future<void> checkSignInStatus() async {
+  /// **Clear error state for retry functionality**
+  void clearError() {
+    _error = null;
+    notifyListeners();
+  }
+
+  /// **FIXED: Force refresh authentication state after account switch**
+  Future<void> refreshAuthState() async {
     try {
-      final user = await _authRepository.getCurrentUser();
-      if (user != null) {
-        _currentUser = user;
-        notifyListeners();
+
+
+      _isLoading = true;
+      notifyListeners();
+
+      // **FIXED: Get fresh user data from AuthService**
+      _userData = await _authService.getUserData();
+
+      if (_userData != null) {
+
+        _error = null;
+      } else {
+
+        _error = 'No authentication data found';
       }
-    } catch (error) {
-      // User not signed in or error occurred
-      _currentUser = null;
+
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
-  // Clear current user (for testing or reset)
-  void clearUser() {
-    _currentUser = null;
-    notifyListeners();
-  }
+  /// **OPTIMIZED: Refresh user data in background without blocking UI**
+  Future<void> _refreshUserDataInBackground() async {
+    try {
+      final freshData = await _authService.getUserData();
+      if (freshData != null) {
+        _userData = freshData;
+        notifyListeners();
 
-  // Private methods
-  void _setLoading(bool loading) {
-    _isLoading = loading;
-    notifyListeners();
-  }
+      }
+    } catch (e) {
 
-  void _setError(String error) {
-    _errorMessage = error;
-    notifyListeners();
-  }
-
-  void _clearError() {
-    _errorMessage = null;
+      // Keep cached data on error
+    }
   }
 }

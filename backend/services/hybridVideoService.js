@@ -70,6 +70,7 @@ class HybridVideoService {
           hlsEncodingService.convertToHLS(absoluteVideoPath, `${videoName}_${Date.now()}`, {
             quality: 'medium',
             resolution: '480p',
+            codec: 'h265', // Enable H.265 for ~50% bandwidth savings
             originalVideoInfo: originalVideoInfo // Pass original info for aspect ratio preservation
           }),
           new Promise((_, reject) => 
@@ -430,6 +431,7 @@ class HybridVideoService {
           quality: 'medium',    // 480p quality preset
           resolution: '480p',   // Max height 480p (aspect ratio preserved)
           segmentDuration: 3,   // 3-second segments for fast startup
+          codec: 'h265',        // Enable H.265 for ~50% bandwidth savings
           originalVideoInfo: originalVideoInfo // Pass original info for aspect ratio preservation
         }
       );

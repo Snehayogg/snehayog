@@ -1,7 +1,7 @@
 import 'dart:io';
 import '../repositories/video_repository.dart';
-import '../../../../config/app_config.dart';
-import '../../../../core/exceptions/app_exceptions.dart';
+import 'package:vayu/shared/config/app_config.dart';
+import 'package:vayu/shared/exceptions/app_exceptions.dart';
 
 /// Use case for uploading videos
 /// This encapsulates the business logic for video uploads

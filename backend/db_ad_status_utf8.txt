@@ -1,0 +1,27 @@
+﻿Connecting to MongoDB...
+Connected!
+
+--- FETCHING ALL AD CAMPAIGNS ---
+Total campaigns: 4
+- [active] Replit ΓÇô┬áBuild apps and sites with AI (6933f5164ce7e9a6490aa2e3)
+- [active] Γé╣999 | Campus Sutra men's Flannel Green & Buff Beige Vignette-Checked Oversized Shirt - Campussutra (696249c1080aac62893ca944)
+- [active] quit noty cat (696b9901ab366027ee1431b2)
+- [active] BELLAVITA CEO Man & White Oud Unisex (698cd315a91eda049121b694)
+
+--- FETCHING ALL AD CREATIVES ---
+Total creatives: 8
+- [carousel ads] [approved] [Active: true] Untitled (68ec47439988039493cb842e)
+- [banner] [approved] [Active: true] Untitled (68ecabbe2439458cb8b64c96)
+- [video feed ad] [approved] [Active: true] Untitled (68f4a629376b224665ae3bef)
+- [banner] [approved] [Active: true] Linkedin (690bafd4fa83c372e203b31e)
+- [banner] [approved] [Active: true] Replit ΓÇô┬áBuild apps and sites with AI (6933f5164ce7e9a6490aa2e5)
+- [banner] [approved] [Active: true] Γé╣999 | Campus Sutra men's Flannel Green & Buff Beige Vignette-Checked Oversized Shirt - Campussutra (696249c1080aac62893ca946)
+- [banner] [approved] [Active: true] quit noty cat (696b9901ab366027ee1431b4)
+- [carousel] [approved] [Active: true] BELLAVITA CEO Man & White Oud Unisex (698cd315a91eda049121b697)
+
+--- CHECKING FOR ACTIVE CAROUSEL ADS ---
+Found 1 active and approved carousel ads.
+
+--- CHECKING FOR ACTIVE BANNER ADS ---
+Found 3 active and approved banner ads.
+Disconnected.

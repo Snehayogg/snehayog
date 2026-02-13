@@ -151,7 +151,7 @@ router.post('/create-with-payment', async (req, res) => {
     }
 
     // Calculate CPM based on ad type
-    const cpm = adType === 'banner' ? 10 : 30; 
+    const cpm = adType === 'banner' ? 20 : 30; 
     const calculatedImpressions = estimatedImpressions || Math.floor(budget / cpm * 1000);
 
     // Create ad creative
@@ -629,7 +629,7 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
     });
     
     // CPM Rates
-    const bannerCpm = 10;
+    const bannerCpm = 20;
     const carouselCpm = 30;
     
     // Calculate total and per-video stats
@@ -1240,42 +1240,50 @@ router.post('/auto-approve-pending', async (req, res) => {
 // **NEW: Get carousel ads specifically**
 router.get('/carousel', async (req, res) => {
   try {
-    // Find active carousel campaigns
-    const campaigns = await AdCampaign.find({
-      status: 'active',
-      startDate: { $lte: new Date() },
-      endDate: { $gte: new Date() }
-    })
-    .populate({
-      path: 'creative',
-      match: { adType: 'carousel' }
-    })
-    .limit(10);
-    
-    // Filter out campaigns without carousel creatives
-    const validCampaigns = campaigns.filter(campaign => 
-      campaign.creative && campaign.creative.adType === 'carousel'
-    );
-    
-    // Convert to carousel ad format
-    const carouselAds = validCampaigns.map(campaign => {
-      const creative = campaign.creative;
+    // 1. Fetch active carousel creatives directly
+    const carouselCreatives = await AdCreative.find({
+      adType: 'carousel',
+      reviewStatus: 'approved',
+      isActive: true
+    }).populate({
+      path: 'campaignId',
+      match: { status: 'active' }
+    });
+
+    // 2. Filter out creatives where the associated campaign is not active (due to populate match)
+    const activeAds = carouselCreatives.filter(creative => creative.campaignId);
+
+    if (activeAds.length === 0) {
+      return res.json([]);
+    }
+
+    // 3. Format ads for the frontend
+    const carouselAds = activeAds.map(ad => {
+      const campaign = ad.campaignId;
       return {
-        id: creative._id,
+        id: ad._id,
         campaignId: campaign._id,
-        adType: 'carousel',
-        title: creative.title || campaign.name,
-        description: creative.description || '',
-        slides: creative.slides || [],
-        callToAction: creative.callToAction,
-        advertiserName: campaign.name,
-        isActive: true,
-        impressions: creative.impressions || 0,
-        clicks: creative.clicks || 0,
-        createdAt: campaign.createdAt
+        advertiserName: campaign.name || 'Advertiser',
+        advertiserProfilePic: '', // Backend doesn't seem to store this in AdCreative/AdCampaign yet
+        slides: ad.slides.map(slide => ({
+          id: slide._id,
+          mediaUrl: slide.mediaUrl,
+          thumbnailUrl: slide.thumbnail || slide.mediaUrl,
+          mediaType: slide.mediaType,
+          aspectRatio: slide.aspectRatio,
+          title: slide.title,
+          description: slide.description
+        })),
+        callToActionLabel: ad.callToAction?.label || 'Learn More',
+        callToActionUrl: ad.callToAction?.url || '',
+        likes: ad.likes || 0,
+        shares: ad.shares || 0,
+        likedBy: [], 
+        isActive: ad.isActive,
+        createdAt: ad.createdAt
       };
     });
-    
+
     res.json(carouselAds);
   } catch (error) {
     console.error('❌ Error fetching carousel ads:', error);
