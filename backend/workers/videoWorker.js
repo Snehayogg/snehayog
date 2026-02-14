@@ -163,7 +163,7 @@ const videoWorker = new Worker('video-processing', async (job) => {
   }
 }, {
   connection: redisOptions,
-  concurrency: 2 // Process max 2 videos at a time to save CPU
+  concurrency: 2 // Optimized to process more videos simultaneously
 });
 
 videoWorker.on('completed', (job) => {

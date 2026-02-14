@@ -346,25 +346,43 @@ export const uploadVideo = async (req, res) => {
       ]);
     }
 
-    // 9. Background Processing
+    // 9. Background Processing - Respond immediately to user for better speed
     const rawVideoKey = `temp_raw/${user._id}/${Date.now()}_${path.basename(req.file.path)}`;
-    
-    // Cloudflare R2 Upload & Queueing
-    const { default: cloudflareR2Service } = await import('../services/cloudflareR2Service.js');
-    await cloudflareR2Service.uploadFileToR2(req.file.path, rawVideoKey, req.file.mimetype);
-    
-    await queueService.addVideoJob({
-        videoId: video._id,
-        rawVideoKey: rawVideoKey,
-        videoName: videoName,
-        userId: user._id.toString()
-    });
+    const tempFilePath = req.file.path;
+    const tempMimeType = req.file.mimetype;
 
-    try { fs.unlinkSync(req.file.path); } catch (e) { console.warn('Failed to cleanup upload', e); }
+    // We do NOT await this block - it runs in background
+    (async () => {
+      try {
+        // Cloudflare R2 Upload & Queueing
+        const { default: cloudflareR2Service } = await import('../services/cloudflareR2Service.js');
+        await cloudflareR2Service.uploadFileToR2(tempFilePath, rawVideoKey, tempMimeType);
+        
+        await queueService.addVideoJob({
+            videoId: video._id,
+            rawVideoKey: rawVideoKey,
+            videoName: videoName,
+            userId: user._id.toString()
+        });
+
+        console.log(`✅ Upload: Background processing complete for video ${video._id}`);
+      } catch (bgError) {
+        console.error(`❌ Upload: Background processing failed for video ${video._id}:`, bgError);
+      } finally {
+        // Cleanup temp file AFTER background processing
+        try { 
+          if (fs.existsSync(tempFilePath)) {
+            fs.unlinkSync(tempFilePath); 
+          }
+        } catch (e) { 
+          console.warn('Failed to cleanup upload', e); 
+        }
+      }
+    })();
 
     return res.status(201).json({
       success: true,
-      message: 'Video uploaded and queued for processing.',
+      message: 'Video upload received! Processing will begin in background.',
       video: {
         id: video._id,
         videoName: video.videoName,

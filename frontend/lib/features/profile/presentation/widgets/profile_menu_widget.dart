@@ -196,16 +196,18 @@ class ProfileMenuWidget extends StatelessWidget {
                       },
                     });
 
-                    // Delete Videos
-                    menuItems.add({
-                      'title': 'Delete',
-                      'icon': Icons.delete_outline,
-                      'color': Colors.red,
-                      'onTap': () {
-                        Navigator.pop(context);
-                        onEnterSelectionMode?.call();
-                      },
-                    });
+                    // Delete Videos (Only for owner)
+                    if (stateManager.isOwner) {
+                      menuItems.add({
+                        'title': 'Delete',
+                        'icon': Icons.delete_outline,
+                        'color': Colors.red,
+                        'onTap': () {
+                          Navigator.pop(context);
+                          onEnterSelectionMode?.call();
+                        },
+                      });
+                    }
 
 
 

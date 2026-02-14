@@ -612,9 +612,9 @@ class VideoService {
 
       // **Compress video if needed**
       File? finalVideoFile = videoFile;
-      if (fileSize > 50 * 1024 * 1024) {
-        // Compress if > 50MB
-        AppLogger.log('🔄 VideoService: Compressing large video...');
+      if (fileSize > 15 * 1024 * 1024) {
+        // Compress if > 15MB (Highly recommended for 400kbps speed)
+        AppLogger.log('🔄 VideoService: Compressing video for better upload speed (>15MB)...');
         final compressedFile = await compressVideo(videoFile);
         if (compressedFile != null) {
           finalVideoFile = compressedFile;
@@ -833,7 +833,7 @@ class VideoService {
 
       final MediaInfo? mediaInfo = await VideoCompress.compressVideo(
         videoFile.path,
-        quality: VideoQuality.DefaultQuality,
+        quality: VideoQuality.Res640x480Quality, // 480p is perfect for mobile consumption & size
         deleteOrigin: false,
       );
 

@@ -65,8 +65,7 @@ class _UploadScreenState extends State<UploadScreen> {
     _stopUnifiedProgress();
     
     // Clear selection so user starts fresh
-    _selectedVideo.value = null;
-    _titleController.clear();
+    _deselectVideo();
     
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -74,6 +73,14 @@ class _UploadScreenState extends State<UploadScreen> {
         backgroundColor: Colors.grey.shade800,
       ),
     );
+  }
+
+  /// Deselect current video and reset related fields
+  void _deselectVideo() {
+    _selectedVideo.value = null;
+    _titleController.clear();
+    _errorMessage.value = null;
+    _deriveTitleFromFile(File('')); // Reset title derivation if needed, though clear() is enough
   }
 
   // **UNIFIED PROGRESS PHASES** - Complete video processing flow
@@ -723,7 +730,7 @@ class _UploadScreenState extends State<UploadScreen> {
                   duration: Duration(seconds: 4),
                 ),
               );
-              Navigator.pop(context);
+              // Navigator.pop(context); // REMOVED: Pops MainScreen as UploadScreen is a tab
           }
           return; // EXIT EARLY - Don't wait
       }
@@ -1044,10 +1051,10 @@ class _UploadScreenState extends State<UploadScreen> {
                           // Switch to Vayu (Feed) tab - index 1
                           try {
                             Provider.of<MainController>(context, listen: false).changeIndex(1);
-                            Navigator.of(context).pop(); // Close upload screen
+                            // Navigator.of(context).pop(); // REMOVED: Pops MainScreen as UploadScreen is a tab
                           } catch (e) {
                             AppLogger.log('❌ UploadScreen: Error switching to feed: $e');
-                            Navigator.of(context).pop(); // Safety pop
+                            // Navigator.of(context).pop(); // REMOVED: Safety pop
                           }
                         },
                         style: ElevatedButton.styleFrom(
@@ -1259,6 +1266,11 @@ class _UploadScreenState extends State<UploadScreen> {
         AppLogger.log(
           '📏 File size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB',
         );
+      } else {
+        // **NEW: If picker cancelled and no video currently selected, hide form**
+        if (_selectedVideo.value == null) {
+          _showUploadForm.value = false;
+        }
       }
     } catch (e) {
       // **BATCHED UPDATE: Update error state**
@@ -1387,9 +1399,9 @@ class _UploadScreenState extends State<UploadScreen> {
                           child: InkWell(
                             onTap: isSignedIn
                                 ? () {
-                                    // **NO setState: Use ValueNotifier**
-                                    _showUploadForm.value =
-                                        !_showUploadForm.value;
+                                    // **Directly pick video and show form**
+                                    _showUploadForm.value = true;
+                                    _pickVideo();
                                   }
                                 : () {
                                     _showLoginPrompt();
@@ -1528,6 +1540,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                     onPressed: () {
                                       // **NO setState: Use ValueNotifier**
                                       _showUploadForm.value = false;
+                                      _deselectVideo();
                                     },
                                     icon: const Icon(Icons.close),
                                   ),
@@ -1546,72 +1559,65 @@ class _UploadScreenState extends State<UploadScreen> {
                                     return ValueListenableBuilder<File?>(
                                       valueListenable: _selectedVideo,
                                       builder: (context, selectedVideo, _) {
-                                        if (isProcessing) {
-                                          return Center(
-                                            child: Column(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              children: [
-                                                const CircularProgressIndicator(),
-                                                const SizedBox(height: 16),
-                                                Text(
-                                                  AppText.get(
-                                                      'upload_processing_video'),
-                                                  style: const TextStyle(
-                                                    fontSize: 16,
-                                                    color: Colors.grey,
+                                        return Stack(
+                                          children: [
+                                            InkWell(
+                                              onTap: isProcessing ? null : _pickVideo,
+                                              borderRadius: BorderRadius.circular(12),
+                                              child: Center(
+                                                child: Column(
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  children: [
+                                                    if (isProcessing) ...[
+                                                      const CircularProgressIndicator(),
+                                                      const SizedBox(height: 16),
+                                                      Text(
+                                                        AppText.get('upload_processing_video'),
+                                                        style: const TextStyle(fontSize: 16, color: Colors.grey),
+                                                      ),
+                                                    ] else if (selectedVideo != null) ...[
+                                                      const Icon(Icons.perm_media, size: 48, color: Colors.blue),
+                                                      const SizedBox(height: 16),
+                                                      Text(
+                                                        selectedVideo.path.split('/').last,
+                                                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                                                        textAlign: TextAlign.center,
+                                                      ),
+                                                      const SizedBox(height: 8),
+                                                      Text(
+                                                        'Click to change',
+                                                        style: TextStyle(fontSize: 12, color: Colors.blue.withOpacity(0.7)),
+                                                      ),
+                                                    ] else ...[
+                                                      const Icon(Icons.add_to_photos, size: 48, color: Colors.grey),
+                                                      const SizedBox(height: 16),
+                                                      Text(
+                                                        AppText.get('btn_select_video', fallback: 'Select Video'),
+                                                        style: const TextStyle(fontSize: 16, color: Colors.grey),
+                                                      ),
+                                                    ],
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                            if (selectedVideo != null && !isProcessing)
+                                              Positioned(
+                                                top: 8,
+                                                right: 8,
+                                                child: IconButton(
+                                                  onPressed: _deselectVideo,
+                                                  icon: Container(
+                                                    padding: const EdgeInsets.all(4),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.red.withOpacity(0.1),
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                    child: const Icon(Icons.close, size: 20, color: Colors.red),
                                                   ),
                                                 ),
-                                              ],
-                                            ),
-                                          );
-                                        } else if (selectedVideo != null) {
-                                          return Center(
-                                            child: Column(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              children: [
-                                                const Icon(
-                                                  Icons.perm_media,
-                                                  size: 48,
-                                                  color: Colors.blue,
-                                                ),
-                                                const SizedBox(height: 16),
-                                                Text(
-                                                  selectedVideo.path
-                                                      .split('/')
-                                                      .last,
-                                                  style: const TextStyle(
-                                                    fontSize: 16,
-                                                    fontWeight: FontWeight.w500,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          );
-                                        } else {
-                                          return const Center(
-                                            child: Column(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              children: [
-                                                Icon(
-                                                  Icons.perm_media,
-                                                  size: 48,
-                                                  color: Colors.grey,
-                                                ),
-                                                SizedBox(height: 16),
-                                                Text(
-                                                  'No video selected',
-                                                  style: TextStyle(
-                                                    fontSize: 16,
-                                                    color: Colors.grey,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          );
-                                        }
+                                              ),
+                                          ],
+                                        );
                                       },
                                     );
                                   },

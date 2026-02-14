@@ -206,7 +206,7 @@ class ProfileVideosWidget extends StatelessWidget {
   Widget _buildVideoItem(BuildContext context, ProfileStateManager manager, VideoModel video, int index) {
     final isSelected = manager.selectedVideoIds.contains(video.id);
     final bool isSeries = video.seriesId != null;
-    final canSelectVideo = manager.isSelecting && manager.userData != null;
+    final canSelectVideo = manager.isSelecting && manager.isOwner && manager.userData != null;
 
     return RepaintBoundary(
       child: GestureDetector(
@@ -237,7 +237,7 @@ class ProfileVideosWidget extends StatelessWidget {
           }
         },
         onLongPress: () {
-          if (manager.userData != null && !manager.isSelecting) {
+          if (manager.isOwner && manager.userData != null && !manager.isSelecting) {
             manager.enterSelectionMode();
             manager.toggleVideoSelection(video.id);
           }

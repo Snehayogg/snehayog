@@ -45,17 +45,14 @@ class _MainScreenState extends State<MainScreen>
   bool _hasCheckedForUpdates = false;
 
   Future<void> _refreshVideoList() async {
-    print('🔄 MainScreen: _refreshVideoList() called');
 
     try {
       // Refresh the video screen
       final videoScreenState = _videoScreenKey.currentState;
       if (videoScreenState != null) {
-        print(
-            '🔄 MainScreen: VideoScreen state found, calling refreshVideos()');
         // Cast to access the public method and await completion
         await (videoScreenState as dynamic).refreshVideos();
-        print('✅ MainScreen: VideoScreen refresh completed');
+
       } else {
         print('❌ MainScreen: VideoScreen state not found');
       }
@@ -64,17 +61,26 @@ class _MainScreenState extends State<MainScreen>
       print('🔄 MainScreen: Refreshing ProfileScreen videos');
       try {
         ProfileScreen.refreshVideos(_profileScreenKey);
-        print('✅ MainScreen: Profile videos refreshed successfully');
       } catch (e) {
         print('❌ MainScreen: Error refreshing profile videos: $e');
       }
 
-      // Navigate to video tab to show the refreshed content
+      // **NEW: Also refresh the Vayu screen videos**
+      try {
+        VayuScreen.refresh(_vayuScreenKey);
+      } catch (e) {
+        print('❌ MainScreen: Error refreshing Vayu videos: $e');
+      }
+
+      // Navigate to video tab ONLY if user is still on upload tab (index 3)
+      // This allows "View in Feed" (index 1) to work without being overridden
       final mainController =
           Provider.of<MainController>(context, listen: false);
-      if (mainController.currentIndex != 0) {
-        print('🔄 MainScreen: Navigating to video tab to show new upload');
+      if (mainController.currentIndex == 3) {
+        print('🔄 MainScreen: Still on upload tab, navigating to video tab');
         mainController.changeIndex(0);
+      } else {
+        print('🔄 MainScreen: User already navigated to index ${mainController.currentIndex}, skipping auto-switch');
       }
     } catch (e) {
       print('❌ MainScreen: Error in _refreshVideoList: $e');

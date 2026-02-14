@@ -40,6 +40,14 @@ class AuthService {
   static DateTime? _lastProfileFetch;
   static const Duration _cacheTtl = Duration(seconds: 30);
 
+  /// **NEW: Get the currently logged-in user ID (using memory cache)**
+  String? get currentUserId {
+    if (_cachedProfile != null) {
+      return (_cachedProfile!['googleId'] ?? _cachedProfile!['id'])?.toString();
+    }
+    return null;
+  }
+
   Future<Map<String, dynamic>?> signInWithGoogle(
       {bool forceAccountPicker = true}) async {
     try {

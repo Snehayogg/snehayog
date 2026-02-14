@@ -79,7 +79,9 @@ class HLSEncodingService {
       segmentDuration = 3, // Optimized segment duration: 3 seconds for fast startup
       quality = 'medium', // low, medium, high (medium = 480p optimal)
       resolution = '480p', // Fixed to 480p for cost optimization (single quality only)
-      codec = 'h265' // 'h264' or 'h265' - H.265 for ~50% bandwidth savings
+      codec = 'h265', // 'h264' or 'h265' - H.265 for ~50% bandwidth savings
+      copyVideo = false, // Instant packaging, skips video transcoding
+      copyAudio = false  // Instant packaging, skips audio transcoding
     } = options;
 
     // Resolve actual codec (fallback to h264 if h265 requested but unavailable)
@@ -150,43 +152,55 @@ class HLSEncodingService {
       console.log(`[HLS] ${videoId} | START | codec=${codecName} resolution=${selectedResolution.width}x${selectedResolution.height} bitrate=${targetBitrate} segments=${segmentDuration}s`);
 
       // Build video codec options based on actual codec
-      const isH265 = actualCodec === 'h265';
-      const videoOptions = isH265
-        ? [
-            // H.265/HEVC - ~50% smaller files at same quality (ideal for 500kbps)
-            '-c:v', 'libx265',
-            '-tag:v', 'hvc1',          // hvc1 tag for Safari/Apple compatibility
-            '-preset', 'medium',       // medium = better compression ratio for low bitrates
-            '-crf', selectedQuality.crf.toString(),
-            '-maxrate', targetBitrate,
-            '-bufsize', `${parseInt(targetBitrate) * 2}k`,
-            // x265 GOP: keyframe every 2s for HLS segment alignment (60 frames @ 30fps)
-            '-x265-params', 'keyint=60:min-keyint=60:scenecut=0',
-            '-pix_fmt', 'yuv420p'     // 8-bit Main profile for broad device support
-          ]
+      let videoOptions;
+      if (copyVideo) {
+        console.log(`[HLS] ${videoId} | INFO | Using STREAM COPY for video (INSTANT!)`);
+        videoOptions = ['-c:v', 'copy'];
+      } else {
+        videoOptions = actualCodec === 'h265'
+          ? [
+              // H.265/HEVC - ~50% smaller files at same quality (ideal for 500kbps)
+              '-c:v', 'libx265',
+              '-tag:v', 'hvc1',          // hvc1 tag for Safari/Apple compatibility
+              '-preset', 'superfast',    // Maximizes encoding speed
+              '-tune', 'fastdecode',     // Optimizes for fast decoding
+              '-crf', selectedQuality.crf.toString(),
+              '-maxrate', targetBitrate,
+              '-bufsize', `${parseInt(targetBitrate) * 2}k`,
+              // x265 GOP: keyframe every 2s for HLS segment alignment (60 frames @ 30fps)
+              '-x265-params', 'keyint=60:min-keyint=60:scenecut=0:superfast=1',
+              '-threads', '0',           // Use all available CPU threads
+              '-pix_fmt', 'yuv420p'     // 8-bit Main profile for broad device support
+            ]
+          : [
+              // H.264 - maximum compatibility
+              '-c:v', 'libx264',
+              '-preset', 'superfast',    // Maximizes encoding speed
+              '-profile:v', 'high',
+              '-level', '3.1',
+              '-crf', selectedQuality.crf.toString(),
+              '-maxrate', targetBitrate,
+              '-bufsize', `${parseInt(targetBitrate) * 2}k`,
+              '-threads', '0',           // Use all available CPU threads
+              '-sc_threshold', '0',
+              '-g', '60',
+              '-keyint_min', '48',
+              '-force_key_frames', 'expr:gte(t,n_forced*2)',
+              '-pix_fmt', 'yuv420p'
+            ];
+      }
+
+      const audioOptions = copyAudio
+        ? ['-c:a', 'copy']
         : [
-            // H.264 - maximum compatibility
-            '-c:v', 'libx264',
-            '-preset', 'fast',
-            '-profile:v', 'high',
-            '-level', '3.1',
-            '-crf', selectedQuality.crf.toString(),
-            '-maxrate', targetBitrate,
-            '-bufsize', `${parseInt(targetBitrate) * 2}k`,
-            '-sc_threshold', '0',
-            '-g', '60',
-            '-keyint_min', '48',
-            '-force_key_frames', 'expr:gte(t,n_forced*2)',
-            '-pix_fmt', 'yuv420p'
+            '-c:a', 'aac',
+            '-b:a', selectedQuality.audioBitrate,
+            '-ac', '2',
+            '-ar', '44100',
+            '-af', 'acompressor=ratio=4:attack=200:release=1000:threshold=-12dB'
           ];
 
       const commonOptions = [
-        // Audio codec settings (same for both)
-        '-c:a', 'aac',
-        '-b:a', selectedQuality.audioBitrate,
-        '-ac', '2',
-        '-ar', '44100',
-        '-af', 'acompressor=ratio=4:attack=200:release=1000:threshold=-12dB',
         // HLS settings
         '-f', 'hls',
         '-hls_time', segmentDuration.toString(),
@@ -200,7 +214,7 @@ class HLSEncodingService {
 
       let command = ffmpeg(inputPath)
         .inputOptions(['-y', '-hide_banner', '-loglevel error'])
-        .outputOptions([...videoOptions, ...commonOptions]);
+        .outputOptions([...videoOptions, ...audioOptions, ...commonOptions]);
 
       // **FIX: Preserve original resolution - encode at original dimensions**
       // Only scale down if video is extremely large (optional optimization for very large files)
@@ -423,12 +437,12 @@ class HLSEncodingService {
       
       let lastVariantProgress = 0;
       const videoOpts = isH265
-        ? ['-c:v', 'libx265', '-tag:v', 'hvc1', '-preset', 'fast', '-crf', variant.crf.toString(),
+        ? ['-c:v', 'libx265', '-tag:v', 'hvc1', '-preset', 'superfast', '-tune', 'fastdecode', '-crf', variant.crf.toString(),
            '-maxrate', variant.targetBitrate, '-bufsize', `${parseInt(variant.targetBitrate) * 2}k`,
-           '-x265-params', 'keyint=60:min-keyint=60:scenecut=0', '-pix_fmt', 'yuv420p']
-        : ['-c:v', 'libx264', '-preset', 'fast', '-profile:v', 'baseline', '-level', '3.0',
+           '-x265-params', 'keyint=60:min-keyint=60:scenecut=0:superfast=1', '-threads', '0', '-pix_fmt', 'yuv420p']
+        : ['-c:v', 'libx264', '-preset', 'superfast', '-profile:v', 'baseline', '-level', '3.0',
            '-crf', variant.crf.toString(), '-maxrate', variant.targetBitrate,
-           '-bufsize', `${parseInt(variant.targetBitrate) * 2}k`, '-pix_fmt', 'yuv420p'];
+           '-bufsize', `${parseInt(variant.targetBitrate) * 2}k`, '-threads', '0', '-pix_fmt', 'yuv420p'];
       
       ffmpeg(inputPath)
         .inputOptions(['-y', '-hide_banner', '-loglevel error'])

@@ -45,6 +45,7 @@ class ProfileStateManager extends ChangeNotifier {
   bool _isSelecting = false;
   bool _isVideosLoading = false;
   final Set<String> _selectedVideoIds = {};
+  String? _requestedUserId;
   
   // Earnings state
   double _cachedEarnings = 0.0;
@@ -87,10 +88,23 @@ class ProfileStateManager extends ChangeNotifier {
   bool get isFetchingMore => _isFetchingMore;
   bool get hasMoreVideos => _hasMoreVideos;
 
+  /// **NEW: Check if the current user is the owner of the viewed profile**
+  bool get isOwner {
+    if (_requestedUserId == null) return true; // null means own profile
+    
+    // Check if we have logged in user data to compare
+    final myId = _authService.currentUserId; 
+    if (myId == null) return false;
+    
+    return _requestedUserId == myId.toString();
+  }
+
 
   // Profile management
   Future<void> loadUserData(String? userId,
       {bool forceRefresh = false, bool silent = false}) async {
+    _requestedUserId = userId; // Store for isOwner check
+    
     if (!silent) {
       _isLoading = true;
       _error = null;
@@ -818,6 +832,7 @@ class ProfileStateManager extends ChangeNotifier {
 
   // Video selection management
   void toggleVideoSelection(String videoId) {
+    if (!isOwner) return;
     AppLogger.log('🔍 toggleVideoSelection called with videoId: $videoId');
     AppLogger.log('🔍 Current selectedVideoIds: $_selectedVideoIds');
 
@@ -847,13 +862,14 @@ class ProfileStateManager extends ChangeNotifier {
   }
 
   void enterSelectionMode() {
+    if (!isOwner) return;
     AppLogger.log('🔍 enterSelectionMode called');
     _isSelecting = true;
     notifyListeners();
   }
 
   Future<void> deleteSelectedVideos() async {
-    if (_selectedVideoIds.isEmpty) return;
+    if (!isOwner || _selectedVideoIds.isEmpty) return;
 
     try {
       AppLogger.log(
@@ -982,6 +998,7 @@ class ProfileStateManager extends ChangeNotifier {
 
   /// Deletes a single video with enhanced error handling
   Future<bool> deleteSingleVideo(String videoId) async {
+    if (!isOwner) return false;
     try {
       AppLogger.log('🗑️ ProfileStateManager: Deleting single video: $videoId');
 
@@ -1250,8 +1267,11 @@ class ProfileStateManager extends ChangeNotifier {
   }
 
   bool get hasUpiId {
-    final upi = _userData?['paymentDetails']?['upiId'];
-    return upi is String && upi.trim().isNotEmpty;
+    final paymentDetails = _userData?['paymentDetails'];
+    if (paymentDetails == null) return false;
+    
+    final upiId = paymentDetails['upiId'];
+    return upiId is String && upiId.trim().isNotEmpty;
   }
 
   Future<void> ensurePaymentDetailsHydrated() async {

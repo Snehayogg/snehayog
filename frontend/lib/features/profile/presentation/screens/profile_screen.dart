@@ -2051,7 +2051,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       Navigator.of(context).pop();
                     },
                   ),
-            actions: _buildAppBarActions(stateManager),
+            actions: _buildAppBarActions(stateManager, isViewingOwnProfile),
             bottom: PreferredSize(
               preferredSize: const Size.fromHeight(1),
               child: Container(
@@ -2065,7 +2065,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  List<Widget> _buildAppBarActions(ProfileStateManager stateManager) {
+  List<Widget> _buildAppBarActions(ProfileStateManager stateManager, bool isViewingOwnProfile) {
     final actions = <Widget>[
       IconButton(
         icon: const Icon(
@@ -2084,7 +2084,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       _buildChatSupportAction(),
     ];
 
-    if (stateManager.isSelecting && stateManager.selectedVideoIds.isNotEmpty) {
+    if (isViewingOwnProfile && stateManager.isSelecting && stateManager.selectedVideoIds.isNotEmpty) {
       actions.add(
         IconButton(
           icon: Container(
@@ -2106,7 +2106,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       actions.add(const SizedBox(width: 8));
     }
 
-    if (stateManager.isSelecting) {
+    if (isViewingOwnProfile && stateManager.isSelecting) {
       actions.add(
         IconButton(
           icon: Container(
@@ -2816,12 +2816,10 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       // **Step 1: check local state (ProfileStateManager) for UPI ID**
       final userData = _stateManager.getUserData();
-      if (userData != null) {
-        final paymentDetails = userData['paymentDetails'];
-        final paymentMethod = userData['preferredPaymentMethod'];
+        if (userData != null) {
+          final paymentDetails = userData['paymentDetails'];
 
-        // Check if UPI ID exists in local state
-        if (paymentMethod == 'upi' && paymentDetails != null) {
+          if (paymentDetails != null) {
           final upiId = paymentDetails['upiId'];
           final hasUpiLocal =
               upiId != null && upiId.toString().trim().isNotEmpty;
@@ -2867,17 +2865,17 @@ class _ProfileScreenState extends State<ProfileScreen>
         AppLogger.log('🔍 ProfileScreen: Payment details: $paymentDetails');
 
         // Check if UPI ID is set
-        if (paymentMethod == 'upi' && paymentDetails != null) {
+        if (paymentDetails != null) {
           final upiId = paymentDetails['upiId'];
           final hasUpi = upiId != null && upiId.toString().trim().isNotEmpty;
           _hasUpiId.value = hasUpi;
           AppLogger.log(
               '🔍 ProfileScreen: UPI ID status from API: ${hasUpi ? "SET" : "NOT SET"}');
         } else {
-          // If payment method is not UPI or payment details don't exist, show notice
+          // If payment details don't exist, show notice
           _hasUpiId.value = false;
           AppLogger.log(
-              '🔍 ProfileScreen: No UPI payment method found - showing notice');
+              '🔍 ProfileScreen: No payment details found - showing notice');
         }
       } else {
         // If API fails, check local state as fallback

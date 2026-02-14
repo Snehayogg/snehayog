@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 class FingerTapGuide extends StatefulWidget {
@@ -20,7 +21,7 @@ class _FingerTapGuideState extends State<FingerTapGuide>
   late Animation<double> _pulseAnimation;
   late Animation<double> _translateAnimation;
   Offset? _targetPosition;
-  int _retryCount = 0;
+  Timer? _updateTimer;
 
   @override
   void initState() {
@@ -38,30 +39,27 @@ class _FingerTapGuideState extends State<FingerTapGuide>
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
 
-    // **SMART: Try to find position immediately and retry if needed**
-    WidgetsBinding.instance.addPostFrameCallback((_) => _updatePosition());
+    // **SMART: Use a periodic timer to update position (handles scrolling)**
+    _updateTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
+      _updatePosition();
+    });
   }
 
   void _updatePosition() {
     if (!mounted) return;
 
     final position = _calculatePosition();
-    if (position != null) {
-      if (mounted) {
-        setState(() {
-          _targetPosition = position;
-        });
-      }
-    } else if (_retryCount < 20) {
-      // Retry every 200ms for up to 4 seconds
-      _retryCount++;
-      Future.delayed(const Duration(milliseconds: 200), _updatePosition);
+    if (position != null && position != _targetPosition) {
+      setState(() {
+        _targetPosition = position;
+      });
     }
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _updateTimer?.cancel();
     super.dispose();
   }
 
@@ -120,7 +118,7 @@ class _FingerTapGuideState extends State<FingerTapGuide>
           // The finger animation
           Positioned(
             left: position.dx - 25, // Centering adjustments
-            top: position.dy - 10,
+            top: position.dy - 25, // FIXED: Corrected vertical offset to point to center
             child: IgnorePointer(
               child: AnimatedBuilder(
                 animation: _controller,

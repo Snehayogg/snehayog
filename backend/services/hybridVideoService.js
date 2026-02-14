@@ -37,59 +37,35 @@ class HybridVideoService {
       const absoluteVideoPath = path.resolve(videoPath);
       console.log('📁 Absolute video path:', absoluteVideoPath);
       
-      // Step 1: Process video to 480p using Cloudflare Stream (FREE transcoding!)
-      console.log('☁️ Step 1: Processing with Cloudflare Stream (FREE transcoding)...');
       let processingResult;
-      let streamVideoId = null;
       
-      try {
-        console.log('⏱️ Starting Cloudflare Stream processing at:', new Date().toISOString());
-        console.log('📁 Processing video file:', absoluteVideoPath);
-        processingResult = await this.processWithCloudflareStream(absoluteVideoPath, videoName, userId);
-        streamVideoId = processingResult.streamVideoId;
-        console.log('✅ Step 1 completed: Cloudflare Stream processing successful at:', new Date().toISOString());
-      } catch (streamError) {
-        console.error('❌ Cloudflare Stream processing failed:', streamError.message);
-        console.error('❌ Error details:', streamError);
-        console.log('🔄 Falling back to Pure HLS Processing (FFmpeg → R2)...');
-        console.log('⏱️ Starting HLS fallback at:', new Date().toISOString());
+      // **SMART BYPASS: Detect if video is already pre-optimized by frontend**
+      console.log('📊 Getting original video info to check for "The Loophole"...');
+      const originalVideoInfo = await this.getOriginalVideoInfo(absoluteVideoPath);
+      
+      const isPreOptimized = originalVideoInfo.height <= 480 && 
+                            (originalVideoInfo.codec === 'h264' || originalVideoInfo.codec === 'h265' || originalVideoInfo.codec === 'hevc');
+
+      if (isPreOptimized) {
+        console.log('🎯 THE LOOPHOLE FOUND: Video is already pre-optimized (480p)!');
+        console.log('⚡ Bypassing Cloudflare Stream for INSTANT local packaging...');
         
-        // **FIX: Get original video info to preserve aspect ratio**
-        console.log('📊 Getting original video dimensions for HLS fallback...');
-        const originalVideoInfo = await this.getOriginalVideoInfo(absoluteVideoPath);
-        console.log('📊 Original video info:', {
-          width: originalVideoInfo.width,
-          height: originalVideoInfo.height,
-          aspectRatio: originalVideoInfo.aspectRatio
+        const videoId = `${videoName}_${Date.now()}`;
+        const hlsResult = await hlsEncodingService.convertToHLS(absoluteVideoPath, videoId, {
+          quality: 'medium',
+          resolution: '480p',
+          copyVideo: true, // INSTANT!
+          copyAudio: false, // Re-encode audio to ensure AAC compatibility
+          originalVideoInfo: originalVideoInfo
         });
-        
-        // Fallback to pure HLS processing with timeout
-        console.log('🎬 Starting HLS encoding with 5-minute timeout (preserving aspect ratio)...');
-        console.log('📁 Using video file for HLS encoding:', absoluteVideoPath);
-        const hlsResult = await Promise.race([
-          hlsEncodingService.convertToHLS(absoluteVideoPath, `${videoName}_${Date.now()}`, {
-            quality: 'medium',
-            resolution: '480p',
-            codec: 'h265', // Enable H.265 for ~50% bandwidth savings
-            originalVideoInfo: originalVideoInfo // Pass original info for aspect ratio preservation
-          }),
-          new Promise((_, reject) => 
-            setTimeout(() => {
-              console.log('⏰ HLS encoding timeout after 5 minutes');
-              reject(new Error('HLS encoding timeout after 5 minutes'))
-            }, 5 * 60 * 1000)
-          )
-        ]);
-        console.log('✅ HLS fallback completed at:', new Date().toISOString());
-        
-        // Convert HLS result to processingResult format
+
         processingResult = {
           videoUrl: hlsResult.playlistUrl,
-          thumbnailUrl: hlsResult.thumbnailUrl || '',
+          thumbnailUrl: '',
           streamVideoId: null,
           duration: originalVideoInfo.duration || 0,
-          size: hlsResult.size || 0,
-          format: 'HLS',
+          size: originalVideoInfo.size || 0,
+          format: 'HLS (Stream Copy)',
           originalVideoInfo: originalVideoInfo,
           aspectRatio: originalVideoInfo.aspectRatio,
           width: originalVideoInfo.width,
@@ -98,7 +74,42 @@ class HybridVideoService {
           outputDir: hlsResult.outputDir,
           localPath: null
         };
-        console.log('✅ Fallback completed: Pure HLS processing successful');
+      } else {
+        // Step 1: Process video to 480p using Cloudflare Stream (FREE transcoding!)
+        console.log('☁️ Step 1: Processing with Cloudflare Stream (FREE transcoding)...');
+        let streamVideoId = null;
+        
+        try {
+          console.log('⏱️ Starting Cloudflare Stream processing at:', new Date().toISOString());
+          processingResult = await this.processWithCloudflareStream(absoluteVideoPath, videoName, userId);
+          streamVideoId = processingResult.streamVideoId;
+        } catch (streamError) {
+          console.error('❌ Cloudflare Stream processing failed:', streamError.message);
+          console.log('🔄 Falling back to Pure HLS Processing (FFmpeg → R2)...');
+          
+          const hlsFallbackResult = await hlsEncodingService.convertToHLS(absoluteVideoPath, `${videoName}_${Date.now()}`, {
+            quality: 'medium',
+            resolution: '480p',
+            codec: 'h265',
+            originalVideoInfo: originalVideoInfo
+          });
+          
+          processingResult = {
+            videoUrl: hlsFallbackResult.playlistUrl,
+            thumbnailUrl: hlsFallbackResult.thumbnailUrl || '',
+            streamVideoId: null,
+            duration: originalVideoInfo.duration || 0,
+            size: hlsFallbackResult.size || 0,
+            format: 'HLS',
+            originalVideoInfo: originalVideoInfo,
+            aspectRatio: originalVideoInfo.aspectRatio,
+            width: originalVideoInfo.width,
+            height: originalVideoInfo.height,
+            isPortrait: originalVideoInfo.aspectRatio < 1.0,
+            outputDir: hlsFallbackResult.outputDir,
+            localPath: null
+          };
+        }
       }
       
       // Step 2: Handle video processing result based on processing method
@@ -179,10 +190,11 @@ class HybridVideoService {
       }
       
       // Step 5: **DELETE FROM CLOUDFLARE STREAM** to avoid storage costs!
-      if (streamVideoId) {
+      const finalStreamVideoId = processingResult.streamVideoId;
+      if (finalStreamVideoId) {
         console.log('🗑️ Deleting video from Cloudflare Stream (no longer needed)...');
         try {
-          await cloudflareStreamService.deleteVideo(streamVideoId);
+          await cloudflareStreamService.deleteVideo(finalStreamVideoId);
           console.log('✅ Video deleted from Cloudflare Stream successfully');
           console.log('💰 Cost saved: Stream storage charges avoided');
         } catch (deleteError) {
@@ -206,29 +218,16 @@ class HybridVideoService {
       console.log('   - R2 bandwidth: $0 (FREE forever!)');
       console.log('   - Total: 100% FREE transcoding!');
       
-      // **FIX: Get original video info to include in result**
-      let originalVideoInfo = null;
-      try {
-        originalVideoInfo = await this.getOriginalVideoInfo(absoluteVideoPath);
-        console.log('📐 Original video info for result:', {
-          width: originalVideoInfo.width,
-          height: originalVideoInfo.height,
-          aspectRatio: originalVideoInfo.aspectRatio
-        });
-      } catch (error) {
-        console.warn('⚠️ Could not get original video info for result:', error.message);
-      }
-      
       return {
         success: true,
         videoUrl: r2VideoResult.url,
         thumbnailUrl: r2ThumbnailUrl,
-        format: streamVideoId ? 'MP4 with Progressive Loading' : 'HLS (HTTP Live Streaming)',
+        format: finalStreamVideoId ? 'MP4 with Progressive Loading' : 'HLS (HTTP Live Streaming)',
         quality: originalVideoInfo ? `${originalVideoInfo.height}p (original preserved)` : 'original',
         storage: 'Cloudflare R2',
         bandwidth: 'FREE Forever',
         size: r2VideoResult.size,
-        processing: streamVideoId ? 'Cloudflare Stream → R2 Hybrid' : 'HLS → R2',
+        processing: finalStreamVideoId ? 'Cloudflare Stream → R2 Hybrid' : 'HLS → R2',
         costSavings: '100% FREE transcoding',
         // **NEW: Include original resolution in result**
         width: originalVideoInfo?.width,
