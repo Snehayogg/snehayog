@@ -1,4 +1,4 @@
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 
 /// Utility class to check and analyze video URLs
 class VideoUrlChecker {

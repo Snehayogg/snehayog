@@ -10,7 +10,7 @@ import 'package:vayu/features/profile/presentation/managers/profile_state_manage
 import 'package:vayu/shared/managers/smart_cache_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:vayu/shared/providers/user_provider.dart';
-import 'package:vayu/shared/models/usermodel.dart';
+import 'package:vayu/features/auth/data/usermodel.dart';
 import 'package:vayu/shared/services/profile_screen_logger.dart';
 import 'package:vayu/shared/theme/app_theme.dart';
 import 'dart:async';
@@ -30,10 +30,11 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:vayu/features/ads/data/services/ad_service.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:vayu/features/profile/presentation/widgets/video_creator_search_delegate.dart';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/features/profile/presentation/screens/creator_revenue_screen.dart';
 import 'package:vayu/shared/utils/app_text.dart';
 
+import 'package:vayu/features/profile/presentation/widgets/finger_tap_guide.dart';
 import 'package:vayu/features/video/data/services/video_cache_proxy_service.dart';
 import 'package:vayu/features/profile/presentation/screens/edit_profile_screen.dart';
 
@@ -92,6 +93,13 @@ class _ProfileScreenState extends State<ProfileScreen>
   bool _videosLoadAttempted = false;
   String? _lastLoadedUserId; // Track which user's videos we've loaded
 
+  // **NEW: Track profile load attempts to prevent constant reloading**
+  int _profileLoadAttemptCount = 0;
+  bool _profileNoDataFound = false;
+
+  // **NEW: Key to track the "Add UPI ID" button position for the guide**
+  final GlobalKey _upiButtonKey = GlobalKey();
+
   @override
 
   void initState() {
@@ -124,9 +132,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     _activeProfileTabIndex.addListener(() {
       if (mounted) setState(() {});
     });
-
-    // **NEW: Check if user should see UPI guide**
-    _checkAndShowUpiGuide();
   }
 
   /// **PUBLIC METHOD: Called when Profile tab is selected**
@@ -141,19 +146,32 @@ class _ProfileScreenState extends State<ProfileScreen>
         _stateManager.userData?['googleId'] ??
         _stateManager.userData?['id'];
 
-    // **FIXED: Reset load attempt flag if user changed**
+    // **FIXED: Reset load attempt flags if user changed**
     if (currentUserId != null && currentUserId != _lastLoadedUserId) {
       _videosLoadAttempted = false;
+      _profileLoadAttemptCount = 0; // Reset for new user
+      _profileNoDataFound = false; // Reset for new user
+      _hasCheckedUpiGuide = false; // Reset session flag for new user
       _lastLoadedUserId = currentUserId;
       AppLogger.log(
-          '🔄 ProfileScreen: User changed, resetting videos load attempt flag');
+          '🔄 ProfileScreen: User changed, resetting load attempt flags and UPI guide session status');
     }
 
-    // **OPTIMIZED: Only load if data is completely missing - don't reload if already loaded**
+    // **OPTIMIZED: Only load if data is completely missing and we haven't exhausted retries**
     if (_stateManager.userData == null) {
+      if (_profileNoDataFound) {
+        AppLogger.log('ℹ️ ProfileScreen: Already checked - no data found for this user (not reloading)');
+        return;
+      }
+      
+      if (_profileLoadAttemptCount >= 3) {
+        AppLogger.log('⚠️ ProfileScreen: Max load attempts (3) reached - not retrying automatically');
+        return;
+      }
+
       AppLogger.log(
-          '📡 ProfileScreen: No user data found, loading from cache or server');
-      _loadData(); // This will use cache if available, only fetch from server if no cache
+          '📡 ProfileScreen: No user data found (Attempt ${_profileLoadAttemptCount + 1}/3), loading...');
+      _loadData(); 
     } else if (!_videosLoadAttempted &&
         _stateManager.userVideos.isEmpty &&
         !_stateManager.isVideosLoading) {
@@ -168,17 +186,10 @@ class _ProfileScreenState extends State<ProfileScreen>
       });
     } else {
       AppLogger.log(
-          '✅ ProfileScreen: Data already loaded - no reload needed (using cache/memory)');
-      if (_videosLoadAttempted && _stateManager.userVideos.isEmpty) {
-        AppLogger.log(
-            'ℹ️ ProfileScreen: Videos already checked - creator has no videos (not reloading)');
-      }
-      // **OPTIMIZED: Don't reload if data is already available - just use cached data**
+          '✅ ProfileScreen: Data already loaded - no reload needed');
     }
   }
 
-  /// **ENHANCED: Instant cache-first loading - show cached data immediately, refresh in background**
-  /// **CRITICAL: When forceRefresh=true, COMPLETELY bypass cache and fetch fresh data from server**
   Future<void> _loadData({bool forceRefresh = false}) async {
     try {
       AppLogger.log(
@@ -195,104 +206,84 @@ class _ProfileScreenState extends State<ProfileScreen>
         final cachedData = await _loadCachedProfileData();
         if (cachedData != null) {
           AppLogger.log(
-              '⚡ ProfileScreen: Using cached data (INSTANT - no server fetch, cache persists when user navigates back)');
+              '⚡ ProfileScreen: Using cached data (INSTANT - no server fetch)');
 
           // **INSTANT: Show cached data immediately (no loading state)**
           _stateManager.setUserData(cachedData);
 
           // **OPTIMIZATION: Also load cached videos immediately**
-          await _loadVideosFromCache(); // This will load from SmartCacheManager via ProfileStateManager
-          _isLoading.value = false; // Hide loading after videos are loaded
+          await _loadVideosFromCache(); 
+          _isLoading.value = false;
 
-          // **NEW: Check UPI ID status after cached data is loaded (only for own profile)**
+          // **NEW: Check UPI ID status and guide after cached data is loaded**
           if (widget.userId == null) {
-            _checkUpiIdStatus();
-          }
-
-          // **FIXED: If no videos in cache for creator profiles, load from server**
-          if (widget.userId != null && _stateManager.userVideos.isEmpty) {
-            AppLogger.log(
-                '🔄 ProfileScreen: No cached videos for creator profile, loading from server');
-            _loadVideos().catchError((e) {
-              AppLogger.log(
-                  '⚠️ ProfileScreen: Error loading videos for creator profile: $e');
+            Future.microtask(() async {
+              await _checkUpiIdStatus();
+              _checkAndShowUpiGuide();
             });
           }
 
           // **OPTIMIZATION: Always refresh in background for fresh data**
-          // SmartCacheManager handles cache expiry, so we refresh to ensure fresh data
-          bool shouldRefresh = true;
-          AppLogger.log(
-              '🔄 ProfileScreen: Will refresh in background to ensure fresh data (cache already shown)');
-
-          if (shouldRefresh) {
-            // **BACKGROUND: Refresh in background (non-blocking)**
-            Future.microtask(() async {
-              try {
-                AppLogger.log('🔄 ProfileScreen: Background refresh started');
-                // Determine userId to use
-                final userIdForRefresh = widget.userId;
-
-                // 1. Refresh user profile data (force refresh, silent)
-                await _stateManager.loadUserData(
-                  userIdForRefresh,
-                  forceRefresh: true,
-                  silent: true,
-                );
-
-                // 2. Refresh videos (force refresh, silent)
-                if (mounted) {
-                  await _loadVideos(forceRefresh: true, silent: true);
-                }
-
-                // 3. Refresh earnings
-                if (mounted) {
+          _profileLoadAttemptCount = 0; // Reset count as we have at least cached data
+          
+          Future.microtask(() async {
+            try {
+              AppLogger.log('🔄 ProfileScreen: Background refresh started');
+              await _stateManager.loadUserData(
+                widget.userId,
+                forceRefresh: true,
+                silent: true,
+              );
+              if (mounted) {
+                await _loadVideos(forceRefresh: true, silent: true);
+                if (widget.userId == null) {
                   await _refreshEarningsData(forceRefresh: true);
-                }
-                AppLogger.log(
-                    '✅ ProfileScreen: Background refresh completed');
-              } catch (e) {
-                AppLogger.log('⚠️ ProfileScreen: Background refresh failed: $e');
-                // **FIX: Show error to user with retry option**
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        '${AppText.get('error_refresh')}: ${_getUserFriendlyError(e)}',
-                      ),
-                      backgroundColor: Colors.orange,
-                      duration: const Duration(seconds: 4),
-                      action: SnackBarAction(
-                        label: AppText.get('btn_retry', fallback: 'Retry'),
-                        textColor: Colors.white,
-                        onPressed: () => _loadData(forceRefresh: true),
-                      ),
-                    ),
-                  );
+                  // **RE-CHECK: Update status after background refresh confirms latest data**
+                  await _checkUpiIdStatus();
+                  _checkAndShowUpiGuide();
                 }
               }
-            });
-          }
+              AppLogger.log('✅ ProfileScreen: Background refresh completed');
+            } catch (e) {
+              AppLogger.log('⚠️ ProfileScreen: Background refresh failed: $e');
+            }
+          });
 
           return; // Exit early - user sees cached data instantly
         }
       }
 
-      // Step 2: No cache or force refresh - load from server with retry
-      // **CRITICAL: When forceRefresh=true, we ALWAYS reach here and fetch from server**
+      // Step 2: No cache or force refresh - load from server
       _isLoading.value = true;
       _error.value = null;
 
-      AppLogger.log(
-          '📡 ProfileScreen: ${forceRefresh ? "FORCE REFRESH - fetching fresh data from server (NO CACHE)" : "No cache, loading from server"}');
+      if (!forceRefresh) {
+        _profileLoadAttemptCount++;
+      }
 
-      // **FIX: Load with retry mechanism**
+      AppLogger.log(
+          '📡 ProfileScreen: Fetching from server (Attempt $_profileLoadAttemptCount/3)');
+
       await _loadDataWithRetry(forceRefresh: forceRefresh);
+      
+      // If we got here and userData is still null, mark as no data
+      if (_stateManager.userData == null) {
+        _profileNoDataFound = true;
+        AppLogger.log('ℹ️ ProfileScreen: Successfully fetched but no data returned');
+      } else {
+        _profileNoDataFound = false;
+        _profileLoadAttemptCount = 0; // Reset count on success
+        
+        // **NEW: Check if user should see UPI guide after successful load**
+        if (widget.userId == null) {
+          _checkAndShowUpiGuide();
+        }
+      }
     } catch (e) {
       AppLogger.log('❌ ProfileScreen: Error loading data: $e');
-      // **BATCHED UPDATE: Update error and loading together**
-      _error.value = e.toString();
+      _error.value = _getUserFriendlyError(e);
       _isLoading.value = false;
+      // Do not mark _profileNoDataFound = true on error, as it might be a temporary network issue
     }
   }
 
@@ -307,9 +298,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         AppLogger.log(
             '📡 ProfileScreen: Loading data (attempt ${retryCount + 1}/${maxRetries + 1}) for ${widget.userId != null ? "creator" : "own"} profile (forceRefresh: $forceRefresh)');
 
-        // **CRITICAL: When forceRefresh=true, loadUserData MUST bypass cache internally**
-        // Start loading profile data with timeout
-        // **FIXED: Longer timeout for creator profiles (20s) vs own profile (15s)**
         final timeoutDuration = widget.userId != null
             ? const Duration(seconds: 20)
             : const Duration(seconds: 15);
@@ -324,112 +312,44 @@ class _ProfileScreenState extends State<ProfileScreen>
         );
 
         if (_stateManager.userData != null) {
-          // **CRITICAL: NEVER cache during force refresh - we want fresh data shown immediately**
-          // Only cache after displaying fresh data (see line 344-348)
           if (!forceRefresh) {
             await _cacheProfileData(_stateManager.userData!);
           }
 
-          // **FIXED: For creator profiles, use widget.userId directly; for own profile, extract from userData**
           final currentUserId = widget.userId ??
               _stateManager.userData!['googleId'] ??
               _stateManager.userData!['_id'] ??
               _stateManager.userData!['id'];
 
           if (currentUserId != null) {
-            // **CRITICAL: When forceRefresh=true, videos MUST also bypass cache**
-            // Load videos with forceRefresh flag to ensure fresh data from server
             if (forceRefresh) {
-              // **CRITICAL: During force refresh, wait for videos to load before hiding loading state**
-              // This ensures user sees complete fresh data, not partial cached data
               await _loadVideos(forceRefresh: true);
-              // **FIX: Hide loading only after videos are loaded during force refresh**
               _isLoading.value = false;
             } else {
-              // **OPTIMIZATION: Hide loading state as soon as profile data is ready**
-              // Videos will continue loading in background and update UI when ready
               _isLoading.value = false;
-
-              // **OPTIMIZATION: Load videos in background without blocking UI (normal load)**
               _loadVideos(forceRefresh: false).catchError((e) {
-                AppLogger.log(
-                    '⚠️ ProfileScreen: Error loading videos in background: $e');
-                // **FIX: Show error for video loading failures**
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                          '${AppText.get('error_videos_load')}: ${_getUserFriendlyError(e)}'),
-                      backgroundColor: Colors.orange,
-                      duration: const Duration(seconds: 3),
-                      action: SnackBarAction(
-                        label: AppText.get('btn_retry', fallback: 'Retry'),
-                        textColor: Colors.white,
-                        onPressed: () => _loadVideos(forceRefresh: true),
-                      ),
-                    ),
-                  );
-                }
+                AppLogger.log('⚠️ ProfileScreen: Error loading videos: $e');
               });
             }
 
-            // **NEW: Check UPI ID status after user data is loaded (only for own profile)**
             if (widget.userId == null) {
-              _checkUpiIdStatus();
+              await _checkUpiIdStatus();
             }
 
-            // **FAST: Load earnings in parallel (non-blocking)**
-            _refreshEarningsData(forceRefresh: forceRefresh).catchError((e) {
-              // Silent fail - earnings are optional
-            });
+            _refreshEarningsData(forceRefresh: forceRefresh).catchError((e) {});
 
-            // **CRITICAL: After successful force refresh, cache the fresh data for next time**
-            // This caches AFTER displaying fresh data to user, so next load can use cache
             if (forceRefresh) {
               await _cacheProfileData(_stateManager.userData!);
-              AppLogger.log(
-                  '✅ ProfileScreen: Fresh profile data cached after force refresh (data already shown to user)');
             }
 
-            AppLogger.log(
-                '✅ ProfileScreen: Profile data loaded, videos and earnings loading in background');
-            return; // Success - exit retry loop
-          } else {
-            // If no user ID, wait for videos anyway (fallback)
-            try {
-              await _loadVideos(forceRefresh: forceRefresh);
-            } catch (e) {
-              AppLogger.log(
-                  '⚠️ ProfileScreen: Error loading videos during retry sequence: $e');
-              // Don't fail the whole profile load if only videos fail
-              // The user will see the profile header and can retry loading videos
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                        '${AppText.get('error_videos_load')}: ${_getUserFriendlyError(e)}'),
-                    backgroundColor: Colors.orange,
-                    duration: const Duration(seconds: 3),
-                    action: SnackBarAction(
-                      label: AppText.get('btn_retry', fallback: 'Retry'),
-                      textColor: Colors.white,
-                      onPressed: () => _loadVideos(forceRefresh: true),
-                    ),
-                  ),
-                );
-              }
-            }
-            _isLoading.value = false;
-            return; // Success - exit retry loop
+            AppLogger.log('✅ ProfileScreen: Profile data loaded successfully');
+            return;
           }
-        } else {
-          // **FIX: Better error message for null data**
-          throw Exception('Server returned empty profile data');
         }
+        // If we reach here, userData was null or currentUserId was null, which is an issue
+        throw Exception('Server returned empty profile data or invalid user ID');
       } catch (e) {
         retryCount++;
-        AppLogger.log(
-            '❌ ProfileScreen: Error loading data (attempt $retryCount): $e');
 
         if (retryCount > maxRetries) {
           // Max retries reached - show error
@@ -563,11 +483,13 @@ class _ProfileScreenState extends State<ProfileScreen>
     AppLogger.log(
         '🔄 ProfileScreen: Manual refresh - clearing ALL caches and fetching fresh data from server (NO CACHE WILL BE USED)');
 
-    // **FIXED: Reset videos load attempt flag on manual refresh**
+    // **FIXED: Reset load attempt flags on manual refresh**
     // This allows videos to be reloaded even if they were empty before
     _videosLoadAttempted = false;
+    _profileLoadAttemptCount = 0;
+    _profileNoDataFound = false;
     AppLogger.log(
-        '🔄 ProfileScreen: Manual refresh - resetting videos load attempt flag');
+        '🔄 ProfileScreen: Manual refresh - resetting load attempt flags');
 
     try {
       // **CRITICAL: Clear ALL caches first - profile cache, video cache, and SmartCache**
@@ -1127,7 +1049,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 decoration: BoxDecoration(
                   color: AppTheme.backgroundPrimary,
                   borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
-                  boxShadow: [
+                  boxShadow: const [
                     BoxShadow(
                       color: AppTheme.shadowPrimary,
                       blurRadius: 20,
@@ -1150,7 +1072,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                           width: 2,
                         ),
                       ),
-                      child: Icon(
+                      child: const Icon(
                         Icons.delete_forever,
                         color: AppTheme.error,
                         size: 32,
@@ -1355,31 +1277,58 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   /// **NEW: Check if user should see UPI guide**
+  /// **REFINED: Called only after successful profile data load**
   Future<void> _checkAndShowUpiGuide() async {
     if (_hasCheckedUpiGuide || widget.userId != null) {
       return; // Already checked or viewing another user's profile
     }
 
-    _hasCheckedUpiGuide = true;
-
     try {
+      // Get user ID to make guide status user-specific
+      final userData = _stateManager.getUserData();
+      final userId = userData?['googleId'] ?? userData?['id'] ?? userData?['_id'];
+      
+      // If we don't have a userId yet, we can't check the specific guide status
+      // This shouldn't normally happen now as it's called after successful load
+      if (!mounted || widget.userId != null || userId == null) {
+        AppLogger.log('ℹ️ ProfileScreen: UPI guide skipped - No user ID or not viewing own profile');
+        return;
+      }
+      
       final prefs = await SharedPreferences.getInstance();
-      final hasSeenGuide = prefs.getBool('has_seen_upi_guide') ?? false;
+      
+      // Use user-specific key so reinstalling OR account switching works correctly
+      final guideKey = 'has_seen_upi_guide_$userId';
+      final hasSeenGuide = prefs.getBool(guideKey) ?? false;
 
-      // Show guide if user hasn't seen it and doesn't have UPI ID
-      if (!hasSeenGuide) {
-        // Wait a bit for the UI to settle
-        await Future.delayed(const Duration(milliseconds: 800));
+      // Show guide ONLY if user hasn't seen it AND definitely doesn't have UPI ID
+      if (!hasSeenGuide && !_hasUpiId.value) {
+        AppLogger.log('💡 ProfileScreen: UPI guide conditions met for user $userId, showing guide...');
         
-        if (mounted && !_hasUpiId.value) {
+        // **IMPORTANT: Set this to true immediately so we don't start multiple timers**
+        _hasCheckedUpiGuide = true;
+        
+        // Wait 5 seconds to ensure the user has settled and the button is laid out
+        await Future.delayed(const Duration(seconds: 5));
+        
+        if (mounted && !_hasUpiId.value && !_showUpiGuide.value) {
           _showUpiGuide.value = true;
+          AppLogger.log('✅ ProfileScreen: Setting _showUpiGuide.value = true');
 
-          // Auto-dismiss after 5 seconds
-          Future.delayed(const Duration(seconds: 5), () {
+          // Auto-dismiss after 10 seconds (gives user more time to see the animation)
+          Future.delayed(const Duration(seconds: 10), () {
             if (mounted && _showUpiGuide.value) {
               _dismissUpiGuide();
             }
           });
+        }
+      } else {
+        // Mark as "session-checked" even if we didn't show it
+        _hasCheckedUpiGuide = true;
+        if (hasSeenGuide) {
+          AppLogger.log('ℹ️ ProfileScreen: UPI guide already seen by user $userId (skipping)');
+        } else if (_hasUpiId.value) {
+          AppLogger.log('✅ ProfileScreen: User $userId already has UPI set (skipping guide)');
         }
       }
     } catch (e) {
@@ -1392,9 +1341,15 @@ class _ProfileScreenState extends State<ProfileScreen>
     _showUpiGuide.value = false;
     
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('has_seen_upi_guide', true);
-      AppLogger.log('✅ ProfileScreen: UPI guide dismissed and marked as seen');
+      final userData = _stateManager.getUserData();
+      final userId = userData?['googleId'] ?? userData?['id'] ?? userData?['_id'];
+      
+      if (userId != null) {
+        final prefs = await SharedPreferences.getInstance();
+        final guideKey = 'has_seen_upi_guide_$userId';
+        await prefs.setBool(guideKey, true);
+        AppLogger.log('✅ ProfileScreen: UPI guide dismissed and marked as seen for user $userId');
+      }
     } catch (e) {
       AppLogger.log('⚠️ ProfileScreen: Error saving UPI guide status: $e');
     }
@@ -1878,148 +1833,15 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ),
                 ),
 
-                // **NEW: Animated UPI Guide Overlay**
+                // **NEW: Interactive Finger Animation Guide (YouTube style)**
                 ValueListenableBuilder<bool>(
                   valueListenable: _showUpiGuide,
                   builder: (context, showGuide, child) {
                     if (!showGuide) return const SizedBox.shrink();
 
-                    return GestureDetector(
-                      onTap: _dismissUpiGuide,
-                      child: Container(
-                        color: Colors.black.withValues(alpha:0.7),
-                        child: Center(
-                          child: TweenAnimationBuilder<double>(
-                            tween: Tween(begin: 0.0, end: 1.0),
-                            duration: const Duration(milliseconds: 600),
-                            curve: Curves.easeOut,
-                            builder: (context, value, child) {
-                              return Opacity(
-                                opacity: value,
-                                child: Transform.scale(
-                                  scale: 0.8 + (value * 0.2),
-                                  child: child,
-                                ),
-                              );
-                            },
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                // Pulsing animation for the hint
-                                TweenAnimationBuilder<double>(
-                                  tween: Tween(begin: 1.0, end: 1.15),
-                                  duration: const Duration(milliseconds: 800),
-                                  curve: Curves.easeInOut,
-                                  builder: (context, scale, child) {
-                                    return Transform.scale(
-                                      scale: scale,
-                                      child: child,
-                                    );
-                                  },
-                                  onEnd: () {
-                                    // Loop the animation
-                                    if (mounted && _showUpiGuide.value) {
-                                      setState(() {});
-                                    }
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.all(24),
-                                    margin: const EdgeInsets.symmetric(horizontal: 32),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(20),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withValues(alpha:0.3),
-                                          blurRadius: 20,
-                                          offset: const Offset(0, 10),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        // Wallet icon with glow effect
-                                        Container(
-                                          padding: const EdgeInsets.all(16),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF10B981).withValues(alpha:0.1),
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Icon(
-                                            Icons.account_balance_wallet,
-                                            size: 48,
-                                            color: Color(0xFF10B981),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 20),
-                                        
-                                        // Main text
-                                        const Text(
-                                          'Add Your UPI ID',
-                                          style: TextStyle(
-                                            fontSize: 24,
-                                            fontWeight: FontWeight.bold,
-                                            color: Color(0xFF1A1A1A),
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                        const SizedBox(height: 12),
-                                        
-                                        // Description
-                                        const Text(
-                                          'Tap the "Add UPI ID" button below to start earning money from your videos!',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            color: Color(0xFF6B7280),
-                                            height: 1.5,
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                        const SizedBox(height: 24),
-                                        
-                                        // Animated arrow pointing down
-                                        TweenAnimationBuilder<double>(
-                                          tween: Tween(begin: 0.0, end: 10.0),
-                                          duration: const Duration(milliseconds: 1000),
-                                          curve: Curves.easeInOut,
-                                          builder: (context, offset, child) {
-                                            return Transform.translate(
-                                              offset: Offset(0, offset),
-                                              child: child,
-                                            );
-                                          },
-                                          onEnd: () {
-                                            if (mounted && _showUpiGuide.value) {
-                                              setState(() {});
-                                            }
-                                          },
-                                          child: const Icon(
-                                            Icons.arrow_downward,
-                                            size: 32,
-                                            color: Color(0xFF10B981),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 16),
-                                        
-                                        // Tap to dismiss hint
-                                        Text(
-                                          'Tap anywhere to dismiss',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey.shade500,
-                                            fontStyle: FontStyle.italic,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
+                    return FingerTapGuide(
+                      targetKey: _upiButtonKey,
+                      onDismiss: _dismissUpiGuide,
                     );
                   },
                 ),
@@ -2562,6 +2384,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   ],
                                 )
                               : ElevatedButton.icon(
+                                  key: _upiButtonKey,
                                   onPressed: _handleAddUpiId,
                                   icon: const Icon(Icons.account_balance_wallet, size: 18),
                                   label: const Text('Add UPI ID'),
@@ -2977,7 +2800,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  // **NEW: Check UPI ID status for notice**
   Future<void> _checkUpiIdStatus() async {
     try {
       // Only check for own profile
@@ -2988,24 +2810,11 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       _isCheckingUpiId.value = true;
 
-      // **NEW: If payment setup is already completed (any method), don't show UPI banner**
-      try {
-        final hasPaymentSetup = await _checkPaymentSetupStatus();
-        if (hasPaymentSetup) {
-          _hasUpiId.value = true;
-          _isCheckingUpiId.value = false;
-          AppLogger.log(
-              '✅ ProfileScreen: Payment setup already completed, hiding UPI notice');
-          return;
-        }
-      } catch (e) {
-        AppLogger.log(
-            '⚠️ ProfileScreen: Error checking payment setup status for UPI notice: $e');
-        // Fall through to detailed UPI check
-      }
+      // **FIXED: Do NOT exit early based on generic "hasPaymentSetup" flag**
+      // We want to specifically check for the existence of a UPI ID.
+      // Generic setup flags might include Bank/Bank Transfer which don't fulfill the "UPI" requirement.
 
-      // **FIX: First check local state (ProfileStateManager) for UPI ID**
-      // This ensures immediate update after saving UPI ID
+      // **Step 1: check local state (ProfileStateManager) for UPI ID**
       final userData = _stateManager.getUserData();
       if (userData != null) {
         final paymentDetails = userData['paymentDetails'];

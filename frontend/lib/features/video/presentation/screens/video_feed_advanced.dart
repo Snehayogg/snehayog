@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart' show kIsWeb, compute;
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:vayu/features/profile/data/services/user_service.dart';
@@ -729,12 +729,16 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   void _onPageChanged(int index) {
     if (index == _currentIndex) return;
 
-    // **OPTIMIZATION: Rapid Pause Strategy**
-    // Instead of iterating all controllers (O(N)), directly pause the one we know is playing.
-    
+    // **NEW: Scroll Velocity Detection**
+    final currentTime = DateTime.now();
+    final scrollDelta = currentTime.difference(_lastPageChangeTime).inMilliseconds;
+    _lastPageChangeTime = currentTime;
+    final bool isFastScroll = scrollDelta < 300; // Threshold for "Ruthless" mode
+    _wasLastScrollFast = isFastScroll; // Store for preloader to use
+
     // **NEW: INSTANT RESOURCE PROTECTION (The "Cut Cable" Logic)**
     // As soon as the user scrolls, we:
-    // 1. Identify "Safe" videos (Current, Next, Prev)
+    // 1. Identify "Safe" videos (Current Target)
     // 2. Kill network for EVERYTHING else immediately.
     // This prevents "Zombie Downloads" from eating bandwidth.
     if (_currentIndex < _videos.length) {
@@ -748,20 +752,19 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
          if (v.videoUrl.isNotEmpty) safeUrls.add(v.videoUrl);
       }
 
-      // 1. Current (Target) Video
+      // 1. Current (Target) Video - ALWAYS SAFE
       if (index < _videos.length) addSafeVideo(_videos[index]);
       
-      // 2. Next Video (if valid)
-      if (index + 1 < _videos.length) addSafeVideo(_videos[index + 1]);
+      // 2. Next Video - ONLY SAFE if NOT scrolling fast
+      // Agar user fast scroll kar raha hai toh hum next video ka bandwidth bhi current video ko de denge.
+      if (!isFastScroll && index + 1 < _videos.length) {
+          addSafeVideo(_videos[index + 1]);
+      }
       
       // **IMMEDIATE PRIORITY SHIFT: YouTube Shorts Style**
-    // The moment the finger swipes, we must signal an Instant Cancellation 
-    // of all pending loads and stop any video that is not the one currently visible.
-    _cancelIrrelevantPreloads(index);
-    
-    // Pause previous video immediately (Instant Audio Cut)
-      // 3. Previous Video (if valid)
-      if (index - 1 >= 0) addSafeVideo(_videos[index - 1]);
+      // The moment the finger swipes, we must signal an Instant Cancellation 
+      // of all pending loads and stop any video that is not the one currently visible.
+      _cancelIrrelevantPreloads(index);
       
       // **EXECUTE ATOMIC CANCELLATION**
       // This is Microsecond-level latency (local check) vs Second-level savings (network).

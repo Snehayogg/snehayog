@@ -245,11 +245,11 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
                     shape: BoxShape.circle,
                     border:
                         Border.all(color: AppTheme.borderPrimary, width: 2),
-                    boxShadow: [
+                    boxShadow: const [
                       BoxShadow(
                         color: AppTheme.shadowSecondary,
                         blurRadius: 4,
-                        offset: const Offset(0, 2),
+                        offset: Offset(0, 2),
                       ),
                     ],
                   ),
@@ -285,11 +285,11 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
                       color: Colors.white,
                       width: 2,
                     ),
-                    boxShadow: [
+                    boxShadow: const [
                       BoxShadow(
                         color: AppTheme.shadowSecondary,
                         blurRadius: 4,
-                        offset: const Offset(0, 1),
+                        offset: Offset(0, 1),
                       ),
                     ],
                   ),

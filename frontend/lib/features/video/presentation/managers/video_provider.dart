@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'dart:async';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
 import 'package:vayu/shared/enums/video_state.dart';
 import 'package:vayu/shared/constants/app_constants.dart';
@@ -65,10 +65,6 @@ class VideoProvider extends ChangeNotifier {
         page: _currentPage,
         videoType: videoType,
       );
-
-      if (result == null) {
-        throw Exception('Failed to load videos');
-      }
 
       final List<VideoModel> fetchedVideos = result['videos'] as List<VideoModel>;
       final bool hasMore = result['hasMore'] as bool? ?? false;

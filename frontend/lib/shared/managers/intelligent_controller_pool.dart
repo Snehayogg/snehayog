@@ -1,5 +1,5 @@
 import 'package:video_player/video_player.dart';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/shared/utils/enhanced_controller_disposal.dart';
 import 'dart:async';
 import 'package:vayu/shared/utils/app_logger.dart';

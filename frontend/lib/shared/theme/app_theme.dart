@@ -490,7 +490,7 @@ class AppTheme {
       ),
 
       // Bottom sheet theme
-      bottomSheetTheme: BottomSheetThemeData(
+      bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: surfacePrimary,
         elevation: 8,
         shape: RoundedRectangleBorder(
@@ -584,7 +584,7 @@ class AppTheme {
 
       // List tile theme
       listTileTheme: ListTileThemeData(
-        contentPadding: EdgeInsets.symmetric(
+        contentPadding: const EdgeInsets.symmetric(
           horizontal: spacing4,
           vertical: spacing2,
         ),

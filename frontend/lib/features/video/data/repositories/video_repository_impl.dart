@@ -2,7 +2,7 @@ import 'dart:io';
 import '../datasources/video_remote_datasource.dart';
 import '../../domain/repositories/video_repository.dart';
 import '../../domain/entities/video_entity.dart';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 import '../datasources/video_local_datasource.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 

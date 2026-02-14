@@ -475,10 +475,10 @@ class LoginScreen extends StatelessWidget {
                           ),
                         ],
                       ),
-                      child: Column(
+                      child: const Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const SizedBox(
+                          SizedBox(
                             width: 32,
                             height: 32,
                             child: CircularProgressIndicator(
@@ -487,8 +487,8 @@ class LoginScreen extends StatelessWidget {
                                   AlwaysStoppedAnimation<Color>(Colors.green),
                             ),
                           ),
-                          const SizedBox(height: 16),
-                          const Text(
+                          SizedBox(height: 16),
+                          Text(
                             'Signing in...',
                             style: TextStyle(
                               fontSize: 16,

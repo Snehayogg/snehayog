@@ -132,6 +132,8 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   Timer? _preloadDebounceTimer;
   // **NEW: Individual debounce timers for each video ID**
   final Map<String, Timer> _preloadDebounceTimers = {};
+  DateTime _lastPageChangeTime = DateTime.now();
+  bool _wasLastScrollFast = false;
 
   // First-frame tracking
   final Map<String, ValueNotifier<bool>> _firstFrameReady = {};

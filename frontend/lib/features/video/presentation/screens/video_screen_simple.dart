@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:vayu/shared/utils/app_logger.dart';

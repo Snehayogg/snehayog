@@ -42,11 +42,11 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
         decoration: BoxDecoration(
           color: AppTheme.backgroundPrimary,
           borderRadius: BorderRadius.circular(AppTheme.radiusXLarge),
-          boxShadow: [
+          boxShadow: const [
             BoxShadow(
               color: AppTheme.shadowPrimary,
               blurRadius: 10,
-              offset: const Offset(0, 4),
+              offset: Offset(0, 4),
             ),
           ],
         ),

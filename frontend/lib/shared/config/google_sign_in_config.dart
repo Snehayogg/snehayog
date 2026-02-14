@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 
 class GoogleSignInConfig {
   static const String platformClientId = '406195883653-qp49f9nauq4t428ndscuu3nr9jb10g4h.apps.googleusercontent.com';

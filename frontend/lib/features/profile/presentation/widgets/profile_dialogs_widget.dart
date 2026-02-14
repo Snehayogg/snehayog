@@ -10,6 +10,7 @@ import 'package:vayu/shared/widgets/feedback/feedback_dialog_widget.dart';
 import 'package:vayu/shared/widgets/report_dialog_widget.dart';
 import 'package:vayu/features/profile/presentation/widgets/top_earners_bottom_sheet.dart';
 import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ProfileDialogsWidget {
   static void showSettingsBottomSheet(
@@ -31,7 +32,7 @@ class ProfileDialogsWidget {
             // Header
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: AppTheme.backgroundSecondary,
                 borderRadius: BorderRadius.vertical(
                   top: Radius.circular(AppTheme.radiusLarge),
@@ -300,7 +301,7 @@ class ProfileDialogsWidget {
         backgroundColor: AppTheme.surfacePrimary,
         title: Row(
           children: [
-            Icon(Icons.help_outline, color: AppTheme.textPrimary),
+            const Icon(Icons.help_outline, color: AppTheme.textPrimary),
             const SizedBox(width: 12),
             Text('Help & Support', style: Theme.of(context).textTheme.headlineSmall),
           ],
@@ -587,6 +588,133 @@ class ProfileDialogsWidget {
         ],
       ),
     );
+  }
+
+  static void showLegalBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade100,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.gavel,
+                      color: Colors.blue.shade700,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Legal & About',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Policies and contact information',
+                          style: TextStyle(fontSize: 14, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              _buildLegalItem(
+                context: context,
+                title: 'Privacy Policy',
+                icon: Icons.privacy_tip_outlined,
+                onTap: () => _launchURL('https://snehayog.site/privacy.html'),
+              ),
+              _buildLegalItem(
+                context: context,
+                title: 'Terms & Conditions',
+                icon: Icons.description_outlined,
+                onTap: () => _launchURL('https://snehayog.site/terms.html'),
+              ),
+              _buildLegalItem(
+                context: context,
+                title: 'Refund & Cancellation',
+                icon: Icons.assignment_return_outlined,
+                onTap: () => _launchURL('https://snehayog.site/refund.html'),
+              ),
+              _buildLegalItem(
+                context: context,
+                title: 'Contact Us',
+                icon: Icons.contact_support_outlined,
+                onTap: () => _launchURL('https://snehayog.site/contact.html'),
+              ),
+              const SizedBox(height: 12),
+              const Center(
+                child: Text(
+                  'Version 1.0.0',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static Widget _buildLegalItem({
+    required BuildContext context,
+    required String title,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      leading: Icon(icon, color: Colors.blue.shade700),
+      title: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+          color: Colors.black87,
+        ),
+      ),
+      trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+    );
+  }
+
+  static Future<void> _launchURL(String url) async {
+    final Uri uri = Uri.parse(url);
+    try {
+      // ignore: deprecated_member_use
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      print('Could not launch $url : $e');
+    }
   }
 
   static Future<void> showHowToEarnDialog(

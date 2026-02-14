@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:video_player/video_player.dart';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/shared/services/video_player_config_service.dart';
 import 'package:vayu/shared/managers/smart_cache_manager.dart';
 import 'package:vayu/shared/services/hls_warmup_service.dart';

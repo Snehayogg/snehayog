@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
-import 'package:vayu/shared/models/video_model.dart';
-import 'package:vayu/shared/models/carousel_ad_model.dart';
+import 'package:vayu/features/video/video_model.dart';
+import 'package:vayu/features/ads/data/carousel_ad_model.dart';
 import 'package:vayu/features/ads/presentation/widgets/carousel_ad_widget.dart';
 
 /// Optimized widget components extracted from VideoFeedAdvanced

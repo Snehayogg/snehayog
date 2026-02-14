@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:vayu/shared/models/carousel_ad_model.dart';
+import 'package:vayu/features/ads/data/carousel_ad_model.dart';
 import 'package:vayu/shared/config/app_config.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/shared/services/http_client_service.dart';

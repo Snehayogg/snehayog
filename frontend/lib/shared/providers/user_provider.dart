@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:vayu/features/profile/data/services/user_service.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
-import 'package:vayu/shared/models/usermodel.dart';
+import 'package:vayu/features/auth/data/usermodel.dart';
 
 class UserProvider extends ChangeNotifier {
   final UserService _userService = UserService();
@@ -241,8 +241,6 @@ class UserProvider extends ChangeNotifier {
           // It's refreshed separately using checkFollowStatus() which is more reliable
 
         }
-      } catch (e) {
-
       } finally {
         _loadingUserData.remove(normalizedId);
         notifyListeners();

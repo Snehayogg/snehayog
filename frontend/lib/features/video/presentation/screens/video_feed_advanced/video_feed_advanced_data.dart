@@ -213,7 +213,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
           // If not resetting, ensure current index is still valid
           if (!shouldResetIndex) {
             if (_currentIndex >= _videos.length) {
-              _currentIndex = _videos.length > 0 ? _videos.length - 1 : 0;
+              _currentIndex = _videos.isNotEmpty ? _videos.length - 1 : 0;
             }
           }
 

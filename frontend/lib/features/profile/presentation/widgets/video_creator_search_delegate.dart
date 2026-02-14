@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/models/usermodel.dart';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/auth/data/usermodel.dart';
+import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/shared/services/search_service.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
 import 'package:vayu/features/profile/data/services/earnings_service.dart';

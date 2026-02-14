@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/models/carousel_ad_model.dart';
+import 'package:vayu/features/ads/data/carousel_ad_model.dart';
 import 'package:vayu/features/ads/data/services/carousel_ad_service.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 

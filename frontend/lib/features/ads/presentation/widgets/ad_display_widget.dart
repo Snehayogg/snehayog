@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/models/ad_model.dart';
+import 'package:vayu/features/ads/data/ad_model.dart';
 import 'package:vayu/features/ads/data/services/ad_service.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:url_launcher/url_launcher.dart';

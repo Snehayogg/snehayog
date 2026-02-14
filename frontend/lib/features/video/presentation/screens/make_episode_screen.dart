@@ -25,7 +25,7 @@ class MakeEpisodeScreen extends StatefulWidget {
 
 class _MakeEpisodeScreenState extends State<MakeEpisodeScreen> {
   final VideoService _videoService = VideoService();
-  List<EpisodeItem> _selectedEpisodes = [];
+  final List<EpisodeItem> _selectedEpisodes = [];
   bool _isUploading = false;
 
   String _currentStatus = '';
@@ -299,7 +299,7 @@ class _MakeEpisodeScreenState extends State<MakeEpisodeScreen> {
                           leading: Container(
                             width: 40,
                             height: 40,
-                            decoration: BoxDecoration(
+                            decoration: const BoxDecoration(
                               color: Colors.black12,
                               shape: BoxShape.circle,
                             ),

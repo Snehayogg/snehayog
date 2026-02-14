@@ -218,6 +218,49 @@ class HttpClientService {
     return _dio;
   }
 
+  /// Make a multipart request using Dio with progress and cancellation support
+  Future<Response> postMultipart(
+    String url, {
+    required Map<String, dynamic> fields,
+    required List<MapEntry<String, MultipartFile>> files,
+    Map<String, String>? headers,
+    CancelToken? cancelToken,
+    void Function(int, int)? onSendProgress,
+    Duration? timeout,
+  }) async {
+    try {
+      final formData = FormData();
+      
+      // Add fields
+      fields.forEach((key, value) {
+        if (value is List) {
+          for (var item in value) {
+            formData.fields.add(MapEntry(key, item.toString()));
+          }
+        } else {
+          formData.fields.add(MapEntry(key, value.toString()));
+        }
+      });
+
+      // Add files
+      formData.files.addAll(files);
+
+      return await dio.post(
+        url,
+        data: formData,
+        cancelToken: cancelToken,
+        onSendProgress: onSendProgress,
+        options: Options(
+          headers: headers,
+          sendTimeout: timeout ?? AppConfig.uploadTimeout,
+          receiveTimeout: timeout ?? AppConfig.uploadTimeout,
+        ),
+      );
+    } catch (_) {
+      rethrow;
+    }
+  }
+
   /// Convert Dio Response to http.Response for backward compatibility
   http.Response _convertDioResponse(Response dioResponse) {
     return http.Response(

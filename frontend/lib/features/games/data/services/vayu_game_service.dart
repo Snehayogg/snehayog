@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/shared/models/game_model.dart';
+import 'package:vayu/features/games/data/game_model.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

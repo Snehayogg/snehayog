@@ -152,7 +152,7 @@ class _PaymentStatusIndicatorState extends State<PaymentStatusIndicator> {
               ),
             ),
             if (!_hasPaymentSetup)
-              Icon(
+              const Icon(
                 Icons.arrow_forward_ios,
                 size: 16,
                 color: AppTheme.warning,

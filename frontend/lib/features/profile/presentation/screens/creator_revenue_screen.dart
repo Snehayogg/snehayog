@@ -8,7 +8,7 @@ import 'package:vayu/features/auth/presentation/controllers/google_sign_in_contr
 import 'package:vayu/features/ads/data/services/ad_service.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/features/auth/data/services/logout_service.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/shared/utils/app_text.dart';

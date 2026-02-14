@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/features/video/presentation/screens/video_feed_advanced/widgets/vertical_action_button.dart';
 
 class VideoOverlay extends StatelessWidget {

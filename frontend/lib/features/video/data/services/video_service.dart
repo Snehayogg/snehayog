@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:io';
@@ -8,8 +9,8 @@ import 'package:flutter/material.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:video_compress/video_compress.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vayu/shared/models/video_model.dart';
-import 'package:vayu/shared/models/ad_model.dart';
+import 'package:vayu/features/video/video_model.dart';
+import 'package:vayu/features/ads/data/ad_model.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:vayu/features/ads/data/services/ad_service.dart';
 import 'package:vayu/shared/services/platform_id_service.dart';
@@ -579,6 +580,7 @@ class VideoService {
     String? description,
     String? link,
     Function(double)? onProgress,
+    CancelToken? cancelToken,
   ]) async {
     try {
       AppLogger.log('🚀 VideoService: Starting video upload...');
@@ -619,140 +621,68 @@ class VideoService {
         }
       }
 
-      // **Create multipart request**
       final resolvedBaseUrl = await getBaseUrlWithFallback();
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse('$resolvedBaseUrl/api/upload/video'),
-      );
+      final url = '$resolvedBaseUrl/api/upload/video';
 
-      final headers = await _getAuthHeaders();
-      // Only forward Authorization; let MultipartRequest set its own Content-Type
-      final authHeader = headers['Authorization'];
-      if (authHeader != null) {
-        request.headers['Authorization'] = authHeader;
-      }
+      final Map<String, dynamic> fields = {
+        'videoName': title,
+        'videoType': 'yog', // Default
+      };
 
-      // **Add video file**
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'video',
-          finalVideoFile.path,
-          contentType: MediaType('video', 'mp4'),
-        ),
-      );
-
-      // Do not attach a separate thumbnail file. Backend generates thumbnails after processing.
-
-      // **Add fields**
-      request.fields['videoName'] = title;
-      // Description intentionally omitted from upload flow
-      String resolvedVideoType = 'yog';
       if (link != null && link.isNotEmpty) {
-        request.fields['link'] = link;
+        fields['link'] = link;
       }
+
       try {
         // Using Zone to retrieve optional metadata injected by caller
         final dynamic metadata = Zone.current['upload_metadata'];
         if (metadata is Map<String, dynamic>) {
-          final String? category = metadata['category'] as String?;
-          final List<String>? tags = (metadata['tags'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList();
-          if (category != null && category.isNotEmpty) {
-            request.fields['category'] = category;
-          }
-          if (tags != null && tags.isNotEmpty) {
-            request.fields['tags'] = json.encode(tags);
-          }
-          final String? metadataVideoType = metadata['videoType'] as String?;
-          if (metadataVideoType != null && metadataVideoType.isNotEmpty) {
-            resolvedVideoType = metadataVideoType;
-          }
-          final String? seriesId = metadata['seriesId'] as String?;
-          if (seriesId != null && seriesId.isNotEmpty) {
-            request.fields['seriesId'] = seriesId;
-          }
-          final int? episodeNumber = metadata['episodeNumber'] as int?;
-          if (episodeNumber != null) {
-            request.fields['episodeNumber'] = episodeNumber.toString();
-          }
+          if (metadata['category'] != null) fields['category'] = metadata['category'];
+          if (metadata['tags'] != null) fields['tags'] = json.encode(metadata['tags']);
+          if (metadata['videoType'] != null) fields['videoType'] = metadata['videoType'];
+          if (metadata['seriesId'] != null) fields['seriesId'] = metadata['seriesId'];
+          if (metadata['episodeNumber'] != null) fields['episodeNumber'] = metadata['episodeNumber'].toString();
         }
       } catch (_) {}
 
-      request.fields['videoType'] = resolvedVideoType;
+      final files = [
+        MapEntry(
+          'video',
+          await MultipartFile.fromFile(
+            finalVideoFile.path,
+            filename: finalVideoFile.path.split('/').last,
+            contentType: MediaType('video', 'mp4'),
+          ),
+        ),
+      ];
 
-      // **Send request**
-      final streamedResponse = await request.send().timeout(
-        const Duration(minutes: 30),
-        onTimeout: () {
-          throw TimeoutException(
-            'Upload likely failed or is taking too long (30m limit). Please check your internet connection.',
-          );
+      final dioResponse = await httpClientService.postMultipart(
+        url,
+        fields: fields,
+        files: files,
+        cancelToken: cancelToken,
+        onSendProgress: (sent, total) {
+          if (onProgress != null && total > 0) {
+            onProgress(sent / total);
+          }
         },
       );
 
-      final responseBody = await streamedResponse.stream.bytesToString();
-
-      // **FIX: Add response validation**
-      if (responseBody.isEmpty) {
+      final responseData = dioResponse.data;
+      if (responseData == null) {
         throw Exception('Empty response from server');
       }
 
-      AppLogger.log(
-        '📡 VideoService: Upload response status: ${streamedResponse.statusCode}',
-      );
-      AppLogger.log(
-          '📄 VideoService: Upload response body (first 500 chars): ${responseBody.length > 500 ? responseBody.substring(0, 500) : responseBody}');
-
-      // **FIX: Handle non-JSON responses (e.g., HTML error pages from Cloudflare 524)**
-      Map<String, dynamic> responseData;
-      try {
-        responseData = json.decode(responseBody);
-      } catch (e) {
-        // Check if it's a Cloudflare error page or HTML response
-        if (responseBody.trim().startsWith('<') ||
-            responseBody.contains('<!DOCTYPE') ||
-            responseBody.contains('<html')) {
-          // HTML error page (likely Cloudflare 524 timeout)
-          if (streamedResponse.statusCode == 524 ||
-              responseBody.contains('524')) {
-            throw Exception(
-              'Upload timed out on server (524). The video file may be too large or the server is busy. Please try again with a smaller video or wait a few minutes.',
-            );
-          } else if (streamedResponse.statusCode >= 500) {
-            throw Exception(
-              'Server error (${streamedResponse.statusCode}). Please try again later.',
-            );
-          } else {
-            throw Exception(
-              'Invalid response from server. Please try again.',
-            );
-          }
-        } else {
-          // Other non-JSON response
-          throw Exception(
-            'Invalid response format from server. Please try again.',
-          );
-        }
-      }
-
-      // responseData is guaranteed to be non-null here (json.decode would have thrown if invalid)
-
-      if (streamedResponse.statusCode == 201) {
+      if (dioResponse.statusCode == 201) {
         final videoData = responseData['video'];
-
-        // **FIX: Add null checks to prevent NoSuchMethodError**
         if (videoData == null) {
-          AppLogger.log('❌ VideoService: Video data is null in response');
           throw Exception('Invalid response: Video data is missing');
         }
 
         return {
           'id': videoData['_id'] ?? videoData['id'] ?? '',
           'title': videoData['videoName'] ?? title,
-          'videoUrl':
-              videoData['videoUrl'] ?? videoData['hlsPlaylistUrl'] ?? '',
+          'videoUrl': videoData['videoUrl'] ?? videoData['hlsPlaylistUrl'] ?? '',
           'thumbnail': videoData['thumbnailUrl'] ?? '',
           'originalVideoUrl': videoData['originalVideoUrl'] ?? '',
           'duration': '0:00',
@@ -764,49 +694,14 @@ class VideoService {
           'processingStatus': videoData['processingStatus'] ?? 'pending',
         };
       } else {
-        AppLogger.log(
-          '❌ VideoService: Upload failed with status ${streamedResponse.statusCode}',
-        );
-        AppLogger.log(
-            '❌ VideoService: Error details: ${responseData.toString()}');
-
-        // **FIX: Handle specific error codes**
-        if (streamedResponse.statusCode == 524) {
-          throw Exception(
-            'Upload timed out on server (524). The video file may be too large or the server is busy. Please try again with a smaller video or wait a few minutes.',
-          );
-        } else if (streamedResponse.statusCode == 413) {
-          throw Exception(
-            'File too large. Maximum size is 100MB.',
-          );
-        } else if (streamedResponse.statusCode == 401 ||
-            streamedResponse.statusCode == 403) {
-          throw Exception(
-            'Authentication failed. Please sign in again.',
-          );
-        }
-
-        final errorMessage = responseData['error']?.toString() ??
-            responseData['details']?.toString() ??
-            'Failed to upload video (Status: ${streamedResponse.statusCode})';
-        throw Exception('❌ $errorMessage');
+        throw Exception(responseData['error'] ?? 'Failed to upload video');
       }
     } catch (e) {
-      AppLogger.log('❌ VideoService: Error uploading video: $e');
-      if (e is TimeoutException) {
-        throw Exception(
-          'Upload timed out. Please check your internet connection and try again.',
-        );
-      } else if (e is SocketException) {
-        throw Exception(
-          'Could not connect to server. Please check if the server is running.',
-        );
-      } else if (e is FormatException) {
-        // Already handled above, but catch here to provide user-friendly message
-        throw Exception(
-          'Invalid response from server. Please try again.',
-        );
+      if (e is DioException && e.type == DioExceptionType.cancel) {
+        AppLogger.log('🚫 VideoService: Upload cancelled by user');
+        rethrow;
       }
+      AppLogger.log('❌ VideoService: Error uploading video: $e');
       rethrow;
     }
   }

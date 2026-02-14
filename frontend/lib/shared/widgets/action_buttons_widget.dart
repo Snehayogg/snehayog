@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/shared/constants/app_constants.dart';
 
 class ActionButtonsWidget extends StatelessWidget {

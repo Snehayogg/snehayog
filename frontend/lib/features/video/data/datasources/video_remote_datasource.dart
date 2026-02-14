@@ -6,7 +6,7 @@ import 'package:vayu/shared/services/http_client_service.dart';
 import 'package:video_player/video_player.dart';
 import 'package:vayu/shared/config/app_config.dart';
 import 'package:vayu/shared/exceptions/app_exceptions.dart';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 
 import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:vayu/shared/services/platform_id_service.dart';

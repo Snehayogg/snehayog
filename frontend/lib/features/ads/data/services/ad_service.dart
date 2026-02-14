@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:vayu/shared/models/ad_model.dart';
+import 'package:vayu/features/ads/data/ad_model.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:vayu/shared/services/cloudflare_r2_service.dart';
 import 'package:vayu/shared/config/app_config.dart';

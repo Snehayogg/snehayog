@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:vayu/features/auth/data/services/authservices.dart';
-import 'package:vayu/shared/models/usermodel.dart';
+import 'package:vayu/features/auth/data/usermodel.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/shared/config/app_config.dart';
 import 'package:vayu/shared/services/http_client_service.dart';

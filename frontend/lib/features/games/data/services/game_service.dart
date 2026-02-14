@@ -1,4 +1,4 @@
-import 'package:vayu/shared/models/game_model.dart';
+import 'package:vayu/features/games/data/game_model.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/features/games/data/services/game_pix_service.dart';
 import 'package:vayu/features/games/data/services/vayu_game_service.dart';

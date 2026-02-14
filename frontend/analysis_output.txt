@@ -1,9 +1,0 @@
-Analyzing 2 items...                                            
-
-   info - Unnecessary use of getter and setter to wrap a field - lib\core\managers\app_initialization_manager.dart:48:25 - unnecessary_getters_setters
-   info - Unnecessary use of getter and setter to wrap a field - lib\core\managers\app_initialization_manager.dart:51:12 - unnecessary_getters_setters
-   info - Don't invoke 'print' in production code - lib\core\managers\app_initialization_manager.dart:222:10 - avoid_print
-   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\view\screens\splash_screen.dart:115:51 - deprecated_member_use
-   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\view\screens\splash_screen.dart:163:39 - deprecated_member_use
-
-5 issues found. (ran in 6.3s)

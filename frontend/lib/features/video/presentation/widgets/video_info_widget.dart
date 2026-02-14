@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/shared/constants/app_constants.dart';
 import 'package:vayu/features/profile/presentation/screens/profile_screen.dart';
 import 'package:vayu/shared/widgets/follow_button_widget.dart';
@@ -301,9 +301,9 @@ class _VisitNowButton extends StatelessWidget {
           mainAxisSize: MainAxisSize.max,
           children: [
             // **REDUCED icon size from 16 to 14**
-            Icon(Icons.open_in_new, color: Colors.white, size: 14),
+            const Icon(Icons.open_in_new, color: Colors.white, size: 14),
             // **REDUCED spacing from 8 to 6**
-            SizedBox(width: 6),
+            const SizedBox(width: 6),
             Text(
               'Visit Now',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(

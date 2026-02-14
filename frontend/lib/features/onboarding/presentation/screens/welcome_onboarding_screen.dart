@@ -18,7 +18,7 @@ class WelcomeOnboardingScreen extends StatefulWidget {
 class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
   bool _isLoading = true;
   String _heading = '';
-  String _subheading = '';
+  final String _subheading = '';
   String _buttonText = '';
 
   @override

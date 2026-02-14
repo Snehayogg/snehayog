@@ -14,7 +14,7 @@ import 'package:vayu/features/auth/presentation/controllers/google_sign_in_contr
 import 'package:vayu/features/auth/data/services/logout_service.dart';
 import 'package:vayu/shared/services/cloudflare_r2_service.dart';
 import 'package:vayu/features/ads/data/services/ad_refresh_notifier.dart';
-import 'package:vayu/shared/models/ad_model.dart';
+import 'package:vayu/features/ads/data/ad_model.dart';
 import 'package:vayu/features/video/presentation/managers/main_controller.dart';
 import 'dart:io';
 import 'package:vayu/shared/utils/app_logger.dart';

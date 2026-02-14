@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/features/video/presentation/managers/video_provider.dart';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:vayu/shared/services/cloudflare_r2_service.dart';
 import 'package:vayu/features/profile/data/services/user_service.dart';

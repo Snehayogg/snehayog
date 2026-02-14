@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
 import 'package:vayu/shared/constants/app_constants.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';

@@ -2,10 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:visibility_detector/visibility_detector.dart';
-import 'package:vayu/shared/models/carousel_ad_model.dart';
+import 'package:vayu/features/ads/data/carousel_ad_model.dart';
 import 'package:vayu/features/ads/data/services/carousel_ad_service.dart';
 import 'package:vayu/features/ads/data/services/ad_impression_service.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 // import 'package:vayu/features/video/data/services/video_service.dart'; // Unused import removed
 import 'package:url_launcher/url_launcher.dart';

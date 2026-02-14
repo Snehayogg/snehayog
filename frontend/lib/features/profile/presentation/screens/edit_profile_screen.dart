@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
 import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/shared/utils/app_text.dart';

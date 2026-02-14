@@ -11,6 +11,7 @@ import 'package:vayu/features/video/data/services/video_service.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:vayu/features/auth/data/services/logout_service.dart';
 import 'package:vayu/shared/services/http_client_service.dart';
+import 'package:dio/dio.dart';
 import 'package:vayu/features/ads/presentation/screens/create_ad_screen_refactored.dart';
 import 'package:vayu/features/ads/presentation/screens/ad_management_screen.dart';
 import 'package:vayu/features/video/presentation/widgets/upload_advanced_settings_section.dart';
@@ -53,6 +54,27 @@ class _UploadScreenState extends State<UploadScreen> {
 
   // Timer for unified progress tracking
   Timer? _progressTimer;
+  CancelToken? _uploadCancelToken;
+
+  /// Cancel current upload
+  void _cancelUpload() {
+    if (_uploadCancelToken != null && !_isUploading.value) return;
+    
+    _uploadCancelToken?.cancel('User cancelled upload');
+    _isUploading.value = false;
+    _stopUnifiedProgress();
+    
+    // Clear selection so user starts fresh
+    _selectedVideo.value = null;
+    _titleController.clear();
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(AppText.get('upload_cancelled', fallback: 'Upload cancelled')),
+        backgroundColor: Colors.grey.shade800,
+      ),
+    );
+  }
 
   // **UNIFIED PROGRESS PHASES** - Complete video processing flow
   Map<String, Map<String, dynamic>> get _progressPhases => {
@@ -306,6 +328,26 @@ class _UploadScreenState extends State<UploadScreen> {
                                 ],
                               ),
                             ],
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // Cancel Button
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: _cancelUpload,
+                              icon: const Icon(Icons.cancel_outlined),
+                              label: Text(AppText.get('btn_cancel_upload', fallback: 'Cancel Upload')),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.red,
+                                side: const BorderSide(color: Colors.red),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -586,12 +628,24 @@ class _UploadScreenState extends State<UploadScreen> {
       AppLogger.log(
           '🎯 UploadScreen: Using videoType=$serverVideoType (free/Yug by default)');
 
+      // Create new cancel token for this upload
+      _uploadCancelToken = CancelToken();
+
       final uploadedVideo = await runZoned(
         () => _videoService.uploadVideo(
           _selectedVideo.value!,
           _titleController.text,
           '', // description
           _linkController.text.isNotEmpty ? _linkController.text : '', // link
+          (progress) {
+             // Handle precise progress from Dio
+             // We map Dio progress (0.0 to 1.0) into the 'upload' phase window
+             // upload phase is from 0.1 to 0.4 in _progressPhases
+             if (_currentPhase.value == 'upload') {
+               _unifiedProgress.value = 0.1 + (progress * 0.3);
+             }
+          },
+          _uploadCancelToken,
         ),
         zoneValues: {
           'upload_metadata': {
@@ -740,6 +794,11 @@ class _UploadScreenState extends State<UploadScreen> {
       // **NO setState: Use ValueNotifier**
       _errorMessage.value = AppText.get('upload_error_file_access');
     } catch (e, stackTrace) {
+      if (e is DioException && e.type == DioExceptionType.cancel) {
+        AppLogger.log('🚫 UploadScreen: Catching cancellation in UI');
+        return; // Don't show error message for manual cancellation
+      }
+
       AppLogger.log('Error uploading video: $e');
       AppLogger.log('Stack trace: $stackTrace');
 
@@ -948,6 +1007,13 @@ class _UploadScreenState extends State<UploadScreen> {
                       child: TextButton(
                         onPressed: () {
                           Navigator.of(context).pop();
+                          // **NEW: Clear state for another upload**
+                          _selectedVideo.value = null;
+                          _unifiedProgress.value = 0.0;
+                          _currentPhase.value = '';
+                          _titleController.clear();
+                          _linkController.clear();
+                          _errorMessage.value = null;
                         },
                         style: TextButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
@@ -973,8 +1039,16 @@ class _UploadScreenState extends State<UploadScreen> {
                       flex: 2,
                       child: ElevatedButton(
                         onPressed: () {
-                          Navigator.of(context).pop();
-                          // The callback already handles navigation to video tab
+                          Navigator.of(context).pop(); // Close dialog
+                          
+                          // Switch to Vayu (Feed) tab - index 1
+                          try {
+                            Provider.of<MainController>(context, listen: false).changeIndex(1);
+                            Navigator.of(context).pop(); // Close upload screen
+                          } catch (e) {
+                            AppLogger.log('❌ UploadScreen: Error switching to feed: $e');
+                            Navigator.of(context).pop(); // Safety pop
+                          }
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green,

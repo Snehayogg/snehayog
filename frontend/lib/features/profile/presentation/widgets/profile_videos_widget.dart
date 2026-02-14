@@ -4,7 +4,7 @@ import 'package:vayu/features/profile/presentation/managers/profile_state_manage
 import 'package:vayu/shared/services/profile_screen_logger.dart';
 import 'package:vayu/features/video/presentation/screens/video_screen.dart';
 import 'package:vayu/features/video/presentation/managers/shared_video_controller_pool.dart';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:cached_network_image/cached_network_image.dart'; // Needed for the new method
 
@@ -474,8 +474,8 @@ class ProfileVideosWidget extends StatelessWidget {
                       itemBuilder: (context, index) {
                         // **FIX: Handle both Map (from backend) and VideoModel types**
                         final episodeData = video.episodes![index];
-                        final String episodeId = episodeData is Map ? (episodeData['_id'] ?? episodeData['id']) : (episodeData as VideoModel).id;
-                        final String thumbnailUrl = episodeData is Map ? (episodeData['thumbnailUrl'] ?? video.thumbnailUrl) : (episodeData as VideoModel).thumbnailUrl;
+                        final String episodeId = (episodeData['_id'] ?? episodeData['id']);
+                        final String thumbnailUrl = (episodeData['thumbnailUrl'] ?? video.thumbnailUrl);
                         final String sequenceNumber = (index + 1).toString();
 
                         return GestureDetector(

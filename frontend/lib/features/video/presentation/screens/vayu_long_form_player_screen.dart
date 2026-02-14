@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/features/video/presentation/managers/main_controller.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'dart:async';
@@ -50,7 +50,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
   bool _showControls = true;
   bool _showScrubbingOverlay = false;
   bool _showPlayPauseAnimation = false;
-  bool _isAnimatingForward = true;
+  final bool _isAnimatingForward = true;
   Duration _scrubbingTargetTime = Duration.zero;
   Duration _scrubbingDelta = Duration.zero;
   double _horizontalDragTotal = 0.0;
@@ -59,7 +59,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
   Timer? _hideControlsTimer;
 
   // Gesture state (MX Player style)
-  double _verticalDragTotal = 0.0;
+  final double _verticalDragTotal = 0.0;
   bool _showBrightnessOverlay = false;
   bool _showVolumeOverlay = false;
   double _brightnessValue = 0.5;
@@ -492,7 +492,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
 
   Future<void> _savePlaybackPosition() async {
     if (_videoPlayerController.value.isInitialized) {
-      if (_prefs == null) _prefs = await SharedPreferences.getInstance();
+      _prefs ??= await SharedPreferences.getInstance();
       final key = 'video_pos_${_currentVideo.id}';
       await _prefs!.setInt(key, _videoPlayerController.value.position.inSeconds);
       AppLogger.log('💾 VayuLongFormPlayer: Saved position ${_videoPlayerController.value.position.inSeconds}s for video ${_currentVideo.id}');
@@ -500,7 +500,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
   }
 
   Future<void> _resumePlayback() async {
-    if (_prefs == null) _prefs = await SharedPreferences.getInstance();
+    _prefs ??= await SharedPreferences.getInstance();
     final key = 'video_pos_${_currentVideo.id}';
     final savedSeconds = _prefs!.getInt(key);
     
@@ -828,7 +828,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
             Center(
               child: Container(
                 padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: Colors.black26,
                   shape: BoxShape.circle,
                 ),

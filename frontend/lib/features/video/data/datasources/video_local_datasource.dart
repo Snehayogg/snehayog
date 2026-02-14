@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 
 class VideoLocalDataSource {

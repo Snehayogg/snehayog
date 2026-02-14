@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 
 class ProfileLocalDataSource {
@@ -122,7 +122,7 @@ class ProfileLocalDataSource {
        final videosList = sanitized['videos'] as List;
        sanitized['videos'] = videosList.map((v) {
          if (v is Map) {
-           final video = Map<String, dynamic>.from(v as Map);
+           final video = Map<String, dynamic>.from(v);
            video['earnings'] = 0.0;
            if (video['uploader'] is Map) {
              final uploader = Map<String, dynamic>.from(video['uploader'] as Map);

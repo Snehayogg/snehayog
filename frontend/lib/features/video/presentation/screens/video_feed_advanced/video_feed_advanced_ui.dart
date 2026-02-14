@@ -921,63 +921,11 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
   // void _debugAspectRatio(VideoPlayerController controller) { ... }
 
   Widget _buildVideoThumbnail(VideoModel video) {
-    final index = _videos.indexOf(video);
-    final aspectRatio = video.aspectRatio > 0 ? video.aspectRatio : 9 / 16;
-
-    return RepaintBoundary(
-      child: Container(
-        width: double.infinity,
-        height: double.infinity,
-        color: Colors.black,
-        child: ValueListenableBuilder<bool>(
-          valueListenable:
-              _firstFrameReady[index] ?? ValueNotifier<bool>(false),
-          builder: (context, ready, _) {
-            final child = video.videoType == 'local_gallery' && video.thumbnailUrl.isNotEmpty
-                ? AspectRatio(
-                    aspectRatio: aspectRatio,
-                    child: Image.file(
-                      File(video.thumbnailUrl),
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => _buildFallbackThumbnail(),
-                    ),
-                  )
-                : video.thumbnailUrl.isNotEmpty
-                    ? AspectRatio(
-                        aspectRatio: aspectRatio,
-                        child: CachedNetworkImage(
-                          imageUrl: video.thumbnailUrl,
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => _buildFallbackThumbnail(),
-                          errorWidget: (context, url, error) =>
-                              _buildFallbackThumbnail(),
-                        ),
-                      )
-                    : _buildFallbackThumbnail();
-
-            // **NEW: Premium pulsing effect during priming**
-            if (!ready && index == _currentIndex) {
-              return TweenAnimationBuilder<double>(
-                tween: Tween<double>(begin: 0.7, end: 1.0),
-                duration: const Duration(milliseconds: 1000),
-                builder: (context, value, child) {
-                  return Opacity(
-                    opacity: value,
-                    child: child,
-                  );
-                },
-                onEnd: () {
-
-                },
-                child: child,
-              );
-              // Note: for a true looping animation we'd need an AnimationController,
-              // but since this is inside a builder, a simple subtle pulse is fine.
-            }
-            return child;
-          },
-        ),
-      ),
+    // TEMPORARY: Disabled thumbnail to test direct video loading
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: Colors.black,
     );
   }
 

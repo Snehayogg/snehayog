@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
 import 'package:vayu/shared/services/auto_scroll_settings.dart';
+import 'package:vayu/features/profile/presentation/widgets/profile_dialogs_widget.dart';
 
 import 'package:vayu/features/profile/presentation/screens/creator_payment_setup_screen.dart';
 
@@ -181,6 +182,17 @@ class ProfileMenuWidget extends StatelessWidget {
                       'onTap': () {
                         Navigator.pop(context);
                         onShowFAQ?.call();
+                      },
+                    });
+
+                    // Legal & About
+                    menuItems.add({
+                      'title': 'Legal & About',
+                      'icon': Icons.gavel,
+                      'color': Colors.blueGrey,
+                      'onTap': () {
+                        Navigator.pop(context);
+                        ProfileDialogsWidget.showLegalBottomSheet(context);
                       },
                     });
 

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:video_player/video_player.dart';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/features/video/presentation/screens/video_feed_advanced/widgets/video_aspect_surface.dart';
 
 class VideoPage extends StatelessWidget {
@@ -54,25 +53,11 @@ class VideoPage extends StatelessWidget {
   }
 
   Widget _buildVideoThumbnail(VideoModel video) {
-    return RepaintBoundary(
-      child: Container(
-        width: double.infinity,
-        height: double.infinity,
-        color: Colors.black,
-        child: video.thumbnailUrl.isNotEmpty
-            ? Center(
-                child: CachedNetworkImage(
-                  imageUrl: video.thumbnailUrl,
-                  fit: BoxFit.contain,
-                  placeholder: (context, url) => _buildFallbackThumbnail(),
-                  errorWidget: (context, url, error) =>
-                      _buildFallbackThumbnail(),
-                  memCacheWidth: 854,
-                  memCacheHeight: 480,
-                ),
-              )
-            : _buildFallbackThumbnail(),
-      ),
+    // TEMPORARY: Disabled thumbnail to test direct video loading
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: Colors.black,
     );
   }
 

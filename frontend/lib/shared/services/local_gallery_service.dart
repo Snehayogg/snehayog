@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:photo_manager/photo_manager.dart';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 
 /// **LocalGalleryService: Manages retrieval of videos from the device's gallery**
@@ -69,7 +69,7 @@ class LocalGalleryService {
       final File? file = await asset.file;
       if (file == null) return null;
 
-      final String thumbnailUrl = '';
+      const String thumbnailUrl = '';
 
       // We use the file path as the video URL for local playback
       final String filePath = file.path;

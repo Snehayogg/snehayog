@@ -45,8 +45,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
               ? currentVideo.hlsMasterPlaylistUrl!
               : currentVideo.videoUrl);
       
-      // Prefetch initial 250KB chunk for instant playback (approx 5s at 400kbps)
-      videoCacheProxy.prefetchInitialChunk(currentUrl, kilobytes: 250).catchError((_){});
+      // Prefetch initial 150KB chunk for instant playback (approx 5s at 400kbps)
+      videoCacheProxy.prefetchInitialChunk(currentUrl, kilobytes: 150).catchError((_){});
     }
     
     // Still preload controller normally (initializes player)
@@ -65,7 +65,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         keepEnd = _currentIndex + 1;
         
         // Priority 1: Current (handled above with 500KB chunk)
-        // Priority 2: Next Video (n+1) - Smaller chunk (300KB)
+        // Priority 2: Next Video (n+1) - Delay if we were just scrolling fast
         if (_currentIndex + 1 < _videos.length) {
             final nextVideo = _videos[_currentIndex + 1];
             final nextUrl = nextVideo.hlsPlaylistUrl?.isNotEmpty == true
@@ -74,11 +74,21 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
                     ? nextVideo.hlsMasterPlaylistUrl!
                     : nextVideo.videoUrl);
             
-            // Prefetch smaller chunk for next video (lower priority - just header/1st frame)
-            videoCacheProxy.prefetchInitialChunk(nextUrl, kilobytes: 100).catchError((_){});
-            
-            // Preload controller for next video
-            _preloadVideo(_currentIndex + 1);
+            // **SMART DELAY**: If user was scrolling fast, wait 1.5 seconds 
+            // before preloading the next video to give full bandwidth to the current one.
+            if (_wasLastScrollFast) {
+              _preloadDebounceTimers[nextVideo.id]?.cancel();
+              _preloadDebounceTimers[nextVideo.id] = Timer(const Duration(milliseconds: 1500), () {
+                if (mounted && _currentIndex == keepStart) {
+                  videoCacheProxy.prefetchInitialChunk(nextUrl, kilobytes: 50).catchError((_){});
+                  _preloadVideo(_currentIndex + 1);
+                }
+              });
+            } else {
+              // Standard preloading for slow scroll
+              videoCacheProxy.prefetchInitialChunk(nextUrl, kilobytes: 50).catchError((_){});
+              _preloadVideo(_currentIndex + 1);
+            }
         }
     } else {
         // SCROLLING UP -> Keep [Current-1, Current]
@@ -86,7 +96,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         keepEnd = _currentIndex;
         
         // Priority 1: Current (handled above with 500KB chunk)
-        // Priority 2: Prev Video (n-1) - Smaller chunk (300KB)
+        // Priority 2: Prev Video (n-1) - Delay if we were just scrolling fast
         if (_currentIndex - 1 >= 0) {
             final prevVideo = _videos[_currentIndex - 1];
             final prevUrl = prevVideo.hlsPlaylistUrl?.isNotEmpty == true
@@ -95,11 +105,18 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
                     ? prevVideo.hlsMasterPlaylistUrl!
                     : prevVideo.videoUrl);
             
-            // Prefetch smaller chunk for previous video
-            videoCacheProxy.prefetchInitialChunk(prevUrl, kilobytes: 100).catchError((_){});
-            
-            // Preload controller for previous video
-            _preloadVideo(_currentIndex - 1);
+            if (_wasLastScrollFast) {
+              _preloadDebounceTimers[prevVideo.id]?.cancel();
+              _preloadDebounceTimers[prevVideo.id] = Timer(const Duration(milliseconds: 1500), () {
+                if (mounted && _currentIndex == keepEnd) {
+                  videoCacheProxy.prefetchInitialChunk(prevUrl, kilobytes: 50).catchError((_){});
+                  _preloadVideo(_currentIndex - 1);
+                }
+              });
+            } else {
+              videoCacheProxy.prefetchInitialChunk(prevUrl, kilobytes: 50).catchError((_){});
+              _preloadVideo(_currentIndex - 1);
+            }
         }
     }
 

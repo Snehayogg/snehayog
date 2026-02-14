@@ -116,7 +116,7 @@ class HLSEncodingService {
       // Calculate bitrate based on original resolution for better quality
       const originalVideoInfo = options.originalVideoInfo;
       let selectedResolution;
-      let targetBitrate = '400k'; // Default bitrate (Updated for 500kbps target)
+      let targetBitrate = '340k'; // Default bitrate (Updated for 400kbps target)
       
       if (originalVideoInfo && originalVideoInfo.width && originalVideoInfo.height) {
         const originalWidth = originalVideoInfo.width;
@@ -128,9 +128,9 @@ class HLSEncodingService {
         } else if (originalHeight > 720) {
           targetBitrate = '1200k'; // 720p-1080p (Reduced)
         } else if (originalHeight > 480) {
-          targetBitrate = '600k'; // 480p-720p (Reduced for efficiency)
+          targetBitrate = '340k'; // 480p-720p (Reduced to fit 400kbps)
         } else {
-          targetBitrate = '400k'; // Below 480p (Targeting ~2MB per minute)
+          targetBitrate = '340k'; // Below 480p
         }
         
         selectedResolution = {
@@ -140,7 +140,7 @@ class HLSEncodingService {
         };
       } else {
         // Fallback to 480p if original info not available
-        targetBitrate = '400k';
+        targetBitrate = '340k';
         selectedResolution = { width: 854, height: 480, bitrate: targetBitrate };
       }
       
@@ -156,7 +156,7 @@ class HLSEncodingService {
             // H.265/HEVC - ~50% smaller files at same quality (ideal for 500kbps)
             '-c:v', 'libx265',
             '-tag:v', 'hvc1',          // hvc1 tag for Safari/Apple compatibility
-            '-preset', 'fast',         // fast = good balance of speed vs compression
+            '-preset', 'medium',       // medium = better compression ratio for low bitrates
             '-crf', selectedQuality.crf.toString(),
             '-maxrate', targetBitrate,
             '-bufsize', `${parseInt(targetBitrate) * 2}k`,

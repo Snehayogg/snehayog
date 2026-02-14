@@ -3,7 +3,7 @@ import 'package:video_player/video_player.dart';
 import 'package:vayu/shared/managers/video_position_cache_manager.dart';
 import 'package:vayu/shared/managers/hot_ui_state_manager.dart';
 import 'package:vayu/shared/factories/video_controller_factory.dart';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/shared/utils/video_disposal_utils.dart';
 import 'dart:collection';
 import 'dart:async';

@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/features/video/presentation/managers/video_controller_manager.dart';
 
 /// Service to optimize video startup and auto-play after app clear

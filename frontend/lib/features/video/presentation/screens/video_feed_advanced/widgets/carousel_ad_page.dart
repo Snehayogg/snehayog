@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/models/carousel_ad_model.dart';
+import 'package:vayu/features/ads/data/carousel_ad_model.dart';
 import 'package:vayu/features/ads/presentation/widgets/carousel_ad_widget.dart';
 
 class CarouselAdPage extends StatelessWidget {

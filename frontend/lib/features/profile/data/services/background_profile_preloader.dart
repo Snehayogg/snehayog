@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:vayu/features/profile/data/services/user_service.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
-import 'package:vayu/shared/models/video_model.dart';
+import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 
 /// **BACKGROUND PROFILE PRELOADER**
@@ -203,7 +203,7 @@ class BackgroundProfilePreloader {
        final videosList = sanitized['videos'] as List;
        sanitized['videos'] = videosList.map((v) {
          if (v is Map) {
-           final video = Map<String, dynamic>.from(v as Map);
+           final video = Map<String, dynamic>.from(v);
            video['earnings'] = 0.0;
            if (video['uploader'] is Map) {
              final uploader = Map<String, dynamic>.from(video['uploader'] as Map);

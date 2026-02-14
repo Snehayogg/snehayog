@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/models/game_model.dart';
+import 'package:vayu/features/games/data/game_model.dart';
 import 'package:vayu/features/games/data/services/game_service.dart';
 import 'package:vayu/features/games/presentation/widgets/game_feed_item.dart';
 import 'package:provider/provider.dart';

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:visibility_detector/visibility_detector.dart';
-import 'package:vayu/shared/models/game_model.dart';
+import 'package:vayu/features/games/data/game_model.dart';
 import 'package:vayu/features/games/presentation/screens/game_player_screen.dart';
 
 class GameFeedItem extends StatefulWidget {

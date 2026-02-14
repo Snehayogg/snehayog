@@ -10,8 +10,8 @@ class VideoPlayerConfigService {
     'standard_480p': VideoQualityPreset(
       name: 'Standard 480p',
       targetResolution: '480p',
-      maxBitrate: 800000,
-      bufferSize: 1, // seconds
+      maxBitrate: 400000,
+      bufferSize: 3, // seconds
       preloadDistance: 3,
       compressionLevel: 0.8,
     ),

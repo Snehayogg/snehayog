@@ -2,8 +2,8 @@ import 'dart:convert';
 
 import 'package:vayu/shared/services/http_client_service.dart';
 import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/shared/models/video_model.dart';
-import 'package:vayu/shared/models/usermodel.dart';
+import 'package:vayu/features/video/video_model.dart';
+import 'package:vayu/features/auth/data/usermodel.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 
 /// Simple search service to search videos and creators.
