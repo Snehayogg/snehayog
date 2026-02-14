@@ -33,12 +33,15 @@ class ProfileStateManager extends ChangeNotifier {
 
   // Set context when needed
   void setContext(BuildContext context) {
+    if (_context == context) return;
     _context = context;
   }
 
+
   // State variables
   List<VideoModel> _userVideos = [];
-  bool _isLoading = true;
+  bool _isLoading = false;
+  bool _isPhotoLoading = false;
   String? _error;
   Map<String, dynamic>? _userData;
   bool _isEditing = false;
@@ -82,6 +85,7 @@ class ProfileStateManager extends ChangeNotifier {
   Set<String> get selectedVideoIds => _selectedVideoIds;
   bool get hasSelectedVideos => _selectedVideoIds.isNotEmpty;
   bool get isVideosLoading => _isVideosLoading;
+  bool get isPhotoLoading => _isPhotoLoading;
   double get cachedEarnings => _cachedEarnings;
   bool get isEarningsLoading => _isEarningsLoading;
   int get totalVideoCount => _totalVideoCount;
@@ -771,16 +775,21 @@ class ProfileStateManager extends ChangeNotifier {
   Future<void> saveProfile() async {
     if (_userData != null && nameController.text.isNotEmpty) {
       try {
+        _isLoading = true;
+        notifyListeners();
+
         final newName = nameController.text.trim();
         await _saveProfileData(newName, _userData!['profilePic']);
 
         _userData!['name'] = newName;
         _isEditing = false;
+        _isLoading = false;
         notifyListeners();
 
         nameController.clear();
         notifyListeners();
       } catch (e) {
+        _isLoading = false;
         _error = 'Failed to save profile: ${e.toString()}';
         notifyListeners();
       }
@@ -790,8 +799,8 @@ class ProfileStateManager extends ChangeNotifier {
   Future<void> updateProfilePhoto(String? profilePicPath) async {
     if (_userData != null && profilePicPath != null) {
       try {
-        AppLogger.log(
-            '📸 ProfileStateManager: Starting profile photo upload...');
+        _isPhotoLoading = true;
+        notifyListeners();
 
         // Check if it's already a URL (http/https)
         if (profilePicPath.startsWith('http')) {
@@ -800,6 +809,7 @@ class ProfileStateManager extends ChangeNotifier {
               '✅ ProfileStateManager: Photo is already a URL, saving directly');
           await _saveProfileData(_userData!['name'], profilePicPath);
           _userData!['profilePic'] = profilePicPath;
+          _isPhotoLoading = false;
           notifyListeners();
           return;
         }
@@ -819,12 +829,15 @@ class ProfileStateManager extends ChangeNotifier {
         // Now save the URL to backend
         await _saveProfileData(_userData!['name'], uploadedUrl);
         _userData!['profilePic'] = uploadedUrl;
+        _isPhotoLoading = false;
         notifyListeners();
         AppLogger.log(
             '✅ ProfileStateManager: Profile photo updated successfully');
       } catch (e) {
+        _isPhotoLoading = false;
         AppLogger.log(
             '❌ ProfileStateManager: Error uploading profile photo: $e');
+        notifyListeners();
         rethrow;
       }
     }
@@ -1535,6 +1548,8 @@ class ProfileStateManager extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true; // Mark as disposed for background tasks
+    
+    
     nameController.dispose();
     super.dispose();
   }

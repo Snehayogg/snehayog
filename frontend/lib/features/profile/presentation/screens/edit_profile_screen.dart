@@ -117,8 +117,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,
+          surfaceTintColor: Colors.transparent,
+          centerTitle: true,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.black),
+            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black87, size: 20),
             onPressed: () {
               widget.stateManager.cancelEditing();
               Navigator.pop(context);
@@ -127,8 +129,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           title: const Text(
             'Edit Profile',
             style: TextStyle(
-              color: Colors.black,
-              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+              fontWeight: FontWeight.w700,
+              fontSize: 18,
+              letterSpacing: -0.5,
             ),
           ),
           actions: [
@@ -136,21 +140,35 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               builder: (context, manager, child) {
                 if (manager.isLoading) {
                   return const Center(
-                      child: Padding(
-                    padding: EdgeInsets.only(right: 16.0),
-                    child: SizedBox(
+                    child: Padding(
+                      padding: EdgeInsets.only(right: 16.0),
+                      child: SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2)),
-                  ));
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
+                        ),
+                      ),
+                    ),
+                  );
                 }
-                return TextButton(
-                  onPressed: _handleSave,
-                  child: const Text('Save',
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: TextButton(
+                    onPressed: _handleSave,
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.green,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    ),
+                    child: const Text(
+                      'Save',
                       style: TextStyle(
-                          color: Colors.blue,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16)),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
                 );
               },
             )
@@ -184,32 +202,81 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               }
                             }
 
-                            return CircleAvatar(
-                              radius: 60,
-                              backgroundColor: Colors.grey[200],
-                              backgroundImage: imageProvider,
-                              child: imageProvider == null
-                                  ? const Icon(Icons.person,
-                                      size: 60, color: Colors.grey)
-                                  : null,
+                            return Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.grey[200]!, width: 4),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.05),
+                                    blurRadius: 10,
+                                    spreadRadius: 2,
+                                  ),
+                                ],
+                              ),
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  CircleAvatar(
+                                    radius: 70,
+                                    backgroundColor: Colors.grey[100],
+                                    backgroundImage: imageProvider,
+                                    child: imageProvider == null
+                                        ? Opacity(
+                                            opacity: 0.5,
+                                            child: Image.asset(
+                                              'assets/images/placeholder_profile.png',
+                                              width: 140,
+                                              height: 140,
+                                              errorBuilder: (context, error, stackTrace) =>
+                                                  const Icon(Icons.person, size: 70, color: Colors.grey),
+                                            ),
+                                          )
+                                        : null,
+                                  ),
+                                  if (manager.isPhotoLoading)
+                                    Container(
+                                      width: 140,
+                                      height: 140,
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withOpacity(0.3),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Center(
+                                        child: CircularProgressIndicator(
+                                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                          strokeWidth: 3,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
                             );
                           },
                         ),
                         Positioned(
-                          bottom: 0,
-                          right: 0,
+                          bottom: 5,
+                          right: 5,
                           child: GestureDetector(
                             onTap: _pickImage,
                             child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: const BoxDecoration(
-                                color: Colors.blue,
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.green,
                                 shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 3),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.1),
+                                    blurRadius: 5,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
                               ),
                               child: const Icon(
-                                Icons.camera_alt,
+                                Icons.camera_alt_rounded,
                                 color: Colors.white,
-                                size: 20,
+                                size: 22,
                               ),
                             ),
                           ),
@@ -217,22 +284,66 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 48),
                   Consumer<ProfileStateManager>(
                     builder: (context, manager, _) {
-                      return TextFormField(
-                        controller: manager.nameController,
-                        decoration: const InputDecoration(
-                          labelText: 'Name',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.person_outline),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Please enter your name';
-                          }
-                          return null;
-                        },
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(left: 4.0, bottom: 8.0),
+                            child: Text(
+                              'Display Name',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey[600],
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ),
+                          TextFormField(
+                            controller: manager.nameController,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.black87,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: 'Enter your name',
+                              hintStyle: TextStyle(color: Colors.grey[400]),
+                              prefixIcon: Icon(Icons.person_rounded, color: Colors.green.withOpacity(0.7)),
+                              filled: true,
+                              fillColor: Colors.grey[50],
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                borderSide: BorderSide(color: Colors.grey[200]!),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                borderSide: const BorderSide(color: Colors.green, width: 1.5),
+                              ),
+                              errorBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                borderSide: const BorderSide(color: Colors.redAccent, width: 1),
+                              ),
+                              focusedErrorBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                borderSide: const BorderSide(color: Colors.redAccent, width: 1.5),
+                              ),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Please enter your name';
+                              }
+                              if (value.trim().length < 2) {
+                                return 'Name is too short';
+                              }
+                              return null;
+                            },
+                          ),
+                        ],
                       );
                     },
                   ),

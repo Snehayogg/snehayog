@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:vayu/features/video/presentation/managers/shared_video_controller_pool.dart';
 import 'package:vayu/features/video/presentation/managers/video_controller_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-// Removed: import 'package:vayu/shared/managers/video_manager.dart';
 
 class MainController extends ChangeNotifier {
   int _currentIndex = 0;
@@ -333,4 +332,5 @@ class MainController extends ChangeNotifier {
   Future<void> saveCurrentTabIndex() async {
     await _saveCurrentTabIndex();
   }
+
 }
