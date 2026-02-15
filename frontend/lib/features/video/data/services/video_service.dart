@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:math';
+import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:async';
@@ -583,9 +585,8 @@ class VideoService {
     CancelToken? cancelToken,
   ]) async {
     try {
-      AppLogger.log('🚀 VideoService: Starting video upload...');
+      AppLogger.log('?? VideoService: Starting video upload...');
 
-      // **Check server health**
       final isHealthy = await checkServerHealth();
       if (!isHealthy) {
         throw Exception(
@@ -593,16 +594,13 @@ class VideoService {
         );
       }
 
-      // **Check file size**
       final fileSize = await videoFile.length();
       if (fileSize > maxFileSize) {
         throw Exception('File too large. Maximum size is 100MB');
       }
 
-      // **Check if video is too long**
       final isLong = await isLongVideo(videoFile.path);
 
-      // **Get authentication**
       final userData = await _authService.getUserData();
       if (userData == null) {
         throw Exception(
@@ -610,11 +608,9 @@ class VideoService {
         );
       }
 
-      // **Compress video if needed**
-      File? finalVideoFile = videoFile;
+      File finalVideoFile = videoFile;
       if (fileSize > 15 * 1024 * 1024) {
-        // Compress if > 15MB (Highly recommended for 400kbps speed)
-        AppLogger.log('🔄 VideoService: Compressing video for better upload speed (>15MB)...');
+        AppLogger.log('?? VideoService: Compressing video for better upload speed (>15MB)...');
         final compressedFile = await compressVideo(videoFile);
         if (compressedFile != null) {
           finalVideoFile = compressedFile;
@@ -622,88 +618,258 @@ class VideoService {
       }
 
       final resolvedBaseUrl = await getBaseUrlWithFallback();
-      final url = '$resolvedBaseUrl/api/upload/video';
-
       final Map<String, dynamic> fields = {
         'videoName': title,
-        'videoType': 'yog', // Default
+        'videoType': 'yog',
       };
+
+      if (description != null && description.isNotEmpty) {
+        fields['description'] = description;
+      }
 
       if (link != null && link.isNotEmpty) {
         fields['link'] = link;
       }
 
       try {
-        // Using Zone to retrieve optional metadata injected by caller
         final dynamic metadata = Zone.current['upload_metadata'];
         if (metadata is Map<String, dynamic>) {
           if (metadata['category'] != null) fields['category'] = metadata['category'];
           if (metadata['tags'] != null) fields['tags'] = json.encode(metadata['tags']);
           if (metadata['videoType'] != null) fields['videoType'] = metadata['videoType'];
           if (metadata['seriesId'] != null) fields['seriesId'] = metadata['seriesId'];
-          if (metadata['episodeNumber'] != null) fields['episodeNumber'] = metadata['episodeNumber'].toString();
+          if (metadata['episodeNumber'] != null) {
+            fields['episodeNumber'] = metadata['episodeNumber'].toString();
+          }
         }
       } catch (_) {}
 
-      final files = [
-        MapEntry(
-          'video',
-          await MultipartFile.fromFile(
-            finalVideoFile.path,
-            filename: finalVideoFile.path.split('/').last,
-            contentType: MediaType('video', 'mp4'),
-          ),
-        ),
-      ];
+      Map<String, dynamic> responseData;
+      try {
+        responseData = await _uploadVideoResumable(
+          baseUrl: resolvedBaseUrl,
+          videoFile: finalVideoFile,
+          fields: fields,
+          onProgress: onProgress,
+          cancelToken: cancelToken,
+        );
+      } catch (resumableError) {
+        if (resumableError is DioException &&
+            resumableError.type == DioExceptionType.cancel) {
+          rethrow;
+        }
 
-      final dioResponse = await httpClientService.postMultipart(
-        url,
-        fields: fields,
-        files: files,
+        AppLogger.log(
+            '?? VideoService: Resumable upload failed, falling back to legacy multipart upload: $resumableError');
+
+        responseData = await _uploadVideoLegacyMultipart(
+          baseUrl: resolvedBaseUrl,
+          videoFile: finalVideoFile,
+          fields: fields,
+          onProgress: onProgress,
+          cancelToken: cancelToken,
+        );
+      }
+
+      return _mapUploadResponse(responseData, title, userData, isLong);
+    } catch (e) {
+      if (e is DioException && e.type == DioExceptionType.cancel) {
+        AppLogger.log('?? VideoService: Upload cancelled by user');
+        rethrow;
+      }
+      AppLogger.log('? VideoService: Error uploading video: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> _uploadVideoLegacyMultipart({
+    required String baseUrl,
+    required File videoFile,
+    required Map<String, dynamic> fields,
+    Function(double)? onProgress,
+    CancelToken? cancelToken,
+  }) async {
+    final files = [
+      MapEntry(
+        'video',
+        await MultipartFile.fromFile(
+          videoFile.path,
+          filename: videoFile.path.split('/').last,
+          contentType: MediaType('video', 'mp4'),
+        ),
+      ),
+    ];
+
+    final dioResponse = await httpClientService.postMultipart(
+      '$baseUrl/api/upload/video',
+      fields: fields,
+      files: files,
+      cancelToken: cancelToken,
+      onSendProgress: (sent, total) {
+        if (onProgress != null && total > 0) {
+          onProgress(sent / total);
+        }
+      },
+    );
+
+    final responseData = dioResponse.data;
+    if (responseData == null) {
+      throw Exception('Empty response from server');
+    }
+
+    if (dioResponse.statusCode != 201) {
+      throw Exception(responseData['error'] ?? 'Failed to upload video');
+    }
+
+    return Map<String, dynamic>.from(responseData as Map);
+  }
+
+  Future<Map<String, dynamic>> _uploadVideoResumable({
+    required String baseUrl,
+    required File videoFile,
+    required Map<String, dynamic> fields,
+    Function(double)? onProgress,
+    CancelToken? cancelToken,
+  }) async {
+    const int chunkSize = 5 * 1024 * 1024;
+    final int totalSize = await videoFile.length();
+    final int totalChunks = (totalSize / chunkSize).ceil();
+    final String fileName = videoFile.path.replaceAll('\\', '/').split('/').last;
+    final DateTime modifiedAt = await videoFile.lastModified();
+    final String fileFingerprint = base64Url.encode(
+      utf8.encode('$fileName|$totalSize|${modifiedAt.millisecondsSinceEpoch}'),
+    );
+
+    final initRes = await httpClientService.post(
+      Uri.parse('$baseUrl/api/upload/video/resumable/init'),
+      body: {
+        'fileName': fileName,
+        'fileSize': totalSize,
+        'chunkSize': chunkSize,
+        'totalChunks': totalChunks,
+        'fileFingerprint': fileFingerprint,
+        ...fields,
+      },
+    );
+
+    if (initRes.statusCode != 200) {
+      throw Exception(
+          'Resumable init failed (${initRes.statusCode}): ${initRes.body}');
+    }
+
+    final initData = json.decode(initRes.body) as Map<String, dynamic>;
+    final String? sessionId = initData['sessionId']?.toString();
+    if (sessionId == null || sessionId.isEmpty) {
+      throw Exception('Resumable init returned empty sessionId');
+    }
+
+    final Set<int> uploadedChunkIndexes =
+        ((initData['uploadedChunks'] as List?) ?? const <dynamic>[])
+            .map((value) => int.tryParse(value.toString()))
+            .whereType<int>()
+            .toSet();
+
+    int uploadedBytes = 0;
+    for (final chunkIndex in uploadedChunkIndexes) {
+      final int start = chunkIndex * chunkSize;
+      final int end = min(start + chunkSize, totalSize);
+      if (start < end) {
+        uploadedBytes += (end - start);
+      }
+    }
+
+    if (onProgress != null && totalSize > 0) {
+      onProgress(uploadedBytes / totalSize);
+    }
+
+    for (int chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+      if (uploadedChunkIndexes.contains(chunkIndex)) {
+        continue;
+      }
+
+      final int start = chunkIndex * chunkSize;
+      final int end = min(start + chunkSize, totalSize);
+
+      final bytesBuilder = BytesBuilder(copy: false);
+      await for (final data in videoFile.openRead(start, end)) {
+        bytesBuilder.add(data);
+      }
+
+      final chunkResponse = await httpClientService.postMultipart(
+        '$baseUrl/api/upload/video/resumable/$sessionId/chunk',
+        fields: {
+          'chunkIndex': chunkIndex,
+        },
+        files: [
+          MapEntry(
+            'chunk',
+            MultipartFile.fromBytes(
+              bytesBuilder.takeBytes(),
+              filename: '$fileName.$chunkIndex.part',
+              contentType: MediaType('application', 'octet-stream'),
+            ),
+          ),
+        ],
         cancelToken: cancelToken,
         onSendProgress: (sent, total) {
-          if (onProgress != null && total > 0) {
-            onProgress(sent / total);
+          if (onProgress != null && totalSize > 0 && total > 0) {
+            final currentOverallBytes = uploadedBytes + sent;
+            onProgress(currentOverallBytes / totalSize);
           }
         },
       );
 
-      final responseData = dioResponse.data;
-      if (responseData == null) {
-        throw Exception('Empty response from server');
+      if (chunkResponse.statusCode != 200) {
+        throw Exception(
+            'Chunk upload failed at index $chunkIndex (${chunkResponse.statusCode})');
       }
 
-      if (dioResponse.statusCode == 201) {
-        final videoData = responseData['video'];
-        if (videoData == null) {
-          throw Exception('Invalid response: Video data is missing');
-        }
-
-        return {
-          'id': videoData['_id'] ?? videoData['id'] ?? '',
-          'title': videoData['videoName'] ?? title,
-          'videoUrl': videoData['videoUrl'] ?? videoData['hlsPlaylistUrl'] ?? '',
-          'thumbnail': videoData['thumbnailUrl'] ?? '',
-          'originalVideoUrl': videoData['originalVideoUrl'] ?? '',
-          'duration': '0:00',
-          'views': 0,
-          'uploader': userData['name'] ?? 'Unknown',
-          'uploadTime': 'Just now',
-          'isLongVideo': isLong,
-          'link': videoData['link'] ?? '',
-          'processingStatus': videoData['processingStatus'] ?? 'pending',
-        };
-      } else {
-        throw Exception(responseData['error'] ?? 'Failed to upload video');
+      uploadedBytes += (end - start);
+      if (onProgress != null && totalSize > 0) {
+        onProgress(uploadedBytes / totalSize);
       }
-    } catch (e) {
-      if (e is DioException && e.type == DioExceptionType.cancel) {
-        AppLogger.log('🚫 VideoService: Upload cancelled by user');
-        rethrow;
-      }
-      AppLogger.log('❌ VideoService: Error uploading video: $e');
-      rethrow;
     }
+
+    final completeRes = await httpClientService.post(
+      Uri.parse('$baseUrl/api/upload/video/resumable/$sessionId/complete'),
+      body: {},
+    );
+
+    if (completeRes.statusCode != 201) {
+      throw Exception(
+          'Resumable complete failed (${completeRes.statusCode}): ${completeRes.body}');
+    }
+
+    return Map<String, dynamic>.from(
+      json.decode(completeRes.body) as Map<String, dynamic>,
+    );
+  }
+
+  Map<String, dynamic> _mapUploadResponse(
+    Map<String, dynamic> responseData,
+    String title,
+    Map<String, dynamic> userData,
+    bool isLong,
+  ) {
+    final videoData = responseData['video'];
+    if (videoData == null) {
+      throw Exception('Invalid response: Video data is missing');
+    }
+
+    return {
+      'id': videoData['_id'] ?? videoData['id'] ?? '',
+      'title': videoData['videoName'] ?? title,
+      'videoUrl': videoData['videoUrl'] ?? videoData['hlsPlaylistUrl'] ?? '',
+      'thumbnail': videoData['thumbnailUrl'] ?? '',
+      'originalVideoUrl': videoData['originalVideoUrl'] ?? '',
+      'duration': '0:00',
+      'views': 0,
+      'uploader': userData['name'] ?? 'Unknown',
+      'uploadTime': 'Just now',
+      'isLongVideo': isLong,
+      'link': videoData['link'] ?? '',
+      'processingStatus': videoData['processingStatus'] ?? 'pending',
+    };
   }
 
   /// **Delete video**
@@ -1134,3 +1300,6 @@ class VideoService {
     };
   }
 }
+
+
+

@@ -491,61 +491,16 @@ class AuthService {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       String? token = prefs.getString('jwt_token');
 
-      // Check if it's a fallback session
-      String? fallbackUser = prefs.getString('fallback_user');
-      if (fallbackUser != null) {
-        AppLogger.log('🔄 User has fallback session');
-        // Verify in background (non-blocking)
-        unawaited(_verifyTokenInBackground(token));
-        return true;
-      }
-
-      // If no token, try auto-login with device ID (for persistent login after reinstall)
-      if (token == null || token.isEmpty) {
-        AppLogger.log(
-            'ℹ️ No JWT token found, attempting auto-login with device ID...');
-
-        // **IMPROVED: Wait for auto-login if device ID is recognized (for seamless reinstall experience)**
-        try {
-          final platformIdService = PlatformIdService();
-          final platformId = await platformIdService.getPlatformId();
-
-          // Check if platform ID is valid (platform ID is always available)
-          if (platformId.isNotEmpty && !platformId.startsWith('fallback_')) {
-            AppLogger.log('✅ Platform ID available - attempting auto-login...');
-            // Try auto-login with platform ID (with timeout)
-            final autoLoginResult = await autoLoginWithPlatformId()
-                .timeout(const Duration(seconds: 10), onTimeout: () {
-              AppLogger.log('⚠️ Auto-login timed out');
-              return null;
-            });
-
-            if (autoLoginResult != null) {
-              AppLogger.log('✅ Auto-login successful - user session restored');
-              return true; // User is now logged in
-            } else {
-              AppLogger.log(
-                  'ℹ️ Auto-login failed or cancelled - user needs to login manually');
-              return false;
-            }
-          } else {
-            AppLogger.log('ℹ️ Invalid device ID - first time login required');
-            return false;
-          }
-        } catch (e) {
-          AppLogger.log('⚠️ Error during auto-login check: $e');
-          // Fallback: try auto-login in background (non-blocking)
-          unawaited(autoLoginWithPlatformId().then((userData) {
-            if (userData != null) {
-              AppLogger.log('✅ Auto-login successful in background');
-            }
-          }));
-          return false;
-        }
+      // **FIXED: Perform a synchronous validation check before returning true**
+      // This prevents the "Optimistic Flicker" where the UI shows the profile
+      // for a split second before the background verification kicks in.
+      if (!isTokenValid(token)) {
+        AppLogger.log('⚠️ Token found but is invalid/expired - requiring fresh login');
+        return false;
       }
 
       // **OPTIMIZED: Return cached status immediately, verify in background**
-      AppLogger.log('✅ Using cached token status (optimistic)');
+      AppLogger.log('✅ Token exists and is locally valid - proceeding optimistically');
       // Verify token in background (non-blocking)
       unawaited(_verifyTokenInBackground(token));
       return true; // Optimistic return - assume valid if token exists
@@ -618,47 +573,40 @@ class AuthService {
     try {
       AppLogger.log('🚪 Signing out user...');
 
-      // **FIXED: Sign out from Google first**
+      // **FIXED: Clear memory cache immediately to prevent account switch collisions**
+      _cachedProfile = null;
+      _lastProfileFetch = null;
+      _pendingProfileRequest = null;
+
+      // **OPTIMIZED: Clear Google session faster**
+      // signOut() is sufficient for switching. disconnect() is slow as it revokes all app permissions.
       await _googleSignIn.signOut();
-      // Also revoke granted permissions so the next sign-in prompts account chooser
-      try {
-        await _googleSignIn.disconnect();
-      } catch (e) {
-        AppLogger.log('ℹ️ Google disconnect failed (non-fatal): $e');
-      }
 
-      // **FIXED: Clear ALL stored authentication data**
+      // **OPTIMIZED: Batch clear SharedPreferences**
       SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.remove('jwt_token');
-      await prefs.remove('refresh_token'); // **NEW: Clear refresh token**
-      await prefs.remove('fallback_user');
-      await prefs.remove('auth_skip_login');
-      await prefs.remove('user_profile');
-      await prefs.remove('user_videos');
-      await prefs.remove('last_user_id');
+      
+      // Step 1: Identify all keys to preserve (whitelist)
+      final allKeys = prefs.getKeys();
+      final List<String> whitelist = [
+        'is_first_launch',
+        'theme_mode',
+        'platform_id', // Preserving platform ID allows seamless auto-login/guest sessions
+        'payment_setup_completed', // Preserving shared device state
+        'upi_guide_shown',
+      ];
 
-      // **NEW: Clear device ID on logout (optional - remove if you want device ID to persist)**
-      // Note: Keeping device ID allows user to skip login after reinstall
-      // await DeviceIdService().clearDeviceId();
-
-      // **FIXED: Clear all SharedPreferences keys related to user data**
-      final keys = prefs.getKeys();
-      for (String key in keys) {
-        if (key.startsWith('user_') ||
-            key.startsWith('video_') ||
-            key.startsWith('profile_') ||
-            key.startsWith('profile_cache_') ||
-            key.startsWith('profile_cache_timestamp_') ||
-            key.startsWith('auth_')) {
-          await prefs.remove(key);
-          AppLogger.log('🗑️ Cleared cached data: $key');
+      // Step 2: Clear all other keys in a single loop (more efficient than individual removes)
+      int clearedCount = 0;
+      for (String key in allKeys) {
+        if (!whitelist.contains(key)) {
+          // We don't await each remove to speed up the loop, just fire them off
+          // SharedPreferences is thread-safe for calls anyway.
+          unawaited(prefs.remove(key));
+          clearedCount++;
         }
       }
 
-      // Explicit flags
-      // NOTE: Do not remove payment setup flags so user payment profile persists across sessions
-
-      AppLogger.log('✅ Sign out successful - All user data cleared');
+      AppLogger.log('✅ Sign out successful - Cleared $clearedCount keys (Whitelisted: ${whitelist.length})');
     } catch (e) {
       AppLogger.log('❌ Error during sign out: $e');
       throw Exception('Sign out failed: $e');

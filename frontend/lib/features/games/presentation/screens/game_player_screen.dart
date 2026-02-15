@@ -44,7 +44,20 @@ class _GamePlayerScreenState extends State<GamePlayerScreen> {
     super.dispose();
   }
 
+  String _formatGameUrl(String url) {
+    if (url.contains('html5.gamedistribution.com')) {
+      final String referrer = 'https://snehayog.site/games/${widget.game.id}';
+      final uri = Uri.parse(url);
+      final separator = uri.query.isEmpty ? '?' : '&';
+      return '$url${separator}gd_sdk_referrer_url=$referrer';
+    }
+    return url;
+  }
+
   void _initWebView() {
+    final formattedUrl = _formatGameUrl(widget.game.gameUrl);
+    AppLogger.log('🎮 Loading game URL: $formattedUrl');
+
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(const Color(0xFF000000))
@@ -67,7 +80,7 @@ class _GamePlayerScreenState extends State<GamePlayerScreen> {
           _handleGameMessage(message.message);
         },
       )
-      ..loadRequest(Uri.parse(widget.game.gameUrl));
+      ..loadRequest(Uri.parse(formattedUrl));
   }
 
   // **NEW: Handle Messages from Game**

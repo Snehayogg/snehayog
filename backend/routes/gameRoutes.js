@@ -1,9 +1,33 @@
 import express from 'express';
 import Game from '../models/Game.js';
+import User from '../models/User.js';
 import GameStorage from '../models/GameStorage.js';
 import { verifyToken, passiveVerifyToken } from '../utils/verifytoken.js';
 
 const router = express.Router();
+
+// 0. GET /api/games/developer - Get games for authenticated developer
+router.get('/developer', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Find developer user object first
+    const developer = await User.findOne({ googleId: userId });
+    if (!developer) return res.status(404).json({ error: 'Developer not found' });
+
+    const games = await Game.find({ developer: developer._id })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json({
+      success: true,
+      games
+    });
+  } catch (error) {
+    console.error('❌ Error fetching developer games:', error);
+    res.status(500).json({ error: 'Failed to fetch developer games' });
+  }
+});
 
 // 1. GET /api/games - Game Feed (Discovery)
 router.get('/', passiveVerifyToken, async (req, res) => {
@@ -44,6 +68,39 @@ router.get('/:id', async (req, res) => {
     res.json({ success: true, game });
   } catch (error) {
     res.status(500).json({ error: 'Error fetching game details' });
+  }
+});
+
+// 2.5 POST /api/games/:id/publish - Publish a pending game
+router.post('/:id/publish', verifyToken, async (req, res) => {
+  try {
+    const gameId = req.params.id;
+    const userId = req.user.id;
+
+    // Find developer user object
+    const developer = await User.findOne({ googleId: userId });
+    if (!developer) return res.status(404).json({ error: 'Developer not found' });
+
+    const game = await Game.findById(gameId);
+    if (!game) return res.status(404).json({ error: 'Game not found' });
+
+    // Verify ownership
+    if (game.developer.toString() !== developer._id.toString()) {
+      return res.status(403).json({ error: 'Access denied: You do not own this game' });
+    }
+
+    // Publish game
+    game.status = 'active';
+    await game.save();
+
+    res.json({
+      success: true,
+      message: 'Game published successfully',
+      game
+    });
+  } catch (error) {
+    console.error('❌ Error publishing game:', error);
+    res.status(500).json({ error: 'Failed to publish game' });
   }
 });
 

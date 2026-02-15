@@ -341,6 +341,17 @@ class SmartCacheManager {
     return null;
   }
 
+  /// **NEW: Manually put data into the cache (used for optimistic updates)**
+  Future<void> put<T>(
+    String key,
+    T data, {
+    String cacheType = 'default',
+    Duration? maxAge,
+    String? etag,
+  }) async {
+    await _cacheData(key, data, cacheType, maxAge, etag);
+  }
+
   // ===== PRELOADING & PREDICTION =====
 
   /// Track user navigation for pattern analysis

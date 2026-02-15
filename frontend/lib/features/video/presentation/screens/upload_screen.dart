@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
 import 'package:vayu/features/video/presentation/managers/main_controller.dart';
+import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
 import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
@@ -46,6 +47,7 @@ class _UploadScreenState extends State<UploadScreen> {
   final ValueNotifier<String> _phaseDescription = ValueNotifier<String>('');
   int _uploadStartTime = 0;
   final ValueNotifier<int> _elapsedSeconds = ValueNotifier<int>(0);
+  double _lastUploadNetworkProgress = 0.0;
 
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _linkController = TextEditingController();
@@ -94,7 +96,7 @@ class _UploadScreenState extends State<UploadScreen> {
         'upload': {
           'name': AppText.get('upload_uploading_video'),
           'description': AppText.get('upload_uploading_desc'),
-          'progress': 0.4,
+          'progress': 0.1,
           'icon': Icons.cloud_upload,
         },
         'validation': {
@@ -135,6 +137,7 @@ class _UploadScreenState extends State<UploadScreen> {
   /// Start unified progress tracking for complete video processing flow
   void _startUnifiedProgress() {
     _uploadStartTime = DateTime.now().millisecondsSinceEpoch;
+    _lastUploadNetworkProgress = 0.0;
     // **BATCHED UPDATE: Update progress state**
     _unifiedProgress.value = 0.0;
     _currentPhase.value = 'preparation';
@@ -182,19 +185,19 @@ class _UploadScreenState extends State<UploadScreen> {
   Color _getCurrentPhaseColor(String currentPhase) {
     switch (currentPhase) {
       case 'preparation':
-        return Colors.blue;
+        return AppTheme.info;
       case 'upload':
-        return Colors.orange;
+        return AppTheme.primary;
       case 'validation':
-        return Colors.purple;
+        return AppTheme.warning;
       case 'processing':
-        return Colors.indigo;
+        return AppTheme.primary;
       case 'finalizing':
-        return Colors.teal;
+        return AppTheme.info;
       case 'completed':
-        return Colors.green;
+        return AppTheme.success;
       default:
-        return Colors.blue;
+        return AppTheme.primary;
     }
   }
 
@@ -216,13 +219,13 @@ class _UploadScreenState extends State<UploadScreen> {
                       margin: const EdgeInsets.all(16),
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: AppTheme.backgroundPrimary,
                         borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
+                        boxShadow: const [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
+                            color: AppTheme.shadowPrimary,
                             blurRadius: 10,
-                            offset: const Offset(0, 4),
+                            offset: Offset(0, 4),
                           ),
                         ],
                       ),
@@ -283,7 +286,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                     style: TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w500,
-                                      color: Colors.grey[700],
+                                      color: AppTheme.textSecondary,
                                     ),
                                   ),
                                   Text(
@@ -302,7 +305,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                 borderRadius: BorderRadius.circular(8),
                                 child: LinearProgressIndicator(
                                   value: unifiedProgress,
-                                  backgroundColor: Colors.grey[200],
+                                  backgroundColor: AppTheme.borderPrimary,
                                   valueColor: AlwaysStoppedAnimation<Color>(
                                       _getCurrentPhaseColor(currentPhase)),
                                   minHeight: 8,
@@ -322,14 +325,14 @@ class _UploadScreenState extends State<UploadScreen> {
                                   Icon(
                                     Icons.access_time,
                                     size: 16,
-                                    color: Colors.grey[600],
+                                    color: AppTheme.textTertiary,
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
                                     '${AppText.get('upload_time')} ${_formatTime(elapsedSeconds)}',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.grey[600],
+                                      color: AppTheme.textTertiary,
                                     ),
                                   ),
                                 ],
@@ -344,11 +347,11 @@ class _UploadScreenState extends State<UploadScreen> {
                             width: double.infinity,
                             child: OutlinedButton.icon(
                               onPressed: _cancelUpload,
-                              icon: const Icon(Icons.cancel_outlined),
+                              icon: Icon(Icons.cancel_outlined),
                               label: Text(AppText.get('btn_cancel_upload', fallback: 'Cancel Upload')),
                               style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.red,
-                                side: const BorderSide(color: Colors.red),
+                                foregroundColor: AppTheme.error,
+                                side: const BorderSide(color: AppTheme.error),
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(10),
@@ -393,11 +396,7 @@ class _UploadScreenState extends State<UploadScreen> {
           const SizedBox(height: 4),
           Text(
             body,
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.grey.shade800,
-              height: 1.35,
-            ),
+            style: AppTheme.bodySmall.copyWith(fontSize: 13),
           ),
         ],
       ),
@@ -409,7 +408,7 @@ class _UploadScreenState extends State<UploadScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.backgroundPrimary,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -431,10 +430,10 @@ class _UploadScreenState extends State<UploadScreen> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Colors.red.shade100,
+                          color: AppTheme.error.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(Icons.gavel, color: Colors.red.shade700),
+                        child: const Icon(Icons.gavel, color: AppTheme.error),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -447,7 +446,7 @@ class _UploadScreenState extends State<UploadScreen> {
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close),
+                        icon: const Icon(Icons.close, color: AppTheme.textSecondary),
                         onPressed: () => Navigator.pop(context),
                       )
                     ],
@@ -486,8 +485,8 @@ class _UploadScreenState extends State<UploadScreen> {
                       label: Text(AppText.get('btn_i_understand')),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        backgroundColor: Colors.red.shade600,
-                        foregroundColor: Colors.white,
+                        backgroundColor: AppTheme.error,
+                        foregroundColor: AppTheme.textInverse,
                       ),
                     ),
                   )
@@ -540,9 +539,9 @@ class _UploadScreenState extends State<UploadScreen> {
   /// **NEW: Calculate SHA-256 hash of video file for duplicate detection**
   Future<String> _calculateFileHash(File file) async {
     try {
-      final bytes = await file.readAsBytes();
-      final hash = sha256.convert(bytes);
-      return hash.toString();
+      // Stream hashing avoids loading entire video into memory.
+      final digest = await sha256.bind(file.openRead()).first;
+      return digest.toString();
     } catch (e) {
       AppLogger.log('❌ UploadScreen: Error calculating file hash: $e');
       rethrow;
@@ -649,7 +648,11 @@ class _UploadScreenState extends State<UploadScreen> {
              // We map Dio progress (0.0 to 1.0) into the 'upload' phase window
              // upload phase is from 0.1 to 0.4 in _progressPhases
              if (_currentPhase.value == 'upload') {
-               _unifiedProgress.value = 0.1 + (progress * 0.3);
+               final normalizedProgress = progress.clamp(0.0, 1.0).toDouble();
+               if (normalizedProgress > _lastUploadNetworkProgress) {
+                 _lastUploadNetworkProgress = normalizedProgress;
+               }
+               _unifiedProgress.value = 0.1 + (_lastUploadNetworkProgress * 0.3);
              }
           },
           _uploadCancelToken,
@@ -687,9 +690,15 @@ class _UploadScreenState extends State<UploadScreen> {
       // The backend returns processingStatus: 'queued'
       // We should NOT wait here. We should close the screen and let the user know.
       
-      final String processingStatus = uploadedVideo['processingStatus']?.toString().toLowerCase() ?? '';
-      
-      if (processingStatus == 'queued' || processingStatus == 'processing') {
+      final String processingStatus =
+          uploadedVideo['processingStatus']?.toString().toLowerCase() ?? '';
+      final bool shouldHandleInBackground =
+          processingStatus.isEmpty ||
+          processingStatus == 'pending' ||
+          processingStatus == 'queued' ||
+          processingStatus == 'processing';
+
+      if (shouldHandleInBackground) {
          // **New Background Flow**
          // Don't wait. Just finish.
          
@@ -699,7 +708,7 @@ class _UploadScreenState extends State<UploadScreen> {
          // Give it a split second to breathe
          await Future.delayed(const Duration(milliseconds: 500));
          
-          AppLogger.log('✅ Video queued successfully! Closing screen.');
+          AppLogger.log('? Video upload accepted. Processing in background.');
           
          // Stop unified progress tracking
          _stopUnifiedProgress();
@@ -710,7 +719,39 @@ class _UploadScreenState extends State<UploadScreen> {
              _phaseDescription.value = 'Upload completed! Processing in background.';
          }
 
-          // Call the callback to refresh video list
+          if (!mounted) return;
+
+          // **OPTIMISTIC UPDATE: Inject processing video into ProfileStateManager immediately**
+          try {
+            final optimisticVideoPayload = Map<String, dynamic>.from(uploadedVideo);
+            final uploaderId =
+                userData['googleId']?.toString() ?? userData['id']?.toString() ?? '';
+            optimisticVideoPayload['processingStatus'] =
+                processingStatus.isEmpty ? 'pending' : processingStatus;
+            optimisticVideoPayload['processingProgress'] =
+                (optimisticVideoPayload['processingProgress'] as num?)?.toInt() ?? 0;
+            optimisticVideoPayload['uploadedAt'] ??= DateTime.now().toIso8601String();
+            optimisticVideoPayload['videoName'] =
+                optimisticVideoPayload['videoName']?.toString().trim().isNotEmpty == true
+                    ? optimisticVideoPayload['videoName']
+                    : _titleController.text.trim();
+
+            if (optimisticVideoPayload['uploader'] is! Map) {
+              optimisticVideoPayload['uploader'] = {
+                'id': uploaderId,
+                '_id': uploaderId,
+                'googleId': uploaderId,
+                'name': userData['name']?.toString() ?? 'You',
+                'profilePic': userData['profilePic']?.toString() ?? '',
+              };
+            }
+
+            Provider.of<ProfileStateManager>(context, listen: false)
+                .addVideoOptimistically(optimisticVideoPayload);
+          } catch (e) {
+            AppLogger.log('?? UploadScreen: Error injecting optimistic video: $e');
+          }
+          // Call the callback to refresh other tabs
           if (widget.onVideoUploaded != null) {
             widget.onVideoUploaded!();
           }
@@ -931,11 +972,11 @@ class _UploadScreenState extends State<UploadScreen> {
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppTheme.backgroundPrimary,
               borderRadius: BorderRadius.circular(20),
-              boxShadow: [
+              boxShadow: const [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
+                  color: AppTheme.shadowPrimary,
                   blurRadius: 20,
                   spreadRadius: 2,
                 ),
@@ -984,19 +1025,19 @@ class _UploadScreenState extends State<UploadScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
+                    color: AppTheme.success.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     children: [
                       const Icon(Icons.check_circle_outline,
-                          color: Colors.green, size: 20),
+                          color: AppTheme.success, size: 20),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
                           AppText.get('upload_processed_ready'),
-                          style: TextStyle(
-                            color: Colors.green.shade700,
+                          style: const TextStyle(
+                            color: AppTheme.success,
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
                           ),
@@ -1026,15 +1067,15 @@ class _UploadScreenState extends State<UploadScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
-                            side: BorderSide(
-                              color: Colors.grey.withOpacity(0.3),
+                            side: const BorderSide(
+                              color: AppTheme.borderPrimary,
                             ),
                           ),
                         ),
                         child: Text(
                           AppText.get('btn_upload_another'),
                           style: const TextStyle(
-                            color: Colors.grey,
+                            color: AppTheme.textSecondary,
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
                           ),
@@ -1058,8 +1099,8 @@ class _UploadScreenState extends State<UploadScreen> {
                           }
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
+                          backgroundColor: AppTheme.success,
+                          foregroundColor: AppTheme.textInverse,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -1338,21 +1379,21 @@ class _UploadScreenState extends State<UploadScreen> {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.orange.shade100,
+                        color: AppTheme.warning.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
                         children: [
                           const Icon(
                             Icons.warning_amber_rounded,
-                            color: Colors.orange,
+                            color: AppTheme.warning,
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               AppText.get('upload_please_sign_in'),
                               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: AppTheme.warning.withOpacity(0.8),
+                                color: AppTheme.warning,
                               ),
                             ),
                           ),
@@ -1414,13 +1455,13 @@ class _UploadScreenState extends State<UploadScreen> {
                                   Container(
                                     padding: const EdgeInsets.all(16),
                                     decoration: BoxDecoration(
-                                      color: Colors.blue.shade100,
+                                      color: AppTheme.primary.withValues(alpha: 0.1),
                                       shape: BoxShape.circle,
                                     ),
-                                    child: Icon(
+                                    child: const Icon(
                                       Icons.video_library,
                                       size: 48,
-                                      color: Colors.blue.shade700,
+                                      color: AppTheme.primary,
                                     ),
                                   ),
                                   const SizedBox(height: 16),
@@ -1474,13 +1515,13 @@ class _UploadScreenState extends State<UploadScreen> {
                                   Container(
                                     padding: const EdgeInsets.all(16),
                                     decoration: BoxDecoration(
-                                      color: Colors.green.shade100,
+                                      color: AppTheme.success.withValues(alpha: 0.1),
                                       shape: BoxShape.circle,
                                     ),
-                                    child: Icon(
+                                    child: const Icon(
                                       Icons.campaign,
                                       size: 48,
-                                      color: Colors.green.shade700,
+                                      color: AppTheme.success,
                                     ),
                                   ),
                                   const SizedBox(height: 16),
@@ -1525,7 +1566,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                 children: [
                                   const Icon(
                                     Icons.video_library,
-                                    color: Colors.blue,
+                                    color: AppTheme.primary,
                                   ),
                                   const SizedBox(width: 8),
                                   const Text(
@@ -1542,7 +1583,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                       _showUploadForm.value = false;
                                       _deselectVideo();
                                     },
-                                    icon: const Icon(Icons.close),
+                                    icon: const Icon(Icons.close, color: AppTheme.textSecondary),
                                   ),
                                 ],
                               ),
@@ -1550,7 +1591,7 @@ class _UploadScreenState extends State<UploadScreen> {
                               Container(
                                 height: 200,
                                 decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey),
+                                  border: Border.all(color: AppTheme.borderPrimary),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: ValueListenableBuilder<bool>(
@@ -1573,10 +1614,10 @@ class _UploadScreenState extends State<UploadScreen> {
                                                       const SizedBox(height: 16),
                                                       Text(
                                                         AppText.get('upload_processing_video'),
-                                                        style: const TextStyle(fontSize: 16, color: Colors.grey),
+                                                        style: const TextStyle(fontSize: 16, color: AppTheme.textSecondary),
                                                       ),
                                                     ] else if (selectedVideo != null) ...[
-                                                      const Icon(Icons.perm_media, size: 48, color: Colors.blue),
+                                                      const Icon(Icons.perm_media, size: 48, color: AppTheme.primary),
                                                       const SizedBox(height: 16),
                                                       Text(
                                                         selectedVideo.path.split('/').last,
@@ -1586,14 +1627,14 @@ class _UploadScreenState extends State<UploadScreen> {
                                                       const SizedBox(height: 8),
                                                       Text(
                                                         'Click to change',
-                                                        style: TextStyle(fontSize: 12, color: Colors.blue.withOpacity(0.7)),
+                                                        style: TextStyle(fontSize: 12, color: AppTheme.primary.withValues(alpha: 0.7)),
                                                       ),
                                                     ] else ...[
-                                                      const Icon(Icons.add_to_photos, size: 48, color: Colors.grey),
+                                                      const Icon(Icons.add_to_photos, size: 48, color: AppTheme.textSecondary),
                                                       const SizedBox(height: 16),
                                                       Text(
                                                         AppText.get('btn_select_video', fallback: 'Select Video'),
-                                                        style: const TextStyle(fontSize: 16, color: Colors.grey),
+                                                        style: const TextStyle(fontSize: 16, color: AppTheme.textSecondary),
                                                       ),
                                                     ],
                                                   ],
@@ -1609,10 +1650,10 @@ class _UploadScreenState extends State<UploadScreen> {
                                                   icon: Container(
                                                     padding: const EdgeInsets.all(4),
                                                     decoration: BoxDecoration(
-                                                      color: Colors.red.withOpacity(0.1),
+                                                      color: AppTheme.error.withValues(alpha: 0.1),
                                                       shape: BoxShape.circle,
                                                     ),
-                                                    child: const Icon(Icons.close, size: 20, color: Colors.red),
+                                                    child: const Icon(Icons.close, size: 20, color: AppTheme.error),
                                                   ),
                                                 ),
                                               ),
@@ -1694,11 +1735,11 @@ class _UploadScreenState extends State<UploadScreen> {
                                               padding:
                                                   const EdgeInsets.all(12.0),
                                               decoration: BoxDecoration(
-                                                color: Colors.red.shade50,
+                                                color: AppTheme.error.withValues(alpha: 0.05),
                                                 borderRadius:
                                                     BorderRadius.circular(8.0),
                                                 border: Border.all(
-                                                  color: Colors.red.shade200,
+                                                  color: AppTheme.error.withValues(alpha: 0.2),
                                                   width: 1,
                                                 ),
                                               ),
@@ -1706,16 +1747,15 @@ class _UploadScreenState extends State<UploadScreen> {
                                                 children: [
                                                   Icon(
                                                     Icons.error_outline,
-                                                    color: Colors.red.shade700,
+                                                    color: AppTheme.error,
                                                     size: 20,
                                                   ),
                                                   const SizedBox(width: 8),
                                                   Expanded(
                                                     child: Text(
                                                       errorMessage,
-                                                      style: TextStyle(
-                                                        color:
-                                                            Colors.red.shade700,
+                                                      style: const TextStyle(
+                                                        color: AppTheme.error,
                                                         fontSize: 14,
                                                       ),
                                                     ),
@@ -1740,8 +1780,8 @@ class _UploadScreenState extends State<UploadScreen> {
                                                 label: Text(AppText.get(
                                                     'btn_retry_upload')),
                                                 style: ElevatedButton.styleFrom(
-                                                  backgroundColor: Colors.blue,
-                                                  foregroundColor: Colors.white,
+                                                  backgroundColor: AppTheme.primary,
+                                                  foregroundColor: AppTheme.textInverse,
                                                   padding: const EdgeInsets
                                                       .symmetric(
                                                     vertical: 12,
@@ -1793,8 +1833,8 @@ class _UploadScreenState extends State<UploadScreen> {
                                                     : AppText.get('btn_select_media')),
                                           ),
                                           style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.black,
-                                            foregroundColor: Colors.white,
+                                            backgroundColor: AppTheme.primary,
+                                            foregroundColor: AppTheme.textInverse,
                                             padding: const EdgeInsets.symmetric(vertical: 16),
                                             shape: RoundedRectangleBorder(
                                               borderRadius: BorderRadius.circular(8),
@@ -1822,3 +1862,4 @@ class _UploadScreenState extends State<UploadScreen> {
     );
   }
 }
+

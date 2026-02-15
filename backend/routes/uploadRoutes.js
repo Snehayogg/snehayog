@@ -18,6 +18,37 @@ const router = express.Router();
 
 // **NEW: Apply Upload Rate Limiter to all routes in this file**
 router.use(uploadLimiter);
+const RESUMABLE_CHUNK_SIZE_DEFAULT = 5 * 1024 * 1024; // 5MB
+const RESUMABLE_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+const resumableSessions = new Map();
+
+function pruneExpiredResumableSessions() {
+  const now = Date.now();
+  for (const [sessionId, session] of resumableSessions.entries()) {
+    if (now - session.updatedAt > RESUMABLE_UPLOAD_TTL_MS) {
+      resumableSessions.delete(sessionId);
+    }
+  }
+}
+
+function buildResumableSessionKey(userId, fileFingerprint) {
+  const seed = `${userId}:${fileFingerprint}`;
+  return crypto.createHash('sha1').update(seed).digest('hex');
+}
+
+async function safeDeleteFile(filePath) {
+  if (!filePath) return;
+  try {
+    await fs.unlink(filePath);
+  } catch (_) {}
+}
+
+async function safeDeleteDir(dirPath) {
+  if (!dirPath) return;
+  try {
+    await fs.rm(dirPath, { recursive: true, force: true });
+  } catch (_) {}
+}
 
 /**
  * Calculate SHA256 hash of a file
@@ -133,6 +164,14 @@ const upload = multer({
     } else {
       cb(new Error('Only video files are allowed'), false);
     }
+  }
+});
+
+const chunkUpload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB per chunk
+    files: 1
   }
 });
 
@@ -307,6 +346,338 @@ router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
   }
 });
 
+
+// **NEW: Resumable Upload Init**
+router.post('/video/resumable/init', verifyToken, async (req, res) => {
+  try {
+    pruneExpiredResumableSessions();
+
+    const {
+      fileName,
+      fileSize,
+      chunkSize,
+      totalChunks,
+      fileFingerprint,
+      videoName,
+      description,
+      link,
+      category,
+      tags,
+      videoType,
+      seriesId,
+      episodeNumber
+    } = req.body || {};
+
+    if (!fileName || !fileSize || !totalChunks || !fileFingerprint) {
+      return res.status(400).json({ error: 'Missing resumable init fields' });
+    }
+
+    const userId = req.user.id;
+    const normalizedChunkSize = Number(chunkSize) > 0 ? Number(chunkSize) : RESUMABLE_CHUNK_SIZE_DEFAULT;
+    const normalizedTotalChunks = Number(totalChunks);
+    const normalizedFileSize = Number(fileSize);
+
+    if (!Number.isFinite(normalizedTotalChunks) || normalizedTotalChunks <= 0) {
+      return res.status(400).json({ error: 'Invalid totalChunks value' });
+    }
+
+    const sessionId = buildResumableSessionKey(userId, fileFingerprint);
+    const sessionRoot = path.join(process.cwd(), 'uploads', 'resumable', sessionId);
+    const chunkDir = path.join(sessionRoot, 'chunks');
+
+    let session = resumableSessions.get(sessionId);
+
+    if (!session) {
+      await fs.mkdir(chunkDir, { recursive: true });
+
+      session = {
+        sessionId,
+        userId,
+        fileName,
+        fileSize: normalizedFileSize,
+        chunkSize: normalizedChunkSize,
+        totalChunks: normalizedTotalChunks,
+        fileFingerprint,
+        sessionRoot,
+        chunkDir,
+        receivedChunks: new Set(),
+        metadata: {
+          videoName,
+          description,
+          link,
+          category,
+          tags,
+          videoType,
+          seriesId,
+          episodeNumber
+        },
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+
+      resumableSessions.set(sessionId, session);
+    } else {
+      session.updatedAt = Date.now();
+      session.metadata = {
+        ...session.metadata,
+        videoName,
+        description,
+        link,
+        category,
+        tags,
+        videoType,
+        seriesId,
+        episodeNumber
+      };
+
+      try {
+        const chunkFiles = await fs.readdir(session.chunkDir);
+        session.receivedChunks = new Set(
+          chunkFiles
+            .filter((name) => name.endsWith('.part'))
+            .map((name) => Number(path.basename(name, '.part')))
+            .filter((index) => Number.isFinite(index))
+        );
+      } catch (_) {}
+    }
+
+    const uploadedChunks = Array.from(session.receivedChunks).sort((a, b) => a - b);
+
+    return res.json({
+      success: true,
+      sessionId,
+      uploadedChunks,
+      totalChunks: session.totalChunks,
+      chunkSize: session.chunkSize
+    });
+  } catch (error) {
+    console.error('? Resumable init failed:', error);
+    return res.status(500).json({ error: 'Failed to initialize resumable upload' });
+  }
+});
+
+// **NEW: Resumable Upload Chunk**
+router.post('/video/resumable/:sessionId/chunk', verifyToken, chunkUpload.single('chunk'), async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const chunkIndex = Number(req.body?.chunkIndex);
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'Chunk file is required' });
+    }
+
+    if (!Number.isFinite(chunkIndex) || chunkIndex < 0) {
+      await safeDeleteFile(req.file.path);
+      return res.status(400).json({ error: 'Invalid chunkIndex' });
+    }
+
+    const session = resumableSessions.get(sessionId);
+    if (!session) {
+      await safeDeleteFile(req.file.path);
+      return res.status(404).json({ error: 'Resumable session not found or expired' });
+    }
+
+    if (session.userId !== req.user.id) {
+      await safeDeleteFile(req.file.path);
+      return res.status(403).json({ error: 'Not allowed for this resumable session' });
+    }
+
+    if (chunkIndex >= session.totalChunks) {
+      await safeDeleteFile(req.file.path);
+      return res.status(400).json({ error: 'chunkIndex out of range' });
+    }
+
+    await fs.mkdir(session.chunkDir, { recursive: true });
+
+    const chunkPath = path.join(session.chunkDir, `${chunkIndex}.part`);
+
+    if (fsSync.existsSync(chunkPath)) {
+      await safeDeleteFile(req.file.path);
+    } else {
+      await fs.rename(req.file.path, chunkPath);
+      session.receivedChunks.add(chunkIndex);
+    }
+
+    session.updatedAt = Date.now();
+
+    return res.json({
+      success: true,
+      sessionId,
+      chunkIndex,
+      uploadedChunks: session.receivedChunks.size,
+      totalChunks: session.totalChunks
+    });
+  } catch (error) {
+    console.error('? Resumable chunk upload failed:', error);
+    if (req.file?.path) {
+      await safeDeleteFile(req.file.path);
+    }
+    return res.status(500).json({ error: 'Failed to upload chunk' });
+  }
+});
+
+// **NEW: Resumable Upload Complete**
+router.post('/video/resumable/:sessionId/complete', verifyToken, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const session = resumableSessions.get(sessionId);
+
+    if (!session) {
+      return res.status(404).json({ error: 'Resumable session not found or expired' });
+    }
+
+    if (session.userId !== req.user.id) {
+      return res.status(403).json({ error: 'Not allowed for this resumable session' });
+    }
+
+    const missingChunks = [];
+    for (let index = 0; index < session.totalChunks; index++) {
+      if (!fsSync.existsSync(path.join(session.chunkDir, `${index}.part`))) {
+        missingChunks.push(index);
+      }
+    }
+
+    if (missingChunks.length > 0) {
+      return res.status(409).json({
+        error: 'Cannot complete upload, missing chunks',
+        missingChunks
+      });
+    }
+
+    const fileExt = path.extname(session.fileName) || '.mp4';
+    const assembledFilePath = path.join(process.cwd(), 'uploads', 'temp', `video-resumable-${Date.now()}-${Math.round(Math.random() * 1e9)}${fileExt}`);
+
+    await fs.mkdir(path.dirname(assembledFilePath), { recursive: true });
+
+    const writeStream = fsSync.createWriteStream(assembledFilePath);
+    for (let index = 0; index < session.totalChunks; index++) {
+      const partPath = path.join(session.chunkDir, `${index}.part`);
+      await new Promise((resolve, reject) => {
+        const readStream = fsSync.createReadStream(partPath);
+        readStream.on('error', reject);
+        readStream.on('end', resolve);
+        readStream.pipe(writeStream, { end: false });
+      });
+    }
+
+    await new Promise((resolve, reject) => {
+      writeStream.on('error', reject);
+      writeStream.end(resolve);
+    });
+
+    const uploadResponse = await createVideoFromUploadedFile({
+      userId: req.user.id,
+      filePath: assembledFilePath,
+      originalName: session.fileName,
+      metadata: session.metadata || {}
+    });
+
+    resumableSessions.delete(sessionId);
+    await safeDeleteDir(session.sessionRoot);
+
+    return res.status(201).json(uploadResponse);
+  } catch (error) {
+    console.error('? Resumable complete failed:', error);
+    if (error?.statusCode && error?.payload) {
+      return res.status(error.statusCode).json(error.payload);
+    }
+    return res.status(500).json({ error: 'Failed to finalize resumable upload', details: error.message });
+  }
+});
+
+async function createVideoFromUploadedFile({ userId, filePath, originalName, metadata = {} }) {
+  if (!hybridVideoService) {
+    const { default: service } = await import('../services/hybridVideoService.js');
+    hybridVideoService = service;
+  }
+
+  const videoValidation = await hybridVideoService.validateVideo(filePath);
+  if (!videoValidation.isValid) {
+    await safeDeleteFile(filePath);
+    throw new Error(videoValidation.error || 'Invalid video file');
+  }
+
+  const user = await User.findOne({ googleId: userId });
+  if (!user) {
+    await safeDeleteFile(filePath);
+    throw new Error('User not found');
+  }
+
+  const videoHash = await calculateFileHash(filePath);
+
+  const existingVideo = await Video.findOne({
+    uploader: user._id,
+    videoHash: videoHash,
+    processingStatus: { $ne: 'failed' }
+  });
+
+  if (existingVideo) {
+    await safeDeleteFile(filePath);
+    const duplicateErr = new Error('Duplicate video detected');
+    duplicateErr.statusCode = 409;
+    duplicateErr.payload = {
+      error: 'Duplicate video detected',
+      message: 'You have already uploaded this video',
+      existingVideo: {
+        id: existingVideo._id,
+        videoName: existingVideo.videoName,
+        uploadedAt: existingVideo.uploadedAt
+      }
+    };
+    throw duplicateErr;
+  }
+
+  const videoInfo = await hybridVideoService.getOriginalVideoInfo(filePath);
+  const aspectRatio = videoInfo.width && videoInfo.height ? videoInfo.width / videoInfo.height : 9 / 16;
+
+  const baseUrl = process.env.SERVER_URL || 'http://192.168.0.199:5001';
+  const relativePath = filePath.replace(/\\/g, '/').replace(process.cwd().replace(/\\/g, '/'), '');
+  const tempVideoUrl = `${baseUrl}${relativePath}`;
+
+  const finalVideoName = metadata.videoName || originalName;
+
+  const video = new Video({
+    videoName: finalVideoName,
+    description: metadata.description || '',
+    videoUrl: tempVideoUrl,
+    thumbnailUrl: '',
+    uploader: user._id,
+    videoType: (videoInfo.duration && videoInfo.duration > 60) ? 'vayu' : 'yog',
+    aspectRatio,
+    duration: videoInfo.duration || 0,
+    originalSize: videoValidation.size,
+    originalFormat: path.extname(originalName).substring(1),
+    originalResolution: {
+      width: videoInfo.width || 0,
+      height: videoInfo.height || 0
+    },
+    processingStatus: 'pending',
+    processingProgress: 0,
+    link: metadata.link || '',
+    videoHash,
+    seriesId: metadata.seriesId || null,
+    episodeNumber: metadata.episodeNumber ? parseInt(metadata.episodeNumber) : 0
+  });
+
+  await video.save();
+
+  processVideoHybrid(video._id, filePath, finalVideoName, userId).catch(error => {
+    console.error('? Background processing failed:', error);
+    console.error('? Error stack:', error.stack);
+  });
+
+  return {
+    success: true,
+    message: 'Video upload started successfully',
+    video: {
+      id: video._id,
+      videoName: video.videoName,
+      processingStatus: video.processingStatus,
+      processingProgress: video.processingProgress,
+      estimatedTime: '2-5 minutes depending on video length'
+    }
+  };
+}
 // **NEW: URL normalization function**
 function normalizeVideoUrl(url) {
   if (!url) return url;
@@ -891,3 +1262,4 @@ router.get('/video/:videoId/status', verifyToken, async (req, res) => {
 });
 
 export default router;
+

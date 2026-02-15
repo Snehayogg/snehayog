@@ -1,4 +1,4 @@
-class VideoModel {
+﻿class VideoModel {
   final String id;
   final String videoName;
   final String videoUrl;
@@ -25,6 +25,7 @@ class VideoModel {
   final List<Map<String, dynamic>>? hlsVariants;
   final bool? isHLSEncoded;
   bool isLiked;
+  final bool isOptimistic; // **NEW: Track optimistically injected videos**
 
   // **SIMPLIFIED: Since all videos are 480p, we only need one quality URL**
   // Keeping lowQualityUrl for backward compatibility (will contain 480p URL)
@@ -72,6 +73,7 @@ class VideoModel {
     this.seriesId,
     this.episodeNumber,
     this.isLiked = false,
+    this.isOptimistic = false, // **NEW: Default to false**
   });
 
   factory VideoModel.fromJson(Map<String, dynamic> json) {
@@ -271,7 +273,7 @@ class VideoModel {
 
             return null;
           } catch (e) {
-            print('⚠️ VideoModel: Error parsing hlsVariants: $e');
+            print('âš ï¸ VideoModel: Error parsing hlsVariants: $e');
             return null;
           }
         }(),
@@ -318,6 +320,7 @@ class VideoModel {
             ? json['episodeNumber']
             : int.tryParse(json['episodeNumber']?.toString() ?? '0') ?? 0,
         isLiked: json['isLiked'] == true,
+        isOptimistic: json['isOptimistic'] == true,
       );
     } catch (e) {
       
@@ -370,11 +373,15 @@ class VideoModel {
       'hlsVariants': hlsVariants,
       'isHLSEncoded': isHLSEncoded,
       'lowQualityUrl': lowQualityUrl, // 480p URL
+      'processingStatus': processingStatus,
+      'processingProgress': processingProgress,
+      'processingError': processingError,
       'videoHash': videoHash, // **NEW: Parse video hash**
       'episodes': episodes,
       'seriesId': seriesId,
       'episodeNumber': episodeNumber,
       'isLiked': isLiked,
+      'isOptimistic': isOptimistic,
     };
   }
 
@@ -401,11 +408,15 @@ class VideoModel {
     List<Map<String, dynamic>>? hlsVariants,
     bool? isHLSEncoded,
     String? lowQualityUrl, // 480p URL
+    String? processingStatus,
+    int? processingProgress,
+    String? processingError,
     String? videoHash, // **NEW: Add videoHash to copyWith**
     List<Map<String, dynamic>>? episodes,
     String? seriesId,
     int? episodeNumber,
     bool? isLiked,
+    bool? isOptimistic,
   }) {
     return VideoModel(
       id: id ?? this.id,
@@ -425,18 +436,21 @@ class VideoModel {
       duration: duration ?? this.duration,
       link: link ?? this.link,
       earnings:
-          earnings ?? this.earnings, // **NEW: Handle earnings in copyWith**
-      // **CRITICAL FIX: Handle HLS fields in copyWith**
+          earnings ?? this.earnings, // Handle earnings in copyWith
       hlsMasterPlaylistUrl: hlsMasterPlaylistUrl ?? this.hlsMasterPlaylistUrl,
       hlsPlaylistUrl: hlsPlaylistUrl ?? this.hlsPlaylistUrl,
       hlsVariants: hlsVariants ?? this.hlsVariants,
       isHLSEncoded: isHLSEncoded ?? this.isHLSEncoded,
       lowQualityUrl: lowQualityUrl ?? this.lowQualityUrl, // 480p URL
-      videoHash: videoHash ?? this.videoHash, // **NEW: Handle videoHash**
+      processingStatus: processingStatus ?? this.processingStatus,
+      processingProgress: processingProgress ?? this.processingProgress,
+      processingError: processingError ?? this.processingError,
+      videoHash: videoHash ?? this.videoHash, // Handle videoHash
       episodes: episodes ?? this.episodes,
       seriesId: seriesId ?? this.seriesId,
       episodeNumber: episodeNumber ?? this.episodeNumber,
       isLiked: isLiked ?? this.isLiked,
+      isOptimistic: isOptimistic ?? this.isOptimistic,
     );
   }
 
@@ -577,5 +591,6 @@ class Uploader {
     };
   }
 }
+
 
 

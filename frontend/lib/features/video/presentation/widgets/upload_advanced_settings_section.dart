@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/constants/interests.dart';
+import 'package:vayu/shared/theme/app_theme.dart';
 import 'package:vayu/features/video/presentation/screens/make_episode_screen.dart';
+import 'package:vayu/shared/constants/interests.dart';
+
 
 class UploadAdvancedSettingsSection extends StatelessWidget {
   final ValueNotifier<bool> isExpanded;
@@ -37,7 +39,7 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
       children: [
           ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 8), // **FIX: Reduce header padding**
-            leading: Icon(Icons.tune, color: Theme.of(context).primaryColor),
+            leading: const Icon(Icons.tune, color: AppTheme.primary),
             title: Text(
               'Advanced Options',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -52,7 +54,7 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
                   expanded
                       ? Icons.keyboard_arrow_up
                       : Icons.keyboard_arrow_down,
-                  color: Theme.of(context).primaryColor,
+                  color: AppTheme.primary,
                 );
               },
             ),
@@ -102,7 +104,7 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
         labelStyle: Theme.of(context).textTheme.bodyMedium,
         hintText: 'Write a title',
         hintStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).hintColor.withOpacity(0.4),
+              color: AppTheme.textSecondary.withValues(alpha: 0.4),
             ),
         filled: false,
         fillColor: Colors.transparent,
@@ -134,7 +136,7 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
             fillColor: Colors.transparent,
             border: OutlineInputBorder(),
             helperText: null,
-            labelStyle: TextStyle(color: Colors.black87),
+            labelStyle: TextStyle(color: AppTheme.textSecondary),
             isDense: true,
             contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10), // Standardized padding
           ),
@@ -190,7 +192,7 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.add, color: Colors.black),
+              icon: const Icon(Icons.add, color: AppTheme.textPrimary),
               onPressed: () => _showAddTagsBottomSheet(context),
             ),
           ],
@@ -202,7 +204,7 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
   void _showAddTagsBottomSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true,
+      backgroundColor: AppTheme.backgroundPrimary,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -239,7 +241,7 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
                 autofocus: true,
                 decoration: InputDecoration(
                   hintText: 'Type a tag and press Add',
-                  hintStyle: TextStyle(color: Colors.grey.withOpacity(0.4)),
+                  hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.4)),
                   filled: false,
                   fillColor: Colors.transparent,
                   border: const OutlineInputBorder(),
@@ -267,7 +269,7 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
                       child: Center(
                         child: Text(
                           'No tags added yet',
-                          style: TextStyle(color: Colors.grey),
+                          style: TextStyle(color: AppTheme.textSecondary),
                         ),
                       ),
                     );
@@ -320,7 +322,7 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 2.0),
         child: Row(
           children: [
-            const Icon(Icons.playlist_play, color: Colors.black),
+            const Icon(Icons.playlist_play, color: AppTheme.textPrimary),
             const SizedBox(width: 8), // **FIX: Reduced spacer**
             Expanded(
               child: Column(
@@ -332,17 +334,17 @@ class UploadAdvancedSettingsSection extends StatelessWidget {
                           fontWeight: FontWeight.bold,
                         ),
                   ),
-                  Text(
+                  const Text(
                     'Create a series by selecting multiple videos',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.grey[600],
+                      color: AppTheme.textSecondary,
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.black),
+           const Icon(Icons.arrow_forward_ios, size: 16, color: AppTheme.textPrimary),
           ],
         ),
       ),

@@ -13,6 +13,10 @@ class GameModel {
   final String? orientation;
   final String? bannerImage;
 
+  final String? status;
+  final int views;
+  final String? thumbnailUrl;
+
   GameModel({
     required this.id,
     required this.title,
@@ -25,6 +29,9 @@ class GameModel {
     this.qualityScore,
     this.orientation,
     this.bannerImage,
+    this.status = 'active',
+    this.views = 0,
+    this.thumbnailUrl,
   });
 
   factory GameModel.fromJson(Map<String, dynamic> json) {
@@ -43,22 +50,6 @@ class GameModel {
     );
   }
 
-  factory GameModel.fromJsonGamePix(Map<String, dynamic> json) {
-    return GameModel(
-      id: json['id']?.toString() ?? '',
-      title: json['title'] ?? '',
-      description: json['description'] ?? '',
-      gameUrl: json['url'] ?? '',
-      coverImageUrl: json['image'] ?? '',
-      publisher: 'GamePix',
-      width: json['width'],
-      height: json['height'],
-      qualityScore: json['quality_score'],
-      orientation: json['orientation'],
-      bannerImage: json['banner_image'],
-    );
-  }
-
   factory GameModel.fromJsonVayu(Map<String, dynamic> json) {
     return GameModel(
       id: json['_id'] ?? '',
@@ -66,11 +57,13 @@ class GameModel {
       description: json['description'] ?? '',
       gameUrl: json['gameUrl'] ?? '',
       coverImageUrl: json['thumbnailUrl'] ?? '',
+      thumbnailUrl: json['thumbnailUrl'] ?? '',
       publisher: json['developer'] != null && json['developer'] is Map 
           ? json['developer']['name'] ?? 'Vayu Developer'
           : 'Vayu Creator',
       orientation: json['orientation'],
-      // Map other fields if necessary
+      status: json['status'] ?? 'active',
+      views: json['views'] ?? 0,
       width: json['orientation'] == 'landscape' ? 1280 : 720,
       height: json['orientation'] == 'landscape' ? 720 : 1280,
     );

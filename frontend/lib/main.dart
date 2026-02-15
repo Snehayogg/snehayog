@@ -20,6 +20,8 @@ import 'package:vayu/features/onboarding/data/services/welcome_onboarding_servic
 import 'package:vayu/features/onboarding/data/services/gallery_permission_service.dart';
 import 'package:vayu/features/onboarding/presentation/screens/welcome_onboarding_screen.dart';
 import 'package:vayu/features/ads/data/services/ad_impression_service.dart';
+import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
+import 'package:vayu/features/profile/presentation/managers/game_creator_manager.dart';
 
 import 'package:vayu/features/video/presentation/managers/shared_video_controller_pool.dart';
 import 'package:vayu/features/video/presentation/managers/video_controller_manager.dart';
@@ -35,8 +37,8 @@ void main() async {
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       systemNavigationBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-      systemNavigationBarIconBrightness: Brightness.dark,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarIconBrightness: Brightness.light,
     ),
   );
 
@@ -56,6 +58,8 @@ void main() async {
         ChangeNotifierProvider(create: (_) => MainController()),
         ChangeNotifierProvider(create: (_) => VideoProvider()),
         ChangeNotifierProvider(create: (_) => UserProvider()),
+        ChangeNotifierProvider(create: (_) => ProfileStateManager()),
+        ChangeNotifierProvider(create: (_) => GameCreatorManager()),
         Provider(create: (_) => AuthService()),
       ],
       child: ScreenUtilInit(

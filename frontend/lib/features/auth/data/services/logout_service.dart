@@ -32,39 +32,49 @@ class LogoutService {
       final videoProvider = _readProvider<VideoProvider>(context);
       final profileStateManager = _readProvider<ProfileStateManager>(context);
 
-      // **Step 1: Sign out via controller (falls back to direct service if unavailable)**
-      print(
-          '🚪 LogoutService: Step 1 - Signing out via GoogleSignInController...');
-      if (authController != null) {
-        await authController.signOut();
-      } else {
-        print(
-            '⚠️ LogoutService: GoogleSignInController not available, falling back to AuthService directly');
-        await AuthService().signOut();
-      }
+      // **OPTIMIZED: parallelized logout for speed**
+      await Future.wait([
+        // Step 1: Sign out via controller (falls back to direct service if unavailable)
+        (() async {
+          print('🚪 LogoutService: Signing out via GoogleSignInController...');
+          if (authController != null) {
+            await authController.signOut();
+          } else {
+            print('⚠️ LogoutService: Falling back to AuthService directly');
+            await AuthService().signOut();
+          }
+        })(),
 
-      // **Step 2: Reset MainController navigation state**
-      if (mainController != null) {
-        print('🚪 LogoutService: Step 2 - Clearing MainController...');
-        await mainController.performLogout(resetIndex: false);
-      }
+        // Step 2: Reset MainController navigation state
+        (() async {
+          if (mainController != null) {
+            print('🚪 LogoutService: Clearing MainController...');
+            await mainController.performLogout(resetIndex: false);
+          }
+        })(),
 
-      // **Step 3: Clear cached user/video data**
-      if (userProvider != null) {
-        print('🚪 LogoutService: Step 3 - Clearing UserProvider...');
-        userProvider.clearAllCaches();
-      }
+        // Providers are synchronous but we wrap them for consistency in parallel flow
+        Future.microtask(() {
+          if (userProvider != null) {
+            print('🚪 LogoutService: Clearing UserProvider...');
+            userProvider.clearAllCaches();
+          }
+        }),
 
-      if (videoProvider != null) {
-        print('🚪 LogoutService: Step 4 - Clearing VideoProvider...');
-        videoProvider.clearAllVideos();
-      }
+        Future.microtask(() {
+          if (videoProvider != null) {
+            print('🚪 LogoutService: Clearing VideoProvider...');
+            videoProvider.clearAllVideos();
+          }
+        }),
 
-      // **Step 5: Clear ProfileStateManager instance if scoped in tree**
-      if (profileStateManager != null) {
-        print('🚪 LogoutService: Step 5 - Clearing ProfileStateManager...');
-        profileStateManager.clearData();
-      }
+        Future.microtask(() {
+          if (profileStateManager != null) {
+            print('🚪 LogoutService: Clearing ProfileStateManager...');
+            profileStateManager.clearData();
+          }
+        }),
+      ]);
 
       print('✅ LogoutService: Complete logout successful - All state cleared');
     } catch (e) {
@@ -83,28 +93,36 @@ class LogoutService {
       final videoProvider = _readProvider<VideoProvider>(context);
       final profileStateManager = _readProvider<ProfileStateManager>(context);
 
-      // **FIXED: Step 1: Refresh authentication state**
-      if (authController != null) {
-        print('🔄 LogoutService: Refreshing authentication state...');
-        await authController.refreshAuthState();
-      }
+      // **OPTIMIZED: parallelized refresh for speed**
+      await Future.wait([
+        (() async {
+          if (authController != null) {
+            print('🔄 LogoutService: Refreshing authentication state...');
+            await authController.refreshAuthState();
+          }
+        })(),
 
-      // **FIXED: Step 2: Clear and refresh user caches**
-      if (userProvider != null) {
-        print('🔄 LogoutService: Refreshing user caches...');
-        userProvider.clearAllCaches();
-      }
+        Future.microtask(() {
+          if (userProvider != null) {
+            print('🔄 LogoutService: Refreshing user caches...');
+            userProvider.clearAllCaches();
+          }
+        }),
 
-      // **FIXED: Step 3: Clear and refresh video state**
-      if (videoProvider != null) {
-        print('🔄 LogoutService: Refreshing video state...');
-        videoProvider.clearAllVideos();
-      }
+        Future.microtask(() {
+          if (videoProvider != null) {
+            print('🔄 LogoutService: Refreshing video state...');
+            videoProvider.clearAllVideos();
+          }
+        }),
 
-      if (profileStateManager != null) {
-        print('🔄 LogoutService: Resetting ProfileStateManager cached data...');
-        profileStateManager.clearData();
-      }
+        Future.microtask(() {
+          if (profileStateManager != null) {
+            print('🔄 LogoutService: Resetting ProfileStateManager cached data...');
+            profileStateManager.clearData();
+          }
+        }),
+      ]);
 
       print('✅ LogoutService: All state refreshed successfully');
     } catch (e) {

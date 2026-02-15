@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
+import 'package:vayu/features/profile/presentation/managers/game_creator_manager.dart';
 import 'package:vayu/shared/services/auto_scroll_settings.dart';
 import 'package:vayu/features/profile/presentation/widgets/profile_dialogs_widget.dart';
+import 'package:vayu/shared/theme/app_theme.dart';
 
 import 'package:vayu/features/profile/presentation/screens/creator_payment_setup_screen.dart';
 
@@ -69,8 +71,8 @@ class ProfileMenuWidget extends StatelessWidget {
                 ),
               ),
               Expanded(
-                child: Consumer<ProfileStateManager>(
-                  builder: (context, stateManager, child) {
+                child: Consumer2<ProfileStateManager, GameCreatorManager>(
+                  builder: (context, stateManager, gameManager, child) {
                     // Create list of menu items
                     List<Map<String, dynamic>> menuItems = [];
 
@@ -146,6 +148,17 @@ class ProfileMenuWidget extends StatelessWidget {
                       },
                     });
 
+                    // Game Creator Dashboard Toggle
+                    menuItems.add({
+                      'title': gameManager.isCreatorMode ? 'Video Creator' : 'Game Creator',
+                      'icon': gameManager.isCreatorMode ? Icons.video_collection_outlined : Icons.videogame_asset_outlined,
+                      'color': AppTheme.primary,
+                      'onTap': () {
+                        Navigator.pop(context);
+                        gameManager.toggleCreatorMode();
+                      },
+                    });
+
                     // Report User (conditionally show)
                     if (userId != null &&
                         ((stateManager.userData?['_id'] ??
@@ -213,7 +226,7 @@ class ProfileMenuWidget extends StatelessWidget {
 
                     // Sign Out
                     menuItems.add({
-                      'title': 'Sign Out',
+                      'title': 'Logout',
                       'icon': Icons.logout,
                       'color': Colors.red,
                       'onTap': () {

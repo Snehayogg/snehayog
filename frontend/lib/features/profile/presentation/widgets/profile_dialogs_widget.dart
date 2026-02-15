@@ -21,7 +21,7 @@ class ProfileDialogsWidget {
     print('🔧 ProfileScreen: Opening Settings Bottom Sheet');
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.backgroundPrimary,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -40,24 +40,23 @@ class ProfileDialogsWidget {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.settings, color: Colors.black87, size: 24),
+                  const Icon(Icons.settings, color: AppTheme.textPrimary, size: 24),
                   const SizedBox(width: 12),
                   Text(
                     'Settings',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
-                        ),
+                    style: AppTheme.titleLarge.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const Spacer(),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close, color: Colors.black54),
+                    icon: const Icon(Icons.close, color: AppTheme.textSecondary),
                   ),
                 ],
               ),
             ),
-            Divider(color: Colors.grey[300], height: 1),
+            Divider(color: AppTheme.borderPrimary, height: 1),
 
             // Settings options
             Consumer<ProfileStateManager>(
@@ -100,7 +99,7 @@ class ProfileDialogsWidget {
                           }
                           Navigator.pop(context);
                         },
-                        iconColor: Colors.grey,
+                        iconColor: AppTheme.textSecondary,
                       ),
                       _buildSettingsTile(
                         context: context,
@@ -306,37 +305,37 @@ class ProfileDialogsWidget {
             Text('Help & Support', style: Theme.of(context).textTheme.headlineSmall),
           ],
         ),
-        content: const Column(
+        content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Need help? Here are some common solutions:',
-              style: TextStyle(color: Colors.black54, fontSize: 16),
+              style: AppTheme.bodyMedium,
             ),
             SizedBox(height: 16),
             Text(
               '• Profile Issues: Try refreshing your profile',
-              style: TextStyle(color: Colors.black87, fontSize: 14),
+              style: AppTheme.bodySmall,
             ),
             Text(
               '• Video Problems: Check if videos need HLS conversion',
-              style: TextStyle(color: Colors.black87, fontSize: 14),
+              style: AppTheme.bodySmall,
             ),
             Text(
               '• Payment Setup: Complete payment setup for earnings',
-              style: TextStyle(color: Colors.black87, fontSize: 14),
+              style: AppTheme.bodySmall,
             ),
             Text(
               '• Account Issues: Try signing out and back in',
-              style: TextStyle(color: Colors.black87, fontSize: 14),
+              style: AppTheme.bodySmall,
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close', style: TextStyle(color: Colors.black54)),
+            child: const Text('Close', style: TextStyle(color: AppTheme.textSecondary)),
           ),
           ElevatedButton(
             onPressed: () {
@@ -344,8 +343,8 @@ class ProfileDialogsWidget {
               // Handle debug info
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
+              backgroundColor: AppTheme.primary,
+              foregroundColor: AppTheme.textInverse,
             ),
             child: const Text('Debug Info'),
           ),
@@ -379,7 +378,7 @@ class ProfileDialogsWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.backgroundPrimary,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -399,12 +398,12 @@ class ProfileDialogsWidget {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.blue.shade100,
+                      color: AppTheme.primary.withValues(alpha:0.1),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(
+                    child: const Icon(
                       Icons.help_outline,
-                      color: Colors.blue.shade700,
+                      color: AppTheme.primary,
                       size: 24,
                     ),
                   ),
@@ -418,19 +417,19 @@ class ProfileDialogsWidget {
                           style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.w700,
-                            color: Colors.black87,
+                            color: AppTheme.textPrimary,
                           ),
                         ),
                         SizedBox(height: 4),
                         Text(
                           'Everything you need to know about Vayug',
-                          style: TextStyle(fontSize: 14, color: Colors.grey),
+                          style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
                         ),
                       ],
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(Icons.close, color: AppTheme.textSecondary),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
@@ -525,12 +524,12 @@ class ProfileDialogsWidget {
       margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
+        color: AppTheme.backgroundSecondary,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200, width: 1),
+        border: Border.all(color: AppTheme.borderPrimary, width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha:0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -555,10 +554,8 @@ class ProfileDialogsWidget {
               Expanded(
                 child: Text(
                   question,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
+                  style: AppTheme.titleSmall.copyWith(
+                    color: AppTheme.textPrimary,
                     height: 1.3,
                   ),
                 ),
@@ -571,15 +568,14 @@ class ProfileDialogsWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppTheme.backgroundPrimary,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade200, width: 1),
+              border: Border.all(color: AppTheme.borderPrimary, width: 1),
             ),
             child: Text(
               answer,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade700,
+              style: AppTheme.bodySmall.copyWith(
+                color: AppTheme.textSecondary,
                 height: 1.5,
                 letterSpacing: 0.2,
               ),
@@ -593,7 +589,7 @@ class ProfileDialogsWidget {
   static void showLegalBottomSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.backgroundPrimary,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -609,12 +605,12 @@ class ProfileDialogsWidget {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.blue.shade100,
+                      color: AppTheme.primary.withValues(alpha:0.1),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(
+                    child: const Icon(
                       Icons.gavel,
-                      color: Colors.blue.shade700,
+                      color: AppTheme.primary,
                       size: 24,
                     ),
                   ),
@@ -628,19 +624,19 @@ class ProfileDialogsWidget {
                           style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.w700,
-                            color: Colors.black87,
+                            color: AppTheme.textPrimary,
                           ),
                         ),
                         SizedBox(height: 4),
                         Text(
                           'Policies and contact information',
-                          style: TextStyle(fontSize: 14, color: Colors.grey),
+                          style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
                         ),
                       ],
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(Icons.close, color: AppTheme.textSecondary),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
@@ -671,10 +667,10 @@ class ProfileDialogsWidget {
                 onTap: () => _launchURL('https://snehayog.site/contact.html'),
               ),
               const SizedBox(height: 12),
-              const Center(
+              Center(
                 child: Text(
                   'Version 1.0.0',
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                  style: AppTheme.bodySmall.copyWith(color: AppTheme.textTertiary),
                 ),
               ),
               const SizedBox(height: 8),
@@ -692,16 +688,15 @@ class ProfileDialogsWidget {
     required VoidCallback onTap,
   }) {
     return ListTile(
-      leading: Icon(icon, color: Colors.blue.shade700),
+      leading: Icon(icon, color: AppTheme.primary),
       title: Text(
         title,
-        style: const TextStyle(
-          fontSize: 16,
+        style: AppTheme.bodyMedium.copyWith(
           fontWeight: FontWeight.w500,
-          color: Colors.black87,
+          color: AppTheme.textPrimary,
         ),
       ),
-      trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+      trailing: const Icon(Icons.chevron_right, color: AppTheme.textTertiary),
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
     );
@@ -736,7 +731,7 @@ class ProfileDialogsWidget {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.backgroundPrimary,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -769,27 +764,25 @@ class ProfileDialogsWidget {
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: Colors.blue.shade100,
+                              color: AppTheme.primary.withValues(alpha:0.1),
                               shape: BoxShape.circle,
                             ),
-                            child: Icon(
+                            child: const Icon(
                               Icons.workspace_premium,
-                              color: Colors.blue.shade700,
+                              color: AppTheme.primary,
                             ),
                           ),
                           const SizedBox(width: 12),
-                          const Expanded(
+                          Expanded(
                             child: Text(
                               'How to earn on Vayu',
-                              style: TextStyle(
-                                fontSize: 18,
+                              style: AppTheme.titleLarge.copyWith(
                                 fontWeight: FontWeight.w700,
-                                color: Colors.black87,
                               ),
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.close),
+                            icon: const Icon(Icons.close, color: AppTheme.textSecondary),
                             onPressed: closeSheet,
                           ),
                         ],

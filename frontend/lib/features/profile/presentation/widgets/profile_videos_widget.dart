@@ -1,12 +1,12 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
-import 'package:vayu/shared/services/profile_screen_logger.dart';
 import 'package:vayu/features/video/presentation/screens/video_screen.dart';
 import 'package:vayu/features/video/presentation/managers/shared_video_controller_pool.dart';
 import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:cached_network_image/cached_network_image.dart'; // Needed for the new method
+import 'dart:ui';
 
 class ProfileVideosWidget extends StatelessWidget {
   final ProfileStateManager stateManager;
@@ -37,13 +37,35 @@ class ProfileVideosWidget extends StatelessWidget {
             await precacheImage(NetworkImage(video.thumbnailUrl), context);
           } catch (e) {
             AppLogger.log(
-                '⚠️ ProfileVideosWidget: Failed to preload thumbnail: $e');
+                'âš ï¸ ProfileVideosWidget: Failed to preload thumbnail: $e');
           }
         }
       }
     });
   }
 
+  String _formatViews(int views) {
+    if (views >= 1000000) {
+      return '${(views / 1000000).toStringAsFixed(1).replaceAll('.0', '')}M';
+    } else if (views >= 1000) {
+      return '${(views / 1000).toStringAsFixed(1).replaceAll('.0', '')}K';
+    } else {
+      return views.toString();
+    }
+  }
+
+  bool _isVideoProcessing(VideoModel video) {
+    final status = video.processingStatus.toLowerCase();
+    return video.isOptimistic ||
+        status == 'queued' ||
+        status == 'pending' ||
+        status == 'processing';
+  }
+
+  String _processingLabel(VideoModel video) {
+    final progress = video.processingProgress.clamp(0, 100);
+    return progress > 0 ? 'Processing $progress%' : 'Processing';
+  }
   @override
   Widget build(BuildContext context) {
     // **OPTIMIZED: Preload video thumbnails for better performance**
@@ -206,11 +228,22 @@ class ProfileVideosWidget extends StatelessWidget {
   Widget _buildVideoItem(BuildContext context, ProfileStateManager manager, VideoModel video, int index) {
     final isSelected = manager.selectedVideoIds.contains(video.id);
     final bool isSeries = video.seriesId != null;
+    final bool isProcessing = _isVideoProcessing(video);
     final canSelectVideo = manager.isSelecting && manager.isOwner && manager.userData != null;
 
     return RepaintBoundary(
       child: GestureDetector(
         onTap: () async {
+          if (isProcessing && !manager.isSelecting) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Video is still processing. It will be playable shortly.'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+            return;
+          }
+
           if (isSeries && !manager.isSelecting) {
             _showEpisodeList(context, video);
             return;
@@ -309,38 +342,119 @@ class ProfileVideosWidget extends StatelessWidget {
                     ),
                   ),
 
-                // Views Overlay
-                Positioned(
-                  bottom: 12,
-                  left: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.7),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.visibility,
-                          color: Colors.white,
-                          size: 14,
+                // Processing overlay
+                if (isProcessing)
+                  Positioned.fill(
+                    child: Container(
+                      color: Colors.black.withOpacity(0.45),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 28,
+                              height: 28,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 3,
+                                value: video.processingProgress > 0
+                                    ? video.processingProgress.clamp(0, 100) / 100.0
+                                    : null,
+                                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _processingLabel(video),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${video.views}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
 
+                if (isProcessing)
+                  Positioned(
+                    top: 10,
+                    left: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.9),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _processingLabel(video),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // Views Overlay
+                if (!isProcessing)
+                  Positioned(
+                    bottom: 10,
+                    left: 10,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.15),
+                              width: 0.5,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.1),
+                                blurRadius: 10,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.visibility_rounded,
+                                color: Colors.white.withOpacity(0.9),
+                                size: 13,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                _formatViews(video.views),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.3,
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.black26,
+                                      offset: Offset(0, 1),
+                                      blurRadius: 2,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 // Selection Overlay
                 if (isSelected)
                   Positioned.fill(
@@ -569,3 +683,12 @@ class ProfileVideosWidget extends StatelessWidget {
     );
   }
 }
+
+
+
+
+
+
+
+
+

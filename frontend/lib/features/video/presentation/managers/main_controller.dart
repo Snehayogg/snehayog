@@ -1,4 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayu/features/auth/data/services/logout_service.dart';
+import 'package:provider/provider.dart';
+import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
+import 'package:vayu/features/video/presentation/managers/video_provider.dart';
+import 'dart:async';
 import 'package:vayu/features/video/presentation/managers/shared_video_controller_pool.dart';
 import 'package:vayu/features/video/presentation/managers/video_controller_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -331,6 +337,36 @@ class MainController extends ChangeNotifier {
   /// **NEW: Public method to save current tab index (can be called from anywhere)**
   Future<void> saveCurrentTabIndex() async {
     await _saveCurrentTabIndex();
+  }
+
+  /// **NEW: Optimized state refresh and pre-fetch after account switch**
+  /// Call this after a successful login to coordinate parallel data loading.
+  Future<void> refreshAppStateAfterSwitch(BuildContext context) async {
+    try {
+      AppLogger.log('🚀 MainController: Starting parallel state refresh and pre-fetch...');
+      
+      // 1. Refresh all state providers (clears stale data)
+      await LogoutService.refreshAllState(context);
+
+      // 2. Parallel pre-fetch for immediate UI readiness
+      // We don't await individual loads to keep them truly parallel
+      unawaited(Future.wait([
+        // Pre-fetch own profile data
+        Provider.of<ProfileStateManager>(context, listen: false)
+            .loadUserData(null, forceRefresh: true, silent: true),
+        
+        // Pre-fetch initial video feed
+        Provider.of<VideoProvider>(context, listen: false).refreshVideos(),
+      ]).then((_) {
+        AppLogger.log('✅ MainController: Parallel pre-fetch completed');
+      }).catchError((e) {
+        AppLogger.log('⚠️ MainController: Pre-fetch encounterd errors: $e');
+      }));
+
+      AppLogger.log('✅ MainController: State refresh initiated');
+    } catch (e) {
+      AppLogger.log('❌ MainController: Error during state refresh: $e');
+    }
   }
 
 }

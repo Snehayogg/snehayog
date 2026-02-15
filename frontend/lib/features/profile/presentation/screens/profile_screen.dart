@@ -1,12 +1,11 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:vayu/shared/utils/responsive_helper.dart';
+import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import 'dart:io'; // Added for File
 import 'package:vayu/shared/config/app_config.dart';
 import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
+import 'package:vayu/features/profile/presentation/managers/game_creator_manager.dart';
 import 'package:vayu/shared/managers/smart_cache_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:vayu/shared/providers/user_provider.dart';
@@ -18,6 +17,9 @@ import 'package:share_plus/share_plus.dart' as sp;
 import 'package:vayu/features/profile/data/datasources/profile_local_datasource.dart';
 import 'package:vayu/shared/services/http_client_service.dart';
 import 'package:vayu/features/profile/presentation/widgets/profile_videos_widget.dart';
+import 'package:vayu/features/profile/presentation/widgets/profile_header_widget.dart';
+import 'package:vayu/features/profile/presentation/widgets/profile_tabs_widget.dart';
+import 'package:vayu/features/profile/presentation/widgets/profile_static_views.dart';
 import 'package:vayu/features/profile/presentation/widgets/profile_menu_widget.dart';
 import 'package:vayu/features/profile/presentation/widgets/profile_dialogs_widget.dart';
 import 'package:vayu/features/profile/presentation/widgets/top_earners_grid.dart';
@@ -37,6 +39,7 @@ import 'package:vayu/shared/utils/app_text.dart';
 import 'package:vayu/features/profile/presentation/widgets/finger_tap_guide.dart';
 import 'package:vayu/features/video/data/services/video_cache_proxy_service.dart';
 import 'package:vayu/features/profile/presentation/screens/edit_profile_screen.dart';
+import 'package:vayu/features/profile/presentation/widgets/game_creator_dashboard.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -61,6 +64,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   late final ProfileStateManager _stateManager;
   final ImagePicker _imagePicker = ImagePicker();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  bool _isSigningIn = false; // **NEW: Track local sign-in progress**
   final AdService _adService = AdService();
   final AuthService _authService = AuthService();
 
@@ -105,7 +109,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   void initState() {
     super.initState();
     ProfileScreenLogger.logProfileScreenInit();
-    _stateManager = ProfileStateManager();
+    _stateManager = Provider.of<ProfileStateManager>(context, listen: false);
     _stateManager.setContext(context);
 
     // Ensure context is set early for providers that may be used during loads
@@ -141,10 +145,11 @@ class _ProfileScreenState extends State<ProfileScreen>
     AppLogger.log(
         '🔄 ProfileScreen: Profile tab selected, checking if data needs loading');
 
-    // Get current user ID
-    final currentUserId = widget.userId ??
-        _stateManager.userData?['googleId'] ??
-        _stateManager.userData?['id'];
+    // Get current user ID from AuthService as source of truth
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final myId = authService.currentUserId;
+    
+    final currentUserId = widget.userId ?? myId;
 
     // **FIXED: Reset load attempt flags if user changed**
     if (currentUserId != null && currentUserId != _lastLoadedUserId) {
@@ -157,8 +162,17 @@ class _ProfileScreenState extends State<ProfileScreen>
           '🔄 ProfileScreen: User changed, resetting load attempt flags and UPI guide session status');
     }
 
-    // **OPTIMIZED: Only load if data is completely missing and we haven't exhausted retries**
-    if (_stateManager.userData == null) {
+    // **FIXED: Also force reload if userData exists but belongs to a different user (stale account data)**
+    final managerUserId = (_stateManager.userData?['googleId'] ?? _stateManager.userData?['id'])?.toString();
+    final isStaleData = managerUserId != null && managerUserId != currentUserId;
+
+    // **OPTIMIZED: Only load if data is completely missing, stale, or we haven't exhausted retries**
+    if (_stateManager.userData == null || isStaleData) {
+      if (isStaleData) {
+        AppLogger.log('⚠️ ProfileScreen: Detected stale user data in manager, clearing and reloading...');
+        _stateManager.clearData();
+        if (mounted) context.read<GameCreatorManager>().clearData();
+      }
       if (_profileNoDataFound) {
         AppLogger.log('ℹ️ ProfileScreen: Already checked - no data found for this user (not reloading)');
         return;
@@ -172,6 +186,13 @@ class _ProfileScreenState extends State<ProfileScreen>
       AppLogger.log(
           '📡 ProfileScreen: No user data found (Attempt ${_profileLoadAttemptCount + 1}/3), loading...');
       _loadData(); 
+    } else if (_stateManager.needsVideoRefresh) {
+      // **NEW: Handle producer/upload requested refresh**
+      AppLogger.log(
+          '🚀 ProfileScreen: Manager requested video refresh (needsVideoRefresh=true)');
+      _loadVideos(forceRefresh: true, silent: true).catchError((e) {
+        AppLogger.log('⚠️ ProfileScreen: Error in manager-requested refresh: $e');
+      });
     } else if (!_videosLoadAttempted &&
         _stateManager.userVideos.isEmpty &&
         !_stateManager.isVideosLoading) {
@@ -200,7 +221,9 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (forceRefresh) {
         AppLogger.log(
             '🔄 ProfileScreen: FORCE REFRESH - bypassing ALL cache, fetching fresh data from server');
-        // Skip to Step 2 - load directly from server
+        // **PREVENT STALE DATA: Clear old user data immediately before loading new user**
+        _stateManager.clearData();
+        if (mounted) context.read<GameCreatorManager>().clearData();
       } else {
         // Step 1: Try cache first (only when NOT forcing refresh)
         final cachedData = await _loadCachedProfileData();
@@ -724,7 +747,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     _hasUpiId.dispose();
     _isCheckingUpiId.dispose();
     _showUpiGuide.dispose();
-    _stateManager.dispose();
     super.dispose();
   }
 
@@ -783,13 +805,25 @@ class _ProfileScreenState extends State<ProfileScreen>
       final authController =
           Provider.of<GoogleSignInController>(context, listen: false);
 
+      if (mounted) setState(() => _isSigningIn = true);
+
       final userData = await authController.signIn();
       if (userData != null) {
-        // **FIX: Pass null to loadUserData to load own profile (not userId)**
-        // When null is passed, ProfileStateManager uses logged-in user from AuthService
+        // **OPTIMIZED: Parallel state refresh and pre-fetch**
+        if (mounted) {
+          final mainController = Provider.of<MainController>(context, listen: false);
+          // 1. Immediately clear local stale data from UI
+          _stateManager.clearData();
+        if (mounted) context.read<GameCreatorManager>().clearData();
+          
+          // 2. Perform parallel reset and pre-fetch
+          await mainController.refreshAppStateAfterSwitch(context);
+        }
+
         AppLogger.log(
             '🔄 ProfileScreen: Sign-in successful, loading own profile data...');
-        // Force refresh to get latest data from server
+        
+        // Force refresh to ensure final UI consistency
         await _loadData(forceRefresh: true);
 
         if (mounted) {
@@ -824,6 +858,8 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
         );
       }
+    } finally {
+      if (mounted) setState(() => _isSigningIn = false);
     }
   }
 
@@ -1065,10 +1101,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                       width: 64,
                       height: 64,
                       decoration: BoxDecoration(
-                        color: AppTheme.error.withValues(alpha:0.15),
+                        color: AppTheme.error.withOpacity(0.15),
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: AppTheme.error.withValues(alpha:0.3),
+                          color: AppTheme.error.withOpacity(0.3),
                           width: 2,
                         ),
                       ),
@@ -1114,7 +1150,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(8),
                                 side: BorderSide(
-                                  color: Colors.grey.withValues(alpha:0.3),
+                                  color: Colors.grey.withOpacity(0.3),
                                 ),
                               ),
                             ),
@@ -1355,60 +1391,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  Widget _buildSignInView() {
-    return RepaintBoundary(
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.account_circle,
-                size: 100,
-                color: AppTheme.textTertiary,
-              ),
-              const SizedBox(height: 20),
-              Text(
-                AppText.get('profile_sign_in_title'),
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: AppTheme.textPrimary,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                AppText.get('profile_sign_in_desc'),
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppTheme.textSecondary,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              ElevatedButton.icon(
-                onPressed: _handleGoogleSignIn,
-                icon: Image.network(
-                  'https://www.google.com/favicon.ico',
-                  height: 24,
-                ),
-                label: Text(AppText.get('profile_sign_in_button')),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.textPrimary,
-                  foregroundColor: AppTheme.textInverse,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1423,9 +1405,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               key: _scaffoldKey,
               backgroundColor: AppTheme.backgroundSecondary,
               appBar: _buildAppBar(false),
-              body: RepaintBoundary(
-                child: _buildSkeletonLoading(),
-              ),
+              body: const ProfileSkeleton(),
             );
           }
 
@@ -1479,6 +1459,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 widget.userId == null) {
               // User signed out and was viewing own profile - clear data
               _stateManager.clearData();
+        if (mounted) context.read<GameCreatorManager>().clearData();
             }
           });
 
@@ -1488,45 +1469,94 @@ class _ProfileScreenState extends State<ProfileScreen>
           final displayedUserId = widget.userId ??
               _stateManager.userData?['googleId']?.toString() ??
               _stateManager.userData?['id']?.toString();
-          final bool isViewingOwnProfile = loggedInUserId != null &&
-              loggedInUserId.isNotEmpty &&
-              loggedInUserId == displayedUserId;
+          final bool isViewingOwnProfile = widget.userId == null ||
+              (loggedInUserId != null &&
+                  displayedUserId != null &&
+                  loggedInUserId == displayedUserId);
 
-          return Scaffold(
-            key: _scaffoldKey,
-            backgroundColor: AppTheme.backgroundSecondary,
-            appBar: _buildAppBar(isViewingOwnProfile),
-            drawer: isViewingOwnProfile
-                ? ProfileMenuWidget(
-                    stateManager: _stateManager,
-                    userId: widget.userId,
-                    onEditProfile: _handleEditProfile,
-                    onSaveProfile: _handleSaveProfile,
-                    onCancelEdit: _handleCancelEdit,
-                    onReportUser: () => _openReportDialog(
-                      targetType: 'user',
-                      targetId: widget.userId!,
+          return Stack(
+            children: [
+              Scaffold(
+                key: _scaffoldKey,
+                backgroundColor: AppTheme.backgroundSecondary,
+                appBar: _buildAppBar(isViewingOwnProfile),
+                drawer: isViewingOwnProfile
+                    ? ProfileMenuWidget(
+                        stateManager: _stateManager,
+                        userId: widget.userId,
+                        onEditProfile: _handleEditProfile,
+                        onSaveProfile: _handleSaveProfile,
+                        onCancelEdit: _handleCancelEdit,
+                        onReportUser: () => _openReportDialog(
+                          targetType: 'user',
+                          targetId: widget.userId!,
+                        ),
+                        onShowFeedback: _showFeedbackDialog,
+                        onShowFAQ: _showFAQDialog,
+                        onEnterSelectionMode: () =>
+                            _stateManager.enterSelectionMode(),
+                        onLogout: _handleLogout,
+                        onGoogleSignIn: _handleGoogleSignIn,
+                        onCheckPaymentSetupStatus: _checkPaymentSetupStatus,
+                      )
+                    : null,
+                body: Consumer2<UserProvider, ProfileStateManager>(
+                  builder: (context, userProvider, profileState, child) {
+                    UserModel? userModel;
+                    if (widget.userId != null) {
+                      userModel = userProvider.getUserData(widget.userId!);
+                    }
+                    return _buildBody(userProvider, userModel, authController);
+                  },
+                ),
+              ),
+              // **NEW: Signing In Overlay**
+              if (_isSigningIn)
+                Container(
+                  color: Colors.black.withOpacity(0.5),
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 32, vertical: 24),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 32,
+                            height: 32,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 3,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.green),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            AppText.get('profile_signing_in_label') ??
+                                'Signing in...',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    onShowFeedback: _showFeedbackDialog,
-                    onShowFAQ: _showFAQDialog,
-                    onEnterSelectionMode: () =>
-                        _stateManager.enterSelectionMode(),
-                    onLogout: _handleLogout,
-                    onGoogleSignIn: _handleGoogleSignIn,
-                    onCheckPaymentSetupStatus: _checkPaymentSetupStatus,
-                  )
-                : null,
-            body: Consumer<UserProvider>(
-              builder: (context, userProvider, child) {
-                UserModel? userModel;
-                if (widget.userId != null) {
-                  userModel = userProvider.getUserData(widget.userId!);
-                }
-                // Use the local _stateManager directly since it's not in Provider
-                // Pass authController to check authentication status
-                return _buildBody(userProvider, userModel, authController);
-              },
-            ),
+                  ),
+                ),
+            ],
           );
         },
       ),
@@ -1537,15 +1567,13 @@ class _ProfileScreenState extends State<ProfileScreen>
       GoogleSignInController authController) {
     // **FIXED: If auth is still loading, show skeleton instead of sign-in UI**
     if (authController.isLoading) {
-      return RepaintBoundary(
-        child: _buildSkeletonLoading(),
-      );
+      return const ProfileSkeleton();
     }
 
     // **FIXED: Check authentication status first - if viewing own profile and not signed in, show sign-in view**
     // If viewing someone else's profile (widget.userId != null), show their profile even if not signed in
     if (widget.userId == null && !authController.isSignedIn) {
-      return _buildSignInView();
+      return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
     }
 
     // **FIXED: For creator profiles, ensure videos are loaded after profile data loads**
@@ -1595,9 +1623,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       valueListenable: _isLoading,
       builder: (context, isLoading, child) {
         if (isLoading) {
-          return RepaintBoundary(
-            child: _buildSkeletonLoading(),
-          );
+          return const ProfileSkeleton();
         }
 
         // **OPTIMIZED: Nested ValueListenableBuilder for error state**
@@ -1606,7 +1632,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           builder: (context, error, child) {
             // **FIXED: Check authentication status - if not signed in and viewing own profile, show sign-in view**
             if (widget.userId == null && !authController.isSignedIn) {
-              return _buildSignInView();
+              return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
             }
 
             // Show error state
@@ -1617,13 +1643,13 @@ class _ProfileScreenState extends State<ProfileScreen>
 
               // If viewing own profile and auth error, show sign-in
               if (widget.userId == null && isAuthError) {
-                return _buildSignInView();
+                return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
               }
               
               // **FIX: Allow viewing other profiles even if not signed in**
               // If not signed in and viewing own profile -> Sign In
               if (widget.userId == null && !authController.isSignedIn) {
-                 return _buildSignInView();
+                 return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
               }
 
               // Otherwise show error with retry (for both signed-in users and public profiles)
@@ -1700,7 +1726,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             // Check if we have user data - if viewing own profile and no data, show sign-in view
             if (_stateManager.userData == null) {
               if (widget.userId == null && !authController.isSignedIn) {
-                return _buildSignInView();
+                return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
               }
               // If viewing someone else's profile, we might not have data yet - show loading or error
               if (widget.userId != null) {
@@ -1776,13 +1802,16 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ),
                 );
               }
-              return _buildSignInView();
+              return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
             }
 
             // Determine if viewing own profile (authController already passed as parameter)
 
             // If we reach here, we have user data and can show the profile
-            // If we reach here, we have user data and can show the profile
+            if (context.watch<GameCreatorManager>().isCreatorMode) {
+              return const GameCreatorDashboard();
+            }
+
             return Stack(
               children: [
                 RefreshIndicator(
@@ -1853,139 +1882,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // **NEW: Skeleton loading for better UX**
-  Widget _buildSkeletonLoading() {
-    return RepaintBoundary(
-      child: SingleChildScrollView(
-        child: Column(
-          children: [
-            // Profile header skeleton
-            RepaintBoundary(
-              child: Container(
-                padding: ResponsiveHelper.getAdaptivePadding(context),
-                child: Column(
-                  children: [
-                    // Profile picture skeleton
-                    Container(
-                      width: ResponsiveHelper.isMobile(context) ? 100 : 150,
-                      height: ResponsiveHelper.isMobile(context) ? 100 : 150,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[300],
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Name skeleton
-                    Container(
-                      width: 200,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[300],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Edit button skeleton
-                    Container(
-                      width: 120,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[300],
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // Stats skeleton
-            RepaintBoundary(
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                decoration: const BoxDecoration(
-                  border: Border(
-                    top: BorderSide(color: Color(0xFFE0E0E0)),
-                    bottom: BorderSide(color: Color(0xFFE0E0E0)),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: List.generate(
-                      3,
-                      (index) => Column(
-                            children: [
-                              Container(
-                                width: 60,
-                                height: 32,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[300],
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Container(
-                                width: 80,
-                                height: 20,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[300],
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                              ),
-                            ],
-                          )),
-                ),
-              ),
-            ),
-
-            // Videos section skeleton (Instagram-like 3-column, tighter spacing)
-            RepaintBoundary(
-              child: Padding(
-                padding: ResponsiveHelper.getAdaptivePadding(context),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Title skeleton
-                    Container(
-                      width: 150,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[300],
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Video grid skeleton
-                    GridView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        crossAxisSpacing: 1,
-                        mainAxisSpacing: 1,
-                        childAspectRatio: 0.5,
-                      ),
-                      itemCount: 6,
-                      itemBuilder: (context, index) => Container(
-                        decoration: BoxDecoration(
-                          color: Colors.grey[300],
-                          borderRadius: BorderRadius.zero,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   PreferredSizeWidget _buildAppBar(bool isViewingOwnProfile) {
     return PreferredSize(
@@ -1993,7 +1889,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       child: Consumer<ProfileStateManager>(
         builder: (context, stateManager, child) {
           return AppBar(
-            backgroundColor: Colors.white,
+            backgroundColor: AppTheme.backgroundPrimary,
             elevation: 0,
             shadowColor: Colors.transparent,
             surfaceTintColor: Colors.transparent,
@@ -2003,11 +1899,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                     stateManager.selectedVideoIds.isNotEmpty
                 ? Text(
                     '${stateManager.selectedVideoIds.length} video${stateManager.selectedVideoIds.length == 1 ? '' : 's'} selected',
-                    style: const TextStyle(
-                      color: Color(0xFF1A1A1A),
-                      fontSize: 14,
+                    style: AppTheme.titleMedium.copyWith(
                       fontWeight: FontWeight.w600,
-                      letterSpacing: -0.5,
                     ),
                   )
                 : (stateManager.isEditing
@@ -2027,9 +1920,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     : Text(
                         stateManager.userData?['name'] ??
                             AppText.get('profile_title'),
-                        style: const TextStyle(
-                          color: Color(0xFF1A1A1A),
-                          fontSize: 16,
+                        style: AppTheme.titleLarge.copyWith(
                           fontWeight: FontWeight.w700,
                           letterSpacing: -0.5,
                         ),
@@ -2037,7 +1928,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             leading: isViewingOwnProfile
                 ? IconButton(
                     icon: const Icon(Icons.menu,
-                        color: Color(0xFF1A1A1A), size: 20),
+                        color: AppTheme.textPrimary, size: 20),
                     tooltip: 'Menu',
                     onPressed: () {
                       _scaffoldKey.currentState?.openDrawer();
@@ -2045,7 +1936,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   )
                 : IconButton(
                     icon: const Icon(Icons.arrow_back,
-                        color: Color(0xFF1A1A1A), size: 20),
+                        color: AppTheme.textPrimary, size: 20),
                     tooltip: 'Back',
                     onPressed: () {
                       Navigator.of(context).pop();
@@ -2056,7 +1947,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               preferredSize: const Size.fromHeight(1),
               child: Container(
                 height: 1,
-                color: const Color(0xFFE5E7EB),
+                color: AppTheme.borderPrimary,
               ),
             ),
           );
@@ -2070,7 +1961,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       IconButton(
         icon: const Icon(
           Icons.search,
-          color: Color(0xFF1A1A1A),
+          color: AppTheme.textPrimary,
           size: 20,
         ),
         tooltip: 'Search videos & creators',
@@ -2210,10 +2101,10 @@ class _ProfileScreenState extends State<ProfileScreen>
     final displayedUserId = widget.userId ??
         _stateManager.userData?['googleId']?.toString() ??
         _stateManager.userData?['id']?.toString();
-    final bool isViewingOwnProfile =
-        loggedInUserId != null && loggedInUserId.isNotEmpty
-            ? loggedInUserId == displayedUserId
-            : widget.userId == null;
+    final bool isViewingOwnProfile = widget.userId == null ||
+        (loggedInUserId != null &&
+            displayedUserId != null &&
+            loggedInUserId == displayedUserId);
 
     final List<Widget> slivers = [];
 
@@ -2272,156 +2163,15 @@ class _ProfileScreenState extends State<ProfileScreen>
     // 2. Compact Profile Header
     slivers.add(
       SliverToBoxAdapter(
-        child: Consumer<ProfileStateManager>(
-          builder: (context, stateManager, child) {
-            AppLogger.log('🎨 ProfileScreen: Rebuilding Profile Header (Videos: ${stateManager.totalVideoCount})');
-            return Container(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      _buildCompactAvatar(),
-                      const SizedBox(width: 20),
-                      Expanded(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: _buildCompactStatItem(
-                                label: 'Subscribers',
-                                valueBuilder: (context) => _getFollowersCountString(context),
-                              ),
-                            ),
-                            Container(
-                              height: 24,
-                              width: 1,
-                              color: Colors.grey[300],
-                            ),
-                            Expanded(
-                              child: _buildCompactStatItem(
-                                label: 'Content',
-                                valueBuilder: (context) => stateManager.totalVideoCount.toString(),
-                              ),
-                            ),
-                            Container(
-                              height: 24,
-                              width: 1,
-                              color: Colors.grey[300],
-                            ),
-                            Expanded(
-                              child: _buildCompactStatItem(
-                                label: isViewingOwnProfile ? 'Earnings' : 'Ranking',
-                                isHighlighted: true,
-                                valueBuilder: (context) {
-                                  if (isViewingOwnProfile) {
-                                    return (stateManager.isEarningsLoading || stateManager.isVideosLoading)
-                                        ? 'Loading...'
-                                        : '₹${stateManager.cachedEarnings.toStringAsFixed(2)}';
-                                  } else {
-                                    final rank = stateManager.userData?['rank'] ?? 0;
-                                    return rank > 0 ? '#$rank' : '—';
-                                  }
-                                },
-                                onTap: isViewingOwnProfile ? _handleEarningsTap : null,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    stateManager.userData?['bio'] ?? '',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF4B5563),
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      if (isViewingOwnProfile)
-                        Expanded(
-                          child: stateManager.isEditing
-                              ? Row(
-                                  children: [
-                                    Expanded(
-                                      child: OutlinedButton(
-                                        onPressed: _handleCancelEdit,
-                                        style: OutlinedButton.styleFrom(
-                                          foregroundColor: Colors.red,
-                                          side: const BorderSide(color: Colors.red),
-                                          padding: const EdgeInsets.symmetric(vertical: 10),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(8),
-                                          ),
-                                        ),
-                                        child: const Text('Cancel'),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: ElevatedButton(
-                                        onPressed: _handleSaveProfile,
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.green,
-                                          foregroundColor: Colors.white,
-                                          padding: const EdgeInsets.symmetric(vertical: 10),
-                                          elevation: 0,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(8),
-                                          ),
-                                        ),
-                                        child: const Text('Save'),
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : ElevatedButton.icon(
-                                  key: _upiButtonKey,
-                                  onPressed: _handleAddUpiId,
-                                  icon: const Icon(Icons.account_balance_wallet, size: 18),
-                                  label: const Text('Add UPI ID'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF10B981),
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(vertical: 10),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    elevation: 0,
-                                  ),
-                                ),
-                        ),
-                      if (isViewingOwnProfile && !stateManager.isEditing) ...[
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: _handleReferFriends,
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFF6B7280),
-                              side: const BorderSide(color: Color(0xFFD1D5DB)),
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            child: const Text('Refer Friends'),
-                          ),
-                        ),
-                      ]
-                    ],
-                  ),
-                ],
-              ),
-            );
-          },
+        child: ProfileHeaderWidget(
+          isViewingOwnProfile: isViewingOwnProfile,
+          onProfilePhotoChange: _handleProfilePhotoChange,
+          onAddUpiId: _handleAddUpiId,
+          onReferFriends: _handleReferFriends,
+          onEarningsTap: _handleEarningsTap,
+          onSaveProfile: _handleSaveProfile,
+          onCancelEdit: _handleCancelEdit,
+          upiButtonKey: _upiButtonKey,
         ),
       ),
     );
@@ -2434,7 +2184,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         child: ValueListenableBuilder<int>(
           valueListenable: _activeProfileTabIndex,
           builder: (context, activeIndex, child) {
-            return _ProfileTabs(
+            return ProfileTabsWidget(
               activeIndex: activeIndex,
               onSelect: (i) => _activeProfileTabIndex.value = i,
             );
@@ -2463,190 +2213,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     return slivers;
   }
 
-  // **NEW: Helper to build compact avatar**
-  Widget _buildCompactAvatar() {
-    return GestureDetector(
-      onTap: _stateManager.isEditing ? _handleProfilePhotoChange : null,
-      child: Stack(
-        children: [
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: const Color(0xFFE5E7EB),
-                width: 2,
-              ),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(40),
-              child: Consumer<ProfileStateManager>(
-                builder: (context, stateManager, child) {
-                  final profilePic = stateManager.userData?['profilePic'];
-                  if (profilePic != null && profilePic.isNotEmpty) {
-                    if (profilePic.startsWith('http')) {
-                      return Image.network(profilePic, fit: BoxFit.cover);
-                    } else {
-                      return Image.file(File(profilePic), fit: BoxFit.cover);
-                    }
-                  }
-                  return Container(
-                    color: Colors.grey[200],
-                    child: const Icon(Icons.person, color: Colors.grey, size: 40),
-                  );
-                },
-              ),
-            ),
-          ),
-          if (_stateManager.isEditing)
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha:0.4),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.camera_alt,
-                  color: Colors.white,
-                  size: 24,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
 
-  // **NEW: Helper for compact stats**
-  Widget _buildCompactStatItem({
-    required String label,
-    required String Function(BuildContext) valueBuilder,
-    bool isHighlighted = false,
-    VoidCallback? onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        children: [
-          Builder(builder: (context) {
-             final value = valueBuilder(context);
-             final bool isLoadingText = value.contains('Loading');
-             return Text(
-               value,
-               style: TextStyle(
-                 color: isHighlighted ? const Color(0xFF2563EB) : const Color(0xFF111827),
-                 fontSize: isLoadingText ? 10 : 18,
-                 fontWeight: isLoadingText ? FontWeight.w600 : FontWeight.w700,
-               ),
-             );
-          }),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Color(0xFF6B7280),
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _getFollowersCountString(BuildContext context) {
-    // 1. Try getting from ProfileStateManager first (immediate)
-    if (_stateManager.userData != null) {
-      final followersCount = _stateManager.userData!['followersCount'] ??
-          _stateManager.userData!['followers'];
-
-      if (followersCount != null) {
-        final count = followersCount is int
-            ? followersCount
-            : (int.tryParse(followersCount.toString()) ?? 0);
-        if (count > 0) return count.toString();
-      }
-    }
-
-    // 2. Fallback to UserProvider (async loaded)
-    final List<String> idsToTry = <String?>[
-      widget.userId,
-      _stateManager.userData?['googleId'],
-      _stateManager.userData?['_id'] ?? _stateManager.userData?['id'],
-    ]
-        .where((e) => e != null && (e).isNotEmpty)
-        .map((e) => e as String)
-        .toList()
-        .toSet()
-        .toList();
-
-    if (idsToTry.isNotEmpty) {
-      try {
-        final userProvider = Provider.of<UserProvider>(context, listen: false);
-        for (final candidateId in idsToTry) {
-          final userModel = userProvider.getUserData(candidateId);
-          if (userModel?.followersCount != null &&
-              userModel!.followersCount > 0) {
-            return userModel.followersCount.toString();
-          }
-        }
-      } catch (e) {
-        // Ignore provider errors if context is unstable
-      }
-    }
-
-    return '0';
-  }
-
-  /// Compact tabs: Videos | Recommendations
-  Widget _ProfileTabs(
-      {required int activeIndex, required ValueChanged<int> onSelect}) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF3F4F6),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () => onSelect(0),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                decoration: BoxDecoration(
-                  color: activeIndex == 0 ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: activeIndex == 0 ? [
-                    BoxShadow(color: Colors.black.withValues(alpha:0.05), blurRadius: 2, offset: const Offset(0, 1))
-                  ] : [],
-                ),
-                child: Center(child: Text('Videos', style: TextStyle(fontWeight: FontWeight.w600, color: activeIndex == 0 ? Colors.black : Colors.grey))),
-              ),
-            ),
-          ),
-          Expanded(
-            child: GestureDetector(
-              onTap: () => onSelect(1),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                decoration: BoxDecoration(
-                   color: activeIndex == 1 ? Colors.white : Colors.transparent,
-                   borderRadius: BorderRadius.circular(8),
-                    boxShadow: activeIndex == 1 ? [
-                    BoxShadow(color: Colors.black.withValues(alpha:0.05), blurRadius: 2, offset: const Offset(0, 1))
-                  ] : [],
-                ),
-                 child: Center(child: Text('Top Earner', style: TextStyle(fontWeight: FontWeight.w600, color: activeIndex == 1 ? Colors.black : Colors.grey))),
-
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
 
   /// Recommendations tab – shows Top Earners from following (3-column grid)
@@ -2660,9 +2227,8 @@ class _ProfileScreenState extends State<ProfileScreen>
             const SizedBox(height: 8),
             Text(
               AppText.get('profile_top_earners'),
-              style: const TextStyle(
-                color: Color(0xFF111827),
-                fontSize: 16,
+              style: AppTheme.titleSmall.copyWith(
+                color: AppTheme.textPrimary,
                 fontWeight: FontWeight.w600,
               ),
             ),

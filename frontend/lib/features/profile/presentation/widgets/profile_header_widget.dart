@@ -1,447 +1,310 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:vayu/shared/theme/app_theme.dart';
 import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
 import 'package:vayu/shared/providers/user_provider.dart';
-import 'package:vayu/shared/services/profile_screen_logger.dart';
-import 'package:vayu/shared/widgets/follow_button_widget.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
-import 'dart:io';
+import 'package:vayu/shared/utils/app_logger.dart';
 
 class ProfileHeaderWidget extends StatelessWidget {
-  final ProfileStateManager stateManager;
-  final String? userId;
-  final VoidCallback? onEditProfile;
+  final bool isViewingOwnProfile;
+  final VoidCallback? onProfilePhotoChange;
+  final VoidCallback? onAddUpiId;
+  final VoidCallback? onReferFriends;
+  final VoidCallback? onEarningsTap;
   final VoidCallback? onSaveProfile;
   final VoidCallback? onCancelEdit;
-  final VoidCallback? onProfilePhotoChange;
-  final VoidCallback? onShowHowToEarn;
+  final GlobalKey? upiButtonKey;
 
   const ProfileHeaderWidget({
     super.key,
-    required this.stateManager,
-    this.userId,
-    this.onEditProfile,
+    required this.isViewingOwnProfile,
+    this.onProfilePhotoChange,
+    this.onAddUpiId,
+    this.onReferFriends,
+    this.onEarningsTap,
     this.onSaveProfile,
     this.onCancelEdit,
-    this.onProfilePhotoChange,
-    this.onShowHowToEarn,
+    this.upiButtonKey,
   });
 
   @override
   Widget build(BuildContext context) {
-    return RepaintBoundary(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-        child: Column(
-          children: [
-            // Row: Profile photo left, username and CTA on right
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Avatar stack
-                RepaintBoundary(
-                  child: Stack(
-                    children: [
-                      Consumer<ProfileStateManager>(
-                        builder: (context, stateManager, child) {
-                          final profileImage = _getProfileImage(context);
-                          final profilePic =
-                              stateManager.userData?['profilePic'];
-                          final hasProfilePic =
-                              profilePic != null && profilePic.isNotEmpty;
-
-                          return Container(
-                            width: 80,
-                            height: 80,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: AppTheme.borderPrimary,
-                                width: 2,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.1),
-                                  blurRadius: 16,
-                                  offset: const Offset(0, 6),
-                                ),
-                              ],
-                            ),
-                            child: Stack(
-                              children: [
-                                CircleAvatar(
-                                  radius: 45,
-                                    backgroundColor: AppTheme.backgroundSecondary,
-                                  foregroundImage: profileImage,
-                                  onForegroundImageError:
-                                      (exception, stackTrace) {
-                                    ProfileScreenLogger.logError(
-                                        'Error loading profile image: $exception');
-                                  },
-                                  child: const Icon(
-                                          Icons.person,
-                                          size: 40,
-                                          color: AppTheme.textTertiary,
-                                        ),
-                                ),
-                                // Show loading indicator when image is being loaded
-                                if (hasProfilePic &&
-                                    profilePic.startsWith('http'))
-                                  Positioned.fill(
-                                    child: _ProfileImageLoader(
-                                        imageUrl: profilePic),
-                                  ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                      Consumer<ProfileStateManager>(
-                        builder: (context, stateManager, child) {
-                          if (stateManager.isEditing) {
-                            return Positioned(
-                              bottom: 0,
-                              right: 0,
-                              child: Container(
-                                width: 32,
-                                height: 32,
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).primaryColor,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 2,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.1),
-                                      blurRadius: 6,
-                                      offset: const Offset(0, 3),
-                                    ),
-                                  ],
-                                ),
-                                child: IconButton(
-                                  icon: const Icon(
-                                    Icons.camera_alt,
-                                    color: Colors.white,
-                                    size: 16,
-                                  ),
-                                  onPressed: onProfilePhotoChange,
-                                  padding: EdgeInsets.zero,
-                                ),
-                              ),
-                            );
-                          }
-                          return const SizedBox.shrink();
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 16),
-                // Username and How to earn / Follow button
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Consumer<ProfileStateManager>(
-                        builder: (context, stateManager, child) {
-                          if (stateManager.isEditing) {
-                            return RepaintBoundary(
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                      color: AppTheme.borderPrimary),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.04),
-                                      blurRadius: 6,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: TextField(
-                                  controller: stateManager.nameController,
-                                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                  decoration: const InputDecoration(
-                                    border: InputBorder.none,
-                                    hintText: 'Enter your name',
-                                    hintStyle: TextStyle(
-                                      color: AppTheme.textTertiary,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            );
-                          } else {
-                            return RepaintBoundary(
-                              child: Text(
-                                _getUserName(context),
-                                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: -0.4,
-                                ),
-                              ),
-                            );
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      // **FIX: Show "How to earn" button for own profile, Follow button for others**
-                      Builder(
-                        builder: (context) {
-                          // Show "How to earn" button if callback is provided (own profile)
-                          if (onShowHowToEarn != null) {
-                            return ElevatedButton.icon(
-                              onPressed: onShowHowToEarn,
-                              icon:
-                                  const Icon(Icons.workspace_premium, size: 18),
-                              label: const Text('How to earn'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppTheme.success,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 10,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                elevation: 0,
-                              ),
-                            );
-                          }
-
-                          // Show Follow button for other users' profiles
-                          final displayedUserId = userId ??
-                              stateManager.userData?['googleId']?.toString() ??
-                              stateManager.userData?['id']?.toString();
-
-                          if (displayedUserId != null) {
-                            final userName = _getUserName(context);
-                            return FollowButtonWidget(
-                              uploaderId: displayedUserId,
-                              uploaderName: userName,
-                            );
-                          }
-
-                          return const SizedBox.shrink();
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-
-            // Edit Action Buttons
-            Consumer<ProfileStateManager>(
-              builder: (context, stateManager, child) {
-                if (stateManager.isEditing) {
-                  return RepaintBoundary(
-                    child: Container(
-                      margin: const EdgeInsets.only(top: 24),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          ElevatedButton(
-                            onPressed: onCancelEdit,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.backgroundSecondary,
-                              foregroundColor: AppTheme.textSecondary,
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 20, vertical: 10),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(6),
-                                side: BorderSide.none,
-                              ),
-                            ),
-                            child: const Text(
-                              'Cancel',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12,
-                              ),
-                            ),
+    return Consumer<ProfileStateManager>(
+      builder: (context, stateManager, child) {
+        AppLogger.log('🎨 ProfileHeaderWidget: Rebuilding (Videos: ${stateManager.totalVideoCount})');
+        return Container(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  _buildAvatar(stateManager),
+                  const SizedBox(width: 20),
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: _buildStatItem(
+                            context,
+                            label: 'Subscribers',
+                            value: _getFollowersCountString(context, stateManager),
                           ),
-                          const SizedBox(width: 8),
-                          ElevatedButton(
-                            onPressed: onSaveProfile,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Theme.of(context).primaryColor,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 20, vertical: 10),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(6),
-                                side: BorderSide.none,
-                              ),
-                            ),
-                            child: const Text(
-                              'Save',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12,
-                              ),
-                            ),
+                        ),
+                        Container(
+                          height: 24,
+                          width: 1,
+                          color: AppTheme.borderPrimary,
+                        ),
+                        Expanded(
+                          child: _buildStatItem(
+                            context,
+                            label: 'Content',
+                            value: stateManager.totalVideoCount.toString(),
                           ),
-                        ],
-                      ),
+                        ),
+                        Container(
+                          height: 24,
+                          width: 1,
+                          color: AppTheme.borderPrimary,
+                        ),
+                        Expanded(
+                          child: _buildStatItem(
+                            context,
+                            label: isViewingOwnProfile ? 'Earnings' : 'Ranking',
+                            isHighlighted: true,
+                            value: _getEarningsOrRankValue(stateManager),
+                            onTap: isViewingOwnProfile ? onEarningsTap : null,
+                          ),
+                        ),
+                      ],
                     ),
-                  );
-                } else {
-                  return const SizedBox.shrink();
-                }
-              },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                stateManager.userData?['bio'] ?? '',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: AppTheme.bodySmall.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 16),
+              _buildActionButtons(stateManager),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAvatar(ProfileStateManager stateManager) {
+    return GestureDetector(
+      onTap: stateManager.isEditing ? onProfilePhotoChange : null,
+      child: Stack(
+        children: [
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: AppTheme.borderPrimary,
+                width: 2,
+              ),
             ),
-          ],
-        ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(40),
+              child: () {
+                final profilePic = stateManager.userData?['profilePic'];
+                if (profilePic != null && profilePic.isNotEmpty) {
+                  if (profilePic.startsWith('http')) {
+                    return Image.network(profilePic, fit: BoxFit.cover);
+                  } else {
+                    return Image.file(File(profilePic), fit: BoxFit.cover);
+                  }
+                }
+                return Container(
+                  color: AppTheme.backgroundSecondary,
+                  child: const Icon(Icons.person, color: AppTheme.textTertiary, size: 40),
+                );
+              }(),
+            ),
+          ),
+          if (stateManager.isEditing)
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.camera_alt,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
 
-  // Helper method to get profile image with fallback logic
-  ImageProvider? _getProfileImage(BuildContext context) {
-    if (stateManager.userData != null &&
-        stateManager.userData!['profilePic'] != null) {
-      final profilePic = stateManager.userData!['profilePic'];
-      ProfileScreenLogger.logDebugInfo(
-          'Using profile pic from ProfileStateManager: $profilePic');
-
-      if (profilePic.startsWith('http')) {
-        return NetworkImage(profilePic);
-      } else if (profilePic.isNotEmpty) {
-        try {
-          return FileImage(File(profilePic));
-        } catch (e) {
-          ProfileScreenLogger.logWarning('Error creating FileImage: $e');
-          return null;
-        }
-      }
-    }
-
-    // Fall back to UserProvider data
-    final userProvider = Provider.of<UserProvider>(context, listen: false);
-    if (userId != null) {
-      final userModel = userProvider.getUserData(userId!);
-      if (userModel?.profilePic != null) {
-        final profilePic = userModel!.profilePic;
-        ProfileScreenLogger.logDebugInfo(
-            'Using profile pic from UserProvider: $profilePic');
-
-        if (profilePic.startsWith('http')) {
-          return NetworkImage(profilePic);
-        } else if (profilePic.isNotEmpty) {
-          try {
-            return FileImage(File(profilePic));
-          } catch (e) {
-            ProfileScreenLogger.logWarning('Error creating FileImage: $e');
-            return null;
-          }
-        }
-      }
-    }
-
-    ProfileScreenLogger.logDebugInfo('No profile pic available');
-    return null;
-  }
-
-  // Helper method to get user name with fallback logic
-  String _getUserName(BuildContext context) {
-    // Prioritize ProfileStateManager data, then fall back to UserProvider data
-    if (stateManager.userData != null &&
-        stateManager.userData!['name'] != null) {
-      final name = stateManager.userData!['name'];
-      ProfileScreenLogger.logDebugInfo(
-          'Using name from ProfileStateManager: $name');
-      return name;
-    }
-
-    // Fall back to UserProvider data
-    final userProvider = Provider.of<UserProvider>(context, listen: false);
-    if (userId != null) {
-      final userModel = userProvider.getUserData(userId!);
-      if (userModel?.name != null) {
-        final name = userModel!.name;
-        ProfileScreenLogger.logDebugInfo('Using name from UserProvider: $name');
-        return name;
-      }
-    }
-
-    // Final fallback
-    ProfileScreenLogger.logDebugInfo('No name available, using default');
-    return 'User';
-  }
-}
-
-/// Widget that shows a loading indicator while the profile image is being loaded
-/// This uses Image.network to detect when the image is loading/loaded
-class _ProfileImageLoader extends StatefulWidget {
-  final String imageUrl;
-
-  const _ProfileImageLoader({required this.imageUrl});
-
-  @override
-  State<_ProfileImageLoader> createState() => _ProfileImageLoaderState();
-}
-
-class _ProfileImageLoaderState extends State<_ProfileImageLoader> {
-  bool _isLoading = true;
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Image.network(
-        widget.imageUrl,
-        fit: BoxFit.cover,
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) {
-            // Image loaded successfully
-            if (mounted && _isLoading) {
-              setState(() {
-                _isLoading = false;
-              });
-            }
-            return const SizedBox.shrink();
-          }
-
-          // Still loading - show spinner overlay
-          return Container(
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.2),
-              shape: BoxShape.circle,
+  Widget _buildStatItem(
+    BuildContext context, {
+    required String label,
+    required String value,
+    bool isHighlighted = false,
+    VoidCallback? onTap,
+  }) {
+    final bool isLoadingText = value.contains('Loading');
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: AppTheme.titleMedium.copyWith(
+              color: isHighlighted ? AppTheme.primary : AppTheme.textPrimary,
+              fontSize: isLoadingText ? 10 : 18,
+              fontWeight: isLoadingText ? FontWeight.w600 : FontWeight.w700,
             ),
-            child: const Center(
-              child: SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2.5,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: AppTheme.bodySmall.copyWith(
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getEarningsOrRankValue(ProfileStateManager stateManager) {
+    if (isViewingOwnProfile) {
+      return (stateManager.isEarningsLoading || stateManager.isVideosLoading)
+          ? 'Loading...'
+          : '₹${stateManager.cachedEarnings.toStringAsFixed(2)}';
+    } else {
+      final rank = stateManager.userData?['rank'] ?? 0;
+      return rank > 0 ? '#$rank' : '—';
+    }
+  }
+
+  String _getFollowersCountString(BuildContext context, ProfileStateManager stateManager) {
+    if (stateManager.userData != null) {
+      final followersCount = stateManager.userData!['followersCount'] ??
+          stateManager.userData!['followers'];
+
+      if (followersCount != null) {
+        final count = followersCount is int
+            ? followersCount
+            : (int.tryParse(followersCount.toString()) ?? 0);
+        if (count > 0) return count.toString();
+      }
+    }
+
+    try {
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final userIdCandidates = [
+        stateManager.userData?['googleId'],
+        stateManager.userData?['_id'] ?? stateManager.userData?['id'],
+      ].whereType<String>().toSet();
+
+      for (final id in userIdCandidates) {
+        final userModel = userProvider.getUserData(id);
+        if (userModel?.followersCount != null && userModel!.followersCount > 0) {
+          return userModel.followersCount.toString();
+        }
+      }
+    } catch (_) {}
+
+    return '0';
+  }
+
+  Widget _buildActionButtons(ProfileStateManager stateManager) {
+    if (!isViewingOwnProfile) return const SizedBox.shrink();
+
+    return Row(
+      children: [
+        Expanded(
+          child: stateManager.isEditing
+              ? Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: onCancelEdit,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          side: const BorderSide(color: Colors.red),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: onSaveProfile,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.success,
+                          foregroundColor: AppTheme.textInverse,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Save'),
+                      ),
+                    ),
+                  ],
+                )
+              : ElevatedButton.icon(
+                  key: upiButtonKey,
+                  onPressed: onAddUpiId,
+                  icon: const Icon(Icons.account_balance_wallet, size: 18),
+                  label: const Text('Add UPI ID'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: AppTheme.textInverse,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    elevation: 0,
+                  ),
+                ),
+        ),
+        if (!stateManager.isEditing) ...[
+          const SizedBox(width: 12),
+          Expanded(
+            child: OutlinedButton(
+              onPressed: onReferFriends,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.textSecondary,
+                side: const BorderSide(color: AppTheme.borderPrimary),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
               ),
+              child: const Text('Refer Friends'),
             ),
-          );
-        },
-        errorBuilder: (context, error, stackTrace) {
-          // Image failed to load
-          if (mounted && _isLoading) {
-            setState(() {
-              _isLoading = false;
-            });
-          }
-          return const SizedBox.shrink();
-        },
-      ),
+          ),
+        ]
+      ],
     );
   }
 }

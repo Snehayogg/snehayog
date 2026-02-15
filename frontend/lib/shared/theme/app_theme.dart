@@ -9,39 +9,39 @@ class AppTheme {
   // ===========================================================================
 
   // Primary Colors
-  static const Color primary = Color(0xFF10A37F); // Teal green - main accent
-  static const Color primaryLight = Color(0xFF2DB894);
-  static const Color primaryDark = Color(0xFF0A7A5F);
+  static const Color primary = Color(0xFF2563EB); // Website Blue
+  static const Color primaryLight = Color(0xFF3B82F6);
+  static const Color primaryDark = Color(0xFF1D4ED8);
 
   // Text & Foreground Colors
   static const Color textPrimary =
-      Color(0xFF202123); // Near-black for important content
-  static const Color textSecondary = Color(0xFF565869); // Secondary text
-  static const Color textTertiary = Color(0xFF8E8EA0); // Muted text
+      Color(0xFFF8FAFC); // Website text-main (off-white)
+  static const Color textSecondary = Color(0xFF94A3B8); // Website text-dim
+  static const Color textTertiary = Color(0xFF64748B); // Muted text
   static const Color textInverse =
-      Color(0xFFFFFFFF); // White text on dark backgrounds
+      Color(0xFF0F172A); // Dark text on light backgrounds
 
   // Background Colors
-  static const Color backgroundPrimary = Color(0xFFFFFFFF); // Pure white
-  static const Color backgroundSecondary = Color(0xFFF7F7F8); // Off-white
+  static const Color backgroundPrimary = Color(0xFF0F172A); // Website bg (Dark Blue)
+  static const Color backgroundSecondary = Color(0xFF1E293B); // Website card-bg
   static const Color backgroundTertiary =
-      Color(0xFFF0F0F1); // Subtle background
+      Color(0xFF334155); // Subtle background
 
   // Surface Colors
-  static const Color surfacePrimary = Color(0xFFFFFFFF);
-  static const Color surfaceSecondary = Color(0xFFF7F7F8);
-  static const Color surfaceElevated = Color(0xFFFFFFFF);
+  static const Color surfacePrimary = Color(0xFF1E293B); // Using card-bg for surfaces
+  static const Color surfaceSecondary = Color(0xFF0F172A);
+  static const Color surfaceElevated = Color(0xFF1E293B);
 
   // Semantic Colors
-  static const Color success = Color(0xFF10A37F); // Use primary for success
-  static const Color error = Color(0xFFDC2626);
-  static const Color warning = Color(0xFFF59E0B);
+  static const Color success = Color(0xFF10B981); // Emerald
+  static const Color error = Color(0xFFEF4444); // Red
+  static const Color warning = Color(0xFFF59E0B); // Website accent (Amber)
   static const Color info = Color(0xFF3B82F6);
 
   // Border & Divider Colors
-  static const Color borderPrimary = Color(0xFFE5E7EB);
-  static const Color borderSecondary = Color(0xFFF3F4F6);
-  static const Color divider = Color(0xFFE5E7EB);
+  static const Color borderPrimary = Color(0xFF334155);
+  static const Color borderSecondary = Color(0xFF1E293B);
+  static const Color divider = Color(0xFF334155);
 
   // Shadow Colors
   static const Color shadowPrimary = Color(0x0A000000);
@@ -284,19 +284,19 @@ class AppTheme {
   static ThemeData get lightTheme {
     final baseTheme = ThemeData(
       useMaterial3: true,
-      brightness: Brightness.light,
+      brightness: Brightness.dark,
       fontFamily: GoogleFonts.inter().fontFamily,
     );
 
     return baseTheme.copyWith(
 
       // Color scheme
-      colorScheme: const ColorScheme.light(
+      colorScheme: const ColorScheme.dark(
         primary: primary,
         onPrimary: textInverse,
-        secondary: textSecondary,
+        secondary: warning, // Using website accent as secondary
         onSecondary: textInverse,
-        surface: surfacePrimary,
+        surface: backgroundSecondary,
         onSurface: textPrimary,
         error: error,
         onError: textInverse,
@@ -306,7 +306,7 @@ class AppTheme {
 
       // App bar theme
       appBarTheme: AppBarTheme(
-        backgroundColor: surfacePrimary,
+        backgroundColor: backgroundPrimary,
         foregroundColor: textPrimary,
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -317,9 +317,9 @@ class AppTheme {
 
       // Bottom navigation bar theme
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
-        backgroundColor: surfacePrimary,
+        backgroundColor: backgroundPrimary,
         selectedItemColor: primary,
-        unselectedItemColor: textTertiary,
+        unselectedItemColor: textSecondary,
         type: BottomNavigationBarType.fixed,
         elevation: 8,
         selectedLabelStyle: labelSmall,
@@ -491,7 +491,7 @@ class AppTheme {
 
       // Bottom sheet theme
       bottomSheetTheme: const BottomSheetThemeData(
-        backgroundColor: surfacePrimary,
+        backgroundColor: backgroundSecondary,
         elevation: 8,
         shape: RoundedRectangleBorder(
           borderRadius:

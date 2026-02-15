@@ -18,6 +18,7 @@ import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/features/onboarding/presentation/managers/app_initialization_manager.dart';
 import 'package:vayu/features/games/presentation/screens/games_feed_screen.dart'; // Import GamesFeedScreen
 import 'package:in_app_update/in_app_update.dart';
+import 'package:vayu/shared/theme/app_theme.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -45,45 +46,31 @@ class _MainScreenState extends State<MainScreen>
   bool _hasCheckedForUpdates = false;
 
   Future<void> _refreshVideoList() async {
-
     try {
       // Refresh the video screen
       final videoScreenState = _videoScreenKey.currentState;
       if (videoScreenState != null) {
         // Cast to access the public method and await completion
         await (videoScreenState as dynamic).refreshVideos();
-
       } else {
-        print('❌ MainScreen: VideoScreen state not found');
-      }
-
-      // Also refresh the profile screen videos
-      print('🔄 MainScreen: Refreshing ProfileScreen videos');
-      try {
-        ProfileScreen.refreshVideos(_profileScreenKey);
-      } catch (e) {
-        print('❌ MainScreen: Error refreshing profile videos: $e');
+        AppLogger.log('❌ MainScreen: VideoScreen state not found');
       }
 
       // **NEW: Also refresh the Vayu screen videos**
       try {
         VayuScreen.refresh(_vayuScreenKey);
       } catch (e) {
-        print('❌ MainScreen: Error refreshing Vayu videos: $e');
+        AppLogger.log('❌ MainScreen: Error refreshing Vayu videos: $e');
       }
 
       // Navigate to video tab ONLY if user is still on upload tab (index 3)
-      // This allows "View in Feed" (index 1) to work without being overridden
-      final mainController =
-          Provider.of<MainController>(context, listen: false);
+      final mainController = Provider.of<MainController>(context, listen: false);
       if (mainController.currentIndex == 3) {
-        print('🔄 MainScreen: Still on upload tab, navigating to video tab');
+        AppLogger.log('🔄 MainScreen: Still on upload tab, navigating to video tab');
         mainController.changeIndex(0);
-      } else {
-        print('🔄 MainScreen: User already navigated to index ${mainController.currentIndex}, skipping auto-switch');
       }
     } catch (e) {
-      print('❌ MainScreen: Error in _refreshVideoList: $e');
+      AppLogger.log('❌ MainScreen: Error in _refreshVideoList: $e');
     }
   }
 
@@ -460,7 +447,7 @@ class _MainScreenState extends State<MainScreen>
             await _handleBackPress(mainController);
           },
           child: Scaffold(
-            backgroundColor: Colors.white,
+            backgroundColor: AppTheme.backgroundPrimary,
             floatingActionButton: kDebugMode
                 ? FloatingActionButton(
                     mini: true,
@@ -503,37 +490,15 @@ class _MainScreenState extends State<MainScreen>
             bottomNavigationBar: RepaintBoundary(
               child: Container(
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: (mainController.currentIndex == 0 ||
-                            mainController.currentIndex == 1)
-                        ? [
-                            const Color(0xFF1A1A1A),
-                            const Color(0xFF0F0F0F),
-                          ]
-                        : [
-                            Colors.white,
-                            const Color(0xFFFAFAFA),
-                          ],
+                  color: AppTheme.backgroundPrimary,
+                  border: const Border(
+                    top: BorderSide(color: AppTheme.borderPrimary, width: 0.5),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: (mainController.currentIndex == 0 ||
-                              mainController.currentIndex == 1)
-                          ? Colors.black.withOpacity(0.3)
-                          : Colors.black.withOpacity(0.1),
+                      color: Colors.black.withOpacity(0.3),
                       blurRadius: 20,
                       offset: const Offset(0, -4),
-                      spreadRadius: 0,
-                    ),
-                    BoxShadow(
-                      color: (mainController.currentIndex == 0 ||
-                              mainController.currentIndex == 1)
-                          ? Colors.black.withOpacity(0.2)
-                          : Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, -2),
                       spreadRadius: 0,
                     ),
                   ],
@@ -646,10 +611,8 @@ class _MainScreenState extends State<MainScreen>
                         Icons.refresh,
                         size: isSelected ? 30 : 28, // Same size for all icons
                         color: isSelected
-                            ? const Color(0xFF2196F3)
-                            : (mainController.currentIndex == 0
-                                ? Colors.grey[400]
-                                : Colors.grey[600]),
+                            ? AppTheme.primary
+                            : AppTheme.textSecondary,
                       ),
                     ),
                   ),
@@ -661,7 +624,7 @@ class _MainScreenState extends State<MainScreen>
                   height: 32, // Same size for all icons
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? const Color(0xFF2196F3).withOpacity(0.2)
+                        ? AppTheme.primary.withValues(alpha:0.2)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(20),
                   ),
@@ -669,11 +632,8 @@ class _MainScreenState extends State<MainScreen>
                     icon,
                     size: isSelected ? 30 : 28, // Same size for all icons
                     color: isSelected
-                        ? const Color(0xFF2196F3)
-                        : ((mainController.currentIndex == 0 ||
-                                mainController.currentIndex == 1)
-                            ? Colors.grey[400]
-                            : Colors.grey[600]),
+                        ? AppTheme.primary
+                        : AppTheme.textSecondary,
                   ),
                 ),
 
@@ -684,11 +644,8 @@ class _MainScreenState extends State<MainScreen>
                   fontSize: 9, // Increased from 7 to 9 for better readability
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                   color: isSelected
-                      ? const Color(0xFF2196F3)
-                      : ((mainController.currentIndex == 0 ||
-                              mainController.currentIndex == 1)
-                          ? Colors.grey[400]
-                          : Colors.grey[600]),
+                      ? AppTheme.primary
+                      : AppTheme.textSecondary,
                   letterSpacing: 0.2,
                 ),
                 child: Text(isRefreshingYug ? 'Refreshing...' : label),

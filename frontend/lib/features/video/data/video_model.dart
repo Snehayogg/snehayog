@@ -1,4 +1,4 @@
-class VideoModel {
+﻿class VideoModel {
   final String id;
   final String videoName;
   final String videoUrl;
@@ -271,7 +271,7 @@ class VideoModel {
 
             return null;
           } catch (e) {
-            print('⚠️ VideoModel: Error parsing hlsVariants: $e');
+            print('âš ï¸ VideoModel: Error parsing hlsVariants: $e');
             return null;
           }
         }(),
@@ -370,6 +370,9 @@ class VideoModel {
       'hlsVariants': hlsVariants,
       'isHLSEncoded': isHLSEncoded,
       'lowQualityUrl': lowQualityUrl, // 480p URL
+      'processingStatus': processingStatus,
+      'processingProgress': processingProgress,
+      'processingError': processingError,
       'videoHash': videoHash, // **NEW: Parse video hash**
       'episodes': episodes,
       'seriesId': seriesId,
@@ -401,6 +404,9 @@ class VideoModel {
     List<Map<String, dynamic>>? hlsVariants,
     bool? isHLSEncoded,
     String? lowQualityUrl, // 480p URL
+    String? processingStatus,
+    int? processingProgress,
+    String? processingError,
     String? videoHash, // **NEW: Add videoHash to copyWith**
     List<Map<String, dynamic>>? episodes,
     String? seriesId,
@@ -432,6 +438,9 @@ class VideoModel {
       hlsVariants: hlsVariants ?? this.hlsVariants,
       isHLSEncoded: isHLSEncoded ?? this.isHLSEncoded,
       lowQualityUrl: lowQualityUrl ?? this.lowQualityUrl, // 480p URL
+      processingStatus: processingStatus ?? this.processingStatus,
+      processingProgress: processingProgress ?? this.processingProgress,
+      processingError: processingError ?? this.processingError,
       videoHash: videoHash ?? this.videoHash, // **NEW: Handle videoHash**
       episodes: episodes ?? this.episodes,
       seriesId: seriesId ?? this.seriesId,
@@ -577,5 +586,6 @@ class Uploader {
     };
   }
 }
+
 
 

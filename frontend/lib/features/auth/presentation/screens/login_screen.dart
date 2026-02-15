@@ -3,16 +3,26 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
 import 'package:vayu/features/onboarding/data/services/location_onboarding_service.dart';
+import 'package:vayu/features/video/presentation/managers/main_controller.dart';
+import 'dart:async';
 import 'package:vayu/shared/utils/app_logger.dart';
 
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  bool _isLocalLoading = false;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Consumer<GoogleSignInController>(
         builder: (context, authController, _) {
+          final bool showOverlay = authController.isLoading || _isLocalLoading;
           return Stack(
             children: [
               // Main Content
@@ -395,8 +405,22 @@ class LoginScreen extends StatelessWidget {
                                                     '❌ User denied location permission');
                                               }
 
-                                              Navigator.pushReplacementNamed(
-                                                  context, '/home');
+                                               // **OPTIMIZED: Parallel state refresh and pre-fetch**
+                                               if (context.mounted) {
+                                                 setState(() => _isLocalLoading = true);
+                                                 final mainController =
+                                                     Provider.of<MainController>(
+                                                         context,
+                                                         listen: false);
+                                                 await mainController
+                                                     .refreshAppStateAfterSwitch(
+                                                         context);
+                                               }
+
+                                               if (context.mounted) {
+                                                 Navigator.pushReplacementNamed(
+                                                     context, '/home');
+                                               }
                                             }
                                           },
                                     icon: Image.network(
@@ -457,7 +481,7 @@ class LoginScreen extends StatelessWidget {
               ),
 
               // Loading Overlay
-              if (authController.isLoading)
+              if (showOverlay)
                 Container(
                   color: Colors.black.withOpacity(0.5),
                   child: Center(
