@@ -10,7 +10,7 @@ class AppConfig {
 
   // **MANUAL: Development mode control*
   static const bool _isDevelopment =
-      false; // Set to true for local testing, false for production
+      true; // Set to true for local testing, false for production
 
   // **NEW: Smart URL selection with fallback**
   static String? _cachedBaseUrl;
@@ -26,26 +26,12 @@ class AppConfig {
   static const String _customDomainUrl = 'https://api.snehayog.site';
   static const String _flyUrl = 'https://vayug.fly.dev';
 
-  // **NEW: Clear cache method for development**
-  static void clearCache() {
-    print('🔄 AppConfig: Clearing cached URL');
-    _cachedBaseUrl = null;
-    if (_isDevelopment) {
-      print(
-          '🔧 AppConfig: Development mode - will use local server on next request');
-    }
-  }
-
   // Backend API configuration with smart fallback
   static String get baseUrl {
     // **FIX: For web, always use localhost, not IP address**
     if (kIsWeb) {
       // Web ke liye localhost use karein (development me)
       if (_isDevelopment) {
-        print(
-            '🌐 AppConfig.baseUrl: WEB DEVELOPMENT MODE - Using: $_localWebBaseUrl');
-        print(
-            '🌐 AppConfig.baseUrl: Make sure your backend is running on $_localWebBaseUrl');
         _cachedBaseUrl = _localWebBaseUrl;
         return _localWebBaseUrl;
       }
@@ -62,7 +48,6 @@ class AppConfig {
       if (_cachedBaseUrl != null) {
         return _cachedBaseUrl!;
       }
-      print('🔧 AppConfig.baseUrl: DEVELOPMENT MODE - Defaulting to: $_localIpBaseUrl');
       return _localIpBaseUrl;
     }
 
@@ -75,7 +60,6 @@ class AppConfig {
       return _cachedBaseUrl!;
     }
 
-    print('🔍 AppConfig: No cached URL, defaulting to custom domain');
     _cachedBaseUrl = _flyUrl; // TEMPORARY: Using Fly.io until custom domain SSL is configured
     return _cachedBaseUrl!;
   }

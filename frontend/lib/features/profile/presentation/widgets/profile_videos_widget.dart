@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
 import 'package:vayu/features/video/presentation/screens/video_screen.dart';
@@ -7,6 +7,7 @@ import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:cached_network_image/cached_network_image.dart'; // Needed for the new method
 import 'dart:ui';
+import 'package:vayu/shared/theme/app_theme.dart';
 
 class ProfileVideosWidget extends StatelessWidget {
   final ProfileStateManager stateManager;
@@ -37,7 +38,7 @@ class ProfileVideosWidget extends StatelessWidget {
             await precacheImage(NetworkImage(video.thumbnailUrl), context);
           } catch (e) {
             AppLogger.log(
-                'âš ï¸ ProfileVideosWidget: Failed to preload thumbnail: $e');
+                '⚠️ ProfileVideosWidget: Failed to preload thumbnail: $e');
           }
         }
       }
@@ -285,7 +286,7 @@ class ProfileVideosWidget extends StatelessWidget {
                 Container(
                   width: double.infinity,
                   height: double.infinity,
-                  color: const Color(0xFFF3F4F6),
+                  color: isProcessing ? AppTheme.backgroundSecondary : const Color(0xFFF3F4F6),
                   child: video.thumbnailUrl.isNotEmpty
                       ? Image.network(
                           video.thumbnailUrl,
@@ -346,7 +347,7 @@ class ProfileVideosWidget extends StatelessWidget {
                 if (isProcessing)
                   Positioned.fill(
                     child: Container(
-                      color: Colors.black.withOpacity(0.45),
+                      color: AppTheme.backgroundPrimary.withValues(alpha: 0.72),
                       child: Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
@@ -359,14 +360,15 @@ class ProfileVideosWidget extends StatelessWidget {
                                 value: video.processingProgress > 0
                                     ? video.processingProgress.clamp(0, 100) / 100.0
                                     : null,
-                                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
+                                backgroundColor: AppTheme.borderPrimary,
                               ),
                             ),
                             const SizedBox(height: 8),
                             Text(
                               _processingLabel(video),
                               style: const TextStyle(
-                                color: Colors.white,
+                                color: AppTheme.textPrimary,
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -376,7 +378,6 @@ class ProfileVideosWidget extends StatelessWidget {
                       ),
                     ),
                   ),
-
                 if (isProcessing)
                   Positioned(
                     top: 10,
@@ -384,13 +385,13 @@ class ProfileVideosWidget extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.9),
+                        color: AppTheme.warning.withValues(alpha: 0.95),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         _processingLabel(video),
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: AppTheme.textInverse,
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
                         ),
@@ -683,12 +684,5 @@ class ProfileVideosWidget extends StatelessWidget {
     );
   }
 }
-
-
-
-
-
-
-
 
 

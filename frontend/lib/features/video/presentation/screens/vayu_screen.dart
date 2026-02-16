@@ -6,6 +6,7 @@ import 'package:vayu/features/video/presentation/screens/vayu_long_form_player_s
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/features/profile/presentation/widgets/video_creator_search_delegate.dart';
 import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/shared/widgets/vayu_logo.dart';
 
 
 class VayuScreen extends StatefulWidget {
@@ -193,20 +194,8 @@ class VayuScreenState extends State<VayuScreen> {
         elevation: 0,
         title: Row(
           children: [
-            Image.asset(
-              'assets/icons/app_icon.png',
-              height: 24,
-              errorBuilder: (_, __, ___) =>
-                  const Icon(Icons.play_circle_fill, color: AppTheme.primary),
-            ),
-            const SizedBox(width: AppTheme.spacing2),
-            Text(
-              'Vayu',
-              style: AppTheme.displaySmall.copyWith(
-                color: AppTheme.textPrimary,
-                fontWeight: AppTheme.weightBold,
-                letterSpacing: -0.5,
-              ),
+            const VayuLogo(
+              fontSize: 24,
             ),
           ],
         ),

@@ -27,7 +27,6 @@ class _TopEarnersBottomSheetState extends State<TopEarnersBottomSheet> {
   void initState() {
     super.initState();
     // Clear URL cache to force re-check of local server
-    AppConfig.clearCache();
     AppLogger.log(
         '🔄 TopEarnersBottomSheet: Cleared URL cache, will re-detect server');
     _loadTopEarners();

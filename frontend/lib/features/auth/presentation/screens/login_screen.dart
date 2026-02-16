@@ -6,6 +6,7 @@ import 'package:vayu/features/onboarding/data/services/location_onboarding_servi
 import 'package:vayu/features/video/presentation/managers/main_controller.dart';
 import 'dart:async';
 import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayu/shared/widgets/vayu_logo.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -51,12 +52,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ],
                             ),
-                            child: ClipOval(
-                              child: Image.asset(
-                                'assets/icons/app_icon.png',
-                                width: 80,
-                                height: 80,
-                                fit: BoxFit.cover,
+                            child: const Center(
+                              child: VayuLogo(
+                                fontSize: 32,
                               ),
                             ),
                           ),
@@ -65,7 +63,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                           // Welcome Text
                           const Text(
-                            'Welcome to Vayug',
+                            'Welcome to Vayu',
                             style: TextStyle(
                               fontSize: 28,
                               fontWeight: FontWeight.bold,

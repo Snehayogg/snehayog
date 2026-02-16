@@ -1312,74 +1312,67 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
               ),
             ),
             padding: EdgeInsets.symmetric(
-              horizontal: 16.0, 
-              vertical: isPortrait ? 12.0 : 24.0,
+              horizontal: 8.0, 
+              vertical: isPortrait ? 8.0 : 16.0,
             ),
             child: Row(
               children: [
                 IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  icon: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
                   onPressed: () => Navigator.of(context).pop(),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
                 ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     _currentVideo.videoName,
                     style: TextStyle(
                       color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: isPortrait ? 14 : 16,
+                      fontWeight: FontWeight.w600,
+                      fontSize: isPortrait ? 13 : 15,
                       shadows: const [
-                        Shadow(blurRadius: 10, color: Colors.black87, offset: Offset(0, 2)),
+                        Shadow(blurRadius: 4, color: Colors.black45, offset: Offset(0, 1)),
                       ],
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                IconButton(
+                  icon: const Icon(Icons.more_vert, color: Colors.white, size: 20),
+                  onPressed: () {}, // Future options (quality, etc.)
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
               ],
             ),
           ),
         ),
 
-        // Center controls (Rewind, Play/Pause, Forward)
-        Center(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                iconSize: isPortrait ? 36 : 48,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                icon: const Icon(Icons.replay_10, color: Colors.white, shadows: [Shadow(blurRadius: 10, color: Colors.black45)]),
-                onPressed: () => _seekRelative(const Duration(seconds: -10)),
-              ),
-              SizedBox(width: isPortrait ? 32 : 48),
-              IconButton(
-                iconSize: isPortrait ? 52 : 64,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                icon: Icon(
-                  _videoPlayerController.value.isPlaying
-                      ? Icons.pause_circle_filled
-                      : Icons.play_circle_filled,
-                  color: Colors.white,
-                  shadows: const [Shadow(blurRadius: 20, color: Colors.black45)],
-                ),
-                onPressed: _togglePlay,
-              ),
-              SizedBox(width: isPortrait ? 32 : 48),
-              IconButton(
-                iconSize: isPortrait ? 36 : 48,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                icon: const Icon(Icons.forward_10, color: Colors.white, shadows: [Shadow(blurRadius: 10, color: Colors.black45)]),
-                onPressed: () => _seekRelative(const Duration(seconds: 10)),
-              ),
-            ],
+        // Center Area (No large buttons, just tap to toggle controls)
+        Positioned.fill(
+          child: Center(
+            child: _showPlayPauseAnimation 
+              ? Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: const BoxDecoration(
+                    color: Colors.black45,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _videoPlayerController.value.isPlaying
+                        ? Icons.play_arrow
+                        : Icons.pause,
+                    color: Colors.white,
+                    size: 40,
+                  ),
+                )
+              : const SizedBox.shrink(),
           ),
         ),
 
-        // Bottom bar (Progress, Timer, Fullscreen)
+        // Bottom Bar (Progress Indicator and Controls Row)
         Positioned(
           bottom: 0,
           left: 0,
@@ -1389,61 +1382,137 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
               gradient: LinearGradient(
                 begin: Alignment.bottomCenter,
                 end: Alignment.topCenter,
-                colors: [Colors.black.withValues(alpha:0.7), Colors.transparent],
+                colors: [Colors.black.withOpacity(0.8), Colors.transparent],
               ),
             ),
-            padding: EdgeInsets.symmetric(
-              horizontal: 16.0, 
-              vertical: isPortrait ? 10.0 : 20.0,
+            padding: EdgeInsets.only(
+              bottom: isPortrait ? 8.0 : 16.0,
+              left: 12.0,
+              right: 12.0,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Progress Indicator with Time Labels
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     ValueListenableBuilder(
                       valueListenable: _videoPlayerController,
                       builder: (context, VideoPlayerValue value, child) {
                         return Text(
-                          '${_formatDuration(value.position)} / ${_formatDuration(value.duration)}',
-                          style: TextStyle(
+                          _formatDuration(value.position),
+                          style: const TextStyle(
                             color: Colors.white,
-                            fontSize: isPortrait ? 11 : 12,
-                            fontWeight: FontWeight.bold,
-                            shadows: const [Shadow(blurRadius: 4, color: Colors.black, offset: Offset(0, 1))],
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
                           ),
                         );
                       },
                     ),
-                    IconButton(
-                      iconSize: isPortrait ? 24 : 28,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      icon: Icon(
-                        _isFullScreen ? Icons.fullscreen_exit : Icons.fullscreen,
-                        color: Colors.white,
-                        shadows: const [Shadow(blurRadius: 10, color: Colors.black45)],
+                    Expanded(
+                      child: ValueListenableBuilder(
+                        valueListenable: _videoPlayerController,
+                        builder: (context, VideoPlayerValue value, child) {
+                          return VideoProgressIndicator(
+                            _videoPlayerController,
+                            allowScrubbing: true,
+                            padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 8.0),
+                            colors: VideoProgressColors(
+                              playedColor: AppTheme.primary,
+                              bufferedColor: Colors.white.withOpacity(0.3),
+                              backgroundColor: Colors.white.withOpacity(0.1),
+                            ),
+                          );
+                        },
                       ),
-                      onPressed: _toggleFullScreen,
+                    ),
+                    ValueListenableBuilder(
+                      valueListenable: _videoPlayerController,
+                      builder: (context, VideoPlayerValue value, child) {
+                        return Text(
+                          _formatDuration(value.duration),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),
-                // Premium Progress Bar
-                ValueListenableBuilder(
-                  valueListenable: _videoPlayerController,
-                  builder: (context, VideoPlayerValue value, child) {
-                    return VideoProgressIndicator(
-                      _videoPlayerController,
-                      allowScrubbing: true,
-                      padding: const EdgeInsets.symmetric(vertical: 8.0),
-                      colors: VideoProgressColors(
-                        playedColor: AppTheme.primary,
-                        bufferedColor: Colors.white.withValues(alpha:0.3),
-                        backgroundColor: Colors.white.withValues(alpha:0.1),
+                // Controls Row
+                Padding(
+                  padding: const EdgeInsets.only(top: 4.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      // Lock icon placeholder
+                      IconButton(
+                        iconSize: 20,
+                        onPressed: () {}, // Future: Screen lock
+                        icon: const Icon(Icons.lock_outline_rounded, color: Colors.white),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
                       ),
-                    );
-                  },
+                      
+                      // Rewind 10s
+                      IconButton(
+                        iconSize: 24,
+                        onPressed: () => _seekRelative(const Duration(seconds: -10)),
+                        icon: const Icon(Icons.skip_previous_rounded, color: Colors.white),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                      
+                      // Play/Pause
+                      IconButton(
+                        iconSize: 36,
+                        onPressed: _togglePlay,
+                        icon: Icon(
+                          _videoPlayerController.value.isPlaying
+                              ? Icons.pause_rounded
+                              : Icons.play_arrow_rounded,
+                          color: Colors.white,
+                        ),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                      
+                      // Forward 10s
+                      IconButton(
+                        iconSize: 24,
+                        onPressed: () => _seekRelative(const Duration(seconds: 10)),
+                        icon: const Icon(Icons.skip_next_rounded, color: Colors.white),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                      
+                      // Fullscreen and Rotation
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            iconSize: 22,
+                            onPressed: () {}, // Future: Rotation lock
+                            icon: const Icon(Icons.screen_rotation_rounded, color: Colors.white),
+                            padding: EdgeInsets.symmetric(horizontal: 8),
+                            constraints: const BoxConstraints(),
+                          ),
+                          IconButton(
+                            iconSize: 22,
+                            onPressed: _toggleFullScreen,
+                            icon: Icon(
+                              _isFullScreen ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded,
+                              color: Colors.white,
+                            ),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),

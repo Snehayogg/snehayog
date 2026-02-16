@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:vayu/main.dart'; // Access to AuthWrapper
 import 'package:vayu/features/onboarding/presentation/managers/app_initialization_manager.dart';
 import 'package:vayu/shared/config/app_config.dart';
+import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/shared/widgets/vayu_logo.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -129,7 +131,7 @@ class _SplashScreenState extends State<SplashScreen>
     final initManager = AppInitializationManager.instance;
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppTheme.backgroundPrimary,
       body: Stack(
         children: [
           // Center Content: Vayu Text
@@ -139,15 +141,9 @@ class _SplashScreenState extends State<SplashScreen>
               children: [
                 FadeTransition(
                   opacity: _opacityAnimation,
-                  child: const Text(
-                    'Vayu',
-                    style: TextStyle(
-                      fontSize: 48,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                      letterSpacing: -1.5,
-                      fontFamily: 'Roboto',
-                    ),
+                  child: const VayuLogo(
+                    fontSize: 48,
+                    textColor: AppTheme.white, // White logo on dark splash
                   ),
                 ),
                 const SizedBox(height: 32),
@@ -163,10 +159,8 @@ class _SplashScreenState extends State<SplashScreen>
                         builder: (context, status, _) {
                           return Text(
                             status,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.6),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
+                            style: AppTheme.labelSmall.copyWith(
+                              color: AppTheme.textSecondary.withOpacity(0.6),
                               letterSpacing: 0.5,
                             ),
                           );
@@ -182,8 +176,8 @@ class _SplashScreenState extends State<SplashScreen>
                           builder: (context, _) {
                             return LinearProgressIndicator(
                               value: _progressController.value,
-                              backgroundColor: Colors.white.withAlpha(30),
-                              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                              backgroundColor: AppTheme.white.withOpacity(0.1),
+                              valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
                               minHeight: 3,
                             );
                           },
@@ -204,9 +198,8 @@ class _SplashScreenState extends State<SplashScreen>
             child: Center(
               child: Text(
                 'v${AppConfig.kApiVersion}',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.3),
-                  fontSize: 10,
+                style: AppTheme.labelSmall.copyWith(
+                  color: AppTheme.textTertiary.withOpacity(0.3),
                   letterSpacing: 1,
                 ),
               ),

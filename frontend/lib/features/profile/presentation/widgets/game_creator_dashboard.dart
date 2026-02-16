@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:vayu/features/profile/presentation/managers/game_creator_manager.dart';
 import 'package:vayu/features/games/data/game_model.dart';
-import 'package:file_picker/file_picker.dart';
-import 'dart:io';
 import 'package:vayu/shared/theme/app_theme.dart';
 
 class GameCreatorDashboard extends StatefulWidget {
@@ -66,28 +64,113 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
         horizontal: AppTheme.spacing4,
         vertical: AppTheme.spacing4,
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'My Games',
-            style: AppTheme.headlineMedium,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Creator Dashboard',
+                style: AppTheme.headlineMedium,
+              ),
+              IconButton(
+                onPressed: () => gameManager.loadCreatorGames(),
+                icon: const Icon(Icons.refresh, color: AppTheme.primary),
+              ),
+            ],
           ),
-          ElevatedButton.icon(
-            onPressed: () => _showUploadDialog(context, gameManager),
-            icon: const Icon(Icons.add, color: AppTheme.textInverse),
-            label: const Text('Upload Game'),
+          const SizedBox(height: AppTheme.spacing4),
+          _buildWebUploadCard(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWebUploadCard() {
+    return Container(
+      padding: const EdgeInsets.all(AppTheme.spacing4),
+      decoration: BoxDecoration(
+        color: AppTheme.primary.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+        border: Border.all(color: AppTheme.primary.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.cloud_upload_outlined, color: AppTheme.primary),
+              const SizedBox(width: AppTheme.spacing2),
+              Text(
+                'Upload New Games via Web',
+                style: AppTheme.titleMedium.copyWith(color: AppTheme.primary, fontWeight: AppTheme.weightBold),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppTheme.spacing2),
+          Text(
+            'To ensure the best deployment experience, game uploads are now handled through our dedicated web portal.',
+            style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
+          ),
+          const SizedBox(height: AppTheme.spacing3),
+          ElevatedButton(
+            onPressed: () {
+              // Show instructions or open URL
+              showModalBottomSheet(
+                context: context,
+                backgroundColor: AppTheme.backgroundSecondary,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusLarge)),
+                ),
+                builder: (context) => Padding(
+                  padding: const EdgeInsets.all(AppTheme.spacing6),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Deploy from Computer', style: AppTheme.headlineSmall),
+                      const SizedBox(height: AppTheme.spacing4),
+                      Text(
+                        '1. Visit snehayog.site/creator.html\n2. Log in with your developer token\n3. Upload your Game ZIP',
+                        style: AppTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: AppTheme.spacing6),
+                      Text(
+                        'Your Developer Token:',
+                        style: AppTheme.labelSmall.copyWith(color: AppTheme.textTertiary),
+                      ),
+                      const SizedBox(height: AppTheme.spacing2),
+                      Container(
+                        padding: const EdgeInsets.all(AppTheme.spacing3),
+                        decoration: BoxDecoration(
+                          color: AppTheme.backgroundPrimary,
+                          borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+                        ),
+                        child: const SelectableText(
+                          'Copy your token from Profile > Settings',
+                          style: TextStyle(fontFamily: 'monospace', fontSize: 12),
+                        ),
+                      ),
+                      const SizedBox(height: AppTheme.spacing6),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.pop(context),
+                          style: AppTheme.createButtonStyle(),
+                          child: const Text('GOT IT'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primary,
-              foregroundColor: AppTheme.textInverse,
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppTheme.spacing4,
-                vertical: AppTheme.spacing2,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-              ),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusMedium)),
             ),
+            child: const Text('HOW TO UPLOAD'),
           ),
         ],
       ),
@@ -203,13 +286,22 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: AppTheme.spacing3),
-                          Icon(Icons.remove_red_eye_outlined, size: 14, color: AppTheme.textTertiary),
+                          const SizedBox(width: AppTheme.spacing4),
+                          Icon(Icons.play_arrow_outlined, size: 16, color: AppTheme.primary),
                           const SizedBox(width: 4),
                           Text(
-                            '${game.views} views',
-                            style: AppTheme.bodySmall,
+                            '${game.plays} plays',
+                            style: AppTheme.bodySmall.copyWith(fontWeight: AppTheme.weightBold),
                           ),
+                          if (game.totalTimeSpent > 0) ...[
+                             const SizedBox(width: AppTheme.spacing4),
+                             Icon(Icons.timer_outlined, size: 14, color: AppTheme.warning),
+                             const SizedBox(width: 4),
+                             Text(
+                               '${(game.totalTimeSpent / 60).toStringAsFixed(1)}m',
+                               style: AppTheme.bodySmall,
+                             ),
+                          ],
                         ],
                       ),
                     ],
@@ -241,137 +333,6 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
     );
   }
 
-  Future<void> _showUploadDialog(BuildContext context, GameCreatorManager gameManager) async {
-    final titleController = TextEditingController();
-    final descController = TextEditingController();
-    File? selectedFile;
-    String orientation = 'portrait';
-
-    await showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text('Upload New Game', style: AppTheme.headlineSmall),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Game Title',
-                    hintText: 'Enter a catchy title',
-                  ),
-                ),
-                const SizedBox(height: AppTheme.spacing4),
-                TextField(
-                  controller: descController,
-                  decoration: const InputDecoration(
-                    labelText: 'Description',
-                    hintText: 'What is this game about?',
-                  ),
-                  maxLines: 3,
-                ),
-                const SizedBox(height: AppTheme.spacing4),
-                DropdownButtonFormField<String>(
-                  value: orientation,
-                  decoration: const InputDecoration(labelText: 'Orientation'),
-                  items: const [
-                    DropdownMenuItem(value: 'portrait', child: Text('Portrait')),
-                    DropdownMenuItem(value: 'landscape', child: Text('Landscape')),
-                  ],
-                  onChanged: (val) {
-                    if (val != null) setDialogState(() => orientation = val);
-                  },
-                ),
-                const SizedBox(height: AppTheme.spacing4),
-                GestureDetector(
-                  onTap: () async {
-                    FilePickerResult? result = await FilePicker.platform.pickFiles(
-                      type: FileType.custom,
-                      allowedExtensions: ['zip'],
-                    );
-                    if (result != null) {
-                      setDialogState(() => selectedFile = File(result.files.single.path!));
-                    }
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(AppTheme.spacing4),
-                    decoration: BoxDecoration(
-                      color: AppTheme.backgroundSecondary,
-                      borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
-                      border: Border.all(
-                        color: selectedFile == null ? AppTheme.borderPrimary : AppTheme.primary,
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          selectedFile == null ? Icons.file_upload_outlined : Icons.check_circle_outline,
-                          color: selectedFile == null ? AppTheme.textSecondary : AppTheme.primary,
-                        ),
-                        const SizedBox(width: AppTheme.spacing2),
-                        Text(
-                          selectedFile == null ? 'Select Game ZIP' : 'ZIP Selected',
-                          style: AppTheme.labelMedium.copyWith(
-                            color: selectedFile == null ? AppTheme.textPrimary : AppTheme.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                if (selectedFile != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: AppTheme.spacing2),
-                    child: Text(
-                      selectedFile!.path.split('/').last,
-                      style: AppTheme.labelSmall.copyWith(color: AppTheme.success),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
-            ),
-            ElevatedButton(
-              onPressed: selectedFile == null || titleController.text.isEmpty
-                  ? null
-                  : () async {
-                      final title = titleController.text;
-                      final desc = descController.text;
-                      final file = selectedFile!;
-                      Navigator.pop(context);
-                      
-                      final success = await gameManager.uploadGame(
-                        zipFile: file,
-                        title: title,
-                        description: desc,
-                        orientation: orientation,
-                      );
-
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(success ? 'Game uploaded successfully!' : 'Failed to upload game'),
-                            backgroundColor: success ? AppTheme.success : AppTheme.error,
-                          ),
-                        );
-                      }
-                    },
-              style: AppTheme.createButtonStyle(),
-              child: const Text('Upload'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Future<void> _confirmPublish(BuildContext context, GameModel game, GameCreatorManager gameManager) async {
     bool? confirm = await showDialog<bool>(
@@ -409,3 +370,4 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
     }
   }
 }
+

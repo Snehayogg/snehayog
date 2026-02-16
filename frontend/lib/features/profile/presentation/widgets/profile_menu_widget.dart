@@ -5,7 +5,7 @@ import 'package:vayu/features/profile/presentation/managers/game_creator_manager
 import 'package:vayu/shared/services/auto_scroll_settings.dart';
 import 'package:vayu/features/profile/presentation/widgets/profile_dialogs_widget.dart';
 import 'package:vayu/shared/theme/app_theme.dart';
-
+import 'package:vayu/features/profile/presentation/screens/settings_screen.dart';
 import 'package:vayu/features/profile/presentation/screens/creator_payment_setup_screen.dart';
 
 class ProfileMenuWidget extends StatelessWidget {
@@ -41,30 +41,35 @@ class ProfileMenuWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Drawer(
+      backgroundColor: AppTheme.backgroundPrimary,
       child: Container(
-        color: Colors.white,
+        decoration: BoxDecoration(
+          color: AppTheme.backgroundPrimary,
+          border: Border(
+            left: BorderSide(color: AppTheme.borderPrimary.withOpacity(0.5), width: 1),
+          ),
+        ),
         child: SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(AppTheme.spacing5),
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  border: Border(
-                    bottom: BorderSide(color: Colors.grey[300]!, width: 1),
+                  color: AppTheme.backgroundSecondary.withOpacity(0.5),
+                  border: const Border(
+                    bottom: BorderSide(color: AppTheme.borderPrimary, width: 1),
                   ),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.menu, color: Colors.black87),
-                    SizedBox(width: 12),
+                    const Icon(Icons.grid_view_rounded, color: AppTheme.primary, size: 24),
+                    const SizedBox(width: AppTheme.spacing3),
                     Text(
-                      'Menu',
-                      style: TextStyle(
-                        color: Colors.black87,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
+                      'Account Menu',
+                      style: AppTheme.headlineSmall.copyWith(
+                        color: AppTheme.textPrimary,
+                        letterSpacing: -0.5,
                       ),
                     ),
                   ],
@@ -73,23 +78,36 @@ class ProfileMenuWidget extends StatelessWidget {
               Expanded(
                 child: Consumer2<ProfileStateManager, GameCreatorManager>(
                   builder: (context, stateManager, gameManager, child) {
-                    // Create list of menu items
                     List<Map<String, dynamic>> menuItems = [];
 
-                    // Auto Scroll item
+                    // Settings (New)
+                    menuItems.add({
+                      'title': 'Settings',
+                      'icon': Icons.settings_outlined,
+                      'color': AppTheme.textSecondary,
+                      'onTap': () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                        );
+                      },
+                    });
+
+                    // Auto Scroll
                     menuItems.add({
                       'title': 'Auto Scroll',
-                      'icon': Icons.swap_vert_circle,
-                      'color': Colors.blue,
+                      'icon': Icons.swap_vert_circle_outlined,
+                      'color': AppTheme.info,
                       'onTap': () async {
                         final enabled = await AutoScrollSettings.isEnabled();
                         await AutoScrollSettings.setEnabled(!enabled);
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text(
-                                  'Auto Scroll: ${!enabled ? 'ON' : 'OFF'}'),
+                              content: Text('Auto Scroll: ${!enabled ? 'ON' : 'OFF'}'),
                               duration: const Duration(seconds: 1),
+                              backgroundColor: AppTheme.surfacePrimary,
                             ),
                           );
                         }
@@ -97,12 +115,12 @@ class ProfileMenuWidget extends StatelessWidget {
                       },
                     });
 
-                    // Edit Profile / Save / Cancel items
+                    // Edit Profile / Save / Cancel
                     if (!stateManager.isEditing) {
                       menuItems.add({
                         'title': 'Edit Profile',
-                        'icon': Icons.edit,
-                        'color': Colors.green,
+                        'icon': Icons.person_outline,
+                        'color': AppTheme.success,
                         'onTap': () {
                           Navigator.pop(context);
                           onEditProfile?.call();
@@ -111,8 +129,8 @@ class ProfileMenuWidget extends StatelessWidget {
                     } else {
                       menuItems.add({
                         'title': 'Save',
-                        'icon': Icons.save,
-                        'color': Colors.green,
+                        'icon': Icons.check_circle_outline,
+                        'color': AppTheme.success,
                         'onTap': () {
                           Navigator.pop(context);
                           onSaveProfile?.call();
@@ -120,8 +138,8 @@ class ProfileMenuWidget extends StatelessWidget {
                       });
                       menuItems.add({
                         'title': 'Cancel',
-                        'icon': Icons.close,
-                        'color': Colors.red,
+                        'icon': Icons.cancel_outlined,
+                        'color': AppTheme.error,
                         'onTap': () {
                           Navigator.pop(context);
                           onCancelEdit?.call();
@@ -129,20 +147,17 @@ class ProfileMenuWidget extends StatelessWidget {
                       });
                     }
 
-
-
                     // Payment Setup
                     menuItems.add({
-                      'title': 'Payment Setup',
-                      'icon': Icons.payment,
-                      'color': Colors.green,
+                      'title': 'Payments',
+                      'icon': Icons.account_balance_wallet_outlined,
+                      'color': AppTheme.warning,
                       'onTap': () {
                         Navigator.pop(context);
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) =>
-                                const CreatorPaymentSetupScreen(),
+                            builder: (context) => const CreatorPaymentSetupScreen(),
                           ),
                         );
                       },
@@ -150,8 +165,8 @@ class ProfileMenuWidget extends StatelessWidget {
 
                     // Game Creator Dashboard Toggle
                     menuItems.add({
-                      'title': gameManager.isCreatorMode ? 'Video Creator' : 'Game Creator',
-                      'icon': gameManager.isCreatorMode ? Icons.video_collection_outlined : Icons.videogame_asset_outlined,
+                      'title': gameManager.isCreatorMode ? 'Video Portal' : 'Game Portal',
+                      'icon': gameManager.isCreatorMode ? Icons.video_library_outlined : Icons.gamepad_outlined,
                       'color': AppTheme.primary,
                       'onTap': () {
                         Navigator.pop(context);
@@ -159,7 +174,7 @@ class ProfileMenuWidget extends StatelessWidget {
                       },
                     });
 
-                    // Report User (conditionally show)
+                    // Report User
                     if (userId != null &&
                         ((stateManager.userData?['_id'] ??
                                 stateManager.userData?['id'] ??
@@ -167,8 +182,8 @@ class ProfileMenuWidget extends StatelessWidget {
                             userId)) {
                       menuItems.add({
                         'title': 'Report',
-                        'icon': Icons.flag_outlined,
-                        'color': Colors.orange,
+                        'icon': Icons.report_gmailerrorred_outlined,
+                        'color': AppTheme.error,
                         'onTap': () {
                           Navigator.pop(context);
                           onReportUser?.call();
@@ -179,8 +194,8 @@ class ProfileMenuWidget extends StatelessWidget {
                     // Feedback
                     menuItems.add({
                       'title': 'Feedback',
-                      'icon': Icons.feedback_outlined,
-                      'color': Colors.teal,
+                      'icon': Icons.rate_review_outlined,
+                      'color': AppTheme.success.withOpacity(0.8),
                       'onTap': () {
                         Navigator.pop(context);
                         onShowFeedback?.call();
@@ -189,9 +204,9 @@ class ProfileMenuWidget extends StatelessWidget {
 
                     // FAQ
                     menuItems.add({
-                      'title': 'FAQ',
-                      'icon': Icons.help_outline,
-                      'color': Colors.indigo,
+                      'title': 'Help & FAQ',
+                      'icon': Icons.help_outline_rounded,
+                      'color': AppTheme.primaryLight,
                       'onTap': () {
                         Navigator.pop(context);
                         onShowFAQ?.call();
@@ -200,21 +215,21 @@ class ProfileMenuWidget extends StatelessWidget {
 
                     // Legal & About
                     menuItems.add({
-                      'title': 'Legal & About',
-                      'icon': Icons.gavel,
-                      'color': Colors.blueGrey,
+                      'title': 'Legal',
+                      'icon': Icons.gavel_rounded,
+                      'color': AppTheme.textSecondary,
                       'onTap': () {
                         Navigator.pop(context);
                         ProfileDialogsWidget.showLegalBottomSheet(context);
                       },
                     });
 
-                    // Delete Videos (Only for owner)
+                    // Delete Videos
                     if (stateManager.isOwner) {
                       menuItems.add({
-                        'title': 'Delete',
-                        'icon': Icons.delete_outline,
-                        'color': Colors.red,
+                        'title': 'Manage Content',
+                        'icon': Icons.delete_sweep_outlined,
+                        'color': AppTheme.error,
                         'onTap': () {
                           Navigator.pop(context);
                           onEnterSelectionMode?.call();
@@ -222,42 +237,48 @@ class ProfileMenuWidget extends StatelessWidget {
                       });
                     }
 
-
-
-                    // Sign Out
+                    // Sign Out (Moved to bottom or kept in grid?)
                     menuItems.add({
                       'title': 'Logout',
-                      'icon': Icons.logout,
-                      'color': Colors.red,
+                      'icon': Icons.logout_rounded,
+                      'color': AppTheme.error,
                       'onTap': () {
                         Navigator.pop(context);
                         onLogout?.call();
                       },
                     });
 
-                    return Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: GridView.builder(
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 8,
-                          mainAxisSpacing: 8,
-                          childAspectRatio: 1.05,
-                        ),
-                        itemCount: menuItems.length,
-                        itemBuilder: (context, index) {
-                          final item = menuItems[index];
-                          return _buildMenuBox(
-                            title: item['title'],
-                            icon: item['icon'],
-                            color: item['color'],
-                            onTap: item['onTap'],
-                          );
-                        },
+                    return GridView.builder(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppTheme.spacing4,
+                        vertical: AppTheme.spacing2,
                       ),
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        crossAxisSpacing: AppTheme.spacing3,
+                        mainAxisSpacing: AppTheme.spacing3,
+                        childAspectRatio: 1.1,
+                      ),
+                      itemCount: menuItems.length,
+                      itemBuilder: (context, index) {
+                        final item = menuItems[index];
+                        return _buildMenuBox(
+                          title: item['title'],
+                          icon: item['icon'],
+                          color: item['color'],
+                          onTap: item['onTap'],
+                        );
+                      },
                     );
                   },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(AppTheme.spacing5),
+                child: Text(
+                  'Vayu v1.1.0',
+                  style: AppTheme.labelSmall.copyWith(color: AppTheme.textTertiary),
+                  textAlign: TextAlign.center,
                 ),
               ),
             ],
@@ -273,52 +294,49 @@ class ProfileMenuWidget extends StatelessWidget {
     required Color color,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: color.withOpacity(0.2),
-            width: 1,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppTheme.backgroundSecondary.withOpacity(0.3),
+            borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+            border: Border.all(
+              color: AppTheme.borderPrimary.withOpacity(0.5),
+              width: 1,
+            ),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                shape: BoxShape.circle,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(AppTheme.spacing2),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: 22,
+                ),
               ),
-              child: Icon(
-                icon,
-                color: color,
-                size: 17,
+              const SizedBox(height: AppTheme.spacing2),
+              Text(
+                title,
+                style: AppTheme.labelMedium.copyWith(
+                  color: AppTheme.textPrimary,
+                  fontWeight: AppTheme.weightMedium,
+                  fontSize: 11,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              title,
-              style: const TextStyle(
-                color: Colors.black87,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

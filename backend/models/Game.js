@@ -47,6 +47,10 @@ const gameSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  totalTimeSpent: {
+    type: Number,
+    default: 0 // In seconds
+  },
   rating: {
     type: Number,
     default: 0

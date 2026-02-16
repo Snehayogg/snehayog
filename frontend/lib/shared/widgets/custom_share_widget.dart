@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
+import 'package:vayu/shared/theme/app_theme.dart';
 
 class CustomShareWidget extends StatefulWidget {
   final VideoModel video;
@@ -56,9 +57,9 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: AppTheme.surfacePrimary,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -68,7 +69,7 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.grey[400],
+              color: AppTheme.textTertiary.withOpacity(0.3),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -80,7 +81,7 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: Colors.black87,
+              color: AppTheme.textPrimary,
               letterSpacing: 0.5,
             ),
           ),
@@ -120,18 +121,18 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Colors.grey[50]!,
-            Colors.grey[100]!,
+            AppTheme.backgroundSecondary,
+            AppTheme.backgroundSecondary.withOpacity(0.8),
           ],
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: Colors.grey[200]!,
+          color: AppTheme.textTertiary.withOpacity(0.1),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withOpacity(0.2),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -148,14 +149,14 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Colors.grey[300]!,
-                  Colors.grey[400]!,
+                  AppTheme.backgroundTertiary,
+                  AppTheme.backgroundTertiary.withOpacity(0.8),
                 ],
               ),
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
+                  color: Colors.black.withOpacity(0.2),
                   blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),
@@ -164,7 +165,7 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
             child: const Icon(
               Icons.play_circle_filled,
               size: 32,
-              color: Colors.white,
+              color: AppTheme.primary,
             ),
           ),
           const SizedBox(width: 16),
@@ -179,7 +180,7 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
                   style: const TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 15,
-                    color: Colors.black87,
+                    color: AppTheme.textPrimary,
                     letterSpacing: 0.2,
                   ),
                   maxLines: 2,
@@ -192,7 +193,7 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
                       width: 6,
                       height: 6,
                       decoration: BoxDecoration(
-                        color: Colors.green[500],
+                        color: AppTheme.success,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -201,7 +202,7 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
                       'by ${widget.video.uploader.name}',
                       style: TextStyle(
                         fontSize: 13,
-                        color: Colors.grey[600],
+                        color: AppTheme.textSecondary,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -451,9 +452,10 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
           children: [
             CircularProgressIndicator(),
             SizedBox(width: 20),
-            Text('Opening...'),
+            Text('Opening...', style: TextStyle(color: AppTheme.textPrimary)),
           ],
         ),
+        backgroundColor: AppTheme.surfacePrimary,
       ),
     );
   }
@@ -462,8 +464,9 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Error'),
-        content: Text(message),
+        backgroundColor: AppTheme.surfacePrimary,
+        title: const Text('Error', style: TextStyle(color: AppTheme.textPrimary)),
+        content: Text(message, style: const TextStyle(color: AppTheme.textSecondary)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),

@@ -486,7 +486,7 @@ class _UploadScreenState extends State<UploadScreen> {
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         backgroundColor: AppTheme.error,
-                        foregroundColor: AppTheme.textInverse,
+                        foregroundColor: AppTheme.textPrimary,
                       ),
                     ),
                   )
@@ -1100,7 +1100,7 @@ class _UploadScreenState extends State<UploadScreen> {
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.success,
-                          foregroundColor: AppTheme.textInverse,
+                          foregroundColor: AppTheme.textPrimary,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -1781,7 +1781,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                                     'btn_retry_upload')),
                                                 style: ElevatedButton.styleFrom(
                                                   backgroundColor: AppTheme.primary,
-                                                  foregroundColor: AppTheme.textInverse,
+                                                  foregroundColor: Colors.white,
                                                   padding: const EdgeInsets
                                                       .symmetric(
                                                     vertical: 12,
@@ -1834,7 +1834,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                           ),
                                           style: ElevatedButton.styleFrom(
                                             backgroundColor: AppTheme.primary,
-                                            foregroundColor: AppTheme.textInverse,
+                                            foregroundColor: Colors.white,
                                             padding: const EdgeInsets.symmetric(vertical: 16),
                                             shape: RoundedRectangleBorder(
                                               borderRadius: BorderRadius.circular(8),
@@ -1862,4 +1862,5 @@ class _UploadScreenState extends State<UploadScreen> {
     );
   }
 }
+
 

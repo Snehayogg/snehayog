@@ -54,6 +54,8 @@ class AppText {
     'btn_close': 'Close',
     'btn_confirm': 'Confirm',
     'btn_withdraw_funds': 'Withdraw Funds',
+    'btn_add_upi_id': 'Add UPI ID',
+    'btn_refer_friends': 'Refer Friends',
     'btn_sign_in_google': 'Sign In with Google',
 
     // Upload screen
@@ -242,9 +244,21 @@ class AppText {
     'profile_upi_notice': 'Earning ke liye apna UPI ID add karein',
     'profile_video_earnings': 'Video Earnings',
     'profile_no_videos': 'No videos found',
+    'profile_stat_subscribers': 'Subscribers',
+    'profile_stat_content': 'Content',
+    'profile_stat_earnings': 'Earnings',
+    'profile_stat_rank': 'Ranking',
     'profile_sign_in_success': 'Signed in successfully!',
     'profile_logout_success':
         'Logged out successfully. Your payment details are saved.',
+
+    // Settings
+    'settings_title': 'Settings',
+    'settings_developer_header': 'Developer Settings',
+    'settings_developer_token': 'Access Token',
+    'settings_token_usage': 'Use this token to authenticate with the Game Creator Web Portal.',
+    'settings_token_copied': 'Token copied to clipboard',
+    'settings_account_header': 'Account',
 
     // Errors
     'error_network': 'Network error. Please check your connection.',

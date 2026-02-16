@@ -12,6 +12,7 @@ class AppTheme {
   static const Color primary = Color(0xFF2563EB); // Website Blue
   static const Color primaryLight = Color(0xFF3B82F6);
   static const Color primaryDark = Color(0xFF1D4ED8);
+  static const Color white = Colors.white;
 
   // Text & Foreground Colors
   static const Color textPrimary =
@@ -293,7 +294,7 @@ class AppTheme {
       // Color scheme
       colorScheme: const ColorScheme.dark(
         primary: primary,
-        onPrimary: textInverse,
+        onPrimary: textPrimary,
         secondary: warning, // Using website accent as secondary
         onSecondary: textInverse,
         surface: backgroundSecondary,
@@ -340,7 +341,7 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: primary,
-          foregroundColor: textInverse,
+          foregroundColor: white,
           elevation: 0,
           padding: const EdgeInsets.symmetric(
             horizontal: spacing4,
@@ -356,7 +357,7 @@ class AppTheme {
       // Outlined button theme
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: primary,
+          foregroundColor: white,
           side: const BorderSide(color: primary, width: 1.5),
           padding: const EdgeInsets.symmetric(
             horizontal: spacing4,
@@ -372,7 +373,7 @@ class AppTheme {
       // Text button theme
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: primary,
+          foregroundColor: white,
           padding: const EdgeInsets.symmetric(
             horizontal: spacing3,
             vertical: spacing2,
@@ -628,7 +629,7 @@ class AppTheme {
   }) {
     return ButtonStyle(
       backgroundColor: WidgetStateProperty.all(backgroundColor ?? primary),
-      foregroundColor: WidgetStateProperty.all(foregroundColor ?? textInverse),
+      foregroundColor: WidgetStateProperty.all(foregroundColor ?? textPrimary),
       elevation: WidgetStateProperty.all(elevation ?? 0),
       padding: WidgetStateProperty.all(padding ??
           const EdgeInsets.symmetric(
@@ -661,3 +662,4 @@ class AppTheme {
     );
   }
 }
+

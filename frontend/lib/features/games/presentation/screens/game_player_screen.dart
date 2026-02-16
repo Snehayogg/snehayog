@@ -21,9 +21,12 @@ class _GamePlayerScreenState extends State<GamePlayerScreen> {
   late final WebViewController _controller;
   bool _isLoading = true;
 
+  late final DateTime _startTime;
+
   @override
   void initState() {
     super.initState();
+    _startTime = DateTime.now();
     _initWebView();
     
     // **NEW: Set Orientation** 
@@ -37,11 +40,44 @@ class _GamePlayerScreenState extends State<GamePlayerScreen> {
 
   @override
   void dispose() {
+    // **NEW: Report Analytics**
+    final duration = DateTime.now().difference(_startTime).inSeconds;
+    if (duration > 5) { // Only track if played for more than 5 seconds
+      _reportAnalytics(duration);
+    }
+
     // **NEW: Reset Orientation**
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
     ]);
     super.dispose();
+  }
+
+  Future<void> _reportAnalytics(int duration) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('jwt_token');
+      final String baseUrl = NetworkHelper.apiBaseUrl;
+      final uri = Uri.parse('$baseUrl/games/${widget.game.id}/analytics');
+
+      http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'timeSpent': duration,
+        }),
+      ).catchError((e) {
+        AppLogger.log('❌ Failed to report analytics: $e');
+        return http.Response('Error', 500);
+      });
+      
+      AppLogger.log('📊 GamePlayerScreen: Reported duration $duration s');
+    } catch (e) {
+       AppLogger.log('❌ Failed to report analytics: $e');
+    }
   }
 
   String _formatGameUrl(String url) {

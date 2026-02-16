@@ -23,7 +23,7 @@ class ProfileSkeleton extends StatelessWidget {
                       width: ResponsiveHelper.isMobile(context) ? 100 : 150,
                       height: ResponsiveHelper.isMobile(context) ? 100 : 150,
                       decoration: BoxDecoration(
-                        color: Colors.grey[300],
+                        color: AppTheme.backgroundTertiary.withOpacity(0.5),
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -34,7 +34,7 @@ class ProfileSkeleton extends StatelessWidget {
                       width: 200,
                       height: 32,
                       decoration: BoxDecoration(
-                        color: Colors.grey[300],
+                        color: AppTheme.backgroundTertiary.withOpacity(0.5),
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
@@ -45,7 +45,7 @@ class ProfileSkeleton extends StatelessWidget {
                       width: 120,
                       height: 40,
                       decoration: BoxDecoration(
-                        color: Colors.grey[300],
+                        color: AppTheme.backgroundTertiary.withOpacity(0.5),
                         borderRadius: BorderRadius.circular(20),
                       ),
                     ),
@@ -60,8 +60,8 @@ class ProfileSkeleton extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 20),
                 decoration: const BoxDecoration(
                   border: Border(
-                    top: BorderSide(color: Color(0xFFE0E0E0)),
-                    bottom: BorderSide(color: Color(0xFFE0E0E0)),
+                    top: BorderSide(color: AppTheme.borderPrimary),
+                    bottom: BorderSide(color: AppTheme.borderPrimary),
                   ),
                 ),
                 child: Row(
@@ -74,7 +74,7 @@ class ProfileSkeleton extends StatelessWidget {
                                 width: 60,
                                 height: 32,
                                 decoration: BoxDecoration(
-                                  color: Colors.grey[300],
+                                  color: AppTheme.backgroundTertiary.withOpacity(0.5),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                               ),
@@ -83,7 +83,7 @@ class ProfileSkeleton extends StatelessWidget {
                                 width: 80,
                                 height: 20,
                                 decoration: BoxDecoration(
-                                  color: Colors.grey[300],
+                                  color: AppTheme.backgroundTertiary.withOpacity(0.5),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                               ),
@@ -105,7 +105,7 @@ class ProfileSkeleton extends StatelessWidget {
                       width: 150,
                       height: 24,
                       decoration: BoxDecoration(
-                        color: Colors.grey[300],
+                        color: AppTheme.backgroundTertiary.withOpacity(0.5),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
@@ -125,7 +125,7 @@ class ProfileSkeleton extends StatelessWidget {
                       itemCount: 6,
                       itemBuilder: (context, index) => Container(
                         decoration: BoxDecoration(
-                          color: Colors.grey[300],
+                          color: AppTheme.backgroundTertiary.withOpacity(0.5),
                           borderRadius: BorderRadius.zero,
                         ),
                       ),

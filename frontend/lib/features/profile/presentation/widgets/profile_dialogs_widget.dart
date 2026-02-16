@@ -344,7 +344,7 @@ class ProfileDialogsWidget {
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primary,
-              foregroundColor: AppTheme.textInverse,
+              foregroundColor: AppTheme.textPrimary,
             ),
             child: const Text('Debug Info'),
           ),
@@ -499,7 +499,7 @@ class ProfileDialogsWidget {
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     backgroundColor: AppTheme.primary,
-                    foregroundColor: AppTheme.textInverse,
+                    foregroundColor: AppTheme.textPrimary,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -804,9 +804,9 @@ class ProfileDialogsWidget {
                           width: double.infinity,
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
+                            color: AppTheme.backgroundSecondary,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.blue.shade100),
+                            border: Border.all(color: AppTheme.borderPrimary),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -815,7 +815,7 @@ class ProfileDialogsWidget {
                                 'Saved UPI ID',
                                 style: TextStyle(
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.black87,
+                                  color: AppTheme.textPrimary,
                                 ),
                               ),
                               const SizedBox(height: 6),
@@ -823,7 +823,7 @@ class ProfileDialogsWidget {
                                 currentUpi,
                                 style: const TextStyle(
                                   fontSize: 15,
-                                  color: Colors.black87,
+                                  color: AppTheme.textSecondary,
                                 ),
                               ),
                             ],
@@ -839,7 +839,13 @@ class ProfileDialogsWidget {
                                 upiController.text = currentUpi;
                               });
                             },
-                            child: const Text('Update UPI ID'),
+                            child: const Text(
+                              'Update UPI ID',
+                              style: TextStyle(
+                                color: AppTheme.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         ),
                       ],
@@ -928,8 +934,8 @@ class ProfileDialogsWidget {
                                 },
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
-                            backgroundColor: Colors.blue.shade600,
-                            foregroundColor: Colors.white,
+                            backgroundColor: AppTheme.primary,
+                            foregroundColor: AppTheme.white,
                           ),
                           child: Text(
                             isSaving
@@ -971,7 +977,7 @@ class ProfileDialogsWidget {
             style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: Colors.black87,
+              color: AppTheme.textPrimary,
             ),
           ),
           const SizedBox(height: 4),
@@ -979,7 +985,7 @@ class ProfileDialogsWidget {
             body,
             style: TextStyle(
               fontSize: 13,
-              color: Colors.grey.shade800,
+              color: AppTheme.textSecondary,
               height: 1.35,
             ),
           ),
@@ -997,3 +1003,4 @@ class ProfileDialogsWidget {
     );
   }
 }
+

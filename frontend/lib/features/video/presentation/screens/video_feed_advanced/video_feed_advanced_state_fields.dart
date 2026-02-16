@@ -38,7 +38,6 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   // Cached providers & media query
   MainController? _mainController;
   double? _screenWidth;
-  double? _screenHeight;
 
   // Decoder priming
   int get _decoderPrimeBudget => 3;

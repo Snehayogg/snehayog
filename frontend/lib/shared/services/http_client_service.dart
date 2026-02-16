@@ -92,6 +92,9 @@ class HttpClientService {
       InterceptorsWrapper(
         onRequest: (options, handler) async {
           try {
+            // **FIXED: Ensure headers map is initialized and mutable to prevent NoSuchMethodError**
+            options.headers = Map<String, dynamic>.from(options.headers);
+
             // **NEW: Inject API Version Header**
             options.headers['X-API-Version'] = AppConfig.kApiVersion;
 
@@ -251,7 +254,7 @@ class HttpClientService {
         cancelToken: cancelToken,
         onSendProgress: onSendProgress,
         options: Options(
-          headers: headers,
+          headers: headers ?? <String, String>{},
           sendTimeout: timeout ?? AppConfig.uploadTimeout,
           receiveTimeout: timeout ?? AppConfig.uploadTimeout,
         ),
@@ -303,7 +306,7 @@ class HttpClientService {
       final response = await dio.get(
         url.toString(),
         options: Options(
-          headers: headers,
+          headers: headers ?? <String, String>{},
           receiveTimeout: timeout ?? AppConfig.apiTimeout,
         ),
       );
@@ -325,7 +328,7 @@ class HttpClientService {
         url.toString(),
         data: body is String ? body : jsonEncode(body),
         options: Options(
-          headers: headers,
+          headers: headers ?? <String, String>{},
           receiveTimeout: timeout ?? AppConfig.apiTimeout,
           contentType: headers?['Content-Type'] ?? 'application/json',
         ),
@@ -348,7 +351,7 @@ class HttpClientService {
         url.toString(),
         data: body is String ? body : jsonEncode(body),
         options: Options(
-          headers: headers,
+          headers: headers ?? <String, String>{},
           receiveTimeout: timeout ?? AppConfig.apiTimeout,
           contentType: headers?['Content-Type'] ?? 'application/json',
         ),
@@ -371,7 +374,7 @@ class HttpClientService {
         url.toString(),
         data: body is String ? body : jsonEncode(body),
         options: Options(
-          headers: headers,
+          headers: headers ?? <String, String>{},
           receiveTimeout: timeout ?? AppConfig.apiTimeout,
           contentType: headers?['Content-Type'] ?? 'application/json',
         ),
@@ -394,7 +397,7 @@ class HttpClientService {
         url.toString(),
         data: body is String ? body : jsonEncode(body),
         options: Options(
-          headers: headers,
+          headers: headers ?? <String, String>{},
           receiveTimeout: timeout ?? AppConfig.apiTimeout,
           contentType: body != null
               ? (headers?['Content-Type'] ?? 'application/json')

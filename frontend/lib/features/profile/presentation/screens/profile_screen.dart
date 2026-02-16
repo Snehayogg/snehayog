@@ -61,7 +61,9 @@ class _ProfileScreenState extends State<ProfileScreen>
   static final Uri _whatsAppGroupUri =
       Uri.parse('https://chat.whatsapp.com/H7eU5xnwm3r2dfpvi7hCJC');
 
-  late final ProfileStateManager _stateManager;
+  late ProfileStateManager _stateManager;
+  ProfileStateManager? _localStateManager; // **NEW: Handle local instance for creators**
+  bool _isLocalManager = false; // **NEW: Track manager type**
   final ImagePicker _imagePicker = ImagePicker();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _isSigningIn = false; // **NEW: Track local sign-in progress**
@@ -103,20 +105,74 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   // **NEW: Key to track the "Add UPI ID" button position for the guide**
   final GlobalKey _upiButtonKey = GlobalKey();
+  bool _forceShowSignIn = false;
+
+  bool _shouldShowSignIn(GoogleSignInController authController) {
+    if (widget.userId != null) return false;
+    return _forceShowSignIn || !authController.isSignedIn;
+  }
+
+  void _markForceSignIn() {
+    if (!mounted) return;
+    if (!_forceShowSignIn) {
+      setState(() {
+        _forceShowSignIn = true;
+      });
+    }
+    _stateManager.clearData();
+    context.read<GameCreatorManager>().clearData();
+    _isLoading.value = false;
+    _error.value = null;
+  }
+
+  Future<void> _checkSessionForOwnProfile() async {
+    if (widget.userId != null) return;
+    try {
+      final needsReLogin = await _authService.needsReLogin();
+      if (!mounted) return;
+      if (needsReLogin) {
+        _markForceSignIn();
+      } else if (_forceShowSignIn) {
+        setState(() {
+          _forceShowSignIn = false;
+        });
+      }
+    } catch (_) {
+      // Keep current state on check failure.
+    }
+  }
 
   @override
 
   void initState() {
     super.initState();
     ProfileScreenLogger.logProfileScreenInit();
-    _stateManager = Provider.of<ProfileStateManager>(context, listen: false);
+    
+    // **UNIQUE CONTAINER STRATEGY: Use local manager for creators to avoid sync bugs**
+    final authService = AuthService();
+    final myId = authService.currentUserId;
+    
+    // Check if we are viewing someone else's profile
+    if (widget.userId != null && widget.userId != myId?.toString()) {
+      AppLogger.log('🚀 ProfileScreen: Initializing LOCAL ProfileStateManager for creator: ${widget.userId}');
+      _localStateManager = ProfileStateManager();
+      _stateManager = _localStateManager!;
+      _isLocalManager = true;
+    } else {
+      AppLogger.log('🚀 ProfileScreen: Using GLOBAL ProfileStateManager for own profile');
+      _stateManager = Provider.of<ProfileStateManager>(context, listen: false);
+      _isLocalManager = false;
+    }
+    
     _stateManager.setContext(context);
+    unawaited(_checkSessionForOwnProfile());
 
     // Ensure context is set early for providers that may be used during loads
     // It will be set again in didChangeDependencies
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _stateManager.setContext(context);
+    unawaited(_checkSessionForOwnProfile());
         // **FIX: Ensure data loads on first attempt even if cache fails**
         // Call _loadData() in postFrameCallback to ensure context is ready
         if (_stateManager.userData == null) {
@@ -142,6 +198,12 @@ class _ProfileScreenState extends State<ProfileScreen>
   /// **OPTIMIZED: Only load if data is missing - don't reload on every tab switch**
   /// **FIXED: Don't reload if creator has no videos - only load once per session**
   void onProfileTabSelected() {
+    unawaited(_checkSessionForOwnProfile());
+    // **FIX: Only proceed if this is still the current route**
+    if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? true)) return;
+    if (_forceShowSignIn) {
+      return;
+    }
     AppLogger.log(
         '🔄 ProfileScreen: Profile tab selected, checking if data needs loading');
 
@@ -213,6 +275,12 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Future<void> _loadData({bool forceRefresh = false}) async {
     try {
+      if (widget.userId == null) {
+        await _checkSessionForOwnProfile();
+        if (_forceShowSignIn) {
+          return;
+        }
+      }
       AppLogger.log(
           '🔄 ProfileScreen: Starting data loading (forceRefresh: $forceRefresh)');
 
@@ -596,6 +664,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   void didChangeDependencies() {
     super.didChangeDependencies();
     _stateManager.setContext(context);
+    unawaited(_checkSessionForOwnProfile());
 
     // **DISABLED: Preload profile videos to prevent video playback conflicts**
     // _preloadProfileVideos();
@@ -735,6 +804,12 @@ class _ProfileScreenState extends State<ProfileScreen>
       videoCacheProxy.cancelAllPrefetches();
     } catch (e) {
        AppLogger.log('⚠️ ProfileScreen: Error stopping downloads: $e');
+    }
+
+    // **NEW: Ensure local manager is disposed to free memory**
+    if (_isLocalManager && _localStateManager != null) {
+      AppLogger.log('🧹 ProfileScreen: Disposing local ProfileStateManager');
+      _localStateManager!.dispose();
     }
 
     // **OPTIMIZED: Dispose ValueNotifiers**
@@ -1395,7 +1470,11 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return ChangeNotifierProvider.value(
+    
+    // **UNIQUE CONTAINER: If using local manager, provide it via Provider.value**
+    // This ensure sub-widgets like ProfileHeaderWidget, ProfileVideosWidget, etc. 
+    // all use the correct instance belonging to this specific screen.
+    return ChangeNotifierProvider<ProfileStateManager>.value(
       value: _stateManager,
       child: Consumer<GoogleSignInController>(
         builder: (context, authController, _) {
@@ -1572,7 +1651,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     // **FIXED: Check authentication status first - if viewing own profile and not signed in, show sign-in view**
     // If viewing someone else's profile (widget.userId != null), show their profile even if not signed in
-    if (widget.userId == null && !authController.isSignedIn) {
+    if (_shouldShowSignIn(authController)) {
       return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
     }
 
@@ -1580,13 +1659,17 @@ class _ProfileScreenState extends State<ProfileScreen>
     if (widget.userId != null &&
         _stateManager.userData != null &&
         _stateManager.userVideos.isEmpty &&
-        !_stateManager.isVideosLoading) {
+        !_stateManager.isVideosLoading &&
+        !_videosLoadAttempted) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted &&
-            widget.userId != null &&
+        // **FIX: Only proceed if this is still the current route**
+        if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? true)) return;
+
+        if (widget.userId != null &&
             _stateManager.userData != null &&
             _stateManager.userVideos.isEmpty &&
-            !_stateManager.isVideosLoading) {
+            !_stateManager.isVideosLoading &&
+            !_videosLoadAttempted) {
           AppLogger.log(
               '🔄 ProfileScreen: Profile data loaded but videos missing, loading videos for creator: ${widget.userId}');
           _loadVideos().catchError((e) {
@@ -1601,13 +1684,17 @@ class _ProfileScreenState extends State<ProfileScreen>
     if (widget.userId == null &&
         _stateManager.userData != null &&
         _stateManager.userVideos.isEmpty &&
-        !_stateManager.isVideosLoading) {
+        !_stateManager.isVideosLoading &&
+        !_videosLoadAttempted) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted &&
-            widget.userId == null &&
+        // **FIX: Only proceed if this is still the current route**
+        if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? true)) return;
+
+        if (widget.userId == null &&
             _stateManager.userData != null &&
             _stateManager.userVideos.isEmpty &&
-            !_stateManager.isVideosLoading) {
+            !_stateManager.isVideosLoading &&
+            !_videosLoadAttempted) {
           AppLogger.log(
               '🔄 ProfileScreen: Profile data loaded but videos missing for own profile, loading videos...');
           _loadVideos().catchError((e) {
@@ -1631,7 +1718,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           valueListenable: _error,
           builder: (context, error, child) {
             // **FIXED: Check authentication status - if not signed in and viewing own profile, show sign-in view**
-            if (widget.userId == null && !authController.isSignedIn) {
+            if (_shouldShowSignIn(authController)) {
               return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
             }
 
@@ -1648,7 +1735,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               
               // **FIX: Allow viewing other profiles even if not signed in**
               // If not signed in and viewing own profile -> Sign In
-              if (widget.userId == null && !authController.isSignedIn) {
+              if (_shouldShowSignIn(authController)) {
                  return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
               }
 
@@ -1725,7 +1812,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
             // Check if we have user data - if viewing own profile and no data, show sign-in view
             if (_stateManager.userData == null) {
-              if (widget.userId == null && !authController.isSignedIn) {
+              if (_shouldShowSignIn(authController)) {
                 return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
               }
               // If viewing someone else's profile, we might not have data yet - show loading or error
@@ -3040,3 +3127,4 @@ class _EarningsBottomSheetContentState
     );
   }
 }
+

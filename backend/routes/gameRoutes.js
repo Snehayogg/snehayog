@@ -161,6 +161,37 @@ router.post('/:id/storage', verifyToken, async (req, res) => {
   }
 });
 
+// 4.5 POST /api/games/:id/analytics - Update Game Analytics (Plays & Time Spent)
+router.post('/:id/analytics', verifyToken, async (req, res) => {
+  try {
+    const gameId = req.params.id;
+    const { timeSpent } = req.body; // timeSpent in seconds
+
+    const update = { $inc: { plays: 1 } };
+    if (timeSpent && typeof timeSpent === 'number') {
+      update.$inc.totalTimeSpent = timeSpent;
+    }
+
+    const game = await Game.findByIdAndUpdate(
+      gameId,
+      update,
+      { new: true }
+    );
+
+    if (!game) return res.status(404).json({ error: 'Game not found' });
+
+    res.json({
+      success: true,
+      message: 'Analytics updated',
+      plays: game.plays,
+      totalTimeSpent: game.totalTimeSpent
+    });
+  } catch (error) {
+    console.error('❌ Error updating game analytics:', error);
+    res.status(500).json({ error: 'Failed to update analytics' });
+  }
+});
+
 // 5. GET /api/games/:id/leaderboard - Optional Leaderboard
 router.get('/:id/leaderboard', async (req, res) => {
   try {

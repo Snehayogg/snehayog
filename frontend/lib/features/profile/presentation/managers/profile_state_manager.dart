@@ -124,6 +124,20 @@ class ProfileStateManager extends ChangeNotifier {
   // Profile management
   Future<void> loadUserData(String? userId,
       {bool forceRefresh = false, bool silent = false}) async {
+    // **PREVENT STALE DATA: If user changed, clear old data immediately**
+    if (!silent && userId != _requestedUserId) {
+      AppLogger.log('🔄 ProfileStateManager: User changed from ' + (_requestedUserId ?? "null").toString() + ' to ' + (userId ?? "null").toString() + ', clearing stale data');
+      _userData = null;
+      _userVideos = [];
+      _totalVideoCount = 0;
+      _cachedEarnings = 0.0;
+      _currentPage = 1;
+      _hasMoreVideos = true;
+      _isProfileLoading = true;
+      _isLoading = true;
+      _error = null;
+      notifyListenersSafe();
+    }
     _requestedUserId = userId; // Store for isOwner check
     
     if (!silent) {

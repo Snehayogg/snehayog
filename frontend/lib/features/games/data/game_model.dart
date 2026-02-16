@@ -15,6 +15,8 @@ class GameModel {
 
   final String? status;
   final int views;
+  final int plays;
+  final int totalTimeSpent;
   final String? thumbnailUrl;
 
   GameModel({
@@ -31,6 +33,8 @@ class GameModel {
     this.bannerImage,
     this.status = 'active',
     this.views = 0,
+    this.plays = 0,
+    this.totalTimeSpent = 0,
     this.thumbnailUrl,
   });
 
@@ -47,6 +51,8 @@ class GameModel {
       qualityScore: json['quality_score'],
       orientation: json['orientation'],
       bannerImage: json['banner_image'],
+      plays: json['plays'] ?? 0,
+      totalTimeSpent: json['totalTimeSpent'] ?? 0,
     );
   }
 
@@ -64,6 +70,8 @@ class GameModel {
       orientation: json['orientation'],
       status: json['status'] ?? 'active',
       views: json['views'] ?? 0,
+      plays: json['plays'] ?? 0,
+      totalTimeSpent: json['totalTimeSpent'] ?? 0,
       width: json['orientation'] == 'landscape' ? 1280 : 720,
       height: json['orientation'] == 'landscape' ? 720 : 1280,
     );

@@ -1,14 +1,14 @@
+import 'package:vayu/features/auth/data/services/authservices.dart';
+import 'package:provider/provider.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:vayu/features/auth/data/usermodel.dart';
 import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/shared/services/search_service.dart';
-import 'package:vayu/features/video/data/services/video_service.dart';
-import 'package:vayu/features/profile/data/services/earnings_service.dart';
 import 'package:vayu/features/profile/presentation/screens/profile_screen.dart';
 import 'package:vayu/features/video/presentation/screens/video_screen.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:vayu/shared/theme/app_theme.dart';
 
 /// Global search UI for videos and creators.
 class VideoCreatorSearchDelegate extends SearchDelegate<void> {
@@ -32,21 +32,19 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
 
   @override
   ThemeData appBarTheme(BuildContext context) {
-    final theme = Theme.of(context);
-    return theme.copyWith(
+    return AppTheme.lightTheme.copyWith(
       appBarTheme: AppBarTheme(
-        backgroundColor: Colors.white,
+        backgroundColor: AppTheme.backgroundPrimary,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Color(0xFF1A1A1A)),
-        titleTextStyle: TextStyle(
-          color: Colors.grey[800],
-          fontSize: 18,
+        iconTheme: const IconThemeData(color: AppTheme.textPrimary),
+        titleTextStyle: AppTheme.titleLarge.copyWith(
+          color: AppTheme.textPrimary,
           fontWeight: FontWeight.w600,
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         border: InputBorder.none,
-        hintStyle: TextStyle(color: Colors.grey[400]),
+        hintStyle: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
       ),
     );
   }
@@ -358,31 +356,113 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
 
   /// **PROFESSIONAL: Build creator result tile (full search results)**
   Widget _buildCreatorResultTile(BuildContext context, UserModel creator) {
-    return _CreatorEarningsTile(
-      creator: creator,
+    return ListTile(
+      leading: CircleAvatar(
+        radius: 24,
+        backgroundColor: AppTheme.backgroundSecondary,
+        backgroundImage: creator.profilePic.isNotEmpty
+            ? CachedNetworkImageProvider(creator.profilePic)
+            : null,
+        child: creator.profilePic.isEmpty
+            ? const Icon(Icons.person, color: AppTheme.textSecondary)
+            : null,
+      ),
+      title: Text(
+        creator.name,
+        style: AppTheme.titleMedium.copyWith(fontWeight: FontWeight.w600),
+      ),
+      subtitle: Text(
+        (creator.bio?.isNotEmpty ?? false) ? creator.bio! : 'View profile',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: AppTheme.bodySmall,
+      ),
+      trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: AppTheme.textTertiary),
       onTap: () {
         close(context, null);
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => ProfileScreen(userId: creator.id),
-          ),
-        );
+        
+        final authService = Provider.of<AuthService>(context, listen: false);
+        final myId = authService.currentUserId;
+        
+        if (creator.id == myId) {
+          // If navigating to self, pop to root (Profile Tab root)
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        } else {
+          // Replace if already viewing a creator to avoid deep stacks
+          final isPushed = Navigator.of(context).canPop();
+          if (isPushed) {
+             Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                settings: const RouteSettings(name: 'profile_creator'),
+                builder: (_) => ProfileScreen(userId: creator.id),
+              ),
+            );
+          } else {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                settings: const RouteSettings(name: 'profile_creator'),
+                builder: (_) => ProfileScreen(userId: creator.id),
+              ),
+            );
+          }
+        }
       },
     );
   }
 
   /// **PROFESSIONAL: Build creator suggestion tile (autocomplete)**
   Widget _buildCreatorSuggestionTile(BuildContext context, UserModel creator) {
-    return _CreatorEarningsTile(
-      creator: creator,
-      isCompact: true,
+    return ListTile(
+      dense: true,
+      leading: CircleAvatar(
+        radius: 18,
+        backgroundColor: AppTheme.backgroundSecondary,
+        backgroundImage: creator.profilePic.isNotEmpty
+            ? CachedNetworkImageProvider(creator.profilePic)
+            : null,
+        child: creator.profilePic.isEmpty
+            ? const Icon(Icons.person, color: AppTheme.textSecondary, size: 18)
+            : null,
+      ),
+      title: Text(
+        creator.name,
+        style: AppTheme.titleSmall.copyWith(fontWeight: FontWeight.w600),
+      ),
+      subtitle: Text(
+        (creator.bio?.isNotEmpty ?? false) ? creator.bio! : 'View profile',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: AppTheme.labelSmall,
+      ),
+      trailing: const Icon(Icons.north_west, size: 14, color: AppTheme.textTertiary),
       onTap: () {
         close(context, null);
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => ProfileScreen(userId: creator.id),
-          ),
-        );
+        
+        final authService = Provider.of<AuthService>(context, listen: false);
+        final myId = authService.currentUserId;
+        
+        if (creator.id == myId) {
+          // If navigating to self, pop to root (Profile Tab root)
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        } else {
+          // Replace if already viewing a creator to avoid deep stacks
+          final isPushed = Navigator.of(context).canPop();
+          if (isPushed) {
+             Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                settings: const RouteSettings(name: 'profile_creator'),
+                builder: (_) => ProfileScreen(userId: creator.id),
+              ),
+            );
+          } else {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                settings: const RouteSettings(name: 'profile_creator'),
+                builder: (_) => ProfileScreen(userId: creator.id),
+              ),
+            );
+          }
+        }
       },
     );
   }
@@ -414,25 +494,22 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
                 errorWidget: (context, url, error) => Container(
                   width: 72,
                   height: 72,
-                  color: Colors.grey[200],
-                  child:
-                      const Icon(Icons.play_circle_outline, color: Colors.grey),
+                  color: AppTheme.backgroundSecondary,
+child:
+                      const Icon(Icons.play_circle_outline, color: AppTheme.textTertiary),
                 ),
               )
             : Container(
                 width: 72,
                 height: 72,
-                color: Colors.grey[200],
+                color: AppTheme.backgroundSecondary,
                 child: const Icon(Icons.play_circle_outline,
-                    color: Colors.grey, size: 32),
+                    color: AppTheme.textTertiary, size: 32),
               ),
       ),
       title: Text(
         video.videoName,
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-        ),
+        style: AppTheme.titleMedium.copyWith(fontWeight: FontWeight.w600),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
@@ -440,11 +517,11 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
         padding: const EdgeInsets.only(top: 4),
         child: Row(
           children: [
-            Icon(Icons.visibility, size: 14, color: Colors.grey[600]),
+            const Icon(Icons.visibility, size: 14, color: AppTheme.textTertiary),
             const SizedBox(width: 4),
             Text(
               _formatViewCount(video.views),
-              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+              style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
             ),
           ],
         ),
@@ -498,28 +575,28 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
                 errorWidget: (context, url, error) => Container(
                   width: 56,
                   height: 56,
-                  color: Colors.grey[200],
+                  color: AppTheme.backgroundSecondary,
                   child: const Icon(Icons.play_circle_outline,
-                      color: Colors.grey, size: 24),
+                      color: AppTheme.textTertiary, size: 24),
                 ),
               )
             : Container(
                 width: 56,
                 height: 56,
-                color: Colors.grey[200],
+                color: AppTheme.backgroundSecondary,
                 child: const Icon(Icons.play_circle_outline,
-                    color: Colors.grey, size: 24),
+                    color: AppTheme.textTertiary, size: 24),
               ),
       ),
       title: Text(
         video.videoName,
-        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+        style: AppTheme.titleSmall.copyWith(fontWeight: FontWeight.w500),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
       subtitle: Text(
         '${_formatViewCount(video.views)} views',
-        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+        style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
       ),
       trailing:
           Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey[400]),
@@ -548,219 +625,5 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
     } else {
       return '${(views / 1000000).toStringAsFixed(1)}M';
     }
-  }
-}
-
-/// **NEW: Widget to display creator with earnings calculation**
-class _CreatorEarningsTile extends StatefulWidget {
-  final UserModel creator;
-  final VoidCallback onTap;
-  final bool isCompact;
-
-  const _CreatorEarningsTile({
-    required this.creator,
-    required this.onTap,
-    this.isCompact = false,
-  });
-
-  @override
-  State<_CreatorEarningsTile> createState() => _CreatorEarningsTileState();
-}
-
-class _CreatorEarningsTileState extends State<_CreatorEarningsTile> {
-  double? _earnings;
-  bool _isLoadingEarnings = false;
-  final VideoService _videoService = VideoService();
-  static final Map<String, double> _earningsCache =
-      {}; // **NEW: In-memory cache for earnings**
-  static final Map<String, DateTime> _earningsCacheTimestamp =
-      {}; // **NEW: Cache timestamps**
-
-  @override
-  void initState() {
-    super.initState();
-    _loadEarnings();
-  }
-
-  /// **OPTIMIZED: Load cached earnings immediately, fetch fresh in background**
-  Future<void> _loadEarnings() async {
-    if (widget.creator.videos.isEmpty) {
-      setState(() {
-        _earnings = 0.0;
-        _isLoadingEarnings = false;
-      });
-      return;
-    }
-
-    final creatorId = widget.creator.id;
-    final cacheKey = 'creator_earnings_$creatorId';
-
-    // **STEP 1: Check cache first - show immediately if available**
-    final cachedEarnings = _earningsCache[cacheKey];
-    final cacheTime = _earningsCacheTimestamp[cacheKey];
-    final now = DateTime.now();
-
-    if (cachedEarnings != null && cacheTime != null) {
-      final cacheAge = now.difference(cacheTime);
-      // Use cache if it's less than 5 minutes old
-      if (cacheAge < const Duration(minutes: 5)) {
-        AppLogger.log(
-            '⚡ CreatorEarningsTile: Using cached earnings for $creatorId: ₹${cachedEarnings.toStringAsFixed(2)}');
-        setState(() {
-          _earnings = cachedEarnings;
-          _isLoadingEarnings = false;
-        });
-        // **OPTIMIZED: Still fetch fresh in background (non-blocking)**
-        _fetchFreshEarningsInBackground(creatorId, cacheKey);
-        return;
-      }
-    }
-
-    // **STEP 2: No cache or cache expired - show loading and fetch**
-    setState(() {
-      _isLoadingEarnings = true;
-    });
-
-    try {
-      // Get creator's videos
-      final videos = await _videoService.getUserVideos(creatorId);
-
-      if (videos.isEmpty) {
-        setState(() {
-          _earnings = 0.0;
-          _isLoadingEarnings = false;
-        });
-        // Cache 0 earnings too
-        _earningsCache[cacheKey] = 0.0;
-        _earningsCacheTimestamp[cacheKey] = now;
-        return;
-      }
-
-      // Calculate earnings from videos
-      final earnings =
-          await EarningsService.calculateCreatorTotalRevenueForVideos(
-        videos,
-        timeout: const Duration(seconds: 3),
-      );
-
-      // **CACHE: Store earnings in cache**
-      _earningsCache[cacheKey] = earnings;
-      _earningsCacheTimestamp[cacheKey] = now;
-
-      if (mounted) {
-        setState(() {
-          _earnings = earnings;
-          _isLoadingEarnings = false;
-        });
-      }
-    } catch (e) {
-      // **FALLBACK: Use cached value even if fresh fetch fails**
-      if (cachedEarnings != null) {
-        AppLogger.log(
-            '⚠️ CreatorEarningsTile: Fresh fetch failed, using cached earnings: $e');
-        if (mounted) {
-          setState(() {
-            _earnings = cachedEarnings;
-            _isLoadingEarnings = false;
-          });
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _earnings = 0.0;
-            _isLoadingEarnings = false;
-          });
-        }
-      }
-    }
-  }
-
-  /// **NEW: Fetch fresh earnings in background (non-blocking)**
-  Future<void> _fetchFreshEarningsInBackground(
-      String creatorId, String cacheKey) async {
-    try {
-      // Get creator's videos
-      final videos = await _videoService.getUserVideos(creatorId);
-
-      if (videos.isEmpty) {
-        return;
-      }
-
-      // Calculate earnings from videos
-      final earnings =
-          await EarningsService.calculateCreatorTotalRevenueForVideos(
-        videos,
-        timeout: const Duration(seconds: 3),
-      );
-
-      // **UPDATE CACHE: Store fresh earnings**
-      _earningsCache[cacheKey] = earnings;
-      _earningsCacheTimestamp[cacheKey] = DateTime.now();
-
-      // **UPDATE UI: Only update if value changed significantly (avoid flicker)**
-      if (mounted &&
-          (_earnings == null || (_earnings! - earnings).abs() > 0.01)) {
-        setState(() {
-          _earnings = earnings;
-        });
-        AppLogger.log(
-            '✅ CreatorEarningsTile: Background earnings updated for $creatorId: ₹${earnings.toStringAsFixed(2)}');
-      }
-    } catch (e) {
-      // Silent fail - keep showing cached value
-      AppLogger.log(
-          '⚠️ CreatorEarningsTile: Background earnings fetch failed (non-critical): $e');
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: EdgeInsets.symmetric(
-        horizontal: 16,
-        vertical: widget.isCompact ? 4 : 8,
-      ),
-      leading: CircleAvatar(
-        radius: widget.isCompact ? 20 : 28,
-        backgroundColor: Colors.grey[200],
-        backgroundImage: widget.creator.profilePic.isNotEmpty
-            ? CachedNetworkImageProvider(widget.creator.profilePic)
-            : null,
-        child: widget.creator.profilePic.isEmpty
-            ? Icon(
-                Icons.person,
-                size: widget.isCompact ? 20 : 28,
-                color: Colors.grey,
-              )
-            : null,
-      ),
-      title: Text(
-        widget.creator.name,
-        style: TextStyle(
-          fontSize: widget.isCompact ? 15 : 16,
-          fontWeight: widget.isCompact ? FontWeight.w500 : FontWeight.w600,
-        ),
-      ),
-      subtitle: _isLoadingEarnings
-          ? Text(
-              'Calculating...',
-              style: TextStyle(
-                fontSize: widget.isCompact ? 12 : 13,
-                color: Colors.grey[600],
-              ),
-            )
-          : Text(
-              '₹${(_earnings ?? 0.0).toStringAsFixed(2)} earnings',
-              style: TextStyle(
-                fontSize: widget.isCompact ? 12 : 13,
-                color: Colors.grey[600],
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-      trailing:
-          Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey[400]),
-      onTap: widget.onTap,
-    );
   }
 }

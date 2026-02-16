@@ -473,13 +473,13 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                       child: Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.6),
+                          color: AppTheme.backgroundSecondary.withOpacity(0.7),
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
+                          border: Border.all(color: AppTheme.white.withOpacity(0.5), width: 2),
                         ),
                         child: const Icon(
                           Icons.play_arrow,
-                          color: Colors.white,
+                          color: AppTheme.white,
                           size: 36,
                         ),
                       ),
@@ -535,9 +535,9 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                                               vertical: 10,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: Colors.black.withOpacity(0.8),
-                                              borderRadius: BorderRadius.circular(30),
-                                              border: Border.all(color: Colors.white24),
+                                              color: AppTheme.backgroundSecondary.withOpacity(0.8),
+                                              borderRadius: BorderRadius.circular(AppTheme.radiusXXLarge),
+                                              border: Border.all(color: AppTheme.white.withOpacity(0.1)),
                                             ),
                                             child: index < _videos.length ? Row(
                                               mainAxisSize: MainAxisSize.min,
@@ -573,15 +573,14 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
               ),
             ),
           ),
+          _buildVideoOverlay(video, index),
           if (controller != null && controller.value.isInitialized && isActive)
             Positioned(
               left: 0,
               right: 0,
-              bottom: MediaQuery.of(context).padding.bottom > 0 ? 2 : 0, // Lift slightly if edge-to-edge nav bar present
+              bottom: 0, // **FIX: Aligned to absolute bottom for "Shorts" look**
               child: _buildVideoProgressBar(controller),
             ),
-          _buildVideoOverlay(video, index),
-          _buildReportIndicator(index),
           if (_showHeartAnimation[videoId]?.value == true)
             _buildHeartAnimation(index),
           _buildTopGradientOverlay(),
@@ -647,36 +646,33 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
   Widget _buildReportIndicator(int index) {
     final String videoId =
         (index >= 0 && index < _videos.length) ? _videos[index].id : '';
-    return Positioned(
-      right: 16,
-      top: (_screenHeight ?? 800) * 0.5 - 20,
-      child: RepaintBoundary(
-        child: AnimatedOpacity(
-          opacity: 0.7,
-          duration: const Duration(milliseconds: 300),
-          child: GestureDetector(
-            onTap: () => _openReportDialog(videoId),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.6),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Report',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
+    return RepaintBoundary(
+      child: AnimatedOpacity(
+        opacity: 0.8,
+        duration: const Duration(milliseconds: 300),
+        child: GestureDetector(
+          onTap: () => _openReportDialog(videoId),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppTheme.backgroundSecondary.withOpacity(0.7),
+              borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+              border: Border.all(color: AppTheme.white.withOpacity(0.1), width: 0.5),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Report',
+                  style: TextStyle(
+                    color: AppTheme.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
                   ),
-                  SizedBox(width: 4),
-                  Icon(Icons.arrow_forward_ios, color: Colors.white, size: 12),
-                ],
-              ),
+                ),
+                SizedBox(width: 4),
+                Icon(Icons.arrow_forward_ios, color: AppTheme.white, size: 10),
+              ],
             ),
           ),
         ),
@@ -756,7 +752,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final screenWidth = constraints.maxWidth;
-          return _ThrottledProgressBar(
+          return ThrottledProgressBar(
             controller: controller,
             screenWidth: screenWidth,
             onSeek: (details) => _seekToPosition(controller, details),
@@ -1094,19 +1090,18 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                               ),
                             ),
                             const SizedBox(width: 6),
-                            // **NEW: Subscribe Button**
                             GestureDetector(
                               onTap: () => _handleFollow(video),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                 decoration: BoxDecoration(
-                                  color: _isFollowing(video.uploader.id) ? Colors.grey[700] : Colors.black,
-                                  borderRadius: BorderRadius.circular(20),
+                                  color: _isFollowing(video.uploader.id) ? AppTheme.backgroundTertiary : AppTheme.backgroundSecondary.withOpacity(0.7),
+                                  borderRadius: BorderRadius.circular(AppTheme.radiusFull),
                                 ),
                                 child: Text(
                                   _isFollowing(video.uploader.id) ? 'Subscribed' : 'Subscribe',
                                   style: const TextStyle(
-                                    color: Colors.white,
+                                    color: AppTheme.white,
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -1135,14 +1130,15 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                             width: (_screenWidth ?? 400) * 0.75,
                             padding: const EdgeInsets.symmetric(
                               horizontal: 16,
-                              vertical: 6,
+                              vertical: 8,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.6),
-                              borderRadius: BorderRadius.circular(20),
+                              color: AppTheme.backgroundSecondary.withOpacity(0.7),
+                              borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                              border: Border.all(color: AppTheme.white.withOpacity(0.1)),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.4),
+                                  color: AppTheme.shadowSecondary.withOpacity(0.3),
                                   blurRadius: 12,
                                   offset: const Offset(0, 3),
                                 ),
@@ -1154,14 +1150,14 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                               children: [
                                 Icon(
                                   Icons.open_in_new,
-                                  color: Colors.white,
+                                  color: AppTheme.white,
                                   size: 14,
                                 ),
-                                SizedBox(width: 6),
+                                SizedBox(width: 8),
                                 Text(
                                   'Visit Now',
                                   style: TextStyle(
-                                    color: Colors.white,
+                                    color: AppTheme.white,
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -1179,7 +1175,10 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 bottom:
                     bottomPadding, // Only SafeArea padding, no extra spacing
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
+                    _buildReportIndicator(index),
+                    const SizedBox(height: 16),
                     // **NEW: Episode Action Button**
                     if (video.episodes != null && video.episodes!.isNotEmpty)
                       Column(
@@ -1213,12 +1212,12 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                             height: AppConstants.secondaryActionButtonContainerSize,
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.55),
+                              color: AppTheme.backgroundSecondary.withOpacity(0.7),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
                               Icons.arrow_forward_ios,
-                              color: Colors.white,
+                              color: AppTheme.white,
                               size: AppConstants.secondaryActionButtonSize,
                             ),
                           ),
@@ -1226,7 +1225,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                           const Text(
                             'Swipe',
                             style: TextStyle(
-                              color: Colors.white,
+                              color: AppTheme.white,
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
                             ),
@@ -1268,11 +1267,11 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                   height: AppConstants.primaryActionButtonContainerSize,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.55),
+                    color: AppTheme.backgroundSecondary.withOpacity(0.7),
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
+                        color: AppTheme.shadowSecondary.withOpacity(0.2),
                         blurRadius: 4,
                         offset: const Offset(0, 2),
                       ),
@@ -1293,7 +1292,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                     likeBuilder: (bool isLiked) {
                       return Icon(
                         isLiked ? Icons.favorite : Icons.favorite_border,
-                        color: isLiked ? Colors.red : Colors.white,
+                        color: isLiked ? AppTheme.error : AppTheme.white,
                         size: AppConstants.primaryActionButtonSize, // Match size
                         shadows: const [
                           Shadow(
@@ -1313,8 +1312,8 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 const SizedBox(height: 2),
                 Text(
                   _formatCount(likeCount),
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.9), // Subtle
+                  style: const TextStyle(
+                    color: AppTheme.white,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
@@ -1330,7 +1329,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
   Widget _buildVerticalActionButton({
     required IconData icon,
     required VoidCallback onTap,
-    Color color = Colors.white,
+    Color color = AppTheme.white,
     int? count,
   }) {
     return GestureDetector(
@@ -1344,11 +1343,11 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             height: AppConstants.secondaryActionButtonContainerSize,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.55),
+              color: AppTheme.backgroundSecondary.withOpacity(0.7),
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
+                  color: AppTheme.shadowSecondary.withOpacity(0.2),
                   blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),
@@ -1371,11 +1370,11 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             const SizedBox(height: 4),
             Text(
               _formatCount(count),
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.9), // Subtle
+              style: const TextStyle(
+                color: AppTheme.white,
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
-                shadows: const [
+                shadows: [
                   Shadow(
                     offset: Offset(0, 1),
                     blurRadius: 2,
@@ -1772,7 +1771,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         decoration: const BoxDecoration(
-          color: Colors.white,
+          color: AppTheme.surfacePrimary,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         padding: const EdgeInsets.all(24),
@@ -1785,7 +1784,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Colors.black87,
+                color: AppTheme.textPrimary,
               ),
             ),
             const SizedBox(height: 20),
@@ -1808,7 +1807,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
-                        color: Colors.black87,
+                        color: AppTheme.textPrimary,
                       ),
                     ),
                   ],
@@ -1837,7 +1836,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
-                        color: Colors.black87,
+                        color: AppTheme.textPrimary,
                       ),
                     ),
                   ],

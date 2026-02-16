@@ -5,6 +5,7 @@ import 'package:vayu/shared/theme/app_theme.dart';
 import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
 import 'package:vayu/shared/providers/user_provider.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayu/shared/utils/app_text.dart';
 
 class ProfileHeaderWidget extends StatelessWidget {
   final bool isViewingOwnProfile;
@@ -50,7 +51,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                         Expanded(
                           child: _buildStatItem(
                             context,
-                            label: 'Subscribers',
+                            label: AppText.get('profile_stat_subscribers'),
                             value: _getFollowersCountString(context, stateManager),
                           ),
                         ),
@@ -62,7 +63,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                         Expanded(
                           child: _buildStatItem(
                             context,
-                            label: 'Content',
+                            label: AppText.get('profile_stat_content'),
                             value: stateManager.totalVideoCount.toString(),
                           ),
                         ),
@@ -74,7 +75,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                         Expanded(
                           child: _buildStatItem(
                             context,
-                            label: isViewingOwnProfile ? 'Earnings' : 'Ranking',
+                            label: isViewingOwnProfile ? AppText.get('profile_stat_earnings') : AppText.get('profile_stat_rank'),
                             isHighlighted: true,
                             value: _getEarningsOrRankValue(stateManager),
                             onTap: isViewingOwnProfile ? onEarningsTap : null,
@@ -250,7 +251,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        child: const Text('Cancel'),
+                        child: Text(AppText.get('btn_cancel')),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -259,14 +260,14 @@ class ProfileHeaderWidget extends StatelessWidget {
                         onPressed: onSaveProfile,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.success,
-                          foregroundColor: AppTheme.textInverse,
+                          foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 10),
                           elevation: 0,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        child: const Text('Save'),
+                        child: Text(AppText.get('btn_save')),
                       ),
                     ),
                   ],
@@ -275,10 +276,13 @@ class ProfileHeaderWidget extends StatelessWidget {
                   key: upiButtonKey,
                   onPressed: onAddUpiId,
                   icon: const Icon(Icons.account_balance_wallet, size: 18),
-                  label: const Text('Add UPI ID'),
+                  label: Text(
+                    AppText.get('btn_add_upi_id'),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primary,
-                    foregroundColor: AppTheme.textInverse,
+                    foregroundColor: AppTheme.white,
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
@@ -300,7 +304,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              child: const Text('Refer Friends'),
+              child: Text(AppText.get('btn_refer_friends')),
             ),
           ),
         ]
@@ -308,3 +312,5 @@ class ProfileHeaderWidget extends StatelessWidget {
     );
   }
 }
+
+

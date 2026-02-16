@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vayu Game Creator • Upload & Analytics</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --accent: #f59e0b;
+            --bg: #0f172a;
+            --card-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-dim: #94a3b8;
+            --success: #10b981;
+            --error: #ef4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            flex: 1;
+        }
+
+        header {
+            padding: 20px 0;
+            text-align: center;
+        }
+
+        .logo {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #60a5fa, #2563eb);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .card {
+            background: var(--card-bg);
+            padding: 40px;
+            border-radius: 24px;
+            border: 1px solid rgba(255,255,255,0.05);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            margin-top: 20px;
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-dim);
+            font-weight: 600;
+        }
+
+        input[type="text"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.05);
+            color: white;
+            font-family: inherit;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .file-upload {
+            position: relative;
+            border: 2px dashed rgba(255,255,255,0.1);
+            padding: 40px;
+            text-align: center;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .file-upload:hover {
+            background: rgba(255,255,255,0.02);
+        }
+
+        .file-upload input {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .btn {
+            display: block;
+            width: 100%;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 16px;
+            border-radius: 12px;
+            border: none;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 30px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(37, 99, 235, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        #status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 12px;
+            display: none;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .status-success {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+            border: 1px solid var(--success);
+        }
+
+        .status-error {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--error);
+            border: 1px solid var(--error);
+        }
+
+        .login-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .login-card {
+            text-align: center;
+            padding: 40px;
+            max-width: 400px;
+        }
+
+        footer {
+            padding: 40px 0;
+            text-align: center;
+            color: var(--text-dim);
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <a href="/" class="logo">VAYU</a>
+    </header>
+
+    <div id="loginOverlay" class="login-overlay">
+        <div class="login-card">
+            <h1>Creator Access</h1>
+            <p style="color: var(--text-dim); margin-bottom: 20px;">Please paste your Vayu Auth Token below to access the Game Creator Portal.</p>
+            <input type="text" id="tokenInput" placeholder="Paste JWT token here..." style="margin-bottom: 20px;">
+            <button class="btn" onclick="checkAuth()">Access Dashboard</button>
+        </div>
+    </div>
+
+    <main class="container">
+        <div class="card">
+            <h1>Upload New Game</h1>
+            <form id="uploadForm">
+                <div class="form-group">
+                    <label>Game Title</label>
+                    <input type="text" id="title" name="title" required placeholder="My Amazing Game">
+                </div>
+                
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="description" name="description" rows="3" placeholder="Explain what makes your game fun!"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Orientation</label>
+                    <select id="orientation" name="orientation">
+                        <option value="portrait">Portrait</option>
+                        <option value="landscape">Landscape</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Game ZIP File (Must contain index.html)</label>
+                    <div class="file-upload">
+                        <input type="file" id="game" name="game" accept=".zip" required onchange="updateFileName(this)">
+                        <div id="fileLabel">
+                            <span style="font-size: 2rem;">📦</span><br>
+                            Click or drag ZIP file here
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn" id="submitBtn">Deploy to Vayu</button>
+            </form>
+            <div id="status"></div>
+        </div>
+    </main>
+
+    <footer>
+        &copy; 2026 Vayu Creator Portal. All rights reserved.
+    </footer>
+
+    <script>
+        let authToken = '';
+
+        function checkAuth() {
+            const input = document.getElementById('tokenInput');
+            if (input.value.length > 50) {
+                authToken = input.value;
+                document.getElementById('loginOverlay').style.display = 'none';
+                localStorage.setItem('vayu_creator_token', authToken);
+            } else {
+                alert('Invalid Token. Please copy the token from Vayu App Profile > Developer Settings.');
+            }
+        }
+
+        // Auto-login from localStorage
+        const savedToken = localStorage.getItem('vayu_creator_token');
+        if (savedToken) {
+            authToken = savedToken;
+            document.getElementById('loginOverlay').style.display = 'none';
+        }
+
+        function updateFileName(input) {
+            const label = document.getElementById('fileLabel');
+            if (input.files && input.files[0]) {
+                label.innerHTML = `<span style="font-size: 2rem; color: var(--success);">✅</span><br><b>${input.files[0].name}</b><br>Click to change file`;
+            }
+        }
+
+        document.getElementById('uploadForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            const submitBtn = document.getElementById('submitBtn');
+            const status = document.getElementById('status');
+            
+            submitBtn.disabled = true;
+            submitBtn.innerText = 'Extracting & Deploying...';
+            status.style.display = 'none';
+
+            const formData = new FormData(form);
+
+            try {
+                const response = await fetch('/api/upload/game', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    status.innerHTML = `Game deployed successfully! View it in the app.`;
+                    status.className = 'status-success';
+                    status.style.display = 'block';
+                    form.reset();
+                    document.getElementById('fileLabel').innerHTML = '<span style="font-size: 2rem;">📦</span><br>Click or drag ZIP file here';
+                } else {
+                    throw new Error(data.error || 'Upload failed');
+                }
+            } catch (error) {
+                status.innerText = error.message;
+                status.className = 'status-error';
+                status.style.display = 'block';
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerText = 'Deploy to Vayu';
+            }
+        };
+    </script>
+</body>
+</html>
