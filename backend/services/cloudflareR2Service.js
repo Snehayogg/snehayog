@@ -11,6 +11,9 @@ class CloudflareR2Service {
     // **NEW: Support custom domain (cdn.snehayog.site) for public URLs**
     this.publicDomain = process.env.CLOUDFLARE_R2_PUBLIC_DOMAIN;
     
+    // **NEW: Presigned URL support**
+    this.getSignedUrl = null; // Lazy load to avoid circular dependencies if any
+    
     console.log('🔧 Cloudflare R2 Service Configuration:');
     console.log('   Account ID:', this.accountId ? '✓ Set' : '✗ Missing');
     console.log('   Bucket Name:', this.bucketName ? '✓ Set' : '✗ Missing');
@@ -389,6 +392,39 @@ class CloudflareR2Service {
       
     } catch (error) {
       console.error('❌ Error uploading HLS directory to R2:', error);
+      throw error;
+    }
+  }
+  /**
+   * Generates a presigned URL for direct client-side upload
+   * @param {string} key - The R2 object key
+   * @param {string} contentType - The MIME type of the file
+   * @param {number} expiresIn - Expiration time in seconds (default 3600)
+   */
+  async getPresignedUploadUrl(key, contentType, expiresIn = 3600) {
+    try {
+      // Lazy load getSignedUrl to ensure dependency is available
+      if (!this.getSignedUrl) {
+         const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
+         this.getSignedUrl = getSignedUrl;
+      }
+
+      console.log(`🔑 Generating presigned upload URL for: ${key}`);
+      
+      const command = new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+        ContentType: contentType,
+        // Enforce cache control for uploaded files
+        CacheControl: 'public, max-age=31536000, immutable, stale-while-revalidate=604800' 
+      });
+
+      const url = await this.getSignedUrl(this.s3Client, command, { expiresIn });
+      
+      console.log('✅ Presigned URL generated successfully');
+      return url;
+    } catch (error) {
+      console.error('❌ Error generating presigned URL:', error);
       throw error;
     }
   }

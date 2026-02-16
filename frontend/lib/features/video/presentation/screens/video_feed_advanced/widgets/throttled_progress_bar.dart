@@ -120,7 +120,7 @@ class _ThrottledProgressBarState extends State<ThrottledProgressBar> {
       onHorizontalDragEnd: (_) => setState(() => _isDragging = false),
       onHorizontalDragCancel: () => setState(() => _isDragging = false),
       child: Container(
-        height: 40, // **ENLARGED hit target for even easier access**
+        height: 19, // **TIGHTENED hit target to prevent accidental touch from above**
         color: Colors.transparent,
         child: Stack(
           alignment: Alignment.bottomCenter,

@@ -1318,7 +1318,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
             child: Row(
               children: [
                 IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
+                  icon: const Icon(Icons.arrow_back, color: AppTheme.iconPrimary, size: 24),
                   onPressed: () => Navigator.of(context).pop(),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
@@ -1340,7 +1340,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.more_vert, color: Colors.white, size: 20),
+                  icon: const Icon(Icons.more_vert, color: AppTheme.iconPrimary, size: 20),
                   onPressed: () {}, // Future options (quality, etc.)
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
@@ -1364,7 +1364,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
                     _videoPlayerController.value.isPlaying
                         ? Icons.play_arrow
                         : Icons.pause,
-                    color: Colors.white,
+                    color: AppTheme.iconPrimary,
                     size: 40,
                   ),
                 )
@@ -1447,20 +1447,11 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      // Lock icon placeholder
-                      IconButton(
-                        iconSize: 20,
-                        onPressed: () {}, // Future: Screen lock
-                        icon: const Icon(Icons.lock_outline_rounded, color: Colors.white),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                      
                       // Rewind 10s
                       IconButton(
                         iconSize: 24,
                         onPressed: () => _seekRelative(const Duration(seconds: -10)),
-                        icon: const Icon(Icons.skip_previous_rounded, color: Colors.white),
+                        icon: const Icon(Icons.replay_10_rounded, color: AppTheme.iconPrimary),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                       ),
@@ -1473,7 +1464,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
                           _videoPlayerController.value.isPlaying
                               ? Icons.pause_rounded
                               : Icons.play_arrow_rounded,
-                          color: Colors.white,
+                          color: AppTheme.iconPrimary,
                         ),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
@@ -1483,33 +1474,21 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
                       IconButton(
                         iconSize: 24,
                         onPressed: () => _seekRelative(const Duration(seconds: 10)),
-                        icon: const Icon(Icons.skip_next_rounded, color: Colors.white),
+                        icon: const Icon(Icons.forward_10_rounded, color: AppTheme.iconPrimary),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                       ),
                       
-                      // Fullscreen and Rotation
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            iconSize: 22,
-                            onPressed: () {}, // Future: Rotation lock
-                            icon: const Icon(Icons.screen_rotation_rounded, color: Colors.white),
-                            padding: EdgeInsets.symmetric(horizontal: 8),
-                            constraints: const BoxConstraints(),
-                          ),
-                          IconButton(
-                            iconSize: 22,
-                            onPressed: _toggleFullScreen,
-                            icon: Icon(
-                              _isFullScreen ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded,
-                              color: Colors.white,
-                            ),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
-                        ],
+                      // Fullscreen
+                      IconButton(
+                        iconSize: 22,
+                        onPressed: _toggleFullScreen,
+                        icon: Icon(
+                          _isFullScreen ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded,
+                          color: AppTheme.iconPrimary,
+                        ),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
                       ),
                     ],
                   ),

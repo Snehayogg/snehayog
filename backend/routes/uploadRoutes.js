@@ -176,6 +176,136 @@ const chunkUpload = multer({
 });
 
 // **NEW: Upload video with automatic quality processing**
+// **NEW: Direct Upload Routes**
+
+/**
+ * @route POST /api/upload/video/presigned
+ * @desc Generate a presigned URL for direct R2 upload
+ * @access Private
+ */
+router.post('/video/presigned', verifyToken, async (req, res) => {
+  try {
+    const { fileName, fileType, fileSize } = req.body;
+    const userId = req.user.id;
+
+    if (!fileName || !fileType) {
+      return res.status(400).json({ error: 'FileName and FileType are required' });
+    }
+
+    // Validate file type (basic check)
+    if (!fileType.startsWith('video/')) {
+       return res.status(400).json({ error: 'Only video files are allowed' });
+    }
+    
+    // Max size check (400MB)
+    if (fileSize && fileSize > 400 * 1024 * 1024) {
+        return res.status(400).json({ error: 'File too large (Max 400MB)' });
+    }
+
+    // Generate unique R2 key
+    // We use a "raw" folder to distinguish from processed videos
+    const timestamp = Date.now();
+    const cleanFileName = fileName.replace(/[^a-zA-Z0-9]/g, '_');
+    const key = `uploads/raw/${userId}/${timestamp}_${cleanFileName}`;
+
+    // Get presigned URL
+    const uploadUrl = await cloudflareR2Service.getPresignedUploadUrl(key, fileType);
+
+    res.json({
+      uploadUrl,
+      key,
+      headers: {
+        'Content-Type': fileType,
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error generating presigned URL:', error);
+    res.status(500).json({ error: 'Failed to generate upload URL' });
+  }
+});
+
+/**
+ * @route POST /api/upload/video/direct-complete
+ * @desc Notify backend that direct upload is complete and trigger processing
+ * @access Private
+ */
+router.post('/video/direct-complete', verifyToken, async (req, res) => {
+  try {
+    const { key, videoName, description, link, size } = req.body;
+    const userId = req.user.id;
+
+    if (!key || !videoName) {
+      return res.status(400).json({ error: 'Key and VideoName are required' });
+    }
+
+    console.log('🚀 Direct Upload Complete received for:', key);
+
+    // **NEW: Find user by Google ID to get proper ObjectId**
+    const user = await User.findOne({ googleId: userId });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // 1. Create Video Record (Processing State)
+    // **FIX: Use correct model fields (videoName, uploader, videoUrl)**
+    const newVideo = new Video({
+      uploader: user._id,
+      videoName: videoName,
+      description: description || '',
+      link: link || '',
+      videoUrl: cloudflareR2Service.getPublicUrl(key), // Proper initial URL
+      thumbnailUrl: '', // Will be updated after processing
+      processingStatus: 'processing',
+      processingProgress: 0,
+      processingError: null,
+      originalSize: size || 0,
+      views: 0,
+      likes: 0,
+      isHLSEncoded: false
+    });
+
+    await newVideo.save();
+
+     // **NEW: Lazy load hybrid service**
+    if (!hybridVideoService) {
+      const { default: service } = await import('../services/hybridVideoService.js');
+      hybridVideoService = service;
+    }
+
+    // 2. Trigger Background Processing
+    // We pass the R2 Key as the "path". The service must handle downloading it.
+    // Construct a "virtual" path or URL that the service can recognize
+    const r2Url = cloudflareR2Service.getPublicUrl(key);
+    
+    console.log('🔄 Triggering background processing for Direct Upload...');
+    
+    // We don't await this, it runs in background
+    // **FIX: Signature changed to accept videoId as first argument**
+    if (hybridVideoService && hybridVideoService.processVideoHybrid) {
+      hybridVideoService.processVideoHybrid(newVideo._id, r2Url, videoName, userId).catch(err => {
+          console.error('❌ Background processing failed for direct upload:', err);
+      });
+    } else {
+      // Fallback if imported via wrapper function (like in retry route)
+      processVideoHybrid(newVideo._id, r2Url, videoName, userId).catch(err => {
+          console.error('❌ Background processing failed for direct upload (fallback):', err);
+      });
+    }
+
+    // 3. Return success immediately
+    res.status(201).json({
+      message: 'Video upload received and processing started',
+      video: newVideo
+    });
+
+  } catch (error) {
+    console.error('❌ Error finishing direct upload:', error);
+    res.status(500).json({ error: 'Failed to complete upload process' });
+  }
+});
+
+// Original Routes
 router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
   try {
     if (!req.file) {
@@ -749,6 +879,7 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
     try {
       hybridResult = await Promise.race([
         hybridVideoService.processVideoHybrid(
+          videoId,
           videoPath,
           sanitizedVideoName,
           userId
@@ -926,7 +1057,9 @@ router.post('/video/:videoId/retry', verifyToken, async (req, res) => {
 
     // **NEW: Start processing again**
     const videoPath = video.videoUrl; // Use original path
-    processVideoInBackground(video._id, videoPath, video.videoName, video.uploader);
+    processVideoHybrid(video._id, videoPath, video.videoName, video.uploader).catch(err => {
+        console.error('❌ Retry background processing failed:', err);
+    });
 
     res.json({
       success: true,

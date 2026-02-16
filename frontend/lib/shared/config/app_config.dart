@@ -10,7 +10,7 @@ class AppConfig {
 
   // **MANUAL: Development mode control*
   static const bool _isDevelopment =
-      false; // Set to true for local testing, false for production
+      true; // Set to true for local testing, false for production
 
   // **NEW: Smart URL selection with fallback**
   static String? _cachedBaseUrl;
@@ -345,7 +345,7 @@ class AppConfig {
 
   // Media upload configuration
   static const int maxImageSize = 5 * 1024 * 1024;
-  static const int maxVideoSize = 100 * 1024 * 1024;
+  static const int maxVideoSize = 400 * 1024 * 1024;
 
   // **NEW: Cloudinary Configuration for HLS Streaming**
   // Note: API credentials should be fetched from backend for security
@@ -506,7 +506,7 @@ class NetworkHelper {
   static const Duration defaultRetryDelay = Duration(seconds: 2);
 
   /// File size limits
-  static const int maxVideoFileSize = 100 * 1024 * 1024; // 100MB
+  static const int maxVideoFileSize = 400 * 1024 * 1024; // 400MB
   static const int maxImageFileSize = 5 * 1024 * 1024; // 5MB
 
   /// Valid file extensions

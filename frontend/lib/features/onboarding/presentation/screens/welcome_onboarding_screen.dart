@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/features/onboarding/data/services/welcome_onboarding_service.dart';
 import 'package:vayu/shared/services/app_remote_config_service.dart';
+import 'package:vayu/shared/theme/app_theme.dart';
 
 class WelcomeOnboardingScreen extends StatefulWidget {
   final VoidCallback onGetStarted;
@@ -73,7 +74,7 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.backgroundPrimary,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -85,14 +86,14 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
               // Icon
               Container(
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
+                decoration: const BoxDecoration(
+                  color: AppTheme.backgroundSecondary,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.video_camera_front_rounded,
                   size: 64,
-                  color: Colors.grey[800],
+                  color: AppTheme.textPrimary,
                 ),
               ),
               const SizedBox(height: 32),
@@ -102,33 +103,27 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
                 const SizedBox(
                   height: 60,
                   child: Center(
-                    child: CircularProgressIndicator(),
+                    child: CircularProgressIndicator(color: AppTheme.primary),
                   ),
                 )
               else
                 Text(
                   _heading,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Color(0xFF1A1A1A), // Dark black - primary
-                    fontSize: 24,
+                  style: AppTheme.headlineLarge.copyWith(
+                    color: AppTheme.textPrimary,
                     fontWeight: FontWeight.bold,
-                    height: 1.3,
-                    letterSpacing: -0.3,
                   ),
                 ),
               const SizedBox(height: 16),
 
               // Supporting text - Backend-driven
-              if (!_isLoading)
+              if (!_isLoading && _subheading.isNotEmpty)
                 Text(
                   _subheading,
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.grey[600], // Grey - secondary
-                    fontSize: 16,
-                    fontWeight: FontWeight.w400,
-                    height: 1.4,
+                  style: AppTheme.bodyLarge.copyWith(
+                    color: AppTheme.textSecondary,
                   ),
                 ),
 
@@ -149,9 +144,8 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
                           widget.onGetStarted();
                         },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        const Color(0xFF1A1A1A), // Dark black button
-                    foregroundColor: Colors.white,
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: AppTheme.white,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -164,7 +158,7 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
+                                AlwaysStoppedAnimation<Color>(AppTheme.white),
                           ),
                         )
                       : Text(

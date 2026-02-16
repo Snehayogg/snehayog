@@ -1,14 +1,15 @@
 import 'dart:convert';
-import 'dart:math';
-import 'dart:typed_data';
+
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
-import 'package:flutter/material.dart';
-import 'package:http_parser/http_parser.dart';
+
+
+
 import 'package:video_compress/video_compress.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/features/video/video_model.dart';
@@ -23,10 +24,9 @@ import 'package:vayu/shared/services/http_client_service.dart';
 
 /// Eliminates code duplication and provides consistent API
 class VideoService {
-  static final GlobalKey<NavigatorState> navigatorKey =
-      GlobalKey<NavigatorState>();
   final AuthService _authService = AuthService();
   final AdService _adService = AdService();
+  final HttpClientService httpClientService = HttpClientService.instance;
 
   // Using httpClientService for connection pooling and better performance
 
@@ -609,69 +609,21 @@ class VideoService {
       }
 
       File finalVideoFile = videoFile;
-      if (fileSize > 15 * 1024 * 1024) {
-        AppLogger.log('?? VideoService: Compressing video for better upload speed (>15MB)...');
-        final compressedFile = await compressVideo(videoFile);
-        if (compressedFile != null) {
-          finalVideoFile = compressedFile;
-        }
-      }
+      // **DEPRECATED: Client-side compression removed in favor of Direct R2 Upload**
+      // if (fileSize > 15 * 1024 * 1024) { ... }
 
       final resolvedBaseUrl = await getBaseUrlWithFallback();
-      final Map<String, dynamic> fields = {
-        'videoName': title,
-        'videoType': 'yog',
-      };
 
-      if (description != null && description.isNotEmpty) {
-        fields['description'] = description;
-      }
-
-      if (link != null && link.isNotEmpty) {
-        fields['link'] = link;
-      }
-
-      try {
-        final dynamic metadata = Zone.current['upload_metadata'];
-        if (metadata is Map<String, dynamic>) {
-          if (metadata['category'] != null) fields['category'] = metadata['category'];
-          if (metadata['tags'] != null) fields['tags'] = json.encode(metadata['tags']);
-          if (metadata['videoType'] != null) fields['videoType'] = metadata['videoType'];
-          if (metadata['seriesId'] != null) fields['seriesId'] = metadata['seriesId'];
-          if (metadata['episodeNumber'] != null) {
-            fields['episodeNumber'] = metadata['episodeNumber'].toString();
-          }
-        }
-      } catch (_) {}
-
-      Map<String, dynamic> responseData;
-      try {
-        responseData = await _uploadVideoResumable(
-          baseUrl: resolvedBaseUrl,
-          videoFile: finalVideoFile,
-          fields: fields,
-          onProgress: onProgress,
-          cancelToken: cancelToken,
-        );
-      } catch (resumableError) {
-        if (resumableError is DioException &&
-            resumableError.type == DioExceptionType.cancel) {
-          rethrow;
-        }
-
-        AppLogger.log(
-            '?? VideoService: Resumable upload failed, falling back to legacy multipart upload: $resumableError');
-
-        responseData = await _uploadVideoLegacyMultipart(
-          baseUrl: resolvedBaseUrl,
-          videoFile: finalVideoFile,
-          fields: fields,
-          onProgress: onProgress,
-          cancelToken: cancelToken,
-        );
-      }
-
-      return _mapUploadResponse(responseData, title, userData, isLong);
+      // **NEW: Direct R2 Upload Flow**
+      return await _uploadVideoDirect(
+        baseUrl: resolvedBaseUrl,
+        videoFile: finalVideoFile,
+        title: title,
+        description: description,
+        link: link,
+        onProgress: onProgress,
+        cancelToken: cancelToken,
+      );
     } catch (e) {
       if (e is DioException && e.type == DioExceptionType.cancel) {
         AppLogger.log('?? VideoService: Upload cancelled by user');
@@ -682,194 +634,102 @@ class VideoService {
     }
   }
 
-  Future<Map<String, dynamic>> _uploadVideoLegacyMultipart({
+  // **NEW: Direct Upload Implementation (Phone -> R2 -> Backend)**
+  Future<Map<String, dynamic>> _uploadVideoDirect({
     required String baseUrl,
     required File videoFile,
-    required Map<String, dynamic> fields,
+    required String title,
+    String? description,
+    String? link,
     Function(double)? onProgress,
     CancelToken? cancelToken,
   }) async {
-    final files = [
-      MapEntry(
-        'video',
-        await MultipartFile.fromFile(
-          videoFile.path,
-          filename: videoFile.path.split('/').last,
-          contentType: MediaType('video', 'mp4'),
-        ),
-      ),
-    ];
+    try {
+      AppLogger.log('🚀 VideoService: Starting Direct R2 Upload...');
 
-    final dioResponse = await httpClientService.postMultipart(
-      '$baseUrl/api/upload/video',
-      fields: fields,
-      files: files,
-      cancelToken: cancelToken,
-      onSendProgress: (sent, total) {
-        if (onProgress != null && total > 0) {
-          onProgress(sent / total);
-        }
-      },
-    );
+      // 1. Get Presigned URL
+      AppLogger.log('🔑 Requesting presigned URL...');
+      final fileSize = await videoFile.length();
+      final mimeType = 'video/${videoFile.path.split('.').last}'; // Simple mime guess
 
-    final responseData = dioResponse.data;
-    if (responseData == null) {
-      throw Exception('Empty response from server');
-    }
+      // **FIX: Use auth service to get headers**
+      final authHeaders = await _getAuthHeaders();
 
-    if (dioResponse.statusCode != 201) {
-      throw Exception(responseData['error'] ?? 'Failed to upload video');
-    }
-
-    return Map<String, dynamic>.from(responseData as Map);
-  }
-
-  Future<Map<String, dynamic>> _uploadVideoResumable({
-    required String baseUrl,
-    required File videoFile,
-    required Map<String, dynamic> fields,
-    Function(double)? onProgress,
-    CancelToken? cancelToken,
-  }) async {
-    const int chunkSize = 5 * 1024 * 1024;
-    final int totalSize = await videoFile.length();
-    final int totalChunks = (totalSize / chunkSize).ceil();
-    final String fileName = videoFile.path.replaceAll('\\', '/').split('/').last;
-    final DateTime modifiedAt = await videoFile.lastModified();
-    final String fileFingerprint = base64Url.encode(
-      utf8.encode('$fileName|$totalSize|${modifiedAt.millisecondsSinceEpoch}'),
-    );
-
-    final initRes = await httpClientService.post(
-      Uri.parse('$baseUrl/api/upload/video/resumable/init'),
-      body: {
-        'fileName': fileName,
-        'fileSize': totalSize,
-        'chunkSize': chunkSize,
-        'totalChunks': totalChunks,
-        'fileFingerprint': fileFingerprint,
-        ...fields,
-      },
-    );
-
-    if (initRes.statusCode != 200) {
-      throw Exception(
-          'Resumable init failed (${initRes.statusCode}): ${initRes.body}');
-    }
-
-    final initData = json.decode(initRes.body) as Map<String, dynamic>;
-    final String? sessionId = initData['sessionId']?.toString();
-    if (sessionId == null || sessionId.isEmpty) {
-      throw Exception('Resumable init returned empty sessionId');
-    }
-
-    final Set<int> uploadedChunkIndexes =
-        ((initData['uploadedChunks'] as List?) ?? const <dynamic>[])
-            .map((value) => int.tryParse(value.toString()))
-            .whereType<int>()
-            .toSet();
-
-    int uploadedBytes = 0;
-    for (final chunkIndex in uploadedChunkIndexes) {
-      final int start = chunkIndex * chunkSize;
-      final int end = min(start + chunkSize, totalSize);
-      if (start < end) {
-        uploadedBytes += (end - start);
-      }
-    }
-
-    if (onProgress != null && totalSize > 0) {
-      onProgress(uploadedBytes / totalSize);
-    }
-
-    for (int chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-      if (uploadedChunkIndexes.contains(chunkIndex)) {
-        continue;
-      }
-
-      final int start = chunkIndex * chunkSize;
-      final int end = min(start + chunkSize, totalSize);
-
-      final bytesBuilder = BytesBuilder(copy: false);
-      await for (final data in videoFile.openRead(start, end)) {
-        bytesBuilder.add(data);
-      }
-
-      final chunkResponse = await httpClientService.postMultipart(
-        '$baseUrl/api/upload/video/resumable/$sessionId/chunk',
-        fields: {
-          'chunkIndex': chunkIndex,
+      // **FIX: Use Dio for this request to ensure interceptors work**
+      final dio = Dio(); 
+      
+      final presignedResponse = await dio.post(
+        '$baseUrl/api/upload/video/presigned',
+        data: {
+          'fileName': videoFile.path.split('/').last,
+          'fileType': mimeType,
+          'fileSize': fileSize,
         },
-        files: [
-          MapEntry(
-            'chunk',
-            MultipartFile.fromBytes(
-              bytesBuilder.takeBytes(),
-              filename: '$fileName.$chunkIndex.part',
-              contentType: MediaType('application', 'octet-stream'),
-            ),
-          ),
-        ],
+        options: Options(
+          headers: authHeaders,
+        ),
+      );
+
+      final uploadUrl = presignedResponse.data['uploadUrl'];
+      final key = presignedResponse.data['key'];
+
+      if (uploadUrl == null || key == null) {
+        throw Exception('Failed to get upload URL');
+      }
+
+      AppLogger.log('✅ Got presigned URL. Uploading raw file to R2...');
+
+      // 2. Upload to R2 (Directly)
+      // Note: We use a separate Dio instance to avoid default interceptors/headers causing issues with R2
+      final r2Dio = Dio(); 
+      
+      await r2Dio.put(
+        uploadUrl,
+        data: videoFile.openRead(), // Stream the file
+        options: Options(
+          headers: {
+            'Content-Type': mimeType,
+            'Content-Length': fileSize,
+          },
+        ),
         cancelToken: cancelToken,
         onSendProgress: (sent, total) {
-          if (onProgress != null && totalSize > 0 && total > 0) {
-            final currentOverallBytes = uploadedBytes + sent;
-            onProgress(currentOverallBytes / totalSize);
+          if (total != -1 && onProgress != null) {
+            // Map 0.0 - 0.95 to upload progress
+            // Leave last 5% for backend processing trigger
+            final progress = (sent / total) * 0.95;
+            onProgress(progress);
           }
         },
       );
 
-      if (chunkResponse.statusCode != 200) {
-        throw Exception(
-            'Chunk upload failed at index $chunkIndex (${chunkResponse.statusCode})');
-      }
+      AppLogger.log('✅ R2 Upload complete. Notifying backend...');
+      if (onProgress != null) onProgress(0.98); // Almost done
 
-      uploadedBytes += (end - start);
-      if (onProgress != null && totalSize > 0) {
-        onProgress(uploadedBytes / totalSize);
-      }
+      // 3. Notify Backend to Start Processing
+      final completeResponse = await dio.post(
+        '$baseUrl/api/upload/video/direct-complete',
+        data: {
+          'key': key,
+          'videoName': title,
+          'description': description,
+          'link': link,
+          'size': fileSize,
+        },
+        options: Options(
+          headers: authHeaders,
+        ),
+      );
+
+      AppLogger.log('✅ Backend notified. Processing started.');
+      if (onProgress != null) onProgress(1.0);
+
+      return completeResponse.data;
+
+    } catch (e) {
+      AppLogger.log('❌ Direct upload failed: $e');
+      throw e;
     }
-
-    final completeRes = await httpClientService.post(
-      Uri.parse('$baseUrl/api/upload/video/resumable/$sessionId/complete'),
-      body: {},
-    );
-
-    if (completeRes.statusCode != 201) {
-      throw Exception(
-          'Resumable complete failed (${completeRes.statusCode}): ${completeRes.body}');
-    }
-
-    return Map<String, dynamic>.from(
-      json.decode(completeRes.body) as Map<String, dynamic>,
-    );
-  }
-
-  Map<String, dynamic> _mapUploadResponse(
-    Map<String, dynamic> responseData,
-    String title,
-    Map<String, dynamic> userData,
-    bool isLong,
-  ) {
-    final videoData = responseData['video'];
-    if (videoData == null) {
-      throw Exception('Invalid response: Video data is missing');
-    }
-
-    return {
-      'id': videoData['_id'] ?? videoData['id'] ?? '',
-      'title': videoData['videoName'] ?? title,
-      'videoUrl': videoData['videoUrl'] ?? videoData['hlsPlaylistUrl'] ?? '',
-      'thumbnail': videoData['thumbnailUrl'] ?? '',
-      'originalVideoUrl': videoData['originalVideoUrl'] ?? '',
-      'duration': '0:00',
-      'views': 0,
-      'uploader': userData['name'] ?? 'Unknown',
-      'uploadTime': 'Just now',
-      'isLongVideo': isLong,
-      'link': videoData['link'] ?? '',
-      'processingStatus': videoData['processingStatus'] ?? 'pending',
-    };
   }
 
   /// **Delete video**
@@ -1167,77 +1027,7 @@ class VideoService {
     };
   }
 
-  /// **Upload video to server**
-  Future<Map<String, dynamic>?> uploadVideoFile(
-    File videoFile,
-    String title, {
-    String description = '',
-    String link = '',
-    String videoType = 'yog',
-    String category = '',
-    List<String> tags = const [],
-  }) async {
-    try {
-      AppLogger.log('🚀 VideoService: Starting video upload...');
-      AppLogger.log('📁 File: ${videoFile.path}');
-      AppLogger.log('📝 Title: $title');
-      AppLogger.log('🏷️ Category: $category');
 
-      // Get auth headers
-      final headers = await _getAuthHeaders();
-
-      // Create multipart request
-      final resolvedBaseUrl = await getBaseUrlWithFallback();
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('$resolvedBaseUrl/api/videos/upload'),
-      );
-
-      // Add headers
-      request.headers.addAll(headers);
-
-      // Add video file
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'video',
-          videoFile.path,
-          contentType: MediaType('video', 'mp4'),
-        ),
-      );
-
-      // Add form fields
-      request.fields['videoName'] = title;
-      request.fields['description'] = description;
-      request.fields['link'] = link;
-      request.fields['videoType'] = videoType;
-      request.fields['category'] = category;
-
-      if (tags.isNotEmpty) {
-        request.fields['tags'] = tags.join(',');
-      }
-
-      AppLogger.log('📤 VideoService: Sending upload request...');
-
-      // Send request
-      final response = await request.send().timeout(
-            const Duration(minutes: 30),
-          );
-
-      final responseBody = await response.stream.bytesToString();
-      final data = json.decode(responseBody);
-
-      if (response.statusCode == 201) {
-        AppLogger.log('✅ VideoService: Upload successful');
-        return data;
-      } else {
-        AppLogger.log('❌ VideoService: Upload failed: ${response.statusCode}');
-        throw Exception(data['error'] ?? 'Upload failed');
-      }
-    } catch (e) {
-      AppLogger.log('❌ VideoService: Upload error: $e');
-      rethrow;
-    }
-  }
 
   // **DISPOSE METHOD**
   void dispose() {

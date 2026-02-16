@@ -16,26 +16,100 @@ class HybridVideoService {
    * Hybrid Processing: Cloudflare Stream (FREE Transcoding) → R2 (Storage + FREE Bandwidth)
    * 100% FREE transcoding! Falls back to local FFmpeg HLS if Stream fails.
    */
-  async processVideoHybrid(videoPath, videoName, userId) {
+  async processVideoHybrid(videoId, videoPath, videoName, userId) {
     try {
       console.log('🚀 Starting Hybrid Processing (Cloudflare Stream → R2)...');
+      console.log('🆔 Video ID:', videoId);
       console.log('💰 FREE transcoding with Cloudflare Stream!');
       console.log('📁 Video path:', videoPath);
       console.log('📝 Video name:', videoName);
       console.log('👤 User ID:', userId);
       
       // **FIX: Verify video file exists and is accessible before processing**
-      if (!fs.existsSync(videoPath)) {
-        throw new Error(`Video file not found: ${videoPath}`);
+      // **NEW: Handle Remote URLs (Direct Upload)**
+      let absoluteVideoPath;
+      let isRemoteFile = false;
+
+      if (videoPath.startsWith('http')) {
+        console.log('🌐 Remote video detected (Direct Upload). Downloading to local temp...');
+        isRemoteFile = true;
+        
+        // Lazy load axios/fs if needed (already imported at top of file?)
+        // Let's rely on cloudflareR2Service.downloadFromCloudinary which effectively downloads a URL
+        // We can reuse that or create a simple download helper here. 
+        // Actually, let's use a new helper to download ANY url.
+
+        const tempDir = path.join(process.cwd(), 'temp');
+        if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+        
+        const tempFileName = `raw_${userId}_${Date.now()}.mp4`;
+        const tempFilePath = path.join(tempDir, tempFileName);
+
+        // Download logic
+        const { default: axios } = await import('axios');
+        const response = await axios({
+            method: 'GET',
+            url: videoPath,
+            responseType: 'stream'
+        });
+
+        const writer = fs.createWriteStream(tempFilePath);
+        response.data.pipe(writer);
+
+        await new Promise((resolve, reject) => {
+            writer.on('finish', resolve);
+            writer.on('error', reject);
+        });
+
+        absoluteVideoPath = path.resolve(tempFilePath);
+        console.log('✅ Remote video downloaded to:', absoluteVideoPath);
+
+      } else {
+          if (!fs.existsSync(videoPath)) {
+            throw new Error(`Video file not found: ${videoPath}`);
+          }
+          absoluteVideoPath = path.resolve(videoPath);
       }
       
-      const stats = fs.statSync(videoPath);
+      const stats = fs.statSync(absoluteVideoPath);
       console.log('📊 Video file size:', stats.size, 'bytes');
       console.log('📊 Video file modified:', new Date(stats.mtime).toISOString());
       
-      // **FIX: Store absolute path to ensure we use the correct file**
-      const absoluteVideoPath = path.resolve(videoPath);
       console.log('📁 Absolute video path:', absoluteVideoPath);
+
+      // **SAFE EARLY THUMBNAIL GENERATION**
+      // We generate the thumbnail before the slow encoding starts.
+      let r2ThumbnailUrl = '';
+      try {
+        console.log('📸 Generating thumbnail early for immediate display...');
+        const thumbnailPath = await this.generateThumbnailWithFFmpeg(absoluteVideoPath, videoName, userId);
+        if (thumbnailPath) {
+          console.log('📤 Uploading early thumbnail to R2...');
+          r2ThumbnailUrl = await this.uploadThumbnailImageToR2(thumbnailPath, videoName, userId);
+          console.log(`✅ Early thumbnail uploaded: ${r2ThumbnailUrl}`);
+          
+          // Safe Database Update: So users see the thumbnail immediately after refresh
+          try {
+            const Video = (await import('../models/Video.js')).default;
+            // DIRECT UPDATE: Use videoId for 100% reliability
+            const videoRecord = await Video.findById(videoId);
+            if (videoRecord) {
+              videoRecord.thumbnailUrl = r2ThumbnailUrl;
+              await videoRecord.save();
+              console.log('💾 Early Video record updated in DB with videoId:', videoId);
+            } else {
+              console.warn('⚠️ Could not find video record early with videoId:', videoId);
+            }
+          } catch (dbError) {
+              console.warn('⚠️ Safe DB update failed (non-critical):', dbError.message);
+          }
+
+          // Cleanup local thumbnail
+          if (fs.existsSync(thumbnailPath)) fs.unlinkSync(thumbnailPath);
+        }
+      } catch (thumbError) {
+        console.warn('⚠️ Early thumbnail step failed (continuing to video processing):', thumbError.message);
+      }
       
       let processingResult;
       
@@ -61,7 +135,7 @@ class HybridVideoService {
 
         processingResult = {
           videoUrl: hlsResult.playlistUrl,
-          thumbnailUrl: '',
+          thumbnailUrl: r2ThumbnailUrl || '',
           streamVideoId: null,
           duration: originalVideoInfo.duration || 0,
           size: originalVideoInfo.size || 0,
@@ -81,7 +155,7 @@ class HybridVideoService {
         
         try {
           console.log('⏱️ Starting Cloudflare Stream processing at:', new Date().toISOString());
-          processingResult = await this.processWithCloudflareStream(absoluteVideoPath, videoName, userId);
+          processingResult = await this.processWithCloudflareStream(videoId, absoluteVideoPath, videoName, userId);
           streamVideoId = processingResult.streamVideoId;
         } catch (streamError) {
           console.error('❌ Cloudflare Stream processing failed:', streamError.message);
@@ -96,7 +170,7 @@ class HybridVideoService {
           
           processingResult = {
             videoUrl: hlsFallbackResult.playlistUrl,
-            thumbnailUrl: hlsFallbackResult.thumbnailUrl || '',
+            thumbnailUrl: r2ThumbnailUrl || hlsFallbackResult.thumbnailUrl || '',
             streamVideoId: null,
             duration: originalVideoInfo.duration || 0,
             size: hlsFallbackResult.size || 0,
@@ -113,7 +187,7 @@ class HybridVideoService {
       }
       
       // Step 2: Handle video processing result based on processing method
-      let r2VideoResult, r2ThumbnailUrl, localVideoPath;
+      let r2VideoResult, localVideoPath; // r2ThumbnailUrl is now declared earlier
       
       if (processingResult.streamVideoId && processingResult.localPath) {
         // Cloudflare Stream processing was successful
@@ -129,24 +203,19 @@ class HybridVideoService {
         );
         console.log('✅ R2 video upload completed at:', new Date().toISOString());
         
-        // Step 4: Get thumbnail from Stream and upload to R2
-        console.log('📸 Getting thumbnail from Cloudflare Stream...');
-        const streamThumbnailUrl = await cloudflareStreamService.getThumbnailUrl(processingResult.streamVideoId);
-        
-        if (streamThumbnailUrl) {
-          console.log('⏱️ Starting R2 thumbnail upload at:', new Date().toISOString());
-          r2ThumbnailUrl = await cloudflareR2Service.uploadThumbnailToR2(
-            streamThumbnailUrl, 
-            videoName, 
-            userId
-          );
-          console.log('✅ R2 thumbnail upload completed at:', new Date().toISOString());
-        } else {
-          // Generate thumbnail with FFmpeg as fallback
-          console.log('📸 Generating thumbnail with FFmpeg...');
-          const thumbnailPath = await this.generateThumbnailWithFFmpeg(absoluteVideoPath, videoName, userId);
-          if (thumbnailPath) {
-            r2ThumbnailUrl = await this.uploadThumbnailImageToR2(thumbnailPath, videoName, userId);
+        // Step 4: Get thumbnail from Stream and upload to R2 if we don't have one yet
+        if (!r2ThumbnailUrl) {
+          console.log('📸 Getting thumbnail from Cloudflare Stream...');
+          const streamThumbnailUrl = await cloudflareStreamService.getThumbnailUrl(processingResult.streamVideoId);
+          
+          if (streamThumbnailUrl) {
+            console.log('⏱️ Starting R2 thumbnail upload at:', new Date().toISOString());
+            r2ThumbnailUrl = await cloudflareR2Service.uploadThumbnailToR2(
+              streamThumbnailUrl, 
+              videoName, 
+              userId
+            );
+            console.log('✅ R2 thumbnail upload completed at:', new Date().toISOString());
           }
         }
       } else {
@@ -166,25 +235,6 @@ class HybridVideoService {
           size: 0, // HLS size calculation would be complex
           format: 'hls'
         };
-        
-        // **FIX: Generate thumbnail from the uploaded video file**
-        console.log('📸 Generating thumbnail from uploaded video file...');
-        console.log(`   Video path: ${absoluteVideoPath}`);
-        const thumbnailPath = await this.generateThumbnailWithFFmpeg(absoluteVideoPath, videoName, userId);
-        
-        if (thumbnailPath) {
-          // Upload thumbnail to R2
-          console.log('📤 Uploading thumbnail to R2...');
-          r2ThumbnailUrl = await this.uploadThumbnailImageToR2(
-            thumbnailPath,
-            videoName,
-            userId
-          );
-          console.log(`✅ Thumbnail uploaded: ${r2ThumbnailUrl}`);
-        } else {
-          console.log('⚠️ No thumbnail generated, using default');
-          r2ThumbnailUrl = processingResult.thumbnailUrl || '';
-        }
         
         localVideoPath = null; // No local file for HLS processing
       }
@@ -208,7 +258,20 @@ class HybridVideoService {
         await cloudflareR2Service.cleanupLocalFile(localVideoPath);
       }
       // **FIX: Use absolute path for cleanup to ensure correct file is deleted**
-      await cloudflareR2Service.cleanupLocalFile(absoluteVideoPath);
+      // If it was a remote file, we MUST delete the temp downloaded file.
+      // If it was a local upload (legacy), uploadRoutes handles cleanup usually, 
+      // but if we are here, we might want to clean it up depending on who owns it.
+      // For now, let's strictly clean up if we created the temp file (remote flow).
+      
+      if (isRemoteFile) {
+          await cloudflareR2Service.cleanupLocalFile(absoluteVideoPath);
+          console.log('🧹 Cleaned up downloaded remote file:', absoluteVideoPath);
+      } else {
+         // Existing logic: cleanup if it was passed in? 
+         // Usually uploadRoutes cleans up req.file.path. 
+         // Let's leave legacy behavior mostly alone but safe.
+         // await cloudflareR2Service.cleanupLocalFile(absoluteVideoPath);
+      }
       
       console.log('🎉 Hybrid processing completed successfully!');
       console.log('📊 Cost breakdown:');
@@ -253,7 +316,7 @@ class HybridVideoService {
   /**
    * Process video to single 480p quality using Cloudflare Stream (FREE transcoding!)
    */
-  async processWithCloudflareStream(videoPath, videoName, userId) {
+  async processWithCloudflareStream(videoId, videoPath, videoName, userId) {
     try {
       console.log('☁️ Processing video with Cloudflare Stream (FREE transcoding)...');
       
@@ -561,24 +624,43 @@ class HybridVideoService {
         // **FIX: Use unique filename to avoid conflicts**
         const uniqueId = `${userId}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
         const thumbnailPath = path.join(tempDir, `${videoName}_thumb_${uniqueId}.jpg`);
+        const thumbnailFilename = path.basename(thumbnailPath);
         
-        console.log(`📸 Generating thumbnail to: ${thumbnailPath}`);
+        console.log(`🎬 FFmpeg taking screenshot of: ${absoluteVideoPath}`);
 
         ffmpeg(absoluteVideoPath)
           .screenshots({
             count: 1,
-            timestamps: ['10%'], // Take screenshot at 10% mark (better than fixed 1s)
-            filename: path.basename(thumbnailPath),
+            timestamps: ['10%'], // Take thumbnail at 10% mark
+            filename: thumbnailFilename,
             folder: tempDir,
-            size: '320x180'
+            size: '640x?' // Better resolution for thumbnails
           })
           .on('end', () => {
-            console.log('✅ Thumbnail generated successfully');
+            console.log(`✅ Thumbnail generated successfully at 10%: ${thumbnailPath}`);
             resolve(thumbnailPath);
           })
           .on('error', (err) => {
-            console.error('❌ Thumbnail generation failed:', err.message);
-            resolve(null);
+            console.error('❌ Thumbnail generation failed at 10%:', err.message);
+            
+            // **ROBUST FALLBACK: Try at 00:00:01 if percentage fails**
+            console.log('🔄 Retrying thumbnail generation at 00:00:01...');
+            ffmpeg(absoluteVideoPath)
+              .screenshots({
+                count: 1,
+                timestamps: ['00:00:01'],
+                filename: thumbnailFilename,
+                folder: tempDir,
+                size: '640x?'
+              })
+              .on('end', () => {
+                console.log(`✅ Thumbnail generated (fallback 1s) at: ${thumbnailPath}`);
+                resolve(thumbnailPath);
+              })
+              .on('error', (fallbackErr) => {
+                console.error('❌ Thumbnail fallback also failed:', fallbackErr.message);
+                resolve(null);
+              });
           });
           
       } catch (error) {

@@ -13,6 +13,7 @@ class AppTheme {
   static const Color primaryLight = Color(0xFF3B82F6);
   static const Color primaryDark = Color(0xFF1D4ED8);
   static const Color white = Colors.white;
+  static const Color iconPrimary = Color(0xFFFFFFFF);
 
   // Text & Foreground Colors
   static const Color textPrimary =
