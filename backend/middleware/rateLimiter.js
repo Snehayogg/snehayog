@@ -95,7 +95,7 @@ export const authLimiter = rateLimit({
 // Prevents storage exhaustion and bandwidth abuse
 export const uploadLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  max: 5, // 5 uploads per minute (User requested)
+  max: 15, // **INCREASED**: 15 uploads per minute (Was 5, increased to handle retries/polling better)
   standardHeaders: true,
   legacyHeaders: false,
   store: getStore('upload'),

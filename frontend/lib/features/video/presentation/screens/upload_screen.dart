@@ -40,6 +40,7 @@ class _UploadScreenState extends State<UploadScreen> {
   final ValueNotifier<bool> _isProcessing = ValueNotifier<bool>(false);
   final ValueNotifier<String?> _errorMessage = ValueNotifier<String?>(null);
   final ValueNotifier<bool> _showUploadForm = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> _isMinimizing = ValueNotifier<bool>(false);
 
   // **UNIFIED PROGRESS TRACKING** - Single progress bar for entire flow
   final ValueNotifier<double> _unifiedProgress = ValueNotifier<double>(0.0);
@@ -359,6 +360,29 @@ class _UploadScreenState extends State<UploadScreen> {
                               ),
                             ),
                           ),
+
+                          const SizedBox(height: 12),
+
+                          // Finish in Background Button (only during processing phase)
+                          if (currentPhase == 'processing')
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  _isMinimizing.value = true;
+                                },
+                                icon: const Icon(Icons.arrow_forward),
+                                label: const Text('Finish in Background'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.info,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     );
@@ -678,10 +702,21 @@ class _UploadScreenState extends State<UploadScreen> {
       AppLogger.log('✅ Video upload started successfully!');
       AppLogger.log('🎬 Uploaded video details: $uploadedVideo');
 
-      // **FIX: Handle correct response structure from VideoService**
-      AppLogger.log(
-          '🔄 Processing status: ${uploadedVideo['processingStatus']}');
-      AppLogger.log('🆔 Video ID: ${uploadedVideo['id']}');
+      // **FIX: Robustly extract video data (backend often nests it under \'video\')**
+      final Map<String, dynamic> videoDetails = (uploadedVideo['video'] is Map)
+          ? Map<String, dynamic>.from(uploadedVideo['video'] as Map)
+          : uploadedVideo;
+
+      // **FIX: Robustly extract ID (handle \'id\' vs \'_id\' and nesting)**
+      final String? videoId = videoDetails['id']?.toString() ?? 
+                            videoDetails['_id']?.toString();
+      
+      AppLogger.log('🆔 Resolved Video ID: $videoId');
+      
+      if (videoId == null) {
+        AppLogger.log('❌ Error: Video ID not found in: $videoDetails');
+        throw Exception('Video ID not found in upload response');
+      }
 
       // Update to validation phase
       _updateProgressPhase('validation');
@@ -690,103 +725,53 @@ class _UploadScreenState extends State<UploadScreen> {
       // The backend returns processingStatus: 'queued'
       // We should NOT wait here. We should close the screen and let the user know.
       
-      final String processingStatus =
-          uploadedVideo['processingStatus']?.toString().toLowerCase() ?? '';
-      final bool shouldHandleInBackground =
-          processingStatus.isEmpty ||
-          processingStatus == 'pending' ||
-          processingStatus == 'queued' ||
-          processingStatus == 'processing';
-
-      if (shouldHandleInBackground) {
-         // **New Background Flow**
-         // Don't wait. Just finish.
-         
-          // Update to processing phase just to show movement
-         _updateProgressPhase('processing');
-         
-         // Give it a split second to breathe
-         await Future.delayed(const Duration(milliseconds: 500));
-         
-          AppLogger.log('? Video upload accepted. Processing in background.');
-          
-         // Stop unified progress tracking
-         _stopUnifiedProgress();
-         
-         if (mounted) {
-             _unifiedProgress.value = 1.0;
-             _currentPhase.value = 'completed';
-             _phaseDescription.value = 'Upload completed! Processing in background.';
-         }
-
-          if (!mounted) return;
-
-          // **OPTIMISTIC UPDATE: Inject processing video into ProfileStateManager immediately**
-          try {
-            final optimisticVideoPayload = Map<String, dynamic>.from(uploadedVideo);
-            final uploaderId =
-                userData['googleId']?.toString() ?? userData['id']?.toString() ?? '';
-            optimisticVideoPayload['processingStatus'] =
-                processingStatus.isEmpty ? 'pending' : processingStatus;
-            optimisticVideoPayload['processingProgress'] =
-                (optimisticVideoPayload['processingProgress'] as num?)?.toInt() ?? 0;
-            optimisticVideoPayload['uploadedAt'] ??= DateTime.now().toIso8601String();
-            optimisticVideoPayload['videoName'] =
-                optimisticVideoPayload['videoName']?.toString().trim().isNotEmpty == true
-                    ? optimisticVideoPayload['videoName']
-                    : _titleController.text.trim();
-
-            if (optimisticVideoPayload['uploader'] is! Map) {
-              optimisticVideoPayload['uploader'] = {
-                'id': uploaderId,
-                '_id': uploaderId,
-                'googleId': uploaderId,
-                'name': userData['name']?.toString() ?? 'You',
-                'profilePic': userData['profilePic']?.toString() ?? '',
-              };
-            }
-
-            Provider.of<ProfileStateManager>(context, listen: false)
-                .addVideoOptimistically(optimisticVideoPayload);
-          } catch (e) {
-            AppLogger.log('?? UploadScreen: Error injecting optimistic video: $e');
-          }
-          // Call the callback to refresh other tabs
-          if (widget.onVideoUploaded != null) {
-            widget.onVideoUploaded!();
-          }
-
-          // **BATCHED UPDATE: Clear form**
-          _selectedVideo.value = null;
-          _titleController.clear();
-          _linkController.clear();
-          _selectedCategory.value = null;
-          _tags.value = [];
-          
-          if (mounted) {
-               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Video uploaded! It will appear shortly after processing.'),
-                  backgroundColor: Colors.green,
-                  duration: Duration(seconds: 4),
-                ),
-              );
-              // Navigator.pop(context); // REMOVED: Pops MainScreen as UploadScreen is a tab
-          }
-          return; // EXIT EARLY - Don't wait
-      }
-
-      // **OLD FLOW (Wait for processing - kept for fallback)**
       // Update to processing phase
       _updateProgressPhase('processing');
 
-      // Wait for processing to complete
-      String? videoId;
-      videoId = uploadedVideo['id']?.toString();
+      final String processingStatus =
+          videoDetails['processingStatus']?.toString().toLowerCase() ?? '';
 
-      if (videoId == null) {
-        throw Exception('Video ID not found in upload response');
+      // **OPTIMISTIC UPDATE: Inject processing video into ProfileStateManager immediately**
+      try {
+        final optimisticVideoPayload = Map<String, dynamic>.from(videoDetails);
+        // Ensure ID is present as \'id\' for VideoModel/Manager compatibility
+        optimisticVideoPayload['id'] ??= videoId;
+        final uploaderId =
+            userData['googleId']?.toString() ?? userData['id']?.toString() ?? '';
+        optimisticVideoPayload['processingStatus'] =
+            processingStatus.isEmpty ? 'pending' : processingStatus;
+        optimisticVideoPayload['processingProgress'] =
+            (optimisticVideoPayload['processingProgress'] as num?)?.toInt() ?? 0;
+        optimisticVideoPayload['uploadedAt'] ??= DateTime.now().toIso8601String();
+        optimisticVideoPayload['videoName'] =
+            optimisticVideoPayload['videoName']?.toString().trim().isNotEmpty == true
+                ? optimisticVideoPayload['videoName']
+                : _titleController.text.trim();
+
+        if (optimisticVideoPayload['uploader'] is! Map) {
+          optimisticVideoPayload['uploader'] = {
+            'id': uploaderId,
+            '_id': uploaderId,
+            'googleId': uploaderId,
+            'name': userData['name']?.toString() ?? 'You',
+            'profilePic': userData['profilePic']?.toString() ?? '',
+          };
+        }
+
+        Provider.of<ProfileStateManager>(context, listen: false)
+            .addVideoOptimistically(optimisticVideoPayload);
+      } catch (e) {
+        AppLogger.log('⚠️ UploadScreen: Error injecting optimistic video: $e');
       }
+
+      // Call the callback to refresh other tabs
+      if (widget.onVideoUploaded != null) {
+        widget.onVideoUploaded!();
+      }
+
+      // **UNIFIED FLOW: Always wait for processing completion on this screen**
+      // This gives better UX as the user sees the progress bar go from 0 to 100%
+      // videoId is already validated above
 
       final completedVideo = await _waitForProcessingCompletion(videoId);
 
@@ -885,7 +870,7 @@ class _UploadScreenState extends State<UploadScreen> {
   Future<Map<String, dynamic>?> _waitForProcessingCompletion(
       String videoId) async {
     const maxWaitTime = Duration(minutes: 30); // Maximum wait time (30m)
-    const checkInterval = Duration(seconds: 3); // Poll faster to avoid UI stall
+    const checkInterval = Duration(seconds: 5); // Polling slower to reduce server load
     final startTime = DateTime.now();
 
     AppLogger.log('🔄 Waiting for video processing to complete...');
@@ -946,6 +931,17 @@ class _UploadScreenState extends State<UploadScreen> {
         } else {
           AppLogger.log(
               '❌ Failed to get processing status: ${response?['error'] ?? 'Unknown error'}');
+        }
+
+        // Check if user clicked "Finish in Background"
+        if (_isMinimizing.value) {
+          AppLogger.log('🏃 User chose to finish in background');
+          return {
+            'videoUrl': '',
+            'thumbnailUrl': '',
+            'processingStatus': 'minimizing', // Special status code
+            'processingProgress': 0,
+          };
         }
 
         // Wait before checking again
@@ -1339,6 +1335,7 @@ class _UploadScreenState extends State<UploadScreen> {
     _selectedCategory.dispose();
     _tags.dispose();
     _showAdvancedSettings.dispose();
+    _isMinimizing.dispose();
     super.dispose();
   }
 

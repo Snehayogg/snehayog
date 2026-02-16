@@ -655,8 +655,8 @@ class VideoService {
       // **FIX: Use auth service to get headers**
       final authHeaders = await _getAuthHeaders();
 
-      // **FIX: Use Dio for this request to ensure interceptors work**
-      final dio = Dio(); 
+      // **FIX: Use shared httpClientService.dioClient to ensure interceptors and validateStatus work**
+      final dio = httpClientService.dioClient; 
       
       final presignedResponse = await dio.post(
         '$baseUrl/api/upload/video/presigned',

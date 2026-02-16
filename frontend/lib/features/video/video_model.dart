@@ -283,8 +283,8 @@
         processingStatus: json['processingStatus']?.toString() ?? 'completed',
         processingProgress: (json['processingProgress'] is int)
             ? json['processingProgress']
-            : int.tryParse(json['processingProgress']?.toString() ?? '100') ??
-                100,
+            : int.tryParse(json['processingProgress']?.toString() ?? '0') ??
+                0,
         processingError: json['processingError']?.toString(),
         // **NEW: Parse original resolution from backend**
         originalResolution: () {

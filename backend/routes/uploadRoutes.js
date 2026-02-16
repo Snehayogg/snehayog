@@ -16,8 +16,9 @@ import Game from '../models/Game.js';
 
 const router = express.Router();
 
-// **NEW: Apply Upload Rate Limiter to all routes in this file**
-router.use(uploadLimiter);
+// **UPDATE: Apply Upload Rate Limiter individually to sensitive routes instead of globally**
+// This ensures status polling (/video/:videoId/status) is not restricted.
+// router.use(uploadLimiter); 
 const RESUMABLE_CHUNK_SIZE_DEFAULT = 5 * 1024 * 1024; // 5MB
 const RESUMABLE_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 const resumableSessions = new Map();
@@ -183,7 +184,7 @@ const chunkUpload = multer({
  * @desc Generate a presigned URL for direct R2 upload
  * @access Private
  */
-router.post('/video/presigned', verifyToken, async (req, res) => {
+router.post('/video/presigned', verifyToken, uploadLimiter, async (req, res) => {
   try {
     const { fileName, fileType, fileSize } = req.body;
     const userId = req.user.id;
@@ -230,7 +231,7 @@ router.post('/video/presigned', verifyToken, async (req, res) => {
  * @desc Notify backend that direct upload is complete and trigger processing
  * @access Private
  */
-router.post('/video/direct-complete', verifyToken, async (req, res) => {
+router.post('/video/direct-complete', verifyToken, uploadLimiter, async (req, res) => {
   try {
     const { key, videoName, description, link, size } = req.body;
     const userId = req.user.id;
@@ -278,20 +279,13 @@ router.post('/video/direct-complete', verifyToken, async (req, res) => {
     // Construct a "virtual" path or URL that the service can recognize
     const r2Url = cloudflareR2Service.getPublicUrl(key);
     
-    console.log('🔄 Triggering background processing for Direct Upload...');
+    console.log('🔄 Triggering background processing (Wrapper) for Direct Upload...');
     
-    // We don't await this, it runs in background
-    // **FIX: Signature changed to accept videoId as first argument**
-    if (hybridVideoService && hybridVideoService.processVideoHybrid) {
-      hybridVideoService.processVideoHybrid(newVideo._id, r2Url, videoName, userId).catch(err => {
-          console.error('❌ Background processing failed for direct upload:', err);
-      });
-    } else {
-      // Fallback if imported via wrapper function (like in retry route)
-      processVideoHybrid(newVideo._id, r2Url, videoName, userId).catch(err => {
-          console.error('❌ Background processing failed for direct upload (fallback):', err);
-      });
-    }
+    // **FIX: Use the local processVideoHybrid wrapper instead of calling the service directly.**
+    // The wrapper handles updating the DB status to 'completed' and 'progress: 100'.
+    processVideoHybrid(newVideo._id, r2Url, videoName, userId).catch(err => {
+        console.error('❌ Background processing failed for direct upload:', err);
+    });
 
     // 3. Return success immediately
     res.status(201).json({
@@ -306,7 +300,7 @@ router.post('/video/direct-complete', verifyToken, async (req, res) => {
 });
 
 // Original Routes
-router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
+router.post('/video', verifyToken, uploadLimiter, upload.single('video'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No video file uploaded' });
@@ -478,7 +472,7 @@ router.post('/video', verifyToken, upload.single('video'), async (req, res) => {
 
 
 // **NEW: Resumable Upload Init**
-router.post('/video/resumable/init', verifyToken, async (req, res) => {
+router.post('/video/resumable/init', verifyToken, uploadLimiter, async (req, res) => {
   try {
     pruneExpiredResumableSessions();
 
@@ -587,7 +581,7 @@ router.post('/video/resumable/init', verifyToken, async (req, res) => {
 });
 
 // **NEW: Resumable Upload Chunk**
-router.post('/video/resumable/:sessionId/chunk', verifyToken, chunkUpload.single('chunk'), async (req, res) => {
+router.post('/video/resumable/:sessionId/chunk', verifyToken, uploadLimiter, chunkUpload.single('chunk'), async (req, res) => {
   try {
     const { sessionId } = req.params;
     const chunkIndex = Number(req.body?.chunkIndex);
@@ -647,7 +641,7 @@ router.post('/video/resumable/:sessionId/chunk', verifyToken, chunkUpload.single
 });
 
 // **NEW: Resumable Upload Complete**
-router.post('/video/resumable/:sessionId/complete', verifyToken, async (req, res) => {
+router.post('/video/resumable/:sessionId/complete', verifyToken, uploadLimiter, async (req, res) => {
   try {
     const { sessionId } = req.params;
     const session = resumableSessions.get(sessionId);

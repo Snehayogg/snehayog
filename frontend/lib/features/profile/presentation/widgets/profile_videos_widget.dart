@@ -65,7 +65,7 @@ class ProfileVideosWidget extends StatelessWidget {
 
   String _processingLabel(VideoModel video) {
     final progress = video.processingProgress.clamp(0, 100);
-    return progress > 0 ? 'Processing $progress%' : 'Processing';
+    return 'Processing $progress%';
   }
   @override
   Widget build(BuildContext context) {
@@ -357,9 +357,7 @@ class ProfileVideosWidget extends StatelessWidget {
                               height: 28,
                               child: CircularProgressIndicator(
                                 strokeWidth: 3,
-                                value: video.processingProgress > 0
-                                    ? video.processingProgress.clamp(0, 100) / 100.0
-                                    : null,
+                                value: video.processingProgress.clamp(0, 100) / 100.0,
                                 valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
                                 backgroundColor: AppTheme.borderPrimary,
                               ),
