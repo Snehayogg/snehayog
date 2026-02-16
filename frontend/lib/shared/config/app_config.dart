@@ -10,7 +10,7 @@ class AppConfig {
 
   // **MANUAL: Development mode control*
   static const bool _isDevelopment =
-      true; // Set to true for local testing, false for production
+      false; // Set to true for local testing, false for production
 
   // **NEW: Smart URL selection with fallback**
   static String? _cachedBaseUrl;
