@@ -136,61 +136,64 @@ class _SplashScreenState extends State<SplashScreen>
         children: [
           // Center Content: Vayu Text
           Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                FadeTransition(
-                  opacity: _opacityAnimation,
-                  child: const VayuLogo(
-                    fontSize: 48,
-                    textColor: AppTheme.white, // White logo on dark splash
-                  ),
-                ),
-                const SizedBox(height: 32),
-                
-                // Progress Bar and Status
-                SizedBox(
-                  width: 200,
-                  child: Column(
-                    children: [
-                      // Status Text
-                      ValueListenableBuilder<String>(
-                        valueListenable: initManager.initializationStatus,
-                        builder: (context, status, _) {
-                          return Text(
-                            status,
-                            style: AppTheme.labelSmall.copyWith(
-                              color: AppTheme.textSecondary.withOpacity(0.6),
-                              letterSpacing: 0.5,
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      
-                      // Progress Indicator
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: AnimatedBuilder(
-                          animation: _progressController,
-                          builder: (context, _) {
-                            return LinearProgressIndicator(
-                              value: _progressController.value,
-                              backgroundColor: AppTheme.white.withOpacity(0.1),
-                              valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
-                              minHeight: 3,
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+            child: FadeTransition(
+              opacity: _opacityAnimation,
+              child: const VayuLogo(
+                fontSize: 48,
+                textColor: AppTheme.white, // White logo on dark splash
+              ),
             ),
           ),
           
-          // Version info at bottom (optional but professional)
+          // Bottom Content: Progress Bar and Status
+          Positioned(
+            bottom: 80,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: SizedBox(
+                width: MediaQuery.of(context).size.width * 0.8,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Status Text - FILTERED: Only show if contains "Ready"
+                    ValueListenableBuilder<String>(
+                      valueListenable: initManager.initializationStatus,
+                      builder: (context, status, _) {
+                        final displayStatus = status.toLowerCase().contains('ready') ? status : '';
+                        return Text(
+                          displayStatus,
+                          style: AppTheme.labelSmall.copyWith(
+                            color: AppTheme.textSecondary.withOpacity(0.6),
+                            letterSpacing: 0.5,
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Progress Indicator - THICKER & PROFESSIONAL
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: AnimatedBuilder(
+                        animation: _progressController,
+                        builder: (context, _) {
+                          return LinearProgressIndicator(
+                            value: _progressController.value,
+                            backgroundColor: AppTheme.white.withOpacity(0.1),
+                            valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
+                            minHeight: 6, // Increased from 3
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // Version info at bottom
           Positioned(
             bottom: 30,
             left: 0,

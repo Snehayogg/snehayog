@@ -53,7 +53,7 @@ class AppText {
     'btn_view_all': 'View All',
     'btn_close': 'Close',
     'btn_confirm': 'Confirm',
-    'btn_withdraw_funds': 'Withdraw Funds',
+    'btn_withdraw_funds': 'Redeem Rewards',
     'btn_add_upi_id': 'Setup Billing',
     'btn_refer_friends': 'Refer Friends',
     'btn_sign_in_google': 'Sign In with Google',
@@ -108,9 +108,8 @@ class AppText {
     'upload_terms_reporting': '3. Reporting Copyright Violation',
     'upload_terms_reporting_desc':
         'Copyright owners may submit a takedown request by emailing: factshort1@gmail.com with proof of ownership. Upon receiving a valid request, Vayug will remove the infringing content within 48 hours.',
-    'upload_terms_payment': '4. Creator Guidelines',
     'upload_terms_payment_desc':
-        'All creator payments are subject to a 30-day hold for copyright checks and disputes. If a video is found infringing during this period, the payout will be cancelled and may be withheld.',
+        'All creator payments are subject to a 30-day hold for copyright checks and disputes. If a video is found infringing during this period, the transfer will be cancelled and may be withheld.',
     'upload_terms_strike': '5. Strike Policy',
     'upload_terms_strike_desc':
         '1st Strike → Warning & content removal.  2nd Strike → Account on hold for 60 days.  3rd Strike → Permanent ban, with forfeiture of unpaid rewards.',
@@ -255,7 +254,7 @@ class AppText {
     'settings_title': 'Settings',
     'settings_developer_header': 'Developer Settings',
     'settings_developer_token': 'Access Token',
-    'settings_token_usage': 'Use this token to authenticate with the Game Creator Web Portal.',
+    'settings_token_usage': 'Use this token to authenticate with the Arcade Creator Web Portal.',
     'settings_token_copied': 'Token copied to clipboard',
     'settings_account_header': 'Account',
 
@@ -294,7 +293,7 @@ class AppText {
     // Success messages
     'success_upload': 'Upload successful!',
     'success_ad_created': 'Advertisement created successfully!',
-    'success_withdrawal': 'Withdrawal initiated successfully!',
+    'success_withdrawal': 'Redemption initiated successfully!',
     'success_ad_created_full': '✅ Advertisement created successfully!',
 
     // Update messages
@@ -327,9 +326,9 @@ class AppText {
     'revenue_withdraw_earnings': 'Redeem Rewards',
     'revenue_available_balance': 'Available Score: {amount}',
     'revenue_min_withdrawal': 'Minimum redeemable: {amount}',
-    'revenue_withdraw_dialog_title': 'Withdraw Funds',
+    'revenue_withdraw_dialog_title': 'Initiate Transfer',
     'revenue_withdraw_dialog_content':
-        'This will initiate a withdrawal to your registered bank account. Processing time: 3-5 business days.',
+    'This will initiate a transfer to your registered bank account. Processing time: 3-5 business days.',
     'revenue_video_breakdown': 'Video Performance Breakdown',
     'revenue_no_videos': 'No videos available',
     'revenue_upload_to_earn': 'Upload videos to start growing',

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:vayu/shared/theme/app_theme.dart';
 
 /// **AdDetailsFormWidget - Handles ad title, description, and link input**
 /// For banner ads, only shows link field (title/description not needed)
@@ -54,26 +55,26 @@ class AdDetailsFormWidget extends StatelessWidget {
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: (isTitleValid == false) ? Colors.red : Colors.grey,
+                color: (isTitleValid == false) ? AppTheme.error : AppTheme.borderPrimary,
                 width: (isTitleValid == false) ? 2.0 : 1.0,
               ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: (isTitleValid == false) ? Colors.red : Colors.grey,
+                color: (isTitleValid == false) ? AppTheme.error : AppTheme.borderPrimary,
                 width: (isTitleValid == false) ? 2.0 : 1.0,
               ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: (isTitleValid == false) ? Colors.red : Colors.blue,
+                color: (isTitleValid == false) ? AppTheme.error : AppTheme.primary,
                 width: (isTitleValid == false) ? 2.0 : 2.0,
               ),
             ),
             errorText: (isTitleValid == false) ? titleError : null,
-            errorStyle: const TextStyle(color: Colors.red, fontSize: 12),
+            errorStyle: const TextStyle(color: AppTheme.error, fontSize: 12),
           ),
           onChanged: (_) {
             onClearErrors();
@@ -93,7 +94,7 @@ class AdDetailsFormWidget extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide(
                   color:
-                      (isDescriptionValid == false) ? Colors.red : Colors.grey,
+                      (isDescriptionValid == false) ? AppTheme.error : AppTheme.borderPrimary,
                   width: (isDescriptionValid == false) ? 2.0 : 1.0,
                 ),
               ),
@@ -101,7 +102,7 @@ class AdDetailsFormWidget extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide(
                   color:
-                      (isDescriptionValid == false) ? Colors.red : Colors.grey,
+                      (isDescriptionValid == false) ? AppTheme.error : AppTheme.borderPrimary,
                   width: (isDescriptionValid == false) ? 2.0 : 1.0,
                 ),
               ),
@@ -109,13 +110,13 @@ class AdDetailsFormWidget extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide(
                   color:
-                      (isDescriptionValid == false) ? Colors.red : Colors.blue,
+                      (isDescriptionValid == false) ? AppTheme.error : AppTheme.primary,
                   width: (isDescriptionValid == false) ? 2.0 : 2.0,
                 ),
               ),
               errorText:
                   (isDescriptionValid == false) ? descriptionError : null,
-              errorStyle: const TextStyle(color: Colors.red, fontSize: 12),
+              errorStyle: const TextStyle(color: AppTheme.error, fontSize: 12),
             ),
             maxLines: 3,
             onChanged: (_) {
@@ -136,21 +137,21 @@ class AdDetailsFormWidget extends StatelessWidget {
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: (isLinkValid == false) ? Colors.red : Colors.grey,
+                color: (isLinkValid == false) ? AppTheme.error : AppTheme.borderPrimary,
                 width: (isLinkValid == false) ? 2.0 : 1.0,
               ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: (isLinkValid == false) ? Colors.red : Colors.grey,
+                color: (isLinkValid == false) ? AppTheme.error : AppTheme.borderPrimary,
                 width: (isLinkValid == false) ? 2.0 : 1.0,
               ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: (isLinkValid == false) ? Colors.red : Colors.blue,
+                color: (isLinkValid == false) ? AppTheme.error : AppTheme.primary,
                 width: (isLinkValid == false) ? 2.0 : 2.0,
               ),
             ),
@@ -158,7 +159,7 @@ class AdDetailsFormWidget extends StatelessWidget {
                 ? 'Where users will go when they click the banner'
                 : 'Enter your website URL where users will land after clicking the ad',
             errorText: (isLinkValid == false) ? linkError : null,
-            errorStyle: const TextStyle(color: Colors.red, fontSize: 12),
+            errorStyle: const TextStyle(color: AppTheme.error, fontSize: 12),
           ),
           keyboardType: TextInputType.url,
           onChanged: (_) {

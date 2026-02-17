@@ -110,7 +110,7 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
           ),
           const SizedBox(height: AppTheme.spacing2),
           Text(
-            'To ensure the best deployment experience, game uploads are now handled through our dedicated web portal.',
+            'To ensure the best deployment experience, arcade content uploads are now handled through our dedicated web portal.',
             style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
           ),
           const SizedBox(height: AppTheme.spacing3),
@@ -192,7 +192,7 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
                 border: Border.all(color: AppTheme.borderSecondary, width: 2),
               ),
               child: Icon(
-                Icons.videogame_asset,
+                Icons.sports_esports_outlined,
                 size: 64,
                 color: AppTheme.textTertiary.withOpacity(0.5),
               ),
@@ -204,7 +204,7 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
             ),
             const SizedBox(height: AppTheme.spacing2),
             Text(
-              'Begin your journey by uploading high-quality interactive fun arcade game.',
+              'Begin your journey by uploading high-quality interactive arcade content.',
               textAlign: TextAlign.center,
               style: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
             ),
@@ -252,7 +252,7 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
                     borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
                     child: game.thumbnailUrl != null && game.thumbnailUrl!.isNotEmpty
                         ? Image.network(game.thumbnailUrl!, fit: BoxFit.cover)
-                        : const Icon(Icons.videogame_asset, color: AppTheme.primary),
+                        : const Icon(Icons.sports_esports_outlined, color: AppTheme.primary),
                   ),
                 ),
                 const SizedBox(width: AppTheme.spacing4),

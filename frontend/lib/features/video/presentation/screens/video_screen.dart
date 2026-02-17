@@ -104,21 +104,13 @@ class _VideoScreenState extends State<VideoScreen> {
     // **FIXED: Respect passed videoType (e.g. 'vayu') even if initialVideos are present**
     final String videoType = widget.videoType ?? 'yog';
 
-    // Wrap in Scaffold + SafeArea so UI matches Yug tab full-screen layout
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        top: false,
-        bottom: false,
-        child: VideoFeedAdvanced(
-          key: _videoFeedKey,
-          initialIndex: widget.initialIndex,
-          initialVideos: widget.initialVideos,
-          initialVideoId: widget.initialVideoId,
-          videoType: videoType,
-          isFullScreen: widget.isFullScreen, // **NEW: Pass flag down**
-        ),
-      ),
+    return VideoFeedAdvanced(
+      key: _videoFeedKey,
+      initialIndex: widget.initialIndex,
+      initialVideos: widget.initialVideos,
+      initialVideoId: widget.initialVideoId,
+      videoType: videoType,
+      isFullScreen: widget.isFullScreen,
     );
   }
 }

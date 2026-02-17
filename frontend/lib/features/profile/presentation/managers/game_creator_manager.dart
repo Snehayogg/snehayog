@@ -30,7 +30,7 @@ class GameCreatorManager extends ChangeNotifier {
 
   void toggleCreatorMode() {
     _isCreatorMode = !_isCreatorMode;
-    AppLogger.log('🎮 GameCreatorManager: Creator mode toggled to $_isCreatorMode');
+    AppLogger.log('🎮 ArcadeCreatorManager: Creator mode toggled to $_isCreatorMode');
     if (_isCreatorMode && _creatorGames.isEmpty) {
       loadCreatorGames();
     }
@@ -47,10 +47,10 @@ class GameCreatorManager extends ChangeNotifier {
     try {
       final games = await _vayuGameService.fetchDeveloperGames();
       _creatorGames = games;
-      AppLogger.log('🎮 GameCreatorManager: Loaded ${_creatorGames.length} games');
+      AppLogger.log('🎮 ArcadeCreatorManager: Loaded ${_creatorGames.length} items');
     } catch (e) {
-      AppLogger.log('❌ GameCreatorManager: Error loading games: $e');
-      _error = 'Failed to load games: ${e.toString()}';
+      AppLogger.log('❌ ArcadeCreatorManager: Error loading items: $e');
+      _error = 'Failed to load items: ${e.toString()}';
     } finally {
       _isCreatorGamesLoading = false;
       notifyListenersSafe();
@@ -80,7 +80,7 @@ class GameCreatorManager extends ChangeNotifier {
       }
       return success;
     } catch (e) {
-      AppLogger.log('❌ GameCreatorManager: Error uploading game: $e');
+      AppLogger.log('❌ ArcadeCreatorManager: Error uploading content: $e');
       _error = 'Upload failed: ${e.toString()}';
       return false;
     } finally {
@@ -101,7 +101,7 @@ class GameCreatorManager extends ChangeNotifier {
       }
       return success;
     } catch (e) {
-      AppLogger.log('❌ GameCreatorManager: Error publishing game: $e');
+      AppLogger.log('❌ ArcadeCreatorManager: Error publishing content: $e');
       _error = 'Publishing failed: ${e.toString()}';
       return false;
     } finally {

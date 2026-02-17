@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:vayu/shared/theme/app_theme.dart';
 import 'dart:io';
 
 /// Visual preview showing where ads appear in the app
@@ -36,7 +37,7 @@ class AdPlacementPreviewWidget extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.phone_android, color: Colors.blue.shade600),
+                Icon(Icons.phone_android, color: AppTheme.primary),
                 const SizedBox(width: 8),
                 const Text(
                   'Ad Placement Preview',
@@ -179,7 +180,7 @@ class AdPlacementPreviewWidget extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.blue, width: 3),
+        border: Border.all(color: AppTheme.primary, width: 3),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Stack(
@@ -218,7 +219,7 @@ class AdPlacementPreviewWidget extends StatelessWidget {
           Positioned.fill(
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
+                color: AppTheme.primary.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(5),
               ),
             ),
@@ -290,7 +291,7 @@ class AdPlacementPreviewWidget extends StatelessWidget {
                 height: 60,
                 margin: const EdgeInsets.symmetric(horizontal: 0),
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.blue, width: 3),
+                  border: Border.all(color: AppTheme.primary, width: 3),
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(8),
                     topRight: Radius.circular(8),
@@ -314,7 +315,7 @@ class AdPlacementPreviewWidget extends StatelessWidget {
                     Positioned.fill(
                       child: Container(
                         decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.10),
+                          color: AppTheme.primary.withOpacity(0.10),
                           borderRadius: const BorderRadius.only(
                             topLeft: Radius.circular(5),
                             topRight: Radius.circular(5),
@@ -330,7 +331,7 @@ class AdPlacementPreviewWidget extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: Colors.blue,
+                          color: AppTheme.primary,
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: const Text(

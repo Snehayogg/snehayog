@@ -76,6 +76,7 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   late PageController _pageController;
   final bool _autoScrollEnabled = true;
   bool _isAnimatingPage = false;
+  bool _isProgrammaticScroll = false;
   final Set<int> _autoAdvancedForIndex = {};
 
   // Controller pools

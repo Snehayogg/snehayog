@@ -124,7 +124,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: AppTheme.spacing2),
           Text(
-             AppText.get('settings_token_usage', fallback: 'Use this token to authenticate with the Game Creator Web Portal.'),
+             AppText.get('settings_token_usage', fallback: 'Use this token to authenticate with the Arcade Creator Web Portal.'),
             style: AppTheme.labelSmall.copyWith(color: AppTheme.warning),
           ),
         ],

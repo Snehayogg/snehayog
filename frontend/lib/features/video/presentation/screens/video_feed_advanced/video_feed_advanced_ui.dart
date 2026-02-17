@@ -883,9 +883,12 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     // **FIX: Simplified to use standard AspectRatio widget**
     // This removes usage of originalResolution logic which might be causing sizing issues
     // and relies on standard Flutter widgets to respect aspect ratio.
-    return AspectRatio(
-      aspectRatio: modelAspectRatio,
-      child: VideoPlayer(controller),
+    return Align(
+      alignment: Alignment.bottomCenter, // **FIX: Shift video down to minimize bottom gap**
+      child: AspectRatio(
+        aspectRatio: modelAspectRatio,
+        child: VideoPlayer(controller),
+      ),
     );
   }
 
@@ -904,9 +907,12 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     // **FIX: Simplified to use standard AspectRatio widget**
     // This ensures the video always fits the screen width while maintaining aspect ratio
     // without fragile manual calculations or originalResolution dependency.
-    return AspectRatio(
-      aspectRatio: modelAspectRatio,
-      child: VideoPlayer(controller),
+    return Align(
+      alignment: Alignment.bottomCenter, // **FIX: Shift video down to minimize bottom gap**
+      child: AspectRatio(
+        aspectRatio: modelAspectRatio,
+        child: VideoPlayer(controller),
+      ),
     );
   }
 
@@ -964,7 +970,9 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         // 2. Add extra 60px padding when opened as a full-screen route (e.g. from Profile/Vayu)
         // 3. Ensure min padding (at least 16px) to clear the gesture bar touch zone
         final double systemBottomPadding = mediaQuery.padding.bottom;
-        final double bottomPadding = systemBottomPadding > 0 ? systemBottomPadding + 8 : 20.0;
+        final double bottomPadding = widget.isFullScreen 
+            ? (systemBottomPadding > 0 ? systemBottomPadding + 8 : 15.0) 
+            : 15.0;
 
         return RepaintBoundary(
           child: Stack(
@@ -997,8 +1005,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 left: 0,
                 right: 75,
                 child: Container(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12,
-                      8), // **FIX: Bottom padding for content spacing**
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 4), // **FIX: Tighter bottom padding**
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
@@ -1494,21 +1501,23 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 child: GestureDetector(
                   onTap: () {
                     _hideLongPressAdOverlay();
-                    // **DEBUG: Log tap**
+                    
+                    // Prioritize external navigation if URL is available
+                    if (carouselAd.callToActionUrl.isNotEmpty) {
+                       AppLogger.log('🔗 LongPressOverlay: Launching URL: ${carouselAd.callToActionUrl}');
+                       _launchExternalUrl(carouselAd.callToActionUrl);
+                       return;
+                    }
+
+                    // Fallback: Transition to carousel ad page (Existing logic)
                     if (_videos.isNotEmpty && index < _videos.length) {
                        final videoId = _videos[index].id;
-                       AppLogger.log('🖱️ LongPressOverlay: Tapped for video $videoId');
+                       AppLogger.log('🖱️ LongPressOverlay: Tapped for video $videoId (Fallback to feed)');
                        
                        if (_carouselAdManager.getTotalCarouselAds() > 0) {
-                          AppLogger.log('✅ LongPressOverlay: Have ${_carouselAdManager.getTotalCarouselAds()} ads. Switching to page 1.');
                           if (_currentHorizontalPage.containsKey(videoId)) {
                              _currentHorizontalPage[videoId]!.value = 1; 
-                             AppLogger.log('🔄 LongPressOverlay: Value set to 1 for $videoId');
-                          } else {
-                             AppLogger.log('❌ LongPressOverlay: No notifier found for $videoId');
                           }
-                       } else {
-                          AppLogger.log('❌ LongPressOverlay: No carousel ads loaded.');
                        }
                     }
                   },

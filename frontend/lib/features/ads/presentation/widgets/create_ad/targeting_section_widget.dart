@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:vayu/shared/theme/app_theme.dart';
 import 'package:vayu/shared/services/city_search_service.dart';
 import 'package:vayu/shared/constants/interests.dart';
 
@@ -21,7 +22,6 @@ class TargetingSectionWidget extends StatefulWidget {
   final String? bidType; // 'CPM' or 'CPC'
   final double? bidAmount; // CPM or CPC bid amount
   final String? pacing; // 'smooth' or 'asap'
-  final Map<String, String> hourParting; // Hour-based targeting
   final double? targetCPA; // Target Cost Per Acquisition
   final double? targetROAS; // Target Return on Ad Spend
   final int? attributionWindow; // Attribution window in days
@@ -42,7 +42,6 @@ class TargetingSectionWidget extends StatefulWidget {
   final Function(String?) onBidTypeChanged;
   final Function(double?) onBidAmountChanged;
   final Function(String?) onPacingChanged;
-  final Function(Map<String, String>) onHourPartingChanged;
   final Function(double?) onTargetCPAChanged;
   final Function(double?) onTargetROASChanged;
   final Function(int?) onAttributionWindowChanged;
@@ -65,7 +64,6 @@ class TargetingSectionWidget extends StatefulWidget {
     this.bidType,
     this.bidAmount,
     this.pacing,
-    this.hourParting = const {},
     this.targetCPA,
     this.targetROAS,
     this.attributionWindow,
@@ -85,7 +83,6 @@ class TargetingSectionWidget extends StatefulWidget {
     required this.onBidTypeChanged,
     required this.onBidAmountChanged,
     required this.onPacingChanged,
-    required this.onHourPartingChanged,
     required this.onTargetCPAChanged,
     required this.onTargetROASChanged,
     required this.onAttributionWindowChanged,
@@ -120,10 +117,6 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
   final List<String> _bidTypeOptions = ['CPM', 'CPC'];
   final List<String> _pacingOptions = ['smooth', 'asap'];
   final List<int> _attributionWindowOptions = [1, 7, 14, 30];
-  final List<String> _hourOptions = List.generate(
-    24,
-    (i) => i.toString().padLeft(2, '0'),
-  );
 
   final List<String> _daysOfWeek = [
     'Monday',
@@ -357,11 +350,17 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
         children: [
           Row(
             children: [
-              Icon(Icons.gps_fixed, color: Colors.blue.shade600),
+              Icon(Icons.gps_fixed, color: AppTheme.primary),
               const SizedBox(width: 8),
-              const Text(
-                'Advanced Targeting',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              Expanded(
+                child: Text(
+                  'Advanced Targeting',
+                  style: AppTheme.headlineSmall.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.white,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -421,7 +420,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
 
           // Gender Selection
           DropdownButtonFormField<String>(
-            initialValue: widget.selectedGender,
+            isExpanded: true,
+            initialValue: _genderOptions.contains(widget.selectedGender) ? widget.selectedGender : 'all',
             decoration: const InputDecoration(
               labelText: 'Gender',
               border: OutlineInputBorder(),
@@ -458,7 +458,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
 
           // **NEW: Device Type**
           DropdownButtonFormField<String>(
-            initialValue: widget.deviceType ?? 'all',
+            isExpanded: true,
+            initialValue: _deviceTypeOptions.contains(widget.deviceType) ? widget.deviceType : 'all',
             decoration: const InputDecoration(
               labelText: 'Device Type',
               border: OutlineInputBorder(),
@@ -487,13 +488,17 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.settings, color: Colors.green.shade600),
+                      Icon(Icons.settings, color: AppTheme.primary),
                       const SizedBox(width: 8),
-                      const Text(
-                        'Advanced Campaign Settings',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                      Expanded(
+                        child: Text(
+                          'Advanced Campaign Settings',
+                          style: AppTheme.headlineSmall.copyWith(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.white,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -502,7 +507,10 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
 
                   // Optimization Goal
                   DropdownButtonFormField<String>(
-                    initialValue: widget.optimizationGoal,
+                    isExpanded: true,
+                    initialValue: (widget.optimizationGoal == null || _optimizationGoalOptions.contains(widget.optimizationGoal)) 
+                        ? widget.optimizationGoal 
+                        : 'impressions',
                     decoration: const InputDecoration(
                       labelText: 'Optimization Goal',
                       border: OutlineInputBorder(),
@@ -545,7 +553,10 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
 
                   // Time Zone
                   DropdownButtonFormField<String>(
-                    initialValue: widget.timeZone,
+                    isExpanded: true,
+                    initialValue: (widget.timeZone == null || _timeZoneOptions.contains(widget.timeZone)) 
+                        ? widget.timeZone 
+                        : 'Asia/Kolkata',
                     decoration: const InputDecoration(
                       labelText: 'Time Zone',
                       border: OutlineInputBorder(),
@@ -581,25 +592,30 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.trending_up, color: Colors.orange.shade600),
+                      Icon(Icons.trending_up, color: AppTheme.warning),
                       const SizedBox(width: 8),
-                      const Text(
-                        'Bidding & Performance KPIs',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                      Expanded(
+                        child: Text(
+                          'Bidding & Performance KPIs',
+                          style: AppTheme.headlineSmall.copyWith(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.white,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 16),
 
-                  // Bid Strategy
-                  Row(
+                  // Bid Strategy & Amount
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: widget.bidType ?? 'CPM',
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                          initialValue: _bidTypeOptions.contains(widget.bidType) ? widget.bidType : 'CPM',
                           decoration: const InputDecoration(
                             labelText: 'Bid Strategy',
                             border: OutlineInputBorder(),
@@ -616,10 +632,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                               .toList(),
                           onChanged: widget.onBidTypeChanged,
                         ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Builder(
+                        const SizedBox(height: 16),
+                      Builder(
                           builder: (context) {
                             final bidType = widget.bidType ?? 'CPM';
                             return TextFormField(
@@ -646,18 +660,19 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                             );
                           },
                         ),
-                      ),
+                      const SizedBox(height: 16),
                     ],
                   ),
                   const SizedBox(height: 16),
 
                   // Budget Pacing
                   DropdownButtonFormField<String>(
+                    isExpanded: true,
                     initialValue: widget.pacing ?? 'smooth',
                     decoration: const InputDecoration(
                       labelText: 'Budget Pacing',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.speed),
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.speed),
                       helperText: 'How budget is spent over time',
                     ),
                     items: _pacingOptions.map((pacing) {
@@ -680,8 +695,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                     decoration: const InputDecoration(
                       labelText: 'Target CPA (₹)',
                       hintText: '500.00',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.account_balance_wallet),
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.account_balance_wallet),
                       helperText: 'Target cost per acquisition (optional)',
                     ),
                     keyboardType: TextInputType.number,
@@ -698,8 +713,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                     decoration: const InputDecoration(
                       labelText: 'Target ROAS',
                       hintText: '3.0',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.monetization_on),
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.monetization_on),
                       helperText:
                           'Target return on ad spend (e.g., 3.0 = 3x return)',
                     ),
@@ -713,11 +728,12 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
 
                   // Attribution Window
                   DropdownButtonFormField<int>(
+                    isExpanded: true,
                     initialValue: widget.attributionWindow,
                     decoration: const InputDecoration(
                       labelText: 'Attribution Window',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.access_time),
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.access_time),
                       helperText: 'Conversion attribution period',
                     ),
                     items: [
@@ -740,12 +756,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
           ),
           const SizedBox(height: 16),
 
-          // **NEW: Day Parting (Days of Week)**
           _buildDayPartingSection(),
-          const SizedBox(height: 16),
-
-          // **NEW: Hour Parting (Time-based targeting)**
-          _buildHourPartingSection(),
         ],
       ),
     );
@@ -755,9 +766,13 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Interests',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+          style: AppTheme.headlineSmall.copyWith(
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+            color: AppTheme.white,
+          ),
         ),
         const SizedBox(height: 8),
         Container(
@@ -790,12 +805,12 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                         }
                       },
                       backgroundColor: isCustom
-                          ? Colors.green.shade100
-                          : Colors.blue.shade100,
+                          ? AppTheme.success.withOpacity(0.1)
+                          : AppTheme.primary.withOpacity(0.1),
                       labelStyle: TextStyle(
                         color: isCustom
-                            ? Colors.green.shade800
-                            : Colors.blue.shade800,
+                            ? AppTheme.success
+                            : AppTheme.primary,
                       ),
                     );
                   }).toList(),
@@ -818,8 +833,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                       : 'Add More',
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue.shade50,
-                  foregroundColor: Colors.blue.shade700,
+                  backgroundColor: AppTheme.primary.withOpacity(0.05),
+                  foregroundColor: AppTheme.primary,
                   elevation: 0,
                 ),
               ),
@@ -850,8 +865,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                     icon: const Icon(Icons.add, size: 18),
                     label: const Text('Add'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green.shade50,
-                      foregroundColor: Colors.green.shade700,
+                      backgroundColor: AppTheme.success.withOpacity(0.05),
+                      foregroundColor: AppTheme.success,
                       elevation: 0,
                     ),
                   ),
@@ -863,9 +878,9 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                 const SizedBox(height: 8),
                 Text(
                   'Custom Interests: ${_customInterests.join(', ')}',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 12,
-                    color: Colors.green.shade600,
+                    color: AppTheme.success,
                     fontStyle: FontStyle.italic,
                   ),
                 ),
@@ -890,7 +905,11 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
       children: [
         Text(
           label,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+          style: AppTheme.headlineSmall.copyWith(
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+            color: AppTheme.white,
+          ),
         ),
         const SizedBox(height: 8),
         Container(
@@ -916,8 +935,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                           ..remove(item);
                         onChanged(newItems);
                       },
-                      backgroundColor: Colors.blue.shade100,
-                      labelStyle: TextStyle(color: Colors.blue.shade800),
+                      backgroundColor: AppTheme.primary.withOpacity(0.1),
+                      labelStyle: const TextStyle(color: AppTheme.primary),
                     );
                   }).toList(),
                 ),
@@ -955,11 +974,15 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
       children: [
         Row(
           children: [
-            Icon(Icons.location_on, color: Colors.blue.shade600, size: 20),
+            Icon(Icons.location_on, color: AppTheme.primary, size: 20),
             const SizedBox(width: 8),
-            const Text(
+            Text(
               'Target Locations (India)',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              style: AppTheme.headlineSmall.copyWith(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: AppTheme.white,
+              ),
             ),
           ],
         ),
@@ -970,9 +993,9 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.shade300),
+              border: Border.all(color: AppTheme.backgroundTertiary),
               borderRadius: BorderRadius.circular(8),
-              color: Colors.grey.shade50,
+              color: AppTheme.backgroundSecondary,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -982,7 +1005,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: Colors.grey,
+                    color: AppTheme.textTertiary,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -1002,8 +1025,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                         )..remove(location);
                         widget.onLocationsChanged(newItems);
                       },
-                      backgroundColor: Colors.green.shade100,
-                      labelStyle: TextStyle(color: Colors.green.shade800),
+                      backgroundColor: AppTheme.success.withOpacity(0.1),
+                      labelStyle: const TextStyle(color: AppTheme.success),
                     );
                   }).toList(),
                 ),
@@ -1019,7 +1042,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
           focusNode: _locationSearchFocusNode,
           decoration: InputDecoration(
             hintText: 'Type city name (e.g., Mumbai, Delhi)...',
-            prefixIcon: const Icon(Icons.search, color: Colors.blue),
+            prefixIcon: const Icon(Icons.search, color: AppTheme.primary),
             suffixIcon: _isSearchingLocations
                 ? const Padding(
                     padding: EdgeInsets.all(12),
@@ -1028,13 +1051,13 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                        valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
                       ),
                     ),
                   )
                 : _hasSearchText
                     ? IconButton(
-                        icon: const Icon(Icons.clear, color: Colors.grey),
+                        icon: const Icon(Icons.clear, color: AppTheme.textTertiary),
                         onPressed: () {
                           _locationSearchController.clear();
                           setState(() {
@@ -1047,18 +1070,18 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                         color: Colors.grey),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade300),
+              borderSide: const BorderSide(color: AppTheme.backgroundTertiary),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade300),
+              borderSide: const BorderSide(color: AppTheme.backgroundTertiary),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.blue.shade600, width: 2),
+              borderSide: const BorderSide(color: AppTheme.primary, width: 2),
             ),
             filled: true,
-            fillColor: Colors.grey.shade50,
+            fillColor: AppTheme.backgroundSecondary,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
               vertical: 16,
@@ -1078,9 +1101,9 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                 : (_locationSuggestions.length * 56.0).clamp(0.0, 200.0),
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade300),
+              color: AppTheme.backgroundSecondary,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.backgroundTertiary),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.1),
@@ -1108,7 +1131,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                     separatorBuilder: (context, index) => Divider(
                       height: 1,
                       thickness: 1,
-                      color: Colors.grey.shade200,
+                      color: AppTheme.backgroundTertiary,
                     ),
                     itemBuilder: (context, index) {
                       final location = _locationSuggestions[index];
@@ -1128,8 +1151,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                         leading: Icon(
                           Icons.location_city,
                           color: isAlreadySelected
-                              ? Colors.grey
-                              : Colors.blue.shade600,
+                              ? AppTheme.textTertiary
+                              : AppTheme.primary,
                           size: 20,
                         ),
                         title: Text(
@@ -1138,8 +1161,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
                             color: isAlreadySelected
-                                ? Colors.grey
-                                : Colors.black87,
+                                ? AppTheme.textTertiary
+                                : AppTheme.white,
                           ),
                         ),
                         subtitle: Text(
@@ -1147,8 +1170,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                           style: TextStyle(
                             fontSize: 12,
                             color: isAlreadySelected
-                                ? Colors.grey
-                                : Colors.grey.shade600,
+                                ? AppTheme.textTertiary
+                                : AppTheme.textSecondary,
                           ),
                         ),
                         trailing: isAlreadySelected
@@ -1159,7 +1182,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                               )
                             : Icon(
                                 Icons.add,
-                                color: Colors.blue.shade600,
+                                color: AppTheme.primary,
                                 size: 20,
                               ),
                         enabled: !isAlreadySelected,
@@ -1184,7 +1207,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w500,
-            color: Colors.grey,
+            color: AppTheme.textTertiary,
           ),
         ),
         const SizedBox(height: 8),
@@ -1200,7 +1223,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                     location,
                     style: TextStyle(
                       fontSize: 12,
-                      color: isSelected ? Colors.white : Colors.blue.shade700,
+                      color: isSelected ? AppTheme.white : AppTheme.primary,
                     ),
                   ),
                   selected: isSelected,
@@ -1214,9 +1237,9 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                       widget.onLocationsChanged(newItems);
                     }
                   },
-                  selectedColor: Colors.blue.shade600,
-                  backgroundColor: Colors.blue.shade50,
-                  checkmarkColor: Colors.white,
+                  selectedColor: AppTheme.primary,
+                  backgroundColor: AppTheme.primary.withOpacity(0.05),
+                  checkmarkColor: AppTheme.white,
                 ),
               );
             }).toList(),
@@ -1251,14 +1274,14 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                   return ListTile(
                     title: Text(
                       option,
-                      style: TextStyle(
-                        color: Colors.green.shade700,
+                      style: const TextStyle(
+                        color: AppTheme.success,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    leading: Icon(
+                    leading: const Icon(
                       Icons.add_circle_outline,
-                      color: Colors.green.shade700,
+                      color: AppTheme.success,
                     ),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                     onTap: () {
@@ -1326,7 +1349,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
             const SizedBox(height: 16),
             Text(
               'This will be added to your selected interests and can be used for targeting.',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
             ),
           ],
         ),
@@ -1357,18 +1380,22 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
           children: [
             Row(
               children: [
-                Icon(Icons.calendar_today, color: Colors.purple.shade600),
+                Icon(Icons.calendar_today, color: AppTheme.primary),
                 const SizedBox(width: 8),
-                const Text(
+                Text(
                   'Day Targeting',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  style: AppTheme.headlineSmall.copyWith(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.white,
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
             const Text(
               'Select which days of the week to show ads:',
-              style: TextStyle(fontSize: 14, color: Colors.grey),
+              style: TextStyle(fontSize: 14, color: AppTheme.textTertiary),
             ),
             const SizedBox(height: 12),
             Wrap(
@@ -1386,13 +1413,16 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                     newDayParting[day] = selected;
                     widget.onDayPartingChanged(newDayParting);
                   },
-                  selectedColor: Colors.purple.shade100,
-                  checkmarkColor: Colors.purple.shade700,
+                  selectedColor: AppTheme.primary.withOpacity(0.2),
+                  checkmarkColor: AppTheme.primary,
                 );
               }).toList(),
             ),
             const SizedBox(height: 8),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 TextButton.icon(
                   onPressed: () {
@@ -1404,7 +1434,6 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                   icon: const Icon(Icons.select_all, size: 16),
                   label: const Text('All Days'),
                 ),
-                const SizedBox(width: 8),
                 TextButton.icon(
                   onPressed: () {
                     final weekdaysSelected = Map<String, bool>.fromEntries(
@@ -1420,7 +1449,6 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                   icon: const Icon(Icons.business, size: 16),
                   label: const Text('Weekdays'),
                 ),
-                const SizedBox(width: 8),
                 TextButton.icon(
                   onPressed: () {
                     widget.onDayPartingChanged({});
@@ -1429,140 +1457,6 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                   label: const Text('Clear'),
                 ),
               ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // **NEW: Hour Parting Section**
-  Widget _buildHourPartingSection() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.access_time, color: Colors.teal.shade600),
-                const SizedBox(width: 8),
-                const Text(
-                  'Hour Targeting',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Select specific hours of the day to show ads (24-hour format):',
-              style: TextStyle(fontSize: 14, color: Colors.grey),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade300),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Selected hours display
-                  if (widget.hourParting.isNotEmpty) ...[
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: widget.hourParting.entries.map((entry) {
-                        return Chip(
-                          label: Text('${entry.key}:00'),
-                          deleteIcon: const Icon(Icons.close, size: 18),
-                          onDeleted: () {
-                            final newHourParting = Map<String, String>.from(
-                              widget.hourParting,
-                            );
-                            newHourParting.remove(entry.key);
-                            widget.onHourPartingChanged(newHourParting);
-                          },
-                          backgroundColor: Colors.teal.shade100,
-                          labelStyle: TextStyle(color: Colors.teal.shade800),
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  // Hour selector
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          decoration: const InputDecoration(
-                            labelText: 'Select Hour',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.schedule),
-                          ),
-                          items: _hourOptions.map((hour) {
-                            final hourInt = int.parse(hour);
-                            final isSelected = widget.hourParting.containsKey(
-                              hour,
-                            );
-                            return DropdownMenuItem(
-                              value: hour,
-                              enabled: !isSelected,
-                              child: Text(
-                                '$hour:00 ${hourInt < 12 ? 'AM' : 'PM'}',
-                                style: TextStyle(
-                                  color:
-                                      isSelected ? Colors.grey : Colors.black,
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                          onChanged: (hour) {
-                            if (hour != null) {
-                              final newHourParting = Map<String, String>.from(
-                                widget.hourParting,
-                              );
-                              newHourParting[hour] = 'active';
-                              widget.onHourPartingChanged(newHourParting);
-                            }
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      TextButton.icon(
-                        onPressed: () {
-                          // Select business hours (9 AM - 5 PM)
-                          final businessHours = Map<String, String>.fromEntries(
-                            List.generate(9, (i) => i + 9).map(
-                              (hour) => MapEntry(
-                                hour.toString().padLeft(2, '0'),
-                                'active',
-                              ),
-                            ),
-                          );
-                          widget.onHourPartingChanged(businessHours);
-                        },
-                        icon: const Icon(Icons.business, size: 16),
-                        label: const Text('Business Hours (9 AM - 5 PM)'),
-                      ),
-                      const SizedBox(width: 8),
-                      TextButton.icon(
-                        onPressed: () {
-                          widget.onHourPartingChanged({});
-                        },
-                        icon: const Icon(Icons.clear, size: 16),
-                        label: const Text('Clear All'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
             ),
           ],
         ),

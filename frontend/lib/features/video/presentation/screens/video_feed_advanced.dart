@@ -803,15 +803,21 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // It is already handled in _handlePageChange (debounced) and _buildFeedItem (UI builder).
     // Removing it here prevents API spam during fast scrolling.
 
-    // **FIX: Fast Scroll Debounce Logic**
-    // If user is scrolling fast, cancel previous timer and restart
-    // This prevents "Fire Hose" effect of loading every skipped video
-    _pageChangeDebounceTimer?.cancel();
-    _pageChangeDebounceTimer = Timer(const Duration(milliseconds: 300), () {
-      if (mounted && index == _currentIndex) { // Ensure index is still valid
-         _handlePageChange(index);
-      }
-    });
+    // **OPTIMIZATION: Bypass debounce for programmatic autoscroll**
+    if (_isProgrammaticScroll) {
+       _handlePageChange(index);
+       _isProgrammaticScroll = false; // Reset flag
+    } else {
+      // **FIX: Fast Scroll Debounce Logic**
+      // If user is scrolling fast, cancel previous timer and restart
+      // This prevents "Fire Hose" effect of loading every skipped video
+      _pageChangeDebounceTimer?.cancel();
+      _pageChangeDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+        if (mounted && index == _currentIndex) { // Ensure index is still valid
+           _handlePageChange(index);
+        }
+      });
+    }
 
     // But we DO NOT trigger heavy video loading yet.
     if (_currentIndex != index) {
@@ -1239,18 +1245,19 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       final position = controller.value.position;
       final duration = controller.value.duration;
       if (duration.inMilliseconds > 0 &&
-          (duration - position).inMilliseconds <= 200) {
+          (duration - position).inMilliseconds <= 600) {
         // Near end: advance to next page
         if (_isAnimatingPage) return;
         if (_autoAdvancedForIndex.contains(index)) return;
         final int next = (_currentIndex + 1).clamp(0, _videos.length);
         if (next != _currentIndex && next < _videos.length) {
           _isAnimatingPage = true;
+          _isProgrammaticScroll = true; // **NEW: Signal to bypass debounce**
           _autoAdvancedForIndex.add(index);
           _pageController
               .animateToPage(
                 next,
-                duration: const Duration(milliseconds: 300),
+                duration: const Duration(milliseconds: 250), // **FIXED: Snappier transition**
                 curve: Curves.easeInOut,
               )
               .whenComplete(() => _isAnimatingPage = false);
@@ -1517,16 +1524,18 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   /// **HANDLE VISIT NOW: Open link in browser**
   Future<void> _handleVisitNow(VideoModel video) async {
+    if (video.link?.isNotEmpty != true) return;
+    await _launchExternalUrl(video.link!);
+  }
+
+  /// **LAUNCH EXTERNAL URL: Helper method for ads and video links**
+  Future<void> _launchExternalUrl(String urlString) async {
     try {
-      if (video.link?.isNotEmpty == true) {
-        AppLogger.log('🔗 Visit Now tapped for: ${video.link}');
-
+      final Uri? uri = Uri.tryParse(urlString);
+      if (uri != null) {
         // Use url_launcher to open the link
-        final Uri url = Uri.parse(video.link!);
-
-        // Check if the URL is valid
-        if (await canLaunchUrl(url)) {
-          await launchUrl(url, mode: LaunchMode.externalApplication);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
         } else {
           _showSnackBar('Could not open link', isError: true);
         }

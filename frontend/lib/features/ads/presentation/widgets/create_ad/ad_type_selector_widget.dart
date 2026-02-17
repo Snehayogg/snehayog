@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:vayu/shared/theme/app_theme.dart';
 
 /// **AdTypeSelectorWidget - Handles ad type selection**
 class AdTypeSelectorWidget extends StatelessWidget {
@@ -23,18 +24,18 @@ class AdTypeSelectorWidget extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Ad Type',
-              style: TextStyle(
-                fontSize: 18,
+              style: AppTheme.headlineSmall.copyWith(
                 fontWeight: FontWeight.bold,
+                color: AppTheme.white,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               _getAdTypeDescription(selectedAdType),
               style: TextStyle(
-                color: Colors.grey.shade600,
+                color: AppTheme.textSecondary,
                 fontSize: 12,
                 fontStyle: FontStyle.italic,
               ),
@@ -43,20 +44,20 @@ class AdTypeSelectorWidget extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.blue.shade50,
+                color: AppTheme.primary.withOpacity(0.05),
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.blue.shade200),
+                border: Border.all(color: AppTheme.primary.withOpacity(0.2)),
               ),
               child: Row(
                 children: [
                   Icon(Icons.info_outline,
-                      size: 16, color: Colors.blue.shade700),
+                      size: 16, color: AppTheme.primary),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       _getAdTypeInfo(selectedAdType),
                       style: TextStyle(
-                        color: Colors.blue.shade700,
+                        color: AppTheme.primary,
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
                       ),
@@ -95,14 +96,14 @@ class AdTypeSelectorWidget extends StatelessWidget {
                   ),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue.shade50,
-                  foregroundColor: Colors.blue.shade700,
+                  backgroundColor: AppTheme.primary.withOpacity(0.12),
+                  foregroundColor: AppTheme.white,
                   elevation: 0,
                   padding:
-                      const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: BorderSide(color: Colors.blue.shade200, width: 1),
+                    borderRadius: BorderRadius.circular(10),
+                    side: BorderSide(color: AppTheme.primary.withOpacity(0.3), width: 1),
                   ),
                 ),
               ),

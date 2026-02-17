@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:vayu/shared/theme/app_theme.dart';
 import 'package:vayu/features/ads/data/ad_model.dart';
 import 'package:snehayog_monetization/snehayog_monetization.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
@@ -30,11 +31,14 @@ class PaymentHandlerWidget {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.payment, color: Colors.blue, size: 24),
-            SizedBox(width: 8),
-            Text('Payment Required'),
+            const Icon(Icons.payment, color: AppTheme.primary, size: 24),
+            const SizedBox(width: 8),
+            Text(
+              'Payment Required',
+              style: AppTheme.headlineSmall.copyWith(fontSize: 18, color: AppTheme.white),
+            ),
           ],
         ),
         content: Column(
@@ -47,25 +51,25 @@ class PaymentHandlerWidget {
             const SizedBox(height: 16),
             const Text(
               'Your ad has been created in draft status. Please complete the payment to activate it.',
-              style: TextStyle(fontSize: 14),
+              style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
+                color: AppTheme.primary.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                border: Border.all(color: AppTheme.primary.withOpacity(0.3)),
               ),
               child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     '💰 Campaign Metrics:',
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                    style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.white),
                   ),
                   SizedBox(height: 8),
-                  Text('• Creator-first reward system'),
+                  Text('• Creator-first ecosystem'),
                   Text('• Real-time performance tracking'),
                   Text('• Professional ad management'),
                   Text('• Guaranteed impressions delivery'),
@@ -85,8 +89,8 @@ class PaymentHandlerWidget {
               _initiatePayment(context, ad, invoice, onPaymentSuccess);
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
+              backgroundColor: AppTheme.primary,
+              foregroundColor: AppTheme.white,
             ),
             child: const Text('Pay Now'),
           ),
@@ -167,13 +171,14 @@ class PaymentHandlerWidget {
       builder: (context) => AlertDialog(
         title: Row(
           children: [
-            Icon(Icons.star, color: Colors.amber.shade600, size: 24),
+            Icon(Icons.star, color: AppTheme.warning, size: 24),
             const SizedBox(width: 12),
-            const Text(
+            Text(
               'Why Advertise on Vayug?',
-              style: TextStyle(
+              style: AppTheme.headlineSmall.copyWith(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
+                color: AppTheme.white,
               ),
             ),
           ],
@@ -187,49 +192,49 @@ class PaymentHandlerWidget {
                 'Guaranteed Ad Impressions',
                 'Unlike other platforms where ad reach is uncertain, Vayug ensures advertisers get guaranteed impressions, providing clear ROI visibility.',
                 Icons.visibility,
-                Colors.blue.shade600,
+                AppTheme.primary,
               ),
               const SizedBox(height: 16),
               _buildBenefitItem(
                 'Creator-First Reward Model',
                 'Creators receive rewards based on engagement, leading to higher motivation and engagement. This results in more authentic content, ensuring advertisers\' ads are placed in highly engaging and trusted environments.',
                 Icons.people,
-                Colors.green.shade600,
+                AppTheme.success,
               ),
               const SizedBox(height: 16),
               _buildBenefitItem(
                 'High Engagement & Brand Recall',
                 'Since creators are directly incentivized, they actively promote and integrate brand ads, leading to better click-through and conversion rates.',
                 Icons.trending_up,
-                Colors.orange.shade600,
+                AppTheme.warning,
               ),
               const SizedBox(height: 16),
               _buildBenefitItem(
                 'Less Competition, More Attention',
                 'Unlike crowded platforms (YouTube, Instagram, etc.), Vayug offers advertisers a space with lower competition for user attention, increasing ad visibility and impact.',
                 Icons.psychology,
-                Colors.purple.shade600,
+                AppTheme.primaryDark,
               ),
               const SizedBox(height: 16),
               _buildBenefitItem(
                 'Safe & Relevant Ad Placements',
                 'Ads are displayed only on clean and safe content, ensuring brand safety and alignment with advertiser values.',
                 Icons.security,
-                Colors.teal.shade600,
+                AppTheme.primaryLight,
               ),
               const SizedBox(height: 16),
               _buildBenefitItem(
                 'Focused User Experience',
                 'With a clutter-free interface and fewer distractions, ads receive greater user focus compared to traditional platforms overloaded with content.',
                 Icons.center_focus_strong,
-                Colors.indigo.shade600,
+                AppTheme.info,
               ),
               const SizedBox(height: 16),
               _buildBenefitItem(
                 'Emerging Market Advantage',
                 'Early advertisers on Vayug benefit from first-mover advantage, capturing audience attention before the platform scales massively.',
                 Icons.rocket_launch,
-                Colors.red.shade600,
+                AppTheme.error,
               ),
             ],
           ),
@@ -280,9 +285,8 @@ class PaymentHandlerWidget {
                 const SizedBox(height: 4),
                 Text(
                   description,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade700,
+                  style: AppTheme.bodySmall.copyWith(
+                    color: AppTheme.textSecondary,
                     height: 1.4,
                   ),
                 ),
@@ -298,7 +302,7 @@ class PaymentHandlerWidget {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.green,
+        backgroundColor: AppTheme.success,
       ),
     );
   }
@@ -307,7 +311,7 @@ class PaymentHandlerWidget {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.red,
+        backgroundColor: AppTheme.error,
       ),
     );
   }

@@ -165,7 +165,7 @@ class _GamePlayerScreenState extends State<GamePlayerScreen> {
       _controller.runJavaScript('if(window.onVayuSaveComplete) window.onVayuSaveComplete(true);');
       
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Game Saved!'), duration: Duration(seconds: 1)),
+        const SnackBar(content: Text('Content Saved!'), duration: Duration(seconds: 1)),
       );
     } catch (e) {
       AppLogger.log('❌ Failed to save game data: $e');

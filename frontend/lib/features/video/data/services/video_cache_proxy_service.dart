@@ -109,13 +109,51 @@ class VideoCacheProxyService {
 
   Future<void> _serveLocalFile(File file, HttpRequest request) async {
     final response = request.response;
-    final length = await file.length();
-
-    response.headers.add(HttpHeaders.contentTypeHeader, 'video/mp4');
-    response.headers.add(HttpHeaders.contentLengthHeader, length);
+    final int totalLength = await file.length();
+    
+    // **RANGE SUPPORT: Enable instant seeking and partial content**
+    final String? rangeHeader = request.headers.value(HttpHeaders.rangeHeader);
+    
     response.headers.add('Access-Control-Allow-Origin', '*');
+    response.headers.add(HttpHeaders.acceptRangesHeader, 'bytes');
+    response.headers.add(HttpHeaders.contentTypeHeader, 'video/mp4');
 
-    await response.addStream(file.openRead());
+    if (rangeHeader != null && rangeHeader.startsWith('bytes=')) {
+      try {
+        final parts = rangeHeader.substring(6).split('-');
+        int start = int.parse(parts[0]);
+        int? end = parts.length > 1 && parts[1].isNotEmpty 
+            ? int.parse(parts[1]) 
+            : totalLength - 1;
+
+        // Validation
+        if (start >= totalLength) {
+          response.statusCode = HttpStatus.requestedRangeNotSatisfiable;
+          response.headers.add(HttpHeaders.contentRangeHeader, 'bytes */$totalLength');
+          await response.close();
+          return;
+        }
+
+        if (end >= totalLength) end = totalLength - 1;
+        
+        final int contentLength = end - start + 1;
+        
+        response.statusCode = HttpStatus.partialContent;
+        response.headers.add(HttpHeaders.contentRangeHeader, 'bytes $start-$end/$totalLength');
+        response.headers.add(HttpHeaders.contentLengthHeader, contentLength);
+
+        // AppLogger.log('📡 Proxy: Serving Range $start-$end / $totalLength');
+        await response.addStream(file.openRead(start, end + 1));
+      } catch (e) {
+        response.statusCode = HttpStatus.badRequest;
+      }
+    } else {
+      // Standard full file response
+      response.statusCode = HttpStatus.ok;
+      response.headers.add(HttpHeaders.contentLengthHeader, totalLength);
+      await response.addStream(file.openRead());
+    }
+    
     await response.close();
   }
 
