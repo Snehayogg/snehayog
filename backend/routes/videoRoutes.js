@@ -37,7 +37,7 @@ router.get('/:id', videoController.getVideoById);
  * Video Interaction Routes
  */
 router.post('/sync-watch-history', verifyToken, videoController.syncWatchHistory);
-router.post('/:id/watch', videoController.trackWatch);
+router.post('/:id/watch', passiveVerifyToken, videoController.trackWatch);
 router.post('/:id/like', verifyToken, videoController.toggleLike);
 router.delete('/:id/like', verifyToken, videoController.deleteLike);
 router.post('/:id/increment-view', videoController.incrementView);
