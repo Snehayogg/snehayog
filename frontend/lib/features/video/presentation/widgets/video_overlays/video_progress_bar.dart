@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import 'package:flutter/services.dart';
 
 class VideoProgressBar extends StatefulWidget {
   final VideoPlayerController controller;
@@ -16,6 +17,7 @@ class VideoProgressBar extends StatefulWidget {
 class _VideoProgressBarState extends State<VideoProgressBar> {
   bool _isDragging = false;
   double _dragValue = 0.0;
+  double _lastVibrateValue = 0.0; // **NEW: Track last haptic position**
 
   @override
   Widget build(BuildContext context) {
@@ -60,14 +62,29 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
               setState(() {
                 _isDragging = true;
                 _dragValue = value;
+                _lastVibrateValue = value;
               });
+              HapticFeedback.mediumImpact(); // **STRONGER: Initial touch feedback**
             },
             onChanged: (value) {
               setState(() {
                 _dragValue = value;
               });
+              
+              // **HAPTIC: Vibrate when reaching start or end**
+              if (value <= 0.01 || value >= 0.99) {
+                if ((value - _lastVibrateValue).abs() > 0.01) {
+                  HapticFeedback.vibrate(); // **STRONGER: Boundary feedback**
+                  _lastVibrateValue = value;
+                }
+              } else if ((value - _lastVibrateValue).abs() >= 0.02) {
+                // **NEW: Increased frequency (2% notches) and stronger feel (lightImpact)**
+                HapticFeedback.lightImpact();
+                _lastVibrateValue = value;
+              }
             },
             onChangeEnd: (value) async {
+              HapticFeedback.mediumImpact(); // **STRONGER: End of seek feedback**
               final newPosition = Duration(
                 milliseconds: (value * duration.inMilliseconds).round(),
               );

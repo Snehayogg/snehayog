@@ -15,7 +15,6 @@ class ProfileHeaderWidget extends StatelessWidget {
   final VoidCallback? onEarningsTap;
   final VoidCallback? onSaveProfile;
   final VoidCallback? onCancelEdit;
-  final GlobalKey? upiButtonKey;
 
   const ProfileHeaderWidget({
     super.key,
@@ -26,7 +25,6 @@ class ProfileHeaderWidget extends StatelessWidget {
     this.onEarningsTap,
     this.onSaveProfile,
     this.onCancelEdit,
-    this.upiButtonKey,
   });
 
   @override
@@ -193,7 +191,7 @@ class ProfileHeaderWidget extends StatelessWidget {
     if (isViewingOwnProfile) {
       return (stateManager.isEarningsLoading || stateManager.isVideosLoading)
           ? 'Loading...'
-          : '₹${stateManager.cachedEarnings.toStringAsFixed(2)}';
+          : stateManager.cachedEarnings.toStringAsFixed(2);
     } else {
       final rank = stateManager.userData?['rank'] ?? 0;
       return rank > 0 ? '#$rank' : '—';
@@ -236,63 +234,63 @@ class ProfileHeaderWidget extends StatelessWidget {
 
     return Row(
       children: [
-        Expanded(
-          child: stateManager.isEditing
-              ? Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: onCancelEdit,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.red,
-                          side: const BorderSide(color: Colors.red),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+        if (stateManager.isEditing || stateManager.totalVideoCount >= 2)
+          Expanded(
+            child: stateManager.isEditing
+                ? Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: onCancelEdit,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.red,
+                            side: const BorderSide(color: Colors.red),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
+                          child: Text(AppText.get('btn_cancel')),
                         ),
-                        child: Text(AppText.get('btn_cancel')),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: onSaveProfile,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.success,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: onSaveProfile,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.success,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
+                          child: Text(AppText.get('btn_save')),
                         ),
-                        child: Text(AppText.get('btn_save')),
                       ),
+                    ],
+                  )
+                : ElevatedButton.icon(
+                    onPressed: onAddUpiId,
+                    icon: const Icon(Icons.account_balance_wallet, size: 18),
+                    label: Text(
+                      AppText.get('btn_add_upi_id'),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
-                  ],
-                )
-              : ElevatedButton.icon(
-                  key: upiButtonKey,
-                  onPressed: onAddUpiId,
-                  icon: const Icon(Icons.account_balance_wallet, size: 18),
-                  label: Text(
-                    AppText.get('btn_add_upi_id'),
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
-                    foregroundColor: AppTheme.white,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary,
+                      foregroundColor: AppTheme.white,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      elevation: 0,
                     ),
-                    elevation: 0,
                   ),
-                ),
-        ),
+          ),
         if (!stateManager.isEditing) ...[
-          const SizedBox(width: 12),
+          if (stateManager.totalVideoCount >= 2) const SizedBox(width: 12),
           Expanded(
             child: OutlinedButton(
               onPressed: onReferFriends,

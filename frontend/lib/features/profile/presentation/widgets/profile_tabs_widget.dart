@@ -29,7 +29,7 @@ class ProfileTabsWidget extends StatelessWidget {
           ),
           Expanded(
             child: _buildTabItem(
-              label: 'Top Earner',
+              label: 'Top Creators',
               index: 1,
             ),
           ),

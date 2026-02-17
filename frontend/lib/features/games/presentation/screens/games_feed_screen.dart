@@ -4,6 +4,7 @@ import 'package:vayu/features/games/data/services/game_service.dart';
 import 'package:vayu/features/games/presentation/widgets/game_feed_item.dart';
 import 'package:provider/provider.dart';
 import 'package:vayu/features/video/presentation/managers/main_controller.dart';
+import 'package:vayu/shared/theme/app_theme.dart';
 
 class GamesFeedScreen extends StatefulWidget {
   const GamesFeedScreen({super.key});
@@ -47,7 +48,7 @@ class _GamesFeedScreenState extends State<GamesFeedScreen> with AutomaticKeepAli
       // Fetch next page
       final newGames = await GameService().getGames(page: _currentPage);
       
-      if (newGames.isEmpty) {
+      if (newGames.isEmpty && _games.isEmpty) {
         setState(() {
           _hasMore = false;
           _isLoading = false;
@@ -57,6 +58,7 @@ class _GamesFeedScreenState extends State<GamesFeedScreen> with AutomaticKeepAli
           _games.addAll(newGames);
           _currentPage++;
           _isLoading = false;
+          if (newGames.isEmpty) _hasMore = false;
         });
       }
     } catch (e) {
@@ -80,10 +82,31 @@ class _GamesFeedScreenState extends State<GamesFeedScreen> with AutomaticKeepAli
       body: _games.isEmpty && _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _games.isEmpty && !_isLoading
-              ? const Center(
-                  child: Text(
-                    'No games available',
-                    style: TextStyle(color: Colors.white),
+              ?  Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.auto_awesome, size: 64, color: AppTheme.primary.withValues(alpha:0.5)),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Arcade Game Coming Soon',
+                        style: AppTheme.headlineMedium.copyWith(
+                          color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 48),
+                        child: Text(
+                          'We are curating the best interactive experiences for you. Stay tuned!',
+                          textAlign: TextAlign.center,
+                          style: AppTheme.bodyMedium.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 )
               : PageView.builder(

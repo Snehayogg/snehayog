@@ -4,6 +4,7 @@ import 'package:vayu/features/profile/presentation/managers/profile_state_manage
 import 'package:vayu/shared/providers/user_provider.dart';
 import 'package:vayu/shared/services/profile_screen_logger.dart';
 import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/shared/utils/app_text.dart';
 
 
 
@@ -91,7 +92,7 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
                     Container(
                         width: 1, height: 40, color: AppTheme.borderPrimary),
                     _buildStatColumn(
-                      'Earnings',
+                      AppText.get('profile_stat_earnings'),
                       shouldShowLoading ? 'Loading...' : stateManager.cachedEarnings,
                       isEarnings: true,
                       isLoading: shouldShowLoading,
@@ -129,8 +130,8 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
                 child: Text(
                   isLoading
                       ? (loadingText ?? '...') // **Use custom text or default**
-                      : (isEarnings
-                          ? '₹${(value is double ? value : double.tryParse(value.toString()) ?? 0.0).toStringAsFixed(2)}'
+                      : (isEarnings // Using Rewards check
+                          ? (value is double ? value : double.tryParse(value.toString()) ?? 0.0).toStringAsFixed(2)
                           : value.toString()),
                   style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                     fontWeight: FontWeight.w700,

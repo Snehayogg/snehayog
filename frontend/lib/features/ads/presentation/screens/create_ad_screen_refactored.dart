@@ -20,6 +20,8 @@ import 'dart:io';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/shared/utils/app_text.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:vayu/shared/managers/activity_recovery_manager.dart';
+import 'package:vayu/shared/models/app_activity.dart';
 
 class CreateAdScreenRefactored extends StatefulWidget {
   const CreateAdScreenRefactored({super.key});
@@ -164,6 +166,8 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
   void _showFreshAdScreen() {
     // Clear all form fields and saved state
     _clearForm();
+    // Clear global activity
+    ActivityRecoveryManager().clearActivity();
     // Scroll to top for a clean start
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
@@ -225,13 +229,28 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
     try {
       AppLogger.log('💾 CreateAdScreen: Saving form state...');
 
-      // Save form data to SharedPreferences
+      // Save form data to SharedPreferences (Legacy)
       _saveFormData();
+      
+      // Save to ActivityRecoveryManager (New Global System)
+      _saveToActivityManager();
 
       AppLogger.log('✅ CreateAdScreen: Form state saved successfully');
     } catch (e) {
       AppLogger.log('❌ CreateAdScreen: Error saving form state: $e');
     }
+  }
+
+  Future<void> _saveToActivityManager() async {
+    final data = {
+      'title': _titleController.text,
+      'description': _descriptionController.text,
+      'link': _linkController.text,
+      'budget': _budgetController.text,
+      'adType': _selectedAdType,
+      // We can add more fields if needed, but these are the main ones
+    };
+    await ActivityRecoveryManager().saveActivity(ActivityType.adCreation, data);
   }
 
   /// **NEW: Restore form state when app is resumed**

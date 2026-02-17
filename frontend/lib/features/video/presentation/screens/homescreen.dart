@@ -19,6 +19,8 @@ import 'package:vayu/features/onboarding/presentation/managers/app_initializatio
 import 'package:vayu/features/games/presentation/screens/games_feed_screen.dart'; // Import GamesFeedScreen
 import 'package:in_app_update/in_app_update.dart';
 import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/shared/managers/activity_recovery_manager.dart';
+import 'package:vayu/shared/models/app_activity.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -248,6 +250,9 @@ class _MainScreenState extends State<MainScreen>
 
       // **LOCATION ONBOARDING: Check and show location permission request**
       _checkAndShowLocationOnboarding();
+
+      // **ACTIVITY RECOVERY: Check for recoverable activity (Upload, etc.)**
+      _checkActivityRecovery();
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -271,11 +276,32 @@ class _MainScreenState extends State<MainScreen>
     try {
       final mainController =
           Provider.of<MainController>(context, listen: false);
+      
+      // Check for high-priority activity recovery first
+      final activity = await ActivityRecoveryManager().getSavedActivity();
+      if (activity != null) {
+        if (activity.type == ActivityType.videoUpload) {
+          print('🚀 MainScreen: Recoverable upload activity found, switching to upload tab');
+          mainController.changeIndex(3);
+          return;
+        } else if (activity.type == ActivityType.adCreation) {
+          print('🚀 MainScreen: Recoverable ad creation activity found, switching to account tab');
+          mainController.changeIndex(4); // Account tab
+          return;
+        }
+      }
+
       final restoredIndex = await mainController.restoreLastTabIndex();
       print('✅ MainScreen: Restored to tab index $restoredIndex');
     } catch (e) {
       print('❌ MainScreen: Error restoring tab index: $e');
     }
+  }
+
+  /// **NEW: Check for activity recovery without changing tab (for other cases)**
+  Future<void> _checkActivityRecovery() async {
+    // This can handle other activity types that don't need a tab switch
+    // but might need global management.
   }
 
   /// Check if JWT token is valid and handle expired tokens
@@ -534,7 +560,7 @@ class _MainScreenState extends State<MainScreen>
                         index: 2,
                         currentIndex: mainController.currentIndex,
                         icon: Icons.sports_esports, // Game Controller Icon
-                        label: 'Games',
+                        label: 'Arcade',
                         onTap: () => _handleNavTap(2, mainController),
                         mainController: mainController,
                       ),

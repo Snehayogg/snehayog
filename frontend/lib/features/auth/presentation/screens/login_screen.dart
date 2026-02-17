@@ -75,7 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           Column(
                             children: [
                               const Text(
-                                'Create • Video • Earn',
+                                'Create • Video • Discover',
                                 style: TextStyle(
                                   fontSize: 16,
                                   color: Colors.grey,
@@ -106,7 +106,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                                     const SizedBox(width: 6),
                                     Text(
-                                      'No Monetization Criteria',
+                                      'Engagement Rewards',
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: Colors.green[800],

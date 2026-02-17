@@ -15,7 +15,10 @@ router.get('/developer', verifyToken, async (req, res) => {
     const developer = await User.findOne({ googleId: userId });
     if (!developer) return res.status(404).json({ error: 'Developer not found' });
 
-    const games = await Game.find({ developer: developer._id })
+    const games = await Game.find({ 
+      developer: developer._id,
+      title: { $not: /test|verification/i } // Exclude test content
+    })
       .sort({ createdAt: -1 })
       .lean();
 
@@ -36,7 +39,11 @@ router.get('/', passiveVerifyToken, async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
 
-    const games = await Game.find({ status: 'active' })
+    // Filter out test content at DB level
+    const games = await Game.find({ 
+      status: 'active',
+      title: { $not: /test|verification/i } // Case-insensitive exclusion
+    })
       .sort({ plays: -1, rating: -1 }) // Popular first
       .skip(skip)
       .limit(limit)

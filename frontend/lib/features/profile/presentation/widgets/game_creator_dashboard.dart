@@ -71,7 +71,7 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Creator Dashboard',
+                'Arcade Studio',
                 style: AppTheme.headlineMedium,
               ),
               IconButton(
@@ -103,7 +103,7 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
               const Icon(Icons.cloud_upload_outlined, color: AppTheme.primary),
               const SizedBox(width: AppTheme.spacing2),
               Text(
-                'Upload New Games via Web',
+                'Upload New Content via Web',
                 style: AppTheme.titleMedium.copyWith(color: AppTheme.primary, fontWeight: AppTheme.weightBold),
               ),
             ],
@@ -131,7 +131,7 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
                       Text('Deploy from Computer', style: AppTheme.headlineSmall),
                       const SizedBox(height: AppTheme.spacing4),
                       Text(
-                        '1. Visit snehayog.site/creator.html\n2. Log in with your developer token\n3. Upload your Game ZIP',
+                        '1. Visit snehayog.site/creator.html\n2. Log in with your developer token\n3. Upload your Content ZIP',
                         style: AppTheme.bodyMedium,
                       ),
                       const SizedBox(height: AppTheme.spacing6),
@@ -192,19 +192,19 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
                 border: Border.all(color: AppTheme.borderSecondary, width: 2),
               ),
               child: Icon(
-                Icons.videogame_asset_outlined,
+                Icons.videogame_asset,
                 size: 64,
                 color: AppTheme.textTertiary.withOpacity(0.5),
               ),
             ),
             const SizedBox(height: AppTheme.spacing6),
             Text(
-              'No games uploaded yet',
+              'Your Arcade Content',
               style: AppTheme.headlineSmall.copyWith(color: AppTheme.textPrimary),
             ),
             const SizedBox(height: AppTheme.spacing2),
             Text(
-              'Upload your first game to start reaching millions of users and earning rewards!',
+              'Begin your journey by uploading high-quality interactive fun arcade game.',
               textAlign: TextAlign.center,
               style: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
             ),
@@ -287,7 +287,7 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
                             ),
                           ),
                           const SizedBox(width: AppTheme.spacing4),
-                          Icon(Icons.play_arrow_outlined, size: 16, color: AppTheme.primary),
+                          const Icon(Icons.play_arrow_outlined, size: 16, color: AppTheme.primary),
                           const SizedBox(width: 4),
                           Text(
                             '${game.plays} plays',
@@ -295,7 +295,7 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
                           ),
                           if (game.totalTimeSpent > 0) ...[
                              const SizedBox(width: AppTheme.spacing4),
-                             Icon(Icons.timer_outlined, size: 14, color: AppTheme.warning),
+                            const Icon(Icons.timer_outlined, size: 14, color: AppTheme.warning),
                              const SizedBox(width: 4),
                              Text(
                                '${(game.totalTimeSpent / 60).toStringAsFixed(1)}m',
@@ -338,7 +338,7 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
     bool? confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Publish Game', style: AppTheme.headlineSmall),
+        title: Text('Publish Content', style: AppTheme.headlineSmall),
         content: Text(
           'Are you sure you want to publish "${game.title}"? It will become visible to all users.',
           style: AppTheme.bodyMedium,
@@ -346,7 +346,7 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+            child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
@@ -359,10 +359,10 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
 
     if (confirm == true) {
       final success = await gameManager.publishGame(game.id);
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(success ? 'Game published successfully!' : 'Failed to publish game'),
+            content: Text(success ? 'Content published successfully!' : 'Failed to publish content'),
             backgroundColor: success ? AppTheme.success : AppTheme.error,
           ),
         );

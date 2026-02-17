@@ -18,7 +18,7 @@ class AppText {
   static const Map<String, String> _defaultTexts = {
     // Common texts
     'app_name': 'Vayu',
-    'app_tagline': 'Create • Video • Earn',
+    'app_tagline': 'Create • Video • Share',
 
     // Navigation
     'nav_yug': 'Yug',
@@ -54,7 +54,7 @@ class AppText {
     'btn_close': 'Close',
     'btn_confirm': 'Confirm',
     'btn_withdraw_funds': 'Withdraw Funds',
-    'btn_add_upi_id': 'Add UPI ID',
+    'btn_add_upi_id': 'Setup Billing',
     'btn_refer_friends': 'Refer Friends',
     'btn_sign_in_google': 'Sign In with Google',
 
@@ -107,13 +107,13 @@ class AppText {
         'If you upload content belonging to someone else without permission, you (the uploader) will be fully responsible for any legal consequences. Vayug acts only as a platform and does not own or endorse user-uploaded content.',
     'upload_terms_reporting': '3. Reporting Copyright Violation',
     'upload_terms_reporting_desc':
-        'Copyright owners may submit a takedown request by emailing: copyright@snehayog.site with proof of ownership. Upon receiving a valid request, Vayug will remove the infringing content within 48 hours.',
-    'upload_terms_payment': '4. Payment & Revenue Sharing',
+        'Copyright owners may submit a takedown request by emailing: factshort1@gmail.com with proof of ownership. Upon receiving a valid request, Vayug will remove the infringing content within 48 hours.',
+    'upload_terms_payment': '4. Creator Guidelines',
     'upload_terms_payment_desc':
         'All creator payments are subject to a 30-day hold for copyright checks and disputes. If a video is found infringing during this period, the payout will be cancelled and may be withheld.',
     'upload_terms_strike': '5. Strike Policy',
     'upload_terms_strike_desc':
-        '1st Strike → Warning & content removal.  2nd Strike → Payment account on hold for 60 days.  3rd Strike → Permanent ban, with forfeiture of unpaid earnings.',
+        '1st Strike → Warning & content removal.  2nd Strike → Account on hold for 60 days.  3rd Strike → Permanent ban, with forfeiture of unpaid rewards.',
     'upload_terms_liability': '6. Limitation of Liability',
     'upload_terms_liability_desc':
         'Vayug, as an intermediary platform, is not liable for user-uploaded content under the IT Act 2000 (India) and DMCA (international). All responsibility for copyright compliance lies with the content uploader.',
@@ -222,12 +222,12 @@ class AppText {
 
     // Profile
     'profile_my_videos': 'My Videos',
-    'profile_earnings': 'Earnings',
+    'profile_earnings': 'Rewards',
     'profile_settings': 'Settings',
     'profile_title': 'Account',
     'profile_sign_in_title': 'Sign in to view your profile',
     'profile_sign_in_desc':
-        'You need to sign in with your Google account to access your profile, upload videos, and track your earnings.',
+        'You need to sign in with your Google account to access your profile and upload videos.',
     'profile_sign_in_button': 'Sign in with Google',
     'profile_updated_success': 'Profile updated successfully!',
     'profile_photo_uploading': 'Uploading profile photo...',
@@ -240,17 +240,16 @@ class AppText {
         'You are about to delete {count} video(s). This action cannot be undone.',
     'profile_videos_deleted': '{count} videos deleted successfully!',
     'profile_refer_friends': 'Refer 2 friends and get full access',
-    'profile_top_earners': 'Top Earners (Following)',
-    'profile_upi_notice': 'Earning ke liye apna UPI ID add karein',
-    'profile_video_earnings': 'Video Earnings',
+    'profile_top_earners': 'Top Creators (Following)',
+    'profile_upi_notice': 'Score ke liye apna billing setup karein',
+    'profile_video_earnings': 'Video Rewards',
     'profile_no_videos': 'No videos found',
     'profile_stat_subscribers': 'Subscribers',
     'profile_stat_content': 'Content',
-    'profile_stat_earnings': 'Earnings',
+    'profile_stat_earnings': 'Rewards',
     'profile_stat_rank': 'Ranking',
     'profile_sign_in_success': 'Signed in successfully!',
-    'profile_logout_success':
-        'Logged out successfully. Your payment details are saved.',
+    'profile_logout_success': 'Logged out successfully',
 
     // Settings
     'settings_title': 'Settings',
@@ -304,10 +303,10 @@ class AppText {
     'update_recommended': 'A new version is available with exciting features!',
 
     // Revenue screen
-    'revenue_title': 'Creator Revenue',
+    'revenue_title': 'Creator Activity',
     'revenue_sign_in_to_view': 'Please sign in to view your revenue',
-    'revenue_creator_earnings': 'Creator Earnings',
-    'revenue_gross_revenue': 'Gross Revenue',
+    'revenue_creator_earnings': 'Creator Rewards',
+    'revenue_gross_revenue': 'Total Engagement Score',
     'revenue_platform_fee': 'Platform Fee ({percent}%)',
     'revenue_this_month': 'This Month',
     'revenue_last_month': 'Last Month',
@@ -316,24 +315,24 @@ class AppText {
     'revenue_all_time_views': 'All-time Views',
     'revenue_cycle_period': 'Cycle Period',
     'revenue_next_reset': 'Next Reset',
-    'revenue_previous_month': 'Previous Month Earnings',
-    'revenue_no_earnings': 'No earnings in {month}',
-    'revenue_start_creating': 'Start creating content to earn!',
-    'revenue_total_earnings': 'Total Earnings',
-    'revenue_analytics': 'Revenue Analytics',
+    'revenue_previous_month': 'Previous Month Rewards',
+    'revenue_no_earnings': 'No rewards in {month}',
+    'revenue_start_creating': 'Start creating content to grow!',
+    'revenue_total_earnings': 'Total Rewards',
+    'revenue_analytics': 'Growth Analytics',
     'revenue_analytics_this_month': 'This Month',
-    'revenue_breakdown': 'Revenue Breakdown',
-    'revenue_payment_history': 'Payment History',
-    'revenue_no_payments': 'No payments yet',
-    'revenue_withdraw_earnings': 'Withdraw Earnings',
-    'revenue_available_balance': 'Available Balance: ₹{amount}',
-    'revenue_min_withdrawal': 'Minimum withdrawal: ₹{amount}',
+    'revenue_breakdown': 'Performance Breakdown',
+    'revenue_payment_history': 'Reward History',
+    'revenue_no_payments': 'No rewards yet',
+    'revenue_withdraw_earnings': 'Redeem Rewards',
+    'revenue_available_balance': 'Available Score: {amount}',
+    'revenue_min_withdrawal': 'Minimum redeemable: {amount}',
     'revenue_withdraw_dialog_title': 'Withdraw Funds',
     'revenue_withdraw_dialog_content':
         'This will initiate a withdrawal to your registered bank account. Processing time: 3-5 business days.',
-    'revenue_video_breakdown': 'Video Revenue Breakdown',
+    'revenue_video_breakdown': 'Video Performance Breakdown',
     'revenue_no_videos': 'No videos available',
-    'revenue_upload_to_earn': 'Upload videos to start earning',
+    'revenue_upload_to_earn': 'Upload videos to start growing',
     'revenue_and_more': '... and {count} more videos',
     'revenue_detailed_analytics': 'Detailed Video Analytics',
     'revenue_impressions': '{count} impressions',

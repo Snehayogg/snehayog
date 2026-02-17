@@ -45,7 +45,7 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
           _heading = config.getText(
             'welcome_onboarding_heading',
             fallback:
-                'Monetize Your Gaming Content',
+                'Showcase Your Video Content',
           );
           _buttonText = config.getText(
             'welcome_onboarding_button',
@@ -56,7 +56,7 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
       } else {
         // Fallback to hardcoded values if config not available
         setState(() {
-          _heading = 'Monetize Your Gaming Content';
+          _heading = 'Showcase Your Video Content';
           _buttonText = 'Get Started';
           _isLoading = false;
         });
@@ -64,7 +64,7 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
     } catch (e) {
       // Fallback to hardcoded values on error
       setState(() {
-        _heading = 'Monetize Your Gaming Content';
+        _heading = 'Showcase Your Video Content';
         _buttonText = 'Get Started';
         _isLoading = false;
       });

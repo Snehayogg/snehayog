@@ -3,9 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
 import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
 import 'package:vayu/shared/services/auto_scroll_settings.dart';
-import 'package:vayu/features/profile/presentation/screens/creator_payment_setup_screen.dart';
 import 'package:vayu/features/profile/presentation/screens/creator_revenue_screen.dart';
-import 'package:vayu/features/profile/presentation/screens/creator_payout_dashboard.dart';
 import 'package:vayu/shared/widgets/feedback/feedback_dialog_widget.dart';
 import 'package:vayu/shared/widgets/report_dialog_widget.dart';
 import 'package:vayu/features/profile/presentation/widgets/top_earners_bottom_sheet.dart';
@@ -121,84 +119,21 @@ class ProfileDialogsWidget {
                           // Already on profile screen, just scroll to videos
                         },
                       ),
-                      _buildSettingsTile(
-                        context: context,
-                        icon: Icons.dashboard,
-                        title: 'Creator Dashboard',
-                        subtitle: 'View earnings and analytics',
-                        onTap: () async {
-                          Navigator.pop(context);
-                          // Add a small delay to ensure modal closes completely
-                          await Future.delayed(
-                            const Duration(milliseconds: 300),
-                          );
-                          if (context.mounted) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const CreatorPayoutDashboard(),
-                              ),
-                            );
-                          }
-                        },
-                      ),
-                      _buildSettingsTile(
-                        context: context,
-                        icon: Icons.payment,
-                        title: 'Payment Setup',
-                        subtitle: 'Configure payment details for earnings',
-                        onTap: () async {
-                          Navigator.pop(context);
-                          final hasSetup = await checkPaymentSetupStatus();
-                          if (hasSetup) {
-                            // Show current payment details or allow editing
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  '✅ Payment setup already completed',
-                                ),
-                                backgroundColor: AppTheme.success,
-                              ),
-                            );
-                          } else {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const CreatorPaymentSetupScreen(),
-                              ),
-                            );
-                          }
-                        },
-                      ),
                       if (isViewingOwnProfile)
                         _buildSettingsTile(
                           context: context,
                           icon: Icons.analytics,
                           title: 'Revenue Analytics',
-                          subtitle: 'Track your earnings',
+                          subtitle: 'Track your performance',
                           onTap: () async {
                             Navigator.pop(context);
-                            final hasPaymentSetup =
-                                await checkPaymentSetupStatus();
-                            if (hasPaymentSetup) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      const CreatorRevenueScreen(),
-                                ),
-                              );
-                            } else {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      const CreatorPaymentSetupScreen(),
-                                ),
-                              );
-                            }
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const CreatorRevenueScreen(),
+                                  ),
+                                );
                           },
                         ),
                       _buildSettingsTile(
@@ -323,7 +258,7 @@ class ProfileDialogsWidget {
               style: AppTheme.bodySmall,
             ),
             Text(
-              '• Payment Setup: Complete payment setup for earnings',
+              '• Billing Setup: Complete billing setup for rewards',
               style: AppTheme.bodySmall,
             ),
             Text(
@@ -447,23 +382,23 @@ class ProfileDialogsWidget {
                         question:
                             "Why should I use Vayug instead of Instagram?",
                         answer:
-                            "Because on Vayug, you can start earning from day one, not after months of growth. And unlike Instagram, you'll see relevant, meaningful content, not adult or sexual material. It's a platform built to reward real creators and protect genuine viewers.",
+                            "Because on Vayug, you can start growing your profile from day one, with meaningful content. And unlike Instagram, you'll see relevant, meaningful content, not adult or sexual material. It's a platform built to reward real creators and protect genuine viewers.",
                         icon: Icons.compare_arrows,
                         color: Colors.green,
                       ),
                       _buildFAQItem(
                         question:
-                            "YouTube already lets creators earn money. Why switch to Vayug?",
+                            "YouTube already has monetization. Why switch to Vayug?",
                         answer:
-                            "YouTube has strict monetization rules — you need 1,000 subscribers and 4,000 watch hours. On Vayug, there's no barrier — creators start earning from the first upload. It's a platform that values your effort, not your follower count.",
+                            "YouTube has strict entry rules. On Vayug, there's no barrier — creators start building their engagement from the first upload. It's a platform that values your effort, not just your follower count.",
                         icon: Icons.video_library,
                         color: Colors.red,
                       ),
                       _buildFAQItem(
                         question:
-                            "Does Vayug really give 80% ad revenue? Sounds too good to be true.",
+                            "Does Vayug have a creator support model?",
                         answer:
-                            "Yes — creators get 80% of ad revenue directly. The system automatically credits it to your bank account based on your views and engagement. Our goal is to make creators financially independent, not exploit their content.",
+                            "Yes — we use a creator-first model where rewards are distributed based on engagement. The system automatically updates your score based on your views and interaction. Our goal is to make creators independent and valued.",
                         icon: Icons.account_balance_wallet,
                         color: Colors.orange,
                       ),
@@ -589,92 +524,110 @@ class ProfileDialogsWidget {
   static void showLegalBottomSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true, // Allow full height if needed
       backgroundColor: AppTheme.backgroundPrimary,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: SingleChildScrollView(
+              controller: scrollController,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primary.withValues(alpha:0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.gavel,
-                      color: AppTheme.primary,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Legal & About',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.textPrimary,
-                          ),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
                         ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Policies and contact information',
-                          style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
+                        child: const Icon(
+                          Icons.gavel,
+                          color: AppTheme.primary,
+                          size: 24,
                         ),
-                      ],
+                      ),
+                      const SizedBox(width: 16),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Legal & About',
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Policies and contact information',
+                              style: TextStyle(
+                                  fontSize: 14, color: AppTheme.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: AppTheme.textSecondary),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  _buildLegalItem(
+                    context: context,
+                    title: 'Privacy Policy',
+                    icon: Icons.privacy_tip_outlined,
+                    onTap: () => _launchURL('https://snehayog.site/privacy.html'),
+                  ),
+                  _buildLegalItem(
+                    context: context,
+                    title: 'Terms & Conditions',
+                    icon: Icons.description_outlined,
+                    onTap: () => _launchURL('https://snehayog.site/terms.html'),
+                  ),
+                  _buildLegalItem(
+                    context: context,
+                    title: 'Refund & Cancellation',
+                    icon: Icons.assignment_return_outlined,
+                    onTap: () => _launchURL('https://snehayog.site/refund.html'),
+                  ),
+                  _buildLegalItem(
+                    context: context,
+                    title: 'Contact Us',
+                    icon: Icons.contact_support_outlined,
+                    onTap: () => _launchURL('https://snehayog.site/contact.html'),
+                  ),
+                  _buildLegalItem(
+                    context: context,
+                    title: 'About Us',
+                    icon: Icons.info_outline_rounded,
+                    onTap: () => _launchURL('https://snehayog.site/about.html'),
+                  ),
+                  const SizedBox(height: 12),
+                  Center(
+                    child: Text(
+                      'Version 1.0.0',
+                      style: AppTheme.bodySmall
+                          .copyWith(color: AppTheme.textTertiary),
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: AppTheme.textSecondary),
-                    onPressed: () => Navigator.pop(context),
-                  ),
+                  const SizedBox(height: 8),
                 ],
               ),
-              const SizedBox(height: 24),
-              _buildLegalItem(
-                context: context,
-                title: 'Privacy Policy',
-                icon: Icons.privacy_tip_outlined,
-                onTap: () => _launchURL('https://snehayog.site/privacy.html'),
-              ),
-              _buildLegalItem(
-                context: context,
-                title: 'Terms & Conditions',
-                icon: Icons.description_outlined,
-                onTap: () => _launchURL('https://snehayog.site/terms.html'),
-              ),
-              _buildLegalItem(
-                context: context,
-                title: 'Refund & Cancellation',
-                icon: Icons.assignment_return_outlined,
-                onTap: () => _launchURL('https://snehayog.site/refund.html'),
-              ),
-              _buildLegalItem(
-                context: context,
-                title: 'Contact Us',
-                icon: Icons.contact_support_outlined,
-                onTap: () => _launchURL('https://snehayog.site/contact.html'),
-              ),
-              const SizedBox(height: 12),
-              Center(
-                child: Text(
-                  'Version 1.0.0',
-                  style: AppTheme.bodySmall.copyWith(color: AppTheme.textTertiary),
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
+            ),
           ),
         ),
       ),
@@ -775,7 +728,7 @@ class ProfileDialogsWidget {
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              'How to earn on Vayu',
+                              'Creator Rewards Info',
                               style: AppTheme.titleLarge.copyWith(
                                 fontWeight: FontWeight.w700,
                               ),
@@ -789,14 +742,14 @@ class ProfileDialogsWidget {
                       ),
                       const SizedBox(height: 12),
                       _buildHowToEarnPoint(
-                        title: 'Payout schedule',
+                        title: 'Reward distribution',
                         body:
-                            'Balances are credited on the 1st of every month to your preferred payment method after verification.',
+                            'Rewards are validated and updated on the 1st of every month in your profile after verification.',
                       ),
                       _buildHowToEarnPoint(
-                        title: 'Follow content guidelines',
+                        title: 'Secure Identity Verification',
                         body:
-                            'Avoid copyrighted or restricted content. Repeated violations may impact earnings and account status.',
+                            'To maintain a fair and secure platform, we use a Billing Alias (UPI ID) for identity verification. This prevents duplicate accounts and ensures that rewards are distributed correctly to verified, unique creators.',
                       ),
                       if (!showUpiField && currentUpi.isNotEmpty) ...[
                         const SizedBox(height: 16),
@@ -811,13 +764,13 @@ class ProfileDialogsWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
-                                'Saved UPI ID',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  color: AppTheme.textPrimary,
+                               const Text(
+                                  'Saved UPI ID',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.textPrimary,
+                                  ),
                                 ),
-                              ),
                               const SizedBox(height: 6),
                               Text(
                                 currentUpi,
@@ -911,7 +864,7 @@ class ProfileDialogsWidget {
                                           .showSnackBar(
                                         const SnackBar(
                                           content: Text(
-                                            'UPI ID saved successfully. Payouts will be credited on the 1st of every month.',
+                                            'Billing info updated successfully. Scores will be updated on the 1st of every month.',
                                           ),
                                           duration: Duration(seconds: 3),
                                         ),
@@ -921,7 +874,7 @@ class ProfileDialogsWidget {
                                       isSaving = false;
                                       showUpiField = false;
                                       validationMessage =
-                                          'UPI ID saved successfully! Your payouts will credit on the 1st.';
+                                          'Information saved successfully! Your rewards will update on the 1st.';
                                     });
                                   } catch (e) {
                                     setState(() {

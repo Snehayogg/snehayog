@@ -42,7 +42,7 @@ void main() async {
     ),
   );
 
-  debugRepaintRainbowEnabled = true;
+  debugRepaintRainbowEnabled = false;
   
   // **NEW: Initialize Ad Impression Service for offline syncing**
   AdImpressionService().initialize();

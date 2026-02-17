@@ -465,11 +465,6 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
           // **NEW: Monthly Views Card**
           _buildMonthlyViewsCard(),
 
-          const SizedBox(height: 16),
-
-          // **NEW: Previous Month Earnings Section**
-          _buildPreviousMonthEarningsCard(),
-
           const SizedBox(height: 24),
 
           // **NEW: Revenue Analytics Card**
@@ -486,23 +481,13 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   Widget _buildRevenueOverviewCard() {
-    // **FIXED: Use backend API value directly - no fallback**
     final thisMonth = (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
     final lastMonth = (_revenueData?['lastMonth'] as num?)?.toDouble() ?? 0.0;
-
-    // **FIXED: Calculate gross from current month earnings**
     final creatorRevenue = thisMonth;
-    
-    // Calculate gross based on creator share formula (Gross = Creator / 0.8)
     final grossRevenue = thisMonth > 0
         ? thisMonth / AppConfig.creatorRevenueShare
         : 0.0;
-        
-    final calculatedPlatformFee =
-        (grossRevenue - creatorRevenue).clamp(0.0, double.infinity);
-        
-    final platformSharePercent =
-        (AppConfig.platformRevenueShare * 100).toStringAsFixed(0);
+
 
     return Card(
       elevation: 0,
@@ -519,14 +504,14 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
               AppText.get('revenue_creator_earnings'),
               style: const TextStyle(
                 fontSize: 16,
-                color: Colors.grey,
+                color: AppTheme.textSecondary,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              '₹${creatorRevenue.toStringAsFixed(2)}',
+              creatorRevenue.toStringAsFixed(2),
               style: AppTheme.displaySmall.copyWith(
-                color: Colors.green, // Keep green for positive revenue
+                color: AppTheme.success, // Use success color for positive rewards
               ),
             ),
             const SizedBox(height: 20),
@@ -535,40 +520,17 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                 Expanded(
                   child: _buildRevenueStat(
                     AppText.get('revenue_gross_revenue'),
-                    '₹${grossRevenue.toStringAsFixed(2)}',
+                    grossRevenue.toStringAsFixed(2),
                     Icons.receipt_long,
-                    Colors.grey[700]!,
-                  ),
-                ),
-                Expanded(
-                  child: _buildRevenueStat(
-                    AppText.get('revenue_platform_fee',
-                            fallback: 'Platform Fee ({percent}%)')
-                        .replaceAll('{percent}', platformSharePercent),
-                    '₹${calculatedPlatformFee.toStringAsFixed(2)}',
-                    Icons.account_balance,
-                    Colors.red,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildRevenueStat(
-                    AppText.get('revenue_this_month'),
-                    '₹${thisMonth.toStringAsFixed(2)}',
-                    Icons.trending_up,
-                    Colors.grey[700]!, // Changed from Colors.blue
+                    AppTheme.textPrimary,
                   ),
                 ),
                 Expanded(
                   child: _buildRevenueStat(
                     AppText.get('revenue_last_month'),
-                    '₹${lastMonth.toStringAsFixed(2)}',
-                    Icons.calendar_today,
-                    Colors.orange,
+                    lastMonth.toStringAsFixed(2),
+                    Icons.history,
+                    AppTheme.textPrimary,
                   ),
                 ),
               ],
@@ -630,7 +592,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                 ),
                 Icon(
                   Icons.visibility,
-                  color: Colors.grey[700],
+                  color: AppTheme.textSecondary,
                 ),
               ],
             ),
@@ -642,14 +604,14 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                 AppText.get('revenue_current_cycle_views'),
                 style: TextStyle(
                   fontSize: 14,
-                  color: Colors.grey[600],
+                  color: AppTheme.textSecondary,
                 ),
               ),
               const SizedBox(height: 4),
               Text(
                 _currentMonthViews.toString(),
                 style: AppTheme.displaySmall.copyWith(
-                  color: Colors.green,
+                  color: AppTheme.success,
                 ),
               ),
               const SizedBox(height: 20),
@@ -724,257 +686,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     return '${date.day} $monthName ${date.year}';
   }
 
-  /// **NEW: Previous Month Earnings Card - Detailed breakdown**
-  Widget _buildPreviousMonthEarningsCard() {
-    final lastMonth = (_revenueData?['lastMonth'] as num?)?.toDouble() ?? 0.0;
-    final now = DateTime.now();
-    final lastMonthDate = DateTime(
-      now.month == 1 ? now.year - 1 : now.year,
-      now.month == 1 ? 12 : now.month - 1,
-      1,
-    );
-    final lastMonthName = _getMonthName(lastMonthDate.month);
-    final lastMonthYear = lastMonthDate.year;
 
-    // Calculate gross and platform fee for last month
-    final lastMonthGross =
-        lastMonth > 0 ? lastMonth / AppConfig.creatorRevenueShare : 0.0;
-    final lastMonthPlatformFee =
-        (lastMonthGross - lastMonth).clamp(0.0, double.infinity);
-
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
-        side: const BorderSide(color: AppTheme.borderPrimary, width: 1),
-      ),
-      color: AppTheme.backgroundPrimary,
-      child: Padding(
-        padding: const EdgeInsets.all(AppTheme.spacing5),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.history,
-                        color: Colors.orange,
-                        size: 24,
-                      ),
-                      const SizedBox(width: AppTheme.spacing1),
-                      Flexible(
-                        child: Text(
-                          AppText.get('revenue_previous_month'),
-                          style: AppTheme.headlineSmall.copyWith(
-                            color: Colors.orange,
-                            fontWeight: AppTheme.weightBold,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: AppTheme.spacing1),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: AppTheme.spacing2, vertical: AppTheme.spacing1),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
-                  ),
-                  child: Text(
-                    '$lastMonthName $lastMonthYear',
-                    style: AppTheme.labelSmall.copyWith(
-                      fontWeight: AppTheme.weightBold,
-                      color: Colors.orange,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            if (lastMonth == 0.0)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.inbox_outlined,
-                        size: 48,
-                        color: Colors.grey[400],
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        AppText.get('revenue_no_earnings',
-                                fallback: 'No earnings in {month}')
-                            .replaceAll('{month}', lastMonthName),
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey[600],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        AppText.get('revenue_start_creating'),
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[500],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else ...[
-              // Main earnings display
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Colors.orange.withOpacity(0.2),
-                    width: 1,
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    Text(
-                      AppText.get('revenue_total_earnings'),
-                      style: AppTheme.bodySmall.copyWith(
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: AppTheme.spacing1),
-                    Text(
-                      '₹${lastMonth.toStringAsFixed(2)}',
-                      style: AppTheme.displaySmall.copyWith(
-                        color: Colors.orange,
-                        fontWeight: AppTheme.weightBold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: AppTheme.spacing5),
-              // Breakdown
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildPreviousMonthStat(
-                      AppText.get('revenue_gross_revenue'),
-                      '₹${lastMonthGross.toStringAsFixed(2)}',
-                      Icons.receipt_long,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildPreviousMonthStat(
-                      AppText.get('revenue_platform_fee',
-                              fallback: 'Platform Fee')
-                          .replaceAll('({percent}%)', ''),
-                      '₹${lastMonthPlatformFee.toStringAsFixed(2)}',
-                      Icons.account_balance,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              // Comparison with current month
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      AppText.get('revenue_this_month'),
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[700],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    Text(
-                      '₹${((_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green[700],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPreviousMonthStat(String label, String value, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[200]!),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: Colors.grey[600], size: 20),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[800],
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _getMonthName(int month) {
-    const monthNames = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December'
-    ];
-    return monthNames[month - 1];
-  }
 
   Widget _buildRevenueAnalyticsCard() {
     // **FIXED: Use backend API value directly - no fallback**
@@ -983,8 +695,6 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     
     final thisMonthGross =
         thisMonth > 0 ? thisMonth / AppConfig.creatorRevenueShare : 0.0;
-    final thisMonthPlatformFee =
-        (thisMonthGross - thisMonth).clamp(0.0, double.infinity);
 
     // Get video count and analytics (for display purposes)
     final analytics = _getRevenueAnalytics();
@@ -1035,20 +745,16 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
             ),
             const SizedBox(height: AppTheme.spacing4),
             _buildAnalyticsRow(AppText.get('revenue_creator_earnings'),
-                '₹${thisMonth.toStringAsFixed(2)}'),
+                thisMonth.toStringAsFixed(2)),
             _buildAnalyticsRow(AppText.get('revenue_gross_revenue'),
-                '₹${thisMonthGross.toStringAsFixed(2)}'),
-            _buildAnalyticsRow(
-                AppText.get('revenue_platform_fee', fallback: 'Platform Fee')
-                    .replaceAll('({percent}%)', ''),
-                '₹${thisMonthPlatformFee.toStringAsFixed(2)}'),
+                thisMonthGross.toStringAsFixed(2)),
             _buildAnalyticsRow(
                 AppText.get('revenue_total_videos', fallback: 'Total Videos'),
                 totalVideos.toString()),
             _buildAnalyticsRow(
                 AppText.get('revenue_avg_per_video',
                     fallback: 'Average Revenue per Video'),
-                '₹${averageRevenue.toStringAsFixed(2)}'),
+                averageRevenue.toStringAsFixed(2)),
             _buildAnalyticsRow(
                 AppText.get('revenue_top_performing',
                     fallback: 'Top Performing Video'),
@@ -1056,13 +762,12 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
             _buildAnalyticsRow(
                 AppText.get('revenue_top_performing_revenue',
                     fallback: 'Top Performing Revenue'),
-                '₹${topPerformingRevenue.toStringAsFixed(2)}'),
+                topPerformingRevenue.toStringAsFixed(2)),
           ],
         ),
       ),
     );
   }
-// Removed redundant _buildAnalyticsRow here as it's defined above
 
   Widget _buildRevenueBreakdownCard() {
     // **FIXED: Use backend API value directly - no fallback**
@@ -1072,11 +777,8 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     final creatorRevenue = thisMonth;
     final grossRevenue =
         thisMonth > 0 ? thisMonth / AppConfig.creatorRevenueShare : 0.0;
-    final platformFee =
-        (grossRevenue - creatorRevenue).clamp(0.0, double.infinity);
     final hasRevenue = grossRevenue > 0.0;
-    final platformSharePercent =
-        (AppConfig.platformRevenueShare * 100).toStringAsFixed(0);
+
     final creatorSharePercent =
         (AppConfig.creatorRevenueShare * 100).toStringAsFixed(0);
     final totalFlexUnits = hasRevenue ? 100 : 1;
@@ -1138,19 +840,13 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
             const SizedBox(height: 16),
 
             _buildBreakdownRow(AppText.get('revenue_gross_revenue'),
-                '₹${grossRevenue.toStringAsFixed(2)}', Colors.green),
-            _buildBreakdownRow(
-                AppText.get('revenue_platform_fee',
-                        fallback: 'Platform Fee ({percent}%)')
-                    .replaceAll('{percent}', platformSharePercent),
-                '₹${platformFee.toStringAsFixed(2)}',
-                Colors.red),
+                grossRevenue.toStringAsFixed(2), Colors.green),
             const Divider(),
             _buildBreakdownRow(
                 AppText.get('revenue_creator_earnings',
                         fallback: 'Creator Earnings ({percent}%)')
                     .replaceAll('{percent}', creatorSharePercent),
-                '₹${creatorRevenue.toStringAsFixed(2)}',
+                creatorRevenue.toStringAsFixed(2),
                 Colors.grey[700]!, // Changed from Colors.blue
                 isTotal: true),
           ],

@@ -21,6 +21,8 @@ import 'package:vayu/shared/config/app_config.dart';
 import 'package:video_player/video_player.dart';
 import 'package:vayu/shared/utils/app_text.dart';
 import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/shared/managers/activity_recovery_manager.dart';
+import 'package:vayu/shared/models/app_activity.dart';
 
 
 
@@ -66,6 +68,9 @@ class _UploadScreenState extends State<UploadScreen> {
     _uploadCancelToken?.cancel('User cancelled upload');
     _isUploading.value = false;
     _stopUnifiedProgress();
+    
+    // Clear activity from disk
+    ActivityRecoveryManager().clearActivity();
     
     // Clear selection so user starts fresh
     _deselectVideo();
@@ -549,6 +554,77 @@ class _UploadScreenState extends State<UploadScreen> {
   void initState() {
     _selectedCategory.value = _defaultCategory;
     super.initState();
+
+    // Listeners for activity recovery
+    _titleController.addListener(_onFieldChanged);
+    _linkController.addListener(_onFieldChanged);
+    _selectedVideo.addListener(_onFieldChanged);
+    _selectedCategory.addListener(_onFieldChanged);
+    _tags.addListener(_onFieldChanged);
+
+    // Check for saved activity
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkSavedActivity();
+    });
+  }
+
+  void _onFieldChanged() {
+    // Only save if not currently uploading
+    if (!_isUploading.value && !_isProcessing.value) {
+      _saveCurrentActivity();
+    }
+  }
+
+  Future<void> _saveCurrentActivity() async {
+    if (_selectedVideo.value == null &&
+        _titleController.text.isEmpty &&
+        _linkController.text.isEmpty) {
+      // Don't save empty states
+      return;
+    }
+
+    final data = {
+      'videoPath': _selectedVideo.value?.path,
+      'title': _titleController.text,
+      'link': _linkController.text,
+      'category': _selectedCategory.value,
+      'tags': _tags.value,
+    };
+
+    await ActivityRecoveryManager().saveActivity(ActivityType.videoUpload, data);
+  }
+
+  Future<void> _checkSavedActivity() async {
+    final activity = await ActivityRecoveryManager().getSavedActivity();
+    if (activity != null && activity.type == ActivityType.videoUpload) {
+      if (!mounted) return;
+
+      final data = activity.data;
+      final videoPath = data['videoPath'] as String?;
+      
+      AppLogger.log('🚀 UploadScreen: Automatically resuming saved upload activity');
+
+      if (videoPath != null && videoPath.isNotEmpty) {
+        _selectedVideo.value = File(videoPath);
+      }
+      _titleController.text = data['title'] ?? '';
+      _linkController.text = data['link'] ?? '';
+      _selectedCategory.value = data['category'] ?? _defaultCategory;
+      if (data['tags'] != null) {
+        _tags.value = List<String>.from(data['tags']);
+      }
+      _showUploadForm.value = true;
+      
+      // Notify user via a small snackbar instead of a disruptive dialog
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppText.get('upload_resumed', fallback: 'Upload progress restored')),
+          backgroundColor: AppTheme.success.withOpacity(0.8),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   String _deriveTitleFromFile(File file) {
@@ -798,6 +874,9 @@ class _UploadScreenState extends State<UploadScreen> {
         _titleController.clear();
         _linkController.clear();
         _selectedCategory.value = null;
+        
+        // Clear activity after successful completion
+        ActivityRecoveryManager().clearActivity();
         _tags.value = [];
         // Video type selection removed; all uploads default to free (Yug).
         _showAdvancedSettings.value = false;

@@ -6,7 +6,6 @@ import 'package:vayu/shared/services/auto_scroll_settings.dart';
 import 'package:vayu/features/profile/presentation/widgets/profile_dialogs_widget.dart';
 import 'package:vayu/shared/theme/app_theme.dart';
 import 'package:vayu/features/profile/presentation/screens/settings_screen.dart';
-import 'package:vayu/features/profile/presentation/screens/creator_payment_setup_screen.dart';
 
 class ProfileMenuWidget extends StatelessWidget {
   final ProfileStateManager stateManager;
@@ -16,6 +15,7 @@ class ProfileMenuWidget extends StatelessWidget {
   final VoidCallback? onCancelEdit;
   final VoidCallback? onReportUser;
   final VoidCallback? onShowFeedback;
+  final VoidCallback? onShowWhatsApp;
   final VoidCallback? onShowFAQ;
   final VoidCallback? onEnterSelectionMode;
   final VoidCallback? onLogout;
@@ -31,6 +31,7 @@ class ProfileMenuWidget extends StatelessWidget {
     this.onCancelEdit,
     this.onReportUser,
     this.onShowFeedback,
+    this.onShowWhatsApp,
     this.onShowFAQ,
     this.onEnterSelectionMode,
     this.onLogout,
@@ -110,8 +111,8 @@ class ProfileMenuWidget extends StatelessWidget {
                               backgroundColor: AppTheme.surfacePrimary,
                             ),
                           );
+                          Navigator.pop(context);
                         }
-                        Navigator.pop(context);
                       },
                     });
 
@@ -147,26 +148,11 @@ class ProfileMenuWidget extends StatelessWidget {
                       });
                     }
 
-                    // Payment Setup
-                    menuItems.add({
-                      'title': 'Payments',
-                      'icon': Icons.account_balance_wallet_outlined,
-                      'color': AppTheme.warning,
-                      'onTap': () {
-                        Navigator.pop(context);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const CreatorPaymentSetupScreen(),
-                          ),
-                        );
-                      },
-                    });
 
-                    // Game Creator Dashboard Toggle
+                    // Creator Mode Toggle
                     menuItems.add({
-                      'title': gameManager.isCreatorMode ? 'Video Portal' : 'Game Portal',
-                      'icon': gameManager.isCreatorMode ? Icons.video_library_outlined : Icons.gamepad_outlined,
+                      'title': gameManager.isCreatorMode ? 'Video Studio' : 'Arcade Studio',
+                      'icon': gameManager.isCreatorMode ? Icons.video_library_outlined : Icons.sports_esports,
                       'color': AppTheme.primary,
                       'onTap': () {
                         Navigator.pop(context);
@@ -191,14 +177,14 @@ class ProfileMenuWidget extends StatelessWidget {
                       });
                     }
 
-                    // Feedback
+                    // Support Chat (Replaced Feedback)
                     menuItems.add({
-                      'title': 'Feedback',
-                      'icon': Icons.rate_review_outlined,
-                      'color': AppTheme.success.withOpacity(0.8),
+                      'title': 'Support Chat',
+                      'icon': Icons.chat,
+                      'color': const Color(0xFF10B981),
                       'onTap': () {
                         Navigator.pop(context);
-                        onShowFeedback?.call();
+                        onShowWhatsApp?.call();
                       },
                     });
 

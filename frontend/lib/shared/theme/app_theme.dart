@@ -17,7 +17,7 @@ class AppTheme {
 
   // Text & Foreground Colors
   static const Color textPrimary =
-      Color(0xFFF8FAFC); // Website text-main (off-white)
+      Color(0xFFFFFFFF); // Pure white for better visibility
   static const Color textSecondary = Color(0xFF94A3B8); // Website text-dim
   static const Color textTertiary = Color(0xFF64748B); // Muted text
   static const Color textInverse =

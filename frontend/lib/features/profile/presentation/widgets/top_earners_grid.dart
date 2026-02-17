@@ -9,7 +9,7 @@ import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/features/profile/presentation/screens/profile_screen.dart';
 import 'package:vayu/shared/theme/app_theme.dart';
 
-/// Compact grid (3 columns) showing top earners from the user's following list.
+/// Compact grid (3 columns) showing top creators from the user's following list.
 /// This reuses the same API as `TopEarnersBottomSheet` but is optimised for the
 /// ProfileScreen "Recommendations" tab.
 class TopEarnersGrid extends StatefulWidget {
@@ -20,7 +20,7 @@ class TopEarnersGrid extends StatefulWidget {
 }
 
 class _TopEarnersGridState extends State<TopEarnersGrid> {
-  List<Map<String, dynamic>> _topEarners = [];
+  List<Map<String, dynamic>> _topCreators = [];
   bool _isLoading = false;
   bool _hasError = false;
   String? _errorMessage;
@@ -28,10 +28,10 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
   @override
   void initState() {
     super.initState();
-    _loadTopEarners();
+    _loadTopCreators();
   }
 
-  Future<void> _loadTopEarners() async {
+  Future<void> _loadTopCreators() async {
     if (_isLoading) return;
 
     setState(() {
@@ -46,7 +46,7 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
         setState(() {
           _hasError = true;
           _errorMessage =
-              'Sign in to see top earners from your following list.';
+              'Sign in to see top creators from your following list.';
           _isLoading = false;
         });
         return;
@@ -55,7 +55,7 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
       final baseUrl = await AppConfig.getBaseUrlWithFallback();
       final uri = Uri.parse('$baseUrl/api/users/top-earners-from-following');
 
-      AppLogger.log('💰 TopEarnersGrid: Fetching top earners from $uri');
+      AppLogger.log('💰 TopCreatorsGrid: Fetching top creators from $uri');
 
       final response = await httpClientService.get(
         uri,
@@ -67,34 +67,34 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
       );
 
       AppLogger.log(
-          '💰 TopEarnersGrid: Response status: ${response.statusCode}');
+          '💰 TopCreatorsGrid: Response status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final topEarners =
+        final topCreators =
             List<Map<String, dynamic>>.from(data['topEarners'] ?? []);
 
         setState(() {
-          _topEarners = topEarners;
+          _topCreators = topCreators;
           _isLoading = false;
         });
       } else {
         setState(() {
           _hasError = true;
-          _errorMessage = 'Failed to load top earners (${response.statusCode})';
+          _errorMessage = 'Failed to load top creators (${response.statusCode})';
           _isLoading = false;
         });
       }
     } catch (e, stackTrace) {
-      AppLogger.log('❌ TopEarnersGrid: Error loading top earners: $e');
-      AppLogger.log('❌ TopEarnersGrid: Stack trace: $stackTrace');
+      AppLogger.log('❌ TopCreatorsGrid: Error loading top creators: $e');
+      AppLogger.log('❌ TopCreatorsGrid: Stack trace: $stackTrace');
       setState(() {
         _hasError = true;
         _errorMessage = e.toString().contains('TimeoutException')
             ? 'Request timeout. Please check your connection.'
             : e.toString().contains('SocketException')
                 ? 'Network error. Please check your internet connection.'
-                : 'Failed to load top earners';
+                : 'Failed to load top creators';
         _isLoading = false;
       });
     }
@@ -131,7 +131,7 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
               const Icon(Icons.error_outline, color: Colors.red, size: 32),
               const SizedBox(height: 8),
               Text(
-                _errorMessage ?? 'Failed to load top earners',
+                _errorMessage ?? 'Failed to load top creators',
                 style: const TextStyle(
                   color: Colors.black87,
                   fontSize: 14,
@@ -141,7 +141,7 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
               ),
               const SizedBox(height: 8),
               TextButton.icon(
-                onPressed: _loadTopEarners,
+                onPressed: _loadTopCreators,
                 icon: const Icon(Icons.refresh, size: 18),
                 label: const Text('Retry'),
               ),
@@ -151,7 +151,7 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
       );
     }
 
-    if (_topEarners.isEmpty) {
+    if (_topCreators.isEmpty) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(24.0),
@@ -161,7 +161,7 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
               Icon(Icons.people_outline, size: 40, color: Colors.grey),
               SizedBox(height: 8),
               Text(
-                'No top earners found',
+                'No top creators found',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -170,7 +170,7 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
               ),
               SizedBox(height: 4),
               Text(
-                'Start following creators to see who earns the most.',
+                'Start following creators to see who has the highest Score.',
                 style: TextStyle(
                   fontSize: 12,
                   color: Color(0xFF9CA3AF),
@@ -197,19 +197,19 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
         mainAxisSpacing: AppTheme.spacing3,
         childAspectRatio: 0.68,
       ),
-      itemCount: _topEarners.length,
+      itemCount: _topCreators.length,
       itemBuilder: (context, index) {
-        final earner = _topEarners[index];
-        return _buildEarnerTile(earner, index + 1);
+        final creator = _topCreators[index];
+        return _buildCreatorTile(creator, index + 1);
       },
     );
   }
 
-  Widget _buildEarnerTile(Map<String, dynamic> earner, int rank) {
-    final userId = earner['userId'] as String?;
-    final name = earner['name'] as String? ?? 'Unknown';
-    final profilePic = earner['profilePic'] as String?;
-    final earnings = (earner['totalEarnings'] as num?)?.toDouble() ?? 0.0;
+  Widget _buildCreatorTile(Map<String, dynamic> creator, int rank) {
+    final userId = creator['userId'] as String?;
+    final name = creator['name'] as String? ?? 'Unknown';
+    final profilePic = creator['profilePic'] as String?;
+    final score = (creator['totalEarnings'] as num?)?.toDouble() ?? 0.0;
 
     Color badgeColor;
     if (rank == 1) {
@@ -322,25 +322,26 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
               ),
             ),
             const SizedBox(height: AppTheme.spacing1 + 2),
-            // Earnings
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppTheme.spacing2,
-                vertical: AppTheme.spacing1,
-              ),
-              decoration: BoxDecoration(
-                color: AppTheme.success.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
-              ),
-              child: Text(
-                _formatEarnings(earnings),
-                style: const TextStyle(
-                  fontSize: AppTheme.fontSizeXS + 1,
-                  fontWeight: AppTheme.weightBold,
-                  color: AppTheme.success,
+            // Score (Only show if > 0)
+            if (score > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppTheme.spacing2,
+                  vertical: AppTheme.spacing1,
+                ),
+                decoration: BoxDecoration(
+                  color: AppTheme.success.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+                ),
+                child: Text(
+                  _formatScore(score),
+                  style: const TextStyle(
+                    fontSize: AppTheme.fontSizeXS + 1,
+                    fontWeight: AppTheme.weightBold,
+                    color: AppTheme.success,
+                  ),
                 ),
               ),
-            ),
             const SizedBox(height: AppTheme.spacing3),
           ],
         ),
@@ -348,15 +349,15 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
     );
   }
 
-  String _formatEarnings(double earnings) {
-    if (earnings >= 10000000) {
-      return '₹${(earnings / 10000000).toStringAsFixed(1)} Cr';
-    } else if (earnings >= 100000) {
-      return '₹${(earnings / 100000).toStringAsFixed(1)} L';
-    } else if (earnings >= 1000) {
-      return '₹${(earnings / 1000).toStringAsFixed(1)}K';
+  String _formatScore(double score) {
+    if (score >= 10000000) {
+      return '${(score / 10000000).toStringAsFixed(1)} Cr';
+    } else if (score >= 100000) {
+      return '${(score / 100000).toStringAsFixed(1)} L';
+    } else if (score >= 1000) {
+      return '${(score / 1000).toStringAsFixed(1)}K';
     } else {
-      return '₹${earnings.toStringAsFixed(0)}';
+      return score.toStringAsFixed(0);
     }
   }
 }

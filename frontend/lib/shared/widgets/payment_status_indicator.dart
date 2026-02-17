@@ -142,8 +142,8 @@ class _PaymentStatusIndicatorState extends State<PaymentStatusIndicator> {
                   const SizedBox(height: 4),
                   Text(
                     _hasPaymentSetup
-                        ? 'You\'ll receive 80% of ad revenue automatically'
-                        : 'Set up payment details to receive earnings',
+                        ? 'You\'ll receive rewards based on engagement automatically'
+                        : 'Set up billing details to receive rewards',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: AppTheme.textSecondary,
                         ),

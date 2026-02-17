@@ -135,13 +135,13 @@ class _TopEarnersBottomSheetState extends State<TopEarnersBottomSheet> {
   }
 
   String _formatEarnings(double? earnings) {
-    if (earnings == null) return '₹0';
+    if (earnings == null) return '0';
     if (earnings >= 100000) {
-      return '₹${(earnings / 100000).toStringAsFixed(1)}L';
+      return '${(earnings / 100000).toStringAsFixed(1)}L';
     } else if (earnings >= 1000) {
-      return '₹${(earnings / 1000).toStringAsFixed(1)}K';
+      return '${(earnings / 1000).toStringAsFixed(1)}K';
     }
-    return '₹${earnings.toStringAsFixed(0)}';
+    return '${earnings.toStringAsFixed(0)}';
   }
 
   @override
@@ -186,7 +186,7 @@ class _TopEarnersBottomSheetState extends State<TopEarnersBottomSheet> {
                   ),
                   const SizedBox(width: 12),
                   const Text(
-                    'Top Earners (Following)',
+                    'Top Rewards (Following)',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,

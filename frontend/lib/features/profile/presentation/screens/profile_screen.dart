@@ -10,6 +10,7 @@ import 'package:vayu/shared/managers/smart_cache_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:vayu/shared/providers/user_provider.dart';
 import 'package:vayu/features/auth/data/usermodel.dart';
+import 'package:vayu/features/video/data/services/video_cache_proxy_service.dart';
 import 'package:vayu/shared/services/profile_screen_logger.dart';
 import 'package:vayu/shared/theme/app_theme.dart';
 import 'dart:async';
@@ -36,8 +37,6 @@ import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/features/profile/presentation/screens/creator_revenue_screen.dart';
 import 'package:vayu/shared/utils/app_text.dart';
 
-import 'package:vayu/features/profile/presentation/widgets/finger_tap_guide.dart';
-import 'package:vayu/features/video/data/services/video_cache_proxy_service.dart';
 import 'package:vayu/features/profile/presentation/screens/edit_profile_screen.dart';
 import 'package:vayu/features/profile/presentation/widgets/game_creator_dashboard.dart';
 
@@ -80,19 +79,13 @@ class _ProfileScreenState extends State<ProfileScreen>
   final ValueNotifier<int> _verifiedSignedUp = ValueNotifier<int>(0);
 
   // Local tab state for content section
-  // 0 => Your Videos, 1 => Top Earners / Recommendations
+  // 0 => Your Videos, 1 => Top Creators / Recommendations
   final ValueNotifier<int> _activeProfileTabIndex = ValueNotifier<int>(0);
 
   // UPI ID status tracking
   final ValueNotifier<bool> _hasUpiId = ValueNotifier<bool>(
       false); // Default to false - show notice until confirmed
   final ValueNotifier<bool> _isCheckingUpiId = ValueNotifier<bool>(false);
-
-  // Removed _earningsRefreshCounter as it is unused
-
-  // **NEW: First-time user UPI guide**
-  final ValueNotifier<bool> _showUpiGuide = ValueNotifier<bool>(false);
-  bool _hasCheckedUpiGuide = false;
 
   // **NEW: Track if videos have been loaded/checked for this profile session**
   // This prevents reloading when creator has no videos
@@ -103,8 +96,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   int _profileLoadAttemptCount = 0;
   bool _profileNoDataFound = false;
 
-  // **NEW: Key to track the "Add UPI ID" button position for the guide**
-  final GlobalKey _upiButtonKey = GlobalKey();
   bool _forceShowSignIn = false;
 
   bool _shouldShowSignIn(GoogleSignInController authController) {
@@ -218,10 +209,9 @@ class _ProfileScreenState extends State<ProfileScreen>
       _videosLoadAttempted = false;
       _profileLoadAttemptCount = 0; // Reset for new user
       _profileNoDataFound = false; // Reset for new user
-      _hasCheckedUpiGuide = false; // Reset session flag for new user
       _lastLoadedUserId = currentUserId;
       AppLogger.log(
-          '🔄 ProfileScreen: User changed, resetting load attempt flags and UPI guide session status');
+          '🔄 ProfileScreen: User changed, resetting load attempt flags');
     }
 
     // **FIXED: Also force reload if userData exists but belongs to a different user (stale account data)**
@@ -310,7 +300,6 @@ class _ProfileScreenState extends State<ProfileScreen>
           if (widget.userId == null) {
             Future.microtask(() async {
               await _checkUpiIdStatus();
-              _checkAndShowUpiGuide();
             });
           }
 
@@ -331,7 +320,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                   await _refreshEarningsData(forceRefresh: true);
                   // **RE-CHECK: Update status after background refresh confirms latest data**
                   await _checkUpiIdStatus();
-                  _checkAndShowUpiGuide();
                 }
               }
               AppLogger.log('✅ ProfileScreen: Background refresh completed');
@@ -365,10 +353,8 @@ class _ProfileScreenState extends State<ProfileScreen>
         _profileNoDataFound = false;
         _profileLoadAttemptCount = 0; // Reset count on success
         
-        // **NEW: Check if user should see UPI guide after successful load**
-        if (widget.userId == null) {
-          _checkAndShowUpiGuide();
-        }
+        _profileNoDataFound = false;
+        _profileLoadAttemptCount = 0; // Reset count on success
       }
     } catch (e) {
       AppLogger.log('❌ ProfileScreen: Error loading data: $e');
@@ -421,10 +407,6 @@ class _ProfileScreenState extends State<ProfileScreen>
               _loadVideos(forceRefresh: false).catchError((e) {
                 AppLogger.log('⚠️ ProfileScreen: Error loading videos: $e');
               });
-            }
-
-            if (widget.userId == null) {
-              await _checkUpiIdStatus();
             }
 
             _refreshEarningsData(forceRefresh: forceRefresh).catchError((e) {});
@@ -821,7 +803,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     _activeProfileTabIndex.dispose();
     _hasUpiId.dispose();
     _isCheckingUpiId.dispose();
-    _showUpiGuide.dispose();
     super.dispose();
   }
 
@@ -1376,95 +1357,13 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   /// Handle Add UPI ID button tap
   void _handleAddUpiId() {
-    // Dismiss guide if showing
-    if (_showUpiGuide.value) {
-      _dismissUpiGuide();
-    }
-    
     ProfileDialogsWidget.showHowToEarnDialog(
       context,
       stateManager: _stateManager,
     );
   }
 
-  /// **NEW: Check if user should see UPI guide**
-  /// **REFINED: Called only after successful profile data load**
-  Future<void> _checkAndShowUpiGuide() async {
-    if (_hasCheckedUpiGuide || widget.userId != null) {
-      return; // Already checked or viewing another user's profile
-    }
 
-    try {
-      // Get user ID to make guide status user-specific
-      final userData = _stateManager.getUserData();
-      final userId = userData?['googleId'] ?? userData?['id'] ?? userData?['_id'];
-      
-      // If we don't have a userId yet, we can't check the specific guide status
-      // This shouldn't normally happen now as it's called after successful load
-      if (!mounted || widget.userId != null || userId == null) {
-        AppLogger.log('ℹ️ ProfileScreen: UPI guide skipped - No user ID or not viewing own profile');
-        return;
-      }
-      
-      final prefs = await SharedPreferences.getInstance();
-      
-      // Use user-specific key so reinstalling OR account switching works correctly
-      final guideKey = 'has_seen_upi_guide_$userId';
-      final hasSeenGuide = prefs.getBool(guideKey) ?? false;
-
-      // Show guide ONLY if user hasn't seen it AND definitely doesn't have UPI ID
-      if (!hasSeenGuide && !_hasUpiId.value) {
-        AppLogger.log('💡 ProfileScreen: UPI guide conditions met for user $userId, showing guide...');
-        
-        // **IMPORTANT: Set this to true immediately so we don't start multiple timers**
-        _hasCheckedUpiGuide = true;
-        
-        // Wait 5 seconds to ensure the user has settled and the button is laid out
-        await Future.delayed(const Duration(seconds: 5));
-        
-        if (mounted && !_hasUpiId.value && !_showUpiGuide.value) {
-          _showUpiGuide.value = true;
-          AppLogger.log('✅ ProfileScreen: Setting _showUpiGuide.value = true');
-
-          // Auto-dismiss after 10 seconds (gives user more time to see the animation)
-          Future.delayed(const Duration(seconds: 10), () {
-            if (mounted && _showUpiGuide.value) {
-              _dismissUpiGuide();
-            }
-          });
-        }
-      } else {
-        // Mark as "session-checked" even if we didn't show it
-        _hasCheckedUpiGuide = true;
-        if (hasSeenGuide) {
-          AppLogger.log('ℹ️ ProfileScreen: UPI guide already seen by user $userId (skipping)');
-        } else if (_hasUpiId.value) {
-          AppLogger.log('✅ ProfileScreen: User $userId already has UPI set (skipping guide)');
-        }
-      }
-    } catch (e) {
-      AppLogger.log('⚠️ ProfileScreen: Error checking UPI guide: $e');
-    }
-  }
-
-  /// **NEW: Dismiss UPI guide**
-  Future<void> _dismissUpiGuide() async {
-    _showUpiGuide.value = false;
-    
-    try {
-      final userData = _stateManager.getUserData();
-      final userId = userData?['googleId'] ?? userData?['id'] ?? userData?['_id'];
-      
-      if (userId != null) {
-        final prefs = await SharedPreferences.getInstance();
-        final guideKey = 'has_seen_upi_guide_$userId';
-        await prefs.setBool(guideKey, true);
-        AppLogger.log('✅ ProfileScreen: UPI guide dismissed and marked as seen for user $userId');
-      }
-    } catch (e) {
-      AppLogger.log('⚠️ ProfileScreen: Error saving UPI guide status: $e');
-    }
-  }
 
 
   @override
@@ -1571,6 +1470,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                           targetId: widget.userId!,
                         ),
                         onShowFeedback: _showFeedbackDialog,
+                        onShowWhatsApp: _openWhatsAppGroupChat,
                         onShowFAQ: _showFAQDialog,
                         onEnterSelectionMode: () =>
                             _stateManager.enterSelectionMode(),
@@ -1949,18 +1849,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ),
                 ),
 
-                // **NEW: Interactive Finger Animation Guide (YouTube style)**
-                ValueListenableBuilder<bool>(
-                  valueListenable: _showUpiGuide,
-                  builder: (context, showGuide, child) {
-                    if (!showGuide) return const SizedBox.shrink();
 
-                    return FingerTapGuide(
-                      targetKey: _upiButtonKey,
-                      onDismiss: _dismissUpiGuide,
-                    );
-                  },
-                ),
               ],
             );
           },
@@ -2059,7 +1948,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           );
         },
       ),
-      _buildChatSupportAction(),
+      _buildFeedbackAction(),
     ];
 
     if (isViewingOwnProfile && stateManager.isSelecting && stateManager.selectedVideoIds.isNotEmpty) {
@@ -2108,15 +1997,15 @@ class _ProfileScreenState extends State<ProfileScreen>
     return actions;
   }
 
-  Widget _buildChatSupportAction() {
+  Widget _buildFeedbackAction() {
     return IconButton(
       icon: const Icon(
-        Icons.headset_mic_outlined,
+        Icons.tips_and_updates_outlined,
         color: Color(0xFF10B981),
         size: 20,
       ),
-      tooltip: 'Chat with us on WhatsApp',
-      onPressed: _openWhatsAppGroupChat,
+      tooltip: 'Provide Feedback',
+      onPressed: _showFeedbackDialog,
     );
   }
 
@@ -2258,7 +2147,6 @@ class _ProfileScreenState extends State<ProfileScreen>
           onEarningsTap: _handleEarningsTap,
           onSaveProfile: _handleSaveProfile,
           onCancelEdit: _handleCancelEdit,
-          upiButtonKey: _upiButtonKey,
         ),
       ),
     );
@@ -2979,7 +2867,7 @@ class _EarningsBottomSheetContentState
               ),
               const Spacer(),
               Text(
-                '₹${totalEarnings.toStringAsFixed(2)}',
+                '${totalEarnings.toStringAsFixed(2)}',
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -3076,12 +2964,12 @@ class _EarningsBottomSheetContentState
                                     ),
                                   ),
 
-                                  // Earnings
+                                  // Rewards
                                   Expanded(
                                     child: _buildStatItem(
                                       icon: Icons.account_balance_wallet,
-                                      label: 'Earnings',
-                                      value: '₹${earnings.toStringAsFixed(2)}',
+                                      label: 'Rewards',
+                                      value: '${earnings.toStringAsFixed(2)}',
                                       color: const Color(0xFF10B981),
                                     ),
                                   ),

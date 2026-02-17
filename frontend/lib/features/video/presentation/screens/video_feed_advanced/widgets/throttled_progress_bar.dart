@@ -25,6 +25,7 @@ class _ThrottledProgressBarState extends State<ThrottledProgressBar> {
   bool _isDragging = false; // **NEW: Track if user is currently seeking**
   Timer? _updateTimer;
   DateTime _lastUpdate = DateTime.now();
+  double _lastVibrateProgress = 0.0; // **NEW: Track last haptic position**
   static const Duration _updateInterval = Duration(milliseconds: 33); // ~30fps
 
   @override
@@ -97,7 +98,14 @@ class _ThrottledProgressBarState extends State<ThrottledProgressBar> {
 
     // **HAPTIC: Vibrate when reaching start or end**
     if (newProgress <= 0.0 || newProgress >= 1.0) {
+      if ((newProgress - _lastVibrateProgress).abs() > 0.01) {
+        HapticFeedback.vibrate(); // **STRONGER: Distinct vibration at ends**
+        _lastVibrateProgress = newProgress;
+      }
+    } else if ((newProgress - _lastVibrateProgress).abs() >= 0.02) {
+      // **NEW: Increased frequency (2% notches) and stronger feel (lightImpact)**
       HapticFeedback.lightImpact();
+      _lastVibrateProgress = newProgress;
     }
   }
 
@@ -106,15 +114,21 @@ class _ThrottledProgressBarState extends State<ThrottledProgressBar> {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTapDown: (details) {
-        setState(() => _isDragging = true);
-        HapticFeedback.selectionClick(); // **NEW: Initial touch feedback**
+        setState(() {
+          _isDragging = true;
+          _lastVibrateProgress = _progress; // **FIX: Reset on touch to prevent dead zones**
+        });
+        HapticFeedback.mediumImpact(); // **STRONGER: Initial touch feedback**
         _handleSeekUpdate(details);
       },
       onTapUp: (_) => setState(() => _isDragging = false),
       onTapCancel: () => setState(() => _isDragging = false),
       onHorizontalDragStart: (details) {
-        setState(() => _isDragging = true);
-        HapticFeedback.selectionClick();
+        setState(() {
+          _isDragging = true;
+          _lastVibrateProgress = _progress; // **FIX: Reset on drag start**
+        });
+        HapticFeedback.mediumImpact();
       },
       onHorizontalDragUpdate: (details) => _handleSeekUpdate(details),
       onHorizontalDragEnd: (_) => setState(() => _isDragging = false),

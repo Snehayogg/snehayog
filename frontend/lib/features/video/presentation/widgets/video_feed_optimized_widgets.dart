@@ -124,7 +124,7 @@ class EarningsLabelWidget extends StatelessWidget {
         ),
       ),
       child: Text(
-        '₹${earnings.toStringAsFixed(2)}',
+        earnings.toStringAsFixed(2),
         style: const TextStyle(
           color: Colors.white,
           fontSize: 9,
