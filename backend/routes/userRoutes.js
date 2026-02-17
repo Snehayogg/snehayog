@@ -17,6 +17,11 @@ const getProfileCacheKey = (userId) =>
 const getTopEarnersCacheKey = (userId) =>
   userId ? `top_earners_following:${userId}` : null;
 
+const getIsFollowingCacheKey = (currentUserId, targetUserId) =>
+  (currentUserId && targetUserId) ? `isfollowing:${currentUserId}:${targetUserId}` : null;
+
+const IS_FOLLOWING_CACHE_TTL = 30; // 30 seconds
+
 const cacheResponse = async (key, data, ttl) => {
   if (!key || !data) return;
   try {
@@ -649,14 +654,24 @@ router.get('/isfollowing/:userId', verifyToken, async (req, res) => {
       return res.json({ isFollowing: false });
     }
 
+    const cacheKey = getIsFollowingCacheKey(currentUserId, userId);
+    const cachedStatus = await getCachedResponse(cacheKey);
+    if (cachedStatus !== null) {
+      return res.json(cachedStatus);
+    }
+
     const currentUser = await User.findOne({ googleId: currentUserId });
     if (!currentUser) {
-      return res.json({ isFollowing: false });
+      const response = { isFollowing: false };
+      await cacheResponse(cacheKey, response, IS_FOLLOWING_CACHE_TTL);
+      return res.json(response);
     }
 
     const userToCheck = await User.findOne({ googleId: userId });
     if (!userToCheck) {
-      return res.json({ isFollowing: false });
+      const response = { isFollowing: false };
+      await cacheResponse(cacheKey, response, IS_FOLLOWING_CACHE_TTL);
+      return res.json(response);
     }
 
     // Check if following by comparing MongoDB ObjectId references
@@ -664,7 +679,9 @@ router.get('/isfollowing/:userId', verifyToken, async (req, res) => {
       followingId => followingId.toString() === userToCheck._id.toString()
     );
     
-    res.json({ isFollowing });
+    const response = { isFollowing };
+    await cacheResponse(cacheKey, response, IS_FOLLOWING_CACHE_TTL);
+    res.json(response);
   } catch (err) {
     console.error('Check follow status error:', err);
     res.status(500).json({ error: 'Failed to check follow status' });

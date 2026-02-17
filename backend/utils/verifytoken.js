@@ -64,7 +64,7 @@ const updateLastActive = async (googleId) => {
         );
     } catch (error) {
         // Silently fail - don't block request if lastActive update fails
-        console.error('⚠️ Failed to update lastActive:', error.message);
+        console.log('⚠️ Failed to update lastActive:', error.message);
     }
 };
 
@@ -97,8 +97,13 @@ export const verifyToken = async (req, res, next) => {
             // Log specific JWT verification errors for debugging
             if (jwtError.name === 'TokenExpiredError') {
                 console.log('⚠️ JWT Token expired:', jwtError.expiredAt);
+                return res.status(401).json({ error: 'Invalid or expired token', code: 'TOKEN_EXPIRED' });
             } else if (jwtError.name === 'JsonWebTokenError') {
                 console.log('❌ JWT Token invalid signature/malformed:', jwtError.message);
+                // If it looks like a JWT but is malformed, return 401 immediately
+                if (token.startsWith('ey')) {
+                    return res.status(401).json({ error: 'Invalid or expired token', code: 'TOKEN_INVALID' });
+                }
             } else {
                 console.log('❓ JWT Token verification failed (Generic):', jwtError.message);
             }
@@ -151,15 +156,15 @@ export const verifyToken = async (req, res, next) => {
             return next();
         } catch (idTokenError) {
             // All verification methods failed
-            console.error('❌ Token verification failed - all methods exhausted');
-            console.error('🔍 Token prefix:', token.substring(0, 15) + '...');
-            console.error('🔍 JWT Secret configured:', !!JWT_SECRET);
-            console.error('🔍 ID Token Error:', idTokenError.message);
+            console.log('❌ Token verification failed - all methods exhausted');
+            console.log('🔍 Token prefix:', token.substring(0, 15) + '...');
+            console.log('🔍 JWT Secret configured:', !!JWT_SECRET);
+            console.log('🔍 ID Token Error:', idTokenError.message);
             
             return res.status(401).json({ error: 'Invalid or expired token' });
         }
     } catch (error) {
-        console.error('❌ Token verification error:', error.message);
+        console.log('❌ Token verification error:', error.message);
         return res.status(401).json({ error: 'Invalid or expired token' });
     }
 };

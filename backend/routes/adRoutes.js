@@ -12,8 +12,33 @@ import adService from '../services/adService.js';
 import adTargetingRoutes from './adTargetingRoutes.js';
 import adCommentRoutes from './adCommentRoutes.js';
 import adCleanupService from '../services/adCleanupService.js';
+import mongoose from 'mongoose';
+import redisService from '../services/redisService.js';
 
 const router = express.Router();
+
+const REVENUE_CACHE_TTL = 300; // 5 minutes
+
+const getRevenueCacheKey = (userId) => userId ? `revenue:${userId}` : null;
+
+const cacheResponse = async (key, data, ttl) => {
+  if (!key || !data) return;
+  try {
+    await redisService.set(key, data, ttl);
+  } catch (err) {
+    console.error('❌ Redis cache set error:', err.message);
+  }
+};
+
+const getCachedResponse = async (key) => {
+  if (!key) return null;
+  try {
+    return await redisService.get(key);
+  } catch (err) {
+    console.error('❌ Redis cache get error:', err.message);
+    return null;
+  }
+};
 
 // Multer configuration for ad creative uploads
 const upload = multer({
@@ -538,27 +563,29 @@ router.get('/campaigns/:id', async (req, res) => {
 
 // GET /ads/creator/revenue/:userId - Get creator revenue summary
 router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
-      try {
-      const { userId } = req.params;
-      
-      // console.log('🔍 Creator revenue request for user:', userId);
-      // console.log('🔍 Request headers:', req.headers);
-      // console.log('🔍 Authenticated user from token:', req.user);
-      
-      // Try finding user by Google ID (primary) OR by Mongo ID (fallback)
-      let user = await User.findOne({ googleId: userId });
-      
-      if (!user && mongoose.Types.ObjectId.isValid(userId)) {
-          console.log(`🔍 GoogleID lookup failed, trying Mongo ID for: ${userId}`);
-          user = await User.findById(userId);
-      }
+  try {
+    const { userId } = req.params;
+    
+    // **NEW: Check Redis Cache first**
+    const cacheKey = getRevenueCacheKey(userId);
+    const cachedData = await getCachedResponse(cacheKey);
+    if (cachedData) {
+      console.log('🚀 Returning cached revenue data for:', userId);
+      return res.json(cachedData);
+    }
 
-      // console.log('🔍 Database query result:', user ? 'User found' : 'User not found');
-      
-      if (!user) {
-        console.log('❌ User not found for ID:', userId);
-        return res.status(404).json({ error: 'User not found' });
-      }
+    // Try finding user by Google ID (primary) OR by Mongo ID (fallback)
+    let user = await User.findOne({ googleId: userId });
+    
+    if (!user && mongoose.Types.ObjectId.isValid(userId)) {
+        console.log(`🔍 GoogleID lookup failed, trying Mongo ID for: ${userId}`);
+        user = await User.findById(userId);
+    }
+
+    if (!user) {
+      console.log('❌ User not found for ID:', userId);
+      return res.status(404).json({ error: 'User not found' });
+    }
 
     // **FIXED: Use direct Video query instead of user.getVideos() to ensure all videos are found**
     // This fixes issues where user.videos array might be out of sync
@@ -800,6 +827,9 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
       videoCount: videoStatsArray.length
     });
 
+    // **NEW: Save to Cache before responding**
+    await cacheResponse(cacheKey, response, REVENUE_CACHE_TTL);
+    
     res.json(response);
 
   } catch (error) {
