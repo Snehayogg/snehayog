@@ -602,7 +602,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
                         ),
                         Shadow(
                           offset: const Offset(0, 1),
-                          blurRadius: 10.0,
+                          blurRadius: 8.0,
                           color: Colors.black.withValues(alpha: 0.5),
                         ),
                       ],
@@ -623,12 +623,12 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
                 shadows: [
                   const Shadow(
                     offset: Offset(0, 1),
-                    blurRadius: 4.0,
+                    blurRadius: 3.0,
                     color: Colors.black,
                   ),
                   Shadow(
                     offset: const Offset(0, 1),
-                    blurRadius: 10.0,
+                    blurRadius: 7.0,
                     color: Colors.black.withValues(alpha: 0.5),
                   ),
                 ],
@@ -646,12 +646,12 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
                   shadows: [
                     const Shadow(
                       offset: Offset(0, 1),
-                      blurRadius: 4.0,
+                      blurRadius: 3.0,
                       color: Colors.black,
                     ),
                     Shadow(
                       offset: const Offset(0, 1),
-                      blurRadius: 10.0,
+                      blurRadius: 7.0,
                       color: Colors.black.withValues(alpha: 0.5),
                     ),
                   ],

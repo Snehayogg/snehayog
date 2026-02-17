@@ -4,9 +4,9 @@
   "description": "Snehayog Backend with Ultra-Fast Video Processing",
   "main": "server.js",
   "scripts": {
-    "start": "node -r dotenv/config server.js",
-    "start:worker": "node -r dotenv/config workers/videoWorker.js",
-    "dev": "nodemon -r dotenv/config server.js",
+    "start": "node server.js",
+    "start:worker": "node workers/videoWorker.js",
+    "dev": "nodemon server.js",
     "test": "jest",
     "setup": "npm install && npm run setup:ffmpeg",
     "setup:ffmpeg": "node scripts/setup-ffmpeg.js",

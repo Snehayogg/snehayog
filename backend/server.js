@@ -1,5 +1,5 @@
-import 'newrelic'
 import 'dotenv/config';
+import newrelic from 'newrelic';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -207,10 +207,12 @@ app.use((req, res, next) => {
         req.url = req.url.replace(/^\/api(\/api)+/, '/api');
         // console.log(`📡 Route Fix: Corrected ${originalUrl} -> ${req.url}`);
     
-        // New Relic transaction naming fix (optional but helpful)
-        if (typeof newrelic !== 'undefined') {
-            newrelic.setTransactionName(req.method + ' ' + req.url);
-        }
+        // New Relic transaction naming fix
+        try {
+            if (newrelic && newrelic.setTransactionName) {
+                newrelic.setTransactionName(req.method + ' ' + req.url);
+            }
+        } catch (e) {}
     }
     next();
 });
