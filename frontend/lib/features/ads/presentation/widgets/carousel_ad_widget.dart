@@ -7,11 +7,12 @@ import 'package:vayu/features/ads/data/services/carousel_ad_service.dart';
 import 'package:vayu/features/ads/data/services/ad_impression_service.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 // import 'package:vayu/features/video/data/services/video_service.dart'; // Unused import removed
-import 'package:url_launcher/url_launcher.dart';
+// import 'package:url_launcher/url_launcher.dart'; // Unused import removed
 import 'package:vayu/shared/widgets/custom_share_widget.dart';
 import 'package:vayu/shared/theme/app_theme.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/shared/constants/app_constants.dart';
+import 'package:vayu/shared/widgets/in_app_browser.dart';
 
 /// **Professional Carousel Ad Widget**
 class CarouselAdWidget extends StatefulWidget {
@@ -223,14 +224,21 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
     // Launch CTA URL if available
     final ctaUrl = widget.carouselAd.callToActionUrl;
     if (ctaUrl.isNotEmpty) {
-      try {
-        final uri = Uri.parse(ctaUrl);
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        }
-      } catch (e) {
-        AppLogger.log('❌ Error launching carousel ad URL: $e');
-      }
+      // **ROAS IMPROVEMENT: Use In-App Browser instead of external launch**
+      // This keeps the user in the app, increasing likelihood of returning to content.
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => SizedBox(
+          height: MediaQuery.of(context).size.height * 0.9, // 90% height
+          child: InAppBrowser(
+            url: ctaUrl,
+            title: widget.carouselAd.callToActionLabel,
+          ),
+        ),
+      );
     }
 
     widget.onAdClosed?.call();
@@ -677,7 +685,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
                   ],
                 ),
                 child: Text(
-                  widget.carouselAd.callToActionLabel.toUpperCase(),
+                  _getCleanedCtaLabel(widget.carouselAd.callToActionLabel).toUpperCase(),
                   style: AppTheme.labelMedium.copyWith(
                     color: AppTheme.textInverse,
                     fontWeight: FontWeight.w800,
@@ -799,6 +807,13 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
       backgroundColor: Colors.transparent,
       builder: (context) => CustomShareWidget(video: mockVideo),
     );
+  }
+
+  String _getCleanedCtaLabel(String label) {
+    if (label.trim().toUpperCase() == 'SHOP NOW') {
+      return 'Learn More';
+    }
+    return label;
   }
 
   /// Create a mock VideoModel from the carousel ad for compatibility

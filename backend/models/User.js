@@ -31,6 +31,11 @@ const UserSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }],
+  // **NEW: Saved/Bookmarked Videos**
+  savedVideos: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Video'
+  }],
   // **NEW: Payment and Payout Preferences**
   preferredCurrency: {
     type: String,
@@ -168,6 +173,29 @@ UserSchema.methods.unfollow = function(userId) {
   const index = this.following.indexOf(userId);
   if (index > -1) {
     this.following.splice(index, 1);
+    return true;
+  }
+  return false;
+};
+
+// **NEW: Saved Video Methods**
+UserSchema.methods.isSaved = function(videoId) {
+  return this.savedVideos.some(id => id.toString() === videoId.toString());
+};
+
+UserSchema.methods.saveVideo = function(videoId) {
+  if (!this.isSaved(videoId)) {
+    this.savedVideos.push(videoId);
+    return true;
+  }
+  return false;
+};
+
+UserSchema.methods.unsaveVideo = function(videoId) {
+  const videoIdStr = videoId.toString();
+  const index = this.savedVideos.findIndex(id => id.toString() === videoIdStr);
+  if (index > -1) {
+    this.savedVideos.splice(index, 1);
     return true;
   }
   return false;

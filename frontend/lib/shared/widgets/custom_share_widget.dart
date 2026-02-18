@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
 import 'package:vayu/shared/theme/app_theme.dart';
@@ -25,7 +26,7 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
       color: const Color(0xFF25D366),
       scheme: 'whatsapp://send',
       webUrl: 'https://wa.me/?text=',
-      fallbackUrl: 'https://web.whatsapp.com/send?text=',
+      fallbackUrl: 'https://wa.me/?text=',
     ),
     ShareOption(
       name: 'Instagram',
@@ -56,10 +57,10 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-      decoration: BoxDecoration(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+      decoration: const BoxDecoration(
         color: AppTheme.surfacePrimary,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -73,7 +74,7 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
 
           // Title with better styling
           const Text(
@@ -85,29 +86,29 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
               letterSpacing: 0.5,
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
 
           // Video preview
           _buildVideoPreview(),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
 
-          // Share options grid
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 2.5,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
+          // Share options horizontal list
+          SizedBox(
+            height: 50,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: _shareOptions.length + 1, // +1 for "More" button
+              itemBuilder: (context, index) {
+                if (index == _shareOptions.length) {
+                  return _buildMoreOption();
+                }
+                final option = _shareOptions[index];
+                return _buildShareOption(option);
+              },
             ),
-            itemCount: _shareOptions.length,
-            itemBuilder: (context, index) {
-              final option = _shareOptions[index];
-              return _buildShareOption(option);
-            },
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
         ],
       ),
     );
@@ -192,7 +193,7 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
                     Container(
                       width: 6,
                       height: 6,
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         color: AppTheme.success,
                         shape: BoxShape.circle,
                       ),
@@ -200,7 +201,7 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
                     const SizedBox(width: 8),
                     Text(
                       'by ${widget.video.uploader.name}',
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 13,
                         color: AppTheme.textSecondary,
                         fontWeight: FontWeight.w500,
@@ -217,40 +218,32 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
   }
 
   Widget _buildShareOption(ShareOption option) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
+    return Container(
+      margin: const EdgeInsets.only(right: 12),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: () {
-            // Add haptic feedback
             HapticFeedback.lightImpact();
             _handleShare(option);
           },
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  option.color.withOpacity(0.1),
+                  option.color.withOpacity(0.15),
                   option.color.withOpacity(0.05),
                 ],
               ),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: option.color.withOpacity(0.2),
+                color: option.color.withOpacity(0.3),
                 width: 1.5,
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: option.color.withOpacity(0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
             ),
             child: Center(
               child: Text(
@@ -258,18 +251,86 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
                   color: option.color,
-                  fontSize: 13, // Reduced size to fit better in container
+                  fontSize: 14,
                   letterSpacing: 0.3,
                 ),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildMoreOption() {
+    return Container(
+      margin: const EdgeInsets.only(right: 12),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            HapticFeedback.mediumImpact();
+            _handleNativeShare();
+          },
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppTheme.textTertiary.withOpacity(0.15),
+                  AppTheme.textTertiary.withOpacity(0.05),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppTheme.textTertiary.withOpacity(0.3),
+                width: 1.5,
+              ),
+            ),
+            child: const Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.more_horiz,
+                    color: AppTheme.textPrimary,
+                    size: 20,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'More',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary,
+                      fontSize: 14,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleNativeShare() async {
+    try {
+      final shareText = _generateShareText();
+      // Close bottom sheet
+      Navigator.of(context).pop();
+      
+      await Share.share(shareText);
+      
+      // Update share count
+      await _updateShareCount();
+    } catch (e) {
+      print('❌ Native share error: $e');
+    }
   }
 
   Future<void> _handleShare(ShareOption option) async {
@@ -336,10 +397,14 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
   Future<bool> _shareToWhatsApp(String text, String url) async {
     try {
       final encodedText = Uri.encodeComponent(text);
-      final whatsappUrl = 'whatsapp://send?text=$encodedText';
+      // Use wa.me universal link for better reliability in opening the app
+      final whatsappUrl = 'https://wa.me/?text=$encodedText';
 
       if (await canLaunchUrl(Uri.parse(whatsappUrl))) {
-        return await launchUrl(Uri.parse(whatsappUrl));
+        return await launchUrl(
+          Uri.parse(whatsappUrl),
+          mode: LaunchMode.externalApplication,
+        );
       }
       return false;
     } catch (e) {
@@ -409,7 +474,7 @@ class _CustomShareWidgetState extends State<CustomShareWidget> {
       final encodedUrl = Uri.encodeComponent(videoUrl);
 
       if (option.name == 'WhatsApp') {
-        webUrl = 'https://web.whatsapp.com/send?text=$encodedText';
+        webUrl = 'https://wa.me/?text=$encodedText';
       } else if (option.name == 'Instagram') {
         // Instagram web doesn't support direct sharing, open main page
         webUrl = 'https://www.instagram.com/';

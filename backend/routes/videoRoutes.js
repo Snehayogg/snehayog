@@ -31,11 +31,13 @@ router.post('/image', verifyToken, videoController.createImageFeedEntry);
  */
 router.get('/', videoController.getFeed);
 router.get('/user/:googleId', verifyToken, videoController.getUserVideos);
+router.get('/saved', verifyToken, videoController.getSavedVideos);
 router.get('/:id', videoController.getVideoById);
 
 /**
  * Video Interaction Routes
  */
+router.post('/:id/save', verifyToken, videoController.toggleSave);
 router.post('/sync-watch-history', verifyToken, videoController.syncWatchHistory);
 router.post('/:id/watch', passiveVerifyToken, videoController.trackWatch);
 router.post('/:id/like', verifyToken, videoController.toggleLike);

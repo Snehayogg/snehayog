@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+
 import 'package:vayu/features/ads/data/services/active_ads_service.dart';
 import 'package:vayu/features/ads/data/services/ad_impression_service.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
@@ -8,6 +8,7 @@ import 'package:vayu/shared/theme/app_theme.dart';
 import 'package:vayu/shared/config/app_config.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/shared/constants/app_constants.dart';
+import 'package:vayu/shared/widgets/in_app_browser.dart';
 
 /// Widget to display banner ads at the top of video feed
 class BannerAdWidget extends StatefulWidget {
@@ -157,7 +158,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
             borderRadius: BorderRadius.circular(12),
             child: InkWell(
               borderRadius: BorderRadius.circular(12),
-              onTap: () => _handleAdClickWithDialog(context),
+              onTap: () => _handleAdClick(context),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 child: Row(
@@ -225,7 +226,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
               child: InkWell(
                 borderRadius: BorderRadius.circular(
                     12), // Match container rounded corners
-                onTap: () => _handleAdClickWithDialog(context),
+                onTap: () => _handleAdClick(context),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12), // Rounded corners
                   clipBehavior: Clip
@@ -320,16 +321,22 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
                                         borderRadius: BorderRadius.circular(6),
                                         border: Border.all(color: Colors.white24, width: 0.5),
                                       ),
-                                      child: Text(
-                                        widget.adData['callToAction']
-                                                ?['label'] ??
-                                            'Learn More',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
+                                      child: (() {
+                                        String label = widget.adData['callToAction']?['label'] ?? 'Learn More';
+                                        // **FIX: Replace 'Shop Now' with 'Learn More'**
+                                        if (label.toString().toUpperCase() == 'SHOP NOW') {
+                                          label = 'Learn More';
+                                        }
+
+                                        return Text(
+                                          label,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        );
+                                      })(),
                                     ),
                                   ),
                                   const Spacer(),
@@ -378,160 +385,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
     return provider;
   }
 
-  /// Handle ad click with confirmation dialog (for image/text clicks)
-  void _handleAdClickWithDialog(BuildContext context) async {
-    try {
-      final adId = widget.adData['_id'] ?? widget.adData['id'];
 
-      // Resolve link from multiple keys and ensure absolute URL
-      String link = (widget.adData['link'] ??
-              widget.adData['url'] ??
-              widget.adData['ctaUrl'] ??
-              widget.adData['callToActionUrl'] ??
-              widget.adData['targetUrl'] ??
-              '')
-          .toString();
-
-      // Fallback: nested callToAction map from backend
-      if (link.trim().isEmpty && widget.adData['callToAction'] is Map) {
-        final nested = widget.adData['callToAction'] as Map;
-        final candidate = (nested['url'] ?? nested['link'])?.toString();
-        if (candidate != null && candidate.trim().isNotEmpty) {
-          link = candidate.trim();
-        }
-      }
-
-      link = _ensureAbsoluteUrl(link);
-
-      // Show confirmation dialog if link is available
-      if (link.isNotEmpty) {
-        final adTitle = widget.adData['title'] ?? 'Sponsored Content';
-        
-        final shouldOpen = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            backgroundColor: AppTheme.backgroundSecondary,
-            surfaceTintColor: Colors.transparent,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
-              side: const BorderSide(color: AppTheme.borderPrimary, width: 1),
-            ),
-            title: Text(
-              'Open Link',
-              style: AppTheme.headlineSmall.copyWith(color: AppTheme.textPrimary),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'This will open an external link:',
-                  style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppTheme.backgroundTertiary.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
-                    border: Border.all(color: AppTheme.borderPrimary, width: 0.5),
-                  ),
-                  child: Text(
-                    adTitle,
-                    style: AppTheme.titleSmall.copyWith(
-                      color: AppTheme.textPrimary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Do you want to continue?',
-                  style: AppTheme.bodyMedium.copyWith(color: AppTheme.textPrimary),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: Text(
-                  'Cancel',
-                  style: AppTheme.labelLarge.copyWith(color: AppTheme.textSecondary),
-                ),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primary,
-                  foregroundColor: AppTheme.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
-                  ),
-                ),
-                child: const Text('Open Link'),
-              ),
-            ],
-          ),
-        );
-
-        if (shouldOpen == true) {
-          // Track click
-          if (adId != null) {
-            final activeAdsService = ActiveAdsService();
-            await activeAdsService.trackClick(adId);
-          }
-
-          // Execute callback
-          widget.onAdClick?.call();
-
-          // Open link
-          final uri = Uri.parse(link);
-          if (await canLaunchUrl(uri)) {
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
-          } else {
-            // Show error to user
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Unable to open link'),
-                  backgroundColor: Colors.red,
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            }
-          }
-        }
-      } else {
-        // Show simple message to user
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('The ads has no link to open'),
-              duration: Duration(seconds: 3),
-              backgroundColor: Colors.black,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      AppLogger.log('❌ Error handling banner ad click: $e');
-
-      // Show error to user
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Error opening link'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    }
-  }
 
   /// Handle ad click directly (for Learn More button)
   void _handleAdClick(BuildContext context) async {
@@ -569,21 +423,21 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
         // Execute callback
         widget.onAdClick?.call();
 
-        // Open link directly
-        final uri = Uri.parse(link);
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        } else {
-          // Show error to user
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Unable to open link'),
-                backgroundColor: Colors.red,
-                duration: Duration(seconds: 2),
+        // **ROAS IMPROVEMENT: Use In-App Browser**
+        if (context.mounted) {
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            useSafeArea: true,
+            backgroundColor: Colors.transparent,
+            builder: (context) => SizedBox(
+              height: MediaQuery.of(context).size.height * 0.9,
+              child: InAppBrowser(
+                url: link,
+                title: widget.adData['title'] ?? 'Sponsored Content',
               ),
-            );
-          }
+            ),
+          );
         }
       } else {
         // Show simple message to user

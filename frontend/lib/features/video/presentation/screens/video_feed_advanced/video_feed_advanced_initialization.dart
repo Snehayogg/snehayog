@@ -828,31 +828,28 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
     if (_currentUserId == null || _videos.isEmpty) return;
 
     try {
-      final userService = UserService();
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
       final uniqueUploaders = _videos
-          .map((video) => video.uploader.id)
+          .map((video) => video.uploader.id.trim())
           .toSet()
-          .where((id) => id != _currentUserId)
+          .where((id) => id.isNotEmpty && id != 'unknown' && id != _currentUserId)
           .toList();
 
       AppLogger.log(
-        '🔍 Checking follow status for ${uniqueUploaders.length} unique uploaders',
+        '🔍 Checking follow status for ${uniqueUploaders.length} unique uploaders via UserProvider',
       );
 
+      // **OPTIMIZED: Check status for each uploader - UserProvider will cache them**
       for (final uploaderId in uniqueUploaders) {
         try {
-          final isFollowing = await userService.isFollowingUser(uploaderId);
-          if (isFollowing) {
-            // **OPTIMIZED: No setState needed - _followingUsers doesn't trigger UI rebuilds**
-            _followingUsers.add(uploaderId);
-          }
+          // checkFollowStatus will fetch from backend and update UserProvider's cache
+          await userProvider.checkFollowStatus(uploaderId);
         } catch (e) {
           AppLogger.log('❌ Error checking follow status for $uploaderId: $e');
         }
       }
 
-      AppLogger.log(
-          '✅ Loaded follow status for ${_followingUsers.length} users');
+      AppLogger.log('✅ Synchronized follow status for ${uniqueUploaders.length} users');
     } catch (e) {
       AppLogger.log('❌ Error loading following users: $e');
     }

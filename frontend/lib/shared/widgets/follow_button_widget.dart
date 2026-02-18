@@ -9,12 +9,16 @@ class FollowButtonWidget extends StatefulWidget {
   final String uploaderId;
   final String uploaderName;
   final VoidCallback? onFollowChanged;
+  final String? followText; // **NEW: Custom follow text**
+  final String? followingText; // **NEW: Custom following text**
 
   const FollowButtonWidget({
     Key? key,
     required this.uploaderId,
     required this.uploaderName,
     this.onFollowChanged,
+    this.followText,
+    this.followingText,
   }) : super(key: key);
 
   @override
@@ -96,8 +100,9 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
 
           // Try GoogleSignInController first (more reliable)
           if (authController.isSignedIn && authController.userData != null) {
-            currentUserId = authController.userData!['id'] ??
-                authController.userData!['googleId'] ??
+            // **SYNC FIX: Prioritize googleId to match backend follow logic**
+            currentUserId = authController.userData!['googleId'] ??
+                authController.userData!['id'] ??
                 authController.userData!['_id'];
           }
 
@@ -106,7 +111,7 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
             final userData = await authService.getUserData();
             if (userData != null) {
               currentUserId =
-                  userData['id'] ?? userData['googleId'] ?? userData['_id'];
+                  userData['googleId'] ?? userData['id'] ?? userData['_id'];
             }
           }
 
@@ -135,13 +140,13 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
     if (_isOwnVideoNotifier.value) return;
 
     try {
-      print(
-          '🎯 FollowButtonWidget: Attempting to toggle follow for ${widget.uploaderName} (ID: ${widget.uploaderId})');
-
       final trimmedUploaderId = widget.uploaderId.trim();
+      print(
+          '🎯 FollowButtonWidget: Attempting to toggle follow for ${widget.uploaderName} (ID: $trimmedUploaderId)');
+
       if (trimmedUploaderId.isEmpty || trimmedUploaderId == 'unknown') {
         _showSnackBar('Unable to follow right now. Please try again later.');
-        print('❌ FollowButtonWidget: Uploader ID is empty');
+        print('❌ FollowButtonWidget: Uploader ID is empty or unknown');
         return;
       }
 
@@ -285,22 +290,22 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
                 if (!isInitialized) {
                   // **MODERN LOADING STATE: Professional skeleton loader**
                   return Container(
-                    width: 90,
-                    height: 36,
+                    width: 60,
+                    height: 24,
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(24),
+                      borderRadius: BorderRadius.circular(16),
                       border: Border.all(
                         color: Colors.white.withOpacity(0.2),
-                        width: 1.5,
+                        width: 1.0,
                       ),
                     ),
                     child: const Center(
                       child: SizedBox(
-                        width: 16,
-                        height: 16,
+                        width: 12,
+                        height: 12,
                         child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
+                          strokeWidth: 2.0,
                           valueColor: AlwaysStoppedAnimation<Color>(
                             Colors.white,
                           ),
@@ -315,43 +320,37 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
                 return AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
                   curve: Curves.easeOutCubic,
-                  width: isFollowing ? 110 : 85,
-                  height: 36,
+                  width: isFollowing ? 90 : 80,
+                  height: 24,
                   decoration: BoxDecoration(
                     // **UNIFIED DESIGN: White background for both states**
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: Colors.grey.shade300,
-                      width: 1.5,
+                      width: 1.0,
                     ),
                     boxShadow: [
                       // **PROFESSIONAL SHADOWS: Subtle depth**
                       BoxShadow(
                         color: Colors.black.withOpacity(0.08),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                        spreadRadius: 0,
-                      ),
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
                         blurRadius: 4,
                         offset: const Offset(0, 1),
-                        spreadRadius: -1,
+                        spreadRadius: 0,
                       ),
                     ],
                   ),
                   child: Material(
                     color: Colors.transparent,
                     child: InkWell(
-                      borderRadius: BorderRadius.circular(24),
+                      borderRadius: BorderRadius.circular(16),
                       onTap: _handleFollowTap,
                       splashColor: Colors.grey.shade200,
                       highlightColor: Colors.grey.shade100,
                       child: Padding(
                         padding: EdgeInsets.symmetric(
-                          horizontal: isFollowing ? 16 : 18,
-                          vertical: 9,
+                          horizontal: isFollowing ? 8 : 10,
+                          vertical: 4,
                         ),
                         child: AnimatedSwitcher(
                           duration: const Duration(milliseconds: 250),
@@ -380,19 +379,21 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
                                     Icons.check_circle_rounded,
                                     key: ValueKey('following'),
                                     color: Color(0xFF10B981), // Green-500
-                                    size: 18,
+                                    size: 14,
                                   ),
                                 ),
-                                const SizedBox(width: 6),
+                                const SizedBox(width: 4),
                               ],
                               Text(
-                                isFollowing ? 'Following' : 'Follow',
+                                isFollowing 
+                                    ? (widget.followingText ?? 'Following') 
+                                    : (widget.followText ?? 'Follow'),
                                 style: const TextStyle(
                                   color: Color(
                                       0xFF374151), // Gray-700 (same for both)
-                                  fontSize: 14,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.2,
+                                  letterSpacing: 0.1,
                                   height: 1.0,
                                 ),
                               ),

@@ -689,18 +689,58 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
 
     if (_lockedBannerAdByVideoId.containsKey(video.id)) {
       adData = _lockedBannerAdByVideoId[video.id];
-    } else if (_adsLoaded) {
-      if (_bannerAds.isNotEmpty) {
+    } else if (_adsLoaded && _bannerAds.isNotEmpty) {
+      // **ROAS IMPROVEMENT: Contextual Ad Matching**
+      // Attempt to match ad keywords with video title/description
+      Map<String, dynamic>? matchedAd;
+
+      try {
+        final videoTitle = video.videoName.toLowerCase();
+        final videoDesc = (video.description ?? '').toLowerCase();
+
+        // 1. Search for matching ad
+        for (final ad in _bannerAds) {
+          final keywords = ad['targetKeywords'];
+          if (keywords != null) {
+            final List<String> targetWords = (keywords is List)
+                ? keywords.map((e) => e.toString().toLowerCase()).toList()
+                : keywords
+                    .toString()
+                    .split(',')
+                    .map((e) => e.trim().toLowerCase())
+                    .toList();
+
+            for (final word in targetWords) {
+              if (word.isNotEmpty &&
+                  (videoTitle.contains(word) || videoDesc.contains(word))) {
+                matchedAd = ad;
+                break;
+              }
+            }
+          }
+          if (matchedAd != null) break;
+        }
+      } catch (e) {
+        // AppLogger.log('⚠️ Error in contextual ad matching: $e');
+      }
+
+      // 2. Fallback to Round-Robin if no match found
+      if (matchedAd == null) {
         final adIndex = index % _bannerAds.length;
         if (adIndex < _bannerAds.length) {
-          adData = _bannerAds[adIndex];
-          _lockedBannerAdByVideoId[video.id] = adData;
+          matchedAd = _bannerAds[adIndex];
         }
-      } else {
-        // **FIX: If ads are confirmed loaded but empty, hide the section entirely**
-        // This avoids showing a "Sponsored" placeholder when no ads exist.
-        return const SizedBox.shrink();
       }
+
+      // 3. Lock the selected ad for consistency
+      if (matchedAd != null) {
+        adData = matchedAd;
+        _lockedBannerAdByVideoId[video.id] = adData;
+      }
+    } else if (_adsLoaded && _bannerAds.isEmpty) {
+      // **FIX: If ads are confirmed loaded but empty, hide the section entirely**
+      // This avoids showing a "Sponsored" placeholder when no ads exist.
+      return const SizedBox.shrink();
     }
 
     // Prepare ad data map with videoId if available

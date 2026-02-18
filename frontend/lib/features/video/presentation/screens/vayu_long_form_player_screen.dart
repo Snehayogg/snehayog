@@ -8,6 +8,8 @@ import 'package:vayu/features/video/presentation/managers/main_controller.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'dart:async';
 import 'package:vayu/features/video/data/services/video_service.dart';
+import 'package:vayu/features/profile/presentation/screens/profile_screen.dart';
+import 'package:vayu/shared/widgets/follow_button_widget.dart';
 import 'package:vayu/shared/theme/app_theme.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:vayu/shared/factories/video_controller_factory.dart';
@@ -70,6 +72,8 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
   // Error state
   bool _hasError = false;
   String _errorMessage = '';
+
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -464,21 +468,10 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
     }
   }
 
-  void _handleDoubleTap() {
-    _togglePlay();
-  }
-
-  void _handleDoubleTapDown(TapDownDetails details) {
-    // We already use double tap for play/pause, so we'll move skip to triple tap or side buttons
-    // For now, keep the requested "double tap play/pause" priority.
-    // If the user wants BOTH, we might need a different approach.
-    // Let's stick to the requested: single tap = controls, double tap = play/pause.
-  }
-
   void _startHideControlsTimer() {
     _hideControlsTimer?.cancel();
     _hideControlsTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted && _videoPlayerController.value.isPlaying) {
+      if (mounted) {
         setState(() {
           _showControls = false;
         });
@@ -592,45 +585,95 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
     }
   }
 
+  Future<void> _handleToggleSave() async {
+    if (_isSaving) return;
+
+    try {
+      setState(() => _isSaving = true);
+      HapticFeedback.lightImpact();
+
+      final isSaved = await _videoService.toggleSave(_currentVideo.id);
+
+      setState(() {
+        _currentVideo.isSaved = isSaved;
+        _isSaving = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(isSaved ? 'Video saved to bookmarks' : 'Video removed from bookmarks'),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _isSaving = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save: $e')),
+        );
+      }
+    }
+  }
+
   Widget _buildScrubbingOverlay() {
     return Center(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha:0.9),
-          borderRadius: BorderRadius.circular(16),
-           boxShadow: const [
-            BoxShadow(color: Colors.black26, blurRadius: 10, spreadRadius: 2),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              _isForward ? Icons.forward_10 : Icons.replay_10,
-              color: Colors.black,
-              size: 48,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Semi-transparent backdrop for content
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.black45,
+              borderRadius: BorderRadius.circular(40),
             ),
-            const SizedBox(height: 12),
-            Text(
-              '${_isForward ? "+" : ""}${_scrubbingDelta.inSeconds.abs()}s',
-              style: const TextStyle(
-                color: Colors.black,
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _isForward ? Icons.forward_10 : Icons.replay_10,
+                  color: Colors.white,
+                  size: 32,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  '${_isForward ? "+" : ""}${_scrubbingDelta.inSeconds.abs()}s',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    shadows: [
+                      Shadow(
+                        blurRadius: 10.0,
+                        color: Colors.black,
+                        offset: Offset(0, 0),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 4),
-            Text(
-              _formatDuration(_scrubbingTargetTime),
-              style: TextStyle(
-                color: Colors.black.withValues(alpha:0.7),
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-              ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _formatDuration(_scrubbingTargetTime),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              shadows: [
+                Shadow(
+                  blurRadius: 10.0,
+                  color: Colors.black,
+                  offset: Offset(2, 2),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -658,36 +701,48 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
   }) {
     return Center(
       child: Container(
-        width: 140,
-        padding: const EdgeInsets.all(16),
+        width: 160,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha:0.9),
+          color: Colors.black45,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: const [
-            BoxShadow(color: Colors.black26, blurRadius: 10, spreadRadius: 2),
-          ],
+          border: Border.all(color: Colors.white12, width: 1),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: Colors.black, size: 36),
-            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(icon, color: Colors.white, size: 24),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${(value * 100).toInt()}%',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
             ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
                 value: value,
-                backgroundColor: Colors.black.withValues(alpha:0.1),
+                backgroundColor: Colors.white10,
                 valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
-                minHeight: 6,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${(value * 100).toInt()}%',
-              style: const TextStyle(
-                color: Colors.black,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
+                minHeight: 4,
               ),
             ),
           ],
@@ -805,7 +860,6 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
               _chewieController!.videoPlayerController.value.isInitialized)
             GestureDetector(
               onTap: _handleTap,
-              onDoubleTap: _handleDoubleTap,
               onHorizontalDragStart: (details) {
                 setState(() {
                   _horizontalDragTotal = 0.0;
@@ -915,7 +969,6 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
                 _chewieController!.videoPlayerController.value.isInitialized)
             GestureDetector(
               onTap: _handleTap,
-              onDoubleTap: _handleDoubleTap,
               onHorizontalDragStart: (details) {
                 setState(() {
                   _horizontalDragTotal = 0.0;
@@ -992,13 +1045,31 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            _currentVideo.videoName,
-            style: AppTheme.headlineMedium.copyWith(color: Colors.white),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  _currentVideo.videoName,
+                  style: AppTheme.headlineMedium.copyWith(color: Colors.white),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: _handleToggleSave,
+                icon: Icon(
+                  _currentVideo.isSaved ? Icons.bookmark : Icons.bookmark_border,
+                  color: _currentVideo.isSaved ? AppTheme.primary : Colors.white,
+                  size: 28,
+                ),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Row(
             children: [
               Text(
@@ -1013,79 +1084,70 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
   }
 
   Widget _buildActionBar() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          _buildActionItem(Icons.bookmark_border, 'Save'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionItem(IconData icon, String label) {
-    return InkWell(
-      onTap: () {},
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: Colors.white, size: 24),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: AppTheme.bodySmall.copyWith(color: Colors.white70, fontSize: 12),
-            ),
-          ],
-        ),
-      ),
-    );
+    return const SizedBox.shrink(); // Save button moved to title area
   }
 
   Widget _buildChannelRow() {
     return Padding(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 20,
-            backgroundImage: _currentVideo.uploader.profilePic.isNotEmpty
-                ? CachedNetworkImageProvider(_currentVideo.uploader.profilePic)
-                : null,
-            backgroundColor: Colors.grey[800],
-            child: _currentVideo.uploader.profilePic.isEmpty
-                ? const Icon(Icons.person, color: Colors.white)
-                : null,
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ProfileScreen(userId: _currentVideo.uploader.id),
+                ),
+              );
+            },
+            child: CircleAvatar(
+              radius: 20,
+              backgroundImage: _currentVideo.uploader.profilePic.isNotEmpty
+                  ? CachedNetworkImageProvider(_currentVideo.uploader.profilePic)
+                  : null,
+              backgroundColor: Colors.grey[800],
+              child: _currentVideo.uploader.profilePic.isEmpty
+                  ? const Icon(Icons.person, color: Colors.white)
+                  : null,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _currentVideo.uploader.name,
-                  style: AppTheme.bodyLarge.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  '${_currentVideo.uploader.totalVideos ?? 0} videos', 
-                  style: AppTheme.bodySmall.copyWith(color: Colors.grey),
-                ),
-              ],
+            child: GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ProfileScreen(userId: _currentVideo.uploader.id),
+                  ),
+                );
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _currentVideo.uploader.name,
+                    style: AppTheme.bodyLarge.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    '${_currentVideo.uploader.totalVideos ?? 0} videos', 
+                    style: AppTheme.bodySmall.copyWith(color: Colors.grey),
+                  ),
+                ],
+              ),
             ),
           ),
-          ElevatedButton(
-            onPressed: () {},
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.black,
-              shape: const StadiumBorder(),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            ),
-            child: const Text('Subscribe', style: TextStyle(fontWeight: FontWeight.bold)),
+          FollowButtonWidget(
+            uploaderId: _currentVideo.uploader.id,
+            uploaderName: _currentVideo.uploader.name,
+            followText: 'Subscribe',
+            followingText: 'Subscribed',
+            onFollowChanged: () {
+              // Optionally refresh uploader info if needed
+            },
           ),
         ],
       ),
@@ -1311,9 +1373,9 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
                 colors: [Colors.black.withValues(alpha:0.7), Colors.transparent],
               ),
             ),
-            padding: EdgeInsets.symmetric(
+            padding: const EdgeInsets.symmetric(
               horizontal: 8.0, 
-              vertical: isPortrait ? 8.0 : 16.0,
+              vertical: 4.0,
             ),
             child: Row(
               children: [
@@ -1385,8 +1447,8 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
                 colors: [Colors.black.withOpacity(0.8), Colors.transparent],
               ),
             ),
-            padding: EdgeInsets.only(
-              bottom: isPortrait ? 8.0 : 16.0,
+            padding: const EdgeInsets.only(
+              bottom: 4.0,
               left: 12.0,
               right: 12.0,
             ),
@@ -1416,7 +1478,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
                           return VideoProgressIndicator(
                             _videoPlayerController,
                             allowScrubbing: true,
-                            padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 8.0),
+                            padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
                             colors: VideoProgressColors(
                               playedColor: AppTheme.primary,
                               bufferedColor: Colors.white.withOpacity(0.3),
@@ -1443,7 +1505,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
                 ),
                 // Controls Row
                 Padding(
-                  padding: const EdgeInsets.only(top: 4.0),
+                  padding: const EdgeInsets.only(top: 0.0),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [

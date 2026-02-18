@@ -75,6 +75,13 @@
 		<string>We need your location to provide you with continuous location-based features.</string>
 		<key>UIStatusBarHidden</key>
 		<true/>
+		<key>LSApplicationQueriesSchemes</key>
+		<array>
+			<string>whatsapp</string>
+			<string>instagram</string>
+			<string>fb</string>
+			<string>tg</string>
+		</array>
 		<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>
 	</dict>

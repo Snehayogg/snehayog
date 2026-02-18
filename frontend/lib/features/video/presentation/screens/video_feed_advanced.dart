@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, compute;
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
@@ -10,7 +9,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
-import 'package:vayu/features/profile/data/services/user_service.dart';
+import 'package:vayu/shared/providers/user_provider.dart';
 import 'package:vayu/shared/managers/carousel_ad_manager.dart';
 import 'package:like_button/like_button.dart';
 import 'package:vayu/shared/constants/app_constants.dart';
@@ -1583,55 +1582,38 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
   /// **HANDLE FOLLOW/UNFOLLOW: With API integration**
   Future<void> _handleFollow(VideoModel video) async {
-    if (_currentUserId == null) {
-      // Silent return if not logged in
-      return;
-    }
-
-    if (video.uploader.id == _currentUserId) {
-      // Silent return for self
-      return;
-    }
+    if (_currentUserId == null) return;
+    if (video.uploader.id == _currentUserId) return;
 
     try {
-      final isFollowing = _isFollowing(video.uploader.id);
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final trimmedUploaderId = video.uploader.id.trim();
+      
+      if (trimmedUploaderId.isEmpty || trimmedUploaderId == 'unknown') {
+        AppLogger.log('⚠️ Cannot follow: Invalid uploader ID');
+        return;
+      }
 
-      // Optimistic UI update
-      setState(() {
-        if (isFollowing) {
-          _followingUsers.remove(video.uploader.id);
-        } else {
-          _followingUsers.add(video.uploader.id);
-        }
-      });
-
-      // Call API using UserService
-      final userService = UserService();
-      if (isFollowing) {
-        await userService.unfollowUser(video.uploader.id);
-      } else {
-        await userService.followUser(video.uploader.id);
+      // **SYNC: toggleFollow handles both optimistic update and API call**
+      final success = await userProvider.toggleFollow(trimmedUploaderId);
+      
+      if (!success) {
+        AppLogger.log('❌ Failed to toggle follow for $trimmedUploaderId');
       }
     } catch (e) {
-      AppLogger.log('❌ Error handling follow/unfollow: $e');
-
-      // Revert optimistic update on error
-      setState(() {
-        final isFollowing = _isFollowing(video.uploader.id);
-        if (isFollowing) {
-          _followingUsers.remove(video.uploader.id);
-        } else {
-          _followingUsers.add(video.uploader.id);
-        }
-      });
-
-      // Silent on error per requirement
+      AppLogger.log('❌ Error in _handleFollow: $e');
     }
   }
 
   /// **CHECK IF USER IS FOLLOWING**
   bool _isFollowing(String userId) {
-    return _followingUsers.contains(userId);
+    // **SYNC: Now using global UserProvider state**
+    try {
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      return userProvider.isFollowingUser(userId);
+    } catch (e) {
+      return false;
+    }
   }
 
 

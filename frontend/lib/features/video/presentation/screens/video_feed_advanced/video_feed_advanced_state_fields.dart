@@ -18,7 +18,7 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   }
   int _currentPage = 1;
 
-  final Set<String> _followingUsers = {};
+  // final Set<String> _followingUsers = {}; // **REMOVED: Now using global UserProvider**
   final Set<String> _seenVideoKeys = <String>{};
   final ValueNotifier<String?> _errorMessageVN = ValueNotifier<String?>(null);
   String? get _errorMessage => _errorMessageVN.value;

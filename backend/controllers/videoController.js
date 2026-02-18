@@ -1065,6 +1065,77 @@ export const toggleLike = async (req, res) => {
   }
 };
 
+/**
+ * Toggle Save Video (Bookmark)
+ */
+export const toggleSave = async (req, res) => {
+  try {
+    const googleId = req.user.googleId;
+    const videoId = req.params.id;
+
+    if (!googleId) return res.status(400).json({ error: 'User not authenticated' });
+    if (!videoId) return res.status(400).json({ error: 'Video ID is required' });
+
+    const user = await User.findOne({ googleId });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const video = await Video.findById(videoId);
+    if (!video) return res.status(404).json({ error: 'Video not found' });
+
+    const isSaved = user.isSaved(videoId);
+    let saved;
+
+    if (isSaved) {
+      user.unsaveVideo(videoId);
+      saved = false;
+    } else {
+      user.saveVideo(videoId);
+      saved = true;
+    }
+
+    await user.save();
+
+    res.json({
+      success: true,
+      isSaved: saved,
+      message: saved ? 'Video saved to bookmarks' : 'Video removed from bookmarks'
+    });
+  } catch (error) {
+    console.error('Error toggling save:', error);
+    res.status(500).json({ error: 'Failed to toggle save' });
+  }
+};
+
+export const getSavedVideos = async (req, res) => {
+  try {
+    const googleId = req.user.googleId;
+    if (!googleId) return res.status(401).json({ error: 'Authentication required' });
+
+    const user = await User.findOne({ googleId })
+      .populate({
+        path: 'savedVideos',
+        populate: {
+          path: 'uploader',
+          select: 'name profilePic googleId'
+        }
+      });
+
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // Filter out any null videos (in case some were deleted but still in savedVideos array)
+    // Also ensuring they are sorted by recent first if possible, though savedVideos order might be push order
+    const validSavedVideos = (user.savedVideos || []).filter(v => v != null).reverse(); // Reverse to get most recent first
+
+    const requestingUserObjectIdStr = user._id.toString();
+    const serializedVideos = serializeVideos(validSavedVideos, req.apiVersion, requestingUserObjectIdStr);
+
+    res.json(serializedVideos);
+  } catch (error) {
+    console.error('❌ Error fetching saved videos:', error);
+    res.status(500).json({ error: 'Failed to fetch saved videos', details: error.message });
+  }
+};
+
 export const deleteLike = async (req, res) => {
   try {
     const googleId = req.user.googleId;

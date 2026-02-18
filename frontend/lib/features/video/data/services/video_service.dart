@@ -444,6 +444,99 @@ class VideoService {
     }
   }
 
+  /// **Toggle save (bookmark) for a video**
+  Future<bool> toggleSave(String videoId) async {
+    final hasInternet = await ConnectivityService.hasInternetConnection();
+    if (!hasInternet) {
+      throw Exception('No internet connection');
+    }
+
+    try {
+      AppLogger.log('🔄 VideoService: Toggling save for video: $videoId');
+
+      final userData = await _authService.getUserData();
+      if (userData == null || userData['token'] == null) {
+        throw Exception('Please sign in to save videos');
+      }
+
+      final headers = await _getAuthHeaders();
+      headers['Content-Type'] = 'application/json';
+
+      // **FIX: Robust URL construction to avoid double slashes or missing /api**
+      final baseUrl = NetworkHelper.apiBaseUrl.endsWith('/') 
+          ? NetworkHelper.apiBaseUrl.substring(0, NetworkHelper.apiBaseUrl.length - 1)
+          : NetworkHelper.apiBaseUrl;
+      
+      final url = '$baseUrl/videos/$videoId/save';
+      AppLogger.log('🚀 VideoService: Save request URL: $url');
+
+      final res = await http
+          .post(
+            Uri.parse(url),
+            headers: headers,
+            body: json.encode({}),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        return data['isSaved'] == true;
+      } else if (res.statusCode == 401 || res.statusCode == 403) {
+        throw Exception('Please sign in again to save videos');
+      } else {
+        final error = json.decode(res.body);
+        throw Exception(error['error'] ?? 'Failed to save video');
+      }
+    } catch (e) {
+      AppLogger.log('❌ VideoService: Error toggling save: $e');
+      rethrow;
+    }
+  }
+
+  /// **Get all saved videos for the current user**
+  Future<List<VideoModel>> getSavedVideos() async {
+    final hasInternet = await ConnectivityService.hasInternetConnection();
+    if (!hasInternet) {
+      throw Exception('No internet connection');
+    }
+
+    try {
+      AppLogger.log('📡 VideoService: Fetching saved videos...');
+
+      final userData = await _authService.getUserData();
+      if (userData == null || userData['token'] == null) {
+        throw Exception('Please sign in to view saved videos');
+      }
+
+      final headers = await _getAuthHeaders();
+      final baseUrl = NetworkHelper.apiBaseUrl.endsWith('/') 
+          ? NetworkHelper.apiBaseUrl.substring(0, NetworkHelper.apiBaseUrl.length - 1)
+          : NetworkHelper.apiBaseUrl;
+      
+      final url = '$baseUrl/videos/saved';
+
+      final res = await http
+          .get(
+            Uri.parse(url),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (res.statusCode == 200) {
+        final List<dynamic> data = json.decode(res.body);
+        return data.map((json) => VideoModel.fromJson(json)).toList();
+      } else if (res.statusCode == 401 || res.statusCode == 403) {
+        throw Exception('Please sign in again to view saved videos');
+      } else {
+        final error = json.decode(res.body);
+        throw Exception(error['error'] ?? 'Failed to fetch saved videos');
+      }
+    } catch (e) {
+      AppLogger.log('❌ VideoService: Error fetching saved videos: $e');
+      rethrow;
+    }
+  }
+
   /// **Like a video (for backward compatibility)**
   Future<VideoModel> likeVideo(String videoId) async {
     return await toggleLike(videoId);

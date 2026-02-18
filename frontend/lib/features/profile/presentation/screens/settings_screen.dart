@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
+import 'package:vayu/features/profile/presentation/screens/saved_videos_screen.dart';
 import 'package:vayu/shared/theme/app_theme.dart';
 import 'package:vayu/shared/utils/app_text.dart';
-import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
-import 'package:provider/provider.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -60,6 +61,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _buildSectionHeader(AppText.get('settings_developer_header', fallback: 'Developer Settings')),
                 const SizedBox(height: AppTheme.spacing2),
                 _buildTokenCard(),
+                const SizedBox(height: AppTheme.spacing6),
+                _buildSectionHeader('Library'),
+                const SizedBox(height: AppTheme.spacing2),
+                _buildActionTile(
+                  title: 'Saved Videos',
+                  icon: Icons.bookmark_outlined,
+                  color: AppTheme.textPrimary,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const SavedVideosScreen()),
+                    );
+                  },
+                ),
                 const SizedBox(height: AppTheme.spacing6),
                 _buildSectionHeader(AppText.get('settings_account_header', fallback: 'Account')),
                 const SizedBox(height: AppTheme.spacing2),

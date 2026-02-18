@@ -59,9 +59,10 @@ class UserProvider extends ChangeNotifier {
     try {
       final isFollowing = await _userService.isFollowingUser(normalizedId);
       _followStatusCache[normalizedId] = isFollowing;
+      print('🔍 UserProvider: Follow status for $normalizedId is $isFollowing');
       return isFollowing;
     } catch (e) {
-
+      print('❌ UserProvider: Error checking follow status for $normalizedId: $e');
       return false;
     } finally {
       _loadingFollowStatus.remove(normalizedId);
@@ -108,6 +109,7 @@ class UserProvider extends ChangeNotifier {
     }
 
     try {
+      print('🎯 UserProvider: Calling followUser for $normalizedId');
       final success = await _userService.followUser(normalizedId);
       if (success) {
         _followStatusCache[normalizedId] = true;
@@ -131,10 +133,13 @@ class UserProvider extends ChangeNotifier {
         }
 
         notifyListeners();
+        print('✅ UserProvider: Successfully followed $normalizedId');
+      } else {
+        print('❌ UserProvider: Failed to follow $normalizedId (API returned false)');
       }
       return success;
     } catch (e) {
-
+      print('❌ UserProvider: Exception during followUser for $normalizedId: $e');
       return false;
     }
   }
@@ -147,6 +152,7 @@ class UserProvider extends ChangeNotifier {
     }
 
     try {
+      print('🎯 UserProvider: Calling unfollowUser for $normalizedId');
       final success = await _userService.unfollowUser(normalizedId);
       if (success) {
         _followStatusCache[normalizedId] = false;
@@ -172,10 +178,13 @@ class UserProvider extends ChangeNotifier {
         }
 
         notifyListeners();
+        print('✅ UserProvider: Successfully unfollowed $normalizedId');
+      } else {
+        print('❌ UserProvider: Failed to unfollow $normalizedId (API returned false)');
       }
       return success;
     } catch (e) {
-
+      print('❌ UserProvider: Exception during unfollowUser for $normalizedId: $e');
       return false;
     }
   }
@@ -221,7 +230,7 @@ class UserProvider extends ChangeNotifier {
         return;
       }
 
-
+      print('🔄 UserProvider: Refreshing user data for $normalizedId');
 
       // **FIXED: Clear user data cache first to force fresh data fetch**
       _userDataCache.remove(normalizedId);
@@ -237,16 +246,19 @@ class UserProvider extends ChangeNotifier {
         final userData = await _userService.getUserData(normalizedId);
         if (userData != null) {
           _userDataCache[normalizedId] = userData;
+          print('✅ UserProvider: Successfully refreshed user data for $normalizedId');
           // **NOTE: Follow status cache is NOT updated here**
           // It's refreshed separately using checkFollowStatus() which is more reliable
 
+        } else {
+          print('⚠️ UserProvider: No user data returned for $normalizedId');
         }
       } finally {
         _loadingUserData.remove(normalizedId);
         notifyListeners();
       }
     } catch (e) {
-
+      print('❌ UserProvider: Error refreshing user data for $userId: $e');
     }
   }
 

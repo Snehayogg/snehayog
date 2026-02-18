@@ -25,6 +25,7 @@
   final List<Map<String, dynamic>>? hlsVariants;
   final bool? isHLSEncoded;
   bool isLiked;
+  bool isSaved; // **NEW: Track if video is saved by current user**
   final bool isOptimistic; // **NEW: Track optimistically injected videos**
 
   // **SIMPLIFIED: Since all videos are 480p, we only need one quality URL**
@@ -73,6 +74,7 @@
     this.seriesId,
     this.episodeNumber,
     this.isLiked = false,
+    this.isSaved = false, // **NEW: Default to false**
     this.isOptimistic = false, // **NEW: Default to false**
   });
 
@@ -320,6 +322,7 @@
             ? json['episodeNumber']
             : int.tryParse(json['episodeNumber']?.toString() ?? '0') ?? 0,
         isLiked: json['isLiked'] == true,
+        isSaved: json['isSaved'] == true, // **NEW: Parse isSaved from backend**
         isOptimistic: json['isOptimistic'] == true,
       );
     } catch (e) {
@@ -381,6 +384,7 @@
       'seriesId': seriesId,
       'episodeNumber': episodeNumber,
       'isLiked': isLiked,
+      'isSaved': isSaved, // **NEW: Include isSaved in JSON**
       'isOptimistic': isOptimistic,
     };
   }
@@ -416,6 +420,7 @@
     String? seriesId,
     int? episodeNumber,
     bool? isLiked,
+    bool? isSaved, 
     bool? isOptimistic,
   }) {
     return VideoModel(
@@ -450,6 +455,7 @@
       seriesId: seriesId ?? this.seriesId,
       episodeNumber: episodeNumber ?? this.episodeNumber,
       isLiked: isLiked ?? this.isLiked,
+      isSaved: isSaved ?? this.isSaved,
       isOptimistic: isOptimistic ?? this.isOptimistic,
     );
   }
