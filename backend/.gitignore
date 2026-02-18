@@ -4,7 +4,6 @@
 .env.development
 .env.test
 .env.production
-public/.well-known/assetlinks.json
 serviceAccountKey.json
 app-ads.txt
 firebaseServiceAccount.json
