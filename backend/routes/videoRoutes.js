@@ -1,5 +1,5 @@
 import express from 'express';
-import { verifyToken } from '../utils/verifytoken.js';
+import { verifyToken, passiveVerifyToken } from '../utils/verifytoken.js';
 import * as videoController from '../controllers/videoController.js';
 import { validateVideoData, upload } from '../middleware/videoMiddleware.js';
 import rateLimit from 'express-rate-limit';

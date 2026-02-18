@@ -919,9 +919,11 @@ export const syncWatchHistory = async (req, res) => {
 
 export const trackWatch = async (req, res) => {
   try {
+    const deviceId = req.body.deviceId || req.headers['x-device-id'];
+    
     // **OPTIMIZATION: Use Identity from middleware (removes 800ms Google API fallback)**
-    userId = req.user?.googleId || req.user?.id;
-    isAuthenticated = !!req.user;
+    const userId = req.user?.googleId || req.user?.id;
+    const isAuthenticated = !!req.user;
 
     const identityId = userId || deviceId;
     const videoId = req.params.id;

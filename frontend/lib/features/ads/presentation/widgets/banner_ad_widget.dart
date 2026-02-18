@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:vayu/features/ads/data/services/active_ads_service.dart';
 import 'package:vayu/features/ads/data/services/ad_impression_service.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
+import 'package:vayu/shared/theme/app_theme.dart';
 import 'package:vayu/shared/config/app_config.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/shared/constants/app_constants.dart';
@@ -404,46 +405,72 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
 
       // Show confirmation dialog if link is available
       if (link.isNotEmpty) {
+        final adTitle = widget.adData['title'] ?? 'Sponsored Content';
+        
         final shouldOpen = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('Open Link'),
+            backgroundColor: AppTheme.backgroundSecondary,
+            surfaceTintColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+              side: const BorderSide(color: AppTheme.borderPrimary, width: 1),
+            ),
+            title: Text(
+              'Open Link',
+              style: AppTheme.headlineSmall.copyWith(color: AppTheme.textPrimary),
+            ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('This will open an external link:'),
-                const SizedBox(height: 8),
+                Text(
+                  'This will open an external link:',
+                  style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
+                ),
+                const SizedBox(height: 12),
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(4),
+                    color: AppTheme.backgroundTertiary.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+                    border: Border.all(color: AppTheme.borderPrimary, width: 0.5),
                   ),
                   child: Text(
-                    link,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontFamily: 'monospace',
+                    adTitle,
+                    style: AppTheme.titleSmall.copyWith(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w600,
                     ),
-                    maxLines: 2,
+                    maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const SizedBox(height: 8),
-                const Text('Do you want to continue?'),
+                const SizedBox(height: 12),
+                Text(
+                  'Do you want to continue?',
+                  style: AppTheme.bodyMedium.copyWith(color: AppTheme.textPrimary),
+                ),
               ],
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
+                child: Text(
+                  'Cancel',
+                  style: AppTheme.labelLarge.copyWith(color: AppTheme.textSecondary),
+                ),
               ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(context, true),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
+                  backgroundColor: AppTheme.primary,
+                  foregroundColor: AppTheme.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+                  ),
                 ),
                 child: const Text('Open Link'),
               ),
