@@ -652,15 +652,10 @@ class AuthService {
         }
       }
 
-      // 2. If no token (or refresh failed), try auto-login with Platform ID
+      // 2. If no token (or refresh failed), return null as we no longer support device-id auto-login
       if (token == null || token.isEmpty) {
-        AppLogger.log(
-            '🔍 AuthService: No valid token, attempting auto-login with device ID...');
-        final autoLoginResult = await autoLoginWithPlatformId();
-        if (autoLoginResult != null) {
-          AppLogger.log('✅ AuthService: Auto-login successful');
-          return autoLoginResult;
-        }
+        AppLogger.log('🔍 AuthService: No valid token found, user needs to sign in');
+        return null;
       }
 
       // 3. Finally, call getUserData to ensure we have the full profile
@@ -685,11 +680,26 @@ class AuthService {
     }
   }
 
+  /// **NEW: Clear in-memory profile cache**
+  void clearMemoryCache() {
+    AppLogger.log('🔐 AuthService: Clearing in-memory profile cache');
+    _cachedProfile = null;
+    _lastProfileFetch = null;
+    _pendingProfileRequest = null;
+  }
+
   // Get user data from JWT token
   Future<Map<String, dynamic>?> getUserData(
-      {bool skipTokenRefresh = false}) async {
+      {bool skipTokenRefresh = false, bool forceRefresh = false}) async {
     try {
       AppLogger.log('🔍 AuthService: Getting user data...');
+
+      // **OPTIMIZATION: Clear cache if forceRefresh is requested**
+      if (forceRefresh) {
+        AppLogger.log('🔄 AuthService: Force refresh requested - clearing memory cache');
+        _cachedProfile = null;
+        _lastProfileFetch = null;
+      }
 
       // **OPTIMIZATION: Return cached data if valid (30s TTL)**
       if (_cachedProfile != null && _lastProfileFetch != null) {
@@ -995,83 +1005,7 @@ class AuthService {
     }
   }
 
-  /// **IMPROVED: Auto-login using device ID (for persistent login after reinstall)**
-  /// Uses the new /api/auth/device-login endpoint which doesn't require Google session
-  Future<Map<String, dynamic>?> autoLoginWithPlatformId() async {
-    try {
-      AppLogger.log('🔄 Attempting auto-login with device ID...');
 
-      final platformIdService = PlatformIdService();
-
-      // Step 1: Get device ID (persists across reinstalls)
-      final deviceId = await platformIdService.getPlatformId();
-      if (deviceId.isEmpty || deviceId.startsWith('fallback_') || deviceId.startsWith('emergency_')) {
-        AppLogger.log('❌ Invalid device ID - cannot auto-login');
-        return null;
-      }
-
-      AppLogger.log('✅ Device ID retrieved: ${deviceId.substring(0, 8)}...');
-
-      // Step 2: Call device-login endpoint directly (no Google session required!)
-      final resolvedBaseUrl = await AppConfig.getBaseUrlWithFallback();
-      final response = await httpClientService.post(
-        Uri.parse('$resolvedBaseUrl/api/auth/device-login'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'deviceId': deviceId}),
-        timeout: const Duration(seconds: 10),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final accessToken = data['accessToken'];
-        final refreshToken = data['refreshToken'];
-        final user = data['user'];
-
-        if (accessToken == null || user == null) {
-          AppLogger.log('❌ Invalid response from device-login');
-          return null;
-        }
-
-        // Save tokens
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('jwt_token', accessToken);
-        if (refreshToken != null) {
-          await prefs.setString('refresh_token', refreshToken);
-        }
-
-        // Save user data as fallback
-        final fallbackData = {
-          'id': user['googleId'] ?? user['id'],
-          'googleId': user['googleId'],
-          'name': user['name'] ?? 'User',
-          'email': user['email'],
-          'profilePic': user['profilePic'],
-        };
-        await prefs.setString('fallback_user', jsonEncode(fallbackData));
-
-        AppLogger.log('✅ Auto-login successful! User: ${user['email']}');
-
-        return {
-          'id': user['googleId'] ?? user['id'],
-          'googleId': user['googleId'],
-          'name': user['name'] ?? 'User',
-          'email': user['email'],
-          'profilePic': user['profilePic'],
-          'token': accessToken,
-        };
-      } else if (response.statusCode == 401) {
-        // No valid session for this device - user needs to login with Google
-        AppLogger.log('ℹ️ No active session for this device - login required');
-        return null;
-      } else {
-        AppLogger.log('❌ Device login failed: ${response.statusCode}');
-        return null;
-      }
-    } catch (e) {
-      AppLogger.log('⚠️ Auto-login failed: $e');
-      return null;
-    }
-  }
 
   /// **NEW: Refresh the access token using the refresh token (with Google Silent Sign-In fallback)**
   Future<String?> refreshAccessToken() async {

@@ -22,7 +22,7 @@ router.post('/', authLimiter, googleSignIn);
 router.post('/google', authLimiter, googleSignIn);
 
 // Device Auto-Login (after app reinstall)
-router.post('/device-login', authLimiter, deviceLogin);
+// router.post('/device-login', authLimiter, deviceLogin);
 
 // Refresh Access Token
 router.post('/refresh', authLimiter, refreshAccessToken);

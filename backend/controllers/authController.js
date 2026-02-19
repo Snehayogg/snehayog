@@ -87,63 +87,14 @@ export const googleSignIn = async (req, res) => {
  * Uses device ID to find existing session and issue new tokens
  */
 export const deviceLogin = async (req, res) => {
-  const { deviceId } = req.body;
-
-  try {
-    if (!deviceId || deviceId.trim() === '') {
-      return res.status(400).json({ error: 'Device ID is required' });
-    }
-
-    console.log('🔐 Device Login: Checking device:', deviceId.substring(0, 8) + '...');
-
-    // Find valid session for this device
-    const session = await RefreshToken.findValidSessionByDevice(deviceId);
-
-    if (!session || !session.userId) {
-      console.log('❌ No valid session found for device');
-      return res.status(401).json({ 
-        error: 'No active session for this device',
-        requiresLogin: true 
-      });
-    }
-
-    const user = session.userId; // Populated from findValidSessionByDevice
-
-    // Update last used timestamp
-    session.lastUsedAt = new Date();
-    await session.save();
-
-    // Generate new Access Token
-    const accessToken = generateJWT(user.googleId, '1h');
-
-    // Rotate Refresh Token for security
-    const newRefreshToken = await RefreshToken.createForDevice(
-      user._id,
-      deviceId,
-      session.deviceName,
-      session.platform
-    );
-
-    console.log('✅ Device Login successful for:', user.email);
-
-    res.json({
-      accessToken,
-      refreshToken: newRefreshToken,
-      user: {
-        id: user.googleId,
-        _id: user._id,
-        googleId: user.googleId,
-        name: user.name,
-        email: user.email,
-        profilePic: user.profilePic
-      }
-    });
-
-  } catch (error) {
-    console.error('❌ Device Login error:', error);
-    res.status(500).json({ error: 'Device login failed', details: error.message });
-  }
+  res.status(410).json({ error: 'Device login is no longer supported. Please use Google Sign-In.' });
 };
+/*
+export const deviceLogin = async (req, res) => {
+  const { deviceId } = req.body;
+  // ... (rest of the code)
+};
+*/
 
 /**
  * Refresh Access Token

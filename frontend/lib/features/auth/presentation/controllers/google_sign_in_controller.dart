@@ -65,22 +65,7 @@ class GoogleSignInController extends ChangeNotifier {
         _userData = await _authService.getUserData();
 
       } else {
-
-
-        // **NEW: Try auto-login with device ID (for persistent login after reinstall)**
-        try {
-          final autoLoginResult = await _authService.autoLoginWithPlatformId();
-          if (autoLoginResult != null) {
-
-            _userData = autoLoginResult;
-          } else {
-
-            _userData = null;
-          }
-        } catch (e) {
-
-          _userData = null;
-        }
+        _userData = null;
       }
     } catch (e) {
 

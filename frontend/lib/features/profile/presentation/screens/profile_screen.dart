@@ -15,7 +15,7 @@ import 'package:vayu/shared/services/profile_screen_logger.dart';
 import 'package:vayu/shared/theme/app_theme.dart';
 import 'dart:async';
 import 'package:share_plus/share_plus.dart' as sp;
-import 'package:vayu/features/profile/data/datasources/profile_local_datasource.dart';
+
 import 'package:vayu/shared/services/http_client_service.dart';
 import 'package:vayu/features/profile/presentation/widgets/profile_videos_widget.dart';
 import 'package:vayu/features/profile/presentation/widgets/profile_header_widget.dart';
@@ -2457,15 +2457,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         return null;
       }
 
-      final dataSource = ProfileLocalDataSource();
-      Map<String, dynamic>? cachedProfile =
-          await dataSource.getCachedUserData(targetUserId);
 
-      if (cachedProfile != null) {
-        ProfileScreenLogger.logDebugInfo(
-            '⚡ Loading profile from Hive Cache (INSTANT - cache persists when user navigates back)');
-        return cachedProfile;
-      }
 
       // **NEW: Check SmartCacheManager (Memory Cache) if Hive is empty**
       // This is crucial because ProfilePreloader caches to SmartCacheManager
@@ -2499,23 +2491,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   /// Cache persists when user navigates back to same profile
   Future<void> _cacheProfileData(Map<String, dynamic> profileData) async {
     try {
-      // **OPTIMIZATION: Cache to Hive via ProfileLocalDataSource**
-      final loggedInUser = await _authService.getUserData();
-      final loggedInUserId = loggedInUser?['googleId'] ?? loggedInUser?['id'];
-      
-      final String? targetUserId = widget.userId ?? loggedInUserId;
-
-      if (targetUserId == null) {
-        ProfileScreenLogger.logDebugInfo(
-            '⚠️ No user ID found, skipping Hive cache');
-        return;
-      }
-
-      final dataSource = ProfileLocalDataSource();
-      await dataSource.cacheUserData(targetUserId, profileData);
-
-      ProfileScreenLogger.logDebugInfo(
-          '✅ Profile data cached to Hive (persists when user navigates back)');
+      // NOTE: Hive caching removed to prevent data mismatch bugs.
+      // We rely on SmartCacheManager for short-term memory caching.
     } catch (e) {
       ProfileScreenLogger.logWarning('Error caching profile data: $e');
     }
@@ -2692,6 +2669,9 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Future<void> _clearProfileCache() async {
     try {
+      // 0. Clear AuthService in-memory cache
+      _authService.clearMemoryCache();
+
       // 1. Clear Legacy SharedPreferences Cache (Earnings & Old Profile Data)
       final prefs = await SharedPreferences.getInstance();
       final cacheKey = _getProfileCacheKey();
@@ -2712,32 +2692,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         await prefs.remove('earnings_cache_timestamp_$userId');
       }
 
-      // 2. Clear Hive Cache (New Profile & Video Data)
-      final dataSource = ProfileLocalDataSource();
-      
-      final idsToClear = <String>{
-        if (widget.userId != null && widget.userId!.isNotEmpty)
-          widget.userId!,
-        if (_stateManager.userData?['googleId'] != null &&
-            _stateManager.userData!['googleId'].toString().isNotEmpty)
-          _stateManager.userData!['googleId'].toString(),
-         if (_stateManager.userData?['id'] != null &&
-            _stateManager.userData!['id'].toString().isNotEmpty)
-          _stateManager.userData!['id'].toString(),
-      };
-
-      // Also clear "self" if logged in
-      final loggedInUser = await _authService.getUserData();
-       if (loggedInUser != null) {
-          if (loggedInUser['id'] != null) idsToClear.add(loggedInUser['id']);
-          if (loggedInUser['googleId'] != null) idsToClear.add(loggedInUser['googleId']);
-       }
-
-      for (final id in idsToClear) {
-        await dataSource.clearUserCache(id);
-        ProfileScreenLogger.logDebugInfo(
-            '🧹 ProfileScreen: Cleared Hive cache for user $id');
-      }
+      // Hive Cache clearing removed as Hive is no longer used for profile data.
       
       AppLogger.log('🧹 ProfileScreen: Profile cache cleared successfully');
     } catch (e) {

@@ -13,7 +13,7 @@ import 'package:vayu/features/profile/data/services/payment_setup_service.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
 import 'package:vayu/features/ads/data/services/ad_service.dart';
 
-import 'package:vayu/features/profile/data/datasources/profile_local_datasource.dart';
+
 import 'package:vayu/shared/managers/smart_cache_manager.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 
@@ -24,7 +24,7 @@ class ProfileStateManager extends ChangeNotifier {
   final AuthService _authService = AuthService();
   final UserService _userService = UserService();
   final PaymentSetupService _paymentSetupService = PaymentSetupService();
-  final ProfileLocalDataSource _localDataSource = ProfileLocalDataSource();
+
   final SmartCacheManager _smartCacheManager = SmartCacheManager();
   bool _smartCacheInitialized = false;
   bool _isDisposed = false;
@@ -153,7 +153,7 @@ class ProfileStateManager extends ChangeNotifier {
 
       await _ensureSmartCacheInitialized();
 
-      final loggedInUser = await _authService.getUserData();
+      final loggedInUser = await _authService.getUserData(forceRefresh: forceRefresh);
       AppLogger.log(
           'ðŸ”„ ProfileStateManager: Logged in user: ${loggedInUser?['id']}');
       AppLogger.log(
@@ -178,26 +178,12 @@ class ProfileStateManager extends ChangeNotifier {
         if (myId != null) {
            AppLogger.log('ðŸš€ ProfileStateManager: Starting PARALLEL video load for own profile ($myId)');
            loadUserVideos(myId.toString(), forceRefresh: forceRefresh, silent: silent).catchError((e) {
-              AppLogger.log('âš ï¸ ProfileStateManager: Parallel video load error: $e');
+              AppLogger.log('ProfileStateManager: Parallel video load error: $e');
            });
         }
       }
 
-      // **HIVE CACHE: Check for persistent data first**
-      if (!forceRefresh) {
-        final cachedData = await _localDataSource.getCachedUserData(userId ?? loggedInUser?['id'] ?? loggedInUser?['googleId'] ?? 'self');
-        if (cachedData != null) {
-          AppLogger.log('ðŸ“¦ ProfileStateManager: Found Hive cache for profile');
-          _userData = _normalizeUserData(cachedData, userId);
-          _totalVideoCount = _userData?['totalVideos'] ?? _userData?['videosCount'] ?? 0;
-          nameController.text = _userData?['name']?.toString() ?? '';
-          _isLoading = false;
-          notifyListenersSafe();
-          
-          // If cache is fresh enough, skip network fetch (silent refresh still happens below)
-          // Profile caching is long-term, so we usually silent refresh.
-        }
-      }
+
 
       // **FIXED: Allow loading creator profiles without authentication**
       // Only require authentication for own profile (userId == null)
@@ -256,8 +242,7 @@ class ProfileStateManager extends ChangeNotifier {
       _userData = Map<String, dynamic>.from(normalizedData);
       nameController.text = _userData?['name']?.toString() ?? '';
 
-      // **HIVE SAVE: Persist profile for cold start**
-      unawaited(_localDataSource.cacheUserData(userId ?? _userData!['googleId'] ?? _userData!['id'] ?? 'self', _userData!));
+
       
       
       _isProfileLoading = false;
@@ -386,9 +371,17 @@ class ProfileStateManager extends ChangeNotifier {
     final Map<String, dynamic> normalized = Map<String, dynamic>.from(data);
 
     // 1. Normalize Google ID (Backend returns it as 'id')
-    final actualGoogleId = normalized['googleId'] ??
-        normalized['id'] ??
-        requestedUserId;
+    final String? dataId = data['id']?.toString() ?? data['googleId']?.toString();
+    
+    // **SECURITY FIX: Strict ID Matching**
+    // If we requested a specific user ID, the data MUST match it.
+    if (requestedUserId != null && dataId != null && 
+        requestedUserId != 'self' && dataId != requestedUserId) {
+       AppLogger.log('⚠️ ProfileStateManager: DATA INTEGRITY ERROR - Requested $requestedUserId but got data for $dataId. Rejecting data.');
+       throw Exception('Data integrity error: User ID mismatch');
+    }
+
+    final actualGoogleId = dataId ?? requestedUserId;
     normalized['googleId'] = actualGoogleId;
 
     if (!normalized.containsKey('id')) {
